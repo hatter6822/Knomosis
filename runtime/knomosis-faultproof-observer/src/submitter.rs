@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! L1 transaction submission for fault-proof game moves.
 //!
@@ -590,6 +591,15 @@ pub enum ActionKind {
     /// exchange for an admission-layer `budget_increment` grant
     /// on the signer's epoch-budget slot.
     TopUpActionBudget = 20,
+    /// `TopUpActionBudgetFor(recipient, gas_resource, gas_amount,
+    /// budget_increment, pool_actor)` — Workstream GP action-index
+    /// 21 (GP.3.4 delegated top-up).  Same gas-transfer as
+    /// `TopUpActionBudget` (debit the delegate-signer, credit the
+    /// pool actor), but the admission-layer `budget_increment` is
+    /// credited to a *different* `recipient`'s epoch-budget slot,
+    /// gated by that recipient's prior `allowTopUpFrom` consent.
+    /// The L1 step-VM execution arm landed in GP.5.3.
+    TopUpActionBudgetFor = 21,
 }
 
 /// Encode the FULL-FORM `terminateOnSingleStep` calldata.  The
@@ -1322,6 +1332,7 @@ mod tests {
         assert_eq!(ActionKind::FaultProofResolution as u8, 18);
         assert_eq!(ActionKind::DepositWithFee as u8, 19);
         assert_eq!(ActionKind::TopUpActionBudget as u8, 20);
+        assert_eq!(ActionKind::TopUpActionBudgetFor as u8, 21);
     }
 
     /// Game id is encoded as 32-byte big-endian.

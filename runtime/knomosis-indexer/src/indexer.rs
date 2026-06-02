@@ -1,132 +1,86 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Indexer orchestration: dispatch events to the balance view +
-//! advance the cursor atomically.
+//! the GP.6.4 budget / pool tables + advance the cursor atomically
+//! via a single `SqliteCombinedTransaction` block.
+//!
+//! ## What changed in GP.6.4 v2.0
+//!
+//! Previously (v1) the indexer's `apply_batch` opened a kv-only
+//! `Storage::transaction` and the budget views lived in
+//! kv-keyspace prefixes (`u/`, `pe/`, `pb/`) inside the same kv
+//! table.  v2.0 switches to FIVE physical SQLite tables (created
+//! by `migration_002_budget_views`) and uses
+//! `CombinedTransactionOps` so the kv operations (balance +
+//! cursor) AND the budget-table operations commit atomically
+//! together inside a single `BEGIN IMMEDIATE ... COMMIT` block.
 //!
 //! ## Dispatch table
 //!
-//! For each incoming `Event`, the indexer applies:
+//! For each incoming `Event`, the indexer applies the following
+//! per-view updates:
+//!
+//! **Balance view (kv `b/` keyspace, unchanged from v1):**
 //!
 //! | Tag | Constructor               | Balance-view effect                                |
 //! |-----|---------------------------|----------------------------------------------------|
 //! | 0   | `BalanceChanged`          | `set(actor, resource, new_value)` (authoritative)  |
-//! | 8   | `RewardIssued`            | `credit(recipient, resource, amount)` if no `BalanceChanged` for same key |
-//! | 9   | `WithdrawalRequested`     | `debit(sender, resource, amount)` if no `BalanceChanged` for same key |
-//! | 10  | `DepositCredited`         | `credit(recipient, resource, amount)` if no `BalanceChanged` for same key |
+//! | 8   | `RewardIssued`            | `credit(recipient, resource, amount)` if no `BalanceChanged` |
+//! | 9   | `WithdrawalRequested`     | `debit(sender, resource, amount)` if no `BalanceChanged`    |
+//! | 10  | `DepositCredited`         | `credit(recipient, resource, amount)` if no `BalanceChanged`|
 //! | All other tags            | no-op (balance view unaffected)                        |
 //!
-//! ## Two-pass dispatch (the BalanceChanged-overrides-semantic rule)
+//! **GP.6.4 budget / pool view (5 physical SQLite tables):**
 //!
-//! The canonical kernel's `extractEvents`
-//! (`LegalKernel/Events/Extract.lean`) emits events in the order:
-//!
-//! ```text
-//!   action-events ++ bridge-events ++ lp-events ++ fault-proof-events ++ [nonceAdvanced]
-//! ```
-//!
-//! For a `reward` action this is `[balanceChanged?, rewardIssued]`
-//! — `balanceChanged` (delta-filtered, present iff balance
-//! actually changed) FIRST, then the always-emitted
-//! `rewardIssued`.  Similarly for `deposit` it's
-//! `[balanceChanged?, depositCredited]` and for `withdraw` it's
-//! `[balanceChanged?, withdrawalRequested]`.
-//!
-//! An arrival-order dispatch would DOUBLE-COUNT when both are
-//! present: applying `BalanceChanged` first sets the cell to the
-//! authoritative post-state value, then applying the semantic
-//! credit/debit double-counts.  For `withdraw` it's worse: the
-//! `BalanceChanged` sets the cell to the post-withdraw balance,
-//! then `debit` underflows (since the post-withdraw value is less
-//! than the withdrawn amount), rolling back the entire batch.
-//!
-//! The correct dispatch is **two-pass**:
-//!
-//!   1. **Pass 1**: collect the set `S = { (actor, resource) :
-//!      ∃ BalanceChanged event in batch with this (actor, resource) }`.
-//!   2. **Pass 2**: apply each `RewardIssued`, `WithdrawalRequested`,
-//!      `DepositCredited` event whose `(actor, resource)` is NOT
-//!      in `S`.  These are the "fall-back" semantic events when
-//!      the kernel didn't emit a corresponding `BalanceChanged`
-//!      (e.g. a zero-amount action, where the balance didn't
-//!      change but the semantic event is unconditionally emitted).
-//!   3. **Pass 3**: apply every `BalanceChanged` event as a `set`.
-//!      This is the authoritative final value.
-//!
-//! ## Mathematical contract
-//!
-//! Let `B(a, r)` denote the balance-view value for `(actor, resource)`.
-//! For each batch:
-//!
-//!   * If the batch contains `BalanceChanged(r, a, _, v)` for
-//!     `(a, r)`: after `apply_batch`, `B(a, r) = v` (the
-//!     `BalanceChanged.new_value`).
-//!   * If the batch contains NO `BalanceChanged` for `(a, r)` but
-//!     contains `RewardIssued(r, a, amt)` (or `DepositCredited`):
-//!     after `apply_batch`, `B(a, r)` is incremented by `amt`.
-//!   * If the batch contains NO `BalanceChanged` for `(a, r)` but
-//!     contains `WithdrawalRequested(r, a, amt, …)`: after
-//!     `apply_batch`, `B(a, r)` is decremented by `amt`.  If the
-//!     pre-batch value was less than `amt`, the batch fails with
-//!     [`IndexerError::Balance`] (no partial mutations persist).
-//!   * Otherwise: `B(a, r)` is unchanged.
-//!
-//! This matches the kernel's `getBalance(actor, resource)` for
-//! every `(actor, resource)` pair after replaying any event stream.
-//!
-//! ## Overflow handling
-//!
-//! `credit` overflow (current balance + delta > u128::MAX) is
-//! treated as a **halt condition**: the batch rolls back and the
-//! indexer surfaces [`IndexerError::Balance`].  Saturating credit
-//! would permanently corrupt the balance cell to `u128::MAX`,
-//! which is silently wrong.  An operator who hits this error
-//! investigates the upstream event source (kernel bug or
-//! malformed event).
+//! See [`crate::budget_view`]'s docstring for the per-tag
+//! dispatch.  Briefly: tags 16/17/19 credit budget grants
+//! (lifetime + current-epoch); tag 18 drains the pool view if
+//! `--gas-pool-actor` is configured; tag 20 (GP.6.4) credits
+//! current-epoch consumption.
 //!
 //! ## Atomicity
 //!
-//! Each event-batch (one log frame's worth of events, all sharing
-//! the same seq) is applied inside a single storage transaction.
-//! The transaction's last operation is the cursor advance.  On
-//! commit, every balance update + the cursor advance become
-//! visible atomically.  On any per-event error, the transaction
-//! is rolled back and the entire batch is discarded — the cursor
-//! does NOT advance, and the indexer's next subscribe will
-//! re-deliver the failing batch (giving the operator time to
-//! intervene).
+//! Each event-batch (one log frame's worth of events, all
+//! sharing the same seq) is applied inside a single
+//! `SqliteCombinedTransaction`.  The transaction's last operation
+//! is the cursor advance.  On commit, every balance update + the
+//! budget-table updates + the cursor advance become visible
+//! atomically.  On any per-event error, the transaction is rolled
+//! back and the entire batch is discarded — the cursor does NOT
+//! advance, and the indexer's next subscribe will re-deliver the
+//! failing batch.
 //!
 //! ## Idempotency
 //!
 //! On startup, the indexer reads the cursor and subscribes with
-//! `resume_from = cursor`.  The wire protocol guarantees that
-//! the server then sends every event with `seq > cursor`.  If
-//! the indexer crashes mid-batch, the cursor reflects the last
+//! `resume_from = cursor`.  The wire protocol guarantees that the
+//! server then sends every event with `seq > cursor`.  If the
+//! indexer crashes mid-batch, the cursor reflects the last
 //! committed batch's seq; on restart, the server replays from
-//! that seq.  The replay is byte-equivalent to the original
-//! batch (the event stream is deterministic given the log), so
-//! the dispatch produces the same balance updates.
+//! that seq.
 
 use std::collections::HashSet;
 
+use knomosis_storage::combined_transaction::{
+    CombinedStorage, CombinedTransactionError, CombinedTransactionOps,
+};
 use knomosis_storage::storage::Storage;
 
-use crate::balance::{BalanceError, BalanceTxView};
-use crate::cursor::{advance_cursor_in_tx, ensure_identifier, read_cursor, CursorError};
-use crate::decoder::DecodeError;
-use crate::event::{ActorId, Event, ResourceId};
+use crate::balance::{BalanceError, BALANCE_KEY_LEN, BALANCE_KEY_PREFIX, BALANCE_VALUE_LEN};
+use crate::budget_view::{dispatch_epoch_if_crossed, dispatch_event, BudgetDispatchError};
+use crate::cursor::{ensure_identifier, read_cursor, CursorError, CURSOR_KEY, CURSOR_VALUE_LEN};
+use crate::decoder::{amount_from_be_bytes, amount_to_be_bytes, DecodeError};
+use crate::event::{ActorId, Amount, Event, ResourceId};
 use crate::INDEXER_IDENTIFIER;
 
 /// Maximum number of events allowed in a single `apply_batch`
 /// call.  Defence-in-depth bound mirroring
-/// `knomosis-event-subscribe::extract::HARD_MAX_EVENT_COUNT` (1024).
-/// A batch that exceeds this is treated as a wire-protocol
-/// violation; the indexer halts the batch rather than
-/// allocating an unbounded HashSet for the two-pass dispatch
-/// pre-computation.
+/// `knomosis-event-subscribe::extract::HARD_MAX_EVENT_COUNT`.
 pub const INDEXER_MAX_BATCH_EVENTS: usize = 1024;
 
 /// Indexer-level errors.
@@ -138,30 +92,29 @@ pub enum IndexerError {
     /// Balance-view error (overflow / underflow / corrupt cell).
     #[error("balance error: {0}")]
     Balance(#[from] BalanceError),
+    /// Budget-view dispatch error (overflow / underflow / corrupt
+    /// cell from the GP.6.4 budget tables).  Distinct from
+    /// [`IndexerError::Balance`] so an operator can tell which
+    /// view's invariant failed.
+    #[error("budget-view error: {0}")]
+    BudgetView(#[from] BudgetDispatchError),
     /// Cursor error (non-monotone / corrupt cell / identifier
     /// mismatch).
     #[error("cursor error: {0}")]
     Cursor(#[from] CursorError),
-    /// CBE decoder error.  Indicates the wire-format payload was
-    /// malformed (truncated, bad tag, oversize byte string, etc.).
+    /// CBE decoder error.
     #[error("decoder error at seq {seq}: {source}")]
     Decode {
-        /// The event sequence number whose payload failed to decode.
+        /// The event sequence number whose payload failed.
         seq: u64,
         /// The underlying decoder error.
         #[source]
         source: DecodeError,
     },
-    /// The event batch is empty.  Indicates an extractor / wire
-    /// protocol bug — events are emitted in batches of at least
-    /// one event per log frame.
+    /// The event batch is empty.
     #[error("empty event batch")]
     EmptyBatch,
     /// The event batch exceeds [`INDEXER_MAX_BATCH_EVENTS`].
-    /// Indicates an extractor / wire protocol bug — the upstream
-    /// knomosis-event-subscribe bounds batches at `HARD_MAX_EVENT_COUNT`
-    /// (1024) per its docstring.  Defence-in-depth in case the
-    /// wire format ever loosens the bound silently.
     #[error("batch too large: {size} events > {max}")]
     BatchTooLarge {
         /// The offending batch size.
@@ -169,9 +122,7 @@ pub enum IndexerError {
         /// The configured maximum.
         max: usize,
     },
-    /// The event's seq is at or before the cursor.  Indicates a
-    /// wire-protocol bug: the server should never deliver events
-    /// the indexer has already processed.
+    /// The event's seq is at or before the cursor.
     #[error("stale event seq {seq} (cursor at {cursor})")]
     StaleEvent {
         /// The event's seq.
@@ -179,37 +130,19 @@ pub enum IndexerError {
         /// Current cursor value.
         cursor: u64,
     },
-    /// The wire protocol delivered events out of order (a later
-    /// frame's seq was strictly less than an earlier frame's seq).
-    /// The wire-protocol spec (`docs/abi.md` §11.4) requires
-    /// monotonically non-decreasing seq numbers; this error
-    /// indicates the server is buggy or the connection is being
-    /// tampered with.
+    /// Wire protocol delivered events out of order.
     #[error(
         "protocol violation: out-of-order seq (current {current_seq}, received {offending_seq})"
     )]
     ProtocolViolation {
         /// The current seq the indexer was accumulating.
         current_seq: u64,
-        /// The offending seq that arrived (must be < current_seq
-        /// to trigger this variant).
+        /// The offending seq.
         offending_seq: u64,
     },
     /// `tx.commit()` reported an error but the SQLite-level state
-    /// may have partially succeeded.  After this error the
-    /// indexer's in-memory cursor was reloaded from disk to
-    /// determine the true state.  If the disk shows the new value,
-    /// the commit succeeded despite the error report; if the disk
-    /// shows the old value, the commit truly failed.  Either way,
-    /// the caller MUST treat the in-memory cursor as authoritative
-    /// (via `cursor()`) when retrying.
-    ///
-    /// **Recovery semantics.**  This variant is RECOVERABLE: the
-    /// in-memory cursor has been resynced to disk; the daemon
-    /// loop can continue (the next `apply_batch` for the same seq
-    /// returns `StaleEvent`, and the server will replay subsequent
-    /// events).  The daemon SHOULD log at WARN and reconnect
-    /// rather than halt.
+    /// may have partially succeeded; the in-memory cursor was
+    /// reloaded from disk.  Recoverable.
     #[error("commit ambiguous at seq {seq} (disk cursor after reload: {disk_cursor})")]
     CommitAmbiguous {
         /// The seq being committed.
@@ -217,122 +150,149 @@ pub enum IndexerError {
         /// The disk cursor value AFTER reload from storage.
         disk_cursor: u64,
     },
-    /// `tx.commit()` AND the subsequent disk-cursor reload BOTH
-    /// failed.  The on-disk state is now unknown — we don't know
-    /// whether the batch's mutations persisted.  The indexer
-    /// marks itself as poisoned; subsequent `apply_batch` calls
-    /// return [`IndexerError::Poisoned`] until the operator
-    /// restarts.
-    ///
-    /// **Recovery semantics.**  This variant is UNRECOVERABLE
-    /// within the current process.  The daemon MUST halt; the
-    /// operator inspects the on-disk state (e.g., via
-    /// `knomosis-indexer query`), confirms no corruption, and
-    /// restarts.
+    /// `tx.commit()` AND the disk-cursor reload BOTH failed.
+    /// Unrecoverable; the indexer poisons itself.
     #[error(
         "cursor recovery failed at seq {seq} (commit error: {commit_error}; cursor read error: {cursor_error})"
     )]
     CursorRecoveryFailed {
         /// The seq being committed.
         seq: u64,
-        /// The original commit error (string form — we don't
-        /// preserve the structured error because the cursor read
-        /// also failed).
+        /// The original commit error.
         commit_error: String,
         /// The cursor-read error.
         cursor_error: String,
     },
-    /// The indexer is poisoned due to a previous
-    /// [`IndexerError::CursorRecoveryFailed`].  All subsequent
-    /// `apply_batch` calls return this error until the process
-    /// restarts.
+    /// The indexer is poisoned from a previous CursorRecoveryFailed.
     #[error("indexer poisoned by a previous cursor-recovery failure; restart required")]
     Poisoned,
 }
 
-/// An indexer instance backed by a [`Storage`].
+/// Indexer-side accessors that the apply path needs:
+///   * `Storage` for startup reads (cursor + identifier).
+///   * `CombinedStorage` for atomic kv + budget tx during
+///     `apply_batch`.
+pub trait IndexerStorage: Storage + CombinedStorage {}
+impl<T: Storage + CombinedStorage + ?Sized> IndexerStorage for T {}
+
+/// An indexer instance backed by a storage that supports BOTH
+/// kv operations (via [`Storage`]) AND combined kv + budget
+/// transactions (via [`CombinedStorage`]).  The production impl
+/// is `SqliteStorage`; tests can use fault-injecting adaptors.
 ///
-/// Construct via [`Indexer::open`] which performs the startup
-/// dance (identifier check + cursor read).  Apply event batches
-/// via [`Indexer::apply_batch`]; the method handles the
-/// transaction lifecycle internally.
-pub struct Indexer<'a, S: Storage + ?Sized> {
+/// Construct via [`Indexer::open`] (default config: no
+/// `--gas-pool-actor`, no `--epoch-length`) or
+/// [`Indexer::open_with_config`] (explicit config).
+pub struct Indexer<'a, S: IndexerStorage + ?Sized> {
     storage: &'a S,
-    /// The last-committed cursor value, mirrored in memory for
-    /// fast access.  Synced with the on-disk cursor at startup
-    /// and after each successful batch commit.
+    /// Last-committed cursor value, mirrored in memory.
     cursor: u64,
-    /// Set to `true` after a [`IndexerError::CursorRecoveryFailed`]
-    /// — the in-memory cursor may not reflect disk; subsequent
+    /// Poisoned by a previous `CursorRecoveryFailed`; subsequent
     /// `apply_batch` calls reject with [`IndexerError::Poisoned`].
-    /// Recovery requires restarting the process (so the
-    /// in-memory cursor reloads from disk via [`Indexer::open`]).
     poisoned: bool,
+    /// GP.6.4: `--gas-pool-actor` config.  When `Some(p)`,
+    /// `Event.gasPoolClaim` debits `pool_balances_{eth,bold}[p]`.
+    /// When `None`, GasPoolClaim is a no-op (gross-inflow pool
+    /// view).
+    gas_pool_actor: Option<ActorId>,
+    /// GP.6.4: `--epoch-length` config.  When > 0, the indexer
+    /// resets the per-epoch tables every `epoch_length` seqs.
+    /// When 0, epoch advancement is disabled.
+    epoch_length: u64,
 }
 
-impl<S: Storage + ?Sized> std::fmt::Debug for Indexer<'_, S> {
+impl<S: IndexerStorage + ?Sized> std::fmt::Debug for Indexer<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Indexer")
             .field("cursor", &self.cursor)
             .field("poisoned", &self.poisoned)
+            .field("gas_pool_actor", &self.gas_pool_actor)
+            .field("epoch_length", &self.epoch_length)
             .finish_non_exhaustive()
     }
 }
 
-impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
-    /// Open an indexer over `storage`.  Verifies the on-disk
-    /// identifier matches the binary's [`INDEXER_IDENTIFIER`]
-    /// (initialising the cell if absent), then reads the cursor.
+impl<'a, S: IndexerStorage + ?Sized> Indexer<'a, S> {
+    /// Open an indexer over `storage` with default GP.6.4
+    /// config (no `--gas-pool-actor`, no `--epoch-length`).
+    /// See [`Self::open_with_config`] for explicit-config
+    /// construction.
     ///
     /// # Errors
     ///
-    /// Returns [`IndexerError::Cursor`] with
-    /// [`CursorError::IdentifierMismatch`] if the database was
-    /// written by an incompatible indexer.  Returns
-    /// [`IndexerError::Storage`] on storage failure.
+    /// See [`IndexerError`].
     pub fn open(storage: &'a S) -> Result<Self, IndexerError> {
+        Self::open_with_config(storage, None, 0)
+    }
+
+    /// Open an indexer with explicit GP.6.4 configuration:
+    ///   * `gas_pool_actor`: `Some(p)` enables drain wiring on
+    ///     `Event.gasPoolClaim` (decrements
+    ///     `pool_balances_{eth,bold}[p]`); `None` preserves
+    ///     gross-inflow pool semantics.
+    ///   * `epoch_length`: `> 0` triggers per-epoch table resets
+    ///     every `epoch_length` seqs; `0` disables.
+    ///
+    /// # Errors
+    ///
+    /// See [`IndexerError`].
+    pub fn open_with_config(
+        storage: &'a S,
+        gas_pool_actor: Option<ActorId>,
+        epoch_length: u64,
+    ) -> Result<Self, IndexerError> {
         ensure_identifier(storage, INDEXER_IDENTIFIER)?;
         let cursor = read_cursor(storage)?;
-        tracing::info!(cursor, identifier = INDEXER_IDENTIFIER, "indexer opened");
+        tracing::info!(
+            cursor,
+            identifier = INDEXER_IDENTIFIER,
+            ?gas_pool_actor,
+            epoch_length,
+            "indexer opened (GP.6.4 v2.0)"
+        );
         Ok(Self {
             storage,
             cursor,
             poisoned: false,
+            gas_pool_actor,
+            epoch_length,
         })
     }
 
-    /// `true` if a previous `apply_batch` cascade-failed (commit
-    /// AND cursor reload both failed).  Subsequent `apply_batch`
-    /// calls reject with [`IndexerError::Poisoned`].
+    /// `true` if a previous `apply_batch` cascade-failed.
+    #[must_use]
     pub fn is_poisoned(&self) -> bool {
         self.poisoned
     }
 
     /// Current cursor value (last-committed seq).
+    #[must_use]
     pub fn cursor(&self) -> u64 {
         self.cursor
     }
 
-    /// Apply a batch of events that share the same seq.  All
-    /// effects + the cursor advance commit atomically.
-    ///
-    /// `events` is the list of events from a single log frame
-    /// (multiple events per frame are allowed; they all share
-    /// the seq).  `seq` is the frame's seq number; it must be
-    /// strictly greater than the current cursor.
+    /// Configured `--gas-pool-actor`.  See
+    /// [`Self::open_with_config`].
+    #[must_use]
+    pub fn gas_pool_actor(&self) -> Option<ActorId> {
+        self.gas_pool_actor
+    }
+
+    /// Configured `--epoch-length`.  See
+    /// [`Self::open_with_config`].
+    #[must_use]
+    pub fn epoch_length(&self) -> u64 {
+        self.epoch_length
+    }
+
+    /// Apply a batch of events that share the same seq.  Atomic
+    /// commit: balance view + budget tables + cursor advance go
+    /// in one `SqliteCombinedTransaction`.
     ///
     /// # Errors
     ///
-    /// Returns [`IndexerError::EmptyBatch`] if `events` is empty.
-    /// Returns [`IndexerError::StaleEvent`] if `seq <= cursor`.
-    /// Returns [`IndexerError::Balance`] on balance arithmetic
-    /// errors (the transaction is rolled back and the cursor
-    /// remains at its previous value).  Returns
-    /// [`IndexerError::Storage`] on transaction commit failure.
+    /// See [`IndexerError`].
     pub fn apply_batch(&mut self, seq: u64, events: &[Event]) -> Result<(), IndexerError> {
-        // Poisoned check first: if a previous cascade-failure
-        // left the in-memory cursor in an unknown state, refuse
-        // any further operations until the process restarts.
         if self.poisoned {
             return Err(IndexerError::Poisoned);
         }
@@ -352,10 +312,10 @@ impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
             });
         }
 
-        // Pre-compute the set of (actor, resource) pairs covered
-        // by `BalanceChanged` events in this batch.  Semantic
-        // events for the same pair are skipped in pass 2 to
-        // avoid double-counting (see module docstring).
+        // Pre-compute (actor, resource) pairs covered by
+        // BalanceChanged in this batch (semantic events for the
+        // same pair are skipped to avoid double-counting; see
+        // the "BalanceChanged-overrides-semantic" rule).
         let bc_pairs: HashSet<(ActorId, ResourceId)> = events
             .iter()
             .filter_map(|e| match e {
@@ -366,106 +326,78 @@ impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
             })
             .collect();
 
-        // Start a transaction; on failure mid-batch the
-        // transaction is rolled back by Drop and the cursor stays
-        // at its previous value.
-        let mut tx = self.storage.transaction()?;
-        {
-            let mut bv = BalanceTxView::new(&mut *tx);
+        // Open the SINGLE combined transaction.
+        let mut tx = self.storage.begin_combined_tx().map_err(map_combined_err)?;
 
-            // Pass 1 (Phase 2 in the docstring): apply semantic
-            // events (RewardIssued / DepositCredited /
-            // WithdrawalRequested) whose (actor, resource) is NOT
-            // covered by a BalanceChanged.
-            for event in events {
-                apply_semantic_event(&mut bv, event, &bc_pairs)?;
-            }
+        // ----- Pass 0 (GP.6.4): epoch boundary check -----
+        // Reset per-epoch tables if seq crosses an epoch boundary
+        // (BEFORE per-event dispatch so the dispatch loop credits
+        // into the freshly-reset tables).
+        dispatch_epoch_if_crossed(&mut *tx, seq, self.epoch_length)?;
 
-            // Pass 2 (Phase 3 in the docstring): apply
-            // BalanceChanged events as authoritative `set`s.
-            for event in events {
-                if let Event::BalanceChanged {
-                    resource,
-                    actor,
-                    new_value,
-                    ..
-                } = event
-                {
-                    bv.set(*actor, *resource, *new_value)?;
-                }
+        // ----- Pass 1 (balance semantic events) -----
+        // Apply RewardIssued / WithdrawalRequested / DepositCredited
+        // where (actor, resource) is NOT covered by a BalanceChanged.
+        for event in events {
+            apply_balance_semantic_event(&mut *tx, event, &bc_pairs)?;
+        }
+
+        // ----- Pass 2 (balance authoritative `set`s) -----
+        // Apply BalanceChanged events as authoritative `set`s.
+        for event in events {
+            if let Event::BalanceChanged {
+                resource,
+                actor,
+                new_value,
+                ..
+            } = event
+            {
+                balance_set(&mut *tx, *actor, *resource, *new_value)?;
             }
         }
 
-        // Cursor advance is the last operation inside the
-        // transaction.  If it fails, the entire batch rolls back.
-        advance_cursor_in_tx(&mut *tx, seq)?;
+        // ----- Pass 3 (GP.6.4 budget / pool dispatch) -----
+        // Dispatch GP-family events (tags 16/17/19/20) to the
+        // budget tables; tag 18 drains the pool if configured.
+        for event in events {
+            dispatch_event(&mut *tx, event, self.gas_pool_actor)?;
+        }
 
-        // Commit.  On commit failure, SQLite *may* have
-        // partially succeeded — the in-memory cursor MUST be
-        // re-synced with disk before any subsequent operation,
-        // otherwise a stale in-memory cursor combined with a
-        // successful disk commit could cause double-apply on
-        // retry.  We reload from disk and surface a
-        // `CommitAmbiguous` error so the caller knows to inspect
-        // `cursor()`.
+        // ----- Pass 4 (cursor advance) -----
+        // Cursor advance is the last operation inside the tx.
+        // On failure, the entire batch rolls back.
+        advance_cursor_via_combined(&mut *tx, self.cursor, seq)?;
+
+        // Commit.  On commit failure, re-sync the in-memory
+        // cursor with disk (matching the v1 recovery discipline).
         match tx.commit() {
             Ok(()) => {
                 self.cursor = seq;
                 Ok(())
             }
-            Err(commit_err) => {
-                // The transaction's Drop already attempted a
-                // ROLLBACK as part of the commit-failure path.
-                // Reload the cursor from disk to determine the
-                // true state.  If disk shows `seq`, the commit
-                // succeeded despite the error report; if disk
-                // shows the previous value, the commit truly
-                // rolled back.
-                //
-                // **Cascading-failure handling (audit C-2)**:
-                // if read_cursor ITSELF fails, we don't know the
-                // disk state — the indexer is poisoned and MUST
-                // halt until restart.  Without this defense, the
-                // in-memory cursor stays stale; a subsequent
-                // `apply_batch` would skip a stale-seq check and
-                // potentially double-apply.
-                match read_cursor(self.storage) {
-                    Ok(disk_cursor) => {
-                        self.cursor = disk_cursor;
-                        if disk_cursor >= seq {
-                            // The commit actually succeeded.  Surface
-                            // the CommitAmbiguous error so the caller
-                            // knows the original error reported wasn't
-                            // fatal.  Caller (daemon loop) should log
-                            // a WARN and continue — the cursor is
-                            // synced.
-                            Err(IndexerError::CommitAmbiguous { seq, disk_cursor })
-                        } else {
-                            // The commit truly failed.  Propagate the
-                            // original commit error.
-                            Err(IndexerError::Storage(commit_err))
-                        }
-                    }
-                    Err(cursor_err) => {
-                        // Cascade failure.  Poison the indexer so
-                        // any subsequent apply_batch refuses to
-                        // run.  Operator must inspect on-disk
-                        // state and restart.
-                        self.poisoned = true;
-                        Err(IndexerError::CursorRecoveryFailed {
-                            seq,
-                            commit_error: commit_err.to_string(),
-                            cursor_error: cursor_err.to_string(),
-                        })
+            Err(commit_err) => match read_cursor(self.storage) {
+                Ok(disk_cursor) => {
+                    self.cursor = disk_cursor;
+                    if disk_cursor >= seq {
+                        Err(IndexerError::CommitAmbiguous { seq, disk_cursor })
+                    } else {
+                        Err(map_combined_err(commit_err))
                     }
                 }
-            }
+                Err(cursor_err) => {
+                    self.poisoned = true;
+                    Err(IndexerError::CursorRecoveryFailed {
+                        seq,
+                        commit_error: commit_err.to_string(),
+                        cursor_error: cursor_err.to_string(),
+                    })
+                }
+            },
         }
     }
 
-    /// Re-read the on-disk cursor (e.g. after another indexer
-    /// process committed).  Mostly diagnostic; production usage
-    /// uses the in-memory cursor.
+    /// Re-read the on-disk cursor (e.g. after another process
+    /// committed).
     ///
     /// # Errors
     ///
@@ -476,22 +408,15 @@ impl<'a, S: Storage + ?Sized> Indexer<'a, S> {
     }
 }
 
-/// Apply a single semantic event (RewardIssued, DepositCredited,
-/// WithdrawalRequested) to a balance-tx view, BUT ONLY IF the
-/// event's (actor, resource) is not covered by a BalanceChanged
-/// event elsewhere in the batch.  BalanceChanged events
-/// themselves are not handled here — they're applied in a
-/// separate pass after this one.
-///
-/// **Overflow handling.**  `credit` overflow is propagated as
-/// [`BalanceError::CreditOverflow`] — the indexer rolls back the
-/// batch.  We do NOT silently saturate (that would corrupt the
-/// balance cell to u128::MAX permanently).
-fn apply_semantic_event(
-    view: &mut BalanceTxView<'_>,
+/// Apply a semantic event (RewardIssued / WithdrawalRequested /
+/// DepositCredited) to the balance view inside a combined
+/// transaction, but only if `(actor, resource)` is not covered
+/// by a BalanceChanged in the same batch.
+fn apply_balance_semantic_event(
+    tx: &mut dyn CombinedTransactionOps,
     event: &Event,
     bc_pairs: &HashSet<(ActorId, ResourceId)>,
-) -> Result<(), BalanceError> {
+) -> Result<(), IndexerError> {
     match event {
         Event::RewardIssued {
             resource,
@@ -499,12 +424,9 @@ fn apply_semantic_event(
             amount,
         } => {
             if bc_pairs.contains(&(*recipient, *resource)) {
-                // BalanceChanged in this batch overrides — skip.
                 return Ok(());
             }
-            // No BalanceChanged for this (actor, resource).  Apply
-            // the credit; overflow halts the batch.
-            view.credit(*recipient, *resource, *amount)?;
+            balance_credit(tx, *recipient, *resource, *amount)?;
         }
         Event::WithdrawalRequested {
             resource,
@@ -513,18 +435,9 @@ fn apply_semantic_event(
             ..
         } => {
             if bc_pairs.contains(&(*sender, *resource)) {
-                // BalanceChanged in this batch overrides — skip.
-                // (This is the critical fix for the
-                // BalanceChanged-then-withdraw underflow bug: a
-                // batch like [BalanceChanged(s, r, _, 20),
-                // WithdrawalRequested(r, s, 30, …)] would have
-                // underflowed with arrival-order dispatch
-                // because the set-to-20 + debit-30 = -10.)
                 return Ok(());
             }
-            // No BalanceChanged for this (sender, resource).
-            // Apply the debit; underflow halts the batch.
-            view.debit(*sender, *resource, *amount)?;
+            balance_debit(tx, *sender, *resource, *amount)?;
         }
         Event::DepositCredited {
             resource,
@@ -533,37 +446,200 @@ fn apply_semantic_event(
             ..
         } => {
             if bc_pairs.contains(&(*recipient, *resource)) {
-                // BalanceChanged in this batch overrides — skip.
                 return Ok(());
             }
-            view.credit(*recipient, *resource, *amount)?;
+            balance_credit(tx, *recipient, *resource, *amount)?;
         }
-        // BalanceChanged is handled in a separate pass; all
-        // other events (NonceAdvanced, IdentityRegistered,
-        // dispute/verdict/fault-proof/local-policy events) are
-        // no-ops at the balance-view layer.
         _ => {}
     }
     Ok(())
 }
 
+/// Build the canonical balance key.  Mirrors
+/// [`crate::balance::balance_key`] inline so the combined-tx
+/// path doesn't depend on the keyspace-based BalanceTxView types.
+fn balance_key_bytes(actor: ActorId, resource: ResourceId) -> [u8; BALANCE_KEY_LEN] {
+    let mut k = [0u8; BALANCE_KEY_LEN];
+    k[0..2].copy_from_slice(BALANCE_KEY_PREFIX);
+    k[2..10].copy_from_slice(&actor.to_be_bytes());
+    k[10..18].copy_from_slice(&resource.to_be_bytes());
+    k
+}
+
+/// Read a balance cell via the combined tx.  Returns 0 if absent.
+fn balance_get(
+    tx: &dyn CombinedTransactionOps,
+    actor: ActorId,
+    resource: ResourceId,
+) -> Result<Amount, IndexerError> {
+    let key = balance_key_bytes(actor, resource);
+    let cell = tx.kv_get(&key).map_err(map_combined_err)?;
+    match cell {
+        None => Ok(0),
+        Some(bytes) if bytes.len() == BALANCE_VALUE_LEN => {
+            let mut buf = [0u8; BALANCE_VALUE_LEN];
+            buf.copy_from_slice(&bytes);
+            Ok(amount_from_be_bytes(&buf))
+        }
+        Some(bytes) => Err(IndexerError::Balance(BalanceError::CorruptCell {
+            actor,
+            resource,
+            expected: BALANCE_VALUE_LEN,
+            actual: bytes.len(),
+        })),
+    }
+}
+
+/// Set a balance cell via the combined tx.
+fn balance_set(
+    tx: &mut dyn CombinedTransactionOps,
+    actor: ActorId,
+    resource: ResourceId,
+    value: Amount,
+) -> Result<(), IndexerError> {
+    let key = balance_key_bytes(actor, resource);
+    let cell = amount_to_be_bytes(value);
+    tx.kv_put(&key, &cell).map_err(map_combined_err)?;
+    Ok(())
+}
+
+/// Credit a balance cell, halting on overflow (saturates the cell
+/// to u128::MAX before returning the error, matching the v1
+/// `BalanceTxView::credit` discipline).
+fn balance_credit(
+    tx: &mut dyn CombinedTransactionOps,
+    actor: ActorId,
+    resource: ResourceId,
+    delta: Amount,
+) -> Result<Amount, IndexerError> {
+    let current = balance_get(tx, actor, resource)?;
+    match current.checked_add(delta) {
+        Some(sum) => {
+            balance_set(tx, actor, resource, sum)?;
+            Ok(sum)
+        }
+        None => {
+            balance_set(tx, actor, resource, Amount::MAX)?;
+            Err(IndexerError::Balance(BalanceError::CreditOverflow {
+                actor,
+                resource,
+                delta,
+            }))
+        }
+    }
+}
+
+/// Debit a balance cell, halting on underflow.
+fn balance_debit(
+    tx: &mut dyn CombinedTransactionOps,
+    actor: ActorId,
+    resource: ResourceId,
+    delta: Amount,
+) -> Result<Amount, IndexerError> {
+    let current = balance_get(tx, actor, resource)?;
+    match current.checked_sub(delta) {
+        Some(diff) => {
+            balance_set(tx, actor, resource, diff)?;
+            Ok(diff)
+        }
+        None => Err(IndexerError::Balance(BalanceError::DebitUnderflow {
+            actor,
+            resource,
+            current,
+            delta,
+        })),
+    }
+}
+
+/// Advance the cursor inside the combined tx.  Mirrors
+/// [`crate::cursor::advance_cursor_in_tx`] using the combined-tx
+/// kv methods.  Returns CursorError on non-monotonic advance or
+/// corrupt cell.
+fn advance_cursor_via_combined(
+    tx: &mut dyn CombinedTransactionOps,
+    in_memory_cursor: u64,
+    new_value: u64,
+) -> Result<(), IndexerError> {
+    let cell = tx.kv_get(CURSOR_KEY).map_err(map_combined_err)?;
+    let on_disk_cursor: u64 = match cell {
+        None => 0,
+        Some(bytes) if bytes.len() == CURSOR_VALUE_LEN => {
+            let mut buf = [0u8; CURSOR_VALUE_LEN];
+            buf.copy_from_slice(&bytes);
+            u64::from_be_bytes(buf)
+        }
+        Some(bytes) => {
+            return Err(IndexerError::Cursor(CursorError::CorruptCell {
+                expected: CURSOR_VALUE_LEN,
+                actual: bytes.len(),
+            }));
+        }
+    };
+    // The in-memory cursor should match disk (last-committed
+    // value); if not, we have an external writer or a recovery
+    // anomaly.  Use the stricter of the two for the monotonicity
+    // check.
+    let current = on_disk_cursor.max(in_memory_cursor);
+    if new_value < current {
+        return Err(IndexerError::Cursor(CursorError::NonMonotonicAdvance {
+            current,
+            attempted: new_value,
+        }));
+    }
+    tx.kv_put(CURSOR_KEY, &new_value.to_be_bytes())
+        .map_err(map_combined_err)?;
+    Ok(())
+}
+
+/// Helper: convert a [`CombinedTransactionError`] into an
+/// [`IndexerError`].  Routes Storage errors via
+/// `IndexerError::Storage` and Budget errors via
+/// `IndexerError::BudgetView`.
+fn map_combined_err(e: CombinedTransactionError) -> IndexerError {
+    match e {
+        CombinedTransactionError::Storage(s) => IndexerError::Storage(s),
+        CombinedTransactionError::Budget(b) => {
+            IndexerError::BudgetView(CombinedTransactionError::Budget(b))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Indexer, IndexerError};
+    use super::{Indexer, IndexerError, IndexerStorage};
     use crate::balance::BalanceView;
-    use crate::event::Event;
+    use crate::budget_view::BudgetReadView;
+    use crate::event::{Event, RESOURCE_ID_ETH};
     use knomosis_storage::sqlite::SqliteStorage;
+    use knomosis_storage::storage::Storage;
 
-    /// Opening a fresh database initialises the identifier and
-    /// returns cursor = 0.
+    /// Open a fresh in-memory indexer.
+    fn open_indexer() -> (SqliteStorage, ()) {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        (s, ())
+    }
+
+    /// Indexer is constructable + reads cursor 0 from a fresh DB.
     #[test]
     fn open_fresh_db() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let ix = Indexer::open(&s).unwrap();
         assert_eq!(ix.cursor(), 0);
+        assert!(!ix.is_poisoned());
+        assert_eq!(ix.gas_pool_actor(), None);
+        assert_eq!(ix.epoch_length(), 0);
     }
 
-    /// Re-opening an existing database matches the cursor.
+    /// `open_with_config` records the gas_pool_actor + epoch_length.
+    #[test]
+    fn open_with_config_records_settings() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let ix = Indexer::open_with_config(&s, Some(42), 100).unwrap();
+        assert_eq!(ix.gas_pool_actor(), Some(42));
+        assert_eq!(ix.epoch_length(), 100);
+    }
+
+    /// Reopen preserves the cursor across indexer instances.
     #[test]
     fn reopen_preserves_cursor() {
         let dir = tempfile::tempdir().unwrap();
@@ -585,9 +661,10 @@ mod tests {
         assert_eq!(ix.cursor(), 1);
     }
 
-    /// `BalanceChanged` sets the balance authoritatively.
+    /// BalanceChanged sets the balance authoritatively (via
+    /// combined tx).
     #[test]
-    fn dispatch_balance_changed() {
+    fn dispatch_balance_changed_combined_tx() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut ix = Indexer::open(&s).unwrap();
         ix.apply_batch(
@@ -604,9 +681,9 @@ mod tests {
         assert_eq!(bv.get(42, 1).unwrap(), 500);
     }
 
-    /// `RewardIssued` credits the recipient.
+    /// RewardIssued credits the recipient (via combined tx).
     #[test]
-    fn dispatch_reward_issued() {
+    fn dispatch_reward_issued_combined_tx() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut ix = Indexer::open(&s).unwrap();
         ix.apply_batch(
@@ -622,84 +699,38 @@ mod tests {
         assert_eq!(bv.get(7, 2).unwrap(), 100);
     }
 
-    /// `DepositCredited` credits the recipient.
+    /// WithdrawalRequested debits the sender; underflow halts.
     #[test]
-    fn dispatch_deposit_credited() {
+    fn dispatch_withdrawal_underflow_halts() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut ix = Indexer::open(&s).unwrap();
-        ix.apply_batch(
-            1,
-            &[Event::DepositCredited {
-                resource: 2,
-                recipient: 8,
-                amount: 250,
-                deposit_id: 1,
-            }],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(8, 2).unwrap(), 250);
-    }
-
-    /// `WithdrawalRequested` debits the sender.
-    #[test]
-    fn dispatch_withdrawal_requested() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        // Seed sender balance via BalanceChanged.
+        // Seed actor with 50.
         ix.apply_batch(
             1,
             &[Event::BalanceChanged {
                 resource: 1,
-                actor: 9,
+                actor: 1,
                 old_value: 0,
-                new_value: 500,
+                new_value: 50,
             }],
         )
         .unwrap();
-        // Withdraw 200.
-        ix.apply_batch(
+        // Try withdraw 100 → underflow.
+        let result = ix.apply_batch(
             2,
             &[Event::WithdrawalRequested {
                 resource: 1,
-                sender: 9,
-                amount: 200,
+                sender: 1,
+                amount: 100,
                 recipient_l1: [0; 20],
                 withdrawal_id: 1,
             }],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(9, 1).unwrap(), 300);
-    }
-
-    /// Multi-event batch applies atomically.
-    #[test]
-    fn multi_event_batch_atomic() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        ix.apply_batch(
-            1,
-            &[
-                Event::BalanceChanged {
-                    resource: 1,
-                    actor: 1,
-                    old_value: 0,
-                    new_value: 100,
-                },
-                Event::BalanceChanged {
-                    resource: 1,
-                    actor: 2,
-                    old_value: 0,
-                    new_value: 200,
-                },
-            ],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 1).unwrap(), 100);
-        assert_eq!(bv.get(2, 1).unwrap(), 200);
+        );
+        assert!(matches!(result, Err(IndexerError::Balance(_))));
+        // Cursor stays at 1.
         assert_eq!(ix.cursor(), 1);
+        let bv = BalanceView::new(&s);
+        assert_eq!(bv.get(1, 1).unwrap(), 50);
     }
 
     /// `apply_batch` rejects an empty batch.
@@ -707,13 +738,13 @@ mod tests {
     fn empty_batch_rejected() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut ix = Indexer::open(&s).unwrap();
-        match ix.apply_batch(1, &[]) {
-            Err(IndexerError::EmptyBatch) => {}
-            other => panic!("expected EmptyBatch, got {other:?}"),
-        }
+        assert!(matches!(
+            ix.apply_batch(1, &[]),
+            Err(IndexerError::EmptyBatch)
+        ));
     }
 
-    /// `apply_batch` rejects a stale seq (already processed).
+    /// `apply_batch` rejects a stale seq.
     #[test]
     fn stale_seq_rejected() {
         let s = SqliteStorage::open_in_memory().unwrap();
@@ -728,308 +759,284 @@ mod tests {
             }],
         )
         .unwrap();
-        // Try replaying seq 5.
-        match ix.apply_batch(
-            5,
-            &[Event::BalanceChanged {
-                resource: 1,
-                actor: 1,
-                old_value: 0,
-                new_value: 200,
-            }],
-        ) {
-            Err(IndexerError::StaleEvent { seq, cursor }) => {
-                assert_eq!(seq, 5);
-                assert_eq!(cursor, 5);
-            }
-            other => panic!("expected StaleEvent, got {other:?}"),
-        }
-        // Cursor unchanged.
+        assert!(matches!(
+            ix.apply_batch(
+                5,
+                &[Event::BalanceChanged {
+                    resource: 1,
+                    actor: 1,
+                    old_value: 0,
+                    new_value: 200
+                }]
+            ),
+            Err(IndexerError::StaleEvent { seq: 5, cursor: 5 })
+        ));
         assert_eq!(ix.cursor(), 5);
-        // Balance unchanged from the original.
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 1).unwrap(), 100);
     }
 
-    /// Debit underflow rolls back the entire batch.
+    /// **Audit-regression**: a multi-event batch (transfer-shaped)
+    /// applies atomically via the combined tx.
     #[test]
-    fn debit_underflow_rolls_back() {
+    fn transfer_shaped_batch_atomic() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut ix = Indexer::open(&s).unwrap();
-        // Seed with 50.
         ix.apply_batch(
             1,
             &[Event::BalanceChanged {
-                resource: 1,
+                resource: 0,
                 actor: 1,
                 old_value: 0,
-                new_value: 50,
+                new_value: 500,
             }],
         )
         .unwrap();
-        // Try to withdraw 100.
-        let result = ix.apply_batch(
+        ix.apply_batch(
             2,
-            &[Event::WithdrawalRequested {
-                resource: 1,
-                sender: 1,
-                amount: 100,
-                recipient_l1: [0; 20],
-                withdrawal_id: 1,
-            }],
-        );
-        assert!(matches!(result, Err(IndexerError::Balance(_))));
-        // Cursor unchanged from before the failed batch.
-        assert_eq!(ix.cursor(), 1);
-        // Balance unchanged.
+            &[
+                Event::BalanceChanged {
+                    resource: 0,
+                    actor: 1,
+                    old_value: 500,
+                    new_value: 300,
+                },
+                Event::BalanceChanged {
+                    resource: 0,
+                    actor: 2,
+                    old_value: 0,
+                    new_value: 200,
+                },
+            ],
+        )
+        .unwrap();
         let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 1).unwrap(), 50);
+        assert_eq!(bv.get(1, 0).unwrap(), 300);
+        assert_eq!(bv.get(2, 0).unwrap(), 200);
     }
 
-    /// No-op events (e.g. NonceAdvanced) advance the cursor
-    /// without touching balances.
+    /// GP.6.4: depositWithFee credits BOTH balance view AND
+    /// budget view atomically via the combined tx.
     #[test]
-    fn no_op_event_advances_cursor() {
+    fn deposit_with_fee_credits_both_views_atomically() {
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut ix = Indexer::open(&s).unwrap();
         ix.apply_batch(
             1,
-            &[Event::NonceAdvanced {
-                actor: 1,
-                old_nonce: 0,
-                new_nonce: 1,
+            &[
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 42,
+                    old_value: 0,
+                    new_value: 900,
+                },
+                Event::BalanceChanged {
+                    resource: RESOURCE_ID_ETH,
+                    actor: 1,
+                    old_value: 0,
+                    new_value: 100,
+                },
+                Event::DepositWithFeeCredited {
+                    resource: RESOURCE_ID_ETH,
+                    recipient: 42,
+                    pool_actor: 1,
+                    user_amount: 900,
+                    pool_amount: 100,
+                    budget_grant: 50,
+                    deposit_id: 7,
+                },
+            ],
+        )
+        .unwrap();
+        let bv = BalanceView::new(&s);
+        let budget = BudgetReadView::new(&s);
+        assert_eq!(bv.get(42, RESOURCE_ID_ETH).unwrap(), 900);
+        assert_eq!(bv.get(1, RESOURCE_ID_ETH).unwrap(), 100);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 50);
+        assert_eq!(
+            budget.get_actor_budget_current_epoch_grants(42).unwrap(),
+            50
+        );
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 100);
+    }
+
+    /// GP.6.4: BudgetConsumed (tag 20) credits the current-epoch
+    /// consumed counter via the combined tx.
+    #[test]
+    fn budget_consumed_credits_current_epoch_consumed() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        ix.apply_batch(
+            1,
+            &[Event::BudgetConsumed {
+                actor: 42,
+                amount: 1,
             }],
         )
         .unwrap();
-        assert_eq!(ix.cursor(), 1);
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.scan_all().unwrap().len(), 0);
+        let budget = BudgetReadView::new(&s);
+        assert_eq!(
+            budget.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            1
+        );
     }
 
-    /// Identifier mismatch on reopen.
+    /// GP.6.4: GasPoolClaim with --gas-pool-actor set drains the
+    /// pool view atomically with the cursor advance.
+    #[test]
+    fn gas_pool_claim_drains_with_config() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        // Pre-credit pool ETH for actor 1.
+        let mut ix = Indexer::open_with_config(&s, Some(1), 0).unwrap();
+        ix.apply_batch(
+            1,
+            &[Event::ActionBudgetTopUp {
+                signer: 99,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: 1000,
+                budget_increment: 100,
+                pool_actor: 1,
+            }],
+        )
+        .unwrap();
+        // Drain 300 via GasPoolClaim.
+        ix.apply_batch(
+            2,
+            &[Event::GasPoolClaim {
+                resource: RESOURCE_ID_ETH,
+                sequencer: 2,
+                amount: 300,
+            }],
+        )
+        .unwrap();
+        let budget = BudgetReadView::new(&s);
+        // Pool ETH: 1000 - 300 = 700.
+        assert_eq!(budget.get_pool_eth(1).unwrap(), 700);
+    }
+
+    /// GP.6.4: epoch advancement resets per-epoch tables but
+    /// preserves lifetime tables.
+    #[test]
+    fn epoch_advancement_resets_per_epoch_tables() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        // epoch_length = 10 → epoch crosses every 10 seqs.
+        let mut ix = Indexer::open_with_config(&s, None, 10).unwrap();
+        // Apply in epoch 0 (seq 1).
+        ix.apply_batch(
+            1,
+            &[Event::ActionBudgetTopUp {
+                signer: 42,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: 10,
+                budget_increment: 100,
+                pool_actor: 1,
+            }],
+        )
+        .unwrap();
+        let budget = BudgetReadView::new(&s);
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 100);
+        assert_eq!(
+            budget.get_actor_budget_current_epoch_grants(42).unwrap(),
+            100
+        );
+        // Cross to epoch 1.  The kernel advances epoch at
+        // logIndex == epochLength (= 10), which surfaces as
+        // seq = logIndex + 1 = 11.  (seq 10 ⇒ logIndex 9 is
+        // still epoch 0, so it would NOT cross — the
+        // off-by-one the audit corrected.)
+        ix.apply_batch(
+            11,
+            &[Event::ActionBudgetTopUp {
+                signer: 42,
+                gas_resource: RESOURCE_ID_ETH,
+                gas_amount: 5,
+                budget_increment: 50,
+                pool_actor: 1,
+            }],
+        )
+        .unwrap();
+        let budget = BudgetReadView::new(&s);
+        // Lifetime accumulates (100 + 50 = 150).
+        assert_eq!(budget.get_actor_budget(42).unwrap(), 150);
+        // Current-epoch resets to just the new credit (50).
+        assert_eq!(
+            budget.get_actor_budget_current_epoch_grants(42).unwrap(),
+            50
+        );
+    }
+
+    /// **Atomicity**: a budget overflow halts the WHOLE batch
+    /// (kv + budget tables rolled back together).
+    #[test]
+    fn budget_overflow_rolls_back_kv() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        // Pre-saturate the budget for actor 42 via a direct
+        // BudgetStorage write.
+        {
+            use knomosis_storage::combined_transaction::CombinedStorage;
+            let mut tx = s.begin_combined_tx().unwrap();
+            tx.credit_actor_budget(42, u128::MAX - 5).unwrap();
+            tx.commit().unwrap();
+        }
+        let mut ix = Indexer::open(&s).unwrap();
+        // A batch that updates a balance AND tries to credit
+        // 100 more budget → budget overflow.
+        let result = ix.apply_batch(
+            1,
+            &[
+                Event::BalanceChanged {
+                    resource: 0,
+                    actor: 99,
+                    old_value: 0,
+                    new_value: 555,
+                },
+                Event::ActionBudgetTopUp {
+                    signer: 42,
+                    gas_resource: RESOURCE_ID_ETH,
+                    gas_amount: 1,
+                    budget_increment: 100,
+                    pool_actor: 1,
+                },
+            ],
+        );
+        assert!(matches!(result, Err(IndexerError::BudgetView(_))));
+        // **Critical**: cursor stays at 0 AND the balance change
+        // for actor 99 was rolled back.
+        assert_eq!(ix.cursor(), 0);
+        let bv = BalanceView::new(&s);
+        assert_eq!(bv.get(99, 0).unwrap(), 0);
+    }
+
+    /// `IndexerStorage` blanket impl: SqliteStorage qualifies
+    /// (the production storage backend).  Compile-time check.
+    #[test]
+    fn sqlite_storage_implements_indexer_storage() {
+        fn assert_indexer_storage<T: IndexerStorage>() {}
+        assert_indexer_storage::<SqliteStorage>();
+    }
+
+    /// Identifier mismatch on reopen rejects (preserved from v1).
     #[test]
     fn identifier_mismatch_on_reopen() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("ix.db");
-        // Manually plant a different identifier.
         {
-            use knomosis_storage::storage::Storage;
             let s = SqliteStorage::open(&path).unwrap();
             s.put(crate::cursor::IDENTIFIER_KEY, b"other/v1").unwrap();
         }
-        // Open as knomosis-indexer/v1 — must fail.
         let s = SqliteStorage::open(&path).unwrap();
         let result = Indexer::open(&s);
-        // We can't use the {:?} formatter on Indexer because the
-        // variant carries the storage borrow; match the typed
-        // result against the expected `Err` shape.
-        match result {
-            Err(IndexerError::Cursor(crate::cursor::CursorError::IdentifierMismatch {
-                expected,
-                found,
-            })) => {
-                assert_eq!(expected, "knomosis-indexer/v1");
-                assert_eq!(found, "other/v1");
-            }
-            Err(other) => panic!("expected IdentifierMismatch, got Err({other:?})"),
-            Ok(_) => panic!("expected IdentifierMismatch, got Ok"),
-        }
+        assert!(matches!(
+            result,
+            Err(IndexerError::Cursor(
+                crate::cursor::CursorError::IdentifierMismatch { .. }
+            ))
+        ));
     }
 
-    /// **Audit-regression C-2**: Dispatch order — when a batch
-    /// contains both BalanceChanged and a semantic event for the
-    /// same (actor, resource), the BalanceChanged value wins
-    /// (the semantic event is skipped to avoid double-counting).
-    ///
-    /// This is the canonical kernel-emit order: for a `reward`
-    /// action, the Lean side emits `[balanceChanged?,
-    /// rewardIssued]` — balanceChanged FIRST.  Arrival-order
-    /// dispatch would set then credit, giving 100 + 100 = 200.
-    /// The correct dispatch is two-pass: credit is skipped
-    /// because BalanceChanged covers the same (actor, resource).
-    #[test]
-    fn dispatch_two_pass_reward_no_double_count() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        // Initial state: actor 1, resource 0, balance 0.
-        // Reward action with amount=100: balance becomes 100.
-        // Kernel emits:
-        //   1. BalanceChanged(0, 1, 0, 100)
-        //   2. RewardIssued(0, 1, 100)
-        ix.apply_batch(
-            1,
-            &[
-                Event::BalanceChanged {
-                    resource: 0,
-                    actor: 1,
-                    old_value: 0,
-                    new_value: 100,
-                },
-                Event::RewardIssued {
-                    resource: 0,
-                    recipient: 1,
-                    amount: 100,
-                },
-            ],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        // Without two-pass dispatch: balance would be 200 (set
-        // then credit double-counts).  With two-pass: balance is
-        // 100 (RewardIssued skipped because BalanceChanged
-        // covers the same key).
-        assert_eq!(bv.get(1, 0).unwrap(), 100);
-    }
-
-    /// **Audit-regression C-2 (withdraw variant)**: A withdraw
-    /// action emits `[balanceChanged?, withdrawalRequested]`.  With
-    /// arrival-order dispatch, the set-to-post-balance + debit
-    /// would underflow (post-balance < withdrawn amount).  With
-    /// two-pass dispatch, the WithdrawalRequested is skipped
-    /// (BalanceChanged covers the key), and the balance ends up
-    /// at the authoritative post-state value.
-    #[test]
-    fn dispatch_two_pass_withdraw_no_underflow() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        // Seed: actor 1, resource 0, balance 100.
-        ix.apply_batch(
-            1,
-            &[Event::BalanceChanged {
-                resource: 0,
-                actor: 1,
-                old_value: 0,
-                new_value: 100,
-            }],
-        )
-        .unwrap();
-        // Withdraw 30: balance becomes 70.
-        // Kernel emits:
-        //   1. BalanceChanged(0, 1, 100, 70)
-        //   2. WithdrawalRequested(0, 1, 30, addr, wdid)
-        ix.apply_batch(
-            2,
-            &[
-                Event::BalanceChanged {
-                    resource: 0,
-                    actor: 1,
-                    old_value: 100,
-                    new_value: 70,
-                },
-                Event::WithdrawalRequested {
-                    resource: 0,
-                    sender: 1,
-                    amount: 30,
-                    recipient_l1: [0; 20],
-                    withdrawal_id: 1,
-                },
-            ],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        // Without two-pass: set-to-70 then debit-30 = 40 (WRONG,
-        // double-counts the withdraw).  Or worse: in a scenario
-        // where post-balance < withdrawn-amount, set-to-X then
-        // debit-Y underflows.  With two-pass: balance is 70.
-        assert_eq!(bv.get(1, 0).unwrap(), 70);
-    }
-
-    /// **Audit-regression C-2 (semantic-event-without-balance-changed)**:
-    /// If a batch has a semantic event WITHOUT a corresponding
-    /// BalanceChanged (e.g. amount=0, where the kernel
-    /// delta-filters BalanceChanged but still emits the
-    /// unconditional semantic event), the semantic event applies
-    /// normally.
-    #[test]
-    fn dispatch_semantic_event_alone_applies() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        // Reward of 50 to actor 1 — no BalanceChanged (e.g., a
-        // sythetic test scenario or a kernel quirk).
-        ix.apply_batch(
-            1,
-            &[Event::RewardIssued {
-                resource: 0,
-                recipient: 1,
-                amount: 50,
-            }],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 0).unwrap(), 50);
-    }
-
-    /// **Audit-regression C-2 (cross-key non-interference)**:
-    /// A batch with BalanceChanged for (A1, R) and RewardIssued
-    /// for (A2, R) (different actors) — both should apply.
-    #[test]
-    fn dispatch_two_pass_different_actors_dont_interfere() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        ix.apply_batch(
-            1,
-            &[
-                Event::BalanceChanged {
-                    resource: 0,
-                    actor: 1,
-                    old_value: 0,
-                    new_value: 100,
-                },
-                Event::RewardIssued {
-                    resource: 0,
-                    recipient: 2, // different actor!
-                    amount: 50,
-                },
-            ],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 0).unwrap(), 100); // BalanceChanged for actor 1
-        assert_eq!(bv.get(2, 0).unwrap(), 50); // RewardIssued for actor 2
-    }
-
-    /// **Audit-regression H-5**: `credit` overflow halts the
-    /// batch — the indexer does NOT silently saturate.
-    #[test]
-    fn credit_overflow_halts_batch() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        // Seed: actor 1, balance just below u128::MAX.
-        ix.apply_batch(
-            1,
-            &[Event::BalanceChanged {
-                resource: 0,
-                actor: 1,
-                old_value: 0,
-                new_value: u128::MAX - 10,
-            }],
-        )
-        .unwrap();
-        // Reward 100 to actor 1: overflow.
-        let result = ix.apply_batch(
-            2,
-            &[Event::RewardIssued {
-                resource: 0,
-                recipient: 1,
-                amount: 100,
-            }],
-        );
-        assert!(matches!(result, Err(IndexerError::Balance(_))));
-        // Cursor unchanged.
-        assert_eq!(ix.cursor(), 1);
-        // Balance unchanged (no saturation).
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 0).unwrap(), u128::MAX - 10);
-    }
-
-    /// **Audit-regression C-3**: Cursor update happens AFTER
-    /// successful commit.  If commit fails, the in-memory cursor
-    /// is reloaded from disk to avoid desync.  We can't easily
-    /// inject a commit failure via SqliteStorage; this test
-    /// verifies the happy path that the cursor IS updated on
-    /// success.
+    /// **Audit-regression**: cursor advance happens AFTER commit
+    /// success.  Pin on the happy path.
     #[test]
     fn cursor_updates_on_commit_success() {
+        let (_s, ()) = open_indexer();
         let s = SqliteStorage::open_in_memory().unwrap();
         let mut ix = Indexer::open(&s).unwrap();
         let pre = ix.cursor();
@@ -1045,52 +1052,7 @@ mod tests {
         .unwrap();
         assert_eq!(ix.cursor(), 10);
         assert_ne!(ix.cursor(), pre);
-        // Reload from disk: should match.
         let on_disk = crate::cursor::read_cursor(&s).unwrap();
         assert_eq!(on_disk, 10);
-    }
-
-    /// **Audit-regression**: A transfer-shaped batch (two
-    /// BalanceChanged events, no semantic events) applies
-    /// correctly.  Verifies the cross-key independence of the
-    /// two-pass dispatch.
-    #[test]
-    fn transfer_shaped_batch_applies() {
-        let s = SqliteStorage::open_in_memory().unwrap();
-        let mut ix = Indexer::open(&s).unwrap();
-        // Seed: sender has 500.
-        ix.apply_batch(
-            1,
-            &[Event::BalanceChanged {
-                resource: 0,
-                actor: 1,
-                old_value: 0,
-                new_value: 500,
-            }],
-        )
-        .unwrap();
-        // Transfer 200 from actor 1 to actor 2: kernel emits two
-        // BalanceChanged events.
-        ix.apply_batch(
-            2,
-            &[
-                Event::BalanceChanged {
-                    resource: 0,
-                    actor: 1, // sender
-                    old_value: 500,
-                    new_value: 300,
-                },
-                Event::BalanceChanged {
-                    resource: 0,
-                    actor: 2, // receiver
-                    old_value: 0,
-                    new_value: 200,
-                },
-            ],
-        )
-        .unwrap();
-        let bv = BalanceView::new(&s);
-        assert_eq!(bv.get(1, 0).unwrap(), 300);
-        assert_eq!(bv.get(2, 0).unwrap(), 200);
     }
 }

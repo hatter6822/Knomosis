@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Fault-injection tests for the indexer's recovery paths.
 //!
@@ -17,6 +18,9 @@
 
 use knomosis_indexer::event::Event;
 use knomosis_indexer::indexer::{Indexer, IndexerError, INDEXER_MAX_BATCH_EVENTS};
+use knomosis_storage::combined_transaction::{
+    CombinedStorage, CombinedTransactionError, CombinedTransactionOps,
+};
 use knomosis_storage::sqlite::SqliteStorage;
 use knomosis_storage::storage::{
     KeyValuePairs, Storage, StorageError, StorageSnapshot, StorageTransaction,
@@ -28,11 +32,11 @@ use std::sync::Arc;
 /// inject specific failures.  Each failure flag is `consumed`
 /// when triggered (one-shot) so tests can observe single-event
 /// recovery cleanly.
-struct FaultyStorage<S: Storage + ?Sized> {
+struct FaultyStorage<S: Storage + CombinedStorage + ?Sized> {
     inner: Box<S>,
-    /// If set, the next `transaction()` call returns a wrapped
-    /// transaction whose `commit()` returns Err.  Auto-cleared
-    /// after one trigger.
+    /// If set, the next `transaction()` / `begin_combined_tx()`
+    /// returns a wrapped transaction whose `commit()` returns Err.
+    /// Auto-cleared after one trigger.
     fail_next_commit: AtomicBool,
     /// If set, the next `get(b"c/cursor")` call returns Err.
     /// Used to inject the cascading failure (commit fails AND
@@ -42,7 +46,7 @@ struct FaultyStorage<S: Storage + ?Sized> {
     cursor_read_count: AtomicU8,
 }
 
-impl<S: Storage + ?Sized> FaultyStorage<S> {
+impl<S: Storage + CombinedStorage + ?Sized> FaultyStorage<S> {
     fn new(inner: Box<S>) -> Self {
         Self {
             inner,
@@ -61,7 +65,7 @@ impl<S: Storage + ?Sized> FaultyStorage<S> {
     }
 }
 
-impl<S: Storage + ?Sized> Storage for FaultyStorage<S> {
+impl<S: Storage + CombinedStorage + ?Sized> Storage for FaultyStorage<S> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StorageError> {
         if key == b"c/cursor" {
             let _ = self.cursor_read_count.fetch_add(1, Ordering::SeqCst);
@@ -141,6 +145,153 @@ impl StorageTransaction for FaultyTransaction<'_> {
     }
 
     fn rollback(mut self: Box<Self>) -> Result<(), StorageError> {
+        let inner = self.inner.take().unwrap();
+        inner.rollback()
+    }
+}
+
+impl<S: Storage + CombinedStorage + ?Sized> CombinedStorage for FaultyStorage<S> {
+    fn begin_combined_tx(
+        &self,
+    ) -> Result<Box<dyn CombinedTransactionOps + '_>, CombinedTransactionError> {
+        let inner_tx = self.inner.begin_combined_tx()?;
+        let fail_commit = self.fail_next_commit.swap(false, Ordering::SeqCst);
+        Ok(Box::new(FaultyCombinedTransaction {
+            inner: Some(inner_tx),
+            fail_commit,
+        }))
+    }
+}
+
+/// Wrapper combined-transaction that can inject COMMIT failures.
+/// (The cursor-read failure mode is injected at the
+/// `Storage::get` path — used during the indexer's
+/// post-commit-failure recovery — not at the combined tx level,
+/// because the indexer's apply_batch's cursor advance happens
+/// INSIDE the combined tx and shouldn't share the
+/// recovery-path's fault flag.)
+struct FaultyCombinedTransaction<'a> {
+    inner: Option<Box<dyn CombinedTransactionOps + 'a>>,
+    fail_commit: bool,
+}
+
+impl CombinedTransactionOps for FaultyCombinedTransaction<'_> {
+    fn kv_get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, CombinedTransactionError> {
+        self.inner.as_ref().unwrap().kv_get(key)
+    }
+
+    fn kv_put(&mut self, key: &[u8], value: &[u8]) -> Result<(), CombinedTransactionError> {
+        self.inner.as_mut().unwrap().kv_put(key, value)
+    }
+
+    fn kv_delete(&mut self, key: &[u8]) -> Result<(), CombinedTransactionError> {
+        self.inner.as_mut().unwrap().kv_delete(key)
+    }
+
+    fn kv_scan(&self, prefix: &[u8]) -> Result<KeyValuePairs, CombinedTransactionError> {
+        self.inner.as_ref().unwrap().kv_scan(prefix)
+    }
+
+    fn get_actor_budget(&self, actor: u64) -> Result<u128, CombinedTransactionError> {
+        self.inner.as_ref().unwrap().get_actor_budget(actor)
+    }
+
+    fn get_actor_budget_current_epoch_grants(
+        &self,
+        actor: u64,
+    ) -> Result<u128, CombinedTransactionError> {
+        self.inner
+            .as_ref()
+            .unwrap()
+            .get_actor_budget_current_epoch_grants(actor)
+    }
+
+    fn get_actor_budget_current_epoch_consumed(
+        &self,
+        actor: u64,
+    ) -> Result<u128, CombinedTransactionError> {
+        self.inner
+            .as_ref()
+            .unwrap()
+            .get_actor_budget_current_epoch_consumed(actor)
+    }
+
+    fn get_pool_eth(&self, p: u64) -> Result<u128, CombinedTransactionError> {
+        self.inner.as_ref().unwrap().get_pool_eth(p)
+    }
+
+    fn get_pool_bold(&self, p: u64) -> Result<u128, CombinedTransactionError> {
+        self.inner.as_ref().unwrap().get_pool_bold(p)
+    }
+
+    fn credit_actor_budget(
+        &mut self,
+        actor: u64,
+        delta: u128,
+    ) -> Result<u128, CombinedTransactionError> {
+        self.inner
+            .as_mut()
+            .unwrap()
+            .credit_actor_budget(actor, delta)
+    }
+
+    fn credit_actor_budget_current_epoch_grants(
+        &mut self,
+        actor: u64,
+        delta: u128,
+    ) -> Result<u128, CombinedTransactionError> {
+        self.inner
+            .as_mut()
+            .unwrap()
+            .credit_actor_budget_current_epoch_grants(actor, delta)
+    }
+
+    fn credit_actor_budget_current_epoch_consumed(
+        &mut self,
+        actor: u64,
+        delta: u128,
+    ) -> Result<u128, CombinedTransactionError> {
+        self.inner
+            .as_mut()
+            .unwrap()
+            .credit_actor_budget_current_epoch_consumed(actor, delta)
+    }
+
+    fn credit_pool_eth(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+        self.inner.as_mut().unwrap().credit_pool_eth(p, delta)
+    }
+
+    fn credit_pool_bold(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+        self.inner.as_mut().unwrap().credit_pool_bold(p, delta)
+    }
+
+    fn debit_pool_eth(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+        self.inner.as_mut().unwrap().debit_pool_eth(p, delta)
+    }
+
+    fn debit_pool_bold(&mut self, p: u64, delta: u128) -> Result<u128, CombinedTransactionError> {
+        self.inner.as_mut().unwrap().debit_pool_bold(p, delta)
+    }
+
+    fn reset_current_epoch(&mut self) -> Result<(), CombinedTransactionError> {
+        self.inner.as_mut().unwrap().reset_current_epoch()
+    }
+
+    fn commit(mut self: Box<Self>) -> Result<(), CombinedTransactionError> {
+        let inner = self.inner.take().unwrap();
+        if self.fail_commit {
+            let _ = inner.rollback();
+            Err(CombinedTransactionError::Storage(
+                StorageError::CommitFailed {
+                    reason: "fault-injected: commit failure".to_string(),
+                },
+            ))
+        } else {
+            inner.commit()
+        }
+    }
+
+    fn rollback(mut self: Box<Self>) -> Result<(), CombinedTransactionError> {
         let inner = self.inner.take().unwrap();
         inner.rollback()
     }

@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -72,27 +73,29 @@ open LegalKernel.Authority
 
 /-! ## EI.6.a — `Bridge.DepositRecord.encode_injective`
 
-The inner-record injectivity theorem.  `DepositRecord` is a 2-field
-record `{ resource : ResourceId, amount : Amount }`; equal canonical
-encodings imply structural equality.
+The inner-record injectivity theorem.  `DepositRecord` is the 4-field
+record `{ resource, userAmount, poolAmount, budgetGrant }` (GP.4.1
+widening); equal canonical encodings imply structural equality.
 
 Routes through `depositRecord_roundtrip` (`Encoding/State.lean`):
 both records decode to `.ok (rec_i, [])`; transitivity through the
 shared byte stream forces the decoded records to coincide. -/
 
 /-- EI.6.a — `Bridge.DepositRecord.encode_injective`.  Equal canonical
-    encodings imply structural equality on the 2-field record.
+    encodings imply structural equality on the 4-field record.
 
-    **Hypotheses.**  Canonical-encoding bounds on both fields of both
-    inputs.  `resource.toNat < 2^64` is automatic (UInt64), but is
+    **Hypotheses.**  Canonical-encoding bounds on all four fields of
+    both inputs.  `resource.toNat < 2^64` is automatic (UInt64), but is
     propagated through the per-pair list-element bounds in the outer
-    `BridgeState.encodeConsumed` proof.  `amount < 2^64` is a
-    deployment-level constraint enforced at the runtime boundary
-    (§8.5). -/
+    `BridgeState.encodeConsumed` proof.  The `userAmount` / `poolAmount`
+    / `budgetGrant` bounds are deployment-level constraints enforced at
+    the runtime boundary (§8.5). -/
 theorem Bridge.DepositRecord.encode_injective
     (rec₁ rec₂ : Bridge.DepositRecord)
-    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.amount < 256 ^ 8)
-    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.amount < 256 ^ 8)
+    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
+          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8)
+    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
+          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8)
     (h : Bridge.DepositRecord.encode rec₁ = Bridge.DepositRecord.encode rec₂) :
     rec₁ = rec₂ := by
   have r₁ := depositRecord_roundtrip rec₁ [] h₁
@@ -115,8 +118,10 @@ Direct application of `encodeAsBytes_eq_injective_of_encode_eq_injective`
     on the inner record.  Same bounds hypotheses as EI.6.a. -/
 theorem Bridge.DepositRecord.encodeAsBytes_injective
     (rec₁ rec₂ : Bridge.DepositRecord)
-    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.amount < 256 ^ 8)
-    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.amount < 256 ^ 8)
+    (h₁ : rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
+          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8)
+    (h₂ : rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
+          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8)
     (h : Bridge.DepositRecord.encodeAsBytes rec₁ = Bridge.DepositRecord.encodeAsBytes rec₂) :
     rec₁ = rec₂ := by
   unfold Bridge.DepositRecord.encodeAsBytes at h
@@ -156,7 +161,8 @@ private theorem bridgeState_encodeConsumed_eq_via_consumedProj
     length, per-deposit-id < 2^64 (automatic — `DepositId := Nat` is
     used as a key, and the encoded count is bounded by the head),
     per-record framed-bytes-size < 2^64, and per-record canonical
-    bounds (the resource and amount fields).
+    bounds (the resource, userAmount, poolAmount, and budgetGrant
+    fields).
 
     Workstream EI (`docs/planning/encoder_injectivity_plan.md` §4.6
     EI.6.c). -/
@@ -171,9 +177,11 @@ theorem Bridge.BridgeState.encodeConsumed_injective
     (h_size₂ : ∀ p ∈ bs₂.consumed.toList,
                 (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8)
     (h_rec₁ : ∀ p ∈ bs₁.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8)
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+                p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8)
     (h_rec₂ : ∀ p ∈ bs₂.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8)
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+                p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8)
     (h : Bridge.BridgeState.encodeConsumed bs₁ =
          Bridge.BridgeState.encodeConsumed bs₂) :
     bs₁.consumed.Equiv bs₂.consumed := by
@@ -561,9 +569,11 @@ theorem Bridge.BridgeState.encode_injective
     (h_cons_size₂ : ∀ p ∈ bs₂.consumed.toList,
                   (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8)
     (h_cons_rec₁ : ∀ p ∈ bs₁.consumed.toList,
-                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8)
+                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+                  p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8)
     (h_cons_rec₂ : ∀ p ∈ bs₂.consumed.toList,
-                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8)
+                  p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+                  p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8)
     (h_pend_len₁ : bs₁.pending.toList.length < 256 ^ 8)
     (h_pend_len₂ : bs₂.pending.toList.length < 256 ^ 8)
     (h_pend_id₁ : ∀ p ∈ bs₁.pending.toList, p.1 < 256 ^ 8)

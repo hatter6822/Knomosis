@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! `knomosis-indexer` binary entry point.
 //!
@@ -29,9 +30,11 @@ use std::time::Duration;
 use knomosis_cli_common::exit::OperatorExitCode;
 use knomosis_cli_common::logging;
 use knomosis_indexer::balance::BalanceView;
+use knomosis_indexer::budget_view::BudgetReadView;
 use knomosis_indexer::client::SubscribeClient;
 use knomosis_indexer::config::{
-    parse_args, ConfigError, DaemonConfig, QueryConfig, Subcommand, HELP_TEXT,
+    parse_args, ConfigError, DaemonConfig, QueryBudgetConfig, QueryConfig, QueryPoolConfig,
+    Subcommand, HELP_TEXT,
 };
 use knomosis_indexer::daemon::{consume_stream, ConsumeOutcome};
 use knomosis_indexer::indexer::Indexer;
@@ -64,6 +67,9 @@ fn main() -> ExitCode {
     let exit_code = match cmd {
         Subcommand::Daemon(cfg) => run_daemon(cfg),
         Subcommand::Query(cfg) => run_query(cfg),
+        Subcommand::QueryBudget(cfg) => run_query_budget(cfg),
+        Subcommand::QueryPoolEth(cfg) => run_query_pool_eth(cfg),
+        Subcommand::QueryPoolBold(cfg) => run_query_pool_bold(cfg),
     };
     ExitCode::from(exit_code.as_i32() as u8)
 }
@@ -74,6 +80,8 @@ fn run_daemon(cfg: DaemonConfig) -> OperatorExitCode {
         version = VERSION,
         storage = %cfg.storage_path.display(),
         subscribe = %cfg.subscribe_endpoint,
+        gas_pool_actor = ?cfg.gas_pool_actor,
+        epoch_length = cfg.epoch_length,
         "knomosis-indexer daemon starting"
     );
 
@@ -81,6 +89,14 @@ fn run_daemon(cfg: DaemonConfig) -> OperatorExitCode {
         tracing::error!(
             "--verify-against-knomosis is set but the verification path is not yet implemented; \
              see docs/planning/rust_host_runtime_plan.md §RH-E.1"
+        );
+        return OperatorExitCode::NotImplemented;
+    }
+
+    if cfg.verify_budget_against_knomosis.is_some() {
+        tracing::error!(
+            "--verify-budget-against-knomosis is set but the budget-verification path is \
+             not yet implemented; see docs/planning/unified_gas_pool_plan.md §GP.6.4"
         );
         return OperatorExitCode::NotImplemented;
     }
@@ -93,13 +109,14 @@ fn run_daemon(cfg: DaemonConfig) -> OperatorExitCode {
         }
     };
 
-    let mut indexer = match Indexer::open(&storage) {
-        Ok(i) => i,
-        Err(e) => {
-            tracing::error!(error = %e, "failed to open indexer");
-            return OperatorExitCode::OperatorAction;
-        }
-    };
+    let mut indexer =
+        match Indexer::open_with_config(&storage, cfg.gas_pool_actor, cfg.epoch_length) {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to open indexer");
+                return OperatorExitCode::OperatorAction;
+            }
+        };
 
     let mut reconnects: u32 = 0;
     loop {
@@ -208,7 +225,6 @@ fn run_query(cfg: QueryConfig) -> OperatorExitCode {
     let view = BalanceView::new(&storage);
     match view.get(cfg.actor, cfg.resource) {
         Ok(balance) => {
-            // Output format: "<actor> <resource> <balance>\n"
             println!("{} {} {}", cfg.actor, cfg.resource, balance);
             OperatorExitCode::Success
         }
@@ -219,6 +235,130 @@ fn run_query(cfg: QueryConfig) -> OperatorExitCode {
                 error = %e,
                 "balance lookup failed"
             );
+            OperatorExitCode::OperatorAction
+        }
+    }
+}
+
+/// GP.6.4: `query-budget <actor>` — prints lifetime cumulative
+/// grants, current-epoch grants, current-epoch consumed, and (if
+/// `--free-tier <N>` supplied) `remaining_this_epoch = free_tier
+/// + current_epoch_grants - current_epoch_consumed`.
+///
+/// Output format (space-separated):
+///   ```text
+///   <actor> lifetime=<N> grants_this_epoch=<N> consumed_this_epoch=<N>
+///   [remaining_this_epoch=<N>]
+///   ```
+fn run_query_budget(cfg: QueryBudgetConfig) -> OperatorExitCode {
+    let storage = match SqliteStorage::open(&cfg.storage_path) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to open storage");
+            return OperatorExitCode::OperatorAction;
+        }
+    };
+    let view = BudgetReadView::new(&storage);
+    let lifetime = match view.get_actor_budget(cfg.actor) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!(actor = cfg.actor, error = %e, "lifetime budget lookup failed");
+            return OperatorExitCode::OperatorAction;
+        }
+    };
+    let grants = match view.get_actor_budget_current_epoch_grants(cfg.actor) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!(
+                actor = cfg.actor,
+                error = %e,
+                "current-epoch grants lookup failed"
+            );
+            return OperatorExitCode::OperatorAction;
+        }
+    };
+    let consumed = match view.get_actor_budget_current_epoch_consumed(cfg.actor) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!(
+                actor = cfg.actor,
+                error = %e,
+                "current-epoch consumed lookup failed"
+            );
+            return OperatorExitCode::OperatorAction;
+        }
+    };
+    let line = if let Some(free_tier) = cfg.free_tier {
+        let remaining = match view.remaining_this_epoch(cfg.actor, free_tier) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!(
+                    actor = cfg.actor,
+                    error = %e,
+                    "remaining_this_epoch computation failed"
+                );
+                return OperatorExitCode::OperatorAction;
+            }
+        };
+        format!(
+            "{} lifetime={lifetime} grants_this_epoch={grants} consumed_this_epoch={consumed} remaining_this_epoch={remaining}",
+            cfg.actor
+        )
+    } else {
+        format!(
+            "{} lifetime={lifetime} grants_this_epoch={grants} consumed_this_epoch={consumed}",
+            cfg.actor
+        )
+    };
+    println!("{line}");
+    OperatorExitCode::Success
+}
+
+/// GP.6.4: `query-pool-eth <actor>` — prints the per-pool-actor
+/// ETH balance (resource 0).
+///
+/// Output format: `<actor> pool_eth=<N>`
+fn run_query_pool_eth(cfg: QueryPoolConfig) -> OperatorExitCode {
+    let storage = match SqliteStorage::open(&cfg.storage_path) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to open storage");
+            return OperatorExitCode::OperatorAction;
+        }
+    };
+    let view = BudgetReadView::new(&storage);
+    match view.get_pool_eth(cfg.actor) {
+        Ok(v) => {
+            println!("{} pool_eth={v}", cfg.actor);
+            OperatorExitCode::Success
+        }
+        Err(e) => {
+            tracing::error!(actor = cfg.actor, error = %e, "pool-ETH lookup failed");
+            OperatorExitCode::OperatorAction
+        }
+    }
+}
+
+/// GP.6.4: `query-pool-bold <actor>` — prints the per-pool-actor
+/// BOLD balance (resource 1).
+///
+/// Output format: `<actor> pool_bold=<N>`
+fn run_query_pool_bold(cfg: QueryPoolConfig) -> OperatorExitCode {
+    let storage = match SqliteStorage::open(&cfg.storage_path) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to open storage");
+            return OperatorExitCode::OperatorAction;
+        }
+    };
+    let view = BudgetReadView::new(&storage);
+    match view.get_pool_bold(cfg.actor) {
+        Ok(v) => {
+            println!("{} pool_bold={v}", cfg.actor);
+            OperatorExitCode::Success
+        }
+        Err(e) => {
+            tracing::error!(actor = cfg.actor, error = %e, "pool-BOLD lookup failed");
             OperatorExitCode::OperatorAction
         }
     }

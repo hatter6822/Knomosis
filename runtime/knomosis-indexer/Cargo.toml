@@ -2,7 +2,7 @@
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
-# under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 # `knomosis-indexer` — RH-E.1.  Long-running daemon that consumes
 # events from a running `knomosis-event-subscribe` (RH-D) and maintains
@@ -61,6 +61,14 @@ tracing-subscriber = { workspace = true }
 proptest = { workspace = true }
 # `tempfile` provides isolated tempdirs for per-test database files.
 tempfile = { workspace = true }
+# `serde` / `serde_json` / `hex` are dev-only: they parse the
+# Lean-generated `event_subscribe_cbe.json` cross-stack fixture so
+# `tests/cross_stack_lean_event.rs` can prove this crate's
+# `decode_event` / `encode_event` round-trips REAL Lean `Event.encode`
+# bytes byte-for-byte for tags 0..15 (GP.6.3).
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

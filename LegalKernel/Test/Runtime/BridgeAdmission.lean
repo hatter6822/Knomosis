@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -160,14 +161,20 @@ def depositMarksConsumed : TestCase := {
         (actual := pr.state.state.bridge.isConsumed depositId)
         "depositId marked consumed in bridge.consumed"
       -- Bridge-side effect (RB.3): the consumed DepositRecord carries
-      -- the deposit's (resource, amount) metadata — required by the
-      -- Workstream-C bridge-accounting theorem `totalDeposited`.
+      -- the deposit's (resource, userAmount, poolAmount, budgetGrant)
+      -- metadata — required by the Workstream-C bridge-accounting
+      -- theorem `totalDeposited`.  A fee-less `.deposit` records the
+      -- full amount as `userAmount`, with pool / budget legs zero.
       match pr.state.state.bridge.consumed[depositId]? with
       | some rec =>
         assertEq (expected := (1 : Nat)) (actual := rec.resource.toNat)
           "consumed DepositRecord.resource matches"
-        assertEq (expected := (50 : Nat)) (actual := rec.amount)
-          "consumed DepositRecord.amount matches"
+        assertEq (expected := (50 : Nat)) (actual := rec.userAmount)
+          "consumed DepositRecord.userAmount matches"
+        assertEq (expected := (0 : Nat)) (actual := rec.poolAmount)
+          "fee-less deposit has zero poolAmount"
+        assertEq (expected := (0 : Nat)) (actual := rec.budgetGrant)
+          "fee-less deposit has zero budgetGrant"
       | none =>
         throw <| IO.userError "DepositRecord missing from bridge.consumed after deposit"
       -- Bridge actor's nonce advanced.
@@ -206,6 +213,9 @@ def depositReplayRejected : TestCase := {
         -- Verify the log index did NOT advance.
         assertEq (expected := 1) (actual := pr1.state.logIndex)
           "logIndex unchanged by rejected replay"
+      | .error .budgetRejected =>
+        throw <| IO.userError
+          "BUG: deposit-replay rejection was .budgetRejected (expected .notAdmissible)"
     | .error e =>
       throw <| IO.userError s!"first deposit unexpectedly rejected: {repr e}"
     safeRemoveFile (System.FilePath.mk tmp)
@@ -276,6 +286,9 @@ def depositByNonBridgeSignerRejected : TestCase := {
       throw <| IO.userError "BUG: deposit by non-bridge actor admitted (RB.3 conjunct 8 didn't fire)"
     | .error .notAdmissible =>
       pure ()  -- Expected.
+    | .error .budgetRejected =>
+      throw <| IO.userError
+        "BUG: non-bridge deposit rejection was .budgetRejected (expected .notAdmissible)"
     safeRemoveFile (System.FilePath.mk tmp)
 }
 
@@ -298,6 +311,9 @@ def reregistrationRejected : TestCase := {
       throw <| IO.userError "BUG: re-registration admitted (RB.3 conjunct 7 didn't fire)"
     | .error .notAdmissible =>
       pure ()  -- Expected.
+    | .error .budgetRejected =>
+      throw <| IO.userError
+        "BUG: re-registration rejection was .budgetRejected (expected .notAdmissible)"
     safeRemoveFile (System.FilePath.mk tmp)
 }
 

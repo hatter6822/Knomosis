@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! CBE (Canonical Binary Encoding) encoder/decoder matching the
 //! Lean kernel's `LegalKernel.Encoding.*` modules.
@@ -312,6 +313,59 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             );
             out.extend_from_slice(&encode_u64(*winner));
             out.extend_from_slice(&encode_u64(*revert_from_idx));
+        }
+        Action::DepositWithFee {
+            r,
+            recipient,
+            pool_actor,
+            user_amount,
+            pool_amount,
+            budget_grant,
+            deposit_id,
+        } => {
+            // Field order matches `Encoding/Action.lean::Action.encode`'s
+            // `.depositWithFee` arm exactly:
+            //   r ‖ recipient ‖ poolActor ‖ userAmount ‖ poolAmount
+            //     ‖ budgetGrant ‖ depositId.
+            // Each field is a CBE uint (9-byte head).
+            out.extend_from_slice(&encode_u64(*r));
+            out.extend_from_slice(&encode_u64(*recipient));
+            out.extend_from_slice(&encode_u64(*pool_actor));
+            out.extend_from_slice(&encode_amount(*user_amount)?);
+            out.extend_from_slice(&encode_amount(*pool_amount)?);
+            out.extend_from_slice(&encode_u64(*budget_grant));
+            out.extend_from_slice(&encode_u64(*deposit_id));
+        }
+        Action::TopUpActionBudget {
+            gas_resource,
+            gas_amount,
+            budget_increment,
+            pool_actor,
+        } => {
+            // Field order matches `Encoding/Action.lean::Action.encode`'s
+            // `.topUpActionBudget` arm:
+            //   gasResource ‖ gasAmount ‖ budgetIncrement ‖ poolActor.
+            out.extend_from_slice(&encode_u64(*gas_resource));
+            out.extend_from_slice(&encode_amount(*gas_amount)?);
+            out.extend_from_slice(&encode_u64(*budget_increment));
+            out.extend_from_slice(&encode_u64(*pool_actor));
+        }
+        Action::TopUpActionBudgetFor {
+            recipient,
+            gas_resource,
+            gas_amount,
+            budget_increment,
+            pool_actor,
+        } => {
+            // Field order matches `Encoding/Action.lean::Action.encode`'s
+            // `.topUpActionBudgetFor` arm:
+            //   recipient ‖ gasResource ‖ gasAmount ‖ budgetIncrement
+            //     ‖ poolActor.
+            out.extend_from_slice(&encode_u64(*recipient));
+            out.extend_from_slice(&encode_u64(*gas_resource));
+            out.extend_from_slice(&encode_amount(*gas_amount)?);
+            out.extend_from_slice(&encode_u64(*budget_increment));
+            out.extend_from_slice(&encode_u64(*pool_actor));
         }
     }
     Ok(out)
@@ -761,5 +815,428 @@ mod tests {
     #[test]
     fn encode_u64_zero_known_vector() {
         assert_eq!(encode_u64(0), vec![0x00, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+
+    /// `encode_action` for `DepositWithFee` (Workstream GP).  The
+    /// encoded form is: tag 19 + r + recipient + pool_actor +
+    /// user_amount + pool_amount + budget_grant + deposit_id =
+    /// 8 × 9 = 72 bytes (each field is a 9-byte CBE uint head).
+    #[test]
+    fn encode_deposit_with_fee_layout() {
+        let action = Action::DepositWithFee {
+            r: 0,
+            recipient: 1,
+            pool_actor: 2,
+            user_amount: 1000,
+            pool_amount: 500,
+            budget_grant: 10,
+            deposit_id: 42,
+        };
+        let encoded = encode_action(&action).unwrap();
+        assert_eq!(encoded.len(), HEAD_LEN * 8);
+        // Tag is 19 (0x13).
+        assert_eq!(encoded[0], CBE_TAG_UINT);
+        assert_eq!(&encoded[1..9], &19u64.to_le_bytes());
+        // r (0) at offset 9.
+        assert_eq!(encoded[9], CBE_TAG_UINT);
+        assert_eq!(&encoded[10..18], &0u64.to_le_bytes());
+        // recipient (1) at offset 18.
+        assert_eq!(encoded[18], CBE_TAG_UINT);
+        assert_eq!(&encoded[19..27], &1u64.to_le_bytes());
+        // pool_actor (2) at offset 27.
+        assert_eq!(encoded[27], CBE_TAG_UINT);
+        assert_eq!(&encoded[28..36], &2u64.to_le_bytes());
+        // user_amount (1000) at offset 36.
+        assert_eq!(encoded[36], CBE_TAG_UINT);
+        assert_eq!(&encoded[37..45], &1000u64.to_le_bytes());
+        // pool_amount (500) at offset 45.
+        assert_eq!(encoded[45], CBE_TAG_UINT);
+        assert_eq!(&encoded[46..54], &500u64.to_le_bytes());
+        // budget_grant (10) at offset 54.
+        assert_eq!(encoded[54], CBE_TAG_UINT);
+        assert_eq!(&encoded[55..63], &10u64.to_le_bytes());
+        // deposit_id (42) at offset 63.
+        assert_eq!(encoded[63], CBE_TAG_UINT);
+        assert_eq!(&encoded[64..72], &42u64.to_le_bytes());
+    }
+
+    /// `encode_action` for `TopUpActionBudget` (Workstream GP).
+    /// Encoded form: tag 20 + gas_resource + gas_amount +
+    /// budget_increment + pool_actor = 5 × 9 = 45 bytes.
+    #[test]
+    fn encode_top_up_action_budget_layout() {
+        let action = Action::TopUpActionBudget {
+            gas_resource: 0,
+            gas_amount: 100,
+            budget_increment: 5,
+            pool_actor: 2,
+        };
+        let encoded = encode_action(&action).unwrap();
+        assert_eq!(encoded.len(), HEAD_LEN * 5);
+        // Tag is 20 (0x14).
+        assert_eq!(encoded[0], CBE_TAG_UINT);
+        assert_eq!(&encoded[1..9], &20u64.to_le_bytes());
+        // gas_resource (0).
+        assert_eq!(encoded[9], CBE_TAG_UINT);
+        assert_eq!(&encoded[10..18], &0u64.to_le_bytes());
+        // gas_amount (100).
+        assert_eq!(encoded[18], CBE_TAG_UINT);
+        assert_eq!(&encoded[19..27], &100u64.to_le_bytes());
+        // budget_increment (5).
+        assert_eq!(encoded[27], CBE_TAG_UINT);
+        assert_eq!(&encoded[28..36], &5u64.to_le_bytes());
+        // pool_actor (2).
+        assert_eq!(encoded[36], CBE_TAG_UINT);
+        assert_eq!(&encoded[37..45], &2u64.to_le_bytes());
+    }
+
+    /// `encode_action` for `TopUpActionBudgetFor` (Workstream GP.3.4).
+    /// Encoded form: tag 21 + recipient + gas_resource + gas_amount
+    /// + budget_increment + pool_actor = 6 × 9 = 54 bytes.
+    #[test]
+    fn encode_top_up_action_budget_for_layout() {
+        let action = Action::TopUpActionBudgetFor {
+            recipient: 7,
+            gas_resource: 0,
+            gas_amount: 100,
+            budget_increment: 5,
+            pool_actor: 2,
+        };
+        let encoded = encode_action(&action).unwrap();
+        assert_eq!(encoded.len(), HEAD_LEN * 6);
+        // Tag is 21 (0x15).
+        assert_eq!(encoded[0], CBE_TAG_UINT);
+        assert_eq!(&encoded[1..9], &21u64.to_le_bytes());
+        // recipient (7).
+        assert_eq!(encoded[9], CBE_TAG_UINT);
+        assert_eq!(&encoded[10..18], &7u64.to_le_bytes());
+        // gas_resource (0).
+        assert_eq!(encoded[18], CBE_TAG_UINT);
+        assert_eq!(&encoded[19..27], &0u64.to_le_bytes());
+        // gas_amount (100).
+        assert_eq!(encoded[27], CBE_TAG_UINT);
+        assert_eq!(&encoded[28..36], &100u64.to_le_bytes());
+        // budget_increment (5).
+        assert_eq!(encoded[36], CBE_TAG_UINT);
+        assert_eq!(&encoded[37..45], &5u64.to_le_bytes());
+        // pool_actor (2).
+        assert_eq!(encoded[45], CBE_TAG_UINT);
+        assert_eq!(&encoded[46..54], &2u64.to_le_bytes());
+    }
+
+    /// Known-vector test for `DepositWithFee` — pinned against the
+    /// Lean reference `LegalKernel.Encoding.Action.encode
+    /// (.depositWithFee 0 1 2 1000 500 10 42)`.  The byte-equivalence
+    /// is the load-bearing cross-stack contract; failing this
+    /// assertion would mean the Rust ingestor cannot serialise an
+    /// `Action.depositWithFee` byte-equivalently to Lean, breaking
+    /// the kernel's signature-verification path.
+    ///
+    /// Hand-calculated expected bytes (8 × 9 = 72 bytes):
+    ///
+    ///   * Tag 19 (uint): `[0x00, 0x13, 0, 0, 0, 0, 0, 0, 0]`
+    ///   * r 0 (uint): `[0x00, 0x00, 0, 0, 0, 0, 0, 0, 0]`
+    ///   * recipient 1 (uint): `[0x00, 0x01, 0, 0, 0, 0, 0, 0, 0]`
+    ///   * pool_actor 2 (uint): `[0x00, 0x02, 0, 0, 0, 0, 0, 0, 0]`
+    ///   * user_amount 1000 (uint): `[0x00, 0xe8, 0x03, 0, 0, 0, 0, 0, 0]`
+    ///   * pool_amount 500 (uint): `[0x00, 0xf4, 0x01, 0, 0, 0, 0, 0, 0]`
+    ///   * budget_grant 10 (uint): `[0x00, 0x0a, 0, 0, 0, 0, 0, 0, 0]`
+    ///   * deposit_id 42 (uint): `[0x00, 0x2a, 0, 0, 0, 0, 0, 0, 0]`
+    #[test]
+    fn encode_deposit_with_fee_known_vector() {
+        let action = Action::DepositWithFee {
+            r: 0,
+            recipient: 1,
+            pool_actor: 2,
+            user_amount: 1000,
+            pool_amount: 500,
+            budget_grant: 10,
+            deposit_id: 42,
+        };
+        let actual = encode_action(&action).unwrap();
+        let expected: Vec<u8> = vec![
+            // Tag 19 (CBE uint head, value 19 = 0x13).
+            0x00, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // r 0.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // recipient 1.
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // user_amount 1000 = 0x03e8 (LE: e8, 03).
+            0x00, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // pool_amount 500 = 0x01f4 (LE: f4, 01).
+            0x00, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // budget_grant 10 = 0x0a.
+            0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // deposit_id 42 = 0x2a.
+            0x00, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    /// Known-vector test for `DepositWithFee` with `r = 1` (BOLD).
+    /// Verifies the resource-parametric encoding: only the `r` field
+    /// byte differs from the ETH (`r = 0`) case.
+    #[test]
+    fn encode_deposit_with_fee_bold_known_vector() {
+        let eth_action = Action::DepositWithFee {
+            r: 0,
+            recipient: 1,
+            pool_actor: 2,
+            user_amount: 1000,
+            pool_amount: 500,
+            budget_grant: 10,
+            deposit_id: 42,
+        };
+        let bold_action = Action::DepositWithFee {
+            r: 1,
+            recipient: 1,
+            pool_actor: 2,
+            user_amount: 1000,
+            pool_amount: 500,
+            budget_grant: 10,
+            deposit_id: 42,
+        };
+        let eth_bytes = encode_action(&eth_action).unwrap();
+        let bold_bytes = encode_action(&bold_action).unwrap();
+        // Both encodings have the same length.
+        assert_eq!(eth_bytes.len(), bold_bytes.len());
+        // The `r` field is at bytes 9..18 (after the 9-byte tag head).
+        // The low byte (index 10) is the only difference.
+        assert_eq!(eth_bytes[10], 0x00);
+        assert_eq!(bold_bytes[10], 0x01);
+        // All other bytes are identical.
+        for i in 0..eth_bytes.len() {
+            if i == 10 {
+                continue;
+            }
+            assert_eq!(
+                eth_bytes[i], bold_bytes[i],
+                "ETH/BOLD encodings differ outside the resource field at byte {i}"
+            );
+        }
+    }
+
+    /// Known-vector test for `TopUpActionBudget` — pinned against
+    /// `LegalKernel.Encoding.Action.encode (.topUpActionBudget 0 100 5 2)`.
+    #[test]
+    fn encode_top_up_action_budget_known_vector() {
+        let action = Action::TopUpActionBudget {
+            gas_resource: 0,
+            gas_amount: 100,
+            budget_increment: 5,
+            pool_actor: 2,
+        };
+        let actual = encode_action(&action).unwrap();
+        let expected: Vec<u8> = vec![
+            // Tag 20 (CBE uint head, value 20 = 0x14).
+            0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // gas_resource 0.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // gas_amount 100 = 0x64.
+            0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // budget_increment 5.
+            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    /// Known-vector test for `TopUpActionBudgetFor` — pinned
+    /// against `LegalKernel.Encoding.Action.encode
+    /// (.topUpActionBudgetFor 7 0 100 5 2)`.
+    #[test]
+    fn encode_top_up_action_budget_for_known_vector() {
+        let action = Action::TopUpActionBudgetFor {
+            recipient: 7,
+            gas_resource: 0,
+            gas_amount: 100,
+            budget_increment: 5,
+            pool_actor: 2,
+        };
+        let actual = encode_action(&action).unwrap();
+        let expected: Vec<u8> = vec![
+            // Tag 21 (CBE uint head, value 21 = 0x15).
+            0x00, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // recipient 7.
+            0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // gas_resource 0.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // gas_amount 100 = 0x64.
+            0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // budget_increment 5.
+            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    /// `DepositWithFee` encoding rejects `user_amount` ≥ 2^64
+    /// (`Action.fieldsBounded` requires `userAmount < 2^64`).
+    #[test]
+    fn encode_deposit_with_fee_rejects_oversized_user_amount() {
+        let action = Action::DepositWithFee {
+            r: 0,
+            recipient: 1,
+            pool_actor: 2,
+            user_amount: 1u128 << 64,
+            pool_amount: 0,
+            budget_grant: 0,
+            deposit_id: 0,
+        };
+        match encode_action(&action) {
+            Err(super::EncodeError::FieldExceedsBound { value }) => {
+                assert_eq!(value, 1u128 << 64);
+            }
+            other => panic!("expected FieldExceedsBound, got {other:?}"),
+        }
+    }
+
+    /// `DepositWithFee` encoding rejects `pool_amount` ≥ 2^64.
+    #[test]
+    fn encode_deposit_with_fee_rejects_oversized_pool_amount() {
+        let action = Action::DepositWithFee {
+            r: 0,
+            recipient: 1,
+            pool_actor: 2,
+            user_amount: 0,
+            pool_amount: u128::MAX,
+            budget_grant: 0,
+            deposit_id: 0,
+        };
+        match encode_action(&action) {
+            Err(super::EncodeError::FieldExceedsBound { value }) => {
+                assert_eq!(value, u128::MAX);
+            }
+            other => panic!("expected FieldExceedsBound, got {other:?}"),
+        }
+    }
+
+    /// `TopUpActionBudget` encoding rejects `gas_amount` ≥ 2^64.
+    #[test]
+    fn encode_top_up_action_budget_rejects_oversized_gas_amount() {
+        let action = Action::TopUpActionBudget {
+            gas_resource: 0,
+            gas_amount: 1u128 << 64,
+            budget_increment: 0,
+            pool_actor: 0,
+        };
+        match encode_action(&action) {
+            Err(super::EncodeError::FieldExceedsBound { value }) => {
+                assert_eq!(value, 1u128 << 64);
+            }
+            other => panic!("expected FieldExceedsBound, got {other:?}"),
+        }
+    }
+
+    /// `TopUpActionBudgetFor` encoding rejects `gas_amount` ≥ 2^64.
+    #[test]
+    fn encode_top_up_action_budget_for_rejects_oversized_gas_amount() {
+        let action = Action::TopUpActionBudgetFor {
+            recipient: 0,
+            gas_resource: 0,
+            gas_amount: 1u128 << 64,
+            budget_increment: 0,
+            pool_actor: 0,
+        };
+        match encode_action(&action) {
+            Err(super::EncodeError::FieldExceedsBound { value }) => {
+                assert_eq!(value, 1u128 << 64);
+            }
+            other => panic!("expected FieldExceedsBound, got {other:?}"),
+        }
+    }
+
+    /// `TopUpActionBudget` and `TopUpActionBudgetFor` have distinct
+    /// tag bytes — they encode to byte-distinct streams even with
+    /// identical gas-transfer fields.  This pins the tag-separation
+    /// design property at the encoder layer.
+    #[test]
+    fn top_up_action_budget_variants_distinct_bytes() {
+        let self_funded = Action::TopUpActionBudget {
+            gas_resource: 0,
+            gas_amount: 100,
+            budget_increment: 5,
+            pool_actor: 2,
+        };
+        let delegated = Action::TopUpActionBudgetFor {
+            recipient: 7,
+            gas_resource: 0,
+            gas_amount: 100,
+            budget_increment: 5,
+            pool_actor: 2,
+        };
+        let self_bytes = encode_action(&self_funded).unwrap();
+        let delegated_bytes = encode_action(&delegated).unwrap();
+        // The tag bytes are distinct.
+        assert_ne!(self_bytes[1], delegated_bytes[1]);
+        // The full encodings have different lengths (5 × 9 vs 6 × 9).
+        assert_eq!(self_bytes.len(), HEAD_LEN * 5);
+        assert_eq!(delegated_bytes.len(), HEAD_LEN * 6);
+        // And are byte-distinct.
+        assert_ne!(self_bytes, delegated_bytes);
+    }
+
+    /// Signing input for a `DepositWithFee` action is well-formed
+    /// (starts with the domain prefix, includes the action's CBE
+    /// bytes, ends with signer + nonce).
+    #[test]
+    fn signing_input_deposit_with_fee() {
+        let action = Action::DepositWithFee {
+            r: 0,
+            recipient: 1,
+            pool_actor: 2,
+            user_amount: 1000,
+            pool_amount: 500,
+            budget_grant: 10,
+            deposit_id: 42,
+        };
+        let signing_bytes = signing_input(&action, 99, 7, b"test-deployment").unwrap();
+        // Domain prefix: 9-byte head + 27-byte ASCII.
+        assert_eq!(signing_bytes[0], CBE_TAG_BYTES);
+        assert_eq!(&signing_bytes[1..9], &27u64.to_le_bytes());
+        assert_eq!(&signing_bytes[9..36], SIGNED_ACTION_DOMAIN.as_bytes());
+        // Deployment-id: 9-byte head + 15-byte ASCII "test-deployment".
+        assert_eq!(signing_bytes[36], CBE_TAG_BYTES);
+        assert_eq!(&signing_bytes[37..45], &15u64.to_le_bytes());
+        assert_eq!(&signing_bytes[45..60], b"test-deployment");
+        // Action follows; tag 19 starts at offset 60.
+        assert_eq!(signing_bytes[60], CBE_TAG_UINT);
+        assert_eq!(&signing_bytes[61..69], &19u64.to_le_bytes());
+        // Total length: 36 (domain) + 24 (deployment) + 72 (action)
+        // + 9 (signer) + 9 (nonce) = 150.
+        assert_eq!(signing_bytes.len(), 36 + 24 + 72 + 9 + 9);
+    }
+
+    /// Encoder produces byte-identical output across two calls
+    /// (determinism).  Important: a future micro-optimisation that
+    /// accidentally allocates non-zero high-byte padding would
+    /// break this.
+    #[test]
+    fn encode_gp_actions_deterministic() {
+        let a = Action::DepositWithFee {
+            r: 1,
+            recipient: 7,
+            pool_actor: 3,
+            user_amount: 999,
+            pool_amount: 1,
+            budget_grant: 1,
+            deposit_id: 1,
+        };
+        let e1 = encode_action(&a).unwrap();
+        let e2 = encode_action(&a).unwrap();
+        assert_eq!(e1, e2);
+        let b = Action::TopUpActionBudget {
+            gas_resource: 0,
+            gas_amount: 50,
+            budget_increment: 1,
+            pool_actor: 3,
+        };
+        let f1 = encode_action(&b).unwrap();
+        let f2 = encode_action(&b).unwrap();
+        assert_eq!(f1, f2);
+        let c = Action::TopUpActionBudgetFor {
+            recipient: 7,
+            gas_resource: 0,
+            gas_amount: 50,
+            budget_increment: 1,
+            pool_actor: 3,
+        };
+        let g1 = encode_action(&c).unwrap();
+        let g2 = encode_action(&c).unwrap();
+        assert_eq!(g1, g2);
     }
 }

@@ -2,7 +2,7 @@
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
-# under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 # Continuous integration.  Started at Phase 0 WU 0.4; extended at
 # Phase 1 (WU 1.11, WU 1.12) to enforce the TCB allowlist and the
@@ -23,13 +23,17 @@
 #                              import is a TCB expansion that triggers
 #                              the §13.6 amendment process.
 #   5. Strict-warnings gate     (Audit-3.7): `lake build` output is
-#                              inspected for any `: warning:` lines;
-#                              non-empty result fails the job.  This
-#                              elevates `linter.missingDocs` and
+#                              inspected for any Lean diagnostic
+#                              `warning:` line; non-empty result fails
+#                              the job.  This elevates
+#                              `linter.missingDocs` and
 #                              `linter.unusedVariables` (set as
 #                              warnings in `lakefile.lean`) to
 #                              hard CI failures without disturbing
-#                              local development workflows.
+#                              local development workflows.  Every
+#                              target is `@[default_target]`, so a bare
+#                              `lake build` compiles every first-party
+#                              module and no warning can hide.
 #
 # The Lean toolchain is read from `lean-toolchain` by
 # `leanprover/lean-action`, so version bumps need only edit that file
@@ -90,15 +94,29 @@ jobs:
         run: lake build
 
       - name: Strict-warnings gate (Audit-3.7)
-        # Re-run `lake build` and capture its output; fail the job
-        # if any line contains `: warning:`.  The first `lake build`
-        # above caches the elaboration, so this re-invocation is fast
-        # — it just streams the cached output through `tee` for grep.
-        # Local developers' `lake build` is unaffected (warnings stay
-        # warnings in the IDE / CLI).
+        # Re-run `lake build` and capture its output; fail the job if
+        # any line is a Lean diagnostic warning.  The first `lake build`
+        # above caches the elaboration, so this re-invocation is fast —
+        # Lake REPLAYS cached diagnostics, so the warnings still stream
+        # through `tee` for grep.  Local developers' `lake build` is
+        # unaffected (warnings stay warnings in the IDE / CLI).
+        #
+        # Pattern note: Lean 4 emits warnings as `warning: <file>.lean:
+        # <line>:<col>: <msg>` (the `warning:` token comes FIRST, before
+        # the source location).  The gate therefore matches a line
+        # starting with `warning:` (tolerating leading whitespace) OR
+        # the legacy `<...>: warning:` form.  An earlier pattern
+        # (`\.lean:[0-9]+:[0-9]+:.*: warning:`) expected `warning:`
+        # AFTER the location and so never matched real Lean output —
+        # making this gate silently ineffective until corrected.  Since
+        # `lakefile.lean` marks EVERY library + executable
+        # `@[default_target]`, this `lake build` compiles every
+        # first-party module (kernel, laws, tests, Lex, Deployments, the
+        # runtime + audit-binary executables), so no module's warnings
+        # can hide from the gate.
         run: |
           lake build 2>&1 | tee /tmp/lake_build.log
-          if grep -E '\.lean:[0-9]+:[0-9]+:.*: warning:' /tmp/lake_build.log; then
+          if grep -E '^[[:space:]]*warning:|: warning:' /tmp/lake_build.log; then
             echo "::error::Build emitted warnings; failing strict gate."
             exit 1
           fi

@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -55,13 +56,13 @@ def tests : List TestCase :=
     }
   , { name := "BridgeState.markConsumed inserts the deposit record"
     , body := do
-        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, amount := 100 })
+        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
         assertEq (expected := true) (actual := bs.isConsumed 42) "consumed"
         assertEq (expected := false) (actual := bs.isConsumed 43) "not consumed"
     }
   , { name := "BridgeState.markConsumed leaves pending unchanged"
     , body := do
-        let bs := BridgeState.empty.markConsumed 1 ({ resource := 1, amount := 100 })
+        let bs := BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
         assertEq (expected := (0 : Nat)) (actual := bs.pending.size) "pending empty"
         assertEq (expected := (0 : Nat)) (actual := bs.nextWdId) "nextWdId 0"
     }
@@ -75,7 +76,7 @@ def tests : List TestCase :=
     }
   , { name := "BridgeState.appendWithdrawal preserves consumed"
     , body := do
-        let bs0 := BridgeState.empty.markConsumed 1 ({ resource := 1, amount := 100 })
+        let bs0 := BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
         let wd : PendingWithdrawal :=
           { resource := 1, recipient := EthAddress.zero, amount := 50, l2LogIndex := 0 }
         let bs1 := bs0.appendWithdrawal wd
@@ -101,11 +102,15 @@ def tests : List TestCase :=
     }
   , { name := "DepositRecord equality is decidable"
     , body := do
-        let r1 : DepositRecord := { resource := 1, amount := 100 }
-        let r2 : DepositRecord := { resource := 1, amount := 100 }
-        let r3 : DepositRecord := { resource := 2, amount := 100 }
+        let r1 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
+        let r2 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
+        let r3 : DepositRecord := { resource := 2, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
+        let r4 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 5, budgetGrant := 0 }
+        let r5 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 7 }
         assert (r1 == r2) "equal records"
-        assert (! (r1 == r3)) "distinct records"
+        assert (! (r1 == r3)) "distinct resources"
+        assert (! (r1 == r4)) "distinct poolAmount"
+        assert (! (r1 == r5)) "distinct budgetGrant"
     }
   , { name := "PendingWithdrawal equality is decidable"
     , body := do
@@ -178,7 +183,7 @@ def tests : List TestCase :=
   -- to a different byte stream than empty.
   , { name := "Non-empty BridgeState distinguishable from empty"
     , body := do
-        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, amount := 100 })
+        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
         let b1 := Encodable.encode (T := BridgeState) bs
         let b2 := Encodable.encode (T := BridgeState) BridgeState.empty
         if b1 == b2 then
@@ -189,10 +194,78 @@ def tests : List TestCase :=
   -- correct (insert-then-contains = true).
   , { name := "markConsumed then isConsumed: insert-then-contains semantics"
     , body := do
-        let bs := BridgeState.empty.markConsumed 7 ({ resource := 1, amount := 50 })
+        let bs := BridgeState.empty.markConsumed 7
+          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0 })
         assertEq (expected := true) (actual := bs.isConsumed 7) "freshly consumed"
         -- A different deposit-id is NOT consumed.
         assertEq (expected := false) (actual := bs.isConsumed 8) "absent"
+    }
+  -- GP.4.1: legacy two-field deposit-record compatibility.
+  , { name := "DepositRecord.fromLegacy maps amount to userAmount, zeros pool/budget"
+    , body := do
+        let lr : LegacyDepositRecord := { resource := 3, amount := 77 }
+        let dr := DepositRecord.fromLegacy lr
+        assertEq (expected := (3 : ResourceId)) (actual := dr.resource) "resource preserved"
+        assertEq (expected := (77 : Amount)) (actual := dr.userAmount) "amount → userAmount"
+        assertEq (expected := (0 : Amount)) (actual := dr.poolAmount) "poolAmount zeroed"
+        assertEq (expected := (0 : Nat)) (actual := dr.budgetGrant) "budgetGrant zeroed"
+    }
+  , { name := "DepositRecord.toLegacy_fromLegacy: round-trip is the identity (value-level)"
+    , body := do
+        let lr : LegacyDepositRecord := { resource := 9, amount := 1234 }
+        assert (decide ((DepositRecord.fromLegacy lr).toLegacy = lr))
+          "toLegacy ∘ fromLegacy = id"
+    }
+  , { name := "DepositRecord.toLegacy_fromLegacy: term-level API (GP.4.1)"
+    , body := do
+        let _t : ∀ (lr : LegacyDepositRecord),
+                   (DepositRecord.fromLegacy lr).toLegacy = lr :=
+          DepositRecord.toLegacy_fromLegacy
+        pure ()
+    }
+  , { name := "DepositRecord.fromLegacy_toLegacy on a zero-pool/budget record (value-level)"
+    , body := do
+        -- A record in the legacy subspace (poolAmount = budgetGrant = 0)
+        -- round-trips through toLegacy ∘ fromLegacy.
+        let dr : DepositRecord :=
+          { resource := 4, userAmount := 88, poolAmount := 0, budgetGrant := 0 }
+        assert (decide (DepositRecord.fromLegacy dr.toLegacy = dr))
+          "fromLegacy ∘ toLegacy = id on the legacy subspace"
+    }
+  , { name := "DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget: term-level API (GP.4.1)"
+    , body := do
+        let _t : ∀ (rec : DepositRecord),
+                   rec.poolAmount = 0 → rec.budgetGrant = 0 →
+                   DepositRecord.fromLegacy rec.toLegacy = rec :=
+          DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget
+        pure ()
+    }
+  -- GP.4.1: end-to-end BridgeState encode→decode round-trip through the
+  -- `decodeConsumed` reconstruction path, with a fee-bearing (four-field)
+  -- consumed record.  Exercises the full state codec, not just the
+  -- isolated `DepositRecord.decode`.
+  , { name := "BridgeState round-trips a fee-bearing consumed record (GP.4.1)"
+    , body := do
+        let bs : BridgeState :=
+          { consumed := (∅ : Std.TreeMap DepositId DepositRecord compare).insert
+              (1 : DepositId)
+              { resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5 }
+            pending  := ∅
+            nextWdId := 0 }
+        match Bridge.BridgeState.decode (Bridge.BridgeState.encode bs) with
+        | .ok (bs', rest) =>
+            if !rest.isEmpty then
+              throw <| IO.userError "BridgeState round-trip: decoder left trailing bytes"
+            match bs'.consumed[(1 : DepositId)]? with
+            | some rec =>
+                assertEq (expected := (1 : ResourceId)) (actual := rec.resource) "resource"
+                assertEq (expected := (30 : Amount)) (actual := rec.userAmount) "userAmount"
+                assertEq (expected := (20 : Amount)) (actual := rec.poolAmount) "poolAmount"
+                assertEq (expected := (5 : Nat)) (actual := rec.budgetGrant) "budgetGrant"
+            | none =>
+                throw <| IO.userError "BridgeState round-trip: consumed record missing after decode"
+        | .error e =>
+            throw <| IO.userError s!"BridgeState round-trip: decode failed: {repr e}"
     }
   ]
 

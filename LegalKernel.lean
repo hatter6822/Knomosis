@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -182,6 +183,7 @@ import LegalKernel.Encoding.CBOR
 import LegalKernel.Encoding.Encodable
 import LegalKernel.Encoding.Disputes
 import LegalKernel.Encoding.Action
+import LegalKernel.Encoding.Event
 import LegalKernel.Encoding.SignedAction
 import LegalKernel.Encoding.State
 import LegalKernel.Encoding.StateInjective
@@ -223,7 +225,10 @@ import LegalKernel.Events.Types
 import LegalKernel.Events.Extract
 import LegalKernel.Runtime.Hash
 import LegalKernel.Runtime.LogFile
+import LegalKernel.Runtime.BudgetSidecar
+import LegalKernel.Runtime.GasPoolSidecar
 import LegalKernel.Runtime.Replay
+import LegalKernel.Runtime.EventStream
 import LegalKernel.Runtime.Snapshot
 import LegalKernel.Runtime.AttestedSnapshot
 import LegalKernel.Runtime.Loop
@@ -236,6 +241,15 @@ import LegalKernel.Bridge.Ingest
 import LegalKernel.Bridge.State
 import LegalKernel.Bridge.Admissible
 import LegalKernel.Bridge.Accounting
+-- Workstream GP.7.2 — the canonical `gasPoolPolicy` LocalPolicy
+-- governing `gasPoolActor` outflow (capped `transfer`-to-sequencer
+-- only).  Non-TCB; consumed by the GP.7.3 pool-drain bound.
+import LegalKernel.Bridge.GasPoolPolicy
+-- Workstream GP.7.3 — the inductive pool-drain bound: across any
+-- contiguous trace of `n` admitted SignedActions respecting the
+-- GP.7.2 gas-pool authority discipline, `gasPoolActor`'s ETH-leg
+-- balance cannot have decreased by more than `n × maxDrainPerActionEth`.
+import LegalKernel.Bridge.PoolDrainBound
 import LegalKernel.Bridge.WithdrawalRoot
 import LegalKernel.Bridge.WithdrawalProof
 import LegalKernel.Bridge.Finalisation

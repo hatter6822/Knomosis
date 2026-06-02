@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! `knomosis-event-subscribe` — RH-D entry-point binary.
 //!
@@ -16,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use knomosis_cli_common::exit::OperatorExitCode;
 use knomosis_event_subscribe::config::{help_text, parse_args, Config, ConfigError, ParseError};
 use knomosis_event_subscribe::event_cache::EventCache;
+use knomosis_event_subscribe::event_type::EventStreamStats;
 use knomosis_event_subscribe::extract::mock::MockExtractor;
 use knomosis_event_subscribe::extract::subprocess::SubprocessExtractor;
 use knomosis_event_subscribe::extract::Extractor;
@@ -107,8 +109,13 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
             .knomosis_binary
             .clone()
             .ok_or(BuildError::Validation("--knomosis-binary missing".into()))?;
-        info!(binary = ?binary, "constructing SubprocessExtractor");
-        Box::new(SubprocessExtractor::new(binary, log_path.clone()))
+        let global_args = cfg.extractor_global_args();
+        info!(
+            binary = ?binary,
+            global_args = ?global_args,
+            "constructing SubprocessExtractor"
+        );
+        Box::new(SubprocessExtractor::new(binary, log_path.clone()).with_global_args(global_args))
     };
 
     // Bind listener.
@@ -132,6 +139,7 @@ fn build_server_config(cfg: &Config) -> Result<ServerConfig, BuildError> {
         extractor,
         registry,
         cache,
+        stats: Arc::new(EventStreamStats::new()),
         send_queue_depth: cfg.send_queue_depth,
         max_subscriber_lag: cfg.max_subscriber_lag,
         max_frame_size: cfg.max_frame_size,

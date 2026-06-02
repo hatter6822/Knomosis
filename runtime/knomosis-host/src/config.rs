@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! CLI configuration parsing for `knomosis-host`.
 //!
@@ -23,6 +24,13 @@
 //! | `--knomosis-log <PATH>`   | optional | Persistent log file for `CommandKernel`              |
 //! | `--knomosis-work-dir <P>` | optional | Temp work dir for `CommandKernel` (defaults next to LOG) |
 //! | `--deployment-id <H>`  | optional | Hex-encoded deployment id passed to knomosis binary     |
+//! | `--budget-policy bounded`| optional | Enable the GP.6.2 per-actor budget admission gate    |
+//! | `--free-tier <N>`      | optional | Per-epoch budget floor (with `--budget-policy`)      |
+//! | `--action-cost <C>`    | optional | Per-action budget debit (clamped `>= 1`; default 1)  |
+//! | `--current-epoch <E>`  | optional | Current epoch index (default 0; free tier needs E≥1) |
+//! | `--epoch-length <N>`   | optional | Admitted actions per budget epoch (0 = no advance)   |
+//! | `--gas-pool-eth-cap <N>`| optional | GP.7.4 gas-pool genesis: ETH-leg per-action cap     |
+//! | `--gas-pool-bold-cap <N>`| optional | GP.7.4 gas-pool genesis: BOLD-leg per-action cap   |
 //! | `--max-queue-depth <N>`| optional | Bounded queue size (default 256)                     |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -36,6 +44,8 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+
+use crate::budget::BudgetPolicy;
 
 /// Parsed knomosis-host configuration.
 #[derive(Clone, Debug)]
@@ -67,6 +77,27 @@ pub struct Config {
     pub max_concurrent_connections: usize,
     /// Use the in-memory mock kernel.
     pub use_mock_kernel: bool,
+    /// Raw `--budget-policy <mode>` value (GP.6.2).  The only
+    /// recognised mode is `"bounded"`; any other value is rejected
+    /// by [`Config::validate`].
+    pub budget_mode: Option<String>,
+    /// `--free-tier <N>` value (GP.6.2): the per-epoch budget floor.
+    pub budget_free_tier: Option<u64>,
+    /// `--action-cost <C>` value (GP.6.2): the per-action debit
+    /// (clamped to `>= 1` by [`BudgetPolicy::mk_bounded`]).
+    pub budget_action_cost: Option<u64>,
+    /// `--current-epoch <E>` value (GP.6.2): the current epoch index.
+    pub budget_current_epoch: Option<u64>,
+    /// `--epoch-length <N>` value (GP.6.2 epoch advancement): admitted
+    /// actions per budget epoch (`None` / `0` disables advancement).
+    pub budget_epoch_length: Option<u64>,
+    /// `--gas-pool-eth-cap <N>` value (GP.7.4): the ETH-leg per-action
+    /// drain cap.  Supplying this OR `--gas-pool-bold-cap` enables the
+    /// gas-pool genesis wiring; a missing cap defaults to `0`.
+    pub gas_pool_eth_cap: Option<u64>,
+    /// `--gas-pool-bold-cap <N>` value (GP.7.4): the BOLD-leg per-action
+    /// drain cap.  See `gas_pool_eth_cap`.
+    pub gas_pool_bold_cap: Option<u64>,
 }
 
 impl Config {
@@ -88,6 +119,68 @@ impl Config {
             max_frame_size: crate::frame::DEFAULT_MAX_FRAME_SIZE,
             max_concurrent_connections: crate::listener::DEFAULT_MAX_CONCURRENT_CONNECTIONS,
             use_mock_kernel: false,
+            budget_mode: None,
+            budget_free_tier: None,
+            budget_action_cost: None,
+            budget_current_epoch: None,
+            budget_epoch_length: None,
+            gas_pool_eth_cap: None,
+            gas_pool_bold_cap: None,
+        }
+    }
+
+    /// The configured per-actor budget policy (GP.6.2), if any.
+    ///
+    /// A policy is assembled when `--budget-policy bounded` is
+    /// supplied OR any of the three budget sub-flags is present
+    /// (with `bounded` the only mode).  `BudgetPolicy::mk_bounded`
+    /// clamps `action_cost` to `>= 1`, matching the Lean smart
+    /// constructor.  A non-`"bounded"` mode yields `None` (rejected
+    /// by [`Config::validate`]).
+    #[must_use]
+    pub fn budget_policy(&self) -> Option<BudgetPolicy> {
+        match self.budget_mode.as_deref() {
+            Some("bounded") => Some(self.assemble_bounded()),
+            // A non-`bounded` explicit mode yields no policy (and is
+            // rejected by `validate`).
+            Some(_) => None,
+            // No explicit mode: a bare budget sub-flag still enables
+            // bounded mode (with the other fields defaulted).
+            None => {
+                let any_sub = self.budget_free_tier.is_some()
+                    || self.budget_action_cost.is_some()
+                    || self.budget_current_epoch.is_some();
+                if any_sub {
+                    Some(self.assemble_bounded())
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Assemble a bounded policy from the parsed sub-flags, defaulting
+    /// each to the genesis-default field value.
+    fn assemble_bounded(&self) -> BudgetPolicy {
+        BudgetPolicy::mk_bounded(
+            self.budget_free_tier.unwrap_or(0),
+            self.budget_action_cost.unwrap_or(1),
+            self.budget_current_epoch.unwrap_or(0),
+        )
+    }
+
+    /// The configured GP.7.4 gas-pool caps `(eth_cap, bold_cap)`, if the
+    /// gas pool is enabled.  `Some((eth, bold))` when EITHER
+    /// `--gas-pool-eth-cap` or `--gas-pool-bold-cap` is supplied (a
+    /// missing cap defaults to `0`, i.e. that leg cannot drain); `None`
+    /// when neither is supplied (gas pool disabled).  Forwarded to the
+    /// `CommandKernel` via `with_gas_pool_policy`, which passes the two
+    /// caps to the `knomosis` binary's gas-pool genesis wiring.
+    #[must_use]
+    pub fn gas_pool_caps(&self) -> Option<(u64, u64)> {
+        match (self.gas_pool_eth_cap, self.gas_pool_bold_cap) {
+            (None, None) => None,
+            (eth, bold) => Some((eth.unwrap_or(0), bold.unwrap_or(0))),
         }
     }
 
@@ -153,6 +246,15 @@ impl Config {
             return Err(ConfigError::ConcurrentConnectionsTooLarge(
                 self.max_concurrent_connections,
             ));
+        }
+        // GP.6.2: the only recognised budget mode is `bounded`.  A
+        // sub-flag without an explicit `--budget-policy` defaults to
+        // bounded mode, so only an explicit non-`bounded` value is an
+        // error.
+        if let Some(mode) = self.budget_mode.as_deref() {
+            if mode != "bounded" {
+                return Err(ConfigError::UnknownBudgetMode(mode.to_string()));
+            }
         }
         Ok(())
     }
@@ -229,6 +331,9 @@ pub enum ConfigError {
     /// `--max-concurrent-connections` above the hard ceiling.
     #[error("--max-concurrent-connections {0} exceeds hard ceiling")]
     ConcurrentConnectionsTooLarge(usize),
+    /// `--budget-policy` supplied with a value other than `bounded`.
+    #[error("--budget-policy '{0}' unrecognised; the only supported mode is 'bounded'")]
+    UnknownBudgetMode(String),
 }
 
 /// Parse command-line arguments into a `Config`.
@@ -317,6 +422,78 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     .ok_or_else(|| ParseError::MissingValue("--deployment-id".into()))?;
                 cfg.deployment_id = Some(value.clone());
             }
+            "--budget-policy" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--budget-policy".into()))?;
+                cfg.budget_mode = Some(value.clone());
+            }
+            "--free-tier" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--free-tier".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--free-tier".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_free_tier = Some(n);
+            }
+            "--action-cost" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--action-cost".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--action-cost".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_action_cost = Some(n);
+            }
+            "--current-epoch" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--current-epoch".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--current-epoch".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_current_epoch = Some(n);
+            }
+            "--epoch-length" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--epoch-length".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--epoch-length".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.budget_epoch_length = Some(n);
+            }
+            "--gas-pool-eth-cap" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--gas-pool-eth-cap".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--gas-pool-eth-cap".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.gas_pool_eth_cap = Some(n);
+            }
+            "--gas-pool-bold-cap" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--gas-pool-bold-cap".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--gas-pool-bold-cap".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.gas_pool_bold_cap = Some(n);
+            }
             "--max-queue-depth" => {
                 let value = iter
                     .next()
@@ -390,6 +567,15 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --knomosis-log <PATH>        Persistent log file shared across requests\n\
          \x20 --knomosis-work-dir <PATH>   Per-request temp work directory\n\
          \x20 --deployment-id <HEX>     32-byte deployment id (hex) passed to knomosis\n\
+         \n\
+         Budget gate (GP.6.2; optional):\n\
+         \x20 --budget-policy bounded   Enable the per-actor epoch-budget admission gate\n\
+         \x20 --free-tier <N>           Per-epoch budget floor (default 0)\n\
+         \x20 --action-cost <C>         Per-action budget debit (clamped >= 1; default 1)\n\
+         \x20 --current-epoch <E>       Current epoch index (default 0; free tier needs E >= 1)\n\
+         \x20 --epoch-length <N>        Admitted actions per budget epoch (0 = no advancement)\n\
+         \x20 --gas-pool-eth-cap <N>    Enable the GP.7.4 gas-pool genesis (ETH-leg per-action cap)\n\
+         \x20 --gas-pool-bold-cap <N>   Gas-pool BOLD-leg per-action cap (enables if either is set)\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size (default 256)\n\
@@ -731,5 +917,213 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<ParseError>();
         assert_send_sync::<ConfigError>();
+    }
+
+    /// GP.6.2: the budget flags parse and assemble a bounded policy.
+    #[test]
+    fn budget_flags_parse_and_assemble() {
+        use crate::budget::BudgetPolicy;
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "bounded",
+            "--free-tier",
+            "5",
+            "--action-cost",
+            "2",
+            "--current-epoch",
+            "1",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.budget_policy(), Some(BudgetPolicy::mk_bounded(5, 2, 1)));
+    }
+
+    /// No budget flags → no policy (back-compat: genesis default).
+    #[test]
+    fn no_budget_flags_no_policy() {
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert!(cfg.budget_policy().is_none());
+        cfg.validate().unwrap();
+    }
+
+    /// A budget sub-flag without an explicit `--budget-policy`
+    /// defaults to bounded mode (with the other fields defaulted).
+    #[test]
+    fn budget_subflag_defaults_to_bounded() {
+        use crate::budget::BudgetPolicy;
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--free-tier",
+            "7",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.budget_policy(), Some(BudgetPolicy::mk_bounded(7, 1, 0)));
+    }
+
+    /// `--action-cost` is clamped to `>= 1` (matching the Lean
+    /// smart constructor).
+    #[test]
+    fn budget_action_cost_clamped() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "bounded",
+            "--action-cost",
+            "0",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.budget_policy().unwrap().action_cost(), 1);
+    }
+
+    /// A non-`bounded` budget mode fails validation.
+    #[test]
+    fn unknown_budget_mode_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "unlimited",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::UnknownBudgetMode(m)) => assert_eq!(m, "unlimited"),
+            other => panic!("expected UnknownBudgetMode, got {other:?}"),
+        }
+    }
+
+    /// A non-numeric `--free-tier` value is a parse error.
+    #[test]
+    fn budget_free_tier_non_numeric_fails() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--free-tier",
+            "lots",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--free-tier"),
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// Help text mentions the budget flags.
+    #[test]
+    fn help_text_mentions_budget_flags() {
+        let text = super::help_text("knomosis-host");
+        assert!(text.contains("--budget-policy"));
+        assert!(text.contains("--free-tier"));
+        assert!(text.contains("--action-cost"));
+        assert!(text.contains("--current-epoch"));
+        assert!(text.contains("--epoch-length"));
+    }
+
+    /// GP.7.4: both gas-pool caps parse and assemble into
+    /// `gas_pool_caps()`.
+    #[test]
+    fn gas_pool_flags_parse_and_assemble() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--gas-pool-eth-cap",
+            "1000",
+            "--gas-pool-bold-cap",
+            "3000",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.gas_pool_caps(), Some((1000, 3000)));
+    }
+
+    /// GP.7.4: no gas-pool flags → gas pool disabled (back-compat).
+    #[test]
+    fn no_gas_pool_flags_disabled() {
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert!(cfg.gas_pool_caps().is_none());
+        cfg.validate().unwrap();
+    }
+
+    /// GP.7.4: supplying ONLY one cap enables the gas pool with the
+    /// other leg defaulting to `0` (that leg cannot drain).
+    #[test]
+    fn gas_pool_single_cap_defaults_other_to_zero() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--gas-pool-eth-cap",
+            "1000",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.gas_pool_caps(), Some((1000, 0)));
+    }
+
+    /// GP.7.4: a non-numeric gas-pool cap is a parse error.
+    #[test]
+    fn gas_pool_invalid_cap_rejected() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--gas-pool-eth-cap",
+            "not-a-number",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--gas-pool-eth-cap"),
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// GP.7.4: help text mentions the gas-pool flags.
+    #[test]
+    fn help_text_mentions_gas_pool_flags() {
+        let text = super::help_text("knomosis-host");
+        assert!(text.contains("--gas-pool-eth-cap"));
+        assert!(text.contains("--gas-pool-bold-cap"));
+    }
+
+    /// GP.6.2: `--epoch-length` parses into `budget_epoch_length`.
+    #[test]
+    fn epoch_length_parses() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--budget-policy",
+            "bounded",
+            "--free-tier",
+            "1",
+            "--current-epoch",
+            "1",
+            "--epoch-length",
+            "3",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.budget_epoch_length, Some(3));
+    }
+
+    /// A non-numeric `--epoch-length` is a parse error.
+    #[test]
+    fn epoch_length_non_numeric_fails() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--epoch-length",
+            "soon",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--epoch-length"),
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
     }
 }

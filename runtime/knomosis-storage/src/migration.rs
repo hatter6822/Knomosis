@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Append-only migration scaffolding (RH-E.0.d).
 //!
@@ -96,10 +97,16 @@ pub struct Migration {
 /// PR per the engineering plan §7 risk register.  Modifying or
 /// removing an existing entry is a backwards-incompatible change
 /// to every database created against the old version.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    name: "initial_kv_table",
-    apply: migration_001_initial_kv_table,
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        name: "initial_kv_table",
+        apply: migration_001_initial_kv_table,
+    },
+    Migration {
+        name: "gp_6_4_budget_views",
+        apply: migration_002_budget_views,
+    },
+];
 
 /// Compile-time assertion that the migration table fits in u32.
 /// Without this, a future PR that adds u32::MAX + 1 migrations
@@ -299,6 +306,74 @@ fn migration_001_initial_kv_table(conn: &Connection) -> Result<(), rusqlite::Err
     Ok(())
 }
 
+/// Second migration (Workstream GP / GP.6.4): create the three
+/// per-actor budget / pool tables that
+/// `knomosis-indexer::budget_view` consumes.
+///
+/// Tables created:
+///   * `actor_budgets(actor BLOB PRIMARY KEY, value BLOB)`:
+///     per-actor cumulative budget grants (16-byte BE u128).
+///   * `actor_budgets_current_epoch_grants(actor BLOB PRIMARY KEY,
+///     value BLOB)`: per-actor budget grants in the current epoch,
+///     reset at every epoch boundary.
+///   * `actor_budgets_current_epoch_consumed(actor BLOB PRIMARY
+///     KEY, value BLOB)`: per-actor budget consumption (from
+///     `Event.budgetConsumed`, tag 20) in the current epoch.
+///   * `pool_balances_eth(actor BLOB PRIMARY KEY, value BLOB)`:
+///     per-pool-actor ETH (resource 0) cumulative inflows / net
+///     balance.
+///   * `pool_balances_bold(actor BLOB PRIMARY KEY, value BLOB)`:
+///     per-pool-actor BOLD (resource 1) cumulative inflows / net
+///     balance.
+///
+/// All five tables use 8-byte BE actor keys + 16-byte BE u128
+/// values.  `WITHOUT ROWID` aligns with the `kv` table for
+/// consistency; the small fixed-size keys mean the rowid would be
+/// pure overhead.
+///
+/// A sixth `_meta` cell `gp_6_4_current_epoch` records the
+/// current epoch number (decimal `u64` text) for the indexer to
+/// detect epoch crossings.
+///
+/// Frozen at index 2 (schema version 2).
+///
+/// **Idempotency**: every `CREATE TABLE` uses `IF NOT EXISTS`, so
+/// a re-run against a partially-applied schema (e.g., crash
+/// recovery) succeeds.
+fn migration_002_budget_views(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS actor_budgets(\
+            actor BLOB PRIMARY KEY NOT NULL, \
+            value BLOB NOT NULL) WITHOUT ROWID",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS actor_budgets_current_epoch_grants(\
+            actor BLOB PRIMARY KEY NOT NULL, \
+            value BLOB NOT NULL) WITHOUT ROWID",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS actor_budgets_current_epoch_consumed(\
+            actor BLOB PRIMARY KEY NOT NULL, \
+            value BLOB NOT NULL) WITHOUT ROWID",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pool_balances_eth(\
+            actor BLOB PRIMARY KEY NOT NULL, \
+            value BLOB NOT NULL) WITHOUT ROWID",
+        [],
+    )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pool_balances_bold(\
+            actor BLOB PRIMARY KEY NOT NULL, \
+            value BLOB NOT NULL) WITHOUT ROWID",
+        [],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{apply_migrations, current_schema_version, target_schema_version, MIGRATIONS};
@@ -325,6 +400,95 @@ mod tests {
     #[test]
     fn first_migration_is_initial_kv_table() {
         assert_eq!(MIGRATIONS[0].name, "initial_kv_table");
+    }
+
+    /// The second migration is the `gp_6_4_budget_views` step
+    /// (frozen at index 2 / schema version 2).  Same load-bearing
+    /// contract as the index-1 migration: tools / operators
+    /// expecting schema-version 2 to mean "the GP.6.4 budget /
+    /// pool tables exist" read this constant to confirm.
+    #[test]
+    fn second_migration_is_gp_6_4_budget_views() {
+        assert!(MIGRATIONS.len() >= 2, "expected at least 2 migrations");
+        assert_eq!(MIGRATIONS[1].name, "gp_6_4_budget_views");
+    }
+
+    /// After migrations apply, the five GP.6.4 tables exist.
+    /// Pins the migration's DDL side effects against the
+    /// migration's name; any future PR that renames a table must
+    /// also update this list (and update the indexer's
+    /// `budget_view.rs` to match).
+    #[test]
+    fn gp_6_4_tables_exist_after_migration() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        apply_migrations(&mut conn).unwrap();
+        for table in [
+            "actor_budgets",
+            "actor_budgets_current_epoch_grants",
+            "actor_budgets_current_epoch_consumed",
+            "pool_balances_eth",
+            "pool_balances_bold",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    rusqlite::params![table],
+                    |row| row.get(0),
+                )
+                .unwrap_or_else(|e| panic!("table existence probe failed for {table}: {e}"));
+            assert_eq!(count, 1, "table {table} not created by migration_002");
+        }
+    }
+
+    /// The GP.6.4 tables share a uniform schema: `actor BLOB
+    /// PRIMARY KEY NOT NULL` + `value BLOB NOT NULL`, both
+    /// `WITHOUT ROWID`.  Pin the schema shape so a future PR that
+    /// changes a column type / NULLability / WITHOUT-ROWID is
+    /// caught up front.
+    #[test]
+    fn gp_6_4_tables_have_uniform_schema() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        apply_migrations(&mut conn).unwrap();
+        for table in [
+            "actor_budgets",
+            "actor_budgets_current_epoch_grants",
+            "actor_budgets_current_epoch_consumed",
+            "pool_balances_eth",
+            "pool_balances_bold",
+        ] {
+            let sql_lower: String = conn
+                .query_row(
+                    "SELECT LOWER(sql) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    rusqlite::params![table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(
+                sql_lower.contains("actor blob primary key not null"),
+                "table {table}: missing canonical actor column ({sql_lower})"
+            );
+            assert!(
+                sql_lower.contains("value blob not null"),
+                "table {table}: missing canonical value column ({sql_lower})"
+            );
+            assert!(
+                sql_lower.contains("without rowid"),
+                "table {table}: missing WITHOUT ROWID ({sql_lower})"
+            );
+        }
+    }
+
+    /// Re-applying migrations on an already-up-to-date DB is a no-op.
+    /// Catches accidental side effects in the migration body.
+    #[test]
+    fn gp_6_4_migration_idempotent() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        apply_migrations(&mut conn).unwrap();
+        let v1 = current_schema_version(&conn).unwrap();
+        apply_migrations(&mut conn).unwrap();
+        let v2 = current_schema_version(&conn).unwrap();
+        assert_eq!(v1, v2);
+        assert_eq!(v2, target_schema_version());
     }
 
     /// `target_schema_version` matches the table length cast to

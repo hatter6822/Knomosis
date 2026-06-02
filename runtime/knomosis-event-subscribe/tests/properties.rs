@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Property tests for `knomosis-event-subscribe`.
 //!
@@ -181,5 +182,66 @@ proptest! {
             Err(knomosis_event_subscribe::frame::FrameError::OversizeFrame { .. })
         );
         prop_assert!(is_oversize);
+    }
+}
+
+// ===================================================================
+// WU GP.6.3: event-type registry properties.
+// ===================================================================
+
+use knomosis_event_subscribe::event_type::{
+    peek_event_tag, EventClass, EventType, CBE_TAG_UINT, EVENT_TAG_HEAD_LEN,
+};
+
+/// Build a well-formed CBE uint head for `tag`, then append
+/// arbitrary trailing field bytes.
+fn head_with_trailer(tag: u64, trailer: &[u8]) -> Vec<u8> {
+    let mut v = Vec::with_capacity(EVENT_TAG_HEAD_LEN + trailer.len());
+    v.push(CBE_TAG_UINT);
+    v.extend_from_slice(&tag.to_le_bytes());
+    v.extend_from_slice(trailer);
+    v
+}
+
+proptest! {
+    /// `peek_event_tag` never panics on arbitrary bytes.
+    #[test]
+    fn peek_event_tag_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..128)) {
+        let _ = peek_event_tag(&bytes);
+    }
+
+    /// `EventClass::classify` never panics on arbitrary bytes.
+    #[test]
+    fn classify_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..128)) {
+        let _ = EventClass::classify(&bytes);
+    }
+
+    /// `peek_event_tag` reads exactly the leading-head tag regardless
+    /// of any trailing field bytes (it is a head peek, not a
+    /// structural decode).
+    #[test]
+    fn peek_reads_head_tag_ignoring_trailer(
+        tag in any::<u64>(),
+        trailer in proptest::collection::vec(any::<u8>(), 0..64),
+    ) {
+        let payload = head_with_trailer(tag, &trailer);
+        prop_assert_eq!(peek_event_tag(&payload).unwrap(), tag);
+    }
+
+    /// `classify` of a well-formed head agrees with `from_tag`:
+    /// `Known(et)` exactly when `from_tag` recognises the tag, and
+    /// `Unknown { tag }` otherwise — and the streamer never errors on
+    /// a syntactically valid head (forward-compatibility).
+    #[test]
+    fn classify_agrees_with_from_tag(
+        tag in any::<u64>(),
+        trailer in proptest::collection::vec(any::<u8>(), 0..32),
+    ) {
+        let payload = head_with_trailer(tag, &trailer);
+        let class = EventClass::classify(&payload);
+        match EventType::from_tag(tag) {
+            Some(et) => prop_assert_eq!(class, EventClass::Known(et)),
+            None => prop_assert_eq!(class, EventClass::Unknown { tag }),
+        }
     }
 }

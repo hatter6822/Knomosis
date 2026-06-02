@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! End-to-end integration tests for `knomosis-event-subscribe`.
 //!
@@ -1054,4 +1055,271 @@ fn symlinked_log_path_rejected() {
     let result = knomosis_event_subscribe::tail::TailReader::open(&real_path);
     assert!(result.is_ok());
     let _ = std::fs::remove_file(&symlink_path);
+}
+
+// ===================================================================
+// WU GP.6.3: streaming the new gas-pool-family event variants.
+//
+// `knomosis-event-subscribe` is an opaque-byte transport: it forwards
+// the extractor's CBE-encoded `Event` payloads verbatim.  These tests
+// prove the additive-extension property end-to-end — the new
+// Workstream-GP gas-pool family (tags 16/17/18/19), and even a
+// hypothetical future tag the registry does not yet know, stream
+// byte-for-byte unchanged with no protocol-version bump.
+// ===================================================================
+
+use knomosis_event_subscribe::event_type::{EventClass, EventStreamStats, EventType};
+
+/// Encode a CBE uint head (`0x00` + 8-byte little-endian value) —
+/// the same primitive `knomosis-indexer::decoder::write_uint` emits.
+fn cbe_uint(n: u64) -> Vec<u8> {
+    let mut v = Vec::with_capacity(9);
+    v.push(0x00);
+    v.extend_from_slice(&n.to_le_bytes());
+    v
+}
+
+/// Encode a CBE `Event` payload: a leading uint head carrying the
+/// constructor `tag`, followed by one uint head per field.  Realistic
+/// shapes for the gas-pool family (all fields are CBE uints on the
+/// Lean side); the subscriber treats the bytes as opaque regardless.
+fn cbe_event(tag: u64, fields: &[u64]) -> Vec<u8> {
+    let mut v = cbe_uint(tag);
+    for &f in fields {
+        v.extend_from_slice(&cbe_uint(f));
+    }
+    v
+}
+
+/// **WU GP.6.3 acceptance: gas-pool-family events stream verbatim.**
+///
+/// A subscriber receives the four Workstream-GP event payloads
+/// (`depositWithFeeCredited` 16, `actionBudgetTopUp` 17,
+/// `gasPoolClaim` 18, `delegatedActionBudgetTopUp` 19) byte-for-byte
+/// unchanged.  Also asserts the event-type registry classifies each
+/// produced payload as exactly the expected `Known` variant — tying
+/// the on-the-wire bytes to the registry catalogue.
+#[test]
+fn gas_pool_family_events_stream_verbatim() {
+    // depositWithFeeCredited: resource, recipient, poolActor,
+    // userAmount, poolAmount, budgetGrant, depositId.
+    let deposit_with_fee = cbe_event(16, &[0, 7, 1, 900, 100, 50, 12]);
+    // actionBudgetTopUp: signer, gasResource, gasAmount,
+    // budgetIncrement, poolActor.
+    let action_budget_topup = cbe_event(17, &[7, 0, 500, 10, 1]);
+    // gasPoolClaim: resource, sequencer, amount.
+    let gas_pool_claim = cbe_event(18, &[0, 2, 250]);
+    // delegatedActionBudgetTopUp: recipient, signer, gasResource,
+    // gasAmount, budgetIncrement, poolActor.
+    let delegated_topup = cbe_event(19, &[9, 7, 0, 500, 10, 1]);
+
+    let expected: Vec<(Vec<u8>, EventType)> = vec![
+        (deposit_with_fee, EventType::DepositWithFeeCredited),
+        (action_budget_topup, EventType::ActionBudgetTopUp),
+        (gas_pool_claim, EventType::GasPoolClaim),
+        (delegated_topup, EventType::DelegatedActionBudgetTopUp),
+    ];
+
+    // Sanity: the registry recognises each produced payload as the
+    // intended variant before we ever stream it.
+    for (payload, ty) in &expected {
+        assert_eq!(
+            EventClass::classify(payload),
+            EventClass::Known(*ty),
+            "registry should classify the {ty} payload"
+        );
+        assert!(ty.is_gas_pool_family());
+    }
+
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let extractor = Box::new(MockExtractor::new());
+    extractor.set_responses(
+        expected
+            .iter()
+            .map(|(payload, _)| MockResponse::Ok(vec![payload.clone()]))
+            .collect(),
+    );
+    let (cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    let mut stream = connect_subscribe(addr, 0);
+    std::thread::sleep(Duration::from_millis(100));
+
+    for _ in 0..expected.len() {
+        append_log_frame(&log_path, b"frame");
+    }
+
+    let frames = read_n_events(&mut stream, expected.len());
+    for (i, frame) in frames.iter().enumerate() {
+        let (expected_payload, _) = &expected[i];
+        match frame {
+            OutboundFrame::Event { seq, payload } => {
+                assert_eq!(*seq, (i as u64) + 1, "frame {i} seq");
+                // The load-bearing assertion: the streamed payload is
+                // byte-for-byte the extractor's output — verbatim,
+                // additive forwarding with no transformation.
+                assert_eq!(
+                    payload.as_slice(),
+                    expected_payload.as_slice(),
+                    "frame {i} payload must stream verbatim"
+                );
+            }
+            other => panic!("expected Event for frame {i}, got {other:?}"),
+        }
+    }
+
+    stop_server(&stop, handle);
+}
+
+/// **WU GP.6.3 acceptance: a future / unknown event tag still
+/// streams verbatim (forward compatibility).**
+///
+/// A subscriber built against an older tag set keeps working against
+/// a server emitting a newer tag.  The streamer classifies tag 50 as
+/// `Unknown` but forwards the payload unchanged — the additive
+/// extension policy is mechanised, not merely documented.
+#[test]
+fn future_unknown_event_tag_streams_verbatim() {
+    // Tag 50 is beyond the current known set (0..=20).
+    let future_payload = cbe_event(50, &[1, 2, 3]);
+    assert_eq!(
+        EventClass::classify(&future_payload),
+        EventClass::Unknown { tag: 50 },
+        "tag 50 must classify as Unknown (forward-compatible)"
+    );
+
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let extractor = Box::new(MockExtractor::new());
+    extractor.set_responses(vec![MockResponse::Ok(vec![future_payload.clone()])]);
+    let (cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    let mut stream = connect_subscribe(addr, 0);
+    std::thread::sleep(Duration::from_millis(100));
+    append_log_frame(&log_path, b"frame");
+
+    let frames = read_n_events(&mut stream, 1);
+    match &frames[0] {
+        OutboundFrame::Event { seq, payload } => {
+            assert_eq!(*seq, 1);
+            assert_eq!(
+                payload.as_slice(),
+                future_payload.as_slice(),
+                "unknown-tag payload must stream verbatim"
+            );
+        }
+        other => panic!("expected Event, got {other:?}"),
+    }
+
+    stop_server(&stop, handle);
+}
+
+/// **WU GP.6.3: a multi-event log frame mixing legacy and gas-pool
+/// events is delivered as one ordered batch, verbatim.**
+///
+/// A single `depositWithFee` admission emits both a kernel-level
+/// `balanceChanged` (tag 0) and the semantic `depositWithFeeCredited`
+/// (tag 16); they share a seq.  This proves the new variants compose
+/// with the existing multi-event-per-frame batching.
+#[test]
+fn mixed_legacy_and_gas_pool_batch_streams_in_order() {
+    let balance_changed = cbe_event(0, &[0, 7, 0, 900]);
+    let deposit_with_fee = cbe_event(16, &[0, 7, 1, 900, 100, 50, 12]);
+    let batch = vec![balance_changed.clone(), deposit_with_fee.clone()];
+
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let extractor = Box::new(MockExtractor::new());
+    extractor.set_responses(vec![MockResponse::Ok(batch.clone())]);
+    let (cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    let mut stream = connect_subscribe(addr, 0);
+    std::thread::sleep(Duration::from_millis(100));
+    append_log_frame(&log_path, b"frame");
+
+    // Both events share seq=1 (same log frame).
+    let frames = read_n_events(&mut stream, 2);
+    for (i, frame) in frames.iter().enumerate() {
+        match frame {
+            OutboundFrame::Event { seq, payload } => {
+                assert_eq!(*seq, 1, "both events share the frame seq");
+                assert_eq!(
+                    payload.as_slice(),
+                    batch[i].as_slice(),
+                    "event {i} verbatim"
+                );
+            }
+            other => panic!("expected Event for event {i}, got {other:?}"),
+        }
+    }
+    // The registry classifies them as the legacy + gas-pool pair.
+    assert_eq!(
+        EventClass::classify(&balance_changed),
+        EventClass::Known(EventType::BalanceChanged)
+    );
+    assert_eq!(
+        EventClass::classify(&deposit_with_fee),
+        EventClass::Known(EventType::DepositWithFeeCredited)
+    );
+
+    stop_server(&stop, handle);
+}
+
+/// **WU GP.6.3: the server records per-event-type stats end-to-end.**
+///
+/// Exercises the previously-untested server integration of the
+/// event-type registry: a server streams a gas-pool deposit (16), a
+/// gas-pool claim (18), and a future/unknown tag (50); after the
+/// subscriber has received all three, the shared `EventStreamStats`
+/// reflects the correct per-type tallies.  Recording happens BEFORE
+/// broadcast, so receipt of an event implies it was already counted.
+#[test]
+fn extractor_records_event_type_stats() {
+    let log = tempfile::NamedTempFile::new().unwrap();
+    let log_path = log.path().to_path_buf();
+    let extractor = Box::new(MockExtractor::new());
+    extractor.set_responses(vec![
+        MockResponse::Ok(vec![cbe_event(18, &[0, 2, 250])]), // gasPoolClaim
+        MockResponse::Ok(vec![cbe_event(16, &[0, 7, 1, 900, 100, 50, 12])]), // depositWithFeeCredited
+        MockResponse::Ok(vec![cbe_event(50, &[1, 2, 3])]),                   // unknown future tag
+    ]);
+    let stats = Arc::new(EventStreamStats::new());
+    let (mut cfg, addr) = make_server(&log_path, extractor, 64, 64);
+    cfg.stats = Arc::clone(&stats);
+    let (stop, addr, handle) = start_server(cfg, addr);
+
+    let mut stream = connect_subscribe(addr, 0);
+    std::thread::sleep(Duration::from_millis(100));
+    append_log_frame(&log_path, b"f1");
+    append_log_frame(&log_path, b"f2");
+    append_log_frame(&log_path, b"f3");
+
+    // Receiving all three guarantees the extractor recorded them.
+    let _ = read_n_events(&mut stream, 3);
+
+    assert_eq!(
+        stats.count(EventType::GasPoolClaim),
+        1,
+        "gasPoolClaim tally"
+    );
+    assert_eq!(
+        stats.count(EventType::DepositWithFeeCredited),
+        1,
+        "depositWithFeeCredited tally"
+    );
+    assert_eq!(stats.unknown_count(), 1, "unknown-tag tally");
+    assert_eq!(
+        stats.count(EventType::BalanceChanged),
+        0,
+        "untouched type stays 0"
+    );
+    assert_eq!(stats.total(), 3, "total recorded");
+    let summary = stats.summary();
+    assert!(summary.contains("gasPoolClaim=1"), "summary: {summary}");
+    assert!(summary.contains("unknown=1"), "summary: {summary}");
+
+    stop_server(&stop, handle);
 }

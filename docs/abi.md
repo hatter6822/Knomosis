@@ -3,7 +3,7 @@
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
 # Phase 5 ABI: On-Disk and On-Wire Contracts (WU 5.10)
@@ -319,7 +319,9 @@ The full per-constructor table for the dispute types is in
 ### 5.3 Phase-6 + Workstream-C + Workstream-LP + Workstream-H `Event` Inductive Extension
 
 The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 16
-constructors at frozen indices 0..15:
+constructors at frozen indices 0..15 (and is further extended to
+20 by Workstream GP — indices 16..19, documented in the
+"Workstream-GP `Event` Inductive Extension" subsection below):
 
 ```
 Event.balanceChanged       := 0
@@ -350,6 +352,55 @@ kernel-level balance deltas use `balanceChanged`.
 The Phase-5 indexer schema continues to deserialise correctly
 under the Phase-6 schema; new event constructors are simply
 unrecognised by Phase-5-only consumers.
+
+### 5.3 Workstream-GP `Event` Inductive Extension
+
+The unified-gas-pool workstream (§15E) appends five more `Event`
+constructors at frozen indices 16..20:
+
+```
+Event.depositWithFeeCredited     := 16 -- GP §15E v1.0 (fee-split deposit)
+Event.actionBudgetTopUp          := 17 -- GP §15E v1.0 (self-funded top-up)
+Event.gasPoolClaim               := 18 -- GP §15E v1.0 (pool drain; GP.7)
+Event.delegatedActionBudgetTopUp := 19 -- GP.3.4 (delegated top-up)
+Event.budgetConsumed             := 20 -- GP.6.4 (per-action budget debit)
+```
+
+Field layouts (mirrored from `LegalKernel/Events/Types.lean`, each
+field a CBE uint head):
+
+| Tag | Constructor                  | Fields                                                                       |
+|-----|------------------------------|------------------------------------------------------------------------------|
+| 16  | `depositWithFeeCredited`     | `resource, recipient, poolActor, userAmount, poolAmount, budgetGrant, depositId` |
+| 17  | `actionBudgetTopUp`          | `signer, gasResource, gasAmount, budgetIncrement, poolActor`                 |
+| 18  | `gasPoolClaim`               | `resource, sequencer, amount`                                                |
+| 19  | `delegatedActionBudgetTopUp` | `recipient, signer, gasResource, gasAmount, budgetIncrement, poolActor`      |
+| 20  | `budgetConsumed`             | `actor, amount`                                                              |
+
+`depositWithFeeCredited` (16) is emitted IN ADDITION to the
+kernel-level `balanceChanged` (0) on a fee-split deposit, so an
+indexer can distinguish a fee-split deposit (with its budget-grant
+breakdown) from a legacy `depositCredited` (10).  Indexers
+maintaining a per-actor budget view (WU GP.6.4) credit the
+*recipient* on tag 19 (NOT the signer/payer), per the delegated
+top-up semantics.
+
+`budgetConsumed` (20, GP.6.4) is emitted by `extractEvents` on
+every admitted action whose signer is NOT exempt from budget
+consumption — i.e. `signer ≠ Bridge.bridgeActor` (the bridgeActor
+is exempt per the GP.3.2.c kernel consume-exemption) AND the
+deployment runs a `.bounded freeTier actionCost _` policy with
+`actionCost > 0`.  The `amount` is exactly the kernel's
+`actionCost` (`EpochBudgetState.consume` debits precisely that
+much).  Indexers consume tag 20 to maintain a per-epoch "budget
+consumed" counter and compute "N actions remaining this epoch"
+(see §11A).
+
+These tags carry no change to the §11 EVENT-frame layout — they
+emit at the existing 9-byte CBE tag head (§11.1) and stream
+additively.  The Rust-side streamer's tag registry
+(`runtime/knomosis-event-subscribe/src/event_type.rs`) mirrors all
+five.
 
 ### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
 
@@ -823,6 +874,127 @@ that read a single verdict byte and disconnect continue to
 work; clients wanting finer-grained stage updates will
 subscribe via RH-D when it ships.
 
+### 10.2.2 Budget-exhaustion reason (Workstream GP.6.2 / OQ-GP-3)
+
+The per-actor budget admission gate (Workstream GP) rejects an
+action whose signer has insufficient epoch budget.  Per the OQ-GP-3
+wire-format-stability decision, this rejection does NOT add a new
+verdict byte: it FOLDS under the existing `NotAdmissible` (`1`)
+verdict, carrying the canonical reason string
+
+```text
+    InsufficientBudget
+```
+
+in the response's UTF-8 reason field (§10.1).  A client distinguishes
+a budget rejection from any other `NotAdmissible` purely by the
+reason string; the verdict byte is unchanged, so `PROTOCOL_VERSION`
+is unchanged and pre-GP clients keep working.
+
+The reason string is emitted by:
+
+  * the Lean kernel reached through `CommandKernel` — the
+    authoritative gate (`apply_bridge_admissible_with_budget`,
+    enabled by the `--budget-policy bounded --free-tier N
+    --action-cost C --current-epoch E` flags the `CommandKernel`
+    forwards).  The budget gate's `none` outcome surfaces as
+    `ProcessError.budgetRejected` (`LegalKernel/Runtime/Loop.lean`),
+    which the `knomosis process` subcommand prints on **stderr** as a
+    structured marker line
+
+    ```text
+        knomosis-reason: InsufficientBudget
+    ```
+
+    `CommandKernel` lifts the first `knomosis-reason: <TOKEN>` line off
+    the subprocess's stderr into the response reason, so a budget
+    rejection reaches clients as the wire-stable `InsufficientBudget`
+    rather than the generic `knomosis exited with status N`.  A
+    non-zero exit with no marker keeps the raw-stderr / generic reason
+    (the verdict byte is correct in every case).  Base-admissibility
+    failures (`ProcessError.notAdmissible`) emit no marker; and
+  * the in-memory `MockKernel` budget gate
+    (`runtime/knomosis-host/src/budget.rs`), used by tests and dev
+    deployments.
+
+The mock gate additionally surfaces a small family of
+budget-gate-specific `NotAdmissible` reason strings for the
+signer-correlation safety conjuncts it can check without kernel
+balances (`BudgetGateBridgeActorTopUp`, `BudgetGateSelfPoolTopUp`,
+`BudgetGateZeroGasTopUp`, `BudgetGateSelfRecipientDelegatedTopUp`,
+`BudgetGateNonBridgeDepositWithFee`), plus
+`BudgetGateUnsupportedAction` when a valid-but-unmodelled action
+reaches the in-memory gate (it fails closed; the authoritative Lean
+kernel budgets every action variant).  In the mock's optional STRICT
+mode (`BudgetGate::with_strict_checks`) two further reasons surface
+the gas-balance / consent conjuncts — `BudgetGateInsufficientGas` and
+`BudgetGateDelegationNotAuthorized`.  All are `NotAdmissible` — only
+the reason string varies.
+
+### 10.2.3 Budget-config sidecar + epoch advancement (GP.6.2)
+
+The per-actor budget gate's configuration — the bounded policy
+(`freeTier`, `actionCost`, `currentEpoch`) plus the epoch-advancement
+length — participates in every log entry's post-state hash, so it is
+fixed for the life of a log.  Two on-disk / CLI facts follow:
+
+  * **Epoch advancement (`--epoch-length N`).**  With `N > 0` the
+    effective budget epoch advances by one every `N` admitted log
+    entries (the L2 action-clock realisation of OQ-GP-4), lazily
+    replenishing each actor's free tier.  It is a deterministic
+    function of the log index, so replay reproduces every epoch.
+    `N = 0` (default) keeps the epoch fixed.  The `knomosis` binary,
+    the `knomosis-host` daemon, and `CommandKernel` all accept the flag.
+  * **`<LOG>.budgetcfg` sidecar.**  When a deployment uses a
+    NON-default budget config, the `knomosis` binary writes a one-line
+    sidecar next to the log on first successful bootstrap:
+
+    ```text
+    knomosis-budget/v1 <freeTier> <actionCost> <currentEpoch> <epochLength>
+    ```
+
+    Every log-touching subcommand (`process` / `replay` / `bootstrap` /
+    `snapshot`) cross-checks the current flags against this sidecar
+    BEFORE replay; a mismatch (the operator forgot or changed a budget
+    flag on restart) fails with a clear `budget-config error` naming
+    the original flags, rather than an opaque post-state-hash
+    mismatch.  Default-config deployments write no sidecar (the
+    pre-GP.6.2 on-disk footprint is unchanged).
+
+### 10.2.4 Gas-pool genesis config + sidecar (GP.7.4)
+
+A deployment opts into the unified gas pool by supplying the two
+per-leg per-action drain caps; the `knomosis` binary then declares
+`gasPoolPolicy` for `gasPoolActor` in the genesis `localPolicies` AND
+intersects `gasPoolAuthorityPolicy` into the deployment policy (both
+halves of the GP.7.4 contract).  Because the genesis `localPolicies`
+declaration participates in every log entry's post-state hash, the
+gas-pool config — exactly like the budget config — is fixed for the
+life of a log:
+
+  * **Flags (`--gas-pool-eth-cap N` / `--gas-pool-bold-cap M`).**
+    Supplying EITHER enables the gas pool (a missing cap defaults to
+    `0`, i.e. that leg cannot drain).  The `knomosis` binary, the
+    `knomosis-host` daemon, and `CommandKernel` all accept the flags;
+    the binary threads them through every log-touching subcommand
+    (`process` / `replay` / `bootstrap` / `snapshot` / `replay-up-to` /
+    `export-cell-proofs` / `extract-events`).
+  * **`<LOG>.gaspoolcfg` sidecar.**  When the gas pool is enabled, the
+    `knomosis` binary writes a one-line sidecar next to the log on
+    first successful bootstrap:
+
+    ```text
+    knomosis-gaspool/v1 <ethCap> <boldCap>
+    ```
+
+    Every log-touching subcommand cross-checks the current caps against
+    this sidecar BEFORE replay; a mismatch (a forgotten / changed /
+    disabled cap on restart) fails with a clear `gas-pool-config error`
+    naming the original flags, rather than an opaque post-state-hash
+    mismatch.  A gas-pool-DISABLED run against a sidecar-bearing log is
+    rejected the same way.  Gas-pool-disabled deployments write no
+    sidecar (the pre-GP.7.4 on-disk footprint is unchanged).
+
 ### 10.3 Transport
 
   * **Plain TCP.**  `--listen <ADDR>` (e.g. `127.0.0.1:7654`).
@@ -970,6 +1142,27 @@ offset  size  field
 
 Termination frames are followed by an immediate connection
 close from the server side.
+
+**Event payload tags (additive extension).**  The `Event` payload
+(the `N` bytes of an EVENT frame) is a CBE-encoded `Event` whose
+leading 9 bytes are a CBE uint head carrying the constructor tag
+(`0x00` tag byte + 8-byte little-endian constructor index; the same
+head `knomosis-indexer::decoder` reads).  The set of tags is
+**append-only** (`LegalKernel/Events/Types.lean::Event.tag`): a new
+constructor — e.g. the Workstream-GP gas-pool family at tags 16/17/18
+(`depositWithFeeCredited`, `actionBudgetTopUp`, `gasPoolClaim`), the
+GP.3.4 `delegatedActionBudgetTopUp` at 19, and the GP.6.4
+`budgetConsumed` at 20 — emits at the SAME 9-byte head with no new
+fields in the *frame*.  The frame layout is
+therefore unchanged, and no `PROTOCOL_VERSION` bump is required.  The
+streamer (`knomosis-event-subscribe`) forwards every event payload
+verbatim, recognised or not, so a subscriber built against an older
+tag set keeps working against a newer server (forward
+compatibility).  The Rust-side tag catalogue lives in
+`runtime/knomosis-event-subscribe/src/event_type.rs`
+(`EventType` / `peek_event_tag` / `EventClass::classify`), which
+mirrors the frozen `Event.tag` indices `0..=20` (the
+GP.6.4 `budgetConsumed` at tag 20 included).
 
 ### 11.2 Frame kind table
 
@@ -1178,12 +1371,104 @@ graceful drain.
     `runtime/knomosis-event-subscribe/src/subscription.rs`.
   * Server orchestrator:
     `runtime/knomosis-event-subscribe/src/server.rs`.
+  * Event-type tag registry (Rust-side catalogue of the frozen
+    `Event.tag` space; powers trace-level observability + the
+    additive-extension contract):
+    `runtime/knomosis-event-subscribe/src/event_type.rs`.
   * Engineering plan:
-    `docs/planning/rust_host_runtime_plan.md` §RH-D.
-  * Event constructor table (frozen indices 0..15):
+    `docs/planning/rust_host_runtime_plan.md` §RH-D; gas-pool
+    event variants: `docs/planning/unified_gas_pool_plan.md` §GP.6.3.
+  * Event constructor table (frozen indices 0..20, including the
+    Workstream-GP gas-pool family 16..20):
     `LegalKernel/Events/Types.lean` + §5.3.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.
+  * `Event` CBE wire codec (the encoder authority that produces the
+    bytes streamed in §11.1's EVENT frame):
+    `LegalKernel/Encoding/Event.lean` (`Event.encode` / `Event.decode`
+    / `Event.tag_matches_encode_tag`).
+  * Event-type tag registry (Rust mirror of `Event.tag`):
+    `runtime/knomosis-event-subscribe/src/event_type.rs`.
+
+### 11.10 `extract-events` subprocess protocol (RH-D backend)
+
+The event-subscription server obtains the per-log-frame `Event` list
+from a Lean `knomosis extract-events --log LOG` subprocess
+(`Main.lean::cmdExtractEvents`; the Rust driver is
+`knomosis-event-subscribe::extract::subprocess::SubprocessExtractor`).
+This is the *backend* protocol (server → `knomosis` subprocess),
+distinct from the *subscriber* protocol of §11.1–§11.9 (server →
+client).
+
+The subprocess is stateful: it threads a running `ExtendedState`
+across requests, reconstructing each frame's post-state via the full
+bridge-aware admission path (`replayStepWith` +
+`apply_bridge_admissible_with_budget`) so the emitted events are
+byte-identical to the runtime's `Loop.processPure` output.
+
+**Request (server → subprocess, one per log frame):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    8    sequence number (big-endian u64)
+    8    4    payload length N (big-endian u32; ≤ 16 MiB)
+   12    N    CBE-encoded `LogEntry` (the on-disk frame payload)
+```
+
+**Response (subprocess → server):**
+
+```text
+offset  size  field
+------  ----  -------------------------------------------------
+    0    8    sequence number (echoed, big-endian u64)
+    8    4    event count K (big-endian u32)
+ 12+..  ...   K × (4-byte BE event length ‖ `Event.encode` bytes)
+```
+
+A clean EOF at a request boundary (stdin closed before the 12-byte
+header) terminates the subprocess with exit 0.  A truncated request,
+a malformed `LogEntry`, or a replay failure exits non-zero (the
+driver observes the resulting stdout EOF as an extractor error and
+halts the daemon — no silent gaps).  Replay re-verifies each signed
+action via the deployment's `Verify`; the dev binary's opaque
+returns `false`, so signed frames require a production-linked verifier
+(as for `replay-up-to`).
+
+**Deployment-config forwarding.**  Replay must run under the SAME
+deployment config the log was produced with: the `--deployment-id`
+(domain-separates signature verification) and the budget policy /
+epoch schedule (drives the per-actor admission gate, and is
+cross-checked against the `<LOG>.budgetcfg` sidecar at startup).  The
+`knomosis-event-subscribe` daemon therefore accepts `--deployment-id`,
+`--budget-policy` / `--free-tier` / `--action-cost` / `--current-epoch`,
+and `--epoch-length`, and its `SubprocessExtractor` PREPENDS them as
+global flags before `extract-events` (so the spawned argv is
+`knomosis [those flags] extract-events --log <log>`).  A default-config
+deployment forwards nothing (the invocation is unchanged).
+
+**Response size.**  A single log frame's event list is bounded by
+`HARD_MAX_EVENT_COUNT` (2^20); the multi-actor laws
+(`distributeOthers` / `proportionalDilute`) emit one `balanceChanged`
+per affected actor, so the cap is a generous DoS ceiling, not a
+per-action bound.  A count above it is a subprocess protocol
+violation.
+
+**`Event` payload field layout.**  Each emitted event is
+`Event.encode` (`LegalKernel/Encoding/Event.lean`): the constructor
+tag head (§5.3) followed by its fields in declaration order, every
+field a CBE uint / byte string per the `Encoding.CBOR` convention.
+The layout is byte-for-byte the format `knomosis-indexer::decoder`
+decodes — notably tag 11 (`localPolicyDeclared`) encodes its `policy`
+as a CBE byte string (opaque bytes wrapping the structured policy),
+matching the indexer's `read_byte_string`.  The Lean↔indexer
+byte-equivalence is mechanically pinned for all 21 tags
+(0..=20) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
+(a Lean→`decode_event`→`encode_event` round-trip against the
+real `event_subscribe_cbe.json` bytes).  GP.6.4 widened the
+indexer's `Event` mirror to cover the Workstream-GP gas-pool
+family (tags 16..=19); previously those tags decoded to a
+typed `UnknownTag`.
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 
@@ -1194,15 +1479,42 @@ on-disk key schema so operator tools (queries, dashboards,
 audits) can read the indexer's database directly without
 re-deriving keys from the source.
 
-### 11A.1 Key prefixes
+### 11A.1 Storage layout (kv keyspaces + GP.6.4 SQL tables)
 
-The indexer reserves the following single-byte-prefixed
-keyspaces in the `kv` table:
+The indexer's state lives in TWO storage surfaces of the same
+SQLite database:
 
-| Prefix | Length    | Content                            | Value format          |
-|--------|-----------|------------------------------------|-----------------------|
-| `b/`   | 18 bytes  | balance for `(actor, resource)`    | 16-byte BE u128       |
-| `c/`   | varies    | indexer control cells              | UTF-8 or fixed-width  |
+**(a) The `kv` blob table** holds the balance view + control
+cells under reserved key prefixes:
+
+| Prefix | Length    | Content                                | Value format          | Workstream |
+|--------|-----------|----------------------------------------|-----------------------|------------|
+| `b/`   | 18 bytes  | balance for `(actor, resource)`        | 16-byte BE u128       | RH-E.1     |
+| `c/`   | varies    | indexer control cells                  | UTF-8 or fixed-width  | RH-E.1     |
+
+The `c/` control cells are `c/cursor`, `c/identifier`, and (new
+in GP.6.4) `c/current_epoch` (8-byte BE u64 — the indexer's
+persisted epoch counter, see §11A.4).
+
+**(b) Five dedicated GP.6.4 SQL tables** (created by
+`knomosis-storage`'s `migration_002_budget_views`, schema
+version 2) hold the per-actor budget + per-pool-actor balance
+views.  Each is `(actor BLOB PRIMARY KEY, value BLOB)
+WITHOUT ROWID`, with an 8-byte BE u64 actor key and a 16-byte
+BE u128 value:
+
+| Table                                  | Content                                              | Workstream |
+|----------------------------------------|------------------------------------------------------|------------|
+| `actor_budgets`                        | lifetime cumulative budget grants per actor          | GP.6.4     |
+| `actor_budgets_current_epoch_grants`   | per-actor grants WITHIN the current epoch            | GP.6.4     |
+| `actor_budgets_current_epoch_consumed` | per-actor consumption WITHIN the current epoch       | GP.6.4     |
+| `pool_balances_eth`                    | per-pool-actor NET ETH (resource 0) balance          | GP.6.4     |
+| `pool_balances_bold`                   | per-pool-actor NET BOLD (resource 1) balance         | GP.6.4     |
+
+(The GP.6.4 v1 design used `u/`/`pe/`/`pb/` kv keyspaces; the
+v2.1 refactor replaced those with the five physical SQL tables
+above so the kv-balance writes and the budget-table writes
+commit atomically in one combined transaction — see §11A.6.)
 
 ### 11A.2 Balance key layout
 
@@ -1244,28 +1556,94 @@ database whose identifier disagrees with the binary's
 `IdentifierMismatch` error rather than silently corrupting
 the database.
 
-### 11A.4 Event dispatch table
+### 11A.4 GP.6.4 budget / pool tables — semantics
 
-For each `Event` (frozen tags 0..15 per §5.3), the indexer
-applies one of the following balance-view operations:
+The five GP.6.4 tables (§11A.1) track the following.  Budget /
+grant / pool credits use CHECKED arithmetic and HALT the batch
+on `u128::MAX` overflow (consistent with the balance view's
+halt-on-overflow discipline — NOT saturating).  Pool drains use
+checked subtraction and HALT on underflow.
+
+  * `actor_budgets[a]` = lifetime cumulative budget grants to
+    actor `a`.  Sourced from the three grant events: tag 16
+    (`depositWithFeeCredited.budgetGrant` → `recipient`), tag 17
+    (`actionBudgetTopUp.budgetIncrement` → `signer`), tag 19
+    (`delegatedActionBudgetTopUp.budgetIncrement` → `recipient`,
+    NOT `signer`).
+  * `actor_budgets_current_epoch_grants[a]` = the same grants,
+    but accumulated only WITHIN the current epoch (DELETE-reset
+    at every epoch boundary — see "Epoch resets" below).
+  * `actor_budgets_current_epoch_consumed[a]` = per-actor budget
+    consumption within the current epoch, sourced from tag 20
+    (`budgetConsumed.amount` → `actor`).
+  * `pool_balances_eth[p]` = per-pool-actor NET ETH (resource 0)
+    balance: gross inflows (tags 16/17/19 `pool_amount` /
+    `gas_amount` when resource = 0) MINUS drains (tag 18
+    `gasPoolClaim.amount` when resource = 0 AND `p` equals the
+    operator-configured `--gas-pool-actor`).
+  * `pool_balances_bold[p]` = symmetric, for BOLD (resource 1).
+
+**`gasPoolClaim` (tag 18) drain wiring.**  When the daemon runs
+WITHOUT `--gas-pool-actor`, tag 18 is a no-op and the pool
+tables track GROSS inflows.  When `--gas-pool-actor <id>` is
+set, tag 18 with `resource ∈ {0, 1}` DECREMENTS
+`pool_balances_{eth,bold}[id]` (halting on underflow), so the
+pool tables track the NET live balance.
+
+**Epoch resets ("N actions remaining this epoch").**  The
+indexer persists a `c/current_epoch` cell.  On each batch, the
+indexer computes `epoch = (seq − 1) / epoch_length` (with
+`--epoch-length N`; `0` disables).  The `(seq − 1)` aligns the
+indexer's epoch boundaries EXACTLY with the kernel's
+`logIndex / epochLength` because the tail reader's `seq` is
+1-indexed while the kernel `logIndex` is 0-indexed
+(`logIndex = seq − 1`).  When the computed epoch differs from
+the persisted one, the two `*_current_epoch_*` tables are
+DELETE-reset and the new epoch is persisted — all inside the
+same combined transaction (§11A.6).  A deployment UI computes
+`remaining_this_epoch(a) = freeTier + grants_this_epoch −
+consumed_this_epoch`, which equals the kernel's authoritative
+`currentBudget` exactly when `freeTier = 0` (genesis default)
+or the actor's carryover ≤ `freeTier`, and is a conservative
+lower bound otherwise (the grant events do not carry the kernel
+budget balance — see the `remaining_this_epoch` docstring in
+`runtime/knomosis-indexer/src/budget_view.rs`).
+
+### 11A.5 Event dispatch table
+
+For each `Event` (frozen tags 0..20 per §5.3), the indexer
+applies the following balance-view and budget-table operations,
+ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
+
+**Balance view (`b/` kv keyspace):**
 
 | Tag | Event                  | Balance-view effect                            |
 |-----|------------------------|------------------------------------------------|
 | 0   | `BalanceChanged`       | `set(actor, resource, new_value)` (authoritative) |
-| 8   | `RewardIssued`         | `credit(recipient, resource, amount)` (saturating) |
-| 9   | `WithdrawalRequested`  | `debit(sender, resource, amount)` (rejects on underflow) |
-| 10  | `DepositCredited`      | `credit(recipient, resource, amount)` (saturating) |
-| 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15 | (any other tag) | no-op (balance view unaffected) |
+| 8   | `RewardIssued`         | `credit(recipient, resource, amount)` (saturating, skipped if BalanceChanged covers same key) |
+| 9   | `WithdrawalRequested`  | `debit(sender, resource, amount)` (rejects on underflow, skipped if BalanceChanged covers same key) |
+| 10  | `DepositCredited`      | `credit(recipient, resource, amount)` (saturating, skipped if BalanceChanged covers same key) |
+| all other tags         | no-op (balance view unaffected)                |
 
-The dispatch is intentionally **idempotent under
-`BalanceChanged` priority**: if a single batch contains both
-a typed event (e.g. `RewardIssued`) and a `BalanceChanged`
-that reflects the same effect, the `BalanceChanged.new_value`
-overwrites the typed event's adjustment.  This matches the
-kernel's convention of emitting `BalanceChanged` for every
+**Budget / pool tables (five SQL tables, GP.6.4):**
+
+| Tag | Event                          | budget-table effect (lifetime + current-epoch) | pool-table effect                              |
+|-----|--------------------------------|-------------------------------------------------|------------------------------------------------|
+| 16  | `depositWithFeeCredited`       | `actor_budgets[recipient]` AND `…_current_epoch_grants[recipient]` += `budgetGrant` | if `r ∈ {0,1}`: `pool_balances_{eth,bold}[poolActor]` += `poolAmount` |
+| 17  | `actionBudgetTopUp`            | both `[signer]` += `budgetIncrement`            | if `gr ∈ {0,1}`: `[poolActor]` += `gasAmount`  |
+| 18  | `gasPoolClaim`                 | no-op                                           | if `--gas-pool-actor` set AND `r ∈ {0,1}`: `[gasPoolActor]` −= `amount` (halt on underflow); else no-op |
+| 19  | `delegatedActionBudgetTopUp`   | both `[recipient]` += `budgetIncrement` (NOT signer) | if `gr ∈ {0,1}`: `[poolActor]` += `gasAmount` |
+| 20  | `budgetConsumed`               | `…_current_epoch_consumed[actor]` += `amount`   | no-op                                          |
+| other tags                         | no-op                                       | no-op                                          |
+
+The balance dispatch is **idempotent under `BalanceChanged`
+priority**: if a single batch contains both a typed event (e.g.
+`RewardIssued`) and a `BalanceChanged` for the same key, the
+`BalanceChanged.new_value` wins.  This matches the kernel's
+convention of emitting `BalanceChanged` for every
 balance-affecting action.
 
-### 11A.5 Mathematical invariant
+### 11A.5b Mathematical invariant
 
 For any event stream `[e_1, e_2, ..., e_n]` extracted from a
 canonical log, after the indexer applies the stream to a
@@ -1280,22 +1658,65 @@ verification work against a running `knomosis-host`.
 
 Each event-batch (one log frame's worth of events, all
 sharing the same seq) commits atomically inside a single
-`Storage::transaction`:
+`SqliteCombinedTransaction` — opened once via
+`CombinedStorage::begin_combined_tx`, it spans BOTH the `kv`
+table (balance cells + cursor) AND the five GP.6.4 budget /
+pool tables under one `BEGIN IMMEDIATE`.  `apply_batch`
+(`knomosis-indexer/src/indexer.rs`) runs five passes inside
+that single transaction:
 
-  1. For each event, apply its dispatch-table effect via
-     `BalanceTxView` (staged in the transaction).
-  2. Advance the cursor via `advance_cursor_in_tx`.
-  3. `tx.commit()` — every balance update + the cursor
-     advance become visible at once.
+  0. **Epoch boundary** — `dispatch_epoch_if_crossed` resets
+     the two per-epoch tables (`actor_budgets_current_epoch_grants`,
+     `..._consumed`) when `seq` crosses an epoch boundary
+     (run FIRST so the dispatch loop credits into the
+     freshly-reset tables — see §11A.4 for the
+     `(seq − 1) / epoch_length` alignment with the kernel's
+     `logIndex / epochLength`).
+  1. **Balance semantic events** — `RewardIssued` /
+     `WithdrawalRequested` / `DepositCredited` for pairs NOT
+     covered by a `BalanceChanged` in the same batch.
+  2. **Balance authoritative sets** — `BalanceChanged`
+     applied as authoritative `set`s (overrides the semantic
+     pass for the same `(actor, resource)`).
+  3. **GP.6.4 budget / pool dispatch** — `dispatch_event`
+     routes tags 16/17/19/20 to the budget tables and tag 18
+     to the pool drain (when `--gas-pool-actor` is set).
+  4. **Cursor advance** — `advance_cursor_via_combined`
+     writes `c/cursor` last.
 
-On any per-event error (underflow, corrupt cell, etc.), the
-transaction rolls back; the cursor does NOT advance; the
-indexer's next subscribe re-delivers the failing batch (so
-an operator can intervene before progress resumes).
+`tx.commit()` then makes every balance update, budget / pool
+update, AND the cursor advance visible at once.
+
+On any per-event error (balance underflow, budget over/under-flow,
+corrupt cell, etc.), the combined transaction rolls back; the
+cursor does NOT advance; the indexer's next subscribe re-delivers
+the failing batch (so an operator can intervene before progress
+resumes).  On a `commit()` error, the in-memory cursor is re-synced
+from disk: a `disk_cursor >= seq` surfaces `CommitAmbiguous`
+(recoverable — the commit landed); a failed re-read poisons the
+indexer with `CursorRecoveryFailed` (restart required).
+
+### 11A.6a Halt-on-overflow / -underflow discipline
+
+The balance view's credits are SATURATING (clamp at
+`u128::MAX`), matching the kernel's `Nat`-saturation default.
+The GP.6.4 budget / pool tables instead use CHECKED arithmetic
+(per the `--gas-pool-actor` design decision): a credit that
+would overflow `u128`, or a pool drain that would underflow
+below zero, returns a typed `BudgetDispatchError` and rolls the
+WHOLE batch back rather than silently wrapping or clamping.  A
+`u128` budget counter cannot realistically overflow under any
+honest workload (it would take ≈ 3.4 × 10³⁸ lifetime grants), so
+the halt is a corruption tripwire, not an expected control-flow
+path.
 
 ### 11A.7 SQLite schema
 
-The underlying `knomosis-storage` schema is:
+The underlying `knomosis-storage` schema is built by an
+append-only `MIGRATIONS` list
+(`knomosis-storage/src/migration.rs`), one entry per schema
+version.  **Schema version 1** (`migration_001_initial_kv_table`)
+creates the kv + meta tables:
 
 ```sql
 CREATE TABLE kv(
@@ -1309,44 +1730,94 @@ CREATE TABLE _meta(
 );
 ```
 
-`_meta` carries the storage layer's schema version
-(`schema_version` key).  Schema migrations are append-only:
-once a migration is published, its body is never modified
-(see `knomosis-storage/src/migration.rs::MIGRATIONS`).
+**Schema version 2** (`migration_002_budget_views`, GP.6.4)
+adds the five budget / pool tables, each with the SAME uniform
+`(actor BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL) WITHOUT
+ROWID` shape (8-byte BE u64 actor key, 16-byte BE u128 value):
 
-The kv table is opened in WAL mode (`journal_mode = WAL`)
-with `synchronous = NORMAL` by default.  Operators wanting
-strict durability override via `SqliteOpenOptions::with_synchronous`.
+```sql
+CREATE TABLE actor_budgets(                       -- lifetime-cumulative grants
+    actor BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL) WITHOUT ROWID;
+CREATE TABLE actor_budgets_current_epoch_grants(  -- per-epoch grants (reset on boundary)
+    actor BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL) WITHOUT ROWID;
+CREATE TABLE actor_budgets_current_epoch_consumed(-- per-epoch consumption (reset on boundary)
+    actor BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL) WITHOUT ROWID;
+CREATE TABLE pool_balances_eth(                   -- NET ETH gas-pool inflow (deposits − drains)
+    actor BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL) WITHOUT ROWID;
+CREATE TABLE pool_balances_bold(                  -- NET BOLD gas-pool inflow (deposits − drains)
+    actor BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL) WITHOUT ROWID;
+```
+
+`_meta` carries the storage layer's schema version
+(`schema_version` key); after both migrations the on-disk
+version is `2` (`target_schema_version() == MIGRATIONS.len()`).
+Migrations are append-only: once published, a migration body is
+never modified, and every `CREATE TABLE` uses `IF NOT EXISTS`
+so re-running is idempotent.
+
+All tables share the `kv` table's `WITHOUT ROWID` shape so the
+8-byte-BE actor key is the clustered primary key — a point
+lookup is one B-tree descent, and a `scan` over a single table
+enumerates its actors in ascending key order (matching the Lean
+`TreeMap` iteration order).
+
+The database is opened in WAL mode (`journal_mode = WAL`) with
+`synchronous = NORMAL` by default.  Operators wanting strict
+durability override via `SqliteOpenOptions::with_synchronous`.
 
 ### 11A.8 Indexer CLI
 
-The `knomosis-indexer` binary exposes two subcommands:
+The `knomosis-indexer` binary exposes one daemon plus four
+one-shot query subcommands:
 
   * `knomosis-indexer daemon` — long-running daemon that
     subscribes to knomosis-event-subscribe and maintains the
-    balance view.  Required flags:
+    balance + GP.6.4 budget / pool views.  Required flag:
     `--storage <PATH>`.  Optional flags: `--subscribe <ADDR>`,
     `--max-frame-size <BYTES>`, `--reconnect-backoff-ms <MS>`,
-    `--max-reconnects <N>`, `--verify-against-knomosis <URL>`.
+    `--max-reconnects <N>`, `--verify-against-knomosis <URL>`,
+    and the GP.6.4 additions `--gas-pool-actor <id>` (enables
+    tag-18 pool-drain accounting; absent ⇒ pool ledgers are
+    deposit-only), `--epoch-length <N>` (`> 0` ⇒ per-epoch
+    grant / consumed tables reset every `N` log frames, aligned
+    to the kernel's `logIndex / epochLength`; `0` ⇒ never
+    reset), and `--verify-budget-against-knomosis <URL>`
+    (reserved; currently returns `NotImplemented`).
 
   * `knomosis-indexer query <actor> <resource>` — one-shot
-    lookup.  Output format:
-    `<actor> <resource> <balance>\n` on stdout.  Exits 0 on
-    success.
+    balance lookup.  Output: `<actor> <resource> <balance>\n`.
+
+  * `knomosis-indexer query-budget <actor>` (GP.6.4) —
+    one-shot lifetime-cumulative budget lookup.  Output:
+    `<actor> <budget>\n`.
+
+  * `knomosis-indexer query-pool-eth <actor>` /
+    `knomosis-indexer query-pool-bold <actor>` (GP.6.4) —
+    one-shot NET gas-pool inflow lookup for the ETH / BOLD
+    resource.  Output: `<actor> <pool_balance>\n`.
+
+  All subcommands exit 0 on success.
 
 ### 11A.9 Cross-reference
 
   * Storage trait surface: `runtime/knomosis-storage/src/storage.rs`.
   * SQLite implementation: `runtime/knomosis-storage/src/sqlite.rs`.
   * Migrations: `runtime/knomosis-storage/src/migration.rs`.
+  * Budget tables + transaction (GP.6.4):
+    `runtime/knomosis-storage/src/budget_storage.rs`.
+  * Combined (kv + budget) transaction (GP.6.4):
+    `runtime/knomosis-storage/src/combined_transaction.rs`.
   * Indexer library: `runtime/knomosis-indexer/src/lib.rs`.
   * Event decoder: `runtime/knomosis-indexer/src/decoder.rs`.
   * Balance view: `runtime/knomosis-indexer/src/balance.rs`.
+  * Budget / pool view (GP.6.4):
+    `runtime/knomosis-indexer/src/budget_view.rs`.
   * Cursor: `runtime/knomosis-indexer/src/cursor.rs`.
   * Indexer orchestration: `runtime/knomosis-indexer/src/indexer.rs`.
   * Wire-protocol client: `runtime/knomosis-indexer/src/client.rs`.
   * Engineering plan:
-    `docs/planning/rust_host_runtime_plan.md` §RH-E.
+    `docs/planning/rust_host_runtime_plan.md` §RH-E and
+    `docs/planning/unified_gas_pool_plan.md` §GP.6.4.
 
 ## 12. Hash Swap-Point ABI (Audit-3.1)
 
@@ -1737,7 +2208,7 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStepVM`:
 
-  * `executeStep(bytes32 preStateCommit, bytes signedActionEncoded, CellProof[] cellProofs) view returns (bytes32 postStateCommit)`
+  * `executeStep(bytes32 preStateCommit, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs) pure returns (bytes32 postStateCommit)` — `actionKind` is the frozen `Action` dispatcher index (`0..21`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`.
 
 `KnomosisDisputeVerifierV2`:
 
@@ -1836,7 +2307,10 @@ Where:
   * `encodePending` is the canonical sorted-pair encoding of
     `[(WithdrawalId, PendingWithdrawal.encodeAsBytes)]`.
   * Each `DepositRecord` encodes as
-    `CBE-uint(resource.toNat) ++ CBE-uint(amount)`.
+    `CBE-uint(resource.toNat) ++ CBE-uint(userAmount) ++
+     CBE-uint(poolAmount) ++ CBE-uint(budgetGrant)` (the GP.4.1
+     four-field widening; the pre-widening form was the two-segment
+     `CBE-uint(resource.toNat) ++ CBE-uint(amount)`).
   * Each `PendingWithdrawal` encodes as
     `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++
      CBE-uint(amount) ++ CBE-uint(l2LogIndex)`.
@@ -1869,8 +2343,11 @@ companion `leafBlob` is the CBE-encoded `PendingWithdrawal`.
 authority that signs every L1-derived Knomosis action.  Reservation is
 operational, not structural:
 
-  * `Bridge.AddressBook.empty.nextActorId = 1` — assigned ids start
-    at 1.
+  * `Bridge.AddressBook.empty.nextActorId = 3` (post-GP.7.1) —
+    assigned ids start at 3, reserving `ActorId`s 0 / 1 / 2 for the
+    bridge actor, the `gasPoolActor`, and the `sequencerActor`
+    respectively (pinned by `addressBook_empty_nextActorId`; the
+    gas-pool / sequencer slots are the Workstream GP.7.1 reservation).
   * `bridgeActor : ActorId := 0` (`LegalKernel/Bridge/BridgeActor.lean`).
   * `bridgePolicy : AuthorityPolicy` admits only
     `Action.replaceKey`, `Action.registerIdentity`, and

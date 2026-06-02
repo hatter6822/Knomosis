@@ -3,7 +3,7 @@
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
 # Genesis Plan: The Legal Kernel
@@ -5849,7 +5849,7 @@ the existing pins (see `LegalKernel/Encoding/Action.lean` and
 `LegalKernel/Events/Types.lean`).
 
 ```
--- Action constructors (frozen indices 0..18)
+-- Action constructors (frozen indices 0..21)
 Action.transfer            := 0
 Action.mint                := 1
 Action.burn                := 2
@@ -5869,8 +5869,11 @@ Action.declareLocalPolicy  := 15  -- Workstream LP
 Action.revokeLocalPolicy   := 16  -- Workstream LP
 Action.faultProofChallenge  := 17 -- Workstream H
 Action.faultProofResolution := 18 -- Workstream H
+Action.depositWithFee       := 19 -- Workstream GP (GP.2.3)
+Action.topUpActionBudget    := 20 -- Workstream GP (GP.2.3)
+Action.topUpActionBudgetFor := 21 -- Workstream GP (GP.3.4 delegated)
 
--- Event constructors (frozen indices 0..15)
+-- Event constructors (frozen indices 0..19)
 Event.balanceChanged       := 0
 Event.nonceAdvanced        := 1
 Event.identityRegistered   := 2
@@ -5887,6 +5890,10 @@ Event.localPolicyRevoked   := 12 -- Workstream LP
 Event.faultProofGameOpened    := 13 -- Workstream H
 Event.faultProofBisectionStep := 14 -- Workstream H
 Event.faultProofGameSettled   := 15 -- Workstream H
+Event.depositWithFeeCredited     := 16 -- Workstream GP (GP.2.3)
+Event.actionBudgetTopUp          := 17 -- Workstream GP (GP.2.3)
+Event.gasPoolClaim               := 18 -- Workstream GP (GP.2.3)
+Event.delegatedActionBudgetTopUp := 19 -- Workstream GP (GP.3.4)
 ```
 
 Per-constructor field shapes are recorded in `docs/abi.md`
@@ -5947,8 +5954,10 @@ structure BridgeState where
   nextWdId : WithdrawalId
 
 structure DepositRecord where
-  resource : ResourceId
-  amount   : Amount
+  resource    : ResourceId
+  userAmount  : Amount
+  poolAmount  : Amount
+  budgetGrant : Nat
 
 structure PendingWithdrawal where
   resource    : ResourceId
@@ -5962,7 +5971,12 @@ structure PendingWithdrawal where
 internal monotonically-increasing counter.  The `Audit-2`
 amendment widened `consumed`'s value type from `Unit` to
 `DepositRecord` so the bridge accounting theorem can compute
-`totalDeposited`.  See `LegalKernel/Bridge/State.lean`.
+`totalDeposited`.  The Workstream-GP widening (GP.4.1, §15E.10)
+further split `DepositRecord`'s single `amount` field into the
+`(userAmount, poolAmount, budgetGrant)` triple so the deposit-fee
+split is recoverable from L2 state alone; the pre-widening two-field
+shape survives as `LegacyDepositRecord` with a lossless lift.  See
+`LegalKernel/Bridge/State.lean`.
 
 **Accounting equation.**  For every reachable bridge state, the
 following identity holds across reachable transitions
@@ -5976,8 +5990,12 @@ totalDeposited bs.consumed = totalWithdrawn bs.pending +
 
 where:
 
-  * `totalDeposited` sums `DepositRecord.amount` across the
-    `consumed` map's values (per-resource);
+  * `totalDeposited` sums each deposit's total L2 credit
+    `userAmount + poolAmount` (via `DepositRecord.amountAt`) across
+    the `consumed` map's values (per-resource; see §15E.10).  The
+    Workstream-GP amendment (GP.4.2, §15E.11) splits this LHS term into
+    the per-leg sums `totalUserDeposited + totalPoolDeposited`, proved
+    equal to `totalDeposited` so the equation stays balanced;
   * `totalWithdrawn` sums `PendingWithdrawal.amount` across the
     `pending` map's values (per-resource);
   * `bridgeEscrowBalance` is the L2's `getBalance bridgeActor r`
@@ -6171,12 +6189,37 @@ inventory lives in `solidity/README.md` and `docs/abi.md` §13 +
 
   * `KnomosisBridge.sol` (E.1) — L1 escrow for deposits +
     withdrawals.  Implements `depositETH() / depositERC20(...)`,
-    `submitStateRoot(...)` (attestor-signed), and
+    the Workstream-GP user-chosen fee-split entries
+    `depositETHWithFee(uint16 chosenFeeBps)` (GP.5.1; splits
+    `msg.value` into a user credit + a gas-pool fee and grants
+    action budget at the immutable `weiPerBudgetUnitEth` rate)
+    and `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)`
+    (GP.5.4; the opt-in BOLD-currency mirror — pulls the
+    constitutionally-pinned `BOLD_TOKEN_ADDRESS` ERC-20 via
+    `transferFrom` with a balance-delta check, credits the pool at
+    `RESOURCE_ID_BOLD`, and grants budget at `weiPerBudgetUnitBold`;
+    a non-BOLD deployment passes `boldTokenAddress = address(0)` to
+    disable it), `submitStateRoot(...)` (attestor-signed), and
     `withdrawWithProof(uint64, bytes, bytes)`.  Four automatic
     circuit-breakers (`AttestationStale`, `DisputeCooldown`,
     `TvlCapReached`, `MigrationActivated`) fire on
-    deterministic public-state predicates.  No privileged
-    caller; no `pause()`; no `transferOwnership(...)`.
+    deterministic public-state predicates.  No generic admin /
+    `pause()` / `transferOwnership(...)` surface (the
+    `test_no_admin_surface` invariant still holds).  The lone
+    privileged surface is the GP.5.5 BOLD safety hardening: two
+    tightly-scoped immutable roles — `boldCircuitBreaker` (pause /
+    resume the BOLD *deposit* leg via `closeBoldCircuit` /
+    `openBoldCircuit`; the companion permissionless depeg
+    auto-trigger `closeBoldCircuitIfAnyLiquityBranchShutdown` reads
+    `shutdownTime()` from each of three constitutionally-pinned
+    Liquity V2 branch `TroveManager`s and closes the circuit if any
+    branch is in shutdown) and `boldAdmin` (tune the per-BOLD TVL
+    cap within `[0, tvlCap]` via `setBoldTvlCap`) — neither of which
+    can move funds, alter state roots, change any immutable, touch
+    the ETH leg, or halt withdrawals (the "deposits halted,
+    withdrawals continue" posture for a BOLD depeg).  The two roles
+    MUST be distinct addresses and neither may be the bridge itself
+    (constructor-enforced).
   * `KnomosisDisputeVerifier.sol` (E.2, v1) — Three-variant
     dispute pipeline (`signatureInvalid`, `nonceMismatch`,
     `doubleApply`).  Upheld verdicts trigger
@@ -6312,8 +6355,11 @@ sides on every PR.
   * **H.10.1** — L1 step-VM witness-state form (Workstream H).
   * **SC.3** — 100-entry SMT cell-proof corpus (50 honest + 50
     adversarial across 6 tamper classes; Workstream SC).
-  * **SVC** — 218-entry L1 step-VM dispatcher corpus (all 19
-    variants × multiple per-variant fixtures; SVC milestone).
+  * **SVC** — L1 step-VM dispatcher corpus (per-variant fixtures
+    across every dispatched `Action` kind; 218 entries / 19 variants
+    at the SVC milestone, since widened by GP.3.3 → 238 (kinds 19 /
+    20: depositWithFee + topUpActionBudget) and GP.5.3 → 248 (kind
+    21: the delegated topUpActionBudgetFor)).
 
 **Hash-binding-conditional behaviour.**  At default
 `lake test` time, `Bridge.HashAdaptor.isKeccak256Linked = false`
@@ -6473,6 +6519,107 @@ The canonical gas-pool `LocalPolicy` is default-deny with explicit
 allowlist clauses for sequencer reimbursement paths and per-resource
 limits. This yields a policy-level bound on drain rate.
 
+The *per-action* policy ships as `gasPoolPolicy maxDrainPerActionEth
+maxDrainPerActionBold` (GP.7.2, `LegalKernel/Bridge/GasPoolPolicy.lean`):
+five conjunctive clauses confine `gasPoolActor`'s outflow to a
+per-action-capped `transfer` to `sequencerActor` on `ResourceId 0`
+(ETH) or `ResourceId 1` (BOLD).  Because a `LocalPolicy` is sender-blind
+and subject to the LP.7 meta-action exemption, the discipline is
+completed by the complementary `gasPoolAuthorityPolicy` (intersected
+into the deployment policy at genesis), which additionally binds
+`sender = gasPoolActor`, forbids the off-leg / meta-action surface a
+`LocalPolicy` cannot, and keeps the policy in force across a trace.
+
+The *per-epoch* drain bound is the inductive promotion of those
+per-action caps, proven in `LegalKernel/Bridge/PoolDrainBound.lean`
+(GP.7.3).  `PoolBoundedTrace` models a contiguous trace of `n` admitted
+`SignedAction`s respecting the gas-pool discipline (each step is either
+a `gasPoolActor`-signed action authorised by `gasPoolAuthorityPolicy`,
+or a non-pool step that does not decrease the pool's balance — the
+deployment's `sender = signer` obligation, discharged for the dominant
+transfer case by `transfer_other_sender_pool_nondecreasing`).  The
+headline `pool_drain_bounded_by_action_count` then proves
+
+```
+getBalance es'.base 0 gasPoolActor + n · maxDrainPerActionEth
+  ≥ getBalance es0.base 0 gasPoolActor,
+```
+
+i.e. the gas-pool ETH-leg balance cannot have decreased by more than
+`n × maxDrainPerActionEth` across the trace.  `pool_balance_lower_bound_via_trace`
+restates this as a floor on the surviving balance, and
+`pool_cannot_drain_when_cap_zero` gives the boundary: a zero ETH cap
+forbids every ETH-leg drain.
+
+The bound is in fact proven **per-resource**
+(`pool_drain_bounded_by_action_count_per_resource`, cap `legCap mEth
+mBold rLeg`), with the ETH and BOLD legs as specialisations and the two
+legs shown to be independent accounting domains
+(`per_resource_pool_independence`) — delivering the GP.7.5 core.  The
+non-pool-signer obligation is discharged exhaustively over every
+`Action` constructor (`pool_nondecreasing_of_does_not_debit`), the
+literal executable fold ships as `applyTrace` (with
+`applyTrace_drain_bounded_per_resource`), and the per-step bounds lift
+onto the budget-gated production runtime entry
+(`pool_signed_step_drain_le_budget`).  All theorems depend only on
+`propext`, `Classical.choice`, `Quot.sound`; no new opaque, no new
+axiom, no kernel-TCB delta.
+
+**Genesis ratification (GP.7.4).**  A GP-enabled deployment wires both
+halves of the discipline at genesis via the `gasPoolGenesis` hook
+(`LegalKernel/Bridge/GasPoolPolicy.lean`): `gasPoolGenesisState`
+declares `gasPoolPolicy mEth mBold` for `gasPoolActor` in the genesis
+`localPolicies` table, and `gasPoolGenesisPolicy` intersects
+`gasPoolAuthorityPolicy mEth mBold` into the deployment's base
+`AuthorityPolicy`.  Bundling the two into one `GasPoolGenesis` value
+makes the "wire BOTH" contract atomic — a deployment that builds its
+genesis through `gasPoolGenesis` cannot declare the `LocalPolicy`
+without also intersecting the `AuthorityPolicy`, and the half-less
+wiring (which would leave the LP.7 meta-action hole open) is
+unreachable through the constructor.  The contract is ratified by
+`gasPoolGenesisState_declares_policy` (the pool policy is declared and
+nothing else in the state changes — `_preserves_kernel_substates`),
+`gasPoolGenesisPolicy_rejects_meta` (the headline: `gasPoolActor`
+meta-actions are barred under ANY base policy),
+`gasPoolGenesisPolicy_other_actors_unrestricted` (the intersection
+narrows only the pool actor), `gasPoolGenesisPolicy_rejects_non_pool_sender`
+(fund safety), and `gasPoolGenesisPolicy_authorizes_sequencer_eth` /
+`_bold` (the legitimate capped claim on either leg is still admitted).
+The worked deployment `Deployments/Examples/GasPoolExample.lean` runs
+the full lifecycle — bridge-signed ETH + BOLD `depositWithFee`
+(crediting the user and the pool and granting the user an L2 budget)
+and the two capped sequencer claims — end-to-end through the runtime
+admission gate, and is runnable via the `knomosis gas-pool-demo`
+subcommand (process → persisted log → replay round-trip).
+
+The wiring is also an opt-in *deployment config* rather than a fixed
+choice: `GasPoolConfig` + the `*OfConfig` builders gate the genesis on
+an `Option` (`none` = the pre-GP.7.4 genesis, `some ⟨mEth, mBold⟩` =
+both halves wired), and the generic `knomosis` subcommands expose
+`--gas-pool-eth-cap` / `--gas-pool-bold-cap` flags that build the
+gas-pool genesis (state + policy) and thread it through `process` /
+`replay` / `bootstrap` / `snapshot` / `replay-up-to` /
+`export-cell-proofs` / `export-terminate-bundle` / `extract-events`.
+(The `export-terminate-bundle` cross-check is load-bearing: its
+`claimedPostCommit` + `cellProofs` are computed against
+`commitExtendedState`, which includes `commitLocalPolicies`, so the
+gas-pool declaration affects the bundle.)  Because the gas-pool genesis
+`localPolicies` declaration participates in every log entry's
+post-state hash, the config is persisted to a `<log>.gaspoolcfg`
+sidecar (`Runtime/GasPoolSidecar.lean`, mirroring the GP.6.2 budget
+sidecar) and cross-checked on every log-touching command, so a
+forgotten / changed / disabled cap fails loudly rather than as an
+opaque hash mismatch.  The Rust `knomosis-host` `CommandKernel`
+forwards the two caps to the spawned `knomosis` binary, so a deployment
+run through the network host enforces the same discipline.  Two
+completeness theorems pin the residual surface:
+`gasPoolGenesisPolicy_rejects_over_cap_eth` / `_bold` (the
+authority-layer per-action cap rejection) and
+`gasPoolGenesisPolicy_bars_self_declaration` (the structural-genesis
+necessity — once `gasPoolAuthorityPolicy` is in force the pool cannot
+install or replace its own `LocalPolicy` via a signed
+`declareLocalPolicy`, so the genesis declaration MUST be structural).
+
 ### 15E.7 Opaques and axioms
 
 Workstream GP introduces no new opaque trust hooks and no new axioms.
@@ -6483,6 +6630,25 @@ It extends existing typed state and policy surfaces only.
 The trust table in §1.4 is amended with an operational assumption:
 deployment operators set sane fee bounds and exchange-rate parameters.
 Cryptographic assumptions and TCB scope are unchanged.
+
+The GP.5.5 BOLD safety hardening (§15D.8) adds one further *operational*
+trust surface on the L1 mirror only: two tightly-scoped immutable roles
+on `KnomosisBridge` — `boldCircuitBreaker` (pause / resume the BOLD
+deposit leg) and `boldAdmin` (tune the per-BOLD TVL cap within
+`[0, tvlCap]`).  Their authority is deliberately minimal: they cannot
+move funds, alter state roots, change any immutable, touch the ETH leg,
+or halt withdrawals, so a compromised role key degrades availability of
+*new BOLD deposits* at worst — it cannot cause loss of escrowed value
+or affect L2 kernel guarantees.  The optional Liquity-V2 branch-shutdown
+auto-trigger is permissionless and can only *close* the circuit when
+any of the three constitutionally-pinned Liquity V2 collateral-branch
+`TroveManager`s reports a non-zero `shutdownTime` (the definitive
+on-chain depeg signal); its only trust inputs are the three pinned
+TroveManager addresses (under the GP.5.2 cap-audit gate), and a
+faulting TroveManager (revert, no code, wrong-shape return, mutating
+callee, gas griefing — all bounded by a 100k staticcall gas cap)
+degrades cleanly to manual operation (`LiquityV2ReadFailed`).  No
+cryptographic assumption, no kernel TCB delta, no new axiom.
 
 ### 15E.9 Pre-authorised delegated budget top-ups (GP.3.4)
 
@@ -6528,20 +6694,161 @@ consent.
   signed `revokeLocalPolicy` (or by re-declaring a policy without the
   clause); the revocation takes effect from the next admitted action.
 
-* **L1 fault-proof coverage boundary.**  The L2 admission of a
-  delegated top-up is fully gated (default-deny consent + gas safety);
-  the *honest sequencer*'s runtime never admits an unauthorised one.
-  The L1 step-VM *execution* arm for this action variant — the
-  Solidity decoder that re-executes a disputed delegated-top-up step
-  on chain — is staged with the rest of the Solidity step-VM work
-  (the Lean dispatcher returns an empty commit for the variant until
-  then).  Until that lands, a delegated-top-up step is not yet L1-
-  fault-proof-*executable*; this is a documented staging boundary, not
-  a weakening of the L2 admission guarantees above.
+* **L1 fault-proof coverage.**  The L2 admission of a delegated
+  top-up is fully gated (default-deny consent + gas safety); the
+  *honest sequencer*'s runtime never admits an unauthorised one.  The
+  L1 step-VM *execution* arm for this action variant — the Solidity
+  decoder that re-executes a disputed delegated-top-up step on chain —
+  landed in GP.5.3: the Lean `stepVMHash` kind-21 arm dispatches to
+  `stepCommitTopUpActionBudgetFor` (the gas-transfer commit recipe,
+  byte-identical in shape to `topUpActionBudget`'s but bound by a
+  distinct `keccak256("topUpActionBudgetFor")` tag), the Solidity
+  `KnomosisStepVM._stepTopUpActionBudgetFor` mirrors it, and the
+  cross-stack fixture corpus carries 10 `topUpActionBudgetFor`
+  entries.  A delegated-top-up step is therefore now L1-fault-proof-
+  *executable*.  As with every GP-family variant, the `recipient` and
+  `budgetIncrement` fields are admission-layer effects (the
+  recipient's epoch-budget credit) excluded from the step-VM
+  kernel-state hash by design; the cross-stack byte-equivalence is
+  exercised under the production keccak256 binding.
+
+  **Scope boundary (recorded, not silent).**  The step-VM commit binds
+  the kernel-state *balance* writes (debit signer / credit pool), not
+  the `epochBudgets` ledger — there is no `epochBudgets` cell tag, so
+  budget effects are outside the cell-proof model the L1 step VM
+  re-executes.  This is uniform across all 22 variants (the nonce
+  advance is likewise unbound).  Consequently the bisection-game
+  terminate arm catches a sequencer who lies about the *balance*
+  transfer, but a lie about *which* actor's budget was credited would
+  not be caught by step-VM re-execution; the L2 admission gate
+  (`topUpActionBudgetFor_gate`, default-deny consent) is what governs
+  the budget effect on the honest-sequencer path.  Closing the
+  re-execution arm for budget lies would require an `epochBudgets` cell
+  tag + folding the budget value into every GP-variant hash on both
+  stacks — a §13.6 amendment tracked as future work, deliberately out
+  of GP.5.3's scope.  See `LegalKernel/FaultProof/StepVMCoherence.lean`
+  ("Step-VM commit scope") for the code-level statement.
 
 This amendment introduces no new opaque trust hook and no new axiom;
 it extends the typed `Action` / `LocalPolicyClause` / `Event`
 surfaces and the admission gate only.
+
+### 15E.10 Bridge-state persistence of the deposit split (GP.4.1)
+
+The bridge ledger's `consumed` map (§7.1.1) records one
+`DepositRecord` per credited L1 deposit.  GP.4.1 widens that record
+from the pre-amendment `(resource, amount)` pair to the four-field
+`(resource, userAmount, poolAmount, budgetGrant)` shape so the
+deposit-fee split of §15E.3 is recoverable from L2 state alone:
+
+* A fee-less `Action.deposit` records `userAmount := amount`,
+  `poolAmount := 0`, `budgetGrant := 0`.
+* An `Action.depositWithFee` records the §15E.3 `(userAmount,
+  poolAmount)` split and the clamped `budgetGrant` verbatim.
+
+Persisting `budgetGrant` (rather than re-deriving it from
+`poolAmount / weiPerBudgetUnit[resource]` on each read) keeps the
+recipient's budget timeline reconstructible under re-org or replay
+without access to the L1 contract's per-deployment exchange rate,
+and keeps cross-stack byte-equivalence stable across a deployment
+migration that changes the rate.  The pre-amendment two-field shape
+survives as `LegacyDepositRecord` with a lossless lift
+(`DepositRecord.fromLegacy` / `DepositRecord.toLegacy`, certified by
+`toLegacy_fromLegacy`), so historical records and the fee-less path
+round-trip exactly.  The total L2 credit attributable to a deposit is
+`userAmount + poolAmount`; the existing `totalDeposited` accounting
+fold recombines the two legs (so its value is unchanged on every
+state), leaving the GP.4.2 split into per-leg `totalUserDeposited` /
+`totalPoolDeposited` folds to build on this representation.  The
+widening carries through the CBE codec, the encoder-injectivity
+ladder (EI.6 / EI.7), and the state-commitment canonical-bounds
+bundle; it introduces no new opaque trust hook and no new axiom.
+
+### 15E.11 Accounting-equation split (GP.4.2)
+
+GP.4.2 splits the single legacy deposit term on the LHS of the §15D.4
+accounting equation into the two per-leg sums the GP.4.1 record now
+makes available.  In `LegalKernel/Bridge/Accounting.lean`:
+
+* `totalUserDeposited es r` and `totalPoolDeposited es r` fold the
+  per-deposit `userAmount` / `poolAmount` legs (via
+  `DepositRecord.userAmountAt` / `poolAmountAt`) over the `consumed`
+  map at resource `r`.
+* The **split identity** `totalUserDeposited_plus_pool_eq_totalDeposited`
+  proves `totalUserDeposited es r + totalPoolDeposited es r =
+  totalDeposited es r` at every state — the two legs partition the
+  legacy total.  Consequently the amended equation
+
+  ```
+  totalUserDeposited bs.consumed + totalPoolDeposited bs.consumed
+    = totalWithdrawn bs.pending + bridgeEscrowBalance bs
+  ```
+
+  holds *exactly when* the legacy single-term equation does
+  (`bridge_accounting_equation_balanced`): the deposit-fee split is a
+  bookkeeping split of how the L1 `msg.value` is credited on L2, not a
+  split of the L1 escrow, which still holds the full value.  The RHS is
+  therefore structurally unchanged, and the inductive promotion of the
+  legacy equation's `bridgeEscrowBalance` term (the §7.6.4 / §7.6.5
+  follow-up) lifts verbatim.
+
+* Per-action deltas (`totalUserDeposited_step_eq` /
+  `totalPoolDeposited_step_eq`, their fee-less specialisations, and the
+  non-bridge no-op) give the unit-step accounting picture; a fresh
+  deposit credits each leg by its recorded amount at the deposit's
+  resource and leaves every other resource untouched.
+
+* **Pool solvency.**  `depositWithFee_pool_credit_matches_ledger_delta`
+  proves the inflow side: every wei a `depositWithFee` credits to the
+  gas-pool actor's L2 balance is matched, wei-for-wei, by the ledger's
+  recorded `poolAmount`.  `pool_balance_eq_totalPoolDeposited_minus_payouts`
+  then states the solvency identity `getBalance gasPoolActor =
+  totalPoolDeposited − poolPayouts`, parameterised over an arbitrary
+  pool actor.  The canonical deployment fixes that pool actor at the
+  reserved `gasPoolActor = ActorId 1` (Workstream GP.7.1), with the
+  sequencer-payout recipient at `sequencerActor = ActorId 2`; the
+  genesis `AddressBook.empty.nextActorId` advances to `3`
+  (`addressBook_empty_nextActorId`) so no user-registered identity is
+  ever issued a reserved slot (`empty_assign_id_avoids_reserved`), and
+  the Rust `knomosis-l1-ingest` runtime adaptor mirrors the same
+  genesis allocation.  The three reserved actors are provably distinct
+  (`gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`,
+  `sequencerActor_ne_gasPoolActor`).  The solvency theorem stays
+  parameterised so it does not depend on the concrete id; its inductive
+  maintenance across a trace — bounding the pool actor's outflows to
+  the sequencer-payout path — is the `gasPoolPolicy` drain bound
+  (§15E.6), shipped with the GP.7 pool-governance work; the
+  **strong-conservation / AMM-aware** extension depends on
+  `Action.ammSwap` (§15E embedded-AMM amendment) and lands with that
+  workstream.
+
+* **Atomic admitted-step forms.**  The deltas and the pool-credit /
+  ledger coherence are additionally lifted onto the *actual* admitted
+  step `apply_bridge_admissible_with` (the runtime / dispute-pipeline
+  entry), with deposit-id freshness *derived* from the
+  `BridgeAdmissibleWith` witness's uniqueness conjunct rather than
+  assumed: `totalUserDeposited_admissible_depositWithFee`,
+  `totalPoolDeposited_admissible_depositWithFee`,
+  `depositWithFee_admissible_credits_poolActor`, and
+  `depositWithFee_admissible_pool_credit_matches_ledger` (live pool
+  balance and ledger move in lockstep over the same step).  Per-action
+  coverage is complete over every `Action` constructor: the two
+  deposit actions (above), `withdraw` (`accounting_userpool_delta_withdraw`
+  — touches only `pending`, deposit folds unchanged), and every other
+  action (`accounting_userpool_delta_non_bridge`).  The balanced
+  equation is additionally available as the iff
+  `bridge_accounting_equation_balanced_iff` (legacy and split LHS
+  interchangeable for any `totalWithdrawn + escrow` RHS);
+  `pool_solvency_preserved_by_admitted_depositWithFee` proves the
+  reconciliation `getBalance poolActor + payouts = totalPoolDeposited`
+  is preserved across an admitted deposit (the GP.7.3 inflow induction
+  step); and `depositWithFee_budget_admitted_pool_credit_matches_ledger`
+  lifts the coherence onto the literal budget-gated runtime entry via
+  the reusable `apply_bridge_admissible_with_budget_base_bridge_eq`
+  (the production gate overwrites only `epochBudgets`).
+
+All GP.4.2 theorems depend only on `propext`, `Classical.choice`,
+`Quot.sound`; no new opaque, no new axiom, no kernel-TCB delta.
 
 ---
 
@@ -6822,6 +7129,20 @@ one-line summary, and a link to the amending discussion.
 | 1.2      | 2026-05-04 | Phase 3 (Authority Layer) marked complete (WU 3.1 – 3.10).  `Action.compile` redesigned to produce a `CompiledAction` wrapper so that `compile_injective` is a one-line structural proof.  `KeyRegistry` moved from `AuthorityPolicy` to `ExtendedState` so `replaceKey` (WU 3.10) can mutate it through `apply_admissible`.  `Verify` declared `opaque` (not `axiom`) so the kernel's axiom audit continues to return only the three Lean built-ins. |
 | 1.3      | 2026-05-20 | Workstream E-G (Ethereum documentation amendment) lands chapter §15D "Workstream E Amendment: Ethereum Integration".  Documents the knomosis-as-rollup deployment scenario, the five trust assumptions (EUF-CMA secp256k1, keccak256 collision-resistance, L1 finality, Solidity-contract correctness, EIP-1271 contract correctness), the `Action` / `Event` constructor extensions at frozen indices 12 – 14 and 9 – 10, the `BridgeState` accounting equation, the height-64 withdrawal SMT, the EIP-712 signing surface, the ten-contract Solidity surface, the F.1.x cross-stack verification corpus, and the eleven v2 deferrals.  Zero source change; zero new axioms; zero TCB delta.  See `docs/planning/ethereum_workstream_g_plan.md` for the per-sub-unit specification. |
 | 1.4      | 2026-05-21 | Workstream GP Phase GP.0 foundations landed: add chapter §15E "Unified Gas Pool and Per-Actor Budgets", pre-reserve Lex action indices 18–19 for GP actions, reserve event indices 16–18 in the event-tag registry commentary, and add GP cross-references in planning documents (`open_questions.md`, `deferred_work_index.md`, `phase_7_plan.md`). No kernel TCB delta, no new axioms. |
+| 1.5      | 2026-05-28 | Workstream GP.5.5 v1.0 (BOLD-specific safety hardening, initial implementation) lands on the L1 mirror.  `KnomosisBridge.sol` gains the lone privileged surface: tightly-scoped immutable `boldCircuitBreaker` / `boldAdmin` roles governing the per-currency BOLD circuit breaker (manual `closeBoldCircuit` / `openBoldCircuit` plus the initial Liquity-V2 *redemption-rate* auto-trigger `closeBoldCircuitIfRedeemingHeavily` reading `getRedemptionRate()` against a constructor-immutable oracle, with threshold `BOLD_DEPEG_REDEMPTION_THRESHOLD_BPS = 500`) and per-BOLD TVL cap.  §15D.8 + §15E.8 amended with the new privileged surface + operational trust assumption.  Deposit-side, L1-only; cannot move funds, alter state roots, or halt withdrawals.  No kernel TCB delta, no new axioms. |
+| 1.6      | 2026-05-28 | Workstream GP.5.5 v1.1 (branch-shutdown signal refactor) replaces the redemption-rate threshold with the strictly stronger per-branch `TroveManager.shutdownTime() != 0` signal — the definitive on-chain Liquity-V2 depeg indicator.  Function renamed to `closeBoldCircuitIfAnyLiquityBranchShutdown`; the constructor-immutable oracle is replaced by three constitutional `address public constant` TroveManager pins (`LIQUITY_V2_TROVE_MANAGER_ETH` / `_WSTETH` / `_RETH`) under the GP.5.2 cap-audit gate.  The constructor adds role-distinctness (`BoldRolesNotDistinct`) and no-self-as-role (`BoldRoleIsBridge`) guards.  The staticcall is gas-bounded by `LIQUITY_ORACLE_READ_GAS = 100k` to bound malicious-TroveManager griefing.  Event signature widens to `(timestamp, indexed shutdownBranch, branchShutdownTime)`.  §15D.8 + §15E.8 + §15D's privileged-surface narrative re-amended.  No kernel TCB delta, no new axioms. |
+| 1.7      | 2026-05-28 | Workstream GP.5.5 v1.2 (safety polish).  `LiquityOracleHasNoCode` parameterised to carry the missing TroveManager address so operators can diagnose without bisecting.  Constructor gains a pairwise-distinctness check on the three TM constants (`BoldTroveManagersNotDistinct`), defence-in-depth behind the GP.5.2 source-level gate.  `LIQUITY_ORACLE_READ_GAS` joins the GP.5.2 cap-audit gate (now 4 caps + 4 address pins + 1 symbol pin; self-test 36 cases) and is promoted to `public constant`.  The auto-trigger function is flattened to a per-branch early-return chain.  The `_readLiquityShutdownTime` helper is tightened from `internal` to `private`.  Test coverage gains: stateful Foundry invariant suite (3 invariants × 128 000 random sequences), reentrancy attack test on `depositBoldWithFee` via a malicious BOLD mock, per-branch oracle-fault tests (every fault class × {ETH, wstETH, rETH}), constructor revert-ordering pins, fuzz now asserts event-content semantics.  Total: 85 forge tests + 36 self-test cases.  No kernel TCB delta, no new axioms. |
+| 1.8      | 2026-05-31 | Workstream GP.7.0 (exhaustive characterisation of the bridge-signable action set) lands on the Lean side (`LegalKernel/Bridge/BridgeActor.lean`).  `bridgeAuthorizedAction` is hardened from a `_ => false` catch-all to a wildcard-free exhaustive match over all 22 `Action` constructors (behaviour byte-identical — the same four L1-attested variants `replaceKey` / `registerIdentity` / `deposit` / `depositWithFee` return `true`), so a future constructor cannot be silently absorbed as unauthorised.  Three characterisation theorems added: `bridgeAuthorizedAction_eq_true_iff` (the bridge signs EXACTLY those four), `bridgePolicy_authorizes_all_bridge_actions` (no-regression positive half), `bridgePolicy_rejects_non_bridgeable` (exhaustive negative half).  Two complementary compile-time forcing functions guard against silent authority drift (constructor additions caught by the exhaustive match; verdict flips caught by the iff's `cases` proof).  The `ammSwap` arm of the WU is deferred to Workstream GP.11 (the constructor does not exist yet); the forcing functions guarantee its classification is added in lockstep.  `bridge-actor` suite 38 → 58 (20 GP.7.0 cases, incl. five end-to-end `BridgeAdmissibleWith` admissions under `bridgePolicy`).  Names drop the plan's `v1_5` infix per the naming discipline.  No kernel TCB delta, no new axioms (`bridgePolicy_authorizes_all_bridge_actions` is axiom-free; the other two are `{propext, Quot.sound}`). |
+| 1.9      | 2026-05-31 | Workstream GP.7.1 (`gasPoolActor` reservation) lands end-to-end (Lean + Rust).  **Lean** (`LegalKernel/Bridge/BridgeActor.lean` + `LegalKernel/Bridge/AddressBook.lean`): reserves `ActorId 1` for `gasPoolActor` (holds the deposit fee-split skim + per-actor budget top-up payments; outflow bounded by the GP.7.2 `gasPoolPolicy`) and `ActorId 2` for `sequencerActor` (the sole authorised pool-drain recipient + L2 state-root submitter), alongside the pre-existing `ActorId 0` (`bridgeActor`).  The genesis `AddressBook.empty.nextActorId` advances from `1` to `3` (`addressBook_empty_nextActorId`), so an `empty` + `assign` chain never issues a reserved slot to a user-registered identity — the first user actor a fresh deployment registers is `ActorId 3`.  Three pairwise-distinctness theorems (`gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`) underpin the GP.7.2 recipient restriction (a pool whose only permitted drain recipient coincided with itself could not be drained), and the reservation-guarantee theorem `empty_assign_id_avoids_reserved` proves the issued id is distinct from every reserved slot.  `bridge-actor` suite 58 → 71 (13 GP.7.1 cases).  **Rust** (`runtime/knomosis-l1-ingest`): the production runtime adaptor advances in lockstep — `AddressBook::INITIAL_NEXT_ACTOR_ID` becomes `3` with mirror `GAS_POOL_ACTOR_ID` / `SEQUENCER_ACTOR_ID` constants, so the adaptor that performs the actual `assign` honours the reservation; the state-file replay additionally rejects a persisted reserved id (`replay_rejects_reserved_actor_id`); the `l1_ingest.cxsf` cross-stack corpus and all `address_book` / `state` / `translation` / `watcher` / integration tests are rebased onto the genesis-3 allocation (full workspace `cargo test` green, `clippy -D warnings` + `fmt` clean).  This is the *fresh-genesis* half; the orthogonal migration of *existing* deployments that already allocated users in 1..3 remains Phase GP.10.4.  The `bridge-address-book` / `bridge-ingest` Lean value fixtures are likewise rebased.  No kernel TCB delta, no new axioms (the three disjointness theorems are axiom-free `decide`; `addressBook_empty_nextActorId` / `empty_assign_id_avoids_reserved` depend only on the canonical `{propext, Classical.choice, Quot.sound}` via `Std.TreeMap`). |
+| 1.10     | 2026-06-01 | Workstream GP.7.2 (canonical `gasPoolPolicy` declaration) lands on the Lean side (`LegalKernel/Bridge/GasPoolPolicy.lean`).  Declares the per-actor `LocalPolicy` (Workstream LP) the admission layer consults whenever `gasPoolActor` (GP.7.1 / `ActorId 1`) signs an action, bounding the pool's outflow to a single capability: a per-action-capped `transfer` to `sequencerActor` (GP.7.1 / `ActorId 2`).  Five conjunctive clauses — `denyTags gasPoolDeniedTags` (deny every Action tag except `transfer`) plus `requireRecipientIn` / `capAmount` on each of `ResourceId 0` (ETH) and `ResourceId 1` (BOLD), with independent per-leg caps `maxDrainPerActionEth` / `maxDrainPerActionBold`.  `gasPoolDeniedTags = (List.range 23).filter (· ≠ 0) = [1..22]` covers the frozen Action set (0..21) plus the reserved GP.11 `ammSwap` slot (22); coverage is mechanically enforced by `Action.tag_lt_denyListBound` (exhaustive `cases`, a build-time forcing function that breaks if a 24th constructor is appended without bumping the range).  Headline theorems: `gasPoolPolicy_denies_all_non_transfer` (the pool can never `mint` / `burn` / `withdraw` / top up budgets / sign any non-transfer action — closing attack-tree item 5's fund-rerouting and bounding item 4's drain), `gasPoolPolicy_requires_sequencer_recipient_eth` / `_bold` (per-leg recipient restriction), `gasPoolPolicy_caps_per_action_eth` / `_bold` (per-leg amount cap) plus their positive `_amount_le` extraction forms (the per-step ingredient the GP.7.3 inductive drain bound sums), `gasPoolPolicy_eth_bold_independent` (the two legs' resource-keyed clauses are vacuous on the other resource), the happy-path `gasPoolPolicy_permits_sequencer_transfer_eth` / `_bold` (the legitimate capped sequencer claim is admitted), and the single-source-of-truth `gasPoolPolicy_permits_transfer_iff`.  Two boundaries are stated explicitly rather than glossed: (a) `gasPoolPolicy_permits_transfer_off_gas_legs` — the policy carries no clause for resources `≥ 2`, so it does NOT constrain them (off-leg safety rests on a separate pool-balance invariant, the GP.7.3 track); and (b) the **LP.7 meta-action escape hatch** — `gasPoolPolicy_admission_permits_meta_actions` proves a `LocalPolicy` structurally cannot bar `gasPoolActor` from `declareLocalPolicy` / `revokeLocalPolicy` (so a pool key could wipe its own restriction).  That hole is CLOSED in this WU by the complementary `gasPoolAuthorityPolicy`, intersected into the deployment policy at genesis: the `AuthorityPolicy` conjunct of `AdmissibleWith` has no meta-action exemption, so `gasPoolAuthorityPolicy_rejects_meta` / `_intersect_rejects_meta` bar the escape hatch under ANY base policy, `_rejects_off_gas_legs` / `_rejects_non_sequencer` / `_rejects_non_transfer` enforce (at the authority layer) the restrictions the `LocalPolicy` could not, `_authorizes_sequencer_eth` / `_bold` preserve the legitimate drain, and `_other_actors_unrestricted` proves the intersection narrows ONLY `gasPoolActor`.  GP.7.4 genesis prerequisites also ship: `gasPoolPolicy_fieldsBounded` + `gasPoolPolicy_roundtrip` (canonical CBE boundedness + decode∘encode round-trip under `UInt64`-range caps).  New `bridge-gas-pool-policy` suite (57 cases, including end-to-end intersection-composition tests against the restrictive `bridgePolicy` base).  Lean-only; the per-epoch inductive drain bound is GP.7.3.  No kernel TCB delta, no new axioms (the bare-policy + authority theorems use only `{propext, Quot.sound}`; the two admission-level theorems additionally use `Classical.choice` via `ExtendedState`).  GP.7.4 MUST wire BOTH the `LocalPolicy` declaration AND the `AuthorityPolicy` intersection — the `LocalPolicy` alone leaves the meta-action hole open. |
+| 1.11     | 2026-06-01 | Workstream GP.7.2 (PR #106 review) — fund-safety hardening of `gasPoolAuthorityPolicy`.  An automated review flagged that `gasPoolActorAuthorized` ignored the transfer's `sender` field: since the kernel `transfer` law debits the action's `sender` and `AdmissibleWith` verifies only `st.signer`'s signature (never `signer = sender`), a held `gasPoolActor` key could sign `.transfer r victim sequencerActor amount` and drain an ARBITRARY victim's balance to the sequencer.  The companion `LocalPolicy` (`gasPoolPolicy`) structurally cannot bind the sender (its `LocalPolicyClause` vocabulary keys only on resource / recipient / amount), so the fix lands at the `AuthorityPolicy` layer: both authorised gas-leg disjuncts now require `sender = gasPoolActor`, so the pool may move only its OWN funds.  New theorem `gasPoolAuthorityPolicy_rejects_non_pool_sender`; `gasPoolAuthorityPolicy_authorizes_sequencer_eth` / `_bold` specialise the `sender` to `gasPoolActor`.  The `gasPoolPolicy_transfer_sender_independent` theorem (a true fact about the sender-blind `LocalPolicy`) is retained but its docstring is corrected from "harmless" to "a real gap closed at the `AuthorityPolicy` layer".  Suite 57 → 61 cases (the victim-fund-drain rejection, direct + end-to-end through the intersect wiring, + term-level APIs).  No kernel TCB delta; all theorems `{propext}` only.  Verified: all three CI checks green before the fix; the fix strictly narrows the authorised set. |
+| 1.12     | 2026-06-01 | CI de-flake (PR #106) — `knomosis-event-subscribe`'s pre-existing GP.6.3 test `subprocess_forwards_global_args_before_subcommand` raced the fake subprocess: it read the argv-recording file the instant `extract` returned, but the fake's `printf > argfile` runs CONCURRENTLY with the parent's stdin-write / stdout-read and the parent kills+reaps the child on the (expected) protocol-read failure, so on a loaded CI runner the file could be observed slightly after `extract` returns → an intermittent `NotFound` panic.  Fixed test-side only: replace the unconditional `read_to_string(...).expect(...)` with a bounded 5 s poll for a non-empty read.  No production-code change; no version-semantics change (the bump is the routine per-PR patch increment).  Lean side untouched. |
+| 1.13     | 2026-06-01 | Workstream GP.7.3 (inductive pool-drain bound) lands on the Lean side (`LegalKernel/Bridge/PoolDrainBound.lean`).  Promotes the GP.7.2 per-action caps to a per-trace invariant: across any contiguous trace of `n` admitted `SignedAction`s respecting the gas-pool discipline, `gasPoolActor`'s `ResourceId 0` (ETH-leg) balance cannot have decreased by more than `n × maxDrainPerActionEth`.  `PoolBoundedTrace` (a length-indexed inductive relation, the type-safe analogue of the plan's `applyTrace`) carries the two controlling per-step facts: a `gasPoolActor`-signed step is authorised by `gasPoolAuthorityPolicy` (so the cap + sender-binding + meta-blocking + policy-stability all hold — the bound rests on the GP.7.2 `AuthorityPolicy`, NOT the sender-blind `LocalPolicy`), and a non-pool step does not decrease the pool's balance (the deployment's `sender = signer` obligation, dischargeable — proven for the dominant transfer case by `transfer_other_sender_pool_nondecreasing`, including the credit-to-pool branch).  Headline `pool_drain_bounded_by_action_count`; the heart `pool_signed_step_drain_le_eth` computes the per-step ETH debit (`amount ≤ mEth` from the authority cap, `amount ≤ balance` from the transfer precondition) and the BOLD-leg locality (resource-0 untouched); corollaries `pool_balance_lower_bound_via_trace` (surviving-balance floor) and `pool_cannot_drain_when_cap_zero` (`maxDrainPerActionEth = 0` ⇒ no ETH drain); connector `gasPoolActorAuthorized_of_admissible_intersect` discharges the pool-signed hypothesis from the GP.7.4 genesis-wiring policy shape.  §15E.6 amended with the proven bound.  New `bridge-pool-drain-bound` suite (20 cases: per-step ETH/BOLD, external non-interference, 1/2/3-step + mixed traces, the discipline rejections — over-cap / victim-sender / non-sequencer / off-leg / meta / zero-amount — the zero-cap boundary, genesis-wiring fidelity, and term-level API stability).  `omega`'s `Amount`-atomisation limitation worked around via `Nat`-parameter arithmetic helpers (the `transfer_arithmetic` pattern).  Lean-only; no kernel TCB delta, no new axioms (`{propext, Classical.choice, Quot.sound}` only). |
+| 1.14     | 2026-06-01 | Workstream GP.7.3 **optimal closure** (also delivers the GP.7.5 core).  Extends the v1.13 ETH-leg bound to its complete form, all in `LegalKernel/Bridge/PoolDrainBound.lean`: (1) **per-resource** — `pool_drain_bounded_by_action_count_per_resource` (cap `legCap mEth mBold rLeg`) with the ETH / BOLD legs as `simp`-specialisations, removing the vestigial `mBold`; the two legs are proven independent accounting domains (`per_resource_pool_independence`, `pool_balance_eth_leg_independent_of_bold_actions` / `…_bold_…`) — i.e. WU GP.7.5's headline + independence theorems; (2) **exhaustive external discharge** — `pool_nondecreasing_of_does_not_debit` over EVERY `Action` constructor, gated by the decidable `Action.doesNotDebitPoolAt` predicate (credit-only / no-op always; `topUp*` when signer ≠ pool; `transfer` / `burn` / `withdraw` when source ≠ pool; the fold-of-credit laws via a per-actor fold-monotonicity lemma); (3) **executable `applyTrace`** — the literal plan deliverable as an `Option`-valued fold (backed by a new `Decidable (AdmissibleWith …)` instance), with the bound proven directly over it (`applyTrace_drain_bounded_per_resource`) and a relation bridge (`applyTrace_yields_poolBoundedTrace` via `PoolBoundedTrace.headStep`), driven at runtime in the test suite; (4) **production-runtime lift** — the per-step bounds lifted onto the literal budget-gated bridge entry (`pool_signed_step_drain_le_budget`, `pool_nondecreasing_of_does_not_debit_budget`), matching GP.4.2's production-faithfulness; (5) **layering** — `apply_admissible_with_base` relocated beside `apply_admissible_base` in `Authority/SignedAction.lean`.  The GP.4.2 `Accounting.lean` cross-references to `pool_balance_lower_bound_via_trace` were corrected (it is the outflow-cap floor, not the full solvency-reconciliation closure — the still-open `BridgeReachable` WU C.6.4 / C.6.5).  §15E.6 amended.  `bridge-pool-drain-bound` suite 20 → 21 cases (adds BOLD-leg drain, per-resource bound, exhaustive-discharge value checks, the `doesNotDebitPoolAt` classifier, and the executable-`applyTrace` runtime fold).  Lean-only; no kernel TCB delta, no new axioms (`{propext, Classical.choice, Quot.sound}` only). |
+| 1.15     | 2026-06-01 | GP.7.3 post-implementation **audit hardening** (no new theorems; soundness re-verified, two best-practice fixes).  (a) The general, genuinely-computable `Decidable (AdmissibleWith …)` instance (`instDecidableAdmissibleWith`) — introduced for `applyTrace` in v1.14 — is **relocated to its proper home beside `AdmissibleWith` in `Authority/SignedAction.lean`**, so admissibility is now universally decidable + foldable for any consumer (the existential over the registered signing key is decided by casing the concrete registry lookup, never quantifying over the key space; verified to reduce via `#eval`).  (b) Test coverage strengthened: the runtime-entry lift `pool_signed_step_drain_le_budget` is now exercised at the **value level** over the LITERAL `apply_bridge_admissible_with_budget` production entry (with an epoch-advanced budget policy, since a fresh actor's free tier is granted on epoch advance, not at `currentEpoch = 0`), and `applyTrace_yields_poolBoundedTrace` is value-tested by feeding the recovered relation through the headline bound.  `bridge-pool-drain-bound` suite 21 → 23 cases.  Audit confirmed: no `sorry` / `native_decide` / custom axioms; `doesNotDebitPoolAt` is sound + tight (verified by the exhaustive discharge's build); the bound rests on the GP.7.2 `AuthorityPolicy`, not the sender-blind `LocalPolicy`.  Lean-only; no kernel TCB delta, no new axioms. |
+| 1.16     | 2026-06-01 | Workstream GP.7.4 (`gasPoolPolicy` ratification on genesis) lands on the Lean side.  The `gasPoolGenesis` hook (`LegalKernel/Bridge/GasPoolPolicy.lean`) wires BOTH halves of the GP.7.2 discipline atomically: `gasPoolGenesisState` declares `gasPoolPolicy mEth mBold` for `gasPoolActor` in the genesis `localPolicies`, `gasPoolGenesisPolicy` intersects `gasPoolAuthorityPolicy mEth mBold` into the deployment's base `AuthorityPolicy`, and the `GasPoolGenesis` structure + `gasPoolGenesis` constructor bundle them so the "wire BOTH" contract holds by construction (`gasPoolGenesis_wires_both_halves`) — the half-less wiring that would leave the LP.7 meta-action hole open is unreachable through the constructor.  Twelve contract theorems ratify the wiring: `gasPoolGenesisState_declares_policy` / `_preserves_other_localPolicies` / `_preserves_kernel_substates` (the surgical state half — only `localPolicies` changes); and `gasPoolGenesisPolicy_rejects_meta` (the GP.7.4 headline — pool `revokeLocalPolicy` / `declareLocalPolicy` barred under ANY base policy, closing the hole `gasPoolPolicy_admission_permits_meta_actions` exposed), `_other_actors_unrestricted` (the intersection narrows ONLY `gasPoolActor`), `_rejects_non_pool_sender` (the PR #106 fund-safety fix, ratified at genesis), `_rejects_off_gas_legs` / `_rejects_non_sequencer` / `_rejects_non_transfer`, and `_authorizes_sequencer_eth` / `_bold` (the legitimate capped claim still admitted given the base authorises it).  The worked deployment `Deployments/Examples/GasPoolExample.lean` runs the full ETH + BOLD lifecycle (bridge `depositWithFee` × 2 → user + pool credit + L2 budget grant → capped sequencer claim × 2) end-to-end through the production admission gate (`apply_bridge_admissible_with_budget`), and is runnable via the new `knomosis gas-pool-demo` subcommand (process → persisted log → `replayWith` round-trip; the example ships its own deterministic demo verifier since the dev binary's linked `Verify` returns `false` at the Lean level).  §15E.6 amended with the genesis-ratification paragraph.  New `deployments-gas-pool-example` suite (13 integration cases: the worked sequence runs; final balances on both legs; the user budget grants; genesis fidelity; over-cap ETH / BOLD, pool meta-action, victim-sender, and non-sequencer rejections against a well-funded pool; the intersection-narrows-only-the-pool positive case; the IO binary process→log→replay round-trip; and term-level API stability).  Engineering-placement note: the genesis hook lives in `Bridge/GasPoolPolicy.lean` (the canonical gas-pool module, where `gasPoolPolicy` / `gasPoolAuthorityPolicy` / `ExtendedState` / `LocalPolicies.declare` / `AuthorityPolicy.intersect` already are) rather than the plan's tentative `Runtime/Replay.lean`, keeping the bridge-specific helper out of the generic replay module.  Lean-only (+ a self-contained CLI demo); no kernel TCB delta, no new axioms (the pure policy theorems use only `propext`; the state-half + example theorems use the canonical `{propext, Classical.choice, Quot.sound}` via `Std.TreeMap` / `ExtendedState`). |
+| 1.17     | 2026-06-01 | Workstream GP.7.4 **optimal closure** — production-CLI reach + config-driven opt-in + Rust host forwarding + theorem completeness.  (1) **Config-driven opt-in** (`Bridge/GasPoolPolicy.lean`): `GasPoolConfig` + the `gasPoolGenesisStateOfConfig` / `…PolicyOfConfig` / `gasPoolGenesisOfConfig` builders gate the genesis wiring on an `Option` ("if the deployment's config says so" — `none` is the pre-GP.7.4 genesis byte-for-byte, `some ⟨mEth, mBold⟩` wires both halves), with `_none` / `_some` contract theorems.  (2) **Generic `knomosis` CLI** (`Main.lean`): `--gas-pool-eth-cap` / `--gas-pool-bold-cap` flags build the gas-pool genesis (state + policy) via the hook and thread it through every log-touching subcommand (`process` / `replay` / `bootstrap` / `snapshot` / `replay-up-to` / `export-cell-proofs` / `extract-events`), so operators run real gas-pool deployments through the generic binary (verified end-to-end: the gas-pool genesis state hash is distinct from the plain genesis, and the sidecar cross-check accepts a matching config + rejects a wrong / disabled one).  (3) **`GasPoolSidecar`** (`Runtime/GasPoolSidecar.lean`, mirroring the GP.6.2 `BudgetSidecar`): the config is persisted to `<log>.gaspoolcfg` and cross-checked on every log-touching command, because the gas-pool genesis `localPolicies` declaration participates in the per-log-entry post-state hash — a forgotten / changed / disabled cap fails loudly with a clear `gas-pool-config error` rather than an opaque post-state-hash mismatch.  (4) **Rust host** (`runtime/knomosis-host`): the `CommandKernel` forwards the caps via `with_gas_pool_policy` (config `--gas-pool-eth-cap` / `--gas-pool-bold-cap` → `gas_pool_caps()` → the spawned `knomosis process` argv), mirroring its GP.6.2 budget-flag forwarding; +7 host tests.  (5) **Theorem completeness**: `gasPoolGenesisPolicy_rejects_over_cap_eth` / `_bold` (the authority-layer per-action cap rejection) and `gasPoolGenesisPolicy_bars_self_declaration` (the structural-genesis necessity — once `gasPoolAuthorityPolicy` is in force the pool cannot install / replace its own `LocalPolicy` via a signed `declareLocalPolicy`, so the genesis declaration MUST be structural).  §15E.6 amended.  `deployments-gas-pool-example` suite 13 → 17 (a proof-carrying budget-grant tie via `depositWithFee_grants_budget_bridge`, an honest per-half contribution test, a restrictive-base `bridgePolicy` composition, and a snapshot round-trip of the gas-pool genesis state) + new `runtime-gas-pool-sidecar` suite (9 cases).  No kernel TCB delta, no new axioms; all Lean audits + the full Rust workspace (build / test / clippy / fmt) green. |
+| 1.18     | 2026-06-01 | Workstream GP.7.4 **post-implementation audit fix** — `export-terminate-bundle` gas-pool sidecar cross-check.  A deep audit found that `knomosis export-terminate-bundle`'s output (`claimedPostCommit := stepVMHashFromAction preState …` + `cellProofs := buildObserverCellProofs preState …`) is computed against `commitExtendedState preState`, which INCLUDES `commitLocalPolicies` — so the gas-pool genesis declaration (a `localPolicies` entry) affects the bundle, yet the v1.17 wiring had threaded the gas-pool genesis into this subcommand WITHOUT a sidecar cross-check (the other log-touching subcommands all had one).  A mismatched / disabled gas-pool config would therefore build the terminate calldata against the WRONG state commit (which the L1 contract would reject after the operator paid gas) instead of failing early.  The fix adds the `GasPoolSidecar.checkConsistent` guard to `cmdExportTerminateBundle` (exit 2 with a clear `gas-pool-config error` on mismatch), so the gas-pool sidecar is now cross-checked on EVERY log-touching subcommand.  The BUDGET sidecar is deliberately NOT checked there — `commitExtendedState` excludes `budgetPolicy` / `epochBudgets` and `kernelOnlyReplay` runs no budget gate, so the bundle is budget-config-independent (the asymmetry is principled: only the gas-pool config, via `localPolicies`, reaches the commit).  §15E.6 amended.  +1 real-binary integration test (`real_knomosis_gas_pool.rs::gas_pool_export_terminate_bundle_config_checked`, Rust workspace 1753 → 1754).  Not a security hole (a wrong bundle is L1-rejected, never forge-able); a fail-early correctness + UX fix.  Lean audits + full Rust workspace green; no kernel TCB delta, no new axioms. |
 
 ---
 

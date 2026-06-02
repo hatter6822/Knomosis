@@ -3,7 +3,7 @@
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
 # Knomosis Rust host-runtime workspace
@@ -241,6 +241,7 @@ runtime/
 │   │   ├── lib.rs                   — umbrella + identifier constants
 │   │   ├── config.rs                — CLI flag parsing
 │   │   ├── event_cache.rs           — bounded FIFO for backfill
+│   │   ├── event_type.rs            — Event.tag registry + additive-tag classify (GP.6.3)
 │   │   ├── extract.rs               — Extractor trait (Mock + Subprocess)
 │   │   ├── frame.rs                 — wire-frame parser/encoder
 │   │   ├── server.rs                — top-level orchestrator
@@ -249,6 +250,8 @@ runtime/
 │   │   └── main.rs                  — daemon entry point
 │   └── tests/
 │       ├── integration.rs           — end-to-end pipeline scenarios
+│       ├── cross_stack_lean_event.rs — Lean→Rust Event.encode differential (GP.6.3)
+│       ├── real_knomosis_extract_events.rs — real `extract-events` binary smoke (GP.6.3)
 │       └── properties.rs            — proptest invariants
 ├── knomosis-storage/                   — RH-E.0 storage abstraction
 │   ├── Cargo.toml

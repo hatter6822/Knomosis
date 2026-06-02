@@ -2,7 +2,7 @@
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
-# under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 # `knomosis-l1-ingest` — RH-B.  The L1 watcher daemon that translates
 # Ethereum bridge / identity-registry events to Knomosis `SignedAction`s
@@ -56,6 +56,17 @@ path = "src/main.rs"
 [[example]]
 name = "gen_ingest_fixtures"
 path = "examples/gen_ingest_fixtures.rs"
+
+# Workstream GP.6.1: the fee-split corpus generator.  Produces
+# `runtime/tests/cross-stack/l1_ingest_fee_split.cxsf` covering
+# `DepositWithFee` CBE-encoding byte-equivalence with the Lean
+# reference.  Run via:
+#
+#   cargo run --example gen_fee_split_fixtures -- \
+#       tests/cross-stack/l1_ingest_fee_split.cxsf
+[[example]]
+name = "gen_fee_split_fixtures"
+path = "examples/gen_fee_split_fixtures.rs"
 
 [dependencies]
 knomosis-cli-common = { workspace = true }

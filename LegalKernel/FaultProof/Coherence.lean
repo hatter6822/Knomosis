@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -143,6 +144,18 @@ theorem recomputeCommitment_extensional
     produces exactly the same post-commit as the L2 kernel
     (whose semantics is `kernelOnlyApply`).
 
+    **Scope.**  `kernelOnlyApply` is the kernel-EXECUTION semantics
+    — `base` balances, `nonces`, `registry`, and `localPolicies`.
+    It leaves the bridge ledger (`consumed` / `pending` / `nextWdId`)
+    invariant (`applyCellWrites_to_state_preserves_bridge` below), so
+    the bisection-adjudicated state-commitment chain holds the bridge
+    sub-state CONSTANT across every adjudicated step.  The bridge
+    ledger's own evolution — deposit-replay protection and withdrawal
+    tracking — is verified by the dedicated bridge machinery
+    (`BridgeAdmissibleWith`'s deposit-id-freshness conjuncts at
+    admission and the §13 withdrawal-proof + finalisation chain on
+    L1), NOT by the per-step bisection game.
+
     Cross-stack equivalence with the Solidity-side implementation
     is established by the WU H.10.1 fixture corpus; the
     Solidity-side step VM is required to produce the same bytes
@@ -169,6 +182,25 @@ theorem recomputeCommitment_coherent_with_kernelOnlyApply
   --           postStateHash := postStateHash }
   unfold kernelOnlyApply
   rw [h_entry]
+
+/-- **Fault-proof scope invariant (bridge sub-state).**  The fault
+    proof's per-step reference transition `applyCellWrites_to_state`
+    (= `kernelOnlyApply`) leaves the bridge sub-state unchanged.
+    Consequently the L1 step VM re-derives only the kernel-execution
+    sub-state; the `consumed` / `pending` / `nextWdId` bridge ledger is
+    held constant across every step the bisection game adjudicates.
+
+    This is the type-level statement of the Workstream-H scope
+    boundary.  The bridge ledger's own evolution is verified by the
+    dedicated bridge machinery (deposit-id freshness at
+    `BridgeAdmissibleWith` admission and the §13 withdrawal-proof +
+    finalisation chain on L1), not by the per-step game.  See
+    `Disputes.kernelOnlyApply_preserves_bridge`. -/
+theorem applyCellWrites_to_state_preserves_bridge
+    (es : ExtendedState) (st : SignedAction) :
+    (applyCellWrites_to_state es st).bridge = es.bridge := by
+  unfold applyCellWrites_to_state
+  exact kernelOnlyApply_preserves_bridge es _
 
 /-! ## #253 — Multi-step coherence with `kernelOnlyReplay`
 

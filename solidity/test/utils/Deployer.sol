@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -79,6 +79,29 @@ contract Deployer {
                     maxAttestationStaleBlocks: maxAttestationStaleBlocks,
                     cooldownBlocks: cooldownBlocks,
                     tvlCap: tvlCap,
+                    // Permissive fee-split defaults (GP.5.1): the wide
+                    // [0, MAX_FEE_BPS_CAP] range and the minimal
+                    // exchange rate let suites that exercise the
+                    // fee-split path do so without bespoke deployments,
+                    // while leaving depositETH / depositERC20
+                    // behaviour untouched.  Suites needing specific
+                    // bounds (e.g. BridgeFeeSplit.t.sol) construct the
+                    // bridge directly.
+                    minFeeBps: 0,
+                    maxFeeBps: 5000, // == KnomosisBridge.MAX_FEE_BPS_CAP
+                    weiPerBudgetUnitEth: 1, // == KnomosisBridge.MIN_WEI_PER_BUDGET_UNIT
+                    // BOLD disabled (address(0)); BOLD-enabled deployments
+                    // (and the GP.5.4 / GP.5.5 BOLD suites) construct the
+                    // bridge directly with the canonical pin.
+                    weiPerBudgetUnitBold: 0,
+                    boldTokenAddress: address(0),
+                    // GP.5.5 BOLD safety-hardening fields — inert here
+                    // (BOLD disabled: roles unreachable, cap unused, no
+                    // auto-trigger).
+                    boldTvlCap: 0,
+                    boldCircuitBreaker: address(0),
+                    boldAdmin: address(0),
+                    enableLiquityAutoCircuitTrigger: false,
                     erc20ResourceIds: erc20ResourceIds,
                     erc20TokenAddrs: erc20TokenAddrs
                 })

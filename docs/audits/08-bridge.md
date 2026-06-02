@@ -426,8 +426,13 @@ Reasonable.
 ### Bridge-actor policy — only L1-derivable actions admitted
 
 * `bridgeActor : ActorId := 0` (line 101). The reservation is by
-  convention: `AddressBook.empty.nextActorId = 1`, so assigned ids
-  never collide.
+  convention: `AddressBook.empty.nextActorId = 1` (at audit time), so
+  assigned ids never collide.  *(Update — Workstream GP.7.1 advanced
+  the genesis `nextActorId` to `3`, additionally reserving `ActorId 1`
+  / `2` for `gasPoolActor` / `sequencerActor`; the same collision-free
+  property holds, now pinned by `addressBook_empty_nextActorId` and
+  `empty_assign_id_avoids_reserved`.  Line numbers in this audit are
+  pre-GP and have since drifted.)*
 * `bridgeAuthorizedAction` (line 119) — explicit allowlist:
     * `replaceKey` → `true`
     * `registerIdentity` → `true`

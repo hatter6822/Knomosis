@@ -1,6 +1,6 @@
 {"version": "1.0.0",
  "source_location":
- {"position": {"line": 56, "column": 0},
+ {"position": {"line": 57, "column": 0},
   "file": "LegalKernel/Laws/ReplaceKey.lean"},
  "signed_by": {"name": "actor", "kind": "actorRef"},
  "schema_version": 1,

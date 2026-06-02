@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -73,6 +74,7 @@ import Lex.Test.AutoGenProperties
 import LegalKernel.Test.Encoding.CBOR
 import LegalKernel.Test.Encoding.Encodable
 import LegalKernel.Test.Encoding.Action
+import LegalKernel.Test.Encoding.Event
 import LegalKernel.Test.Encoding.SignedAction
 import LegalKernel.Test.Encoding.State
 import LegalKernel.Test.Encoding.SignInput
@@ -91,6 +93,7 @@ import Lex.Test.Tools.Format
 import Lex.Test.Tools.DiagnosticCoverage
 import Lex.Test.DSL.Deployment
 import LegalKernel.Test.Deployments.UsdClearing
+import LegalKernel.Test.Deployments.GasPoolExample
 import Lex.Test.ExampleLex
 import Lex.Test.M2
 import LegalKernel.Test.Events.Types
@@ -102,7 +105,10 @@ import LegalKernel.Test.Runtime.Snapshot
 import LegalKernel.Test.Runtime.AttestedSnapshot
 import LegalKernel.Test.Runtime.Loop
 import LegalKernel.Test.Runtime.LoopHappyPath
+import LegalKernel.Test.Runtime.BudgetSidecar
+import LegalKernel.Test.Runtime.GasPoolSidecar
 import LegalKernel.Test.Runtime.BridgeAdmission
+import LegalKernel.Test.Runtime.ExtractEvents
 import LegalKernel.Test.Disputes.Filing
 import LegalKernel.Test.Disputes.Evidence
 import LegalKernel.Test.Disputes.Verdict
@@ -118,6 +124,8 @@ import LegalKernel.Test.Bridge.HashAdaptor
 import LegalKernel.Test.Bridge.Eip712
 import LegalKernel.Test.Bridge.AddressBook
 import LegalKernel.Test.Bridge.BridgeActor
+import LegalKernel.Test.Bridge.GasPoolPolicy
+import LegalKernel.Test.Bridge.PoolDrainBound
 import LegalKernel.Test.Bridge.Ingest
 import LegalKernel.Test.Bridge.State
 import LegalKernel.Test.Bridge.Admissible
@@ -131,6 +139,11 @@ import LegalKernel.Test.Bridge.CrossCheck.Framework
 import LegalKernel.Test.Bridge.CrossCheck.EcdsaVerify
 import LegalKernel.Test.Bridge.CrossCheck.Keccak256
 import LegalKernel.Test.Bridge.CrossCheck.DepositReceiptHash
+import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit
+import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplitBold
+import LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction
+import LegalKernel.Test.Bridge.CrossCheck.BoldDeposit
+import LegalKernel.Test.Bridge.CrossCheck.EventCbe
 import LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof
 import LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence
 import LegalKernel.Test.Bridge.CrossCheck.MigrationAttestation
@@ -220,6 +233,7 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "encoding-cbor"      Encoding.CBORTests.tests)
   failed := failed + (← runAll "encoding-encodable" Encoding.EncodableTests.tests)
   failed := failed + (← runAll "encoding-action"    Encoding.ActionTests.tests)
+  failed := failed + (← runAll "encoding-event"     Encoding.EventTests.tests)
   failed := failed + (← runAll "encoding-signed"    Encoding.SignedActionTests.tests)
   failed := failed + (← runAll "encoding-state"     Encoding.StateTests.tests)
   failed := failed + (← runAll "encoding-signinput" Encoding.SignInputTests.tests)
@@ -250,6 +264,8 @@ def main : IO UInt32 := do
                                     Lex.Test.DSL.DeploymentTests.tests)
   failed := failed + (← runAll "deployments-usd-clearing"
                                     Deployments.UsdClearingTests.tests)
+  failed := failed + (← runAll "deployments-gas-pool-example"
+                                    Deployments.GasPoolExampleTests.tests)
   failed := failed + (← runAll "laws-example-lex"
                                     Lex.Test.ExampleLex.tests)
   failed := failed + (← runAll "laws-lex-m2"
@@ -265,8 +281,14 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "runtime-loop"      Runtime.LoopTests.tests)
   failed := failed + (← runAll "runtime-loop-happy-path"
                                     Runtime.LoopHappyPath.tests)
+  failed := failed + (← runAll "runtime-budget-sidecar"
+                                    Runtime.BudgetSidecarTests.tests)
+  failed := failed + (← runAll "runtime-gas-pool-sidecar"
+                                    Runtime.GasPoolSidecarTests.tests)
   failed := failed + (← runAll "runtime-bridge-admission"
                                     Runtime.BridgeAdmission.tests)
+  failed := failed + (← runAll "runtime-extract-events"
+                                    Runtime.ExtractEvents.tests)
   failed := failed + (← runAll "encoding-disputes" Encoding.DisputesTests.tests)
   failed := failed + (← runAll "disputes-filing"   Disputes.FilingTests.tests)
   failed := failed + (← runAll "disputes-evidence" Disputes.EvidenceTests.tests)
@@ -300,6 +322,10 @@ def main : IO UInt32 := do
                                     Bridge.AddressBookTests.tests)
   failed := failed + (← runAll "bridge-actor"
                                     Bridge.BridgeActorTests.tests)
+  failed := failed + (← runAll "bridge-gas-pool-policy"
+                                    Bridge.GasPoolPolicyTests.tests)
+  failed := failed + (← runAll "bridge-pool-drain-bound"
+                                    Bridge.PoolDrainBoundTests.tests)
   failed := failed + (← runAll "bridge-ingest"
                                     Bridge.IngestTests.tests)
   failed := failed + (← runAll "bridge-state"
@@ -326,6 +352,16 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.Keccak256.tests)
   failed := failed + (← runAll "crosscheck-deposit-receipt"
                                     Bridge.CrossCheck.DepositReceiptHash.tests)
+  failed := failed + (← runAll "crosscheck-deposit-fee-split"
+                                    Bridge.CrossCheck.DepositFeeSplit.tests)
+  failed := failed + (← runAll "crosscheck-deposit-fee-split-bold"
+                                    Bridge.CrossCheck.DepositFeeSplitBold.tests)
+  failed := failed + (← runAll "crosscheck-deposit-with-fee-action"
+                                    Bridge.CrossCheck.DepositWithFeeAction.tests)
+  failed := failed + (← runAll "crosscheck-bold-deposit"
+                                    Bridge.CrossCheck.BoldDeposit.tests)
+  failed := failed + (← runAll "crosscheck-event-cbe"
+                                    Bridge.CrossCheck.EventCbe.tests)
   failed := failed + (← runAll "crosscheck-withdrawal-proof"
                                     Bridge.CrossCheck.WithdrawalProof.tests)
   failed := failed + (← runAll "crosscheck-dispute-evidence"

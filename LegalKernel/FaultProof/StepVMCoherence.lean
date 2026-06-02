@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -12,12 +13,13 @@ the L1 step-VM cross-stack coherence chain.
 
 This module ships three load-bearing pieces:
 
-  1. `actionKindByte : Action → UInt8` — the 0..20 dispatcher byte
+  1. `actionKindByte : Action → UInt8` — the 0..21 dispatcher byte
      that the Solidity `executeStep(actionKind, ...)` consumes.
      Mirrors the `Encoding.Action.encode`'s leading-tag table and
      the `KnomosisStepVM.sol::ActionKind` enum.  (Workstream GP widened
      the range from 0..18 to 0..20 with `depositWithFee` = 19 and
-     `topUpActionBudget` = 20.)
+     `topUpActionBudget` = 20; GP.5.3 added `topUpActionBudgetFor` =
+     21.)
 
   2. `actionFieldsForL1 : Action → ByteArray` — the canonical byte
      layout the Solidity `_stepXX` decoders expect.  For structured
@@ -27,7 +29,7 @@ This module ships three load-bearing pieces:
      simply hashes via `keccak256(actionFields)` without inspecting
      internal structure).
 
-  3. `stepVMHash` — the unified dispatcher over the 21 per-variant
+  3. `stepVMHash` — the unified dispatcher over the 22 per-variant
      `stepCommitXX` functions.  Given `(preCommit, kind, fields,
      signer, bundle)` it produces the same 32-byte output Solidity's
      `KnomosisStepVM.executeStep` would.  This is the load-bearing
@@ -81,6 +83,45 @@ opaque variants and wait for the L1's `claimTimeout` path, since
 the observer's truth-oracle delegate is the responsible party for
 choosing which move to play.
 
+## Step-VM commit scope (what each `stepCommitXX` binds — and does NOT)
+
+The per-variant step-VM hash binds the **kernel-state cell writes**
+the step VM tracks — the `balance` cells (and, for the variants that
+touch them, `registry` / `localPolicy` / bridge cells) — plus the
+action's identity (the distinct per-variant tag), its
+fixed-width fields, and the signer.  It deliberately does **NOT**
+bind two classes of post-state:
+
+  * **The signer's nonce.**  No variant folds the new nonce into its
+    hash, even though every action advances it (`Action.writeCells`
+    always lists `.nonce signer`).  The nonce cell is carried in the
+    cell-proof bundle for witness verification, not for the output
+    hash.
+  * **The `epochBudgets` ledger.**  The Workstream-GP admission-layer
+    effects — `depositWithFee`'s `budgetGrant` (kind 19),
+    `topUpActionBudget`'s `budgetIncrement` (kind 20), and
+    `topUpActionBudgetFor`'s `recipient` + `budgetIncrement` (kind 21)
+    — are excluded.  There is no `epochBudgets` `CellTag`, so these
+    effects are outside the cell-proof model the step VM re-executes.
+
+**Consequence (a deliberate, design-wide scope boundary, NOT a
+per-variant choice).**  A bisection-game terminate step catches a
+sequencer who lies about a *balance* write, but NOT one who lies about
+a nonce advance or an epoch-budget credit, because the honest
+re-execution produces the same step-VM hash regardless of those
+effects.  This boundary is uniform across all 22 variants; kind 21's
+exclusion of `recipient` / `budgetIncrement` is the same posture kinds
+19 / 20 take for their budget fields.  Binding `epochBudgets` would
+require (1) an `epochBudgets` `CellTag` + cell-proof construction and
+(2) folding the new budget value into every GP-variant hash on BOTH
+stacks — a TCB-adjacent, design-wide change that is a Genesis-Plan
+§13.6 amendment, tracked as `OQ-GP-11` in
+`docs/planning/open_questions.md`, not a GP.5.3 deliverable.
+The L2 admission gate (`topUpActionBudgetFor_gate` et al.) fully
+governs the budget effects on the honest-sequencer path; the gap is
+strictly the on-chain *re-execution* arm for a dishonest sequencer's
+budget lie.
+
 This module is **not** part of the trusted computing base.  Bugs
 here would surface as cross-stack fixture mismatches at the WU
 H.10.1 corpus level; the kernel's invariant proofs are unaffected.
@@ -114,17 +155,16 @@ open LegalKernel.Runtime
 
 Mirrors `Encoding.Action.encode`'s leading-tag table (which uses
 `Encodable.encode (T := Nat) <idx>`).  The Solidity-side
-`KnomosisStepVM.ActionKind` enum has the same indices.  Kinds `0..20`
-have a real `stepVMHash` execution arm; the GP.3.4 `topUpActionBudgetFor`
-takes index `21` but its L1 execution arm is staged for GP.5.3 (see
-`actionKindByteCases`). -/
+`KnomosisStepVM.ActionKind` enum has the same indices.  Kinds `0..21`
+have a real `stepVMHash` execution arm with a cross-stack Solidity
+counterpart (GP.5.3 closed the index-`21` `topUpActionBudgetFor` arm
+that GP.3.4 had staged). -/
 
 /-- The constructor-index dispatcher byte for an `Action`.  Mirrors
     the Solidity `ActionKind` enum and `Encoding.Action.encode`'s
     leading-tag emission.  Frozen, append-only: a new variant takes
     the next index (currently `0..21`; `21` =
-    `topUpActionBudgetFor`, whose `stepVMHash` arm is deferred to
-    GP.5.3). -/
+    `topUpActionBudgetFor`). -/
 def actionKindByte : Action → UInt8
   | .transfer _ _ _ _              => 0
   | .mint _ _ _                    => 1
@@ -149,29 +189,26 @@ def actionKindByte : Action → UInt8
   | .depositWithFee _ _ _ _ _ _ _  => 19
   | .topUpActionBudget _ _ _ _     => 20
   -- Workstream GP (GP.3.4): delegated top-up.  Dispatcher index 21.
-  -- The L1 step-VM execution arm + cross-stack fixtures for this
-  -- variant are deferred to GP.5.3 (Solidity step-VM extension);
-  -- `stepVMHash`'s catch-all returns an empty hash for kind 21 until
-  -- then.  The Lean dispatcher byte is fixed here so the Action
-  -- coverage stays append-only.
+  -- GP.5.3 wired the L1 step-VM execution arm + Solidity `_step21`
+  -- decoder + cross-stack fixtures, so this kind is now
+  -- L1-fault-proof-executable (see `stepVMHash`'s kind-21 arm).
   | .topUpActionBudgetFor _ _ _ _ _ => 21
 
-/-- The `stepVMHash`-*dispatched* kind range, `0..20` — the 21
+/-- The `stepVMHash`-*dispatched* kind range, `0..21` — the 22
     variants for which the L1 step-VM has a real execution arm with a
     cross-stack Solidity counterpart.  Used by the coverage regression
     test (`for kind in actionKindByteCases`) to assert each dispatched
     kind yields a non-empty hash.
 
-    Note (GP.3.4): `actionKindByte` can return `21`
-    (`topUpActionBudgetFor`), but that index is deliberately NOT in
-    this list — its `stepVMHash` execution arm (and the Solidity
-    `_step21` + cross-stack fixtures) are staged for GP.5.3, so
-    `stepVMHash` returns the empty-hash sentinel for kind 21 (see
-    `stepVMHash_unknown_kind_empty`).  This list therefore enumerates
-    the kinds that are currently L1-fault-proof-*executable*, which is
-    the property the coverage test needs. -/
+    Note (GP.5.3): index `21` (`topUpActionBudgetFor`) joined this list
+    once its `stepVMHash` execution arm (and the Solidity `_step21`
+    decoder + cross-stack fixtures) landed; `stepVMHash` now returns the
+    empty-hash sentinel only for kinds `≥ 22` (see
+    `stepVMHash_unknown_kind_empty`).  This list enumerates the kinds
+    that are currently L1-fault-proof-*executable*, which is the
+    property the coverage test needs. -/
 def actionKindByteCases : List UInt8 :=
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 
 /-! ## `actionFieldsForL1` — canonical byte layout per variant
 
@@ -266,15 +303,16 @@ def actionFieldsForL1 : Action → ByteArray
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       uint64BE gasResource.toNat ++ uint64BE gasAmount ++
       uint64BE budgetIncrement ++ uint64BE poolActor.toNat
-  -- Workstream GP (GP.3.4): delegated top-up is a structured variant:
-  -- `uint64BE recipient || uint64BE gasResource || uint64BE gasAmount
-  --  || uint64BE budgetIncrement || uint64BE poolActor`.  The kernel-
-  -- state effect mirrors `topUpActionBudget` (debit signer at
-  -- gasResource, credit poolActor); `recipient` and `budgetIncrement`
-  -- are admission-layer fields (recipient consent + budget grant),
-  -- decoded for layout symmetry but excluded from any kernel-state
-  -- step-VM hash by design.  The matching Solidity `_step21` decoder
-  -- + cross-stack fixtures are deferred to GP.5.3.
+  -- Workstream GP (GP.3.4 / GP.5.3): delegated top-up is a structured
+  -- variant: `uint64BE recipient || uint64BE gasResource ||
+  -- uint64BE gasAmount || uint64BE budgetIncrement || uint64BE
+  -- poolActor`.  The kernel-state effect mirrors `topUpActionBudget`
+  -- (debit signer at gasResource, credit poolActor); `recipient` and
+  -- `budgetIncrement` are admission-layer fields (recipient consent +
+  -- budget grant), decoded for layout symmetry but excluded from the
+  -- step-VM hash by design.  GP.5.3 wired the matching Solidity
+  -- `_step21` decoder + cross-stack fixtures + the `stepVMHash` kind-21
+  -- execution arm.
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       uint64BE recipient.toNat ++ uint64BE gasResource.toNat ++
       uint64BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
@@ -363,12 +401,12 @@ The Lean reference for what Solidity's `executeStep` returns.  Given
 the dispatcher byte, the action fields' bytes, the signer's id,
 and the cell-proof bundle, computes the per-variant step-VM hash.
 
-**Failure modes.**  For an unknown `kind` (≥ 21), returns
+**Failure modes.**  For an unknown `kind` (≥ 22), returns
 `canonicalAbsentValue` (0 bytes).  Solidity-side reverts with
 `UnknownActionKind`; the Lean side surfaces it as an empty hash
 that won't match any L1-produced commit.  Production callers
 (`stepVMHashFromAction`) construct `kind` from `actionKindByte`,
-which is provably in 0..20 — so the catch-all path is unreachable
+which is provably in 0..21 — so the catch-all path is unreachable
 in practice. -/
 
 /-- Read a big-endian `UInt64`-sized `Nat` field from a byte array
@@ -422,9 +460,9 @@ def maxRecipientsPerBulkAction : Nat := 256
     Verified at the cross-stack fixture corpus level (WU H.10.1,
     SVC.5.e).
 
-    **Unknown-kind handling.**  Kinds ≥ 21 return an empty hash
+    **Unknown-kind handling.**  Kinds ≥ 22 return an empty hash
     (which cannot equal any L1 output).  Production callers must
-    construct `kind` from `actionKindByte`, which is in 0..20. -/
+    construct `kind` from `actionKindByte`, which is in 0..21. -/
 def stepVMHash
     (preCommit : ByteArray) (kind : UInt8) (fields : ByteArray)
     (signer : Nat) (bundle : CellProofBundle) : ByteArray :=
@@ -679,12 +717,52 @@ def stepVMHash
         poolBalance + gasAmount
     stepCommitTopUpActionBudget preCommit gasResource signer poolActor
       newSignerBalance newPoolBalance
+  -- 21: TopUpActionBudgetFor (Workstream GP GP.3.4; structured).
+  -- Layout: `uint64BE recipient || uint64BE gasResource ||
+  --  uint64BE gasAmount || uint64BE budgetIncrement ||
+  --  uint64BE poolActor`.  The kernel-state effect is identical in
+  -- shape to kind 20 (`topUpActionBudget`): debit the signer's gas
+  -- balance by `gasAmount`, credit `poolActor` by `gasAmount`,
+  -- reading the pool balance from the post-debit intermediate state
+  -- (so the `signer = poolActor` corner conserves supply).  The
+  -- delegated variant differs ONLY in (a) the leading `recipient`
+  -- field, which shifts the gas-transfer fields right by 8 bytes, and
+  -- (b) the distinct commit tag.  `recipient` and `budgetIncrement`
+  -- are admission-layer effects (recipient consent + budget grant to
+  -- the RECIPIENT's epochBudgets slot), NOT kernel-state cell writes —
+  -- both are excluded from the step-VM hash by design (mirroring how
+  -- kinds 19 / 20 exclude their `budgetGrant` / `budgetIncrement`
+  -- fields).  The admission gate (`topUpActionBudgetFor_gate`)
+  -- upstream rejects `signer = poolActor` (round-4 self-pool defense)
+  -- and `recipient = signer`, so the if-self branch is unreachable on
+  -- the canonical path; the explicit handling defends against a
+  -- malformed bundle reaching this dispatcher with that shape.
+  | 21 =>
+    -- fields 0..8 = recipient (admission-layer; not hashed)
+    let gasResource := readUint64BE fields 8
+    let gasAmount   := readUint64BE fields 16
+    -- fields 24..32 = budgetIncrement (admission-layer; not hashed)
+    let poolActor   := readUint64BE fields 32
+    let signerBalance :=
+      decodeCellNat (readCellValue bundle
+                      (.balance gasResource.toUInt64 signer.toUInt64))
+    let newSignerBalance : Nat :=
+      if signer = poolActor then signerBalance  -- net zero (defended at admission)
+      else signerBalance - gasAmount
+    let newPoolBalance : Nat :=
+      if signer = poolActor then signerBalance
+      else
+        let poolBalance :=
+          decodeCellNat (readCellValue bundle
+                          (.balance gasResource.toUInt64 poolActor.toUInt64))
+        poolBalance + gasAmount
+    stepCommitTopUpActionBudgetFor preCommit gasResource signer poolActor
+      newSignerBalance newPoolBalance
   -- Unknown kind: return empty bytes (won't match any L1 output).
-  -- With the addition of kinds 19/20 above, the dispatcher now
-  -- covers the full 0..20 range that `actionKindByte` produces.
-  -- Any future Action constructor addition MUST extend this
-  -- match before merging — enforced by the
-  -- `stepVMHash_covers_actionKindByte_range` regression test.
+  -- With kinds 19 / 20 / 21 above, the dispatcher now covers the full
+  -- 0..21 range that `actionKindByte` produces.  Any future Action
+  -- constructor addition MUST extend this match before merging —
+  -- enforced by the `actionKindByteCases` coverage regression test.
   | _ => ByteArray.empty
 
 /-! ## Determinism + output-size properties -/
@@ -712,12 +790,12 @@ theorem actionFieldsForL1_deterministic
 
 /-! ## Per-variant dispatch coherence theorems
 
-For each of the 21 variants (0..18 from SVC.5.e plus Workstream-GP's
-`depositWithFee` = 19 and `topUpActionBudget` = 20), the dispatcher's
-output equals the canonical `stepCommitXX` invocation with the
-decoded fields.  Each proof is a structural reduction: `stepVMHash`
-unfolds to the appropriate `stepCommitXX` branch when
-`kind = <variant>`. -/
+For each of the 22 variants (0..18 from SVC.5.e plus Workstream-GP's
+`depositWithFee` = 19, `topUpActionBudget` = 20, and
+`topUpActionBudgetFor` = 21), the dispatcher's output equals the
+canonical `stepCommitXX` invocation with the decoded fields.  Each
+proof is a structural reduction: `stepVMHash` unfolds to the
+appropriate `stepCommitXX` branch when `kind = <variant>`. -/
 
 /-- Dispatch coherence for the `Transfer` variant.
 
@@ -1034,17 +1112,54 @@ theorem stepVMHash_topUpActionBudget_kind
      stepCommitTopUpActionBudget preCommit gasResource signer poolActor
        newSignerBalance newPoolBalance) := rfl
 
-/-- For unknown kinds (≥ 21), `stepVMHash` returns empty bytes.
+/-- Dispatch coherence for the `TopUpActionBudgetFor` variant
+    (Workstream GP GP.3.4 / GP.5.3, action-index 21; structured
+    per-field read).  The kernel-state effect mirrors
+    `Laws.topUpActionBudgetFor.apply_impl`'s setBalance / setBalance
+    two-step — which is byte-identical to `topUpActionBudget`'s: debit
+    the signer's gas balance by `gasAmount`, credit `poolActor` by
+    `gasAmount`.  The leading `recipient` field shifts every gas-
+    transfer field right by 8 bytes relative to kind 20 (gasResource at
+    offset 8, gasAmount at 16, poolActor at 32); `recipient` (offset 0)
+    and `budgetIncrement` (offset 24) are admission-layer fields, read
+    for layout symmetry but excluded from the hash.  The admission gate
+    rejects `signer = poolActor` upstream (round-4 self-pool defense),
+    so the no-op `signer = poolActor` branch is unreachable on the
+    canonical path. -/
+theorem stepVMHash_topUpActionBudgetFor_kind
+    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
+    (bundle : CellProofBundle) :
+    stepVMHash preCommit 21 fields signer bundle =
+    (let gasResource := readUint64BE fields 8
+     let gasAmount   := readUint64BE fields 16
+     let poolActor   := readUint64BE fields 32
+     let signerBalance :=
+       decodeCellNat (readCellValue bundle
+                       (.balance gasResource.toUInt64 signer.toUInt64))
+     let newSignerBalance : Nat :=
+       if signer = poolActor then signerBalance
+       else signerBalance - gasAmount
+     let newPoolBalance : Nat :=
+       if signer = poolActor then signerBalance
+       else
+         let poolBalance :=
+           decodeCellNat (readCellValue bundle
+                           (.balance gasResource.toUInt64 poolActor.toUInt64))
+         poolBalance + gasAmount
+     stepCommitTopUpActionBudgetFor preCommit gasResource signer poolActor
+       newSignerBalance newPoolBalance) := rfl
 
-    Note: `actionKindByte` is provably in `0..20` after the
-    Workstream-GP extension (kinds 19 / 20 for `.depositWithFee` /
-    `.topUpActionBudget`), so the catch-all path is unreachable
-    from `stepVMHashFromAction`; this property is only relevant for
-    caller-supplied raw `UInt8` inputs ≥ 21. -/
+/-- For unknown kinds (≥ 22), `stepVMHash` returns empty bytes.
+
+    Note: `actionKindByte` is provably in `0..21` after the
+    Workstream-GP extension (kinds 19 / 20 / 21 for `.depositWithFee` /
+    `.topUpActionBudget` / `.topUpActionBudgetFor`), so the catch-all
+    path is unreachable from `stepVMHashFromAction`; this property is
+    only relevant for caller-supplied raw `UInt8` inputs ≥ 22. -/
 theorem stepVMHash_unknown_kind_empty
     (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
     (bundle : CellProofBundle) :
-    stepVMHash preCommit 21 fields signer bundle = ByteArray.empty := rfl
+    stepVMHash preCommit 22 fields signer bundle = ByteArray.empty := rfl
 
 /-! ## `stepVMHashFromAction` — the action-driven convenience form
 

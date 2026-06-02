@@ -2,7 +2,7 @@
 # Copyright (C) 2026  Adam Hall
 # This program comes with ABSOLUTELY NO WARRANTY.
 # This is free software, and you are welcome to redistribute it
-# under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 # Rust host-runtime workspace manifest.  Houses the stack specified
 # in `docs/planning/rust_host_runtime_plan.md` §2.2.  Each member
@@ -94,14 +94,14 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.2.20"
+version = "0.3.19"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
 # field gates `cargo` itself before any compilation begins.  Bumping
 # the MSRV is a workspace-level PR, not a per-crate one.
 rust-version = "1.83"
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/hatter6822/Knomosis"
 publish = false
 

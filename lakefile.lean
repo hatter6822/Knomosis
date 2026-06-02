@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 import Lake
@@ -23,7 +24,7 @@ package knomosis where
   -- Lockstep with the Rust workspace version
   -- (`runtime/Cargo.toml`'s `[workspace.package] version`).  Bumped
   -- on every PR per the patch-version-bump policy in `CLAUDE.md`.
-  version := v!"0.2.20"
+  version := v!"0.3.19"
   -- Per-package Lean options.  Phase 0's hygiene gate:
   --
   -- * `autoImplicit := false` — every universe / type variable must
@@ -83,12 +84,34 @@ input_dir lexCodegenInputs where
     link-time configuration.  This keeps the `extern_lib` purely a
     runtime concern. -/
 extern_lib knomosisHashFallback (pkg : NPackage __name__) := do
-  let srcPath : System.FilePath := pkg.dir / "runtime" / "knomosis-hash-fallback.c"
-  let oFile := pkg.buildDir / "runtime" / "knomosis-hash-fallback.o"
-  let srcJob ← inputTextFile srcPath
-  let weakArgs := #["-I", (← getLeanIncludeDir).toString, "-fPIC"]
-  let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "knomosis-hash-fallback") #[oJob]
+  -- Opt-in keccak-linked cross-stack verification build: when
+  -- `KNOMOSIS_HASH_BACKEND=keccak256`, link the pre-built
+  -- `knomosis-hash-keccak256` adaptor staticlib (which exports the same
+  -- three `knomosis_hash_*` C-ABI symbols, backed by real keccak256 via
+  -- the `sha3` crate) IN PLACE OF the FNV-1a-64 fallback.  The staticlib
+  -- is built out-of-band by `scripts/verify_keccak_crossstack.sh`
+  -- (`cargo build -p knomosis-hash-keccak256 --features lean-ffi`) and
+  -- its absolute path passed via `KNOMOSIS_KECCAK_STATICLIB`.  This is a
+  -- SINGLE-archive swap — exactly one library defines the hash symbols,
+  -- so there is no link-order / `--whole-archive` / duplicate-symbol
+  -- race.  The default path (no env var) is byte-identical to the FNV
+  -- fallback build below.
+  match (← IO.getEnv "KNOMOSIS_HASH_BACKEND") with
+  | some "keccak256" =>
+    match (← IO.getEnv "KNOMOSIS_KECCAK_STATICLIB") with
+    | some kPath => inputBinFile (System.FilePath.mk kPath)
+    | none =>
+      error
+        ("KNOMOSIS_HASH_BACKEND=keccak256 requires KNOMOSIS_KECCAK_STATICLIB " ++
+         "(absolute path to a libknomosis_hash_keccak256.a built with " ++
+         "`cargo build -p knomosis-hash-keccak256 --features lean-ffi`)")
+  | _ =>
+    let srcPath : System.FilePath := pkg.dir / "runtime" / "knomosis-hash-fallback.c"
+    let oFile := pkg.buildDir / "runtime" / "knomosis-hash-fallback.o"
+    let srcJob ← inputTextFile srcPath
+    let weakArgs := #["-I", (← getLeanIncludeDir).toString, "-fPIC"]
+    let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
+    buildStaticLib (pkg.staticLibDir / nameToStaticLib "knomosis-hash-fallback") #[oJob]
 
 /-- The trusted core: kernel module, plus the law set that the deployment
     chooses to admit.  See `LegalKernel.lean` for the umbrella import. -/
@@ -101,6 +124,7 @@ lean_lib LegalKernel where
     `Lex.Examples.ExampleLex`, and (via separate `lean_lib`
     declarations below) the audit-binary tooling.  The
     runtime-relevant surface re-exports from `Lex.lean`. -/
+@[default_target]
 lean_lib Lex where
   roots := #[`Lex]
 
@@ -108,22 +132,26 @@ lean_lib Lex where
     the `deployment` macro's full surface (LX.31 / LX.32 / LX.33)
     and serves as the M3 acceptance gate.  See
     `Deployments/Examples/UsdClearing.lean`. -/
+@[default_target]
 lean_lib Deployments where
   roots := #[`Deployments]
 
 /-- Test driver: a thin executable that imports every test module and
     fails (non-zero exit) if any property check raises. `lake test`
     invokes this binary via the `@[test_driver]` attribute. -/
-@[test_driver]
+@[default_target, test_driver]
 lean_exe Tests where
   root := `Tests
   supportInterpreter := true
 
 /-- The Phase-5 `knomosis` runtime executable (WU 5.1).  Multiplexes
-    five subcommands (`info`, `process`, `replay`, `bootstrap`,
-    `snapshot`) against an append-only log file at the path supplied
-    on the command line.  See `Main.lean` for the dispatcher and
-    `docs/abi.md` for the on-disk byte layouts. -/
+    the runtime subcommands (`info`, `process`, `replay`, `bootstrap`,
+    `snapshot`, `withdrawal-proof`, `replay-up-to`, `export-cell-proofs`,
+    `export-terminate-bundle`, and `extract-events` — the RH-D event
+    extractor backend, GP.6.3) against an append-only log file at the
+    path supplied on the command line.  See `Main.lean` for the
+    dispatcher and `docs/abi.md` for the on-disk byte layouts. -/
+@[default_target]
 lean_exe knomosis where
   root := `Main
 
@@ -132,6 +160,7 @@ lean_exe knomosis where
     final state hash without writing to the log.  An auditor running
     this on a separate machine reproduces the runtime's `StateHash`
     byte-for-byte (Genesis Plan §13.2 acceptance). -/
+@[default_target]
 lean_exe «knomosis-replay» where
   root := `Replay
 
@@ -158,6 +187,7 @@ lean_lib DeferralAuditLib where
     `tcb_allowlist.txt`.  Fails (non-zero exit) on any un-allowlisted
     import; CI consumes the exit code to block PRs that expand the
     TCB without going through the §13.6 amendment process. -/
+@[default_target]
 lean_exe tcb_audit where
   root := `Tools.TcbAudit
   supportInterpreter := true
@@ -167,6 +197,7 @@ lean_exe tcb_audit where
     exit) if any kernel-TCB module has a non-zero count.  CI runs
     this as a hard gate after `lake build` so a `sorry` reaching
     `Kernel.lean` or `RBMapLemmas.lean` blocks the build. -/
+@[default_target]
 lean_exe count_sorries where
   root := `Tools.CountSorries
   supportInterpreter := true
@@ -179,6 +210,7 @@ lean_exe count_sorries where
     `tools/stub_allowlist.txt`.  CI runs this after `tcb_audit` so
     a future placeholder-stub regression (like the historical
     `signingInput := ByteArray.empty`) blocks merge automatically. -/
+@[default_target]
 lean_exe stub_audit where
   root := `Tools.StubAudit
   supportInterpreter := true
@@ -198,6 +230,7 @@ lean_exe stub_audit where
       * 1 — at least one forbidden-token match found.
 
     Allowlist (rare exceptions): `tools/naming_allowlist.txt`. -/
+@[default_target]
 lean_exe naming_audit where
   root := `NamingAudit
   supportInterpreter := true
@@ -215,6 +248,7 @@ lean_exe naming_audit where
       * 1 — at least one marker found.
 
     Allowlist: `tools/deferral_allowlist.txt`. -/
+@[default_target]
 lean_exe deferral_audit where
   root := `DeferralAudit
   supportInterpreter := true
@@ -235,6 +269,7 @@ lean_exe deferral_audit where
     Exit semantics:
       * 0 — no production module imports a Test module.
       * 1 — at least one violation found. -/
+@[default_target]
 lean_exe mock_import_audit where
   root := `Tools.MockImportAudit
   supportInterpreter := true
@@ -269,6 +304,7 @@ lean_lib LexAudit where
     (which imports `Lex.Tools.Lint`); this lets test files import
     `Lex.Tools.Lint`'s helpers without colliding with
     `Lex.Tools.Codegen`'s top-level `main`. -/
+@[default_target]
 lean_exe lex_lint where
   root := `Lex.Bin.Lint
   supportInterpreter := true
@@ -285,6 +321,7 @@ lean_exe lex_lint where
 
     The `def main` entry-point glue lives at
     `Lex/Bin/Codegen.lean` (mirrors `lex_lint`). -/
+@[default_target]
 lean_exe lex_codegen where
   root := `Lex.Bin.Codegen
   supportInterpreter := true
@@ -295,6 +332,7 @@ lean_exe lex_codegen where
     walking PRs that mutate Lex laws, and by CI to gate
     governance-critical changes (L007 mismatched version-bump,
     L016 missing refinement proof). -/
+@[default_target]
 lean_exe lex_diff where
   root := `Lex.Bin.Diff
   supportInterpreter := true
@@ -303,6 +341,7 @@ lean_exe lex_diff where
     Reads a Lex law / deployment file, normalises clause order
     + indentation + trailing whitespace, and emits the canonical
     form to stdout.  Idempotent: format-then-format = format. -/
+@[default_target]
 lean_exe lex_format where
   root := `Lex.Bin.Format
   supportInterpreter := true

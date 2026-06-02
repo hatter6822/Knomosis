@@ -3,7 +3,7 @@
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
 # Knomosis Fault-Proof Design Rationale
@@ -176,6 +176,44 @@ Together with the convergence theorem (#231:
 coherence theorem (#225:
 `recomputeCommitment_coherent_with_kernelOnlyApply`), these
 establish the trust-model upgrade at the type level.
+
+**Scope: the bridge ledger is out of the per-step fault proof (by
+design).**  The fault proof's per-step reference transition is
+`kernelOnlyApply` (`recomputeCommitment = commitExtendedState ∘
+kernelOnlyApply`), the kernel-EXECUTION semantics: it writes `base`
+balances, `nonces`, `registry`, and `localPolicies`, and *provably
+leaves the bridge ledger* (`consumed` / `pending` / `nextWdId`)
+unchanged — `Disputes.kernelOnlyApply_preserves_bridge`,
+`Disputes.kernelOnlyReplay_preserves_bridge`, and
+`FaultProof.applyCellWrites_to_state_preserves_bridge`.  So the
+bisection-adjudicated state-commitment chain holds the bridge
+sub-state CONSTANT across every step it adjudicates: even a
+`deposit` / `depositWithFee` / `withdraw` step re-derives only the
+balance / nonce effect on chain, never the `consumed` / `pending`
+mutation.
+
+This is sound because the bridge ledger has its own verification
+path, independent of the per-step bisection game:
+
+  * **Deposit-replay protection** is enforced at admission time by
+    `BridgeAdmissibleWith`'s deposit-id-freshness conjuncts (6 / 6b):
+    a bridge-signed deposit carrying a reused `depositId` is rejected
+    before it is ever applied or committed.
+  * **Withdrawal tracking** is verified on L1 by the §13
+    withdrawal-proof + finalisation chain (`Bridge.WithdrawalRoot`,
+    `Bridge.Finalisation`), which proves a pending withdrawal's
+    membership in the finalised L2 state root before the L1 bridge
+    contract pays out.
+
+The per-step bisection game therefore adjudicates the
+kernel-execution sub-state; the bridge ledger is a constant context
+within that game, secured by the two mechanisms above.  Bringing the
+bridge ledger's per-step evolution *into* the bisection game — so a
+disputed deposit's `consumed`-marking is itself re-executed on L1 —
+is a possible future hardening (it would require lifting the L1 step
+VM to model `applyActionToBridgeState` and matching the Solidity
+`executeStep` cell-write set); it is not needed for the soundness
+argument above and is tracked as future work.
 
 ---
 

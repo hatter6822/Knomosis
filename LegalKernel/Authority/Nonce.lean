@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -78,6 +79,37 @@ namespace BudgetPolicy
     Clamps `actionCost` to at least `1` to avoid zero-cost spam. -/
 def mkBounded (freeTier actionCost currentEpoch : Nat) : BudgetPolicy :=
   .bounded freeTier (max actionCost 1) currentEpoch
+
+/-- GP.6.2 epoch advancement (OQ-GP-4, L2-action-clock realisation).
+
+    Advance the policy's `currentEpoch` as a deterministic function of
+    the action's `logIndex`.  With `epochLength = 0` the epoch is
+    fixed (the pre-epoch-advancement behaviour, used by default).
+    Otherwise the epoch increments by exactly one each time `logIndex`
+    crosses a positive multiple of `epochLength`.
+
+    **Incremental contract.**  This relies on `currentEpoch` already
+    holding the effective epoch for `logIndex − 1`.  The runtime
+    threads the effective epoch through `ExtendedState`, applying this
+    for every log index in order (`0, 1, 2, …`), so the per-step
+    delta (`0` or `1`) accumulates to `baseEpoch + logIndex /
+    epochLength`.  Because it is a pure function of
+    `(currentEpoch, epochLength, logIndex)`, `process` and `replay`
+    compute identical epochs over the same log-index sequence, so the
+    per-entry post-state hashes match (deterministic replay). -/
+def advanceEpoch (policy : BudgetPolicy) (epochLength logIndex : Nat) : BudgetPolicy :=
+  match policy with
+  | .bounded ft ac ce =>
+    if epochLength != 0 && logIndex != 0 && logIndex % epochLength == 0 then
+      .bounded ft ac (ce + 1)
+    else
+      .bounded ft ac ce
+
+/-- With `epochLength = 0`, `advanceEpoch` is the identity (the
+    backward-compatible default-runtime behaviour). -/
+@[simp] theorem advanceEpoch_zero (policy : BudgetPolicy) (logIndex : Nat) :
+    advanceEpoch policy 0 logIndex = policy := by
+  cases policy; simp [advanceEpoch]
 
 end BudgetPolicy
 
@@ -183,6 +215,21 @@ def ExtendedState.empty : ExtendedState where
   localPolicies := LocalPolicies.empty
   epochBudgets  := EpochBudgetState.empty
   budgetPolicy  := .bounded 0 1 0
+
+/-- GP.6.2: return `es` with its `budgetPolicy` epoch advanced for the
+    action at `logIndex` (see `BudgetPolicy.advanceEpoch`).  The
+    runtime applies this immediately before the budget gate so the
+    gate sees the effective epoch; the gate, its theorems, and every
+    other sub-state are untouched.  With `epochLength = 0` this is the
+    identity, preserving the pre-epoch-advancement runtime exactly. -/
+def ExtendedState.withAdvancedEpoch (es : ExtendedState) (epochLength logIndex : Nat) :
+    ExtendedState :=
+  { es with budgetPolicy := es.budgetPolicy.advanceEpoch epochLength logIndex }
+
+/-- `withAdvancedEpoch` with `epochLength = 0` is the identity. -/
+@[simp] theorem ExtendedState.withAdvancedEpoch_zero (es : ExtendedState) (logIndex : Nat) :
+    es.withAdvancedEpoch 0 logIndex = es := by
+  simp [ExtendedState.withAdvancedEpoch]
 
 /-- GP.3.1 policy-default lemma: genesis extended state starts in
     bounded budget mode. -/

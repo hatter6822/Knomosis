@@ -1,0 +1,148 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# Solidity-side CI.
+#
+# Runs in parallel to (and independent of) the Lean-side `ci.yml` and
+# the Rust-side `ci-rust.yml`.  Path-filtered to `solidity/**` (and this
+# workflow file), so PRs that touch only Lean / Rust / docs do not
+# trigger it — preserving CI minutes and status-check noise.
+#
+# Two independent jobs:
+#
+#   1. `caps-audit` — the Workstream GP.5.2 constitutional fee-split-cap
+#      gate (`make audit-caps`) plus its self-test
+#      (`make audit-caps-selftest`).  Pure bash / grep; needs no
+#      Solidity toolchain, so it is fast and never blocks on a Foundry
+#      install.  This is the source-level half of the two-layer cap
+#      protection, and it fails the merge the instant a cap drifts.
+#
+#   2. `forge` — `forge build` + `forge test` over the full contract
+#      suite.  This compiles the contracts and runs the runtime-level
+#      half of the cap protection
+#      (`BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned` and the
+#      constructor-guard revert tests), alongside every other forge
+#      suite.
+#
+# Keeping the two jobs separate means a cap drift is caught by the fast,
+# toolchain-free `caps-audit` job even while the heavier `forge` job is
+# still compiling.
+#
+# Third-party action pinning.  Per CLAUDE.md / Genesis Plan §13.6, every
+# third-party action is pinned to a full-length commit SHA; the comment
+# alongside each `uses:` records the human-readable tag.  Foundry is
+# installed from a version-pinned release artifact (matching
+# `solidity/README.md`) rather than a third-party action, so no
+# un-pinnable action enters the supply chain.  `forge` auto-manages the
+# solc version pinned in `foundry.toml` (0.8.20) via svm on first build.
+
+name: CI (Solidity)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'solidity/**'
+      - '.github/workflows/ci-solidity.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'solidity/**'
+      - '.github/workflows/ci-solidity.yml'
+
+# Cancel in-progress runs of the same workflow on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only token; no workflow step writes to the repo.
+permissions:
+  contents: read
+
+# Every `run:` step executes from the Solidity package root.
+defaults:
+  run:
+    working-directory: solidity
+
+jobs:
+  caps-audit:
+    name: fee-split-cap audit gate (GP.5.2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (same SHA pinned by ci.yml / ci-rust.yml).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: make audit-caps (constitutional cap-drift gate)
+        # Pure grep/sed; asserts MAX_FEE_BPS_CAP / MIN_WEI_PER_BUDGET_UNIT
+        # / MAX_BUDGET_PER_DEPOSIT carry their canonical values in
+        # KnomosisBridge.sol.  Non-zero exit blocks the merge.
+        run: make audit-caps
+
+      - name: make audit-caps-selftest (gate self-test)
+        # Proves the gate accepts canonical source and rejects every
+        # drift class, so the tripwire cannot be silently disabled.
+        run: make audit-caps-selftest
+
+  forge:
+    name: forge build + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Use the project's CI profile (foundry.toml [profile.ci]) so fuzz
+    # tests run at the intended 1000 iterations rather than the local
+    # default of 256.  The profile inherits every default compile
+    # setting (solc path, via_ir, remappings), so only fuzz depth
+    # changes.
+    env:
+      FOUNDRY_PROFILE: ci
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1.
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Foundry v1.7.0
+        # Version-pinned release tarball (matches solidity/README.md);
+        # avoids a third-party action that cannot be SHA-pinned here.
+        # `--retry` guards against transient release-CDN hiccups on the
+        # ~98 MB download; the full-path `forge --version` verifies the
+        # binary actually runs before any PATH dependence.
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.foundry/bin"
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_amd64.tar.gz -o /tmp/foundry.tar.gz
+          tar xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
+          "$HOME/.foundry/bin/forge" --version
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Install solc 0.8.20
+        # foundry.toml pins `solc = "/usr/local/bin/solc"`, so forge uses
+        # this exact binary rather than an svm-managed one.  Install it
+        # there to match the contract's pinned compiler (and the setup in
+        # solidity/README.md).  Without this, `forge build` fails fast
+        # looking for the pinned binary.
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux -o /tmp/solc
+          sudo install -m 0755 /tmp/solc /usr/local/bin/solc
+          solc --version
+
+      - name: forge version (PATH check)
+        run: forge --version
+
+      - name: Vendor dependencies (OpenZeppelin v5.0.2 + forge-std v1.9.4)
+        # lib/* is gitignored; restore the pinned snapshots for CI.
+        run: make vendor-deps
+
+      - name: forge build
+        run: forge build
+
+      - name: forge test
+        run: forge test

@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Top-level orchestrator for the L1 ingestor.
 //!
@@ -859,7 +860,8 @@ mod tests {
         assert_eq!(recorded.len(), 1);
         match &recorded[0].unsigned.action {
             crate::action::Action::RegisterIdentity { actor, pk } => {
-                assert_eq!(*actor, 1);
+                // Fresh registration is issued id 3 post-GP.7.1.
+                assert_eq!(*actor, 3);
                 assert_eq!(pk.as_bytes(), &[0x02, 0xab, 0xcd]);
             }
             _ => panic!("expected RegisterIdentity"),
@@ -928,10 +930,10 @@ mod tests {
         assert_eq!(submitter_inner.len(), 1, "no duplicate submission");
         assert_eq!(watcher2.last_confirmed_block(), Some(0));
         // Address-book state survived the restart.  The
-        // `Submitted` record persisted the (addr, id=1)
-        // assignment; replay rebuilt it.
+        // `Submitted` record persisted the (addr, id=3)
+        // assignment (genesis start, post-GP.7.1); replay rebuilt it.
         let addr = EthAddress::from_bytes(&[0xaa; 20]).unwrap();
-        assert_eq!(watcher2.address_book().lookup(&addr), Some(1));
+        assert_eq!(watcher2.address_book().lookup(&addr), Some(3));
         // Nonce was bumped (the `RegisterIdentity` submission
         // bumped nonce from 0 to 1).
         assert_eq!(watcher2.next_nonce(), 1);
@@ -1203,8 +1205,9 @@ mod tests {
             assert_eq!(recorded.len(), 1);
             match &recorded[0].unsigned.action {
                 crate::action::Action::RegisterIdentity { actor, .. } => {
+                    // Fresh registration is issued id 3 post-GP.7.1.
                     assert_eq!(
-                        *actor, 1,
+                        *actor, 3,
                         "retry must emit fresh RegisterIdentity, NOT ReplaceKey"
                     );
                 }

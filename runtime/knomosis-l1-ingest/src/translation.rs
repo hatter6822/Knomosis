@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! L1 event → Knomosis `Action` translation.
 //!
@@ -158,6 +159,14 @@ pub fn preview_ingest(
             // `Bridge.Ingest.ingest` returns `none` for deposits
             // in MVP scope; deposit handling goes through
             // `applyActionToBridgeState` at the kernel level.
+            Translated::NoAction
+        }
+        IngestedEvent::DepositWithFeeInitiated { .. } => {
+            // Same as `DepositInitiated`: deposit materialisation is
+            // the sequencer's responsibility (chain-level follow-up),
+            // not the ingestor's, so no `Action` is emitted.  The
+            // ingestor recognises + decodes the event for observability
+            // and dedup symmetry with `DepositInitiated`.
             Translated::NoAction
         }
     }
@@ -353,15 +362,16 @@ mod tests {
         let unsigned = ingest(&mut book, &event, 0).unwrap();
         match &unsigned.action {
             Action::RegisterIdentity { actor: id, pk } => {
-                assert_eq!(*id, 1, "first assignment yields id 1");
+                // Genesis `next_actor_id` is 3 post-GP.7.1 (0/1/2 reserved).
+                assert_eq!(*id, 3, "first assignment yields id 3");
                 assert_eq!(pk.as_bytes(), pubkey.as_slice());
             }
             _ => panic!("expected RegisterIdentity"),
         }
         assert_eq!(unsigned.signer, BRIDGE_ACTOR_ID);
         assert_eq!(unsigned.nonce, 0);
-        // Address book was mutated.
-        assert_eq!(book.lookup(&actor), Some(1));
+        // Address book was mutated (fresh id 3 post-GP.7.1).
+        assert_eq!(book.lookup(&actor), Some(3));
     }
 
     /// Second `RegisteredECDSA` for the same address emits
@@ -392,7 +402,9 @@ mod tests {
         let unsigned = ingest(&mut book, &e2, 1).unwrap();
         match &unsigned.action {
             Action::ReplaceKey { actor: id, new_key } => {
-                assert_eq!(*id, 1, "rotation uses existing id");
+                // The first registration was issued id 3 (post-GP.7.1);
+                // the rotation reuses it.
+                assert_eq!(*id, 3, "rotation uses existing id");
                 assert_eq!(new_key.as_bytes(), new_pk.as_slice());
             }
             _ => panic!("expected ReplaceKey"),
@@ -439,6 +451,61 @@ mod tests {
         };
         let result = ingest(&mut book, &event, 0);
         assert!(result.is_none());
+        assert!(book.is_empty());
+    }
+
+    /// `DepositWithFeeInitiated` translates to no action, exactly like
+    /// `DepositInitiated` — deposit materialisation is the sequencer's
+    /// job (chain-level follow-up), not the ingestor's (GP.5.1).  The
+    /// ingestor recognises the event for observability/dedup symmetry.
+    #[test]
+    fn deposit_with_fee_emits_no_action() {
+        let mut book = AddressBook::new();
+        let sender = EthAddress::from_bytes(&[3u8; 20]).unwrap();
+        let event = IngestedEvent::DepositWithFeeInitiated {
+            sender,
+            resource_id: 7,
+            token: EthAddress::ZERO,
+            user_amount: [0; 32],
+            pool_amount: [0; 32],
+            budget_grant: 0,
+            depositor_nonce: 0,
+            receipt_hash: [0; 32],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        let result = ingest(&mut book, &event, 0);
+        assert!(result.is_none());
+        assert!(book.is_empty());
+    }
+
+    /// A BOLD fee-split deposit (`resourceId = 1`, Workstream GP.5.4)
+    /// translates to no action just like the ETH one — the translation
+    /// is resourceId-agnostic, so BOLD needs no per-resource branch.
+    #[test]
+    fn deposit_with_fee_bold_emits_no_action() {
+        let mut book = AddressBook::new();
+        let sender = EthAddress::from_bytes(&[3u8; 20]).unwrap();
+        let event = IngestedEvent::DepositWithFeeInitiated {
+            sender,
+            resource_id: 1, // RESOURCE_ID_BOLD
+            token: EthAddress::from_bytes(&[
+                0x64, 0x40, 0xf1, 0x44, 0xb7, 0xe5, 0x0d, 0x6a, 0x84, 0x39, 0x33, 0x65, 0x10, 0x31,
+                0x2d, 0x2f, 0x54, 0xbe, 0xb0, 0x1d,
+            ])
+            .unwrap(),
+            user_amount: [0; 32],
+            pool_amount: [0; 32],
+            budget_grant: 33,
+            depositor_nonce: 7,
+            receipt_hash: [0; 32],
+            block_number: 1,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        let result = ingest(&mut book, &event, 0);
+        assert!(result.is_none(), "BOLD fee-split deposit -> NoAction");
         assert!(book.is_empty());
     }
 

@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -309,6 +310,58 @@ def tests : List TestCase :=
         let postBal := LegalKernel.getBalance es'.base 1 10
         assertEq (expected := 150) (actual := postBal)
                  "self-credit: pre + userAmount + poolAmount"
+    }
+  -- Bridge-scope invariant: kernelOnlyApply (the fault-proof per-step
+  -- reference) never mutates the bridge ledger, even on a deposit.
+  , { name := "kernelOnlyApply leaves the bridge consumed map unchanged on a deposit"
+    , body := do
+        -- Pre-state carrying one already-consumed deposit (non-empty bridge).
+        let es0 := ExtendedState.empty
+        let bridge0 := Bridge.BridgeState.empty.markConsumed 7
+          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0 })
+        let es : ExtendedState := { es0 with bridge := bridge0 }
+        -- Apply a FRESH deposit (depositId 99) via the fault-proof
+        -- reference kernel step.
+        let depSigned : SignedAction :=
+          { action := .deposit 1 10 25 99, signer := Bridge.bridgeActor,
+            nonce := 0, sig := ByteArray.empty }
+        let entry : LogEntry :=
+          { prevHash := ByteArray.empty, signedAction := depSigned,
+            postStateHash := ByteArray.empty }
+        let es' := kernelOnlyApply es entry
+        -- The bridge ledger is UNCHANGED: the prior entry survives and
+        -- depositId 99 is NOT marked consumed (bridge-scope boundary —
+        -- bridge mutation happens only at the admission layer).
+        assertEq (expected := true) (actual := es'.bridge.isConsumed 7)
+          "prior consumed entry preserved"
+        assertEq (expected := false) (actual := es'.bridge.isConsumed 99)
+          "deposit NOT marked consumed by kernelOnlyApply"
+        assertEq (expected := bridge0.consumed.size) (actual := es'.bridge.consumed.size)
+          "consumed map size unchanged"
+        -- But the kernel effect DID happen: recipient credited.
+        assertEq (expected := 25) (actual := LegalKernel.getBalance es'.base 1 10)
+          "kernel-level credit applied"
+    }
+  , { name := "kernelOnlyApply_preserves_bridge: term-level API"
+    , body := do
+        let _t : ∀ (es : ExtendedState) (entry : LogEntry),
+                   (kernelOnlyApply es entry).bridge = es.bridge :=
+          kernelOnlyApply_preserves_bridge
+        pure ()
+    }
+  , { name := "kernelOnlyReplay_preserves_bridge: term-level API"
+    , body := do
+        let _t : ∀ (genesis : ExtendedState) (entries : List LogEntry),
+                   (kernelOnlyReplay genesis entries).bridge = genesis.bridge :=
+          kernelOnlyReplay_preserves_bridge
+        pure ()
+    }
+  , { name := "applyCellWrites_to_state_preserves_bridge: term-level API"
+    , body := do
+        let _t : ∀ (es : ExtendedState) (st : SignedAction),
+                   (applyCellWrites_to_state es st).bridge = es.bridge :=
+          applyCellWrites_to_state_preserves_bridge
+        pure ()
     }
   ]
 

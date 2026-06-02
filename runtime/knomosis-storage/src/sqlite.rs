@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! SQLite-backed implementation of [`crate::storage::Storage`]
 //! (RH-E.0.b + RH-E.0.c).
@@ -337,6 +338,23 @@ impl SqliteStorage {
         self.conn.lock().unwrap_or_else(|p| p.into_inner())
     }
 
+    /// Acquire the connection mutex.  Public entry point for
+    /// crate-internal modules (the [`crate::budget_storage`]
+    /// module's `SqliteBudgetTransaction` holds this guard for
+    /// the transaction's lifetime).  See the module's design note
+    /// re. mutex discipline.
+    ///
+    /// Downstream crates (knomosis-indexer, etc.) MUST NOT call
+    /// this directly — they consume the typed
+    /// [`crate::budget_storage::BudgetStorage`] /
+    /// [`crate::storage::Storage`] trait surfaces instead.  The
+    /// method is `pub(crate)` to lexically enforce the discipline
+    /// (Rust visibility) — only the storage crate's own modules
+    /// may bypass the trait abstractions.
+    pub(crate) fn lock_connection(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.lock()
+    }
+
     /// Direct access to the schema version after open.  Mainly for
     /// tests; production code uses the trait surface.
     ///
@@ -346,6 +364,29 @@ impl SqliteStorage {
     pub fn schema_version(&self) -> Result<u32, StorageError> {
         let conn = self.lock();
         crate::migration::current_schema_version(&conn)
+    }
+
+    /// Begin a combined `(kv + budget tables)` transaction.  See
+    /// [`crate::combined_transaction::SqliteCombinedTransaction`]
+    /// for the operation surface.  The transaction holds the
+    /// connection mutex for its lifetime so all operations run
+    /// atomically; downstream callers (the
+    /// `knomosis-indexer::apply_batch` driver) use this primitive
+    /// to keep the balance view (kv-keyspace) and the GP.6.4
+    /// budget views (SQL tables) in lockstep.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::combined_transaction::CombinedTransactionError`]
+    /// on `BEGIN IMMEDIATE` failure.
+    pub fn combined_transaction(
+        &self,
+    ) -> Result<
+        crate::combined_transaction::SqliteCombinedTransaction<'_>,
+        crate::combined_transaction::CombinedTransactionError,
+    > {
+        let guard = self.lock();
+        crate::combined_transaction::SqliteCombinedTransaction::begin(guard)
     }
 }
 

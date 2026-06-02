@@ -1,0 +1,214 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# Keccak-linked cross-stack verification CI.
+#
+# The continuous counterpart to the manual "throwaway build" the
+# workstream plans describe.  It is the ONLY job in the repository that
+# proves Lean's hashing == the EVM's keccak256, byte-for-byte, across
+# every cross-stack corpus.
+#
+# Why this is a SEPARATE workflow (not a step in `ci.yml`):
+#
+#   * The Lean kernel is hash-AGNOSTIC.  `Runtime.Hash.hashBytes` is an
+#     `@[extern]` swap-point whose DEFAULT body is the dependency-free
+#     FNV-1a-64 fallback, so `lake build` / `lake test` (and the whole
+#     of `ci.yml`) run standalone with no Rust / keccak dependency.  The
+#     committed cross-stack corpora are generated under that fallback
+#     and their keccak-dependent assertions are gated off
+#     (`isKeccak256Linked = false`).
+#   * This job closes the loop: it links the REAL keccak256 adaptor
+#     (`knomosis-hash-keccak256`, backed by the audited `sha3` crate)
+#     into the Lean test driver IN PLACE OF the fallback, regenerates
+#     the corpora with `isKeccak256Linked = true`, and runs the Solidity
+#     consumers so their keccak-gated byte-equivalence assertions
+#     EXECUTE against the EVM `keccak256` opcode instead of skipping.
+#   * It therefore needs all THREE toolchains (Lean, Rust, Foundry),
+#     which is why it does not belong in the path-filtered single-stack
+#     workflows.
+#
+# All orchestration lives in `scripts/verify_keccak_crossstack.sh`
+# (pure orchestration; no source edits; restores the FNV-default corpora
+# on exit).  This workflow only provisions the toolchains and invokes it.
+#
+# Trigger policy (cost vs. coverage):
+#
+#   * `pull_request` / `push` to main are PATH-FILTERED to the
+#     hash-interface + cross-stack surface (the keccak adaptor, the Lean
+#     extern interface, the cross-stack fixture generators / consumers,
+#     the lakefile extern_lib swap, the verify script, this workflow).
+#     These are the surfaces whose change is most likely to break
+#     Lean<->EVM hash equivalence directly, so they get fast PR feedback.
+#   * `schedule` (nightly) is the COMPREHENSIVE backstop: byte-layout
+#     drift can originate anywhere in the encoding / fault-proof / step-VM
+#     surface (which is too broad to path-filter without running this
+#     heavy job on nearly every PR), so a full keccak-linked run every
+#     night catches that class within a day.
+#   * `workflow_dispatch` allows an on-demand run (e.g. before a release
+#     tag, or to confirm a fix on a feature branch).
+#
+# Third-party action pinning.  Per CLAUDE.md / Genesis Plan §13.6, every
+# third-party action is pinned to a full-length commit SHA; the comment
+# alongside each `uses:` records the human-readable tag the SHA
+# corresponds to at pin time.  Foundry / solc are installed from
+# version-pinned release artifacts (matching `ci-solidity.yml` and
+# `solidity/README.md`), so no un-pinnable action enters the supply
+# chain.
+
+name: CI (Keccak Cross-Stack)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'runtime/knomosis-hash-keccak256/**'
+      - 'runtime/knomosis-hash-fallback.c'
+      - 'LegalKernel/Runtime/Hash.lean'
+      - 'LegalKernel/Test/Bridge/HashAdaptor.lean'
+      - 'LegalKernel/Test/Bridge/CrossCheck/**'
+      - 'solidity/test/CrossCheck/**'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'scripts/verify_keccak_crossstack.sh'
+      - '.github/workflows/ci-keccak-crossstack.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'runtime/knomosis-hash-keccak256/**'
+      - 'runtime/knomosis-hash-fallback.c'
+      - 'LegalKernel/Runtime/Hash.lean'
+      - 'LegalKernel/Test/Bridge/HashAdaptor.lean'
+      - 'LegalKernel/Test/Bridge/CrossCheck/**'
+      - 'solidity/test/CrossCheck/**'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'scripts/verify_keccak_crossstack.sh'
+      - '.github/workflows/ci-keccak-crossstack.yml'
+  schedule:
+    # Nightly at 06:00 UTC — the comprehensive backstop for byte-layout
+    # drift originating outside the path-filtered PR surface.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+# Cancel in-progress runs of the same workflow on the same ref.  Saves
+# CI minutes when a contributor force-pushes during review.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# `contents: read` is the read-only token used by `actions/checkout`.
+# `actions: write` is the narrow extra scope `Swatinem/rust-cache` needs
+# to save cache entries via the GitHub Actions Cache service — it is NOT
+# a repo-write permission.  No workflow step writes to the repo's git
+# contents.
+permissions:
+  contents: read
+  actions: write
+
+env:
+  # Plain-text cargo output so any log-grep filters behave predictably;
+  # matches the lake- / rust-side CI discipline.
+  CARGO_TERM_COLOR: never
+  # Fail fast on incremental-build artifact corruption.
+  CARGO_INCREMENTAL: '0'
+  # Surface backtrace info on test failure for quicker diagnosis.
+  RUST_BACKTRACE: '1'
+
+jobs:
+  keccak-crossstack:
+    name: Lean<->EVM keccak256 byte-equivalence
+    runs-on: ubuntu-latest
+    # Generous budget: this job does a keccak-linked full Lean build, a
+    # Rust staticlib build, corpus regeneration, and the full forge suite
+    # (incl. the step-VM byte-equivalence re-execution of every happy
+    # fixture under a raised gas limit).
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (same SHA pinned by ci.yml / ci-rust.yml
+        # / ci-solidity.yml).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Lean toolchain
+        # leanprover/lean-action v1.5.0 (== v1 tag at pin date).  Reads
+        # `lean-toolchain` automatically, installs elan + lean + lake,
+        # and caches the install across runs.  We do NOT delegate build /
+        # test to the action — the verify script drives every Lean
+        # invocation (it must link the keccak staticlib first).
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9
+        with:
+          build: false
+          test: false
+          lint: false
+
+      - name: Install Rust toolchain (per rust-toolchain.toml)
+        # rustup is preinstalled on ubuntu-latest; the pinned channel
+        # lives in `runtime/rust-toolchain.toml` and is auto-resolved.
+        # `rustup show` materialises the install + makes it visible in
+        # the CI log.  The keccak adaptor needs no extra components.
+        shell: bash
+        working-directory: runtime
+        run: |
+          rustup show active-toolchain || true
+          rustup show
+          cargo --version
+          rustc --version
+
+      - name: Cache cargo artifacts
+        # Swatinem/rust-cache v2.7.7 (same SHA pinned by ci-rust.yml).
+        # Caches the cargo registry + git checkout cache.  The keccak
+        # staticlib itself is built into an isolated, rm-rf'd target dir
+        # by the verify script, so it is intentionally NOT cached (each
+        # run rebuilds the FFI shim from scratch); only dependency
+        # downloads are accelerated here.
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: runtime
+          shared-key: keccak-crossstack
+
+      - name: Install Foundry v1.7.0
+        # Version-pinned release tarball (matches ci-solidity.yml /
+        # solidity/README.md); avoids a third-party action that cannot be
+        # SHA-pinned here.  `--retry` guards transient release-CDN
+        # hiccups; the full-path `forge --version` verifies the binary
+        # runs before any PATH dependence.
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.foundry/bin"
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_amd64.tar.gz -o /tmp/foundry.tar.gz
+          tar xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
+          "$HOME/.foundry/bin/forge" --version
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Install solc 0.8.20
+        # foundry.toml pins `solc = "/usr/local/bin/solc"`, so forge uses
+        # this exact binary.  Install it there to match the contract's
+        # pinned compiler (and the setup in solidity/README.md).
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux -o /tmp/solc
+          sudo install -m 0755 /tmp/solc /usr/local/bin/solc
+          solc --version
+
+      - name: Vendor Solidity dependencies (OpenZeppelin v5.0.2 + forge-std v1.9.4)
+        # solidity/lib/* is gitignored; the verify script runs `forge
+        # test`, which needs the pinned snapshots restored first.
+        working-directory: solidity
+        run: make vendor-deps
+
+      - name: Keccak-linked cross-stack verification
+        # The whole point of the workflow.  Links the real keccak256
+        # staticlib into the Lean test driver, regenerates every
+        # cross-stack corpus with isKeccak256Linked=true, asserts the
+        # link took (fails loudly otherwise — never a vacuous pass), and
+        # runs the Solidity consumers so their keccak-gated
+        # byte-equivalence assertions execute against the EVM keccak256
+        # opcode.  Restores the FNV-default corpora on exit.
+        run: ./scripts/verify_keccak_crossstack.sh

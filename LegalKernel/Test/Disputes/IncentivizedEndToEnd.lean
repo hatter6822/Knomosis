@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -322,8 +323,10 @@ def eventEmissionTests : List TestCase :=
           { action := .reward 0 challenger 100, signer := challenger
             nonce := 0, sig := ⟨#[]⟩ }
         let evs := extractEvents preState post st
-        -- 3 events: balanceChanged + rewardIssued + nonceAdvanced.
-        assertEq (3 : Nat) evs.length "3 events"
+        -- 4 events post-GP.6.4: balanceChanged + rewardIssued +
+        -- budgetConsumed (signer is challenger, non-bridge, so
+        -- the genesis policy's actionCost=1 fires) + nonceAdvanced.
+        assertEq (4 : Nat) evs.length "4 events"
         let rewardIssued := evs.filter Event.isRewardIssued
         assertEq (1 : Nat) rewardIssued.length "1 rewardIssued event"
     }

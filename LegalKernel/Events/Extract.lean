@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -413,11 +414,43 @@ def extractEvents
       else
         []
     | _                                     => []
+  -- Workstream GP / GP.6.4: budget-consumption event.  Emitted on
+  -- every admitted action whose signer is NOT exempt from
+  -- consumption (i.e., signer ≠ bridgeActor) and whose
+  -- `BudgetPolicy.bounded.actionCost > 0`.  The amount EXACTLY
+  -- matches the admission gate's consume step
+  -- (`apply_admissible_with_budget`, GP.3.2): non-bridge signers
+  -- pay `actionCost` per admitted action; bridgeActor is exempt
+  -- (GP.3.2.c, OQ-GP-6).
+  --
+  -- **Why we don't compute from pre/post deltas.**  Topup-class
+  -- actions (`topUpActionBudget`, `topUpActionBudgetFor`) have
+  -- both a credit AND a debit; the net `pre - post` confounds
+  -- them.  Indexers consuming this event want the CONSUMPTION
+  -- specifically (so they can compute remaining = freeTier +
+  -- grants - consumption), so we derive it directly from the
+  -- BudgetPolicy.
+  --
+  -- **Atomic with admission.**  The runtime invokes
+  -- `extractEvents` only when admission succeeded.  Per the
+  -- GP.3.2 invariant, admission succeeded ⇒ either signer is
+  -- bridgeActor (no consumption) or `current_budget ≥ actionCost`
+  -- (consumption of exactly `actionCost`).
+  let budgetConsumedEvts : List Event :=
+    if st.signer = Bridge.bridgeActor then
+      []  -- bridgeActor exemption (GP.3.2.c / OQ-GP-6)
+    else
+      match preState.budgetPolicy with
+      | .bounded _freeTier actionCost _currentEpoch =>
+        if actionCost > 0 then
+          [Event.budgetConsumed st.signer actionCost]
+        else
+          []  -- zero-cost configuration: nothing to emit
   let oldN     := expectsNonce preState  st.signer
   let newN     := expectsNonce postState st.signer
   let nonceEvt := [Event.nonceAdvanced st.signer oldN newN]
   actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts ++ lpEvts ++
-    faultProofEvts ++ gasPoolEvts ++ nonceEvt
+    faultProofEvts ++ gasPoolEvts ++ budgetConsumedEvts ++ nonceEvt
 
 /-! ## Determinism (the §8.9.1 headline property)
 
@@ -458,22 +491,36 @@ theorem extractEvents_nonempty
   simp [List.length_append] at h_last
 
 /-- `freezeResource` emits exactly one event (the nonce advance) and
-    no action events. -/
+    no action events, when the signer is exempt from budget consumption
+    (i.e., the bridgeActor — see GP.3.2.c / OQ-GP-6).  The `h_bridge`
+    hypothesis is the load-bearing assumption that suppresses the
+    GP.6.4 `budgetConsumed` event.  Non-bridge signers under a
+    `.bounded _ ac _` policy with `ac > 0` additionally emit
+    `Event.budgetConsumed signer ac` per
+    `extractEvents_freeze_emits_budgetConsumed_for_non_bridge`. -/
 theorem extractEvents_freeze_only_nonce
     (pre post : ExtendedState) (r : ResourceId)
-    (signer : ActorId) (nonce : Nonce) (sig : Signature) :
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h_bridge : signer = Bridge.bridgeActor) :
     extractEvents pre post ⟨.freezeResource r, signer, nonce, sig⟩ =
     [Event.nonceAdvanced signer (expectsNonce pre signer) (expectsNonce post signer)] := by
-  rfl
+  subst h_bridge
+  simp [extractEvents, actionEvents]
 
-/-- `replaceKey` emits the registration event, then the nonce event. -/
+/-- `replaceKey` emits the registration event, then the nonce event,
+    when the signer is exempt from budget consumption (bridgeActor).
+    The `h_bridge` hypothesis suppresses the GP.6.4 `budgetConsumed`
+    event; non-bridge signers under a bounded policy emit the
+    consumption event additionally (see GP.6.4 documentation). -/
 theorem extractEvents_replaceKey_emits_registration
     (pre post : ExtendedState) (actor : ActorId) (newKey : PublicKey)
-    (signer : ActorId) (nonce : Nonce) (sig : Signature) :
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h_bridge : signer = Bridge.bridgeActor) :
     extractEvents pre post ⟨.replaceKey actor newKey, signer, nonce, sig⟩ =
     [Event.identityRegistered actor newKey,
      Event.nonceAdvanced signer (expectsNonce pre signer) (expectsNonce post signer)] := by
-  rfl
+  subst h_bridge
+  simp [extractEvents, actionEvents]
 
 /-! ## Workstream C.5 — bridge event extraction
 
@@ -500,10 +547,11 @@ theorem extractEvents_deposit_emits_credited
     extractEvents pre post
       ⟨.deposit r recipient amount d, signer, nonce, sig⟩ := by
   unfold extractEvents
-  -- Full output: actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
-  --              ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ nonceEvt.
+  -- Full output (post-GP.6.4): actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
+  --   ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ budgetConsumedEvts ++ nonceEvt.
   show _ ∈ _ ++ _ ++ [Event.depositCredited r recipient amount d]
-                ++ _ ++ _ ++ _ ++ _
+                ++ _ ++ _ ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
@@ -523,7 +571,8 @@ theorem extractEvents_withdraw_emits_requested
       ⟨.withdraw r sender amount rcp, signer, nonce, sig⟩ := by
   unfold extractEvents
   show _ ∈ _ ++ _ ++ [Event.withdrawalRequested r sender amount rcp pre.bridge.nextWdId]
-                ++ _ ++ _ ++ _ ++ _
+                ++ _ ++ _ ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
@@ -550,10 +599,11 @@ theorem extractEvents_declareLocalPolicy_emits_localPolicyDeclared
     extractEvents pre post
       ⟨.declareLocalPolicy p, signer, nonce, sig⟩ := by
   unfold extractEvents
-  -- Output shape (post-GP): actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
-  --                          ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ nonceEvt.
+  -- Output shape (post-GP.6.4): actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
+  --   ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ budgetConsumedEvts ++ nonceEvt.
   -- The localPolicyDeclared event is in the `lpEvts` segment (position 4).
-  show _ ∈ _ ++ _ ++ _ ++ [Event.localPolicyDeclared signer p] ++ _ ++ _ ++ _
+  show _ ∈ _ ++ _ ++ _ ++ [Event.localPolicyDeclared signer p] ++ _ ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
@@ -569,7 +619,8 @@ theorem extractEvents_revokeLocalPolicy_emits_localPolicyRevoked
     extractEvents pre post
       ⟨.revokeLocalPolicy, signer, nonce, sig⟩ := by
   unfold extractEvents
-  show _ ∈ _ ++ _ ++ _ ++ [Event.localPolicyRevoked signer] ++ _ ++ _ ++ _
+  show _ ∈ _ ++ _ ++ _ ++ [Event.localPolicyRevoked signer] ++ _ ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
@@ -596,10 +647,11 @@ theorem extractEvents_faultProofChallenge_emits_gameOpened
     extractEvents pre post
       ⟨.faultProofChallenge bh sIdx eIdx cc, signer, nonce, sig⟩ := by
   unfold extractEvents
-  -- Output shape (post-GP): actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
-  --                          ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ nonceEvt.
+  -- Output shape (post-GP.6.4): actEvts ++ topUpSignerBalanceEvt ++ bridgeEvts
+  --   ++ lpEvts ++ faultProofEvts ++ gasPoolEvts ++ budgetConsumedEvts ++ nonceEvt.
   -- faultProofGameOpened is in the `faultProofEvts` segment (position 5).
-  show _ ∈ _ ++ _ ++ _ ++ _ ++ [Event.faultProofGameOpened 0 signer sIdx eIdx bh] ++ _ ++ _
+  show _ ∈ _ ++ _ ++ _ ++ _ ++ [Event.faultProofGameOpened 0 signer sIdx eIdx bh] ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
@@ -618,7 +670,8 @@ theorem extractEvents_faultProofResolution_emits_gameSettled
     extractEvents pre post
       ⟨.faultProofResolution bh gid winner rfi, signer, nonce, sig⟩ := by
   unfold extractEvents
-  show _ ∈ _ ++ _ ++ _ ++ _ ++ [Event.faultProofGameSettled gid winner signer 0] ++ _ ++ _
+  show _ ∈ _ ++ _ ++ _ ++ _ ++ [Event.faultProofGameSettled gid winner signer 0] ++ _ ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
@@ -653,10 +706,11 @@ theorem extractEvents_depositWithFee_emits_credited
                         budgetGrant depositId, signer, nonce, sig⟩ := by
   unfold extractEvents
   -- The depositWithFeeCredited event is in the `gasPoolEvts`
-  -- segment (position 6 in the 7-segment output list).
+  -- segment (position 6 in the 8-segment post-GP.6.4 output list).
   show _ ∈ _ ++ _ ++ _ ++ _ ++ _ ++
             [Event.depositWithFeeCredited r recipient poolActor userAmount
-                                            poolAmount budgetGrant depositId] ++ _
+                                            poolAmount budgetGrant depositId] ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
   exact List.mem_singleton.mpr rfl
@@ -678,7 +732,45 @@ theorem extractEvents_topUpActionBudget_emits_topUp
   -- The actionBudgetTopUp event is in the `gasPoolEvts` segment.
   show _ ∈ _ ++ _ ++ _ ++ _ ++ _ ++
             [Event.actionBudgetTopUp signer gasResource gasAmount budgetIncrement
-                                       poolActor] ++ _
+                                       poolActor] ++ _ ++ _
+  refine List.mem_append.mpr (Or.inl ?_)
+  refine List.mem_append.mpr (Or.inl ?_)
+  refine List.mem_append.mpr (Or.inr ?_)
+  exact List.mem_singleton.mpr rfl
+
+/-! ## Workstream GP / GP.6.4 — budget-consumption event extraction
+
+The `budgetConsumed` event is emitted on every admitted action whose
+signer is NOT exempt from consumption (i.e., signer ≠ bridgeActor)
+and whose `BudgetPolicy.bounded.actionCost > 0`.  Bridge-signed
+actions never emit `budgetConsumed` because the bridgeActor is
+exempt from consumption per GP.3.2.c / OQ-GP-6. -/
+
+/-- GP.6.4: a non-bridge signer's admitted action under a
+    `.bounded freeTier actionCost _` policy with `actionCost > 0`
+    emits a `budgetConsumed signer actionCost` event in the
+    output list.  Hypotheses:
+      * `h_not_bridge`: the signer is NOT the bridgeActor.
+      * `h_policy`: the deployment uses a `.bounded` policy with
+        the given `actionCost`.
+      * `h_cost`: the actionCost is positive (so consumption
+        actually happens and the event is emitted, not
+        delta-filtered). -/
+theorem extractEvents_emits_budgetConsumed_for_non_bridge_signer
+    (pre post : ExtendedState) (st : SignedAction) (actionCost : Nat)
+    (h_not_bridge : st.signer ≠ Bridge.bridgeActor)
+    (h_policy : ∃ freeTier currentEpoch,
+      pre.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h_cost : actionCost > 0) :
+    Event.budgetConsumed st.signer actionCost ∈ extractEvents pre post st := by
+  obtain ⟨freeTier, currentEpoch, h_eq⟩ := h_policy
+  unfold extractEvents
+  -- The budgetConsumedEvts is in the post-GP.6.4 7th segment of an
+  -- 8-segment output list; reduce the if-then-else to its non-empty
+  -- branch using the three hypotheses.
+  simp only [h_eq, if_neg h_not_bridge, if_pos h_cost]
+  -- Now budgetConsumedEvts = [Event.budgetConsumed st.signer actionCost];
+  -- it's in position 7.
   refine List.mem_append.mpr (Or.inl ?_)
   refine List.mem_append.mpr (Or.inr ?_)
   exact List.mem_singleton.mpr rfl

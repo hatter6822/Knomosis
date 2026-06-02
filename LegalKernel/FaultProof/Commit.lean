@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -523,7 +524,8 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
                  (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8
   /-- Each deposit record's fields fit. -/
   bs_cons_rec : ∀ p ∈ es.bridge.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
+                p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8
   /-- The bridge pending-map pair-list length fits. -/
   bs_pend_len : es.bridge.pending.toList.length < 256 ^ 8
   /-- Each per-withdrawal-id fits. -/

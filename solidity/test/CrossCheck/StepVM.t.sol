@@ -6,8 +6,8 @@ import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
-///         `step_vm.json` fixture (48 entries; #226 / #251
-///         coherence corpus).
+///         `step_vm.json` fixture (248 entries post-GP.5.3; #226 /
+///         #251 coherence corpus).
 ///
 /// @dev    **Two commits per entry.**  Each fixture entry carries
 ///         two distinct 32-byte hashes:
@@ -54,26 +54,27 @@ contract StepVMCrossCheck is CrossCheckFramework {
         uint256 count = vm.parseJsonUint(raw, ".count");
         uint256 countTransfer = vm.parseJsonUint(raw, ".countTransfer");
         uint256 countMint = vm.parseJsonUint(raw, ".countMint");
-        // GP.3.3: the corpus widened from 218 → 238 entries
-        // (Workstream-GP extension: +depositWithFee +
-        // topUpActionBudget at 10 entries each, on top of the
-        // 218 entries from SVC.5.e).  The new countX fields are
-        // checked individually below.
-        assertEq(count, 238, "GP.3.3: total corpus is 238 entries");
+        // GP.5.3: the corpus widened from 238 → 248 entries
+        // (delegated-top-up extension: +topUpActionBudgetFor at 10
+        // entries, on top of the 238 entries that already carried
+        // +depositWithFee + topUpActionBudget).  The new countX fields
+        // are checked individually below.
+        assertEq(count, 248, "GP.5.3: total corpus is 248 entries");
         assertEq(countTransfer, 24, "transfer count");
         assertEq(countMint, 24, "mint count");
     }
 
-    /// @notice GP.3.3 — verify the per-variant count fields are
+    /// @notice GP.5.3 — verify the per-variant count fields are
     ///         the expected 10 each for the 17 SVC.5.e variants
-    ///         plus the 2 Workstream-GP variants
-    ///         (depositWithFee + topUpActionBudget).
+    ///         plus the 3 Workstream-GP variants
+    ///         (depositWithFee + topUpActionBudget +
+    ///         topUpActionBudgetFor).
     function test_perVariant_counts() public view {
         if (!fixtureExists(FIXTURE_NAME)) {
             revert("fixture missing");
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        string[19] memory variantKeys = [
+        string[20] memory variantKeys = [
             ".countBurn",
             ".countFreezeResource",
             ".countReplaceKey",
@@ -93,7 +94,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
             ".countFaultProofResolution",
             // GP.3.3: two new variants at indices 19, 20.
             ".countDepositWithFee",
-            ".countTopUpActionBudget"
+            ".countTopUpActionBudget",
+            // GP.5.3: delegated top-up at index 21.
+            ".countTopUpActionBudgetFor"
         ];
         for (uint256 i = 0; i < variantKeys.length; i++) {
             uint256 c = vm.parseJsonUint(raw, variantKeys[i]);
@@ -145,10 +148,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 adversarialCount++;
             }
         }
-        // GP.3.3: 8 adversarial transfer + 8 adversarial mint +
-        // 19 x4 = 76 adversarial new-variant entries (17 SVC.5.e +
-        // 2 GP variants) = 92 total.
-        assertEq(adversarialCount, 92, "92 adversarial entries total (16 + 19 x4)");
+        // GP.5.3: 8 adversarial transfer + 8 adversarial mint +
+        // 20 x4 = 80 adversarial new-variant entries (17 SVC.5.e +
+        // 3 GP variants) = 96 total.
+        assertEq(adversarialCount, 96, "96 adversarial entries total (16 + 20 x4)");
     }
 
     /// @notice Per-entry happy-path check: every entry whose
@@ -174,9 +177,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 happyCount++;
             }
         }
-        // GP.3.3: 16 happy transfer + 16 happy mint + 19 x6 =
-        // 146 happy entries total (17 SVC.5.e + 2 GP variants).
-        assertEq(happyCount, 146, "146 happy entries total (32 + 19 x6)");
+        // GP.5.3: 16 happy transfer + 16 happy mint + 20 x6 =
+        // 152 happy entries total (17 SVC.5.e + 3 GP variants).
+        assertEq(happyCount, 152, "152 happy entries total (32 + 20 x6)");
     }
 
     /// @notice **Cross-stack per-entry byte-equivalence.**  The
@@ -232,8 +235,8 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         `KnomosisStepVM.executeStep`, and asserts byte
     ///         equality against `expectedStepVMCommitHex`.
     ///
-    ///         Under `isKeccak256Linked = true`, all 134 happy
-    ///         fixtures (16 transfer + 16 mint + 17 x6 other
+    ///         Under `isKeccak256Linked = true`, all 152 happy
+    ///         fixtures (16 transfer + 16 mint + 18 x6 other
     ///         variants) must produce identical bytes on both
     ///         sides.  Skipped under FNV fallback.
     ///
@@ -301,9 +304,9 @@ contract StepVMCrossCheck is CrossCheckFramework {
         for (uint256 i = 0; i < n; i++) {
             happyChecked += _checkEntryAtIndex(raw, i);
         }
-        // 16 transfer + 16 mint + 19 x6 other-variant happy entries
-        // (17 SVC.5.e + 2 Workstream-GP variants).
-        assertEq(happyChecked, 146, "expected 146 happy entries");
+        // 16 transfer + 16 mint + 20 x6 other-variant happy entries
+        // (17 SVC.5.e + 3 Workstream-GP variants).
+        assertEq(happyChecked, 152, "expected 152 happy entries");
     }
 
     /// @notice SVC.5.e+: cell-proof schema invariants are
@@ -372,12 +375,13 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @notice GP.3.3 — cross-stack byte-equivalence for
+    /// @notice GP.5.3 — cross-stack byte-equivalence for
     ///         the actionKind dispatch path.  Every happy fixture's
     ///         `actionKindByte` (the dispatcher byte) must be in
-    ///         0..20 (the Solidity `ActionKind` enum's valid range
+    ///         0..21 (the Solidity `ActionKind` enum's valid range
     ///         post-Workstream-GP: 0..18 SVC.5.e variants + 19
-    ///         (DepositWithFee) + 20 (TopUpActionBudget)).
+    ///         (DepositWithFee) + 20 (TopUpActionBudget) + 21
+    ///         (TopUpActionBudgetFor)).
     ///         An out-of-range dispatcher would revert in
     ///         `_toActionKind`.
     function test_perEntry_actionKindByte_in_range() public {
@@ -397,7 +401,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 continue;
             }
             uint256 kind = vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"));
-            assertLe(kind, 20, string.concat("actionKindByte out of range for ", base));
+            assertLe(kind, 21, string.concat("actionKindByte out of range for ", base));
         }
     }
 
@@ -470,6 +474,92 @@ contract StepVMCrossCheck is CrossCheckFramework {
             proofs[k] =
                 _parseCellProof(raw, string.concat(base, ".cellProofs[", vm.toString(k), "]"));
         }
+    }
+
+    /// @notice GP.5.3 — hash-independent **data-flow** layout pin for
+    ///         the packed primitives EVERY structured step-VM variant's
+    ///         commit preimage is built from.  Lean EMITS its actual
+    ///         `uint64BE` / `uint256BE` encoder output into
+    ///         `step_vm.json` (`packedLayoutGoldens[].encodedHex`);
+    ///         this test READS that output and recomputes
+    ///         `abi.encodePacked(uint64 / uint256)`, asserting byte
+    ///         equality.  Because the comparison is against the
+    ///         Lean-emitted bytes (the single source of truth) rather
+    ///         than an independently-maintained literal, a one-sided
+    ///         layout drift on either stack is caught mechanically.
+    ///         Runs in EVERY binding mode (no keccak needed — pure
+    ///         packed-integer layout), closing the gap the keccak-gated
+    ///         final-hash driver leaves open under the FNV fallback.
+    ///         The corpus includes full-32-byte-width `uint256` values
+    ///         (all-distinct bytes + the maximum) so the high 24 bytes
+    ///         — never set by the realistic balance domain — are pinned.
+    function test_packedLayoutGoldens_match_abiEncodePacked() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".packedLayoutGoldensCount");
+        assertGt(n, 0, "packedLayoutGoldens present");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".packedLayoutGoldens[", vm.toString(i), "]");
+            uint256 width = vm.parseJsonUint(raw, string.concat(base, ".width"));
+            // valueHex is a 32-byte BE hex string; parseJsonUint reads it
+            // losslessly into a uint256 (no JSON-float precision loss).
+            uint256 value = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
+            bytes memory leanEnc = vm.parseJsonBytes(raw, string.concat(base, ".encodedHex"));
+            if (width == 64) {
+                // casting to `uint64` is safe: a width-64 golden carries a
+                // value < 2^64 (the Lean side emits it as a uint64 field).
+                assertEq(
+                    // forge-lint: disable-next-line(unsafe-typecast)
+                    abi.encodePacked(uint64(value)),
+                    leanEnc,
+                    "uint64BE != abi.encodePacked(uint64)"
+                );
+            } else {
+                assertEq(
+                    abi.encodePacked(uint256(value)),
+                    leanEnc,
+                    "uint256BE != abi.encodePacked(uint256)"
+                );
+            }
+        }
+    }
+
+    /// @notice GP.5.3 — hash-independent **data-flow** pin of variant
+    ///         21's exact commit-preimage tail field layout.  Lean
+    ///         emits the tail (`uint64BE gasResource ++ uint64BE signer
+    ///         ++ uint256BE newSigner ++ uint64BE poolActor ++ uint256BE
+    ///         newPool`) plus its five component values; this test
+    ///         recomputes `abi.encodePacked(...)` from those components
+    ///         and asserts byte equality against the Lean-emitted
+    ///         `tailHex`.  Combined with (a) the
+    ///         `stepVMHash_topUpActionBudgetFor_kind` recipe-structure
+    ///         reduction and (b) the tag being
+    ///         `keccak256("topUpActionBudgetFor")` on both stacks, this
+    ///         proves the full variant-21 step-VM commit is
+    ///         byte-equivalent in every binding mode.
+    function test_variant21_tailGolden_matches_abiEncodePacked() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        // Components emitted as 32-byte BE hex (lossless parseJsonUint).
+        uint64 gr = uint64(vm.parseJsonUint(raw, ".variant21TailGolden.gasResource"));
+        uint64 signer = uint64(vm.parseJsonUint(raw, ".variant21TailGolden.signer"));
+        uint256 ns = vm.parseJsonUint(raw, ".variant21TailGolden.newSigner");
+        uint64 pa = uint64(vm.parseJsonUint(raw, ".variant21TailGolden.poolActor"));
+        uint256 np = vm.parseJsonUint(raw, ".variant21TailGolden.newPool");
+        bytes memory leanTail = vm.parseJsonBytes(raw, ".variant21TailGolden.tailHex");
+        bytes memory solTail = abi.encodePacked(gr, signer, ns, pa, np);
+        assertEq(solTail.length, 88, "tail = 8 + 8 + 32 + 8 + 32 = 88 bytes");
+        assertEq(
+            solTail,
+            leanTail,
+            "variant-21 tail layout: abi.encodePacked != Lean uint64BE/uint256BE"
+        );
     }
 
     /// @dev Deploy `KnomosisStepVM` for the byte-equivalence test.

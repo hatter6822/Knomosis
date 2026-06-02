@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Cross-stack fixture generator for RH-B.
 //!
@@ -20,8 +21,9 @@
 //! The fixtures cover every translatable event variant + several
 //! edge cases:
 //!
-//!   1. First-time `RegisteredECDSA` → `RegisterIdentity` (id 1).
-//!   2. Two distinct first-time registrations (ids 1 + 2).
+//!   1. First-time `RegisteredECDSA` → `RegisterIdentity` (id 3,
+//!      the genesis `next_actor_id` post-GP.7.1).
+//!   2. Two distinct first-time registrations (ids 3 + 4).
 //!   3. First-time + rotation (`RegisterIdentity` then
 //!      `ReplaceKey` for the same address).
 //!   4. `RegisteredEIP1271` first-time → `RegisterIdentity`
@@ -32,7 +34,7 @@
 //!   8. Edge: max-realistic pubkey (33-byte SEC1-compressed).
 //!   9. Edge: large nonce (near `u64::MAX`).
 //!   10. Edge: large address book (16 entries) prior to a fresh
-//!       registration that bumps to id 17.
+//!       registration that bumps to id 19 (ids 3..18 pre-assigned).
 
 use std::env;
 use std::path::PathBuf;

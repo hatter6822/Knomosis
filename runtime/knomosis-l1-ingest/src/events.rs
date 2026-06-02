@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Knomosis  - A Societal Kernel
 // Copyright (C) 2026  Adam Hall
 // This program comes with ABSOLUTELY NO WARRANTY.
 // This is free software, and you are welcome to redistribute it
-// under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! L1 event types decoded from raw Ethereum log records.
 //!
@@ -51,8 +52,6 @@
 //! Decoding is panic-free on attacker input — every malformed
 //! offset / length / truncation returns a typed [`DecodeError`].
 
-use sha3::{Digest, Keccak256};
-
 use crate::action::EthAddress;
 
 /// A 32-byte topic hash.  Used both for event signatures (the
@@ -60,6 +59,52 @@ use crate::action::EthAddress;
 /// indexed event parameters (left-padded for primitives,
 /// `keccak256(payload)` for dynamic types).
 pub type TopicHash = [u8; 32];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for
+/// `RegisteredECDSA(address,bytes)`.  See [`hard-pinned topics`].
+///
+/// [`hard-pinned topics`]: EventTopic::hash
+pub const REGISTERED_ECDSA_TOPIC: TopicHash = [
+    0xce, 0x31, 0xc5, 0x0c, 0x89, 0x2e, 0x89, 0x43, 0x2f, 0x74, 0x80, 0x0e, 0x82, 0x6e, 0x0b, 0xb0,
+    0x76, 0xfe, 0x2a, 0x8b, 0x7d, 0xc9, 0x4c, 0xdc, 0xb4, 0x00, 0x48, 0x03, 0xab, 0x13, 0x71, 0x91,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for
+/// `RegisteredEIP1271(address,address)`.
+pub const REGISTERED_EIP1271_TOPIC: TopicHash = [
+    0x29, 0xd3, 0x16, 0xd1, 0xee, 0xe1, 0x86, 0x06, 0x1e, 0x97, 0x88, 0x0a, 0xfb, 0xfe, 0xb6, 0xc0,
+    0xbc, 0x62, 0x7f, 0x65, 0x15, 0x8f, 0xea, 0x15, 0x61, 0x80, 0x3e, 0x2a, 0xf9, 0xbd, 0xe7, 0x06,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for `Revoked(address)`.
+pub const REVOKED_TOPIC: TopicHash = [
+    0xb6, 0xfa, 0x8b, 0x8b, 0xd5, 0xea, 0xb6, 0x0f, 0x29, 0x2e, 0xca, 0x87, 0x6e, 0x3e, 0xf9, 0x07,
+    0x22, 0x27, 0x5b, 0x78, 0x53, 0x09, 0xd8, 0x4b, 0x1d, 0xe1, 0x13, 0xce, 0x0b, 0x8c, 0x4e, 0x74,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for
+/// `DepositInitiated(address,uint64,address,uint256,uint64,bytes32)`.
+pub const DEPOSIT_INITIATED_TOPIC: TopicHash = [
+    0x54, 0x2e, 0xae, 0x02, 0xf9, 0x02, 0xaf, 0xae, 0xe0, 0x5e, 0x2d, 0x3c, 0xdf, 0x00, 0x47, 0x79,
+    0x6b, 0xba, 0xee, 0x70, 0xb5, 0x15, 0xc2, 0x23, 0x06, 0x8b, 0x38, 0x59, 0xa4, 0x15, 0x85, 0xe9,
+];
+
+/// Compile-time-pinned `keccak256` topic-0 hash for the
+/// Workstream-GP fee-split deposit event
+/// `DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)`.
+///
+/// This is the WU GP.6.1 deliverable: the topic hash is baked into
+/// the source as a `pub const` for compile-time pinning (matching
+/// the RH-G observer's hard-pinned topic discipline).  The
+/// `topic_constants_match_keccak_of_signature` test verifies it
+/// equals `keccak256(EventTopic::DepositWithFeeInitiated.signature())`,
+/// so a signature-string drift or a keccak-binding regression is
+/// caught mechanically rather than silently producing logs that no
+/// node ever emits.
+pub const DEPOSIT_WITH_FEE_INITIATED_TOPIC: TopicHash = [
+    0x3c, 0x3b, 0x3a, 0x36, 0x3f, 0xa1, 0xfa, 0x4d, 0xc3, 0x18, 0xcc, 0xf4, 0x24, 0x96, 0x17, 0x0e,
+    0x3c, 0x4c, 0x60, 0x36, 0xff, 0x40, 0x9b, 0x1c, 0xbb, 0xd8, 0xb8, 0x3d, 0xec, 0xed, 0x55, 0x8e,
+];
 
 /// Minimal Ethereum log record.  Carries the bare fields RH-B
 /// consumes: the emitting contract address, the 1–4 indexed topics
@@ -101,6 +146,13 @@ pub enum EventTopic {
     /// resourceId, address token, uint256 amount, uint64
     /// depositorNonce, bytes32 receiptHash)`.
     DepositInitiated,
+    /// `DepositWithFeeInitiated(address indexed sender, uint64 indexed
+    /// resourceId, address indexed token, uint256 userAmount, uint256
+    /// poolAmount, uint64 budgetGrant, uint64 depositorNonce, bytes32
+    /// receiptHash)` — the Workstream-GP user-chosen fee-split deposit
+    /// (`KnomosisBridge.depositETHWithFee`).  Note three indexed
+    /// params (`token` is indexed here, unlike `DepositInitiated`).
+    DepositWithFeeInitiated,
 }
 
 impl EventTopic {
@@ -119,27 +171,44 @@ impl EventTopic {
                 // event in KnomosisBridge.sol.
                 "DepositInitiated(address,uint64,address,uint256,uint64,bytes32)"
             }
+            Self::DepositWithFeeInitiated => {
+                // Matches `KnomosisBridge.DepositWithFeeInitiated`
+                // (Workstream GP.5.1).
+                "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
+            }
         }
     }
 
     /// The `keccak256` of [`Self::signature`] — the topic-0
     /// hash an Ethereum node attaches to a log emitted under
     /// this event.
+    ///
+    /// Returns the compile-time-pinned constant
+    /// (`REGISTERED_ECDSA_TOPIC` etc.) rather than recomputing
+    /// keccak256 per call.  This hard-pins the wire format (matching
+    /// the RH-G observer's topic discipline) and makes log dispatch
+    /// allocation-free.  The
+    /// `topic_constants_match_keccak_of_signature` test verifies
+    /// each constant equals `keccak256(self.signature())`, so a
+    /// signature-string edit or a keccak-binding regression cannot
+    /// silently desynchronise the pinned bytes from the canonical
+    /// event signature.
     #[must_use]
-    pub fn hash(self) -> TopicHash {
-        let mut hasher = Keccak256::new();
-        hasher.update(self.signature().as_bytes());
-        let digest = hasher.finalize();
-        let mut out = [0u8; 32];
-        out.copy_from_slice(&digest);
-        out
+    pub const fn hash(self) -> TopicHash {
+        match self {
+            Self::RegisteredEcdsa => REGISTERED_ECDSA_TOPIC,
+            Self::RegisteredEip1271 => REGISTERED_EIP1271_TOPIC,
+            Self::Revoked => REVOKED_TOPIC,
+            Self::DepositInitiated => DEPOSIT_INITIATED_TOPIC,
+            Self::DepositWithFeeInitiated => DEPOSIT_WITH_FEE_INITIATED_TOPIC,
+        }
     }
 
     /// Find the variant matching a topic hash; `None` if not
     /// recognised.  Used by the decoder to dispatch on `topics[0]`.
     #[must_use]
     pub fn from_hash(hash: &TopicHash) -> Option<Self> {
-        // Iterate; the four variants make this O(4) hashes per
+        // Iterate; the five variants make this O(5) hashes per
         // log decode — at L1 block rates (`< 100` logs/block in
         // practice) this is negligible.
         for variant in [
@@ -147,6 +216,7 @@ impl EventTopic {
             Self::RegisteredEip1271,
             Self::Revoked,
             Self::DepositInitiated,
+            Self::DepositWithFeeInitiated,
         ] {
             if &variant.hash() == hash {
                 return Some(variant);
@@ -242,6 +312,39 @@ pub enum IngestedEvent {
         /// Log index within the transaction.
         log_index: u64,
     },
+    /// `DepositWithFeeInitiated` — a user-chosen fee-split deposit was
+    /// registered on L1 (Workstream GP.5.1).  Like `DepositInitiated`,
+    /// `Bridge.Ingest.ingest` returns `none` for this variant: deposit
+    /// materialisation is the sequencer's responsibility (chain-level
+    /// follow-up), not the ingestor's, so the translator emits no
+    /// `Action` and records it only in the watcher's audit log.  The
+    /// ingestor decodes it for observability + dedup symmetry with
+    /// `DepositInitiated`.
+    DepositWithFeeInitiated {
+        /// The depositor's Ethereum address (`msg.sender`).
+        sender: EthAddress,
+        /// The Knomosis `ResourceId`.
+        resource_id: u64,
+        /// The token contract (0x000... for native ETH).
+        token: EthAddress,
+        /// The amount credited to the recipient (raw `uint256` bytes).
+        user_amount: [u8; 32],
+        /// The amount credited to the gas pool (raw `uint256` bytes).
+        pool_amount: [u8; 32],
+        /// The action-budget grant (`min(poolAmount / weiPerBudgetUnit,
+        /// MAX_BUDGET_PER_DEPOSIT)`; fits `u64`).
+        budget_grant: u64,
+        /// The per-depositor nonce.
+        depositor_nonce: u64,
+        /// The 32-byte receipt hash (`keccak256(abi.encode(...))`).
+        receipt_hash: TopicHash,
+        /// L1 block number.
+        block_number: u64,
+        /// L1 transaction hash.
+        tx_hash: TopicHash,
+        /// Log index within the transaction.
+        log_index: u64,
+    },
 }
 
 impl IngestedEvent {
@@ -273,6 +376,12 @@ impl IngestedEvent {
                 tx_hash,
                 log_index,
                 ..
+            }
+            | Self::DepositWithFeeInitiated {
+                block_number,
+                tx_hash,
+                log_index,
+                ..
             } => (*block_number, *tx_hash, *log_index),
         }
     }
@@ -285,6 +394,7 @@ impl IngestedEvent {
             Self::RegisteredEip1271 { .. } => "RegisteredEIP1271",
             Self::Revoked { .. } => "Revoked",
             Self::DepositInitiated { .. } => "DepositInitiated",
+            Self::DepositWithFeeInitiated { .. } => "DepositWithFeeInitiated",
         }
     }
 }
@@ -572,6 +682,43 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                 log_index: log.log_index,
             }))
         }
+        EventTopic::DepositWithFeeInitiated => {
+            // Topics: [signature_hash, sender, resourceId, token] —
+            // THREE indexed params (token is indexed here, unlike
+            // DepositInitiated).  Data: uint256 userAmount + uint256
+            // poolAmount + uint64 budgetGrant + uint64 depositorNonce
+            // + bytes32 receiptHash (5 × 32 = 160 bytes).
+            if log.topics.len() != 4 {
+                return Err(DecodeError::TopicCountMismatch {
+                    event: "DepositWithFeeInitiated",
+                    expected: 4,
+                    actual: log.topics.len(),
+                });
+            }
+            let sender = decode_abi_address(&log.topics[1], "topic 1")?;
+            let resource_id = slot_to_u64(&log.topics[2], 0)?;
+            let token = decode_abi_address(&log.topics[3], "topic 3 (token)")?;
+            let user_amount = read_slot(&log.data, 0)?;
+            let pool_amount = read_slot(&log.data, 32)?;
+            let budget_grant_slot = read_slot(&log.data, 64)?;
+            let budget_grant = decode_abi_u64(&budget_grant_slot, 64)?;
+            let nonce_slot = read_slot(&log.data, 96)?;
+            let depositor_nonce = decode_abi_u64(&nonce_slot, 96)?;
+            let receipt_hash = read_slot(&log.data, 128)?;
+            Ok(Some(IngestedEvent::DepositWithFeeInitiated {
+                sender,
+                resource_id,
+                token,
+                user_amount,
+                pool_amount,
+                budget_grant,
+                depositor_nonce,
+                receipt_hash,
+                block_number: log.block_number,
+                tx_hash: log.tx_hash,
+                log_index: log.log_index,
+            }))
+        }
     }
 }
 
@@ -579,41 +726,73 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
 mod tests {
     use super::{
         decode_abi_address, decode_abi_bytes, decode_abi_u64, decode_event, DecodeError,
-        EventTopic, IngestedEvent, RawLog, TopicHash,
+        EventTopic, IngestedEvent, RawLog, TopicHash, DEPOSIT_WITH_FEE_INITIATED_TOPIC,
     };
     use crate::action::EthAddress;
 
-    /// Topic hashes are stable: changing the signature string is
-    /// a wire-format break and CI surfaces it.  Computed values
-    /// are the canonical Solidity-side keccak256.
-    #[test]
-    fn topic_hash_registered_ecdsa() {
-        // `keccak256("RegisteredECDSA(address,bytes)")` =
-        // 0xa49a02ea36e5e0ed02d0d6f0fff62cab4be3a64db84a1ce3afe92f9c5e8c5d92
-        let topic = EventTopic::RegisteredEcdsa.hash();
-        // Recompute via keccak256 of the signature string to
-        // confirm consistency.
-        let recomputed = {
-            use sha3::{Digest, Keccak256};
-            let mut hasher = Keccak256::new();
-            hasher.update(b"RegisteredECDSA(address,bytes)");
-            let d = hasher.finalize();
-            let mut out = [0u8; 32];
-            out.copy_from_slice(&d);
-            out
-        };
-        assert_eq!(topic, recomputed);
+    /// Recompute `keccak256(signature)` for an `EventTopic` — the
+    /// independent ground truth the pinned constants are checked
+    /// against.  Local to the test module so the production path
+    /// never recomputes keccak (it returns the pinned constant).
+    fn keccak_of_signature(variant: EventTopic) -> TopicHash {
+        use sha3::{Digest, Keccak256};
+        let mut hasher = Keccak256::new();
+        hasher.update(variant.signature().as_bytes());
+        let d = hasher.finalize();
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&d);
+        out
     }
 
-    /// `EventTopic::from_hash` round-trips through `hash`.
+    /// The five enumerated event topics.  Single source of truth for
+    /// the topic-iterating tests below.
+    const ALL_TOPICS: [EventTopic; 5] = [
+        EventTopic::RegisteredEcdsa,
+        EventTopic::RegisteredEip1271,
+        EventTopic::Revoked,
+        EventTopic::DepositInitiated,
+        EventTopic::DepositWithFeeInitiated,
+    ];
+
+    /// Every compile-time-pinned topic constant equals
+    /// `keccak256(signature)` for its variant.  This is the
+    /// load-bearing guard: `hash()` returns the baked constant, and
+    /// this test certifies the constant matches the canonical event
+    /// signature.  A signature-string edit, a keccak-binding
+    /// regression, or a hand-corrupted constant all fail here.
+    #[test]
+    fn topic_constants_match_keccak_of_signature() {
+        for variant in ALL_TOPICS {
+            let recomputed = keccak_of_signature(variant);
+            assert_eq!(
+                variant.hash(),
+                recomputed,
+                "pinned constant for {variant:?} disagrees with keccak256(signature)"
+            );
+        }
+    }
+
+    /// The WU GP.6.1 deliverable: the exported
+    /// `DEPOSIT_WITH_FEE_INITIATED_TOPIC` constant is the
+    /// fee-split event's topic-0 and is reachable through the
+    /// `EventTopic` API.
+    #[test]
+    fn deposit_with_fee_topic_constant_is_exported_and_canonical() {
+        assert_eq!(
+            DEPOSIT_WITH_FEE_INITIATED_TOPIC,
+            EventTopic::DepositWithFeeInitiated.hash()
+        );
+        assert_eq!(
+            DEPOSIT_WITH_FEE_INITIATED_TOPIC,
+            keccak_of_signature(EventTopic::DepositWithFeeInitiated)
+        );
+    }
+
+    /// `EventTopic::from_hash` round-trips through `hash` for every
+    /// variant (including `DepositWithFeeInitiated`).
     #[test]
     fn topic_round_trip() {
-        for variant in [
-            EventTopic::RegisteredEcdsa,
-            EventTopic::RegisteredEip1271,
-            EventTopic::Revoked,
-            EventTopic::DepositInitiated,
-        ] {
+        for variant in ALL_TOPICS {
             let hash = variant.hash();
             assert_eq!(EventTopic::from_hash(&hash), Some(variant));
         }
@@ -626,15 +805,10 @@ mod tests {
         assert!(EventTopic::from_hash(&unknown).is_none());
     }
 
-    /// All four topic hashes are distinct.
+    /// All five topic hashes are pairwise distinct.
     #[test]
     fn topics_pairwise_distinct() {
-        let hashes = [
-            EventTopic::RegisteredEcdsa.hash(),
-            EventTopic::RegisteredEip1271.hash(),
-            EventTopic::Revoked.hash(),
-            EventTopic::DepositInitiated.hash(),
-        ];
+        let hashes = ALL_TOPICS.map(EventTopic::hash);
         for i in 0..hashes.len() {
             for j in (i + 1)..hashes.len() {
                 assert_ne!(hashes[i], hashes[j], "topic hash collision at {i} vs {j}");
@@ -903,6 +1077,199 @@ mod tests {
             }
             _ => panic!("expected DepositInitiated"),
         }
+    }
+
+    /// `decode_event` on a `DepositWithFeeInitiated` payload (GP.5.1).
+    /// Note THREE indexed topics (sender, resourceId, token) and the
+    /// 160-byte data tail (userAmount, poolAmount, budgetGrant, nonce,
+    /// receiptHash).
+    #[test]
+    fn decode_event_deposit_with_fee_initiated() {
+        let sender = [0x11u8; 20];
+        let mut sender_topic = [0u8; 32];
+        sender_topic[12..32].copy_from_slice(&sender);
+        let mut resource_topic = [0u8; 32];
+        resource_topic[31] = 7; // resourceId = 7 (BE)
+        let token = [0x22u8; 20];
+        let mut token_topic = [0u8; 32];
+        token_topic[12..32].copy_from_slice(&token);
+        // Data: userAmount(0) + poolAmount(32) + budgetGrant(64) +
+        // depositorNonce(96) + receiptHash(128) = 160 bytes.
+        let mut data = vec![0u8; 160];
+        // userAmount = 1000 (0x03e8) at 0..32.
+        data[30] = 0x03;
+        data[31] = 0xe8;
+        // poolAmount = 500 (0x01f4) at 32..64.
+        data[62] = 0x01;
+        data[63] = 0xf4;
+        // budgetGrant = 500 (0x01f4) at 64..96 (low bytes 94..96).
+        data[94] = 0x01;
+        data[95] = 0xf4;
+        // depositorNonce = 42 at 96..128.
+        data[127] = 42;
+        // receiptHash = 0xee... at 128..160.
+        for slot in data.iter_mut().skip(128).take(32) {
+            *slot = 0xee;
+        }
+        let log = RawLog {
+            address: EthAddress::ZERO,
+            topics: vec![
+                EventTopic::DepositWithFeeInitiated.hash(),
+                sender_topic,
+                resource_topic,
+                token_topic,
+            ],
+            data,
+            block_number: 600,
+            tx_hash: [0x5e; 32],
+            log_index: 2,
+        };
+        let decoded = decode_event(&log).unwrap().unwrap();
+        match decoded {
+            IngestedEvent::DepositWithFeeInitiated {
+                sender: s,
+                resource_id,
+                token: t,
+                user_amount,
+                pool_amount,
+                budget_grant,
+                depositor_nonce,
+                receipt_hash,
+                block_number,
+                tx_hash,
+                log_index,
+            } => {
+                assert_eq!(s.as_bytes(), &sender);
+                assert_eq!(resource_id, 7);
+                assert_eq!(t.as_bytes(), &token);
+                let mut expected_user = [0u8; 32];
+                expected_user[30] = 0x03;
+                expected_user[31] = 0xe8;
+                assert_eq!(user_amount, expected_user);
+                let mut expected_pool = [0u8; 32];
+                expected_pool[30] = 0x01;
+                expected_pool[31] = 0xf4;
+                assert_eq!(pool_amount, expected_pool);
+                assert_eq!(budget_grant, 500);
+                assert_eq!(depositor_nonce, 42);
+                assert_eq!(receipt_hash, [0xee; 32]);
+                assert_eq!(block_number, 600);
+                assert_eq!(tx_hash, [0x5e; 32]);
+                assert_eq!(log_index, 2);
+            }
+            _ => panic!("expected DepositWithFeeInitiated"),
+        }
+    }
+
+    /// `decode_event` rejects a `DepositWithFeeInitiated` log with the
+    /// wrong topic count (it requires exactly 4: signature + three
+    /// indexed params).
+    #[test]
+    fn decode_event_deposit_with_fee_wrong_topic_count() {
+        let log = RawLog {
+            address: EthAddress::ZERO,
+            // Only 3 topics (missing the indexed `token`).
+            topics: vec![
+                EventTopic::DepositWithFeeInitiated.hash(),
+                [0u8; 32],
+                [0u8; 32],
+            ],
+            data: vec![0u8; 160],
+            block_number: 0,
+            tx_hash: [0; 32],
+            log_index: 0,
+        };
+        assert!(matches!(
+            decode_event(&log),
+            Err(DecodeError::TopicCountMismatch {
+                event: "DepositWithFeeInitiated",
+                expected: 4,
+                actual: 3
+            })
+        ));
+    }
+
+    /// A BOLD fee-split deposit (Workstream GP.5.4) is the same event
+    /// shape as the ETH one with `resourceId = 1` (RESOURCE_ID_BOLD) and
+    /// the BOLD token address.  The decoder reads `resourceId` generically
+    /// from topic[2], so a BOLD log decodes byte-for-byte like an ETH /
+    /// ERC-20 one — no resource-specific branch.  This pins that the L1
+    /// ingestor already covers BOLD without a code change.
+    #[test]
+    fn decode_event_deposit_with_fee_bold_resource_id_1() {
+        let sender = [0x33u8; 20];
+        let mut sender_topic = [0u8; 32];
+        sender_topic[12..32].copy_from_slice(&sender);
+        // resourceId = 1 (RESOURCE_ID_BOLD), big-endian in the topic.
+        let mut resource_topic = [0u8; 32];
+        resource_topic[31] = 1;
+        // The canonical Liquity V2 BOLD token address.
+        let bold: [u8; 20] = [
+            0x64, 0x40, 0xf1, 0x44, 0xb7, 0xe5, 0x0d, 0x6a, 0x84, 0x39, 0x33, 0x65, 0x10, 0x31,
+            0x2d, 0x2f, 0x54, 0xbe, 0xb0, 0x1d,
+        ];
+        let mut token_topic = [0u8; 32];
+        token_topic[12..32].copy_from_slice(&bold);
+        // Data tail: userAmount(900) + poolAmount(100) + budgetGrant(33) +
+        // depositorNonce(7) + receiptHash, 160 bytes.
+        let mut data = vec![0u8; 160];
+        data[30] = 0x03;
+        data[31] = 0x84; // userAmount = 900
+        data[63] = 0x64; // poolAmount = 100
+        data[95] = 0x21; // budgetGrant = 33
+        data[127] = 7; // depositorNonce = 7
+        for slot in data.iter_mut().skip(128).take(32) {
+            *slot = 0xbd;
+        }
+        let log = RawLog {
+            address: EthAddress::ZERO,
+            topics: vec![
+                EventTopic::DepositWithFeeInitiated.hash(),
+                sender_topic,
+                resource_topic,
+                token_topic,
+            ],
+            data,
+            block_number: 700,
+            tx_hash: [0xb0; 32],
+            log_index: 3,
+        };
+        let decoded = decode_event(&log).unwrap().unwrap();
+        match decoded {
+            IngestedEvent::DepositWithFeeInitiated {
+                resource_id,
+                token: t,
+                budget_grant,
+                depositor_nonce,
+                ..
+            } => {
+                assert_eq!(resource_id, 1, "BOLD resourceId decoded");
+                assert_eq!(t.as_bytes(), &bold, "BOLD token address decoded");
+                assert_eq!(budget_grant, 33);
+                assert_eq!(depositor_nonce, 7);
+            }
+            _ => panic!("expected DepositWithFeeInitiated"),
+        }
+    }
+
+    /// The two deposit-event signatures are distinct (and so are their
+    /// topic hashes), so a `DepositInitiated` log can never be decoded
+    /// as a fee-split deposit or vice versa.
+    #[test]
+    fn deposit_event_topics_are_distinct() {
+        assert_ne!(
+            EventTopic::DepositInitiated.signature(),
+            EventTopic::DepositWithFeeInitiated.signature()
+        );
+        assert_ne!(
+            EventTopic::DepositInitiated.hash(),
+            EventTopic::DepositWithFeeInitiated.hash()
+        );
+        // The fee-split topic hash round-trips through `from_hash`.
+        assert_eq!(
+            EventTopic::from_hash(&EventTopic::DepositWithFeeInitiated.hash()),
+            Some(EventTopic::DepositWithFeeInitiated)
+        );
     }
 
     /// `origin_key` returns the originating triple.

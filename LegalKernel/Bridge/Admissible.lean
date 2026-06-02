@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -140,9 +141,9 @@ theorem bridgeAuthorizedAction_of_isBridgeOnly
 The bridge-side state-update helper.  For most actions this is the
 identity (the bridge state is unchanged).  For `deposit` and
 `depositWithFee`, the deposit-id is recorded in `consumed` with its
-`(resource, total-credited-amount)` metadata.  For `withdraw`, a new
-`PendingWithdrawal` entry is inserted at `nextWdId` and the counter
-is bumped. -/
+`(resource, userAmount, poolAmount, budgetGrant)` metadata.  For
+`withdraw`, a new `PendingWithdrawal` entry is inserted at `nextWdId`
+and the counter is bumped. -/
 
 /-- The bridge-state effect of an action, with explicit per-action
     closure over the L2 log index.  Most actions are bridge-state-
@@ -155,17 +156,22 @@ is bumped. -/
     payload (`BridgeAdmissibleWith` conjunct 6b enforces freshness
     at admission time, and this function persists the consumption at
     apply time so subsequent admissions reject duplicates).  The
-    `consumed` entry's `amount` is `userAmount + poolAmount` — the
-    total credited to L2 balances — matching the deposit-accounting
-    invariant that `consumed` tracks "the L2 supply expansion
-    attributable to this L1 event". -/
+    `consumed` entry records the `(userAmount, poolAmount)` split
+    plus the `budgetGrant` separately (GP.4.1 widening); their sum
+    `userAmount + poolAmount` is the total credited to L2 balances,
+    matching the deposit-accounting invariant that `consumed` tracks
+    "the L2 supply expansion attributable to this L1 event".  A
+    fee-less `.deposit` records `userAmount := amount` with
+    `poolAmount = budgetGrant = 0`. -/
 def applyActionToBridgeState (bs : BridgeState) (action : Action)
     (l2LogIndex : Nat) : BridgeState :=
   match action with
   | .deposit r _recipient amount d =>
-    bs.markConsumed d ({ resource := r, amount := amount })
-  | .depositWithFee r _recipient _poolActor userAmount poolAmount _budgetGrant d =>
-    bs.markConsumed d ({ resource := r, amount := userAmount + poolAmount })
+    bs.markConsumed d ({ resource := r, userAmount := amount,
+                         poolAmount := 0, budgetGrant := 0 })
+  | .depositWithFee r _recipient _poolActor userAmount poolAmount budgetGrant d =>
+    bs.markConsumed d ({ resource := r, userAmount := userAmount,
+                         poolAmount := poolAmount, budgetGrant := budgetGrant })
   | .withdraw r _sender amount rcp =>
     bs.appendWithdrawal
       { resource    := r
@@ -568,10 +574,12 @@ theorem deposit_marks_consumed
   unfold apply_bridge_admissible_with
   show (applyActionToBridgeState es.bridge st.action idx).consumed.contains d = true
   rw [heq]
-  show (es.bridge.markConsumed d ({ resource := r, amount := amount })).consumed.contains d
+  show (es.bridge.markConsumed d ({ resource := r, userAmount := amount,
+                                    poolAmount := 0, budgetGrant := 0 })).consumed.contains d
        = true
   unfold BridgeState.markConsumed
-  show (es.bridge.consumed.insert d ({ resource := r, amount := amount })).contains d = true
+  show (es.bridge.consumed.insert d ({ resource := r, userAmount := amount,
+                                       poolAmount := 0, budgetGrant := 0 })).contains d = true
   exact Std.TreeMap.contains_insert_self
 
 /-- §7.0a / audit-1: a successful deposit-bridge-admissible
@@ -787,6 +795,41 @@ theorem apply_bridge_admissible_with_budget_kernel_epochBudgets
       rw [hk] at hmap
       -- hmap : some esK.epochBudgets = some es'.epochBudgets
       simpa using hmap.symm
+
+/-- The production budget gate preserves the accounting-relevant fields.
+    On a successful `apply_bridge_admissible_with_budget` (the function
+    the runtime `processSignedActionWith` / replay path executes), the
+    resulting state's `base` and `bridge` fields are exactly those of
+    the underlying `apply_bridge_admissible_with` step — the budget gate
+    overwrites only `epochBudgets` in every `some` branch.
+
+    Consequence: every accounting property proved over
+    `apply_bridge_admissible_with` (the `totalDeposited` /
+    `totalUserDeposited` / `totalPoolDeposited` / `totalWithdrawn`
+    deltas, which read only `base` and `bridge`) transfers verbatim to
+    the literal production runtime entry. -/
+theorem apply_bridge_admissible_with_budget_base_bridge_eq
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    es'.base = (apply_bridge_admissible_with verify P d es st idx h).base ∧
+    es'.bridge = (apply_bridge_admissible_with verify P d es st idx h).bridge := by
+  unfold apply_bridge_admissible_with_budget at hsuc
+  cases es.budgetPolicy with
+  | bounded freeTier actionCost currentEpoch =>
+    -- Exhaustively split the control flow (three safety gates, the
+    -- bridgeActor branch, the consume match) in `hsuc`.  Every `none`
+    -- leaf contradicts `hsuc = some es'`; every `some` leaf returns
+    -- `{ apply_bridge_admissible_with … with epochBudgets := … }`, whose
+    -- `base` / `bridge` projections are the underlying step's by
+    -- record-update construction (`⟨rfl, rfl⟩`).
+    repeat' split at hsuc
+    all_goals first
+      | (simp only [Option.some.injEq] at hsuc; subst hsuc; exact ⟨rfl, rfl⟩)
+      | simp at hsuc
 
 /-! ## Bridge-aware (production-path) budget theorems (GP.3.2 + GP.3.4)
 

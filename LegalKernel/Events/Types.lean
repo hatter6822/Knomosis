@@ -1,9 +1,10 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
 /-
   Knomosis  - A Societal Kernel
   Copyright (C) 2026  Adam Hall
   This program comes with ABSOLUTELY NO WARRANTY.
   This is free software, and you are welcome to redistribute it
-  under certain conditions. See: https://github.com/hatter6822/Orbcrypt/blob/main/LICENSE
+  under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -/
 
 /-
@@ -232,6 +233,23 @@ inductive Event
   | delegatedActionBudgetTopUp (recipient signer : ActorId)
                             (gasResource : ResourceId) (gasAmount : Amount)
                             (budgetIncrement : Nat) (poolActor : ActorId)
+  /-- An actor's per-epoch action budget was consumed by `amount`
+      units (Workstream GP / GP.6.4).  Emitted by `extractEvents`
+      on every successful admission whose signer is NOT exempt
+      from consumption (i.e., signer ≠ bridgeActor) and whose
+      `BudgetPolicy.bounded.actionCost > 0`.  Indexers consume this
+      event to compute "current-epoch budget remaining" =
+      `freeTier + grants_this_epoch − consumed_this_epoch`, the
+      load-bearing semantics behind the deployment-UI promise
+      "you have N actions remaining this epoch."  Distinct from the
+      three grant events (`depositWithFeeCredited`,
+      `actionBudgetTopUp`, `delegatedActionBudgetTopUp`), which
+      track CREDITS to the budget ledger; `budgetConsumed` tracks
+      DEBITS.  The bridgeActor exemption from GP.3.2.c means
+      bridge-signed actions never emit `budgetConsumed` (the
+      bridgeActor's L1-gas-gated authority makes L2 budget
+      gating redundant).  Frozen index 20. -/
+  | budgetConsumed         (actor : ActorId) (amount : Nat)
   deriving Repr, DecidableEq
 
 /-! ## §8.9.1.bis Event constructor-index projection (AR.6)
@@ -266,6 +284,7 @@ above):
   17 — `actionBudgetTopUp`       (Workstream GP §15E v1.0)
   18 — `gasPoolClaim`            (Workstream GP §15E v1.0)
   19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4)
+  20 — `budgetConsumed`          (Workstream GP / GP.6.4)
 
 The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
 
@@ -293,6 +312,7 @@ def Event.tag : Event → Nat
   | .actionBudgetTopUp    _ _ _ _ _   => 17
   | .gasPoolClaim         _ _ _       => 18
   | .delegatedActionBudgetTopUp _ _ _ _ _ _ => 19
+  | .budgetConsumed       _ _         => 20
 
 /-! ## Convenience predicates -/
 
@@ -334,6 +354,8 @@ def Event.actor : Event → Option ActorId
   -- GP.3.4: the budget target is the recipient (the actor whose
   -- per-actor budget view an indexer must credit).
   | .delegatedActionBudgetTopUp recipient _ _ _ _ _ => some recipient
+  -- GP.6.4: the actor whose budget was debited.
+  | .budgetConsumed a _                             => some a
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
