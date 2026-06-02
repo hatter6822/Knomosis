@@ -1213,8 +1213,8 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 823 tests across the 11 workspace
-crates (the FQ Rung-0 fair scheduler adds ~69 `knomosis-host`
+**Rust-side test count.**  ~1 824 tests across the 11 workspace
+crates (the FQ Rung-0 fair scheduler adds ~70 `knomosis-host`
 tests — the pure DRR core (`fair::drr`: per-flow / max-flows /
 global cap enforcement, round-robin `pick`, empty-flow eviction +
 deficit reset, plus the equal-weight fairness-bound, the
@@ -1283,7 +1283,7 @@ landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~307  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep |
-| `knomosis-host`                     | ~359  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0 DRR fair scheduler |
+| `knomosis-host`                     | ~360  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0 DRR fair scheduler |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |

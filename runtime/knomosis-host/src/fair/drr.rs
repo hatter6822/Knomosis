@@ -682,6 +682,27 @@ mod tests {
         assert_invariants(&s);
     }
 
+    /// `set_closed` / `is_closed` toggle the lifecycle flag, and `pick`
+    /// STILL drains a closed scheduler — `closed` gates only the
+    /// wrapper's enqueue (so post-shutdown submissions get `Busy`), never
+    /// the drain of already-buffered requests.
+    #[test]
+    fn closed_flag_toggles_and_pick_still_drains() {
+        let mut s = DrrState::new(open_caps());
+        assert!(!s.is_closed());
+        s.enqueue(1u64, req(1)).unwrap();
+        s.enqueue(1, req(1)).unwrap();
+        s.set_closed();
+        assert!(s.is_closed());
+        // Closed does NOT block draining: the scheduler still serves the
+        // already-buffered requests (the worker drains after close()).
+        assert!(s.pick().is_some());
+        assert!(s.pick().is_some());
+        assert!(s.pick().is_none());
+        assert!(s.is_closed(), "closed stays set across picks");
+        assert_invariants(&s);
+    }
+
     /// The defence-in-depth clamps apply even when [`Caps::new`] is fed
     /// absurd values.
     #[test]
