@@ -325,7 +325,8 @@ knomosis/
         ├── phase_7_plan.md                  -- advanced-capability portfolio
         ├── rust_host_runtime_plan.md        -- Phase 5 + E-A/B + H.10.5 Rust host
         ├── smt_cell_proofs_plan.md          -- SMT cell-proof cross-stack plan
-        └── step_vm_coherence_plan.md        -- L1 step-VM 19-variant coherence + observer terminate wiring
+        ├── step_vm_coherence_plan.md        -- L1 step-VM 19-variant coherence + observer terminate wiring
+        └── fair_queuing_plan.md             -- Workstream FQ (per-actor fair queuing / burst resistance)
 ```
 
 Per-file purpose lives in each file's `/-! ... -/` module docstring,
@@ -869,6 +870,7 @@ work units.  Status:
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
 | SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack fixture corpus with cell-proof bundles emitted per fixture entry — 218 entries / 134 happy at SVC close, since widened by GP.3.3 → 238 and GP.5.3 → 248 / 152 happy; every happy fixture byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
 | E-G       | Ethereum: documentation + amendment | Complete (GENESIS_PLAN §15D + ABI §16 + extraction_notes §2.X + std_dependencies refresh) |
+| FQ        | Per-actor fair queuing / burst resistance (knomosis-host) | Planned — not started (`docs/planning/fair_queuing_plan.md`) |
 | 7         | Advanced capabilities              | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
