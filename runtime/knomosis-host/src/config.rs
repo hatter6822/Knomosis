@@ -31,9 +31,10 @@
 //! | `--epoch-length <N>`   | optional | Admitted actions per budget epoch (0 = no advance)   |
 //! | `--gas-pool-eth-cap <N>`| optional | GP.7.4 gas-pool genesis: ETH-leg per-action cap     |
 //! | `--gas-pool-bold-cap <N>`| optional | GP.7.4 gas-pool genesis: BOLD-leg per-action cap   |
-//! | `--scheduler {fifo\|drr}`| optional | Worker scheduler (FQ Rung 0; default `fifo`)        |
-//! | `--per-flow-cap <N>`   | optional | DRR per-connection backlog cap (default 64; drr only)|
-//! | `--max-flows <N>`      | optional | DRR distinct-flow cap (default 4096; drr only)       |
+//! | `--scheduler {fifo\|drr}`| optional | Worker scheduler (FQ Rung 0/1; default `fifo`)      |
+//! | `--per-flow-cap <N>`   | optional | DRR per-(conn,signer) backlog cap (default 64; drr only)|
+//! | `--max-flows <N>`      | optional | DRR distinct-connection cap (default 4096; drr only) |
+//! | `--max-signers-per-conn <N>`| optional | Rung-1 distinct-signer-per-conn cap (default 256; drr only)|
 //! | `--max-queue-depth <N>`| optional | Bounded queue size / DRR global cap (default 256)    |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -50,7 +51,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::budget::BudgetPolicy;
-use crate::fair::drr::{Caps, DEFAULT_MAX_FLOWS, DEFAULT_PER_FLOW_CAP, HARD_MAX_FLOWS};
+use crate::fair::drr::{
+    Caps, DEFAULT_MAX_FLOWS, DEFAULT_MAX_SIGNERS_PER_CONN, DEFAULT_PER_FLOW_CAP, HARD_MAX_FLOWS,
+    HARD_MAX_SIGNERS_PER_CONN,
+};
 
 /// Which worker scheduler the host runs (Workstream GP.8, Track A /
 /// FQ).  `Fifo` is the unchanged default baseline; `Drr` selects the
@@ -181,6 +185,13 @@ pub struct Config {
     /// Ignored at runtime unless `scheduler == Drr`, but its basic
     /// sanity (`1 ..= HARD_MAX_FLOWS`) is validated regardless.
     pub max_flows: usize,
+    /// `--max-signers-per-conn <N>` (FQ.12): the Rung-1 cap on distinct
+    /// signer hints buffered WITHIN one connection (the inner DRR tier).
+    /// Bounds the per-connection scheduler-DoS surface a hint-spamming
+    /// connection can create (`GP.8` §2.6 invariant 4).  Ignored at
+    /// runtime unless `scheduler == Drr`, but its basic sanity
+    /// (`1 ..= HARD_MAX_SIGNERS_PER_CONN`) is validated regardless.
+    pub max_signers_per_conn: usize,
 }
 
 impl Config {
@@ -213,6 +224,7 @@ impl Config {
             scheduler_unrecognized: None,
             per_flow_cap: DEFAULT_PER_FLOW_CAP,
             max_flows: DEFAULT_MAX_FLOWS,
+            max_signers_per_conn: DEFAULT_MAX_SIGNERS_PER_CONN,
         }
     }
 
@@ -271,14 +283,16 @@ impl Config {
         }
     }
 
-    /// The DRR capacity caps (FQ.5), built from the per-flow / max-flows
-    /// flags with the host's `--max-queue-depth` reused as the global
-    /// cap.  Passed to [`crate::queue::FairQueue`] when
-    /// `scheduler == Drr`.  [`Caps::new`] applies the defence-in-depth
-    /// ceilings on top of the CLI validation.
+    /// The DRR capacity caps (FQ.5 / FQ.12), built from the per-flow /
+    /// max-flows / max-signers-per-conn flags with the host's
+    /// `--max-queue-depth` reused as the global cap.  Passed to
+    /// [`crate::queue::FairQueue`] when `scheduler == Drr`.
+    /// [`Caps::new`] + [`Caps::with_max_signers`] apply the
+    /// defence-in-depth ceilings on top of the CLI validation.
     #[must_use]
     pub fn caps(&self) -> Caps {
         Caps::new(self.per_flow_cap, self.max_flows, self.max_queue_depth)
+            .with_max_signers(self.max_signers_per_conn)
     }
 
     /// Returns true if at least one listener is configured.
@@ -374,6 +388,18 @@ impl Config {
         }
         if self.max_flows > HARD_MAX_FLOWS {
             return Err(ConfigError::MaxFlowsTooLarge(self.max_flows));
+        }
+        // FQ.12: the per-connection distinct-signer cap (Rung 1).  A
+        // value of 0 is nonsense for any scheduler (a connection could
+        // route no requests), so — like `per_flow_cap` / `max_flows` —
+        // its intrinsic sanity is checked regardless of scheduler.
+        if self.max_signers_per_conn == 0 {
+            return Err(ConfigError::MaxSignersPerConnZero);
+        }
+        if self.max_signers_per_conn > HARD_MAX_SIGNERS_PER_CONN {
+            return Err(ConfigError::MaxSignersPerConnTooLarge(
+                self.max_signers_per_conn,
+            ));
         }
         // (b) The CROSS-FIELD relationship `per_flow_cap <=
         //     max_queue_depth` is enforced ONLY under `--scheduler drr`,
@@ -494,6 +520,15 @@ pub enum ConfigError {
     /// rejected under any scheduler.
     #[error("--max-flows {0} exceeds hard ceiling")]
     MaxFlowsTooLarge(usize),
+    /// `--max-signers-per-conn 0` (a connection could route no
+    /// requests).  Intrinsically invalid, so rejected under any
+    /// scheduler (Rung 1).
+    #[error("--max-signers-per-conn cannot be zero")]
+    MaxSignersPerConnZero,
+    /// `--max-signers-per-conn` above the hard ceiling.  Intrinsically
+    /// invalid, so rejected under any scheduler (Rung 1).
+    #[error("--max-signers-per-conn {0} exceeds hard ceiling")]
+    MaxSignersPerConnTooLarge(usize),
 }
 
 /// Parse command-line arguments into a `Config`.
@@ -698,6 +733,19 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     })?;
                 cfg.max_flows = n;
             }
+            "--max-signers-per-conn" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--max-signers-per-conn".into()))?;
+                let n = value
+                    .parse::<usize>()
+                    .map_err(|e| ParseError::InvalidValue {
+                        flag: "--max-signers-per-conn".into(),
+                        value: value.clone(),
+                        reason: e.to_string(),
+                    })?;
+                cfg.max_signers_per_conn = n;
+            }
             "--max-queue-depth" => {
                 let value = iter
                     .next()
@@ -781,10 +829,12 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --gas-pool-eth-cap <N>    Enable the GP.7.4 gas-pool genesis (ETH-leg per-action cap)\n\
          \x20 --gas-pool-bold-cap <N>   Gas-pool BOLD-leg per-action cap (enables if either is set)\n\
          \n\
-         Fair sequencing (FQ Rung 0; optional, default off):\n\
-         \x20 --scheduler <fifo|drr>    Worker scheduler (default fifo; drr = per-connection DRR)\n\
-         \x20 --per-flow-cap <N>        DRR per-connection backlog cap (default 64; drr only)\n\
-         \x20 --max-flows <N>           DRR cap on distinct active flows (default 4096; drr only)\n\
+         Fair sequencing (FQ Rung 0/1; optional, default off):\n\
+         \x20 --scheduler <fifo|drr>    Worker scheduler (default fifo; drr = two-tier DRR)\n\
+         \x20 --per-flow-cap <N>        DRR per-(conn,signer) backlog cap (default 64; drr only)\n\
+         \x20 --max-flows <N>           DRR cap on distinct active connections (default 4096; drr only)\n\
+         \x20 --max-signers-per-conn <N>\n\
+         \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20Rung-1 cap on distinct signer hints within one connection (default 256; drr only)\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size / DRR global cap (default 256)\n\

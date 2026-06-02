@@ -50,12 +50,13 @@
 //!     blocking the listener.  `FairQueue` is the optional
 //!     Deficit-Round-Robin fair queue (FQ Rung 0), and `QueueHandle`
 //!     unifies the two behind one scheduler-agnostic `submit` call.
-//!   * [`fair`] — the optional per-connection fair scheduler
-//!     (Workstream GP.8, Track A / FQ — Rung 0).  [`fair::drr`] is the
-//!     pure, I/O-free Deficit-Round-Robin core; the concurrency wrapper
-//!     ([`queue::FairQueue`]) and the server wiring build on it.  Ships
-//!     behind the default-OFF `--scheduler drr` flag; FIFO stays the
-//!     baseline.
+//!   * [`fair`] — the optional fair scheduler (Workstream GP.8, Track A
+//!     / FQ — Rungs 0 and 1).  [`fair::drr`] is the pure, I/O-free
+//!     Deficit-Round-Robin core, reused at both tiers: Rung 0 keys it by
+//!     the connection id; Rung 1 nests an inner signer-hint tier inside
+//!     each connection.  The concurrency wrapper ([`queue::FairQueue`])
+//!     and the server wiring build on it.  Ships behind the default-OFF
+//!     `--scheduler drr` flag; FIFO stays the baseline.
 //!   * [`tls`] — TLS configuration loader.  Parses PEM certificate
 //!     and private-key files into a `rustls::ServerConfig`.
 //!   * [`listener`] — per-protocol acceptors (TCP, Unix socket,
@@ -68,9 +69,16 @@
 //!
 //! Mirrors `docs/abi.md` §10:
 //!
-//!   * **Request**: 4-byte BE u32 length + N CBE-encoded
+//!   * **Request (v1, default)**: 4-byte BE u32 length + N CBE-encoded
 //!     `SignedAction` bytes.  `1 ≤ N ≤ MAX_FRAME_SIZE`; the host
 //!     does not parse the CBE payload itself.
+//!   * **Request (v2, opt-in; `PROTOCOL_VERSION == 2`)**: a 4-byte
+//!     `KNH2` preamble once on connection open, then per frame an 8-byte
+//!     BE signer hint + the v1 length-prefixed payload.  The hint is an
+//!     advisory routing classification only (the inner DRR tier); the
+//!     kernel still reads + verifies the real signer from the CBE body.
+//!     v2 is a strict superset — v1 clients are unaffected.  See
+//!     [`frame`] and `docs/abi.md` §10.4.2.
 //!   * **Response**: 1-byte verdict + 4-byte BE u32 reason length
 //!     + M UTF-8 reason bytes.  M may be 0 (empty reason).
 //!
@@ -146,30 +154,42 @@
 //! tradeoff.  See the engineering plan §RH-C for the original
 //! tokio-based architecture sketch.
 //!
-//! ## Optional fair scheduling (FQ Rung 0)
+//! ## Optional fair scheduling (FQ Rungs 0 and 1)
 //!
 //! By default the worker drains a FIFO `BoundedQueue`.  Under
 //! `--scheduler drr` it instead drains a [`queue::FairQueue`] — a
-//! work-conserving Deficit-Round-Robin scheduler keyed by the
-//! connection's `ConnId` — so that, **under contention for the serial
-//! worker**, no one connection can monopolise it: a flooding connection
-//! delays only itself (HOL blocking is removed at the dequeue end, and
-//! a per-flow buffer cap removes it at the enqueue end), while a
-//! productive burst on an idle host is throttled by nothing.  The
-//! design (`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md`
+//! work-conserving, **two-tier** Deficit-Round-Robin scheduler — so
+//! that, **under contention for the serial worker**, no one actor can
+//! monopolise it: a flooding flow delays only itself (HOL blocking is
+//! removed at the dequeue end, and a per-flow buffer cap removes it at
+//! the enqueue end), while a productive burst on an idle host is
+//! throttled by nothing.  The outer tier round-robins across
+//! transport-authenticated connection ids (`ConnId`); the inner tier
+//! (Rung 1) round-robins across the optional, advisory per-frame signer
+//! hint within each connection.  Rung 0 is the degenerate single-hint
+//! case (a legacy connection routes every request to one sentinel hint).
+//! The design (`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md`
 //! §2.3–§2.8) is governed by these load-bearing invariants:
 //!
 //!   * **Classification-only routing (§2.6 invariant 1).**  The routing
-//!     key (`ConnId`) influences *order and drop* only, never
-//!     admissibility.  A scheduling bug can reorder or drop, never admit
-//!     an inadmissible action nor reject an admissible one — exactly the
-//!     latitude security property #1 already grants the FIFO path.  The
-//!     host still parses no CBE bytes.
-//!   * **The scheduler is bounded (§2.6 invariant 4).**  Distinct flows
-//!     (`--max-flows`), a per-flow backlog (`--per-flow-cap`), and the
-//!     total buffered count (`--max-queue-depth`, reused as the global
-//!     cap) are all capped, with empty flows evicted immediately, so the
-//!     flow map cannot grow without bound.
+//!     keys (`ConnId`, signer hint) influence *order and drop* only,
+//!     never admissibility.  A scheduling bug can reorder or drop, never
+//!     admit an inadmissible action nor reject an admissible one —
+//!     exactly the latitude security property #1 already grants the FIFO
+//!     path.  The host still parses no CBE bytes (it reads at most the
+//!     explicit, untrusted 8-byte hint, never the CBE body).
+//!   * **Spoofing is fairness-only (§2.6 invariant 2).**  A forged
+//!     signer hint can only sub-divide the forging connection's OWN
+//!     outer share among its fakes (self-harm), never steal another
+//!     connection's share — the unspoofable `ConnId` outer tier confines
+//!     it.  A legacy (un-hinted) connection degrades to Rung-0 behaviour
+//!     (§2.6 invariant 3).
+//!   * **The scheduler is bounded (§2.6 invariant 4).**  Distinct
+//!     connections (`--max-flows`), distinct signer hints per connection
+//!     (`--max-signers-per-conn`), a per-flow backlog (`--per-flow-cap`),
+//!     and the total buffered count (`--max-queue-depth`, reused as the
+//!     global cap) are all capped, with empty flows evicted immediately,
+//!     so neither tier's map can grow without bound.
 //!   * **Deterministic, I/O-free decision (§2.7).**  The DRR `pick` reads
 //!     no clock and performs no I/O, so it is reproducible — the seam a
 //!     future accountable-fairness layer would replay against.
@@ -177,21 +197,25 @@
 //!     the scheduler lock and dispatches it *after* releasing the lock,
 //!     so a slow `kernel.submit` never serializes producers.
 //!
-//! Rung 0 requires **no wire-format change** (host-internal only);
-//! `PROTOCOL_VERSION` stays `1`.  The Rung-1 signer-hint extension
-//! (a superset, `PROTOCOL_VERSION` 2) is future work.
+//! Rung 0 requires **no wire-format change** (host-internal only).
+//! Rung 1 adds an opt-in, version-gated per-frame signer hint — a strict
+//! superset that bumps `PROTOCOL_VERSION` to `2` (a v1 client with no
+//! preamble is unaffected and gets Rung-0 fairness).  The negotiation +
+//! per-frame layout live in [`frame`] and `docs/abi.md` §10.4.2.
 //!
-//! **When it bites (topology).**  Fairness is keyed by connection, so it
-//! is meaningful when distinct actors arrive on distinct connections AND
-//! a connection carries multiple in-flight requests.  The current
-//! connection lifecycle is one-shot (one frame → one verdict → close),
-//! so in a deployment where each request opens its own connection, every
-//! connection is a single-request flow and DRR coincides with FIFO — the
-//! mechanism is correct and ready but inert end-to-end.  Its benefit is
-//! realized where a connection multiplexes many requests (a future
-//! persistent-connection mode) or where the host fronts a sequencer that
-//! aggregates many actors; the Rung-1 signer-hint extension sharpens the
-//! single-upstream-connection case.  See
+//! **When it bites (topology).**  Fairness is keyed by connection (outer)
+//! and signer hint (inner), so it is meaningful when distinct actors
+//! contend AND a connection carries multiple in-flight requests.  The
+//! current connection lifecycle is one-shot (one frame → one verdict →
+//! close), so in a deployment where each request opens its own
+//! connection, every connection is a single-request flow and DRR
+//! coincides with FIFO — the mechanism is correct and ready but inert
+//! end-to-end.  Its benefit is realized where a connection multiplexes
+//! many requests (a future persistent-connection mode) or where the host
+//! fronts a sequencer aggregating many actors; the Rung-1 signer hint is
+//! what makes the single-upstream-connection case fair.  The fairness
+//! *property* is therefore pinned at the queue API (where multi-request
+//! flows are constructable), not through the one-shot server.  See
 //! `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.5.
 //!
 //! ## What this crate does NOT provide
@@ -239,7 +263,14 @@ pub const HOST_IDENTIFIER: &str = "knomosis-host/v1";
 /// contract documented in `docs/abi.md` §10 changes.  Mirrors
 /// `knomosis-l1-ingest`'s `PROTOCOL_VERSION` and is part of the
 /// cross-stack version surface.
-pub const PROTOCOL_VERSION: u32 = 1;
+///
+/// `2` since the FQ Rung-1 amendment (FQ.9): a v2 client may opt into
+/// per-frame signer hints by opening the connection with the
+/// [`frame::KNH2_PREAMBLE`].  v2 is a strict SUPERSET — a v1 client
+/// (no preamble) remains valid and is served exactly as before, getting
+/// connection-keyed (Rung-0) fairness — so the bump does not break any
+/// existing client.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 #[cfg(test)]
 mod tests {
@@ -257,9 +288,10 @@ mod tests {
         assert_eq!(HOST_IDENTIFIER, "knomosis-host/v1");
     }
 
-    /// Protocol version starts at 1 and is bumped by amendment.
+    /// Protocol version is 2 since the FQ Rung-1 (signer-hint) wire
+    /// amendment; bumped by amendment thereafter.
     #[test]
     fn protocol_version_constant() {
-        assert_eq!(PROTOCOL_VERSION, 1);
+        assert_eq!(PROTOCOL_VERSION, 2);
     }
 }

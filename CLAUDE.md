@@ -871,7 +871,7 @@ work units.  Status:
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
 | SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack fixture corpus with cell-proof bundles emitted per fixture entry — 218 entries / 134 happy at SVC close, since widened by GP.3.3 → 238 and GP.5.3 → 248 / 152 happy; every happy fixture byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
 | E-G       | Ethereum: documentation + amendment | Complete (GENESIS_PLAN §15D + ABI §16 + extraction_notes §2.X + std_dependencies refresh) |
-| FQ / GP.8 | Per-actor fair queuing / burst resistance (knomosis-host) | Rung 0 complete (connection-keyed DRR fair scheduler, default-OFF `--scheduler drr`); Rung 1 signer-hint + Tracks B–D future work — see `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` |
+| FQ / GP.8 | Per-actor fair queuing / burst resistance (knomosis-host) | Track A complete: Rung 0 (connection-keyed DRR) + Rung 1 (signer-hint wire `PROTOCOL_VERSION 2` + two-tier DRR), default-OFF `--scheduler drr`; Tracks B–D (reimbursement claim / config guidance / runbook) future work — see `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` |
 | 7         | Advanced capabilities              | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -1213,9 +1213,27 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 824 tests across the 11 workspace
-crates (the FQ Rung-0 fair scheduler adds ~70 `knomosis-host`
-tests — the pure DRR core (`fair::drr`: per-flow / max-flows /
+**Rust-side test count.**  ~1 861 tests across the 11 workspace
+crates (the FQ Rung-1 signer-hint wire amendment + two-tier DRR
+adds ~37 tests — the `src/frame.rs` Rung-1 wire suite (preamble
+negotiation, hinted-frame read incl. the dedicated `TruncatedHint`, the
+compile-time + runtime `HARD_MAX_FRAME_SIZE < KNH2_MAGIC` collision
+invariant, the `encode_hinted_frame` round-trip, and the negotiation
+fuzz that never misclassifies a v1 frame), the two-tier `src/fair/drr.rs`
+tests (the extracted single-tier `Tier` suite preserved
+behaviour-for-behaviour + two-tier enqueue / eviction / outer-fairness +
+the spoof-confinement property under arbitrary interleavings +
+per-connection `max_signers` targeting + the Rung-0-collapse
+single-signer case), the `tests/fair_queue.rs` two-tier-fairness +
+queue-level spoof-resistance + targeted-`max_signers` cases, the new
+`tests/wire_compat.rs` v1/v2 interop suite (back-compat on BOTH the FIFO
+and DRR schedulers, negotiation robustness, the oversize-non-magic
+`ParseError`, the truncated-hint `ParseError`, and mixed concurrent
+load), and the `knomosis-bench --emit-hints` flag + an end-to-end
+hinted-path smoke test; `PROTOCOL_VERSION` is bumped 1 → 2 for the
+additive, opt-in wire superset (v1 clients unaffected); up from ~1 824
+at the FQ Rung-0 landing, where the FQ Rung-0 fair scheduler adds ~70
+`knomosis-host` tests — the pure DRR core (`fair::drr`: per-flow / max-flows /
 global cap enforcement, round-robin `pick`, empty-flow eviction +
 deficit reset, plus the equal-weight fairness-bound, the
 bounded-overtaking property under arbitrary interleavings,
@@ -1283,7 +1301,7 @@ landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~307  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep |
-| `knomosis-host`                     | ~360  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0 DRR fair scheduler |
+| `knomosis-host`                     | ~390  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
@@ -1447,35 +1465,60 @@ reason).
     connection write-timeout; kernel-panic isolation via
     `panic::catch_unwind`; `unsafe_code = "forbid"`.
 
-**Workstream FQ / GP.8 (Per-actor fair queuing — Rung 0).**  **Rung 0
-complete** (Lean has no part here; this is a `knomosis-host`-only
-liveness layer).  Adds the optional, default-OFF per-connection
-Deficit-Round-Robin fair scheduler that bounds, under contention for
-the single serial worker, the share any one connection can take — so a
-short-burst flood delays only itself while honest connections keep
-their share and their enqueue capacity, and a productive burst on an
-idle host is throttled by nothing.  See
+**Workstream FQ / GP.8 Track A (Per-actor fair queuing — Rungs 0 + 1).**
+**Track A complete** (Lean has no part here; this is a
+`knomosis-host`-only liveness layer).  Adds the optional, default-OFF
+**two-tier** Deficit-Round-Robin fair scheduler that bounds, under
+contention for the single serial worker, the share any one actor can
+take — so a short-burst flood delays only itself while honest actors
+keep their share and their enqueue capacity, and a productive burst on
+an idle host is throttled by nothing.  The OUTER tier round-robins
+across transport-authenticated connection ids; the INNER tier (Rung 1)
+round-robins across an optional, advisory per-frame signer hint within
+each connection, so a connection multiplexing many (possibly forged)
+hints is confined to its single outer share (`§2.6` invariant 2).  See
 `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2 + §4 (Rung 0 =
-FQ.0 – FQ.8).  What ships and where:
+FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
 
-  * **Pure DRR core** (`src/fair/drr.rs`).  An I/O-free, lock-free,
-    clock-free state machine generic over the routing key
-    (`DrrState<ConnId>` in Rung 0): `enqueue` enforces the three caps
-    (`Caps { per_flow, max_flows, global }`) and hands a rejected
-    request back (`Err(req)` → `Busy`; nothing dropped); `pick` is
-    equal-weight DRR (quantum = cost = 1 ⇒ strict round-robin) with
-    immediate empty-flow eviction (no deficit banked across idle
-    periods — the anti-burst property).  `DrrStats` exposes per-reason
-    rejection + dispatch counters (FQ.6).  Deterministic + replayable
-    (the accountable-fairness seam); `BTreeMap` flow maps (no hash-DoS
-    surface).  The `deficit` / `quantum` fields are retained for a
-    future budget-weighted quantum (a non-goal here).
+  * **Pure two-tier DRR core** (`src/fair/drr.rs`).  ONE I/O-free,
+    lock-free, clock-free generic round-robin `Tier<K, S>` reused at
+    both tiers (FQ.11a): the outer scheduler is `Tier<ConnId, ConnBucket>`
+    where `ConnBucket = Tier<SignerHint, RequestFifo>` is the inner
+    signer tier (any `Tier` is itself a `FlowStore`, so the same `pick`
+    drives both).  The production `DrrState` wraps the outer tier;
+    `enqueue(conn, signer, req)` enforces the four caps (`Caps {
+    per_flow, max_flows, max_signers, global }`) and hands a rejected
+    request back (`Err(req)` → `Busy`; nothing dropped, tallied per
+    reason); `pick` is equal-weight DRR (quantum = cost = 1 ⇒ strict
+    round-robin) with immediate empty-flow eviction at BOTH tiers (no
+    deficit banked across idle periods — the anti-burst property).
+    Deterministic + replayable (the accountable-fairness seam);
+    `BTreeMap` flow maps (no hash-DoS surface).  The single-tier FQ.1
+    suite runs green against the extracted `Tier`, proving the refactor
+    is behaviour-preserving; the spoof-confinement property is pinned
+    under arbitrary interleavings.  The `deficit` / `quantum` fields are
+    retained for a future budget-weighted quantum (a non-goal here).
+  * **Wire negotiation + signer hint** (`src/frame.rs`, FQ.9 / FQ.10).
+    A Rung-1 (v2) client opens with the 4-byte `KNH2_PREAMBLE`; the host
+    peeks the first 4 bytes once (`negotiate_connection`) and reads either
+    a v1 frame (`read_frame_with_prefix`, the prefix not lost) or a hinted
+    `[8-byte BE hint][4-byte len][payload]` frame (`read_hinted_frame`,
+    the bounded hint read BEFORE any body allocation, with a dedicated
+    `TruncatedHint`).  `read_request` is the one-shot composite (legacy ⇒
+    `LEGACY_SIGNER_HINT`).  The disambiguation is collision-proof because
+    `HARD_MAX_FRAME_SIZE` (16 MiB) is strictly below `KNH2_MAGIC`
+    (`0x4B4E4832` ≈ 1.18 GiB) — pinned by a `const` assertion + a unit
+    test — so a valid v1 length can never equal the preamble.  The hint
+    is **advisory routing only** (the kernel reads + verifies the real
+    signer from the CBE body, so a forged hint is fairness-only).
+    `encode_hinted_frame` is the canonical client-side encoder (the
+    single source of truth for the layout).
   * **`FairQueue` + `QueueHandle`** (`src/queue.rs`).  The concurrency
     wrapper (`Arc<Mutex<DrrState>>` + `Condvar`): `try_submit(conn,
-    payload)` notifies only on the empty→non-empty transition (the lone
-    worker can only be parked then); `next(timeout)` does ONE bounded
-    `Condvar` wait then `pick`s — a wakeup with the queue still empty
-    (timeout / `wake_all` / spurious) yields `Idle` so the worker
+    signer, payload)` notifies only on the empty→non-empty transition
+    (the lone worker can only be parked then); `next(timeout)` does ONE
+    bounded `Condvar` wait then `pick`s — a wakeup with the queue still
+    empty (timeout / `wake_all` / spurious) yields `Idle` so the worker
     re-checks `stop`, and the dispatch is returned with the lock ALREADY
     released so the slow `kernel.submit` runs lock-free (the §2.8
     throughput property); non-blocking `try_next` for the shutdown drain;
@@ -1484,50 +1527,73 @@ FQ.0 – FQ.8).  What ships and where:
     (the FairQueue counterpart of FIFO's disconnected-channel rejection);
     poison-recovering locks.
     `QueueHandle { Fifo(BoundedQueue), Fair(FairQueue) }` unifies both
-    behind one `submit(conn, payload)` so the listener code is
-    scheduler-agnostic.
+    behind one `submit(conn, signer, payload)` so the listener code is
+    scheduler-agnostic (FIFO ignores both routing values).
   * **Wiring** (`src/server.rs`, `src/listener.rs`, `src/config.rs`,
     `src/main.rs`).  `Server::run` branches on `--scheduler`: FIFO is
     byte-for-byte the historical path (`worker_loop` + `BoundedQueue`),
     DRR spawns `fair_worker_loop` (mirrors `worker_loop` exactly via
     `FairQueue::next` / `try_next`).  A process-wide monotonic
     `ConnId` (FQ.3) is assigned at `accept()` across all three
-    listeners and threaded as the DRR routing key.  Flags
-    `--scheduler {fifo|drr}` (default `fifo`), `--per-flow-cap`
-    (default 64), `--max-flows` (default 4096), with `--max-queue-depth`
-    reused as the global cap.  An unrecognised `--scheduler` value is a
-    `ConfigError::UnknownScheduler` (deferred to `validate`, mirroring
-    `--budget-policy`); intrinsic cap sanity (`per_flow ≥ 1`,
-    `1 ≤ max_flows ≤ HARD_MAX_FLOWS`) is checked under ANY scheduler,
-    while the cross-field `per_flow ≤ max_queue_depth` is enforced only
-    under `--scheduler drr` (so a small-queue FIFO config is unaffected);
-    `Caps::new` also clamps to the hard ceilings as defence in depth.
+    listeners; `handle_connection` performs the Rung-1 negotiation on
+    EVERY path (a wire concern, not a scheduler one — so a v2 client
+    interoperates with a FIFO host) and threads `(conn, signer)` to the
+    submit call.  Flags `--scheduler {fifo|drr}` (default `fifo`),
+    `--per-flow-cap` (default 64), `--max-flows` (default 4096),
+    `--max-signers-per-conn` (default 256, the Rung-1 inner cap), with
+    `--max-queue-depth` reused as the global cap.  An unrecognised
+    `--scheduler` value is a `ConfigError::UnknownScheduler` (deferred to
+    `validate`, mirroring `--budget-policy`); intrinsic cap sanity
+    (`per_flow ≥ 1`, `1 ≤ max_flows ≤ HARD_MAX_FLOWS`,
+    `1 ≤ max_signers ≤ HARD_MAX_SIGNERS_PER_CONN`) is checked under ANY
+    scheduler, while the cross-field `per_flow ≤ max_queue_depth` is
+    enforced only under `--scheduler drr`; `Caps::new` /
+    `with_max_signers` also clamp to the hard ceilings as defence in
+    depth.
   * **Observability (FQ.6).**  `FairQueue::stats()` exposes the
-    `DrrStats` counters (dispatched + per-reason rejections + active-flow
-    gauge), and the fair worker logs an aggregate `"fair scheduler
-    summary"` line at shutdown and, while running, at most once per 30 s
-    when there has been activity — never per request, silent on an idle
-    host.
-  * **Safety boundary preserved (§2.6).**  The routing key influences
-    order + drop ONLY, never admissibility; the host still parses no
-    CBE bytes.  A queue-level test pins that DRR genuinely reorders
-    vs FIFO yet preserves the verdict multiset; the kernel-panic
-    firewall and lock-free-dispatch-under-load are tested on the fair
-    path too (`tests/fair_queue.rs`).
-  * **Rung 0 = no wire change.**  Host-internal; `PROTOCOL_VERSION`
-    stays `1` (`docs/abi.md` §10.4.1).  The Rung-1 signer-hint
-    extension (a version-gated wire superset) and Tracks B–D
-    (reimbursement claim, config guidance, runbook) are future work.
-  * **Topology caveat (§2.5).**  Fairness is connection-keyed, so it
-    bites only when a connection carries multiple in-flight requests.
-    The host is one-shot-per-connection (one frame → one verdict →
-    close), so under that lifecycle every connection is a single-request
-    flow and DRR coincides with FIFO end-to-end — the mechanism ships
-    correct and ready, but its real bite needs a persistent-connection
-    mode (future) or a sequencer-fronted topology (where Rung 1 helps).
-    The fairness *property* is therefore pinned at the queue-API level
-    (where multi-request flows are constructable), not through the
-    one-shot TCP server.
+    `DrrStats` counters (dispatched + per-reason rejections incl.
+    `rejected_max_signers` + active-flow / active-signer gauges), and the
+    fair worker logs an aggregate `"fair scheduler summary"` line at
+    shutdown and, while running, at most once per 30 s when there has
+    been activity — never per request, silent on an idle host.
+  * **Safety boundary preserved (§2.6).**  The routing keys influence
+    order + drop ONLY, never admissibility; the host still parses no CBE
+    bytes (it reads at most the explicit, untrusted hint).  A queue-level
+    test pins that DRR genuinely reorders vs FIFO yet preserves the
+    verdict multiset; spoof confinement (a forged-hint flood cannot
+    starve a real victim) is pinned both as a `drr.rs` property and a
+    queue-level e2e test; the kernel-panic firewall and
+    lock-free-dispatch-under-load are tested on the fair path too
+    (`tests/fair_queue.rs`).
+  * **Wire interop (FQ.14b).**  `tests/wire_compat.rs` proves a legacy
+    (v1) client and a v2 client both work against one host instance, on
+    BOTH FIFO and DRR; the negotiation never mis-parses (an
+    oversize-non-magic length is a `ParseError`, a truncated hint is a
+    `ParseError`); v1/v2 connections under mixed concurrent load all get
+    the correct verdict.  `PROTOCOL_VERSION` is `2` for the additive,
+    opt-in wire superset (a v1 client with no preamble is unaffected and
+    gets Rung-0 fairness).
+  * **Client emitter (FQ.13c).**  `knomosis-bench --emit-hints` (default
+    OFF) opens each connection with `KNH2` + prepends the per-frame
+    signer hint (the sender `ActorId` the fixture's round-robin assigns)
+    via the canonical `knomosis_host::frame` encoders, exercising the
+    two-tier path end-to-end.  FQ.13a / FQ.13b (l1-ingest / observer
+    emitters) are N/A as literal client edits — the l1-ingest submitter
+    speaks HTTP and the observer submitters speak L1 JSON-RPC, so neither
+    speaks the canonical `knomosis-host` wire format today; the reusable
+    `encode_hinted_frame` primitive is their ready migration drop-in.
+  * **Topology caveat (§2.5).**  Fairness is connection- and
+    signer-keyed, so it bites only when a connection carries multiple
+    in-flight requests across distinct signers.  The host is
+    one-shot-per-connection (one frame → one verdict → close), so under
+    that lifecycle every connection is a single-request flow and DRR
+    coincides with FIFO end-to-end — the mechanism ships correct and
+    ready, but its real bite needs a persistent-connection mode (future)
+    or a sequencer-fronted topology (where the Rung-1 signer hint makes
+    the single-upstream-connection case fair).  The fairness *property*
+    is therefore pinned at the queue-API level (where multi-request,
+    multi-signer flows are constructable), not through the one-shot TCP
+    server.
   * **Throughput (FQ.7c).**  Two measurements.  (1) Queue-op overhead
     in ISOLATION (no-op kernel): DRR is ~1.8× the per-op cost of the
     FIFO `sync_channel` — the `Mutex` + `Condvar` + `BTreeMap` the
@@ -1539,6 +1605,9 @@ FQ.0 – FQ.8).  What ships and where:
     identical on both paths) — comfortably within the plan's ≥90% intent.
     The e2e benchmark is `#[ignore]`d (FQ.7c is not a CI gate; the
     sequential one-shot pattern is slow), runnable with `--ignored`.
+  * **Remaining (Tracks B–D).**  The reimbursement claim (Track B), the
+    free-tier/epoch config guidance (Track C), and the operator runbook
+    (Track D) are future work — see the GP.8 plan.
 
 **Workstream RH-D (Event subscription server).**  **Complete**
 (including the Lean `knomosis extract-events` subcommand +

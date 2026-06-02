@@ -42,7 +42,9 @@ use knomosis_host::frame::encode_frame;
 use knomosis_host::kernel::mock::MockKernel;
 use knomosis_host::kernel::{Kernel, KernelResponse};
 use knomosis_host::listener::tcp::TcpListener;
-use knomosis_host::queue::{drain_one, BoundedQueue, FairQueue, NextOutcome, SubmitOutcome};
+use knomosis_host::queue::{
+    drain_one, BoundedQueue, FairQueue, NextOutcome, SubmitOutcome, LEGACY_SIGNER_HINT,
+};
 use knomosis_host::server::{Server, ServerConfigBuilder};
 use knomosis_host::verdict::Verdict;
 
@@ -78,12 +80,12 @@ fn fairness_whale_does_not_bury_small() {
     // Whale = conn 1 (payload 1), 10 deep.  Small = conn 2 (payload 2).
     for _ in 0..10 {
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
     }
     assert!(matches!(
-        q.try_submit(2, vec![2]),
+        q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
         SubmitOutcome::Enqueued(_)
     ));
 
@@ -112,13 +114,16 @@ fn targeted_backpressure_whale_busy_small_ok() {
     let kernel = MockKernel::new();
     let mut whale_busy = 0;
     for _ in 0..5 {
-        if matches!(q.try_submit(1, vec![1]), SubmitOutcome::Busy) {
+        if matches!(
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
+            SubmitOutcome::Busy
+        ) {
             whale_busy += 1;
         }
     }
     assert_eq!(whale_busy, 3, "whale over-submission must be Busy past cap");
     assert!(matches!(
-        q.try_submit(2, vec![2]),
+        q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
         SubmitOutcome::Enqueued(_)
     ));
 
@@ -136,7 +141,7 @@ fn work_conserving_single_flow_full_rate() {
     let kernel = MockKernel::new();
     for i in 0..20u8 {
         assert!(matches!(
-            q.try_submit(1, vec![i]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![i]),
             SubmitOutcome::Enqueued(_)
         ));
     }
@@ -158,8 +163,8 @@ fn no_starvation_each_head_within_k() {
     let kernel = MockKernel::new();
     for c in 0..k {
         // Two requests each so no flow drains within the first K.
-        let _ = q.try_submit(c, vec![c as u8]);
-        let _ = q.try_submit(c, vec![c as u8]);
+        let _ = q.try_submit(c, LEGACY_SIGNER_HINT, vec![c as u8]);
+        let _ = q.try_submit(c, LEGACY_SIGNER_HINT, vec![c as u8]);
     }
     let order = drain_all_through(&q, &kernel);
     let first_k: std::collections::BTreeSet<u8> =
@@ -413,7 +418,7 @@ fn throughput_queue_op_overhead_isolated() {
     let drr = fair(64, 64, 256);
     let drr_start = Instant::now();
     for _ in 0..iters {
-        if let SubmitOutcome::Enqueued(_) = drr.try_submit(0, vec![0u8]) {
+        if let SubmitOutcome::Enqueued(_) = drr.try_submit(0, LEGACY_SIGNER_HINT, vec![0u8]) {
             if let Some(req) = drr.try_next() {
                 let _ = req
                     .reply
@@ -533,10 +538,10 @@ fn drr_reorders_but_preserves_verdict_multiset() {
     kdrr.set_responses(response_cycle());
     let drr_q = fair(64, 64, 64);
     for &p in &conn1 {
-        let _ = drr_q.try_submit(1, vec![p]);
+        let _ = drr_q.try_submit(1, LEGACY_SIGNER_HINT, vec![p]);
     }
     for &p in &conn2 {
-        let _ = drr_q.try_submit(2, vec![p]);
+        let _ = drr_q.try_submit(2, LEGACY_SIGNER_HINT, vec![p]);
     }
     let mut drr_pairs: Vec<(u8, u8)> = Vec::new();
     while let Some(req) = drr_q.try_next() {
@@ -623,7 +628,7 @@ fn drr_kernel_panic_is_contained() {
 #[test]
 fn fair_dispatch_does_not_serialise_producers_under_load() {
     let q = fair(64, 64, 4096);
-    let _ = q.try_submit(0, vec![0]);
+    let _ = q.try_submit(0, LEGACY_SIGNER_HINT, vec![0]);
     // Pop a request (lock released on return) and "dispatch" it slowly by
     // holding it across the producers' work.
     let NextOutcome::Dispatch(held) = q.next(Duration::from_millis(200)) else {
@@ -636,7 +641,7 @@ fn fair_dispatch_does_not_serialise_producers_under_load() {
         let q = q.clone();
         producers.push(thread::spawn(move || {
             for _ in 0..200 {
-                let _ = q.try_submit(c, vec![c as u8]);
+                let _ = q.try_submit(c, LEGACY_SIGNER_HINT, vec![c as u8]);
             }
         }));
     }
@@ -689,7 +694,7 @@ fn fair_stats_consistent_under_concurrency() {
         let q = q.clone();
         producers.push(thread::spawn(move || {
             for _ in 0..200 {
-                let _ = q.try_submit(c, vec![c as u8]);
+                let _ = q.try_submit(c, LEGACY_SIGNER_HINT, vec![c as u8]);
             }
         }));
     }
@@ -711,4 +716,165 @@ fn fair_stats_consistent_under_concurrency() {
     // Final stats are coherent.
     let s = q.stats();
     assert!(s.dispatched <= 1600);
+}
+
+// ===== FQ.14a — Rung-1 two-tier fairness + spoof-resistance ==========
+//
+// As in Rung 0, the fairness SIGNAL is pinned at the queue API (where a
+// connection can carry multiple in-flight requests across multiple
+// signer hints), not through the one-shot TCP server (under which every
+// connection is a single-request flow and DRR coincides with FIFO —
+// `GP.8` §2.5).  `tests/wire_compat.rs` covers the v1/v2 wire
+// negotiation end-to-end (FQ.14b); these cover the two-tier scheduling.
+
+/// Build a fair queue with an explicit per-connection signer cap.
+fn fair_with_signers(
+    per_flow: usize,
+    max_flows: usize,
+    max_signers: usize,
+    global: usize,
+) -> FairQueue {
+    FairQueue::new(Caps::new(per_flow, max_flows, global).with_max_signers(max_signers))
+}
+
+/// Two-tier fairness: one connection multiplexing MANY signer hints does
+/// not starve a second connection.  Conn 1 floods 5 hints × 2 requests
+/// (10 total); conn 2 sends one.  The outer round-robin alternates
+/// conn1/conn2, so conn 2 is served within the first outer cycle — never
+/// buried behind conn 1's multi-hint backlog.
+#[test]
+fn rung1_one_conn_many_hints_does_not_starve_another() {
+    let q = fair(64, 64, 256);
+    let kernel = MockKernel::new();
+    for hint in 0..5u64 {
+        for _ in 0..2 {
+            assert!(matches!(
+                q.try_submit(1, 100 + hint, vec![1]),
+                SubmitOutcome::Enqueued(_)
+            ));
+        }
+    }
+    assert!(matches!(
+        q.try_submit(2, 200, vec![2]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    let order = drain_all_through(&q, &kernel);
+    let pos = order
+        .iter()
+        .position(|p| p == &vec![2])
+        .expect("conn 2 served");
+    assert!(
+        pos <= 1,
+        "conn 2 served at position {pos}, expected within the outer cycle (≤ 1)"
+    );
+    assert_eq!(order.iter().filter(|p| *p == &vec![1]).count(), 10);
+}
+
+/// Spoof-resistance, end-to-end at the queue level (the §2.6(2)
+/// guarantee, FQ.14a): connection C floods 8 hints spoofing many
+/// victim ids; the REAL victim V on a different connection sends 4
+/// requests and is served within the bounded outer cycle — its requests
+/// land in the first 8 dispatches (one per outer cycle), wholly
+/// unaffected by C's 32-request multi-hint flood.
+#[test]
+fn rung1_spoofed_hints_do_not_starve_the_real_victim() {
+    let q = fair(64, 64, 256);
+    let kernel = MockKernel::new();
+    // Attacker conn 1: 8 forged hints × 4 requests = 32.
+    for hint in 0..8u64 {
+        for _ in 0..4 {
+            assert!(matches!(
+                q.try_submit(1, 9000 + hint, vec![1]),
+                SubmitOutcome::Enqueued(_)
+            ));
+        }
+    }
+    // Real victim conn 2: 4 requests under one hint.
+    for _ in 0..4 {
+        assert!(matches!(
+            q.try_submit(2, 7, vec![2]),
+            SubmitOutcome::Enqueued(_)
+        ));
+    }
+    let order = drain_all_through(&q, &kernel);
+    let victim_positions: Vec<usize> = order
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| *p == &vec![2])
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(victim_positions.len(), 4, "all 4 victim requests served");
+    assert!(
+        victim_positions.iter().max().unwrap() < &8,
+        "victim buried behind the spoofer's multi-hint flood: {victim_positions:?}"
+    );
+    // The spoofer still got served (work-conserving) — it just couldn't
+    // exceed its single outer share while the victim contended.
+    assert_eq!(order.iter().filter(|p| *p == &vec![1]).count(), 32);
+}
+
+/// `--max-signers-per-conn` is enforced at the FairQueue level and is
+/// targeted: the offending connection's (cap+1)-th distinct hint gets
+/// `Busy`, while a second connection opens its own hints freely.
+#[test]
+fn rung1_max_signers_cap_is_targeted_at_queue_level() {
+    let q = fair_with_signers(64, 64, 2, 256); // max_signers = 2 per conn
+    assert!(matches!(
+        q.try_submit(1, 10, vec![1]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert!(matches!(
+        q.try_submit(1, 11, vec![1]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    // Conn 1's THIRD distinct hint → Busy (max_signers = 2).
+    assert!(matches!(q.try_submit(1, 12, vec![1]), SubmitOutcome::Busy));
+    assert_eq!(q.stats().rejected_max_signers, 1);
+    // An existing hint on conn 1 still enqueues (cap is on distinct hints).
+    assert!(matches!(
+        q.try_submit(1, 10, vec![1]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    // Conn 2 opens its own two hints freely (per-connection cap).
+    assert!(matches!(
+        q.try_submit(2, 20, vec![2]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert!(matches!(
+        q.try_submit(2, 21, vec![2]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    assert_eq!(q.stats().rejected_max_signers, 1, "conn 2 unaffected");
+    assert_eq!(q.stats().active_signers, 4, "2 hints on each of 2 conns");
+}
+
+/// A legacy connection (all requests under the sentinel hint) behaves
+/// EXACTLY as Rung 0: the two-tier scheduler with one inner flow per
+/// connection collapses to per-connection round-robin (`GP.8` §2.6
+/// invariant 3).  Mirrors `fairness_whale_does_not_bury_small`.
+#[test]
+fn rung1_legacy_sentinel_hint_is_rung0_behaviour() {
+    let q = fair(64, 64, 256);
+    let kernel = MockKernel::new();
+    for _ in 0..10 {
+        assert!(matches!(
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+    }
+    assert!(matches!(
+        q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
+        SubmitOutcome::Enqueued(_)
+    ));
+    let order = drain_all_through(&q, &kernel);
+    let small_pos = order
+        .iter()
+        .position(|p| p == &vec![2])
+        .expect("small served");
+    assert!(
+        small_pos <= 1,
+        "legacy small served at {small_pos}, expected ≤ 1"
+    );
+    // Each connection has exactly one (sentinel) signer flow.
+    let _ = kernel;
 }

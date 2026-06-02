@@ -95,6 +95,43 @@ fn smoke_tcp_end_to_end() {
     assert!(outcome.throughput_ops_per_sec() > 0.0);
 }
 
+/// FQ.13c — `--emit-hints` end-to-end: the harness opens each connection
+/// with the `KNH2` preamble and prepends a per-frame signer hint; the
+/// host's Rung-1 negotiation de-frames it and admits every request,
+/// exactly as it does for legacy frames.  (The standalone server runs
+/// the default FIFO scheduler, which still de-frames v2 correctly — the
+/// negotiation is a wire concern, not a scheduler one — so this proves
+/// the hinted emitter is byte-compatible with the host's `read_request`
+/// even without DRR enabled.)
+#[test]
+fn smoke_emit_hints_end_to_end() {
+    let mut server =
+        StandaloneServer::spawn_tcp("127.0.0.1:0".parse().unwrap(), 64, HandlerConfig::default())
+            .expect("spawn tcp server");
+    let local_addr = server.tcp_local_addr().unwrap();
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 32,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::Tcp(local_addr));
+    runner_cfg.worker_count = 4;
+    runner_cfg.warmup_requests = 4;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+    runner_cfg.emit_hints = true; // <-- the Rung-1 wire path
+
+    let outcome = run(&fixture, &runner_cfg).expect("run hinted benchmark");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    // Every request admitted (would surface as UnexpectedVerdict if the
+    // host mis-parsed a hinted frame).
+    assert_eq!(outcome.measured_requests, 28);
+    assert!(outcome.throughput_ops_per_sec() > 0.0);
+}
+
 /// A complete report can be saved + loaded + summarised.
 #[cfg(unix)]
 #[test]

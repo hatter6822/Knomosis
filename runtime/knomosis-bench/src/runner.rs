@@ -11,9 +11,12 @@
 //!
 //!   1. Receive a generated [`crate::fixture::Fixture`] and a
 //!      benchmark [`Endpoint`] (Unix-socket path or TCP address).
-//!   2. Frame every payload up-front (4-byte BE length prefix +
-//!      raw CBE bytes) so the worker hot path is one
-//!      `write_all(framed_bytes)` per request.
+//!   2. Frame every payload up-front so the worker hot path is one
+//!      `write_all(framed_bytes)` per request.  Default: a legacy v1
+//!      frame (4-byte BE length prefix + raw CBE bytes).  Under
+//!      `--emit-hints` (FQ.13c): the `KNH2` preamble + an 8-byte signer
+//!      hint + the length-prefixed payload (the Rung-1 wire format),
+//!      both via the canonical `knomosis_host::frame` encoders.
 //!   3. Partition the pre-generated payloads across `worker_count`
 //!      submitter threads via a shared `AtomicUsize` cursor.
 //!   4. Each worker thread:
@@ -259,6 +262,14 @@ pub struct RunnerConfig {
     pub warmup_requests: usize,
     /// Per-request connect+request+response timeout.
     pub request_timeout: Duration,
+    /// Emit Rung-1 (v2) signer hints on the wire (FQ.13c).  When set,
+    /// each pre-framed request becomes `KNH2` preamble + an 8-byte
+    /// signer hint + the length-prefixed payload (the canonical Rung-1
+    /// frame, via [`knomosis_host::frame::encode_hinted_frame`]); the
+    /// hint is the sender `ActorId` the fixture's round-robin
+    /// determines.  Default `false` emits byte-identical legacy v1
+    /// frames.
+    pub emit_hints: bool,
 }
 
 impl RunnerConfig {
@@ -276,6 +287,7 @@ impl RunnerConfig {
             // Per-request budget under the 10k tx/sec target is
             // 100µs, so 30s is 5+ orders of magnitude of margin.
             request_timeout: Duration::from_secs(30),
+            emit_hints: false,
         }
     }
 }
@@ -469,19 +481,40 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
         });
     }
 
-    // 1. Frame every payload up-front.  Frame = 4-byte BE length +
-    //    payload bytes.  Pre-framing means the runner hot path
-    //    is one `write_all(framed_bytes)` per request — no
-    //    per-request allocation, no per-request encoder call.
+    // 1. Frame every payload up-front so the runner hot path is one
+    //    `write_all(framed_bytes)` per request — no per-request
+    //    allocation, no per-request encoder call.
+    //
+    //    Legacy (default): frame = `[4-byte BE length][payload]`.
+    //
+    //    Rung-1 (`--emit-hints`, FQ.13c): because the host is
+    //    one-shot-per-connection, each framed entry is one connection's
+    //    ENTIRE write, so it carries the `KNH2` preamble + an 8-byte
+    //    signer hint + the length-prefixed payload.  The hint is the
+    //    sender `ActorId`, which the fixture's round-robin assigns
+    //    deterministically as `i % actor_count` (see
+    //    `fixture::generate`).  Both paths use the canonical
+    //    `knomosis_host::frame` encoders (the single source of truth for
+    //    the wire layout — FQ.9), so the bench can never drift from the
+    //    host's `read_request`.
+    let actor_count = fixture.config.actor_count.max(1);
     let framed_payloads: Vec<Vec<u8>> = fixture
         .payloads
         .iter()
-        .map(|p| {
-            let len = u32::try_from(p.len()).expect("payload fits u32");
-            let mut buf = Vec::with_capacity(4 + p.len());
-            buf.extend_from_slice(&len.to_be_bytes());
-            buf.extend_from_slice(p);
-            buf
+        .enumerate()
+        .map(|(i, p)| {
+            if config.emit_hints {
+                let signer = (i % actor_count) as u64;
+                let hinted =
+                    knomosis_host::frame::encode_hinted_frame(signer, p).expect("payload fits u32");
+                let mut buf =
+                    Vec::with_capacity(knomosis_host::frame::KNH2_PREAMBLE.len() + hinted.len());
+                buf.extend_from_slice(&knomosis_host::frame::KNH2_PREAMBLE);
+                buf.extend_from_slice(&hinted);
+                buf
+            } else {
+                knomosis_host::frame::encode_frame(p).expect("payload fits u32")
+            }
         })
         .collect();
     let framed_payloads = Arc::new(framed_payloads);

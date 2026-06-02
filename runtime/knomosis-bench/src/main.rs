@@ -162,6 +162,7 @@ fn run_benchmark(cfg: &CliConfig) -> Result<ExitCode, BenchmarkRunError> {
     let mut runner_cfg = RunnerConfig::defaults_for(endpoint);
     runner_cfg.worker_count = cfg.worker_count;
     runner_cfg.warmup_requests = cfg.warmup_requests;
+    runner_cfg.emit_hints = cfg.emit_hints;
 
     info!(
         transport = %transport.name(),

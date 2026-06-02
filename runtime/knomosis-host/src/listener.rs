@@ -37,7 +37,7 @@
 use std::io::{Read, Write};
 use std::time::Duration;
 
-use crate::frame::{read_frame, FrameError};
+use crate::frame::{read_request, FrameError};
 use crate::queue::{ConnId, QueueHandle, SubmitOutcome};
 use crate::verdict::{Verdict, VerdictResponse};
 
@@ -229,18 +229,30 @@ impl HandleOutcome {
 /// pass its native socket type.
 ///
 /// `conn_id` is the connection's monotonic [`ConnId`] (FQ.3).  It is
-/// forwarded to [`QueueHandle::submit`] as the DRR routing key; the
-/// FIFO arm ignores it, so the FIFO path is byte-for-byte unchanged.
-/// The id is a *classification* hint only and never affects
-/// admissibility (`GP.8` §2.6 invariant 1).
+/// forwarded to [`QueueHandle::submit`] as the *outer* DRR routing key,
+/// alongside the per-frame advisory signer hint (Rung 1) — or
+/// [`crate::queue::LEGACY_SIGNER_HINT`] for a legacy / un-hinted frame.
+/// The FIFO arm ignores both, so the FIFO path is byte-for-byte
+/// unchanged for legacy clients.  Both routing values are
+/// *classification* hints only and never affect admissibility (`GP.8`
+/// §2.6 invariants 1 & 2).
+///
+/// The Rung-1 negotiation ([`read_request`]) is performed on EVERY path
+/// (FIFO and DRR), because it is a wire-format concern, not a scheduler
+/// one: a v2 client's preamble + per-frame hint are stripped and the
+/// opaque payload submitted regardless of scheduler, so v2 clients
+/// interoperate with a FIFO host (gaining no fairness, but working).
 pub fn handle_connection<S: Read + Write>(
     stream: &mut S,
     handle: &QueueHandle,
     config: &HandlerConfig,
     conn_id: ConnId,
 ) -> HandleOutcome {
-    // 1. Read the request frame.
-    let payload = match read_frame(stream, config.max_frame_size) {
+    // 1. Negotiate (one-time Rung-1 magic peek) + read the request frame
+    //    and its advisory signer hint.  A legacy connection yields
+    //    `LEGACY_SIGNER_HINT`; its payload bytes are byte-identical to a
+    //    plain v1 `read_frame`, so the FIFO path is unchanged for it.
+    let (signer_hint, payload) = match read_request(stream, config.max_frame_size) {
         Ok(p) => p,
         Err(FrameError::EofBeforeHeader) => {
             // Clean close before a frame arrived.  No response
@@ -262,8 +274,9 @@ pub fn handle_connection<S: Read + Write>(
     };
 
     // 2. Try to submit through the scheduler-agnostic queue handle.
-    //    The connection id is the DRR routing key (ignored by FIFO).
-    let reply_rx = match handle.submit(conn_id, payload) {
+    //    The (connection id, signer hint) pair is the two-tier DRR
+    //    routing key (both ignored by FIFO).
+    let reply_rx = match handle.submit(conn_id, signer_hint, payload) {
         SubmitOutcome::Enqueued(rx) => rx,
         SubmitOutcome::Busy => {
             // Queue full → respond Busy.

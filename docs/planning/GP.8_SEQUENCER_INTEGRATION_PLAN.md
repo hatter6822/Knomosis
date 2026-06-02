@@ -55,8 +55,37 @@ shutdown + FIFO-parity + throughput suites.  All four §2.6 invariants
 and the §2.8 concurrency contract hold; FIFO remains the unchanged
 default.  See the workstream snapshot in `CLAUDE.md`.
 
-**Remaining: Track A — Rung 1 (FQ.9 – FQ.15) and Tracks B–D.  Planned.
-Not started.**  Every prerequisite is met:
+**Track A — Rung 1 (FQ.9 – FQ.15): Complete.**  The signer-hint wire
+amendment + two-tier DRR ship behind the same default-OFF `--scheduler
+drr` flag, with `PROTOCOL_VERSION` bumped 1 → 2 for the additive,
+opt-in wire superset.  Delivered: the `KNH2`-preamble negotiation +
+per-frame hint readers + the canonical `encode_hinted_frame` client
+primitive + the compile-time `HARD_MAX_FRAME_SIZE < KNH2_MAGIC`
+collision invariant (`src/frame.rs`, FQ.9 / FQ.10a / FQ.10b); the DRR
+core refactored into ONE generic `Tier<K, S>` reused at both tiers
+(`Tier<ConnId, ConnBucket>` outer, `Tier<SignerHint, RequestFifo>`
+inner — the single-tier FQ.1 suite runs green against the extracted
+`Tier`), with the two-tier `pick` + spoof-confinement property test
+(`src/fair/drr.rs`, FQ.11a / FQ.11b); the `(conn, signer)` routing
+threaded through `FairQueue::try_submit` / `QueueHandle::submit` /
+`handle_connection` + the `--max-signers-per-conn` cap (`src/queue.rs`,
+`src/listener.rs`, `src/config.rs`, FQ.12); the `knomosis-bench
+--emit-hints` wire client (`runtime/knomosis-bench`, FQ.13c); and the
+two-tier-fairness + spoof-resistance (queue-level) + v1/v2 wire-interop
+(`tests/fair_queue.rs`, `tests/wire_compat.rs`, FQ.14a / FQ.14b)
+suites.  Every §2.6 invariant — including "forged hints are
+self-confined" (invariant 2) and "legacy clients degrade safely"
+(invariant 3) — holds, evidenced by tests.  FQ.13a / FQ.13b are N/A as
+literal client edits: the `knomosis-l1-ingest` submitter speaks HTTP and
+the `knomosis-faultproof-observer` submitters speak L1 JSON-RPC, so
+neither speaks the canonical `knomosis-host` wire format today; the
+reusable `encode_hinted_frame` primitive is the ready drop-in for their
+future migration (the plan's "if/where the ingestor submits there" /
+"whichever speak the knomosis-host wire format" hedges).  See the
+workstream snapshot in `CLAUDE.md`.
+
+**Remaining: Tracks B–D.  Planned.  Not started.**  Every prerequisite
+is met:
 
   * **RH-C (`knomosis-host`) — Complete.**  Track A (FQ) extends it.
   * **GP.6.2 (`knomosis-host` budget admission gate) — Complete.**
@@ -2008,15 +2037,22 @@ The unified sequencer integration is **Complete** when:
 
 ### Track A — Rung 1
 
-  * [ ] FQ.9, FQ.10a–b, FQ.11a–b, FQ.12, FQ.13a–c, FQ.14a–b, FQ.15 merged,
-        each its own commit.
-  * [ ] One DRR implementation (`Tier<K>`) reused at both tiers; the
-        single-tier suite runs green against it.
-  * [ ] Spoof-confinement property test (FQ.11b) + end-to-end spoof test
-        (FQ.14a) green.
-  * [ ] v1/v2 wire interop (FQ.14b) green; legacy clients unaffected.
-  * [ ] abi.md §10 + roadmap updated; CLAUDE.md ≡ AGENTS.md; versions
-        lockstepped; `PROTOCOL_VERSION == 2`.
+  * [x] FQ.9, FQ.10a–b, FQ.11a–b, FQ.12, FQ.14a–b, FQ.15 landed.  FQ.13c
+        (`knomosis-bench --emit-hints`) landed; FQ.13a / FQ.13b are N/A
+        as literal client edits (the l1-ingest submitter speaks HTTP, the
+        observer submitters speak L1 JSON-RPC — neither speaks the
+        canonical `knomosis-host` wire format), with the reusable
+        `encode_hinted_frame` primitive provided as their migration
+        drop-in.
+  * [x] One DRR implementation (`Tier<K, S>`) reused at both tiers; the
+        single-tier FQ.1 suite runs green against the extracted `Tier`.
+  * [x] Spoof-confinement property test (FQ.11b, `drr.rs`) +
+        queue-level end-to-end spoof test (FQ.14a, `tests/fair_queue.rs`)
+        green.
+  * [x] v1/v2 wire interop (FQ.14b, `tests/wire_compat.rs`) green on both
+        FIFO and DRR schedulers; legacy clients unaffected.
+  * [x] abi.md §10.4.2 + roadmap updated; CLAUDE.md ≡ AGENTS.md; versions
+        lockstepped (0.3.21); `PROTOCOL_VERSION == 2`.
 
 ### Track B — Reimbursement claims
 
