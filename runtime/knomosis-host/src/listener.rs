@@ -376,7 +376,7 @@ pub mod tcp {
                             config.max_concurrent_connections,
                         ) {
                             Some(slot) => {
-                                let conn_id = conn_seq.fetch_add(1, Ordering::Relaxed);
+                                let conn_id = crate::queue::assign_conn_id(&conn_seq);
                                 let handle = handle.clone();
                                 let config = config.clone();
                                 thread::spawn(move || {
@@ -505,7 +505,7 @@ pub mod tls {
                             config.max_concurrent_connections,
                         ) {
                             Some(slot) => {
-                                let conn_id = conn_seq.fetch_add(1, Ordering::Relaxed);
+                                let conn_id = crate::queue::assign_conn_id(&conn_seq);
                                 let handle = handle.clone();
                                 let config = config.clone();
                                 let tls_config = Arc::clone(&self.tls_config);
@@ -731,7 +731,7 @@ pub mod unix {
                             config.max_concurrent_connections,
                         ) {
                             Some(slot) => {
-                                let conn_id = conn_seq.fetch_add(1, Ordering::Relaxed);
+                                let conn_id = crate::queue::assign_conn_id(&conn_seq);
                                 let handle = handle.clone();
                                 let config = config.clone();
                                 thread::spawn(move || {

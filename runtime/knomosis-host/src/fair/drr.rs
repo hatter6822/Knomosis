@@ -802,6 +802,55 @@ mod tests {
             prop_assert!(s.is_empty());
         }
 
+        /// Bounded-overtaking fairness under ARBITRARY interleavings —
+        /// the general form of FQ.1b's equal-weight bound that holds even
+        /// with late-joining flows.  Invariant: if two CONSECUTIVE picks
+        /// return the same key X, then at the FIRST of those two picks X
+        /// was the ONLY active flow.  Equivalently, the scheduler never
+        /// serves X twice in a row while a *distinct* already-active flow
+        /// waits; a second flow can only be "jumped" by joining the round
+        /// AFTER X was last served (standard DRR: arrivals join the back).
+        ///
+        /// A `None` pick (empty queue) resets the relation: once every
+        /// flow has drained, a later same-key service is a fresh flow
+        /// instance, unrelated to the previous one.
+        #[test]
+        fn bounded_overtaking_under_arbitrary_ops(
+            ops in proptest::collection::vec(op_strategy(), 0..400)
+        ) {
+            let caps = Caps::new(8, 4, 20);
+            let mut s = DrrState::new(caps);
+            // (key served by the previous pick, active_len just before it)
+            let mut prev: Option<(u64, usize)> = None;
+            for op in ops {
+                match op {
+                    Op::Enqueue(k) => {
+                        let _ = s.enqueue(k, req(k));
+                    }
+                    Op::Pick => {
+                        let active_before = s.active_len();
+                        match s.pick() {
+                            Some(r) => {
+                                let k = tag_of(&r);
+                                if let Some((pk, p_active_before)) = prev {
+                                    if pk == k {
+                                        prop_assert_eq!(
+                                            p_active_before, 1,
+                                            "served {} twice consecutively while {} flows \
+                                             were active at the first service (overtaking)",
+                                            k, p_active_before
+                                        );
+                                    }
+                                }
+                                prev = Some((k, active_before));
+                            }
+                            None => prev = None,
+                        }
+                    }
+                }
+            }
+        }
+
         /// Determinism / replay: the same script yields the same served
         /// sequence on two independent runs.
         #[test]

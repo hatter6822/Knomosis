@@ -17,6 +17,15 @@
 > matter; this document is retained for amendment history and as the
 > standalone FQ reference.  The `FQ.*` identifiers are unchanged, and FQ
 > remains its own roadmap row.
+>
+> **Status: Rung 0 (FQ.0 – FQ.8) is implemented.**  The connection-keyed
+> Deficit-Round-Robin scheduler ships in `runtime/knomosis-host` behind
+> the default-OFF `--scheduler drr` flag (the pure `fair::drr` core, the
+> `FairQueue` / `QueueHandle`, the `ConnId` assignment + scheduler-branched
+> server, and the full unit / property / behavioural / stress test
+> corpus).  See the unified plan's Status section and the `knomosis-host`
+> workstream snapshot in `CLAUDE.md`.  Rung 1 (FQ.9 – FQ.15, the
+> signer-hint wire extension) is future work.
 
 **Document version:** v1.1 (revised from v1.0).
 

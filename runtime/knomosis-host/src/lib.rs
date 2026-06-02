@@ -181,6 +181,19 @@
 //! `PROTOCOL_VERSION` stays `1`.  The Rung-1 signer-hint extension
 //! (a superset, `PROTOCOL_VERSION` 2) is future work.
 //!
+//! **When it bites (topology).**  Fairness is keyed by connection, so it
+//! is meaningful when distinct actors arrive on distinct connections AND
+//! a connection carries multiple in-flight requests.  The current
+//! connection lifecycle is one-shot (one frame → one verdict → close),
+//! so in a deployment where each request opens its own connection, every
+//! connection is a single-request flow and DRR coincides with FIFO — the
+//! mechanism is correct and ready but inert end-to-end.  Its benefit is
+//! realized where a connection multiplexes many requests (a future
+//! persistent-connection mode) or where the host fronts a sequencer that
+//! aggregates many actors; the Rung-1 signer-hint extension sharpens the
+//! single-upstream-connection case.  See
+//! `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.5.
+//!
 //! ## What this crate does NOT provide
 //!
 //!   * **A long-running knomosis subprocess** (`knomosis serve` mode).

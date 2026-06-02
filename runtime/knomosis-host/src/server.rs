@@ -62,7 +62,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::config::Scheduler;
-use crate::fair::drr::Caps;
+use crate::fair::drr::{Caps, DrrStats};
 use crate::kernel::{Kernel, KernelResponse};
 use crate::listener::{tcp::TcpListener, HandlerConfig};
 use crate::queue::{
@@ -81,6 +81,12 @@ use crate::listener::unix::UnixListener;
 /// upper bound that prevents a wedged handler from blocking
 /// shutdown indefinitely.
 const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(75);
+
+/// How often the fair worker emits an aggregate fairness summary while
+/// running (FQ.6).  One `info` line at most per interval, and only when
+/// there has been activity since the last summary — never per-request
+/// spam, and silent on a fully-idle host.
+const FAIR_SUMMARY_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Server configuration.  Constructed by `crate::config::Config`'s
 /// validation path; downstream code uses `Server::builder` to
@@ -383,6 +389,11 @@ fn fair_worker_loop(queue: FairQueue, kernel: Box<dyn Kernel>, stop: Arc<AtomicB
     let kernel_id = kernel.identifier().to_string();
     tracing::info!(kernel = %kernel_id, "fair worker thread up");
     let poll_timeout = Duration::from_millis(100);
+    let mut last_summary = Instant::now();
+    // Cumulative-activity watermark (dispatched + all rejections) at the
+    // last emitted summary, so the periodic line is skipped when nothing
+    // has happened — no idle-host log noise.
+    let mut last_activity: u64 = 0;
     loop {
         if stop.load(Ordering::Relaxed) {
             // Drain remaining requests cooperatively before exiting.
@@ -393,6 +404,16 @@ fn fair_worker_loop(queue: FairQueue, kernel: Box<dyn Kernel>, stop: Arc<AtomicB
             }
             break;
         }
+        // FQ.6: periodic aggregate fairness summary (activity-gated).
+        if last_summary.elapsed() >= FAIR_SUMMARY_INTERVAL {
+            let stats = queue.stats();
+            let activity = fair_activity(&stats);
+            if activity != last_activity {
+                log_fair_summary(&kernel_id, &stats, "periodic");
+                last_activity = activity;
+            }
+            last_summary = Instant::now();
+        }
         match queue.next(poll_timeout) {
             NextOutcome::Dispatch(req) => {
                 let response = catch_unwinding_submit(&*kernel, &req.payload);
@@ -401,7 +422,37 @@ fn fair_worker_loop(queue: FairQueue, kernel: Box<dyn Kernel>, stop: Arc<AtomicB
             NextOutcome::Idle => continue,
         }
     }
+    // FQ.6: final aggregate summary on shutdown (always emitted so the
+    // operator gets the lifetime tally).
+    log_fair_summary(&kernel_id, &queue.stats(), "shutdown");
     tracing::info!(kernel = %kernel_id, "fair worker thread exited");
+}
+
+/// Cumulative-activity watermark for the fair scheduler: total
+/// dispatches plus all cap rejections.  Used to skip the periodic
+/// summary when nothing has changed.
+fn fair_activity(stats: &DrrStats) -> u64 {
+    stats
+        .dispatched
+        .saturating_add(stats.rejected_per_flow)
+        .saturating_add(stats.rejected_max_flows)
+        .saturating_add(stats.rejected_global)
+}
+
+/// Emit one aggregate fair-scheduler summary line (FQ.6).  `reason`
+/// distinguishes the `"periodic"` and `"shutdown"` call sites.
+fn log_fair_summary(kernel_id: &str, stats: &DrrStats, reason: &'static str) {
+    tracing::info!(
+        kernel = %kernel_id,
+        reason,
+        dispatched = stats.dispatched,
+        active_flows = stats.active_flows,
+        queued = stats.total_depth,
+        rejected_per_flow = stats.rejected_per_flow,
+        rejected_max_flows = stats.rejected_max_flows,
+        rejected_global = stats.rejected_global,
+        "fair scheduler summary"
+    );
 }
 
 /// Invoke `kernel.submit(bytes)` with a panic firewall.

@@ -1213,18 +1213,25 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 811 tests across the 11 workspace
-crates (the FQ Rung-0 fair scheduler adds ~57 `knomosis-host`
+**Rust-side test count.**  ~1 820 tests across the 11 workspace
+crates (the FQ Rung-0 fair scheduler adds ~66 `knomosis-host`
 tests — the pure DRR core (`fair::drr`: per-flow / max-flows /
 global cap enforcement, round-robin `pick`, empty-flow eviction +
-deficit reset, plus the equal-weight fairness-bound, determinism,
-and structural-invariant soak property tests), the `FairQueue`
-concurrency wrapper (targeted backpressure, blocking `next` +
-non-blocking `try_next`, lock-free dispatch, MPSC exactly-once,
-poison recovery, `stats`), the `--scheduler` / `--per-flow-cap` /
-`--max-flows` config gate, the `QueueHandle` seam, and the
+deficit reset, plus the equal-weight fairness-bound, the
+bounded-overtaking property under arbitrary interleavings,
+determinism, and structural-invariant soak property tests), the
+`FairQueue` concurrency wrapper (targeted backpressure, blocking
+`next` + non-blocking `try_next`, lock-free dispatch incl. a
+dispatch-outside-the-lock-under-load test, MPSC exactly-once,
+poison recovery, `stats` incl. a concurrent-consistency test), the
+`assign_conn_id` (FQ.3) distinct/monotonic concurrency test, the
+`--scheduler` / `--per-flow-cap` / `--max-flows` config gate (incl.
+`ConfigError::UnknownScheduler` + the intrinsic/cross-field cap
+validation split), the `QueueHandle` seam, and the
 `tests/fair_queue.rs` behavioural / stress / shutdown-under-load /
-FIFO-verdict-parity / throughput-parity suite; up from ~1 754 at
+DRR-reorders-but-preserves-multiset / kernel-panic-firewall /
+throughput suite — the e2e throughput benchmark is `#[ignore]`d per
+FQ.7c (not a CI gate); up from ~1 754 at
 the GP.7.4 landing, where the `knomosis-host` gas-pool forwarding
 adds ten tests — five in `config` (`gas_pool_flags_parse_and_assemble`,
 `no_gas_pool_flags_disabled`, `gas_pool_single_cap_defaults_other_to_zero`,
@@ -1275,7 +1282,7 @@ landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~307  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep |
-| `knomosis-host`                     | ~333  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0 DRR fair scheduler |
+| `knomosis-host`                     | ~356  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0 DRR fair scheduler |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
@@ -1481,25 +1488,50 @@ FQ.0 – FQ.8).  What ships and where:
     listeners and threaded as the DRR routing key.  Flags
     `--scheduler {fifo|drr}` (default `fifo`), `--per-flow-cap`
     (default 64), `--max-flows` (default 4096), with `--max-queue-depth`
-    reused as the global cap; DRR caps are validated only under
-    `--scheduler drr` (FIFO configs unaffected) and clamped to the
-    hard ceilings as defence in depth.
+    reused as the global cap.  An unrecognised `--scheduler` value is a
+    `ConfigError::UnknownScheduler` (deferred to `validate`, mirroring
+    `--budget-policy`); intrinsic cap sanity (`per_flow ≥ 1`,
+    `1 ≤ max_flows ≤ HARD_MAX_FLOWS`) is checked under ANY scheduler,
+    while the cross-field `per_flow ≤ max_queue_depth` is enforced only
+    under `--scheduler drr` (so a small-queue FIFO config is unaffected);
+    `Caps::new` also clamps to the hard ceilings as defence in depth.
+  * **Observability (FQ.6).**  `FairQueue::stats()` exposes the
+    `DrrStats` counters (dispatched + per-reason rejections + active-flow
+    gauge), and the fair worker logs an aggregate `"fair scheduler
+    summary"` line at shutdown and, while running, at most once per 30 s
+    when there has been activity — never per request, silent on an idle
+    host.
   * **Safety boundary preserved (§2.6).**  The routing key influences
     order + drop ONLY, never admissibility; the host still parses no
-    CBE bytes.  FIFO-verdict-parity is pinned by `tests/fair_queue.rs`.
+    CBE bytes.  A queue-level test pins that DRR genuinely reorders
+    vs FIFO yet preserves the verdict multiset; the kernel-panic
+    firewall and lock-free-dispatch-under-load are tested on the fair
+    path too (`tests/fair_queue.rs`).
   * **Rung 0 = no wire change.**  Host-internal; `PROTOCOL_VERSION`
     stays `1` (`docs/abi.md` §10.4.1).  The Rung-1 signer-hint
     extension (a version-gated wire superset) and Tracks B–D
     (reimbursement claim, config guidance, runbook) are future work.
-  * **Throughput (FQ.7c).**  A synthetic single-actor submit+dispatch
-    microbench with a no-op kernel shows ~1.8× the per-op overhead of
-    the FIFO `sync_channel` (the `Mutex` + `Condvar` + `BTreeMap` cost
-    DRR's fairness machinery inherently carries); this is the queue
-    overhead in ISOLATION.  Real throughput is dispatch-dominated and
-    the dispatch runs lock-free (§2.8), so the end-to-end single-actor
-    difference is negligible; the test asserts only a loose,
-    machine-independent bound to catch the catastrophic
-    lock-serialization regression FQ.7c exists to guard.
+  * **Topology caveat (§2.5).**  Fairness is connection-keyed, so it
+    bites only when a connection carries multiple in-flight requests.
+    The host is one-shot-per-connection (one frame → one verdict →
+    close), so under that lifecycle every connection is a single-request
+    flow and DRR coincides with FIFO end-to-end — the mechanism ships
+    correct and ready, but its real bite needs a persistent-connection
+    mode (future) or a sequencer-fronted topology (where Rung 1 helps).
+    The fairness *property* is therefore pinned at the queue-API level
+    (where multi-request flows are constructable), not through the
+    one-shot TCP server.
+  * **Throughput (FQ.7c).**  Two measurements.  (1) Queue-op overhead
+    in ISOLATION (no-op kernel): DRR is ~1.8× the per-op cost of the
+    FIFO `sync_channel` — the `Mutex` + `Condvar` + `BTreeMap` the
+    fairness machinery inherently carries, DRR's worst case with no
+    dispatch work to amortise it; a fast always-on test guards the
+    catastrophic lock-serialization regression.  (2) END-TO-END
+    single-actor throughput through the full server: drr/fifo = **1.00×**
+    (both bounded by the listener's 50 ms accept-poll + dispatch,
+    identical on both paths) — comfortably within the plan's ≥90% intent.
+    The e2e benchmark is `#[ignore]`d (FQ.7c is not a CI gate; the
+    sequential one-shot pattern is slow), runnable with `--ignored`.
 
 **Workstream RH-D (Event subscription server).**  **Complete**
 (including the Lean `knomosis extract-events` subcommand +

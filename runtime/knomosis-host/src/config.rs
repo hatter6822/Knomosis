@@ -160,15 +160,26 @@ pub struct Config {
     /// `--gas-pool-bold-cap <N>` value (GP.7.4): the BOLD-leg per-action
     /// drain cap.  See `gas_pool_eth_cap`.
     pub gas_pool_bold_cap: Option<u64>,
-    /// `--scheduler {fifo|drr}` (FQ Rung 0): the worker scheduler.
-    /// Default [`Scheduler::Fifo`] preserves the historical behaviour
-    /// byte-for-byte.
+    /// `--scheduler {fifo|drr}` (FQ Rung 0): the resolved worker
+    /// scheduler.  Default [`Scheduler::Fifo`] preserves the historical
+    /// behaviour byte-for-byte.  An unrecognised value leaves this at
+    /// the default and records the offending string in
+    /// [`Config::scheduler_unrecognized`] for [`Config::validate`] to
+    /// reject (the same defer-to-validate pattern `--budget-policy`
+    /// uses, so the error surfaces as a [`ConfigError`]).
     pub scheduler: Scheduler,
+    /// The raw `--scheduler` value when it was NOT `fifo` / `drr`
+    /// (`None` when unset or valid).  Held so [`Config::validate`] can
+    /// reject it with a clear [`ConfigError::UnknownScheduler`] rather
+    /// than the parser silently defaulting to FIFO.
+    pub scheduler_unrecognized: Option<String>,
     /// `--per-flow-cap <N>` (FQ.5): the DRR per-connection backlog cap.
-    /// Ignored unless `scheduler == Drr`.
+    /// Ignored at runtime unless `scheduler == Drr`, but its basic
+    /// sanity (`>= 1`) is validated regardless.
     pub per_flow_cap: usize,
     /// `--max-flows <N>` (FQ.5): the DRR cap on distinct active flows.
-    /// Ignored unless `scheduler == Drr`.
+    /// Ignored at runtime unless `scheduler == Drr`, but its basic
+    /// sanity (`1 ..= HARD_MAX_FLOWS`) is validated regardless.
     pub max_flows: usize,
 }
 
@@ -199,6 +210,7 @@ impl Config {
             gas_pool_eth_cap: None,
             gas_pool_bold_cap: None,
             scheduler: Scheduler::Fifo,
+            scheduler_unrecognized: None,
             per_flow_cap: DEFAULT_PER_FLOW_CAP,
             max_flows: DEFAULT_MAX_FLOWS,
         }
@@ -341,27 +353,39 @@ impl Config {
                 return Err(ConfigError::UnknownBudgetMode(mode.to_string()));
             }
         }
-        // FQ.5: the DRR caps are validated ONLY under `--scheduler drr`,
-        // so a FIFO deployment (the default) is byte-for-byte unaffected
-        // — a small `--max-queue-depth` no longer conflicts with the
-        // default per-flow cap it ignores.  `Caps::new` additionally
-        // clamps these to the hard ceilings as defence in depth.
-        if self.scheduler == Scheduler::Drr {
-            if self.per_flow_cap == 0 {
-                return Err(ConfigError::PerFlowCapZero);
-            }
-            if self.per_flow_cap > self.max_queue_depth {
-                return Err(ConfigError::PerFlowCapExceedsQueueDepth {
-                    per_flow_cap: self.per_flow_cap,
-                    max_queue_depth: self.max_queue_depth,
-                });
-            }
-            if self.max_flows == 0 {
-                return Err(ConfigError::MaxFlowsZero);
-            }
-            if self.max_flows > HARD_MAX_FLOWS {
-                return Err(ConfigError::MaxFlowsTooLarge(self.max_flows));
-            }
+        // FQ.0: an unrecognised `--scheduler` value (deferred from the
+        // parser) is a configuration error, like `--budget-policy <bad>`.
+        if let Some(mode) = self.scheduler_unrecognized.as_deref() {
+            return Err(ConfigError::UnknownScheduler(mode.to_string()));
+        }
+        // FQ.5: cap validation has two tiers.
+        //
+        // (a) INTRINSIC sanity is checked ALWAYS: a `per_flow_cap` of 0
+        //     or a `max_flows` outside `1 ..= HARD_MAX_FLOWS` is nonsense
+        //     for any scheduler, so it fails fast even in FIFO mode.
+        //     This never regresses a normal FIFO deployment — the
+        //     defaults (64 / 4096) are well within range — it only flags
+        //     an explicit nonsense value.
+        if self.per_flow_cap == 0 {
+            return Err(ConfigError::PerFlowCapZero);
+        }
+        if self.max_flows == 0 {
+            return Err(ConfigError::MaxFlowsZero);
+        }
+        if self.max_flows > HARD_MAX_FLOWS {
+            return Err(ConfigError::MaxFlowsTooLarge(self.max_flows));
+        }
+        // (b) The CROSS-FIELD relationship `per_flow_cap <=
+        //     max_queue_depth` is enforced ONLY under `--scheduler drr`,
+        //     so a FIFO deployment with a small `--max-queue-depth` and
+        //     the default (ignored) per-flow cap is byte-for-byte
+        //     unaffected.  `Caps::new` additionally clamps to the hard
+        //     ceilings as defence in depth.
+        if self.scheduler == Scheduler::Drr && self.per_flow_cap > self.max_queue_depth {
+            return Err(ConfigError::PerFlowCapExceedsQueueDepth {
+                per_flow_cap: self.per_flow_cap,
+                max_queue_depth: self.max_queue_depth,
+            });
         }
         Ok(())
     }
@@ -441,16 +465,20 @@ pub enum ConfigError {
     /// `--budget-policy` supplied with a value other than `bounded`.
     #[error("--budget-policy '{0}' unrecognised; the only supported mode is 'bounded'")]
     UnknownBudgetMode(String),
-    /// `--scheduler drr` with `--per-flow-cap 0` (a flow could buffer
-    /// nothing).
-    #[error("--per-flow-cap cannot be zero under --scheduler drr")]
+    /// `--scheduler` supplied with a value other than `fifo` / `drr`.
+    #[error("--scheduler '{0}' unrecognised; valid values are 'fifo' or 'drr'")]
+    UnknownScheduler(String),
+    /// `--per-flow-cap 0` (a flow could buffer nothing).  Intrinsically
+    /// invalid, so rejected under any scheduler.
+    #[error("--per-flow-cap cannot be zero")]
     PerFlowCapZero,
     /// `--scheduler drr` with `--per-flow-cap` exceeding the global
     /// `--max-queue-depth` (a per-flow cap above the global cap can
-    /// never bind).
+    /// never bind).  This cross-field check is enforced only under
+    /// `--scheduler drr`.
     #[error(
         "--per-flow-cap {per_flow_cap} exceeds --max-queue-depth {max_queue_depth} \
-         (the per-flow cap must not exceed the global cap)"
+         under --scheduler drr (the per-flow cap must not exceed the global cap)"
     )]
     PerFlowCapExceedsQueueDepth {
         /// The configured per-flow cap.
@@ -458,11 +486,12 @@ pub enum ConfigError {
         /// The configured global (queue-depth) cap.
         max_queue_depth: usize,
     },
-    /// `--scheduler drr` with `--max-flows 0` (no flow could ever be
-    /// admitted).
-    #[error("--max-flows cannot be zero under --scheduler drr")]
+    /// `--max-flows 0` (no flow could ever be admitted).  Intrinsically
+    /// invalid, so rejected under any scheduler.
+    #[error("--max-flows cannot be zero")]
     MaxFlowsZero,
-    /// `--scheduler drr` with `--max-flows` above the hard ceiling.
+    /// `--max-flows` above the hard ceiling.  Intrinsically invalid, so
+    /// rejected under any scheduler.
     #[error("--max-flows {0} exceeds hard ceiling")]
     MaxFlowsTooLarge(usize),
 }
@@ -629,18 +658,19 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 let value = iter
                     .next()
                     .ok_or_else(|| ParseError::MissingValue("--scheduler".into()))?;
-                // A malformed enum value is a CLI usage error, exactly
-                // like a malformed number — surfaced as InvalidValue so
-                // it routes to the usage-error exit path (mirrors every
-                // other typed flag).
-                cfg.scheduler =
-                    value
-                        .parse::<Scheduler>()
-                        .map_err(|e| ParseError::InvalidValue {
-                            flag: "--scheduler".into(),
-                            value: value.clone(),
-                            reason: e.to_string(),
-                        })?;
+                // An unrecognised scheduler mode is a *configuration*
+                // error (like `--budget-policy <bad>`), not a parse
+                // error: defer it to `validate` so it surfaces as a clear
+                // `ConfigError::UnknownScheduler`.  On a valid value set
+                // the resolved field and clear any earlier bad value
+                // (last-flag-wins for repeated `--scheduler`).
+                match value.parse::<Scheduler>() {
+                    Ok(s) => {
+                        cfg.scheduler = s;
+                        cfg.scheduler_unrecognized = None;
+                    }
+                    Err(_) => cfg.scheduler_unrecognized = Some(value.clone()),
+                }
             }
             "--per-flow-cap" => {
                 let value = iter
@@ -1343,27 +1373,45 @@ mod tests {
         fifo.validate().unwrap();
     }
 
-    /// An unrecognised scheduler value is a clear parse error.
+    /// An unrecognised scheduler value parses (deferred) but fails
+    /// validation with a clear `ConfigError::UnknownScheduler` — the
+    /// same defer-to-validate discipline `--budget-policy` uses.
     #[test]
-    fn scheduler_invalid_value_is_parse_error() {
-        match parse_args(&args(&[
+    fn scheduler_invalid_value_is_config_error() {
+        let cfg = parse_args(&args(&[
             "--listen",
             "127.0.0.1:7654",
             "--mock",
             "--scheduler",
             "bogus",
-        ])) {
-            Err(ParseError::InvalidValue {
-                flag,
-                value,
-                reason,
-            }) => {
-                assert_eq!(flag, "--scheduler");
-                assert_eq!(value, "bogus");
-                assert!(reason.contains("fifo") && reason.contains("drr"));
-            }
-            other => panic!("expected InvalidValue, got {other:?}"),
+        ]))
+        .unwrap();
+        // Resolved field stays at the safe default until validation runs.
+        assert_eq!(cfg.scheduler, super::Scheduler::Fifo);
+        assert_eq!(cfg.scheduler_unrecognized.as_deref(), Some("bogus"));
+        match cfg.validate() {
+            Err(ConfigError::UnknownScheduler(v)) => assert_eq!(v, "bogus"),
+            other => panic!("expected UnknownScheduler, got {other:?}"),
         }
+    }
+
+    /// Last-flag-wins: a valid `--scheduler` after an invalid one clears
+    /// the recorded bad value, so validation passes.
+    #[test]
+    fn scheduler_last_valid_value_wins() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "bogus",
+            "--scheduler",
+            "drr",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.scheduler, super::Scheduler::Drr);
+        assert!(cfg.scheduler_unrecognized.is_none());
+        cfg.validate().unwrap();
     }
 
     /// `Scheduler` round-trips through `FromStr` / `Display` / `name`.
@@ -1535,9 +1583,31 @@ mod tests {
         cfg.validate().unwrap();
     }
 
-    /// The bad DRR caps are accepted in FIFO mode (validation is gated).
+    /// FIFO mode skips the CROSS-FIELD check (`per_flow_cap` may exceed
+    /// `max_queue_depth` when it is going to be ignored anyway).
     #[test]
-    fn fifo_mode_ignores_bad_drr_caps() {
+    fn fifo_mode_skips_cross_field_cap_check() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "fifo",
+            "--per-flow-cap",
+            "500",
+            "--max-queue-depth",
+            "256",
+        ]))
+        .unwrap();
+        assert!(cfg.per_flow_cap > cfg.max_queue_depth);
+        cfg.validate().unwrap();
+    }
+
+    /// INTRINSIC cap sanity (`per_flow_cap >= 1`) is enforced regardless
+    /// of scheduler — a value of 0 is nonsense for any scheduler and
+    /// fails fast even in FIFO mode.
+    #[test]
+    fn intrinsic_per_flow_cap_zero_rejected_even_in_fifo() {
         let cfg = parse_args(&args(&[
             "--listen",
             "127.0.0.1:7654",
@@ -1546,11 +1616,32 @@ mod tests {
             "fifo",
             "--per-flow-cap",
             "0",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::PerFlowCapZero) => {}
+            other => panic!("expected PerFlowCapZero, got {other:?}"),
+        }
+    }
+
+    /// INTRINSIC cap sanity (`max_flows >= 1`) is enforced regardless of
+    /// scheduler.
+    #[test]
+    fn intrinsic_max_flows_zero_rejected_even_in_fifo() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "fifo",
             "--max-flows",
             "0",
         ]))
         .unwrap();
-        cfg.validate().unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxFlowsZero) => {}
+            other => panic!("expected MaxFlowsZero, got {other:?}"),
+        }
     }
 
     /// Help text mentions the FQ scheduler / cap flags.

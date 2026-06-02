@@ -40,6 +40,19 @@ use crate::kernel::KernelResponse;
 /// ignores it.
 pub type ConnId = u64;
 
+/// Assign the next [`ConnId`] from a shared monotonic source (FQ.3).
+///
+/// Called identically by every listener's accept loop, against the ONE
+/// counter [`crate::server::Server::run`] creates and shares across all
+/// transports, so connection ids are globally distinct and monotonic
+/// regardless of which listener accepted the connection.  `Relaxed`
+/// ordering is sufficient: the id is a fairness routing key, not a
+/// synchronization signal, and `fetch_add` is atomic so no two callers
+/// ever observe the same value.
+pub fn assign_conn_id(seq: &std::sync::atomic::AtomicU64) -> ConnId {
+    seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Default maximum queue depth.  256 in-flight requests is enough
 /// headroom for a sequencer at moderate load without consuming
 /// excessive memory.
@@ -237,22 +250,35 @@ impl FairQueue {
             reply: reply_tx,
         };
         let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        // Was the queue empty BEFORE this enqueue?  The single worker
+        // parks (in `next`) only while the queue is empty, so it can be
+        // waiting ONLY across an empty→non-empty transition.  Notifying
+        // just on that transition therefore wakes a parked worker in
+        // every case it could be parked, while skipping a redundant
+        // `Condvar` wake on each enqueue into an already-backlogged queue
+        // (the worker provably is not parked then — it will observe the
+        // new request the next time it calls `next`).  Sound for the
+        // single-consumer worker model; revisit if multiple workers are
+        // ever added.
+        let was_empty = guard.is_empty();
         match guard.enqueue(conn, request) {
             Ok(()) => {
                 // Release the lock BEFORE notifying so the woken worker
                 // does not immediately re-block on a still-held lock.
                 drop(guard);
-                self.not_empty.notify_one();
+                if was_empty {
+                    self.not_empty.notify_one();
+                }
                 SubmitOutcome::Enqueued(reply_rx)
             }
             Err(_returned) => {
                 // The returned request (carrying its reply sender) and
                 // the matching `reply_rx` are both dropped here.  The
-                // per-reason breakdown lives in `stats()`; we keep the
-                // hot path quiet (a single debug line, never `info`
-                // spam — FQ.6).
+                // per-reason rejection breakdown is tallied in the
+                // scheduler's `stats()` and surfaced by the worker's
+                // aggregate summary (FQ.6) — the hot path emits no
+                // per-request log line (never per-request spam).
                 drop(guard);
-                tracing::debug!(conn, "fair queue: request rejected (cap reached)");
                 SubmitOutcome::Busy
             }
         }
@@ -1068,5 +1094,46 @@ mod tests {
             handle.submit(2, vec![2]),
             SubmitOutcome::Enqueued(_)
         ));
+    }
+
+    /// FQ.3 — `assign_conn_id` yields distinct, monotonic ids from a
+    /// shared counter, including under concurrency.  This is the exact
+    /// mechanism every listener accept loop uses against the single
+    /// shared `conn_seq` (so connection ids are globally distinct and
+    /// monotonic across all three transports); a regression to a
+    /// non-atomic load+store would surface here as duplicate ids.
+    #[test]
+    fn assign_conn_id_distinct_and_monotonic() {
+        use super::assign_conn_id;
+        use std::sync::atomic::AtomicU64;
+        // Sequential: strictly increasing from 0.
+        let seq = AtomicU64::new(0);
+        assert_eq!(assign_conn_id(&seq), 0);
+        assert_eq!(assign_conn_id(&seq), 1);
+        assert_eq!(assign_conn_id(&seq), 2);
+        // Concurrent: 8 threads × 100 ids each, all distinct and covering
+        // the contiguous range 0..800 (no duplicates, no gaps).
+        let seq = Arc::new(AtomicU64::new(0));
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let s = Arc::clone(&seq);
+            handles.push(thread::spawn(move || {
+                (0..100).map(|_| assign_conn_id(&s)).collect::<Vec<u64>>()
+            }));
+        }
+        let mut all: Vec<u64> = handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap())
+            .collect();
+        all.sort_unstable();
+        let mut distinct = all.clone();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 800, "conn ids must be distinct");
+        assert_eq!(*all.first().unwrap(), 0);
+        assert_eq!(
+            *all.last().unwrap(),
+            799,
+            "ids cover a contiguous monotonic range"
+        );
     }
 }

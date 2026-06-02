@@ -1073,6 +1073,14 @@ signer hint (a wire-format superset that bumps `PROTOCOL_VERSION` to
 `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.3–§2.8 for the
 design.
 
+Because the connection lifecycle is one-shot (§10.5 — one frame, one
+verdict, then close), connection-keyed fairness is meaningful only when
+a connection carries multiple in-flight requests (a persistent-connection
+mode, future) or when the host fronts a sequencer aggregating many
+actors; under strict one-shot, every connection is a single-request flow
+and DRR coincides with FIFO.  This is a deployment-topology property, not
+a wire-format one — the wire format is unchanged either way.
+
 ### 10.5 Connection lifecycle
 
 Each connection handles exactly one request/response cycle, then
