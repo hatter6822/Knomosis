@@ -38,7 +38,7 @@
   <a href="https://github.com/hatter6822/Knomosis/actions/workflows/ci-solidity.yml">
     <img alt="Solidity CI" src="https://img.shields.io/github/actions/workflow/status/hatter6822/Knomosis/ci-solidity.yml?branch=main&label=Solidity%20CI" />
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.3.21-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.4.0-blue" />
   <img alt="Lean" src="https://img.shields.io/badge/Lean-4.29.1-10b981" />
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-informational" />
 </p>
@@ -59,7 +59,7 @@ The canonical design specification is [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN
 
 | Attribute | Value |
 |---|---|
-| Version | `v0.3.21` |
+| Version | `v0.4.0` |
 | Lean toolchain | `v4.29.1` (pinned in `lean-toolchain`) |
 | Build tag | `knomosis-step-vm-coherence` |
 | TCB core | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` |

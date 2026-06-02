@@ -1213,25 +1213,35 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 861 tests across the 11 workspace
+**Rust-side test count.**  ~1 878 tests across the 11 workspace
 crates (the FQ Rung-1 signer-hint wire amendment + two-tier DRR
-adds ~37 tests — the `src/frame.rs` Rung-1 wire suite (preamble
-negotiation, hinted-frame read incl. the dedicated `TruncatedHint`, the
-compile-time + runtime `HARD_MAX_FRAME_SIZE < KNH2_MAGIC` collision
-invariant, the `encode_hinted_frame` round-trip, and the negotiation
-fuzz that never misclassifies a v1 frame), the two-tier `src/fair/drr.rs`
-tests (the extracted single-tier `Tier` suite preserved
-behaviour-for-behaviour + two-tier enqueue / eviction / outer-fairness +
-the spoof-confinement property under arbitrary interleavings +
-per-connection `max_signers` targeting + the Rung-0-collapse
-single-signer case), the `tests/fair_queue.rs` two-tier-fairness +
-queue-level spoof-resistance + targeted-`max_signers` cases, the new
-`tests/wire_compat.rs` v1/v2 interop suite (back-compat on BOTH the FIFO
-and DRR schedulers, negotiation robustness, the oversize-non-magic
-`ParseError`, the truncated-hint `ParseError`, and mixed concurrent
-load), and the `knomosis-bench --emit-hints` flag + an end-to-end
-hinted-path smoke test; `PROTOCOL_VERSION` is bumped 1 → 2 for the
-additive, opt-in wire superset (v1 clients unaffected); up from ~1 824
+adds ~53 tests — the `src/frame.rs` Rung-1 wire suite (preamble
+negotiation, hinted-frame read incl. the dedicated `TruncatedHint` +
+`TruncatedHintedFrame` committed-but-truncated variants, the
+`ConnReader` per-connection read-state machine (one-shot + persistent
+multi-frame v1/v2, negotiates once), the compile-time + runtime
+`HARD_MAX_FRAME_SIZE < KNH2_MAGIC` collision invariant, the
+`encode_hinted_frame` round-trip, and the negotiation fuzz that never
+misclassifies a v1 frame), the two-tier `src/fair/drr.rs` tests (the
+extracted single-tier `Tier` suite preserved behaviour-for-behaviour —
+now driving the REAL `enqueue_leaf` with no synthetic global, which
+lives at the `DrrState` level — + two-tier enqueue / eviction /
+outer-fairness + the spoof-confinement property under arbitrary
+interleavings + per-connection `max_signers` targeting + the
+Rung-0-collapse single-signer case), the `tests/fair_queue.rs`
+two-tier-fairness + queue-level spoof-resistance + targeted-`max_signers`
++ the two-tier queue-op throughput microbench (~2.7× FIFO in isolation,
+guarded), the new `tests/wire_compat.rs` v1/v2 interop suite (back-compat
+on BOTH the FIFO and DRR schedulers, negotiation robustness, the
+oversize-non-magic `ParseError`, the truncated-hint `ParseError`, and
+mixed concurrent load), the `knomosis-bench --emit-hints` flag + an
+end-to-end hinted-path smoke test, AND the FQ.13a `knomosis-l1-ingest`
+`RawTcpSubmitter` suite (framing layout, byte-equivalence against the
+canonical `knomosis_host::frame` encoders, end-to-end against a live
+host, + the daemon's submitter-endpoint validation); `PROTOCOL_VERSION`
+is bumped 1 → 2 for the additive, opt-in wire superset (v1 clients
+unaffected) and the package semver to 0.4.0 (minor — new public API +
+flags + wire version); up from ~1 824
 at the FQ Rung-0 landing, where the FQ Rung-0 fair scheduler adds ~70
 `knomosis-host` tests — the pure DRR core (`fair::drr`: per-flow / max-flows /
 global cap enforcement, round-robin `pick`, empty-flow eviction +
@@ -1300,8 +1310,8 @@ landing:
 | `knomosis-cross-stack`              |  ~33  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind)      |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~307  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep |
-| `knomosis-host`                     | ~390  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) |
+| `knomosis-l1-ingest`                | ~320  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
+| `knomosis-host`                     | ~393  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
@@ -1384,11 +1394,24 @@ signs with a `zeroize`-protected bridge-actor key, and forwards
 CBE-encoded `SignedAction`s to the downstream consumer.
 
   * **Surface.**  `knomosis-l1-ingest` library + daemon binary
-    (`--l1-rpc / --bridge-actor-keystore / --knomosis-host-url /
+    (`--l1-rpc / --bridge-actor-keystore /
+    (--knomosis-host-url | --knomosis-host-tcp) /
     --bridge-contract / --identity-registry / --state-file
-    [+ optional --deployment-id / --confirmation-depth /
-    --poll-interval-ms / --until-block]`).  Identifier:
-    `"knomosis-l1-ingest/v1"`.
+    [+ optional --emit-signer-hints / --deployment-id /
+    --confirmation-depth / --poll-interval-ms / --until-block]`).
+    Identifier: `"knomosis-l1-ingest/v1"`.
+  * **Submitters (FQ.13a).**  `submitter::raw_tcp::RawTcpSubmitter`
+    (`--knomosis-host-tcp <ADDR>`) is the canonical forwarder — it speaks
+    `knomosis-host`'s actual length-prefixed wire format (the HTTP
+    `--knomosis-host-url` path is a placeholder that cannot talk to a real
+    host), so it is the first real RH-B → RH-C link.  Opt-in
+    `--emit-signer-hints` prepends the Rung-1 `KNH2` preamble + the 8-byte
+    signer-`ActorId` hint per frame (default OFF ⇒ byte-identical legacy
+    v1).  The daemon boxes the chosen submitter (`Box<dyn Submitter>`),
+    requires exactly one endpoint, and gates `--emit-signer-hints` on the
+    raw-TCP endpoint.  Framing is hand-rolled but byte-pinned against the
+    canonical `knomosis_host::frame` encoders (dev-dep) + driven
+    end-to-end against a live in-process host.
   * **Byte-exact CBE.**  `src/encoding.rs` hand-rolls Lean's
     `Encoding.Action.encode` layout byte-for-byte: 1-byte tag +
     8-byte LE-Nat head per field; byte strings as head + raw
@@ -1573,15 +1596,22 @@ FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
     the correct verdict.  `PROTOCOL_VERSION` is `2` for the additive,
     opt-in wire superset (a v1 client with no preamble is unaffected and
     gets Rung-0 fairness).
-  * **Client emitter (FQ.13c).**  `knomosis-bench --emit-hints` (default
-    OFF) opens each connection with `KNH2` + prepends the per-frame
-    signer hint (the sender `ActorId` the fixture's round-robin assigns)
-    via the canonical `knomosis_host::frame` encoders, exercising the
-    two-tier path end-to-end.  FQ.13a / FQ.13b (l1-ingest / observer
-    emitters) are N/A as literal client edits — the l1-ingest submitter
-    speaks HTTP and the observer submitters speak L1 JSON-RPC, so neither
-    speaks the canonical `knomosis-host` wire format today; the reusable
-    `encode_hinted_frame` primitive is their ready migration drop-in.
+  * **Client emitters (FQ.13a + FQ.13c).**  Two real wire clients emit
+    hints.  (FQ.13c) `knomosis-bench --emit-hints` (default OFF) opens
+    each connection with `KNH2` + prepends the per-frame signer hint via
+    the canonical `knomosis_host::frame` encoders.  (FQ.13a) the
+    `knomosis-l1-ingest` `submitter::raw_tcp::RawTcpSubmitter` is the
+    crate's **first real `knomosis-host` forwarder** — unlike the HTTP
+    placeholder it speaks the host's actual length-prefixed wire format,
+    and the `--knomosis-host-tcp <ADDR>` + opt-in `--emit-signer-hints`
+    daemon flags select it (the hint is the signer `ActorId`).  Its
+    hand-rolled framing is byte-pinned against `encode_frame` /
+    `encode_hinted_frame` (single source of truth, a `knomosis-host`
+    dev-dep — no runtime coupling) and driven end-to-end against a live
+    in-process host (legacy + hinted + v1/v2 interop).  FQ.13b (observer)
+    is N/A: it submits L1 JSON-RPC game-move calldata, never a
+    `SignedAction` to the host, so there is nothing to hint — the
+    `encode_hinted_frame` primitive is the ready drop-in if that changes.
   * **Topology caveat (§2.5).**  Fairness is connection- and
     signer-keyed, so it bites only when a connection carries multiple
     in-flight requests across distinct signers.  The host is
@@ -1594,12 +1624,15 @@ FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
     is therefore pinned at the queue-API level (where multi-request,
     multi-signer flows are constructable), not through the one-shot TCP
     server.
-  * **Throughput (FQ.7c).**  Two measurements.  (1) Queue-op overhead
-    in ISOLATION (no-op kernel): DRR is ~1.8× the per-op cost of the
-    FIFO `sync_channel` — the `Mutex` + `Condvar` + `BTreeMap` the
-    fairness machinery inherently carries, DRR's worst case with no
-    dispatch work to amortise it; a fast always-on test guards the
-    catastrophic lock-serialization regression.  (2) END-TO-END
+  * **Throughput (FQ.7c).**  Three measurements (all always-on
+    queue-op microbenches except the e2e one).  (1) Single-tier queue-op
+    overhead in ISOLATION (no-op kernel): Rung-0 DRR is ~1.8× the per-op
+    cost of the FIFO `sync_channel` — the `Mutex` + `Condvar` + `BTreeMap`
+    the fairness machinery inherently carries, DRR's worst case with no
+    dispatch work to amortise it.  (2) Two-tier queue-op overhead
+    (16 conns × 8 signers, both `BTreeMap`s per op): ~2.7× FIFO — the
+    inner tier adds a small constant over Rung-0; a fast always-on test
+    guards each against catastrophic regression.  (3) END-TO-END
     single-actor throughput through the full server: drr/fifo = **1.00×**
     (both bounded by the listener's 50 ms accept-poll + dispatch,
     identical on both paths) — comfortably within the plan's ≥90% intent.

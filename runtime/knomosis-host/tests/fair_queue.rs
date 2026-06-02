@@ -441,6 +441,64 @@ fn throughput_queue_op_overhead_isolated() {
     );
 }
 
+/// FQ.7c (Rung 1) — TWO-TIER queue-op overhead in ISOLATION: the DRR path
+/// routing across many `(conn, signer)` pairs (exercising BOTH the outer
+/// `ConnId` tier and the inner `SignerHint` tier `BTreeMap`s per op) vs
+/// the FIFO `sync_channel`, no-op kernel.  This is the Rung-1 counterpart
+/// of `throughput_queue_op_overhead_isolated`: it measures the cost the
+/// SECOND tier adds — each op now does two map `entry`/insert + two
+/// pop/evict steps instead of one.  The ratio is printed for the closeout
+/// note; the bound is loose + machine-independent (it exists only to
+/// catch a catastrophic two-tier regression, not to gate CI on a number).
+#[test]
+fn throughput_two_tier_queue_op_overhead() {
+    let iters = 20_000u32;
+
+    // FIFO baseline: submit + drain one, repeatedly.
+    let (fifo, rx) = BoundedQueue::new(4);
+    let fifo_start = Instant::now();
+    for _ in 0..iters {
+        if let SubmitOutcome::Enqueued(_) = fifo.try_submit(vec![0u8]) {
+            let _ = drain_one(&rx, Duration::from_millis(0), |_| {
+                KernelResponse::from_verdict(Verdict::Ok)
+            });
+        }
+    }
+    let fifo_elapsed = fifo_start.elapsed();
+
+    // DRR two-tier: rotate across 16 connections × 8 signer hints, so
+    // every op routes through BOTH tiers (outer conn map + inner signer
+    // map).
+    let drr = fair_with_signers(64, 1024, 256, 4096);
+    let drr_start = Instant::now();
+    for i in 0..iters {
+        let conn = u64::from(i % 16);
+        let signer = u64::from((i / 16) % 8);
+        if let SubmitOutcome::Enqueued(_) = drr.try_submit(conn, signer, vec![0u8]) {
+            if let Some(req) = drr.try_next() {
+                let _ = req
+                    .reply
+                    .try_send(KernelResponse::from_verdict(Verdict::Ok));
+            }
+        }
+    }
+    let drr_elapsed = drr_start.elapsed();
+
+    let ratio = drr_elapsed.as_secs_f64() / fifo_elapsed.as_secs_f64().max(1e-9);
+    eprintln!(
+        "FQ.7c two-tier queue-op overhead (isolated, no-op kernel, 16 conns × 8 signers): \
+         fifo={fifo_elapsed:?} drr={drr_elapsed:?} (drr/fifo={ratio:.2}x)"
+    );
+    // Loose, machine-independent guard: the inner tier must not blow up
+    // the per-op cost.  Two nested BTreeMaps (each tiny, ≤ 16 / ≤ 8
+    // entries) are a small constant over the single-tier path; an 8×
+    // blowup would signal a real regression.
+    assert!(
+        drr_elapsed < fifo_elapsed * 8 + Duration::from_millis(100),
+        "two-tier queue-op overhead regressed catastrophically: {ratio:.2}x"
+    );
+}
+
 /// END-TO-END single-actor throughput through the full server: FIFO vs
 /// DRR, one client submitting `n` sequential requests over TCP.  This is
 /// the "single-actor throughput" FQ.7c targets.  The per-request cost is

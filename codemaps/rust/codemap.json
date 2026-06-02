@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "edbf0fc9eefc7fd65c709f0dc0e90c81b1a77f7e664cd08f4af92f9e6274d77a"
+    "source_digest": "3e2d1735b269dd7f680eef6064501196e98835ef974ef65cb387366e9cc09a07"
   },
   "summary": {
     "module_count": 134,
-    "declaration_count": 4440
+    "declaration_count": 4476
   },
   "modules": [
     {
@@ -197,6 +197,7 @@
             "Err",
             "ParseError",
             "_",
+            "addr",
             "path",
             "unix"
           ]
@@ -338,6 +339,7 @@
           "line": 672,
           "called": [
             "_",
+            "addr",
             "parse_connect"
           ]
         },
@@ -347,6 +349,7 @@
           "line": 684,
           "called": [
             "_",
+            "addr",
             "parse_connect"
           ]
         },
@@ -513,6 +516,7 @@
           "line": 907,
           "called": [
             "_",
+            "addr",
             "args",
             "argv",
             "parse_args"
@@ -1512,6 +1516,7 @@
             "StandaloneServer",
             "TransportKind",
             "_",
+            "addr",
             "clone",
             "handler",
             "listener",
@@ -1540,6 +1545,7 @@
             "Endpoint",
             "StandaloneServer",
             "TransportKind",
+            "addr",
             "clone",
             "path",
             "unix"
@@ -2110,6 +2116,7 @@
           "called": [
             "Connection",
             "_",
+            "addr",
             "path",
             "stream",
             "unix"
@@ -2293,6 +2300,7 @@
             "drop",
             "fixture",
             "handle",
+            "hinted",
             "histogram",
             "iter",
             "len",
@@ -2563,6 +2571,7 @@
           "name": "connect_with_timeout_refuses_promptly",
           "line": 1090,
           "called": [
+            "addr",
             "connect_with_timeout",
             "drop",
             "listener",
@@ -2574,6 +2583,7 @@
           "name": "connect_with_timeout_respects_timeout",
           "line": 1116,
           "called": [
+            "addr",
             "connect_with_timeout"
           ]
         }
@@ -2589,6 +2599,7 @@
           "name": "StandaloneServerError",
           "line": 74,
           "called": [
+            "addr",
             "error",
             "path",
             "source",
@@ -2646,6 +2657,7 @@
           "called": [
             "HandlerConfig",
             "StandaloneServerError",
+            "addr",
             "build",
             "handle",
             "handler",
@@ -2849,6 +2861,7 @@
             "Err",
             "FixtureConfig",
             "_",
+            "addr",
             "drop",
             "fixture",
             "generate",
@@ -2907,6 +2920,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "flush",
             "handle",
             "header",
@@ -2928,6 +2942,7 @@
             "Err",
             "FixtureConfig",
             "_",
+            "addr",
             "b",
             "fixture",
             "generate",
@@ -2948,6 +2963,7 @@
             "Err",
             "FixtureConfig",
             "_",
+            "addr",
             "fixture",
             "generate",
             "handle",
@@ -3996,6 +4012,7 @@
             "Err",
             "ParseError",
             "action_cost",
+            "addr",
             "args",
             "as_str",
             "budget_policy",
@@ -6972,6 +6989,7 @@
           "called": [
             "ServerBuildError",
             "TcpListener",
+            "addr",
             "listener"
           ]
         },
@@ -6986,6 +7004,7 @@
             "SHUTDOWN_DRAIN_TIMEOUT",
             "ServerConfig",
             "accept_loop",
+            "addr",
             "bounded_join",
             "broadcast_shutdown",
             "config",
@@ -7356,6 +7375,7 @@
           "line": 1495,
           "called": [
             "ServerConfig",
+            "addr",
             "handle",
             "listener",
             "local_addr",
@@ -7400,6 +7420,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "bytes",
             "empty_log",
             "encode_inbound",
@@ -7420,6 +7441,7 @@
           "name": "single_frame_event_delivered",
           "line": 1603,
           "called": [
+            "addr",
             "append",
             "b",
             "empty_log",
@@ -7445,6 +7467,7 @@
           "name": "resume_from_delivers_backfill",
           "line": 1646,
           "called": [
+            "addr",
             "b",
             "empty_log",
             "encode_inbound",
@@ -7467,6 +7490,7 @@
           "name": "resume_before_cache_returns_truncated",
           "line": 1693,
           "called": [
+            "addr",
             "b",
             "empty_log",
             "encode_inbound",
@@ -7489,6 +7513,7 @@
           "name": "invalid_handshake_returns_invalid_request",
           "line": 1736,
           "called": [
+            "addr",
             "empty_log",
             "handle",
             "listener",
@@ -7506,6 +7531,7 @@
           "name": "multiple_subscribers_receive_events",
           "line": 1759,
           "called": [
+            "addr",
             "append",
             "b",
             "empty_log",
@@ -7530,6 +7556,7 @@
           "name": "shutdown_delivers_shutdown_frame",
           "line": 1802,
           "called": [
+            "addr",
             "empty_log",
             "encode_inbound",
             "handle",
@@ -8910,6 +8937,7 @@
             "DEFAULT_MAX_FRAME_SIZE",
             "Extractor",
             "ServerConfig",
+            "addr",
             "listener",
             "local_addr",
             "log_path"
@@ -8921,6 +8949,7 @@
           "line": 91,
           "called": [
             "ServerConfig",
+            "addr",
             "handle",
             "run",
             "stop"
@@ -8940,6 +8969,7 @@
           "name": "connect_subscribe",
           "line": 121,
           "called": [
+            "addr",
             "encode_inbound"
           ]
         },
@@ -8963,6 +8993,7 @@
           "line": 146,
           "called": [
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -8989,6 +9020,7 @@
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -9011,6 +9043,7 @@
           "line": 262,
           "called": [
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -9034,6 +9067,7 @@
           "line": 328,
           "called": [
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -9056,6 +9090,7 @@
           "line": 366,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
+            "addr",
             "append_log_frame",
             "as_bytes",
             "b",
@@ -9078,6 +9113,7 @@
           "line": 405,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
+            "addr",
             "handle",
             "log_path",
             "make_server",
@@ -9094,6 +9130,7 @@
           "line": 428,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -9116,6 +9153,7 @@
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
+            "addr",
             "connect_subscribe",
             "handle",
             "log_path",
@@ -9135,6 +9173,7 @@
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -9158,6 +9197,7 @@
           "called": [
             "OutboundFrame",
             "_",
+            "addr",
             "append_log_frame",
             "as_bytes",
             "b",
@@ -9182,6 +9222,7 @@
           "called": [
             "MockResponse",
             "_",
+            "addr",
             "append_log_frame",
             "as_bytes",
             "connect_subscribe",
@@ -9205,6 +9246,7 @@
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "_",
+            "addr",
             "connect_subscribe",
             "encode_inbound",
             "handle",
@@ -9223,6 +9265,7 @@
           "line": 684,
           "called": [
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -9246,6 +9289,7 @@
           "line": 733,
           "called": [
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "connect_subscribe",
@@ -9270,6 +9314,7 @@
           "called": [
             "MockResponse",
             "_",
+            "addr",
             "append_log_frame",
             "as_bytes",
             "connect_subscribe",
@@ -9294,6 +9339,7 @@
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
             "MockResponse",
+            "addr",
             "append_log_frame",
             "as_bytes",
             "clone",
@@ -9321,6 +9367,7 @@
             "Err",
             "MockResponse",
             "_",
+            "addr",
             "append_log_frame",
             "as_bytes",
             "clone",
@@ -9376,6 +9423,7 @@
           "called": [
             "EventType",
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "cbe_event",
@@ -9402,6 +9450,7 @@
           "name": "future_unknown_event_tag_streams_verbatim",
           "line": 1183,
           "called": [
+            "addr",
             "append_log_frame",
             "b",
             "cbe_event",
@@ -9425,6 +9474,7 @@
           "name": "mixed_legacy_and_gas_pool_batch_streams_in_order",
           "line": 1227,
           "called": [
+            "addr",
             "append_log_frame",
             "b",
             "cbe_event",
@@ -9450,6 +9500,7 @@
           "line": 1280,
           "called": [
             "_",
+            "addr",
             "append_log_frame",
             "b",
             "cbe_event",
@@ -9895,6 +9946,7 @@
           "name": "parse_address_happy",
           "line": 557,
           "called": [
+            "addr",
             "parse_address"
           ]
         },
@@ -9919,6 +9971,7 @@
           "name": "parse_address_no_0x_prefix",
           "line": 579,
           "called": [
+            "addr",
             "parse_address"
           ]
         },
@@ -11869,6 +11922,7 @@
           "called": [
             "Err",
             "JsonRpcSubmitError",
+            "addr",
             "as_bytes",
             "hash",
             "len"
@@ -12188,6 +12242,7 @@
           "name": "derive_address_returns_20_bytes",
           "line": 1185,
           "called": [
+            "addr",
             "derive_address_from_pubkey",
             "key",
             "len",
@@ -12212,6 +12267,7 @@
           "name": "derive_address_for_scalar_one",
           "line": 1200,
           "called": [
+            "addr",
             "derive_address_from_pubkey",
             "key",
             "public_key_compressed",
@@ -12413,6 +12469,7 @@
           "name": "MockJsonRpcServer",
           "line": 1456,
           "called": [
+            "addr",
             "recorded",
             "stop"
           ]
@@ -12429,6 +12486,7 @@
           "line": 1463,
           "called": [
             "_",
+            "addr",
             "listener",
             "local_addr",
             "lock",
@@ -12441,7 +12499,9 @@
           "kind": "fn",
           "name": "url",
           "line": 1510,
-          "called": []
+          "called": [
+            "addr"
+          ]
         },
         {
           "kind": "fn",
@@ -15331,6 +15391,7 @@
           "name": "read_full_address_extracts_all_20_bytes",
           "line": 807,
           "called": [
+            "addr",
             "read_full_address_from_slot"
           ]
         },
@@ -17867,6 +17928,7 @@
           "line": 97,
           "called": [
             "InMemoryL1Source",
+            "base",
             "block_hash",
             "count",
             "head",
@@ -19564,6 +19626,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "captured",
             "clone",
             "handle",
@@ -22571,6 +22634,7 @@
             "ParseError",
             "Scheduler",
             "_",
+            "addr",
             "args",
             "as_str",
             "clone",
@@ -23191,7 +23255,7 @@
     {
       "module": "runtime::knomosis-host::src::fair::drr",
       "path": "runtime/knomosis-host/src/fair/drr.rs",
-      "declaration_count": 99,
+      "declaration_count": 98,
       "declarations": [
         {
           "kind": "const",
@@ -23705,10 +23769,9 @@
         {
           "kind": "fn",
           "name": "leaf_enqueue",
-          "line": 802,
+          "line": 810,
           "called": [
             "Caps",
-            "Err",
             "LeafTier",
             "QueuedRequest",
             "caps",
@@ -23720,7 +23783,7 @@
         {
           "kind": "fn",
           "name": "assert_leaf_invariants",
-          "line": 824,
+          "line": 827,
           "called": [
             "LeafTier",
             "depth",
@@ -23733,7 +23796,7 @@
         {
           "kind": "fn",
           "name": "per_flow_cap_rejects_and_returns_request",
-          "line": 844,
+          "line": 847,
           "called": [
             "assert_leaf_invariants",
             "caps",
@@ -23745,19 +23808,7 @@
         {
           "kind": "fn",
           "name": "max_flows_cap_rejects_new_keys_only",
-          "line": 859,
-          "called": [
-            "assert_leaf_invariants",
-            "caps",
-            "leaf_enqueue",
-            "req",
-            "tag_of"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "global_cap_rejects_and_returns_request",
-          "line": 875,
+          "line": 862,
           "called": [
             "assert_leaf_invariants",
             "caps",
@@ -23769,7 +23820,7 @@
         {
           "kind": "fn",
           "name": "activation_bookkeeping_is_exact",
-          "line": 890,
+          "line": 884,
           "called": [
             "active_len",
             "assert_leaf_invariants",
@@ -23782,7 +23833,7 @@
         {
           "kind": "fn",
           "name": "pick_empty_is_none",
-          "line": 906,
+          "line": 900,
           "called": [
             "pick"
           ]
@@ -23790,7 +23841,7 @@
         {
           "kind": "fn",
           "name": "round_robin_order_across_flows",
-          "line": 914,
+          "line": 908,
           "called": [
             "assert_leaf_invariants",
             "caps",
@@ -23804,7 +23855,7 @@
         {
           "kind": "fn",
           "name": "heavy_flow_does_not_starve_light_flow",
-          "line": 930,
+          "line": 924,
           "called": [
             "_",
             "caps",
@@ -23820,7 +23871,7 @@
         {
           "kind": "fn",
           "name": "every_head_served_within_k_picks",
-          "line": 953,
+          "line": 947,
           "called": [
             "_",
             "caps",
@@ -23836,7 +23887,7 @@
         {
           "kind": "fn",
           "name": "drain_evicts_and_resets_deficit",
-          "line": 973,
+          "line": 967,
           "called": [
             "_",
             "active_len",
@@ -23852,7 +23903,7 @@
         {
           "kind": "fn",
           "name": "boundary_per_flow_one",
-          "line": 991,
+          "line": 985,
           "called": [
             "assert_leaf_invariants",
             "caps",
@@ -23863,7 +23914,7 @@
         {
           "kind": "fn",
           "name": "boundary_max_flows_one",
-          "line": 1008,
+          "line": 1002,
           "called": [
             "_",
             "assert_leaf_invariants",
@@ -23875,18 +23926,8 @@
         },
         {
           "kind": "fn",
-          "name": "boundary_global_zero_rejects_all",
-          "line": 1024,
-          "called": [
-            "caps",
-            "leaf_enqueue",
-            "req"
-          ]
-        },
-        {
-          "kind": "fn",
           "name": "boundary_per_flow_zero_rejects_all",
-          "line": 1034,
+          "line": 1019,
           "called": [
             "caps",
             "is_empty",
@@ -23897,7 +23938,7 @@
         {
           "kind": "fn",
           "name": "single_flow_saturation_and_drain",
-          "line": 1046,
+          "line": 1031,
           "called": [
             "assert_leaf_invariants",
             "caps",
@@ -23910,7 +23951,7 @@
         {
           "kind": "fn",
           "name": "caps_clamp_to_hard_ceilings",
-          "line": 1065,
+          "line": 1050,
           "called": [
             "HARD_MAX_FLOWS",
             "HARD_MAX_QUEUE_DEPTH",
@@ -23922,7 +23963,7 @@
         {
           "kind": "fn",
           "name": "default_constants_stable",
-          "line": 1077,
+          "line": 1062,
           "called": [
             "DEFAULT_MAX_FLOWS",
             "DEFAULT_MAX_SIGNERS_PER_CONN",
@@ -23934,13 +23975,13 @@
         {
           "kind": "enum",
           "name": "Op",
-          "line": 1089,
+          "line": 1074,
           "called": []
         },
         {
           "kind": "fn",
           "name": "run_script",
-          "line": 1096,
+          "line": 1081,
           "called": [
             "Caps",
             "Op",
@@ -23956,7 +23997,7 @@
         {
           "kind": "fn",
           "name": "op_strategy",
-          "line": 1115,
+          "line": 1100,
           "called": [
             "Op"
           ]
@@ -23964,7 +24005,7 @@
         {
           "kind": "fn",
           "name": "structural_invariants_under_arbitrary_ops",
-          "line": 1128,
+          "line": 1113,
           "called": [
             "_",
             "caps",
@@ -23983,7 +24024,7 @@
         {
           "kind": "fn",
           "name": "equal_weight_fairness_bound",
-          "line": 1175,
+          "line": 1163,
           "called": [
             "_",
             "caps",
@@ -24003,7 +24044,7 @@
         {
           "kind": "fn",
           "name": "bounded_overtaking_under_arbitrary_ops",
-          "line": 1222,
+          "line": 1210,
           "called": [
             "_",
             "active_len",
@@ -24018,7 +24059,7 @@
         {
           "kind": "fn",
           "name": "same_script_is_deterministic",
-          "line": 1261,
+          "line": 1249,
           "called": [
             "b",
             "caps",
@@ -24029,7 +24070,7 @@
         {
           "kind": "fn",
           "name": "assert_two_tier_invariants",
-          "line": 1277,
+          "line": 1265,
           "called": [
             "DrrState",
             "active_signers",
@@ -24045,7 +24086,7 @@
         {
           "kind": "fn",
           "name": "two_tier_enqueue_and_eviction",
-          "line": 1311,
+          "line": 1299,
           "called": [
             "active_len",
             "active_signers",
@@ -24062,7 +24103,7 @@
         {
           "kind": "fn",
           "name": "two_tier_outer_fairness_across_connections",
-          "line": 1340,
+          "line": 1328,
           "called": [
             "_",
             "count",
@@ -24078,7 +24119,7 @@
         {
           "kind": "fn",
           "name": "two_tier_spoof_is_confined_to_forger_share",
-          "line": 1373,
+          "line": 1361,
           "called": [
             "_",
             "enqueue",
@@ -24094,7 +24135,7 @@
         {
           "kind": "fn",
           "name": "max_signers_cap_is_targeted_per_connection",
-          "line": 1431,
+          "line": 1419,
           "called": [
             "assert_two_tier_invariants",
             "caps",
@@ -24108,7 +24149,7 @@
         {
           "kind": "fn",
           "name": "two_tier_max_flows_caps_connections",
-          "line": 1454,
+          "line": 1442,
           "called": [
             "assert_two_tier_invariants",
             "caps",
@@ -24121,10 +24162,22 @@
         {
           "kind": "fn",
           "name": "two_tier_global_cap",
-          "line": 1472,
+          "line": 1460,
           "called": [
             "caps",
             "enqueue",
+            "req",
+            "stats",
+            "tag_of"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "drr_state_global_zero_rejects_all",
+          "line": 1474,
+          "called": [
+            "enqueue",
+            "is_empty",
             "req",
             "stats",
             "tag_of"
@@ -24245,7 +24298,7 @@
     {
       "module": "runtime::knomosis-host::src::frame",
       "path": "runtime/knomosis-host/src/frame.rs",
-      "declaration_count": 59,
+      "declaration_count": 67,
       "declarations": [
         {
           "kind": "const",
@@ -24312,7 +24365,7 @@
         {
           "kind": "fn",
           "name": "read_frame",
-          "line": 210,
+          "line": 227,
           "called": [
             "FrameError",
             "HARD_MAX_FRAME_SIZE",
@@ -24326,7 +24379,7 @@
         {
           "kind": "fn",
           "name": "read_frame_with_prefix",
-          "line": 234,
+          "line": 251,
           "called": [
             "FrameError",
             "HARD_MAX_FRAME_SIZE",
@@ -24338,23 +24391,25 @@
         {
           "kind": "fn",
           "name": "read_hinted_frame",
-          "line": 268,
+          "line": 285,
           "called": [
             "Err",
             "FrameError",
             "HARD_MAX_FRAME_SIZE",
+            "HEADER_LEN",
             "SIGNER_HINT_LEN",
             "SignerHint",
+            "header",
             "min",
             "read",
-            "read_frame",
+            "read_payload",
             "signer"
           ]
         },
         {
           "kind": "enum",
           "name": "Negotiation",
-          "line": 312,
+          "line": 332,
           "called": [
             "HEADER_LEN"
           ]
@@ -24362,7 +24417,7 @@
         {
           "kind": "fn",
           "name": "negotiate_connection",
-          "line": 343,
+          "line": 363,
           "called": [
             "FrameError",
             "HEADER_LEN",
@@ -24373,22 +24428,60 @@
           ]
         },
         {
+          "kind": "struct",
+          "name": "ConnReader",
+          "line": 388,
+          "called": [
+            "hinted"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "ConnReader",
+          "line": 395,
+          "called": []
+        },
+        {
           "kind": "fn",
-          "name": "read_request",
-          "line": 367,
+          "name": "new",
+          "line": 398,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "hinted",
+          "line": 406,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "read_next",
+          "line": 422,
           "called": [
             "FrameError",
             "LEGACY_SIGNER_HINT",
             "SignerHint",
+            "hinted",
             "negotiate_connection",
+            "read_frame",
             "read_frame_with_prefix",
             "read_hinted_frame"
           ]
         },
         {
           "kind": "fn",
+          "name": "read_request",
+          "line": 469,
+          "called": [
+            "FrameError",
+            "SignerHint",
+            "read_next"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "read_header_bytes",
-          "line": 384,
+          "line": 480,
           "called": [
             "Err",
             "FrameError",
@@ -24399,7 +24492,7 @@
         {
           "kind": "fn",
           "name": "read_payload",
-          "line": 408,
+          "line": 504,
           "called": [
             "Err",
             "FrameError",
@@ -24410,7 +24503,7 @@
         {
           "kind": "enum",
           "name": "WriteFrameError",
-          "line": 440,
+          "line": 536,
           "called": [
             "error",
             "from"
@@ -24419,7 +24512,7 @@
         {
           "kind": "fn",
           "name": "write_frame",
-          "line": 463,
+          "line": 559,
           "called": [
             "WriteFrameError",
             "_",
@@ -24430,7 +24523,7 @@
         {
           "kind": "fn",
           "name": "encode_frame",
-          "line": 481,
+          "line": 577,
           "called": [
             "HEADER_LEN",
             "WriteFrameError",
@@ -24441,7 +24534,7 @@
         {
           "kind": "fn",
           "name": "encode_hinted_frame",
-          "line": 506,
+          "line": 603,
           "called": [
             "HEADER_LEN",
             "SIGNER_HINT_LEN",
@@ -24455,8 +24548,9 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 517,
+          "line": 614,
           "called": [
+            "ConnReader",
             "DEFAULT_MAX_FRAME_SIZE",
             "FrameError",
             "HARD_MAX_FRAME_SIZE",
@@ -24478,7 +24572,7 @@
         {
           "kind": "fn",
           "name": "round_trip_basic",
-          "line": 529,
+          "line": 626,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HEADER_LEN",
@@ -24494,7 +24588,7 @@
         {
           "kind": "fn",
           "name": "write_frame_matches_encode",
-          "line": 541,
+          "line": 638,
           "called": [
             "encode_frame",
             "write_frame"
@@ -24503,7 +24597,7 @@
         {
           "kind": "fn",
           "name": "header_is_big_endian_u32",
-          "line": 550,
+          "line": 647,
           "called": [
             "_",
             "bytes",
@@ -24513,7 +24607,7 @@
         {
           "kind": "fn",
           "name": "empty_input_returns_eof_before_header",
-          "line": 568,
+          "line": 665,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24525,7 +24619,7 @@
         {
           "kind": "fn",
           "name": "partial_header_returns_truncated_header",
-          "line": 579,
+          "line": 676,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24537,7 +24631,7 @@
         {
           "kind": "fn",
           "name": "partial_payload_returns_truncated_payload",
-          "line": 593,
+          "line": 690,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24549,7 +24643,7 @@
         {
           "kind": "fn",
           "name": "oversize_header_returns_oversize_frame",
-          "line": 614,
+          "line": 711,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24562,7 +24656,7 @@
         {
           "kind": "fn",
           "name": "huge_length_does_not_allocate",
-          "line": 635,
+          "line": 732,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24574,7 +24668,7 @@
         {
           "kind": "fn",
           "name": "zero_length_frame_rejected",
-          "line": 660,
+          "line": 757,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24587,7 +24681,7 @@
         {
           "kind": "fn",
           "name": "one_byte_payload_roundtrip",
-          "line": 671,
+          "line": 768,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "bytes",
@@ -24599,7 +24693,7 @@
         {
           "kind": "fn",
           "name": "payload_at_exact_max_accepted",
-          "line": 681,
+          "line": 778,
           "called": [
             "bytes",
             "cursor",
@@ -24611,7 +24705,7 @@
         {
           "kind": "fn",
           "name": "payload_above_max_rejected",
-          "line": 692,
+          "line": 789,
           "called": [
             "Err",
             "bytes",
@@ -24624,7 +24718,7 @@
         {
           "kind": "fn",
           "name": "multiple_frames_sequential",
-          "line": 713,
+          "line": 810,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24639,13 +24733,13 @@
         {
           "kind": "fn",
           "name": "fragmented_reader",
-          "line": 739,
+          "line": 836,
           "called": []
         },
         {
           "kind": "struct",
           "name": "OneByteReader",
-          "line": 740,
+          "line": 837,
           "called": [
             "pos"
           ]
@@ -24653,7 +24747,7 @@
         {
           "kind": "impl",
           "name": "std::io::Read for OneByteReader<'_>",
-          "line": 744,
+          "line": 841,
           "called": [
             "OneByteReader",
             "_"
@@ -24662,7 +24756,7 @@
         {
           "kind": "fn",
           "name": "read",
-          "line": 745,
+          "line": 842,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "OneByteReader",
@@ -24679,7 +24773,7 @@
         {
           "kind": "fn",
           "name": "payload_too_large_for_u32_returns_error",
-          "line": 770,
+          "line": 867,
           "called": [
             "encode_frame"
           ]
@@ -24687,7 +24781,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 781,
+          "line": 878,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HARD_MAX_FRAME_SIZE",
@@ -24697,13 +24791,13 @@
         {
           "kind": "fn",
           "name": "frame_error_is_send_sync",
-          "line": 791,
+          "line": 888,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 792,
+          "line": 889,
           "called": [
             "FrameError"
           ]
@@ -24711,19 +24805,19 @@
         {
           "kind": "fn",
           "name": "would_block_propagates",
-          "line": 801,
+          "line": 898,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WouldBlockReader",
-          "line": 802,
+          "line": 899,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::io::Read for WouldBlockReader",
-          "line": 803,
+          "line": 900,
           "called": [
             "WouldBlockReader"
           ]
@@ -24731,7 +24825,7 @@
         {
           "kind": "fn",
           "name": "read",
-          "line": 804,
+          "line": 901,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24743,7 +24837,7 @@
         {
           "kind": "fn",
           "name": "rung1_constants_stable",
-          "line": 825,
+          "line": 922,
           "called": [
             "KNH2_MAGIC",
             "KNH2_PREAMBLE",
@@ -24754,7 +24848,7 @@
         {
           "kind": "fn",
           "name": "hard_max_frame_size_below_magic",
-          "line": 837,
+          "line": 934,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HARD_MAX_FRAME_SIZE",
@@ -24764,7 +24858,7 @@
         {
           "kind": "fn",
           "name": "negotiate_detects_v2_preamble",
-          "line": 850,
+          "line": 947,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "KNH2_PREAMBLE",
@@ -24779,7 +24873,7 @@
         {
           "kind": "fn",
           "name": "negotiate_legacy_preserves_first_frame",
-          "line": 869,
+          "line": 966,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "b",
@@ -24794,7 +24888,7 @@
         {
           "kind": "fn",
           "name": "no_valid_v1_length_collides_with_magic",
-          "line": 890,
+          "line": 987,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HARD_MAX_FRAME_SIZE",
@@ -24809,7 +24903,7 @@
         {
           "kind": "fn",
           "name": "negotiate_eof_and_partial",
-          "line": 918,
+          "line": 1015,
           "called": [
             "Err",
             "empty",
@@ -24819,7 +24913,7 @@
         {
           "kind": "fn",
           "name": "hinted_frame_round_trips",
-          "line": 935,
+          "line": 1032,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HEADER_LEN",
@@ -24836,18 +24930,17 @@
         {
           "kind": "fn",
           "name": "hinted_frame_eof_and_truncated_hint",
-          "line": 964,
+          "line": 1059,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
-            "read_hinted_frame",
-            "to_vec"
+            "read_hinted_frame"
           ]
         },
         {
           "kind": "fn",
           "name": "hinted_frame_body_errors_are_independent_of_hint",
-          "line": 1003,
+          "line": 1082,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24859,7 +24952,7 @@
         {
           "kind": "fn",
           "name": "read_request_v1_and_v2",
-          "line": 1024,
+          "line": 1103,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "KNH2_PREAMBLE",
@@ -24874,7 +24967,7 @@
         {
           "kind": "fn",
           "name": "v2_multiple_hinted_frames_sequential",
-          "line": 1045,
+          "line": 1124,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -24890,8 +24983,56 @@
         },
         {
           "kind": "fn",
+          "name": "hinted_frame_committed_then_truncated_is_dedicated_variant",
+          "line": 1150,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "Err",
+            "bytes",
+            "read_hinted_frame",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "conn_reader_one_shot_classifies",
+          "line": 1174,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "KNH2_PREAMBLE",
+            "LEGACY_SIGNER_HINT",
+            "b",
+            "bytes",
+            "encode_frame",
+            "encode_hinted_frame",
+            "hinted",
+            "read_next",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "conn_reader_persistent_multi_frame",
+          "line": 1200,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "Err",
+            "KNH2_PREAMBLE",
+            "LEGACY_SIGNER_HINT",
+            "b",
+            "bytes",
+            "cursor",
+            "encode_frame",
+            "encode_hinted_frame",
+            "hinted",
+            "read_next",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "encode_hinted_frame_inverse_of_read",
-          "line": 1068,
+          "line": 1248,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "LEGACY_SIGNER_HINT",
@@ -24904,7 +25045,7 @@
         {
           "kind": "fn",
           "name": "negotiate_fuzz_never_panics_or_misclassifies",
-          "line": 1090,
+          "line": 1270,
           "called": [
             "Err",
             "KNH2_PREAMBLE",
@@ -25184,6 +25325,7 @@
             "KernelResponse",
             "_",
             "admit",
+            "base",
             "budget",
             "clone",
             "decode_budget_view",
@@ -26844,7 +26986,9 @@
           "kind": "fn",
           "name": "bind",
           "line": 350,
-          "called": []
+          "called": [
+            "addr"
+          ]
         },
         {
           "kind": "fn",
@@ -26928,7 +27072,8 @@
           "name": "bind",
           "line": 484,
           "called": [
-            "ServerConfig"
+            "ServerConfig",
+            "addr"
           ]
         },
         {
@@ -27105,6 +27250,7 @@
             "Kernel",
             "PROTOCOL_VERSION",
             "_",
+            "addr",
             "args",
             "as_i32",
             "build",
@@ -28060,6 +28206,7 @@
             "QueueHandle",
             "SHUTDOWN_DRAIN_TIMEOUT",
             "accept_loop",
+            "addr",
             "clone",
             "config",
             "drop",
@@ -28876,7 +29023,7 @@
     {
       "module": "runtime::knomosis-host::tests::fair_queue",
       "path": "runtime/knomosis-host/tests/fair_queue.rs",
-      "declaration_count": 35,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "fn",
@@ -29008,6 +29155,7 @@
           "called": [
             "Kernel",
             "Scheduler",
+            "addr",
             "build",
             "handle",
             "kernel",
@@ -29035,6 +29183,7 @@
           "line": 240,
           "called": [
             "_",
+            "addr",
             "encode_frame",
             "flush",
             "frame",
@@ -29048,6 +29197,7 @@
           "line": 260,
           "called": [
             "_",
+            "addr",
             "encode_frame",
             "flush",
             "frame",
@@ -29062,6 +29212,7 @@
           "name": "drr_end_to_end_request_response",
           "line": 287,
           "called": [
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -29078,6 +29229,7 @@
           "line": 300,
           "called": [
             "Scheduler",
+            "addr",
             "drr",
             "handle",
             "join_server",
@@ -29095,6 +29247,7 @@
           "name": "drr_stress_many_connections",
           "line": 335,
           "called": [
+            "addr",
             "handle",
             "join_server",
             "lock",
@@ -29111,6 +29264,7 @@
           "line": 368,
           "called": [
             "_",
+            "addr",
             "handle",
             "join_server",
             "kernel",
@@ -29138,11 +29292,29 @@
         },
         {
           "kind": "fn",
+          "name": "throughput_two_tier_queue_op_overhead",
+          "line": 454,
+          "called": [
+            "_",
+            "conn",
+            "drain_one",
+            "drr",
+            "fair_with_signers",
+            "max",
+            "req",
+            "signer",
+            "try_next",
+            "try_submit"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "throughput_parity_end_to_end_single_actor",
-          "line": 461,
+          "line": 519,
           "called": [
             "Scheduler",
             "_",
+            "addr",
             "b",
             "drr",
             "handle",
@@ -29158,7 +29330,7 @@
         {
           "kind": "fn",
           "name": "drr_reorders_but_preserves_verdict_multiset",
-          "line": 510,
+          "line": 568,
           "called": [
             "LEGACY_SIGNER_HINT",
             "_",
@@ -29178,13 +29350,13 @@
         {
           "kind": "struct",
           "name": "PanickingKernel",
-          "line": 586,
+          "line": 644,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for PanickingKernel",
-          "line": 588,
+          "line": 646,
           "called": [
             "Kernel",
             "PanickingKernel"
@@ -29193,7 +29365,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 589,
+          "line": 647,
           "called": [
             "KernelResponse"
           ]
@@ -29201,15 +29373,16 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 592,
+          "line": 650,
           "called": []
         },
         {
           "kind": "fn",
           "name": "drr_kernel_panic_is_contained",
-          "line": 602,
+          "line": 660,
           "called": [
             "PanickingKernel",
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -29222,7 +29395,7 @@
         {
           "kind": "fn",
           "name": "fair_dispatch_does_not_serialise_producers_under_load",
-          "line": 629,
+          "line": 687,
           "called": [
             "LEGACY_SIGNER_HINT",
             "_",
@@ -29237,7 +29410,7 @@
         {
           "kind": "fn",
           "name": "fair_stats_consistent_under_concurrency",
-          "line": 667,
+          "line": 725,
           "called": [
             "LEGACY_SIGNER_HINT",
             "_",
@@ -29254,7 +29427,7 @@
         {
           "kind": "fn",
           "name": "fair_with_signers",
-          "line": 731,
+          "line": 789,
           "called": [
             "FairQueue",
             "with_max_signers"
@@ -29263,7 +29436,7 @@
         {
           "kind": "fn",
           "name": "rung1_one_conn_many_hints_does_not_starve_another",
-          "line": 746,
+          "line": 804,
           "called": [
             "_",
             "count",
@@ -29278,7 +29451,7 @@
         {
           "kind": "fn",
           "name": "rung1_spoofed_hints_do_not_starve_the_real_victim",
-          "line": 780,
+          "line": 838,
           "called": [
             "_",
             "count",
@@ -29294,7 +29467,7 @@
         {
           "kind": "fn",
           "name": "rung1_max_signers_cap_is_targeted_at_queue_level",
-          "line": 820,
+          "line": 878,
           "called": [
             "_",
             "active_signers",
@@ -29306,7 +29479,7 @@
         {
           "kind": "fn",
           "name": "rung1_legacy_sentinel_hint_is_rung0_behaviour",
-          "line": 856,
+          "line": 914,
           "called": [
             "LEGACY_SIGNER_HINT",
             "_",
@@ -29362,6 +29535,7 @@
           "name": "submit_one",
           "line": 75,
           "called": [
+            "addr",
             "try_submit_one"
           ]
         },
@@ -29371,6 +29545,7 @@
           "line": 83,
           "called": [
             "_",
+            "addr",
             "encode_frame",
             "flush",
             "frame",
@@ -29392,6 +29567,7 @@
           "name": "default_mock_returns_ok",
           "line": 119,
           "called": [
+            "addr",
             "b",
             "handle",
             "is_empty",
@@ -29411,6 +29587,7 @@
           "name": "mock_not_admissible_with_reason_round_trips",
           "line": 134,
           "called": [
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -29431,6 +29608,7 @@
           "line": 152,
           "called": [
             "_",
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -29449,6 +29627,7 @@
           "name": "mock_parse_error_round_trips",
           "line": 166,
           "called": [
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -29469,6 +29648,7 @@
           "line": 186,
           "called": [
             "_",
+            "addr",
             "b",
             "build",
             "handle",
@@ -29518,6 +29698,7 @@
           "line": 282,
           "called": [
             "_",
+            "addr",
             "flush",
             "handle",
             "join_server",
@@ -29536,6 +29717,7 @@
           "line": 304,
           "called": [
             "_",
+            "addr",
             "b",
             "drop",
             "handle",
@@ -29556,6 +29738,7 @@
           "line": 325,
           "called": [
             "_",
+            "addr",
             "handle",
             "join_server",
             "kernel",
@@ -29648,6 +29831,7 @@
             "Err",
             "HandlerConfig",
             "_",
+            "addr",
             "b",
             "build",
             "count",
@@ -29675,6 +29859,7 @@
           "called": [
             "SHUTDOWN_DRAIN_SECS",
             "_",
+            "addr",
             "b",
             "build",
             "kernel",
@@ -29749,6 +29934,7 @@
           "called": [
             "Verdict",
             "_",
+            "addr",
             "b",
             "handle",
             "iter",
@@ -29793,6 +29979,7 @@
           "name": "budget_gate_admits_then_rejects_over_wire",
           "line": 693,
           "called": [
+            "addr",
             "handle",
             "is_empty",
             "join_server",
@@ -29811,6 +29998,7 @@
           "name": "budget_gate_per_actor_isolation_over_wire",
           "line": 716,
           "called": [
+            "addr",
             "handle",
             "join_server",
             "kernel",
@@ -29828,6 +30016,7 @@
           "name": "budget_gate_genesis_default_denies_over_wire",
           "line": 744,
           "called": [
+            "addr",
             "handle",
             "join_server",
             "kernel",
@@ -29845,6 +30034,7 @@
           "name": "budget_gate_unsupported_action_fails_closed_over_wire",
           "line": 762,
           "called": [
+            "addr",
             "cbe_uint",
             "handle",
             "join_server",
@@ -29863,6 +30053,7 @@
           "line": 781,
           "called": [
             "_",
+            "addr",
             "handle",
             "join_server",
             "kernel",
@@ -29880,6 +30071,7 @@
           "line": 799,
           "called": [
             "_",
+            "addr",
             "handle",
             "join_server",
             "kernel",
@@ -30256,6 +30448,7 @@
           "called": [
             "Kernel",
             "Scheduler",
+            "addr",
             "build",
             "handle",
             "listener",
@@ -30282,6 +30475,7 @@
           "line": 80,
           "called": [
             "_",
+            "addr",
             "bytes",
             "flush",
             "len",
@@ -30293,6 +30487,7 @@
           "name": "submit_v1",
           "line": 99,
           "called": [
+            "addr",
             "encode_frame",
             "submit_raw"
           ]
@@ -30303,6 +30498,7 @@
           "line": 105,
           "called": [
             "KNH2_PREAMBLE",
+            "addr",
             "bytes",
             "encode_hinted_frame",
             "signer",
@@ -30315,6 +30511,7 @@
           "name": "v1_and_v2_both_work_on_fifo_and_drr",
           "line": 119,
           "called": [
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -30331,6 +30528,7 @@
           "name": "v2_arbitrary_hints_all_admit",
           "line": 140,
           "called": [
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -30356,6 +30554,7 @@
           "called": [
             "KNH2_MAGIC",
             "KNH2_PREAMBLE",
+            "addr",
             "handle",
             "join_server",
             "spawn_server",
@@ -30371,6 +30570,7 @@
           "line": 190,
           "called": [
             "KNH2_PREAMBLE",
+            "addr",
             "b",
             "handle",
             "join_server",
@@ -30388,6 +30588,7 @@
           "line": 214,
           "called": [
             "KNH2_PREAMBLE",
+            "addr",
             "bytes",
             "handle",
             "join_server",
@@ -30404,6 +30605,7 @@
           "line": 232,
           "called": [
             "KNH2_PREAMBLE",
+            "addr",
             "bytes",
             "handle",
             "join_server",
@@ -30419,6 +30621,7 @@
           "name": "mixed_v1_v2_concurrent_load",
           "line": 250,
           "called": [
+            "addr",
             "as_bytes",
             "handle",
             "join_server",
@@ -31641,7 +31844,8 @@
           "name": "connect",
           "line": 192,
           "called": [
-            "ClientError"
+            "ClientError",
+            "addr"
           ]
         },
         {
@@ -31653,6 +31857,7 @@
             "ClientOptions",
             "HARD_MAX_FRAME_SIZE",
             "KIND_SUBSCRIBE",
+            "addr",
             "flush",
             "min",
             "stream"
@@ -32911,6 +33116,7 @@
           "line": 500,
           "called": [
             "EthAddress",
+            "addr",
             "write_byte_string"
           ]
         },
@@ -34565,6 +34771,7 @@
             "RESOURCE_ID_ETH",
             "_",
             "apply_batch",
+            "base",
             "get_actor_budget",
             "push",
             "signer",
@@ -34958,6 +35165,7 @@
           "line": 48,
           "called": [
             "TcpListener",
+            "addr",
             "listener",
             "local_addr"
           ]
@@ -35008,6 +35216,7 @@
           "line": 123,
           "called": [
             "_",
+            "addr",
             "b",
             "balance_changed_bytes",
             "bind_listener",
@@ -35030,6 +35239,7 @@
           "line": 157,
           "called": [
             "_",
+            "addr",
             "b",
             "balance_changed_bytes",
             "bind_listener",
@@ -35053,6 +35263,7 @@
           "line": 184,
           "called": [
             "_",
+            "addr",
             "b",
             "balance_changed_bytes",
             "bind_listener",
@@ -35076,6 +35287,7 @@
           "line": 211,
           "called": [
             "_",
+            "addr",
             "b",
             "balance_changed_bytes",
             "bind_listener",
@@ -35098,6 +35310,7 @@
           "line": 242,
           "called": [
             "_",
+            "addr",
             "b",
             "balance_changed_bytes",
             "bind_listener",
@@ -35120,6 +35333,7 @@
           "line": 276,
           "called": [
             "_",
+            "addr",
             "balance_changed_bytes",
             "bind_listener",
             "client",
@@ -35139,6 +35353,7 @@
           "line": 304,
           "called": [
             "_",
+            "addr",
             "balance_changed_bytes",
             "bind_listener",
             "client",
@@ -35159,6 +35374,7 @@
           "called": [
             "_",
             "actor",
+            "addr",
             "apply_batch",
             "bind_listener",
             "client",
@@ -35179,6 +35395,7 @@
           "line": 369,
           "called": [
             "_",
+            "addr",
             "balance_changed_bytes",
             "bind_listener",
             "client",
@@ -35776,6 +35993,7 @@
           "called": [
             "Event",
             "actor",
+            "addr",
             "key",
             "policy",
             "resource"
@@ -35920,6 +36138,7 @@
           "line": 33,
           "called": [
             "TcpListener",
+            "addr",
             "listener",
             "local_addr"
           ]
@@ -35968,6 +36187,7 @@
           "name": "round_trip_event_then_shutdown",
           "line": 96,
           "called": [
+            "addr",
             "b",
             "bind_listener",
             "client",
@@ -35986,6 +36206,7 @@
           "line": 138,
           "called": [
             "_",
+            "addr",
             "bind_listener",
             "client",
             "encode_control",
@@ -36000,6 +36221,7 @@
           "line": 153,
           "called": [
             "_",
+            "addr",
             "bind_listener",
             "client",
             "encode_control",
@@ -36015,6 +36237,7 @@
           "line": 172,
           "called": [
             "_",
+            "addr",
             "bind_listener",
             "client",
             "encode_control",
@@ -36029,6 +36252,7 @@
           "line": 191,
           "called": [
             "_",
+            "addr",
             "bind_listener",
             "client",
             "encode_control",
@@ -36044,6 +36268,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "bind_listener",
             "client",
             "listener",
@@ -36058,6 +36283,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "bind_listener",
             "client",
             "frame",
@@ -36074,6 +36300,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "bind_listener",
             "client",
             "frame",
@@ -36090,6 +36317,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "bind_listener",
             "client",
             "frame",
@@ -36113,6 +36341,7 @@
           "line": 303,
           "called": [
             "_",
+            "addr",
             "bind_listener",
             "client",
             "frame",
@@ -36129,6 +36358,7 @@
           "called": [
             "Err",
             "_",
+            "addr",
             "bind_listener",
             "client",
             "frame",
@@ -36238,6 +36468,7 @@
           "called": [
             "FixtureInput",
             "actor",
+            "addr",
             "address_book",
             "args",
             "assign",
@@ -36262,6 +36493,7 @@
           "called": [
             "AddressBook",
             "EthAddress",
+            "addr",
             "id",
             "lookup_reverse",
             "next_actor_id",
@@ -36477,6 +36709,7 @@
           "name": "eth_address_roundtrip",
           "line": 645,
           "called": [
+            "addr",
             "as_bytes"
           ]
         },
@@ -36485,6 +36718,7 @@
           "name": "eth_address_hex_format",
           "line": 656,
           "called": [
+            "addr",
             "hex",
             "len",
             "to_hex"
@@ -36600,6 +36834,7 @@
           "called": [
             "ActorId",
             "EthAddress",
+            "addr",
             "get"
           ]
         },
@@ -36622,6 +36857,7 @@
             "ActorId",
             "AssignError",
             "EthAddress",
+            "addr",
             "get",
             "insert",
             "next",
@@ -36635,6 +36871,7 @@
           "called": [
             "ActorId",
             "EthAddress",
+            "addr",
             "try_assign"
           ]
         },
@@ -36688,6 +36925,7 @@
           "name": "lookup_unknown_is_none",
           "line": 224,
           "called": [
+            "addr",
             "lookup"
           ]
         },
@@ -36696,6 +36934,7 @@
           "name": "first_assign_is_fresh",
           "line": 234,
           "called": [
+            "addr",
             "assign",
             "id",
             "len",
@@ -36708,6 +36947,7 @@
           "line": 248,
           "called": [
             "_",
+            "addr",
             "assign",
             "len",
             "next_actor_id"
@@ -36730,6 +36970,7 @@
           "line": 277,
           "called": [
             "_",
+            "addr",
             "assign",
             "id",
             "lookup"
@@ -36741,6 +36982,7 @@
           "line": 286,
           "called": [
             "_",
+            "addr",
             "assign",
             "id",
             "lookup_reverse"
@@ -36753,6 +36995,7 @@
           "called": [
             "BRIDGE_ACTOR_ID",
             "_",
+            "addr",
             "assign",
             "id"
           ]
@@ -36767,6 +37010,7 @@
             "INITIAL_NEXT_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
             "_",
+            "addr",
             "assign",
             "id",
             "lookup_reverse",
@@ -36790,6 +37034,7 @@
           "line": 370,
           "called": [
             "Err",
+            "addr",
             "is_empty",
             "lookup",
             "try_assign",
@@ -36802,6 +37047,7 @@
           "line": 397,
           "called": [
             "_",
+            "addr",
             "assign",
             "unsafe_inject_counter"
           ]
@@ -36994,6 +37240,7 @@
           "line": 462,
           "called": [
             "EthAddress",
+            "addr",
             "as_bytes",
             "encode_bytes_checked"
           ]
@@ -37225,6 +37472,7 @@
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
+            "addr",
             "encode_eth_address",
             "len"
           ]
@@ -37744,6 +37992,7 @@
           "name": "decode_address_low_20",
           "line": 821,
           "called": [
+            "addr",
             "decode_abi_address"
           ]
         },
@@ -38015,6 +38264,7 @@
             "FixtureInput",
             "_",
             "actor",
+            "addr",
             "address_book",
             "as_bytes",
             "block_number",
@@ -38035,6 +38285,7 @@
             "FixtureInput",
             "MAX_DECODED_ADDRESS_BOOK_ENTRIES",
             "_",
+            "addr",
             "address_book",
             "bytes",
             "cursor",
@@ -39123,19 +39374,22 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::main",
       "path": "runtime/knomosis-l1-ingest/src/main.rs",
-      "declaration_count": 12,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "fn",
           "name": "main",
-          "line": 79,
+          "line": 82,
           "called": [
             "Err",
             "INGEST_IDENTIFIER",
+            "Submitter",
+            "addr",
             "args",
             "as_i32",
             "classify_error",
             "config",
+            "emits_hints",
             "error",
             "hex_encode",
             "identifier",
@@ -39148,13 +39402,15 @@
             "source",
             "stop",
             "submitter",
-            "watcher"
+            "url",
+            "watcher",
+            "with_emit_hints"
           ]
         },
         {
           "kind": "fn",
           "name": "classify_error",
-          "line": 179,
+          "line": 206,
           "called": [
             "OperatorExitCode",
             "WatcherError",
@@ -39164,7 +39420,7 @@
         {
           "kind": "struct",
           "name": "ParsedArgs",
-          "line": 194,
+          "line": 221,
           "called": [
             "EthAddress"
           ]
@@ -39172,18 +39428,19 @@
         {
           "kind": "enum",
           "name": "ParseExit",
-          "line": 209,
+          "line": 248,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_args",
-          "line": 217,
+          "line": 256,
           "called": [
             "DEFAULT_L1_CONFIRMATION_DEPTH",
             "Err",
             "ParseExit",
             "ParsedArgs",
+            "_",
             "args",
             "as_str",
             "clone",
@@ -39198,7 +39455,7 @@
         {
           "kind": "fn",
           "name": "missing",
-          "line": 307,
+          "line": 380,
           "called": [
             "ParseExit"
           ]
@@ -39206,7 +39463,7 @@
         {
           "kind": "fn",
           "name": "parse_address",
-          "line": 311,
+          "line": 384,
           "called": [
             "Err",
             "EthAddress",
@@ -39218,7 +39475,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_bytes",
-          "line": 323,
+          "line": 396,
           "called": [
             "Err",
             "as_bytes",
@@ -39230,7 +39487,7 @@
         {
           "kind": "fn",
           "name": "hex_digit",
-          "line": 337,
+          "line": 410,
           "called": [
             "Err",
             "_",
@@ -39240,7 +39497,7 @@
         {
           "kind": "fn",
           "name": "hex_encode",
-          "line": 346,
+          "line": 419,
           "called": [
             "b",
             "bytes",
@@ -39252,7 +39509,7 @@
         {
           "kind": "fn",
           "name": "hex_char",
-          "line": 355,
+          "line": 428,
           "called": [
             "_"
           ]
@@ -39260,8 +39517,94 @@
         {
           "kind": "fn",
           "name": "print_help",
-          "line": 363,
+          "line": 436,
           "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 463,
+          "called": [
+            "ParseExit",
+            "parse_args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "argv",
+          "line": 466,
+          "called": [
+            "iter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "base",
+          "line": 476,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "err_message",
+          "line": 491,
+          "called": [
+            "Err",
+            "_",
+            "args",
+            "argv",
+            "parse_args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "neither_submitter_endpoint_is_error",
+          "line": 502,
+          "called": [
+            "base",
+            "err_message"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "both_submitter_endpoints_is_error",
+          "line": 508,
+          "called": [
+            "args",
+            "base",
+            "err_message"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "emit_hints_without_tcp_is_error",
+          "line": 522,
+          "called": [
+            "args",
+            "base",
+            "err_message"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "http_endpoint_alone_parses",
+          "line": 534,
+          "called": [
+            "args",
+            "argv",
+            "base",
+            "parse_args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "tcp_endpoint_with_hints_parses",
+          "line": 548,
+          "called": [
+            "args",
+            "argv",
+            "base",
+            "parse_args"
+          ]
         }
       ]
     },
@@ -39970,6 +40313,7 @@
             "MAX_RESPONSE_BYTES",
             "RpcError",
             "_",
+            "addr",
             "as_bytes",
             "find_double_crlf",
             "flush",
@@ -40664,6 +41008,7 @@
             "TopicHash",
             "WatcherState",
             "_",
+            "addr",
             "address_book",
             "block_hash",
             "block_number",
@@ -40783,6 +41128,7 @@
             "ForwardedKey",
             "HexBytes",
             "_",
+            "addr",
             "address_book",
             "append",
             "block_hash",
@@ -40974,6 +41320,7 @@
             "AddressAssignment",
             "HexBytes",
             "_",
+            "addr",
             "address_book",
             "append",
             "block_hash",
@@ -41055,24 +41402,24 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::submitter",
       "path": "runtime/knomosis-l1-ingest/src/submitter.rs",
-      "declaration_count": 52,
+      "declaration_count": 71,
       "declarations": [
         {
           "kind": "const",
           "name": "MAX_SUBMISSION_BYTES",
-          "line": 54,
+          "line": 65,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_TIMEOUT",
-          "line": 57,
+          "line": 68,
           "called": []
         },
         {
           "kind": "enum",
           "name": "Verdict",
-          "line": 63,
+          "line": 74,
           "called": [
             "ParseError"
           ]
@@ -41080,13 +41427,13 @@
         {
           "kind": "impl",
           "name": "Verdict",
-          "line": 79,
+          "line": 90,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_byte",
-          "line": 83,
+          "line": 94,
           "called": [
             "_",
             "b"
@@ -41095,13 +41442,13 @@
         {
           "kind": "fn",
           "name": "to_byte",
-          "line": 95,
+          "line": 106,
           "called": []
         },
         {
           "kind": "enum",
           "name": "SubmitError",
-          "line": 102,
+          "line": 113,
           "called": [
             "EncodeError",
             "ParseError",
@@ -41112,13 +41459,32 @@
         {
           "kind": "trait",
           "name": "Submitter",
-          "line": 127,
+          "line": 138,
           "called": []
         },
         {
           "kind": "fn",
           "name": "submit",
-          "line": 134,
+          "line": 145,
+          "called": [
+            "SignedActionForSubmit",
+            "SubmitError",
+            "Verdict",
+            "signed"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Submitter for Box<dyn Submitter>",
+          "line": 154,
+          "called": [
+            "Submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "submit",
+          "line": 155,
           "called": [
             "SignedActionForSubmit",
             "SubmitError",
@@ -41129,7 +41495,7 @@
         {
           "kind": "struct",
           "name": "SignedActionForSubmit",
-          "line": 140,
+          "line": 163,
           "called": [
             "UnsignedAction",
             "signature"
@@ -41138,13 +41504,13 @@
         {
           "kind": "impl",
           "name": "SignedActionForSubmit",
-          "line": 147,
+          "line": 170,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode",
-          "line": 154,
+          "line": 177,
           "called": [
             "EncodeError",
             "action",
@@ -41157,7 +41523,7 @@
         {
           "kind": "fn",
           "name": "signer",
-          "line": 165,
+          "line": 188,
           "called": [
             "ActorId"
           ]
@@ -41165,7 +41531,7 @@
         {
           "kind": "fn",
           "name": "nonce",
-          "line": 171,
+          "line": 194,
           "called": [
             "Nonce"
           ]
@@ -41173,7 +41539,7 @@
         {
           "kind": "mod",
           "name": "buffering",
-          "line": 180,
+          "line": 203,
           "called": [
             "SignedActionForSubmit",
             "SubmitError",
@@ -41184,7 +41550,7 @@
         {
           "kind": "struct",
           "name": "BufferingSubmitter",
-          "line": 190,
+          "line": 213,
           "called": [
             "BufferingInner"
           ]
@@ -41192,7 +41558,7 @@
         {
           "kind": "struct",
           "name": "BufferingInner",
-          "line": 195,
+          "line": 218,
           "called": [
             "SignedActionForSubmit",
             "Verdict",
@@ -41202,19 +41568,19 @@
         {
           "kind": "impl",
           "name": "BufferingSubmitter",
-          "line": 201,
+          "line": 224,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 205,
+          "line": 228,
           "called": []
         },
         {
           "kind": "fn",
           "name": "set_responses",
-          "line": 212,
+          "line": 235,
           "called": [
             "Verdict",
             "lock"
@@ -41223,7 +41589,7 @@
         {
           "kind": "fn",
           "name": "recorded",
-          "line": 223,
+          "line": 246,
           "called": [
             "SignedActionForSubmit",
             "clone",
@@ -41233,7 +41599,7 @@
         {
           "kind": "fn",
           "name": "len",
-          "line": 233,
+          "line": 256,
           "called": [
             "recorded"
           ]
@@ -41241,7 +41607,7 @@
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 239,
+          "line": 262,
           "called": [
             "recorded"
           ]
@@ -41249,7 +41615,7 @@
         {
           "kind": "impl",
           "name": "Submitter for BufferingSubmitter",
-          "line": 244,
+          "line": 267,
           "called": [
             "BufferingSubmitter",
             "Submitter"
@@ -41258,7 +41624,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 245,
+          "line": 268,
           "called": [
             "Err",
             "SignedActionForSubmit",
@@ -41277,7 +41643,7 @@
         {
           "kind": "mod",
           "name": "http",
-          "line": 269,
+          "line": 292,
           "called": [
             "DEFAULT_TIMEOUT",
             "SignedActionForSubmit",
@@ -41289,7 +41655,7 @@
         {
           "kind": "struct",
           "name": "HttpSubmitter",
-          "line": 287,
+          "line": 310,
           "called": [
             "path",
             "url"
@@ -41298,13 +41664,13 @@
         {
           "kind": "impl",
           "name": "HttpSubmitter",
-          "line": 295,
+          "line": 318,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 302,
+          "line": 325,
           "called": [
             "DEFAULT_TIMEOUT",
             "SubmitError",
@@ -41315,19 +41681,19 @@
         {
           "kind": "fn",
           "name": "with_timeout",
-          "line": 317,
+          "line": 340,
           "called": []
         },
         {
           "kind": "fn",
           "name": "url",
-          "line": 324,
+          "line": 347,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Submitter for HttpSubmitter",
-          "line": 329,
+          "line": 352,
           "called": [
             "HttpSubmitter",
             "Submitter"
@@ -41336,13 +41702,14 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 330,
+          "line": 353,
           "called": [
             "Err",
             "SignedActionForSubmit",
             "SubmitError",
             "Verdict",
             "_",
+            "addr",
             "as_bytes",
             "encode",
             "flush",
@@ -41356,9 +41723,124 @@
           ]
         },
         {
+          "kind": "mod",
+          "name": "raw_tcp",
+          "line": 450,
+          "called": [
+            "DEFAULT_TIMEOUT",
+            "SignedActionForSubmit",
+            "SubmitError",
+            "Submitter",
+            "Verdict"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "KNH2_PREAMBLE",
+          "line": 463,
+          "called": [
+            "b"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "RawTcpSubmitter",
+          "line": 470,
+          "called": [
+            "addr"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "RawTcpSubmitter",
+          "line": 481,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "new",
+          "line": 491,
+          "called": [
+            "DEFAULT_TIMEOUT",
+            "SubmitError",
+            "addr",
+            "next"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "with_emit_hints",
+          "line": 507,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "with_timeout",
+          "line": 514,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "emits_hints",
+          "line": 521,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "addr",
+          "line": 527,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "build_request",
+          "line": 543,
+          "called": [
+            "KNH2_PREAMBLE",
+            "SignedActionForSubmit",
+            "SubmitError",
+            "_",
+            "encode",
+            "len",
+            "signed",
+            "signer"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Submitter for RawTcpSubmitter",
+          "line": 564,
+          "called": [
+            "RawTcpSubmitter",
+            "Submitter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "submit",
+          "line": 565,
+          "called": [
+            "Err",
+            "SignedActionForSubmit",
+            "SubmitError",
+            "Verdict",
+            "_",
+            "addr",
+            "build_request",
+            "flush",
+            "header",
+            "next",
+            "read_exact",
+            "reason",
+            "signed",
+            "stream",
+            "verdict"
+          ]
+        },
+        {
           "kind": "struct",
           "name": "HttpUrl",
-          "line": 417,
+          "line": 629,
           "called": [
             "path"
           ]
@@ -41366,7 +41848,7 @@
         {
           "kind": "fn",
           "name": "parse_http_url",
-          "line": 426,
+          "line": 638,
           "called": [
             "Err",
             "HttpUrl",
@@ -41378,7 +41860,7 @@
         {
           "kind": "fn",
           "name": "find_double_crlf",
-          "line": 457,
+          "line": 669,
           "called": [
             "b",
             "len"
@@ -41387,7 +41869,7 @@
         {
           "kind": "fn",
           "name": "parse_http_status",
-          "line": 467,
+          "line": 679,
           "called": [
             "header",
             "next"
@@ -41396,9 +41878,10 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 476,
+          "line": 688,
           "called": [
             "Action",
+            "ActorId",
             "PublicKey",
             "SignedActionForSubmit",
             "SubmitError",
@@ -41412,7 +41895,7 @@
         {
           "kind": "fn",
           "name": "sample_signed_action",
-          "line": 486,
+          "line": 699,
           "called": [
             "BRIDGE_ACTOR_ID",
             "SignedActionForSubmit",
@@ -41427,7 +41910,7 @@
         {
           "kind": "fn",
           "name": "verdict_round_trip",
-          "line": 502,
+          "line": 715,
           "called": [
             "to_byte"
           ]
@@ -41435,7 +41918,7 @@
         {
           "kind": "fn",
           "name": "verdict_unknown_returns_none",
-          "line": 515,
+          "line": 728,
           "called": [
             "b"
           ]
@@ -41443,15 +41926,82 @@
         {
           "kind": "fn",
           "name": "verdict_byte_table",
-          "line": 523,
+          "line": 736,
           "called": [
             "to_byte"
           ]
         },
         {
           "kind": "fn",
+          "name": "signed_with_signer",
+          "line": 749,
+          "called": [
+            "ActorId",
+            "SignedActionForSubmit",
+            "UnsignedAction",
+            "action",
+            "actor",
+            "nonce",
+            "signature",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_tcp_legacy_frame_layout",
+          "line": 767,
+          "called": [
+            "action",
+            "build_request",
+            "emits_hints",
+            "encode",
+            "frame",
+            "len",
+            "signed_with_signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_tcp_hinted_frame_layout",
+          "line": 784,
+          "called": [
+            "action",
+            "b",
+            "build_request",
+            "emits_hints",
+            "encode",
+            "frame",
+            "len",
+            "signed_with_signer",
+            "signer",
+            "with_emit_hints"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_tcp_hinted_is_legacy_plus_prefix",
+          "line": 811,
+          "called": [
+            "action",
+            "build_request",
+            "hinted",
+            "signed_with_signer",
+            "with_emit_hints"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_tcp_rejects_unresolvable_addr",
+          "line": 831,
+          "called": [
+            "Err",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "buffering_submitter_default",
-          "line": 532,
+          "line": 840,
           "called": [
             "len",
             "recorded",
@@ -41462,7 +42012,7 @@
         {
           "kind": "fn",
           "name": "buffering_submitter_cycles_responses",
-          "line": 544,
+          "line": 852,
           "called": [
             "sample_signed_action",
             "set_responses",
@@ -41472,7 +42022,7 @@
         {
           "kind": "fn",
           "name": "buffering_submitter_not_admissible",
-          "line": 555,
+          "line": 863,
           "called": [
             "Err",
             "sample_signed_action",
@@ -41483,7 +42033,7 @@
         {
           "kind": "fn",
           "name": "buffering_submitter_parse_error",
-          "line": 567,
+          "line": 875,
           "called": [
             "Err",
             "sample_signed_action",
@@ -41494,7 +42044,7 @@
         {
           "kind": "fn",
           "name": "signed_action_encode_non_empty",
-          "line": 580,
+          "line": 888,
           "called": [
             "encode",
             "is_empty",
@@ -41504,7 +42054,7 @@
         {
           "kind": "fn",
           "name": "signed_action_accessors",
-          "line": 588,
+          "line": 896,
           "called": [
             "BRIDGE_ACTOR_ID",
             "nonce",
@@ -41515,7 +42065,7 @@
         {
           "kind": "fn",
           "name": "parse_http_url_ok",
-          "line": 596,
+          "line": 904,
           "called": [
             "parse_http_url",
             "path"
@@ -41524,7 +42074,7 @@
         {
           "kind": "fn",
           "name": "parse_http_url_rejects_non_http",
-          "line": 605,
+          "line": 913,
           "called": [
             "parse_http_url"
           ]
@@ -41532,7 +42082,7 @@
         {
           "kind": "fn",
           "name": "find_double_crlf_basic",
-          "line": 612,
+          "line": 920,
           "called": [
             "b",
             "find_double_crlf"
@@ -41541,7 +42091,7 @@
         {
           "kind": "fn",
           "name": "parse_http_status_ok",
-          "line": 620,
+          "line": 928,
           "called": [
             "parse_http_status"
           ]
@@ -41839,6 +42389,7 @@
           "line": 639,
           "called": [
             "actor",
+            "addr",
             "block_number",
             "event",
             "ingest",
@@ -42331,6 +42882,7 @@
           "called": [
             "BlockHeader",
             "SharedSubmitter",
+            "addr",
             "address_book",
             "bridge_addr",
             "build_registered_ecdsa_log",
@@ -42614,6 +43166,7 @@
           "called": [
             "_",
             "action",
+            "addr",
             "address_book",
             "assign",
             "decode_expected",
@@ -42665,6 +43218,7 @@
             "Translated",
             "_",
             "action",
+            "addr",
             "address_book",
             "assign",
             "commit_assignment",
@@ -43384,6 +43938,7 @@
           "name": "state_persists_across_restarts",
           "line": 176,
           "called": [
+            "addr",
             "address_book",
             "bridge_addr",
             "build_registered_ecdsa_log",
@@ -43428,6 +43983,7 @@
           "called": [
             "action",
             "actor",
+            "addr",
             "address_book",
             "as_bytes",
             "block_number",
@@ -43544,6 +44100,7 @@
           "name": "address_book_monotone",
           "line": 130,
           "called": [
+            "addr",
             "assign",
             "id"
           ]
@@ -43554,6 +44111,7 @@
           "line": 147,
           "called": [
             "_",
+            "addr",
             "assign",
             "lookup"
           ]
@@ -43564,6 +44122,7 @@
           "line": 161,
           "called": [
             "actor",
+            "addr",
             "block_number",
             "event",
             "ingest",
@@ -43577,6 +44136,7 @@
           "line": 184,
           "called": [
             "actor",
+            "addr",
             "block_number",
             "event",
             "ingest",

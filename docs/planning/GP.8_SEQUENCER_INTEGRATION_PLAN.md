@@ -69,19 +69,21 @@ inner — the single-tier FQ.1 suite runs green against the extracted
 (`src/fair/drr.rs`, FQ.11a / FQ.11b); the `(conn, signer)` routing
 threaded through `FairQueue::try_submit` / `QueueHandle::submit` /
 `handle_connection` + the `--max-signers-per-conn` cap (`src/queue.rs`,
-`src/listener.rs`, `src/config.rs`, FQ.12); the `knomosis-bench
---emit-hints` wire client (`runtime/knomosis-bench`, FQ.13c); and the
-two-tier-fairness + spoof-resistance (queue-level) + v1/v2 wire-interop
-(`tests/fair_queue.rs`, `tests/wire_compat.rs`, FQ.14a / FQ.14b)
-suites.  Every §2.6 invariant — including "forged hints are
+`src/listener.rs`, `src/config.rs`, FQ.12); the client emitters
+(`knomosis-bench --emit-hints`, FQ.13c, AND the FQ.13a
+`knomosis-l1-ingest` raw-TCP submitter — `RawTcpSubmitter` + the opt-in
+`--emit-signer-hints` / `--knomosis-host-tcp` daemon flags, the first
+real l1-ingest → knomosis-host forwarder, byte-pinned against the
+canonical `encode_hinted_frame` + driven end-to-end against a live host);
+and the two-tier-fairness + spoof-resistance (queue-level) + v1/v2
+wire-interop (`tests/fair_queue.rs`, `tests/wire_compat.rs`, FQ.14a /
+FQ.14b) suites.  Every §2.6 invariant — including "forged hints are
 self-confined" (invariant 2) and "legacy clients degrade safely"
-(invariant 3) — holds, evidenced by tests.  FQ.13a / FQ.13b are N/A as
-literal client edits: the `knomosis-l1-ingest` submitter speaks HTTP and
-the `knomosis-faultproof-observer` submitters speak L1 JSON-RPC, so
-neither speaks the canonical `knomosis-host` wire format today; the
-reusable `encode_hinted_frame` primitive is the ready drop-in for their
-future migration (the plan's "if/where the ingestor submits there" /
-"whichever speak the knomosis-host wire format" hedges).  See the
+(invariant 3) — holds, evidenced by tests.  FQ.13b is N/A as a literal
+client edit: the `knomosis-faultproof-observer` submitters speak L1
+JSON-RPC (game-move calldata), never a `SignedAction` to the host, so
+there is nothing to hint; the reusable `encode_hinted_frame` primitive
+remains the ready drop-in if it ever forwards to the host.  See the
 workstream snapshot in `CLAUDE.md`.
 
 **Remaining: Tracks B–D.  Planned.  Not started.**  Every prerequisite
@@ -2037,13 +2039,14 @@ The unified sequencer integration is **Complete** when:
 
 ### Track A — Rung 1
 
-  * [x] FQ.9, FQ.10a–b, FQ.11a–b, FQ.12, FQ.14a–b, FQ.15 landed.  FQ.13c
-        (`knomosis-bench --emit-hints`) landed; FQ.13a / FQ.13b are N/A
-        as literal client edits (the l1-ingest submitter speaks HTTP, the
-        observer submitters speak L1 JSON-RPC — neither speaks the
-        canonical `knomosis-host` wire format), with the reusable
-        `encode_hinted_frame` primitive provided as their migration
-        drop-in.
+  * [x] FQ.9, FQ.10a–b, FQ.11a–b, FQ.12, FQ.13a, FQ.13c, FQ.14a–b, FQ.15
+        landed.  FQ.13a = the `knomosis-l1-ingest` `RawTcpSubmitter` (the
+        canonical raw-TCP forwarder + opt-in `--emit-signer-hints`,
+        byte-pinned against `encode_hinted_frame` + driven end-to-end
+        against a live host); FQ.13c = `knomosis-bench --emit-hints`.
+        FQ.13b is N/A (the observer speaks L1 JSON-RPC, never a
+        `SignedAction` to the host), with `encode_hinted_frame` the ready
+        drop-in if that ever changes.
   * [x] One DRR implementation (`Tier<K, S>`) reused at both tiers; the
         single-tier FQ.1 suite runs green against the extracted `Tier`.
   * [x] Spoof-confinement property test (FQ.11b, `drr.rs`) +

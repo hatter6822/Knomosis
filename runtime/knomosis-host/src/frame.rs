@@ -161,6 +161,23 @@ pub enum FrameError {
         /// Number of hint bytes received before EOF (0 < n < SIGNER_HINT_LEN).
         bytes_read: usize,
     },
+    /// On a Rung-1 (hinted) connection, the peer sent a COMPLETE 8-byte
+    /// signer hint — thereby *committing* to a request — then closed
+    /// before (or part-way through) the length header.  This is a
+    /// truncated request (the host answers `ParseError`), NOT the benign
+    /// inter-frame close that [`FrameError::EofBeforeHeader`] denotes;
+    /// the dedicated variant keeps that distinction explicit in operator
+    /// logs (FQ.10b).  `header_bytes_read` is how many of the
+    /// [`HEADER_LEN`] length-header bytes arrived (0–3).
+    #[error(
+        "client sent a signer hint then {header_bytes_read} of {} length-header bytes before EOF",
+        HEADER_LEN
+    )]
+    TruncatedHintedFrame {
+        /// Length-header bytes received after the hint before EOF
+        /// (0 <= n < HEADER_LEN).
+        header_bytes_read: usize,
+    },
     /// The peer sent a complete header but only part of the
     /// payload before closing the connection.
     #[error("client sent {bytes_read} of {declared_length} payload bytes before EOF")]
@@ -250,10 +267,10 @@ pub fn read_frame_with_prefix<R: Read>(
 /// [`FrameError::EofBeforeHeader`] (the peer closed between frames).
 ///
 /// Once the FULL hint has been read the client has **committed** to a
-/// request, so a subsequent EOF before the length header is a *truncated
-/// request* ([`FrameError::TruncatedHeader`] — a protocol error the host
-/// answers `ParseError`), NOT the benign inter-frame close that
-/// `EofBeforeHeader` denotes.  This keeps the truncation semantics
+/// request, so a subsequent EOF before / mid the length header is a
+/// *truncated request* ([`FrameError::TruncatedHintedFrame`] — a protocol
+/// error the host answers `ParseError`), NOT the benign inter-frame close
+/// that `EofBeforeHeader` denotes.  This keeps the truncation semantics
 /// consistent with the v1 path (where a started-but-unfinished frame is
 /// likewise a protocol error, not a clean close) and is what a future
 /// persistent-connection mode relies on to decide a response is owed.
@@ -286,20 +303,23 @@ pub fn read_hinted_frame<R: Read>(
         bytes_read += n;
     }
     let signer = u64::from_be_bytes(hint);
-    // 2. Then the ordinary length-prefixed payload.  The hint has
-    //    committed the client to a request, so re-map the frame reader's
-    //    clean-close `EofBeforeHeader` (no length-header byte arrived) to
-    //    `TruncatedHeader { bytes_read: 0 }` — a protocol error → the host
-    //    answers `ParseError` rather than treating a half-sent request as
-    //    a benign disconnect.  A partial length header (1–3 bytes) already
-    //    surfaces as `TruncatedHeader` directly.
-    let payload = match read_frame(reader, max_frame_size) {
-        Ok(p) => p,
-        Err(FrameError::EofBeforeHeader) => {
-            return Err(FrameError::TruncatedHeader { bytes_read: 0 })
+    // 2. Read the 4-byte length header explicitly.  The hint has
+    //    committed the client to a request, so ANY EOF here (clean or
+    //    mid-header) is a `TruncatedHintedFrame` — a protocol error →
+    //    `ParseError` — never the benign `EofBeforeHeader` clean close.
+    let mut header = [0u8; HEADER_LEN];
+    let mut header_read = 0usize;
+    while header_read < HEADER_LEN {
+        let n = reader.read(&mut header[header_read..])?;
+        if n == 0 {
+            return Err(FrameError::TruncatedHintedFrame {
+                header_bytes_read: header_read,
+            });
         }
-        Err(e) => return Err(e),
-    };
+        header_read += n;
+    }
+    // 3. Bound the declared length and read the payload.
+    let payload = read_payload(reader, u32::from_be_bytes(header), max_frame_size)?;
     Ok((signer, payload))
 }
 
@@ -350,15 +370,97 @@ pub fn negotiate_connection<R: Read>(reader: &mut R) -> Result<Negotiation, Fram
     }
 }
 
+/// Per-connection read state for the Rung-1 wire protocol (FQ.10a — the
+/// "record `hinted` on the connection's read state" object).
+///
+/// A connection's v1/v2 classification is negotiated **exactly once** —
+/// on the first [`ConnReader::read_next`] — and fixed for the
+/// connection's lifetime; there is no mid-connection renegotiation.  This
+/// is the state machine a persistent-connection mode (future) loops over
+/// to read successive requests: `negotiate once, then read frames per the
+/// fixed classification`.  Using it (rather than calling [`read_request`]
+/// in a loop, which would re-peek for the magic on every frame) is what
+/// keeps a persistent v2 connection's 2nd+ frames read as hinted frames
+/// rather than re-negotiated.  The one-shot server reads exactly one frame
+/// and closes, so it can use either; it uses the [`read_request`]
+/// convenience.
+#[derive(Debug, Default)]
+pub struct ConnReader {
+    /// `None` until the first frame negotiates the connection's
+    /// classification; then `Some(true)` for a v2 (hinted) connection or
+    /// `Some(false)` for a legacy (v1) connection, for its lifetime.
+    hinted: Option<bool>,
+}
+
+impl ConnReader {
+    /// A fresh, un-negotiated connection reader.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the connection has been classified as hinted (v2) yet:
+    /// `None` before the first [`ConnReader::read_next`], then
+    /// `Some(true)` (v2) / `Some(false)` (v1) for the connection's life.
+    #[must_use]
+    pub fn hinted(&self) -> Option<bool> {
+        self.hinted
+    }
+
+    /// Read the next request, negotiating the connection's classification
+    /// on the FIRST call and reading per that fixed classification
+    /// thereafter (FQ.10).  Returns the advisory signer hint — the real
+    /// per-frame hint for a v2 connection, the [`LEGACY_SIGNER_HINT`]
+    /// sentinel for a v1 connection — plus the opaque payload (always
+    /// byte-identical to what a plain [`read_frame`] would yield for the
+    /// same body).
+    ///
+    /// # Errors
+    ///
+    /// See [`FrameError`].  `EofBeforeHeader` means the peer closed
+    /// cleanly before this request (no response owed).
+    pub fn read_next<R: Read>(
+        &mut self,
+        reader: &mut R,
+        max_frame_size: usize,
+    ) -> Result<(SignerHint, Vec<u8>), FrameError> {
+        match self.hinted {
+            None => match negotiate_connection(reader)? {
+                Negotiation::Hinted => {
+                    self.hinted = Some(true);
+                    read_hinted_frame(reader, max_frame_size)
+                }
+                Negotiation::Legacy(prefix) => {
+                    self.hinted = Some(false);
+                    let payload = read_frame_with_prefix(reader, prefix, max_frame_size)?;
+                    Ok((LEGACY_SIGNER_HINT, payload))
+                }
+            },
+            Some(true) => read_hinted_frame(reader, max_frame_size),
+            Some(false) => {
+                let payload = read_frame(reader, max_frame_size)?;
+                Ok((LEGACY_SIGNER_HINT, payload))
+            }
+        }
+    }
+}
+
 /// Read one full request from a freshly-accepted connection, performing
 /// the Rung-1 negotiation and returning the routing signer hint plus the
-/// opaque payload (FQ.10).
+/// opaque payload (FQ.10).  The **one-shot convenience** over
+/// [`ConnReader`]: it negotiates and reads a single frame, which is all
+/// the one-shot-per-connection server needs.
 ///
 /// For a v2 connection the real per-frame hint is returned; for a legacy
 /// (v1) connection the [`LEGACY_SIGNER_HINT`] sentinel is returned (so
 /// the fair scheduler treats the whole connection as one inner flow ⇒
 /// Rung-0 behaviour).  Either way the returned payload is byte-identical
 /// to what a plain [`read_frame`] would have produced for the same body.
+///
+/// **Do not call this in a loop on one connection** — it re-negotiates
+/// each call.  A persistent-connection mode must instead hold a
+/// [`ConnReader`] and call [`ConnReader::read_next`] (which negotiates
+/// once).
 ///
 /// # Errors
 ///
@@ -368,13 +470,7 @@ pub fn read_request<R: Read>(
     reader: &mut R,
     max_frame_size: usize,
 ) -> Result<(SignerHint, Vec<u8>), FrameError> {
-    match negotiate_connection(reader)? {
-        Negotiation::Hinted => read_hinted_frame(reader, max_frame_size),
-        Negotiation::Legacy(prefix) => {
-            let payload = read_frame_with_prefix(reader, prefix, max_frame_size)?;
-            Ok((LEGACY_SIGNER_HINT, payload))
-        }
-    }
+    ConnReader::new().read_next(reader, max_frame_size)
 }
 
 /// Fill `buf` completely from `reader`, mapping a clean EOF at offset 0
@@ -493,8 +589,9 @@ pub fn encode_frame(payload: &[u8]) -> Result<Vec<u8>, WriteFrameError> {
 /// of [`read_hinted_frame`].
 ///
 /// This is the **single source of truth** for the Rung-1 frame layout
-/// that any wire client (the bench harness today; a future migrated
-/// L1-ingest / observer submitter) uses to emit hinted frames — the
+/// that wire clients use to emit hinted frames — the `knomosis-bench`
+/// harness calls it directly, and the `knomosis-l1-ingest` raw-TCP
+/// submitter (FQ.13a) byte-pins its hand-rolled framing against it.  The
 /// caller sends [`KNH2_PREAMBLE`] ONCE on connection open, then one of
 /// these per request.  Keeping the layout in one tested place means a
 /// client can never drift from the host's `read_hinted_frame`.
@@ -517,9 +614,9 @@ pub fn encode_hinted_frame(signer: SignerHint, payload: &[u8]) -> Result<Vec<u8>
 mod tests {
     use super::{
         encode_frame, encode_hinted_frame, negotiate_connection, read_frame,
-        read_frame_with_prefix, read_hinted_frame, read_request, write_frame, FrameError,
-        Negotiation, DEFAULT_MAX_FRAME_SIZE, HARD_MAX_FRAME_SIZE, HEADER_LEN, KNH2_MAGIC,
-        KNH2_PREAMBLE, SIGNER_HINT_LEN,
+        read_frame_with_prefix, read_hinted_frame, read_request, write_frame, ConnReader,
+        FrameError, Negotiation, DEFAULT_MAX_FRAME_SIZE, HARD_MAX_FRAME_SIZE, HEADER_LEN,
+        KNH2_MAGIC, KNH2_PREAMBLE, SIGNER_HINT_LEN,
     };
     use crate::queue::LEGACY_SIGNER_HINT;
     use std::io::Cursor;
@@ -955,11 +1052,9 @@ mod tests {
 
     /// FQ.10b — EOF semantics on a hinted connection: a clean EOF before
     /// any hint byte is `EofBeforeHeader` (the peer closed between
-    /// frames); a partial hint is the dedicated `TruncatedHint`; and —
-    /// once the FULL hint has committed the client to a request — an EOF
-    /// before the length header is a `TruncatedHeader` (a protocol error
-    /// → `ParseError`), NOT a benign `EofBeforeHeader`.  All surfaced
-    /// BEFORE any body allocation.
+    /// frames); a partial hint is the dedicated `TruncatedHint`.  Both
+    /// surfaced BEFORE any body allocation.  (The committed-but-truncated
+    /// `TruncatedHintedFrame` cases are covered separately.)
     #[test]
     fn hinted_frame_eof_and_truncated_hint() {
         // (a) EOF before any hint byte → benign inter-frame close.
@@ -973,26 +1068,10 @@ mod tests {
             Err(FrameError::TruncatedHint { bytes_read }) => assert_eq!(bytes_read, 5),
             other => panic!("expected TruncatedHint, got {other:?}"),
         }
-        // (c) FULL 8-byte hint then EOF before the length header → a
-        //     committed-but-truncated request, NOT a clean close.  This
-        //     must be a protocol error (handle_connection → ParseError),
-        //     so it must NOT be EofBeforeHeader.
-        let full_hint_only = 42u64.to_be_bytes().to_vec();
-        match read_hinted_frame(&mut Cursor::new(full_hint_only), DEFAULT_MAX_FRAME_SIZE) {
-            Err(FrameError::TruncatedHeader { bytes_read }) => assert_eq!(bytes_read, 0),
-            other => panic!("expected TruncatedHeader (committed-but-truncated), got {other:?}"),
-        }
-        // (d) full hint + 2 of 4 length-header bytes then EOF → also a
-        //     TruncatedHeader (the partial header surfaces directly).
-        let mut full_hint_partial_len = 7u64.to_be_bytes().to_vec();
-        full_hint_partial_len.extend_from_slice(&[0u8, 0]); // 2 of 4 len bytes
-        match read_hinted_frame(
-            &mut Cursor::new(full_hint_partial_len),
-            DEFAULT_MAX_FRAME_SIZE,
-        ) {
-            Err(FrameError::TruncatedHeader { bytes_read }) => assert_eq!(bytes_read, 2),
-            other => panic!("expected TruncatedHeader (partial len), got {other:?}"),
-        }
+        // The committed-but-truncated cases (a FULL hint then EOF / a
+        // partial length header) surface the dedicated
+        // `TruncatedHintedFrame` and are covered by
+        // `hinted_frame_committed_then_truncated_is_dedicated_variant`.
     }
 
     /// FQ.10b — a hinted connection with a valid hint but a zero-length
@@ -1060,6 +1139,107 @@ mod tests {
             Err(FrameError::EofBeforeHeader) => {}
             other => panic!("expected EofBeforeHeader, got {other:?}"),
         }
+    }
+
+    /// FQ.10b (E8) — a COMPLETE hint followed by an EOF (or partial)
+    /// length header is the dedicated `TruncatedHintedFrame` — a
+    /// committed-but-truncated request, NOT the benign `EofBeforeHeader`
+    /// clean close.  Both the no-length-byte and partial-length-byte
+    /// cases surface it (with the right `header_bytes_read`).
+    #[test]
+    fn hinted_frame_committed_then_truncated_is_dedicated_variant() {
+        // Full hint, then immediate close (0 length-header bytes).
+        let bytes = 42u64.to_be_bytes().to_vec();
+        match read_hinted_frame(&mut Cursor::new(bytes), DEFAULT_MAX_FRAME_SIZE) {
+            Err(FrameError::TruncatedHintedFrame { header_bytes_read }) => {
+                assert_eq!(header_bytes_read, 0);
+            }
+            other => panic!("expected TruncatedHintedFrame{{0}}, got {other:?}"),
+        }
+        // Full hint + 2 of 4 length-header bytes, then close.
+        let mut bytes = 42u64.to_be_bytes().to_vec();
+        bytes.extend_from_slice(&[0x00, 0x00]);
+        match read_hinted_frame(&mut Cursor::new(bytes), DEFAULT_MAX_FRAME_SIZE) {
+            Err(FrameError::TruncatedHintedFrame { header_bytes_read }) => {
+                assert_eq!(header_bytes_read, 2);
+            }
+            other => panic!("expected TruncatedHintedFrame{{2}}, got {other:?}"),
+        }
+    }
+
+    /// FQ.10a — `ConnReader` negotiates ONCE: the one-shot composite over
+    /// it (`read_request`) and a direct `read_next` both classify a v1 /
+    /// v2 connection correctly and expose `hinted()`.
+    #[test]
+    fn conn_reader_one_shot_classifies() {
+        // v1: a plain frame ⇒ Some(false), legacy sentinel hint.
+        let mut v1 = ConnReader::new();
+        assert_eq!(v1.hinted(), None);
+        let mut c1 = Cursor::new(encode_frame(b"body").unwrap());
+        let (h, p) = v1.read_next(&mut c1, DEFAULT_MAX_FRAME_SIZE).unwrap();
+        assert_eq!(v1.hinted(), Some(false));
+        assert_eq!(h, LEGACY_SIGNER_HINT);
+        assert_eq!(p, b"body");
+        // v2: preamble + hinted frame ⇒ Some(true), real hint.
+        let mut v2 = ConnReader::new();
+        let mut bytes = KNH2_PREAMBLE.to_vec();
+        bytes.extend_from_slice(&encode_hinted_frame(99, b"body").unwrap());
+        let mut c2 = Cursor::new(bytes);
+        let (h, p) = v2.read_next(&mut c2, DEFAULT_MAX_FRAME_SIZE).unwrap();
+        assert_eq!(v2.hinted(), Some(true));
+        assert_eq!(h, 99);
+        assert_eq!(p, b"body");
+    }
+
+    /// FQ.10a — `ConnReader` reads MULTIPLE frames on a persistent
+    /// connection, negotiating only once (the footgun `read_request`
+    /// would re-trigger): a v2 connection's 2nd+ frames are read as
+    /// hinted frames, NOT re-negotiated; a v1 connection's 2nd+ frames
+    /// are read as plain frames.
+    #[test]
+    fn conn_reader_persistent_multi_frame() {
+        // v2: preamble once, then THREE hinted frames.
+        let mut bytes = KNH2_PREAMBLE.to_vec();
+        for (hint, body) in [(1u64, b"aa".as_slice()), (2, b"bbb"), (3, b"c")] {
+            bytes.extend_from_slice(&encode_hinted_frame(hint, body).unwrap());
+        }
+        let mut cursor = Cursor::new(bytes);
+        let mut reader = ConnReader::new();
+        for (expect_hint, expect_body) in [(1u64, b"aa".as_slice()), (2, b"bbb"), (3, b"c")] {
+            let (h, p) = reader
+                .read_next(&mut cursor, DEFAULT_MAX_FRAME_SIZE)
+                .unwrap();
+            assert_eq!(h, expect_hint);
+            assert_eq!(p, expect_body);
+            assert_eq!(reader.hinted(), Some(true), "must stay v2 across frames");
+        }
+        // Clean inter-frame close after the last frame.
+        match reader.read_next(&mut cursor, DEFAULT_MAX_FRAME_SIZE) {
+            Err(FrameError::EofBeforeHeader) => {}
+            other => panic!("expected EofBeforeHeader, got {other:?}"),
+        }
+
+        // v1: TWO plain frames, no preamble — read as legacy throughout.
+        let mut bytes = encode_frame(b"first").unwrap();
+        bytes.extend_from_slice(&encode_frame(b"second").unwrap());
+        let mut cursor = Cursor::new(bytes);
+        let mut reader = ConnReader::new();
+        let (h1, p1) = reader
+            .read_next(&mut cursor, DEFAULT_MAX_FRAME_SIZE)
+            .unwrap();
+        assert_eq!(reader.hinted(), Some(false));
+        let (h2, p2) = reader
+            .read_next(&mut cursor, DEFAULT_MAX_FRAME_SIZE)
+            .unwrap();
+        assert_eq!(
+            (h1, p1.as_slice()),
+            (LEGACY_SIGNER_HINT, b"first".as_slice())
+        );
+        assert_eq!(
+            (h2, p2.as_slice()),
+            (LEGACY_SIGNER_HINT, b"second".as_slice())
+        );
+        assert_eq!(reader.hinted(), Some(false), "must stay v1 across frames");
     }
 
     /// `encode_hinted_frame` is the exact inverse of `read_hinted_frame`

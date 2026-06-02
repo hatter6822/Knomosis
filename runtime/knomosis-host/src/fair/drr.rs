@@ -797,19 +797,22 @@ mod tests {
     /// A single-tier leaf tier (the extracted Rung-0 core).
     type LeafTier = Tier<u64, RequestFifo>;
 
-    /// Enqueue into a leaf tier with Rung-0 caps; returns the rejected
-    /// request (mirroring the old `DrrState::enqueue` `Err` shape).
+    /// Enqueue into the extracted single-tier core with `caps`'
+    /// per-flow / max-flows bounds, returning the rejected request on a
+    /// breach (the `Err` shape the wrapper maps to `Busy`).
+    ///
+    /// A thin wrapper over the REAL [`Tier::enqueue_leaf`] — no synthetic
+    /// logic — so the FQ.1 suite is genuine behaviour-preservation
+    /// evidence for the extracted core.  The single-tier `Tier` has no
+    /// `global` cap (that lives in the two-tier [`DrrState`]), so `global`
+    /// is exercised at the `DrrState` level instead (`two_tier_global_cap`
+    /// / `drr_state_global_zero_rejects_all`).
     fn leaf_enqueue(
         t: &mut LeafTier,
         caps: Caps,
         key: u64,
         r: QueuedRequest,
     ) -> Result<(), QueuedRequest> {
-        // Mirror the global cap at the single-tier level for the FQ.1
-        // tests that exercise `global`.
-        if t.total_depth >= caps.global {
-            return Err(r);
-        }
         t.enqueue_leaf(
             key,
             r,
@@ -870,19 +873,10 @@ mod tests {
         assert_leaf_invariants(&t);
     }
 
-    /// `global` cap independently returns the request back.
-    #[test]
-    fn global_cap_rejects_and_returns_request() {
-        let caps = Caps::new(10, 10, 2);
-        let mut t = LeafTier::new();
-        assert!(leaf_enqueue(&mut t, caps, 1, req(1)).is_ok());
-        assert!(leaf_enqueue(&mut t, caps, 2, req(2)).is_ok());
-        // Third request (any flow) breaches global = 2.
-        let err = leaf_enqueue(&mut t, caps, 3, req(42)).expect_err("global breach");
-        assert_eq!(tag_of(&err), 42);
-        assert_eq!(t.total_depth, 2);
-        assert_leaf_invariants(&t);
-    }
+    // (The `global` cap is NOT a single-tier concern — it lives in the
+    // two-tier `DrrState` — so it is exercised by `two_tier_global_cap`
+    // and `drr_state_global_zero_rejects_all`, not against the extracted
+    // leaf `Tier`.)
 
     /// Activation bookkeeping: a new key registers exactly one active
     /// entry; repeated enqueues on it do not duplicate it.
@@ -1019,15 +1013,6 @@ mod tests {
         assert_leaf_invariants(&t);
     }
 
-    /// `global = 0`: every enqueue is rejected (everything `Busy`).
-    #[test]
-    fn boundary_global_zero_rejects_all() {
-        let caps = Caps::new(10, 10, 0);
-        let mut t = LeafTier::new();
-        assert!(leaf_enqueue(&mut t, caps, 1, req(1)).is_err());
-        assert!(t.total_depth == 0);
-    }
-
     /// `per_flow = 0`: a degenerate flow can hold nothing (defence in
     /// depth; CLI validation forbids this value).
     #[test]
@@ -1158,9 +1143,12 @@ mod tests {
                     prop_assert!(flow.store.depth() > 0);
                     prop_assert!(flow.store.depth() <= caps.per_flow);
                 }
-                // Caps respected.
-                prop_assert!(t.total_depth <= caps.global);
+                // Caps respected.  The single-tier `Tier` enforces
+                // `max_flows` (distinct keys) and `per_flow` (backlog),
+                // so its depth is bounded by their product; `global` is a
+                // two-tier `DrrState` cap and is asserted there.
                 prop_assert!(t.flows.len() <= caps.max_flows);
+                prop_assert!(t.total_depth <= caps.per_flow * caps.max_flows);
             }
         }
 
@@ -1476,6 +1464,18 @@ mod tests {
         s.enqueue(2, 20, req(2)).unwrap();
         let err = s.enqueue(3, 30, req(3)).expect_err("global breach");
         assert_eq!(tag_of(&err), 3);
+        assert_eq!(s.stats().rejected_global, 1);
+    }
+
+    /// `global = 0`: every enqueue is rejected (everything `Busy`) — the
+    /// boundary case, at the `DrrState` level where `global` lives
+    /// (relocated from the single-tier suite, which has no `global` cap).
+    #[test]
+    fn drr_state_global_zero_rejects_all() {
+        let mut s = DrrState::new(Caps::new(10, 10, 0));
+        let err = s.enqueue(1, 10, req(1)).expect_err("global = 0 rejects");
+        assert_eq!(tag_of(&err), 1, "the rejected request flows back");
+        assert!(s.is_empty());
         assert_eq!(s.stats().rejected_global, 1);
     }
 

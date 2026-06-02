@@ -38,10 +38,12 @@
 //! |---------------------------------|----------|----------------------------------------------------------------------|
 //! | `--l1-rpc <URL>`                | yes      | Ethereum JSON-RPC endpoint (e.g. `http://localhost:8545`)           |
 //! | `--bridge-actor-keystore <PATH>`| yes      | Raw 32-byte secp256k1 private key file                              |
-//! | `--knomosis-host-url <URL>`        | yes      | `knomosis-host` POST endpoint for signed-action submission             |
+//! | `--knomosis-host-url <URL>`     | one of   | `knomosis-host` HTTP POST endpoint (placeholder transport)          |
+//! | `--knomosis-host-tcp <ADDR>`    | one of   | `knomosis-host` raw-TCP listener (`host:port`; canonical wire format, FQ.13a) |
 //! | `--bridge-contract <HEX>`       | yes      | 20-byte hex address of the L1 `KnomosisBridge.sol` instance            |
 //! | `--identity-registry <HEX>`     | yes      | 20-byte hex address of the L1 `KnomosisIdentityRegistry.sol` instance  |
 //! | `--state-file <PATH>`           | yes      | Watcher persistent-state file (JSONL)                                |
+//! | `--emit-signer-hints`           | no       | Emit Rung-1 `KNH2` signer hints (raw-TCP only; default off, FQ.13a)  |
 //! | `--deployment-id <HEX>`         | no       | 32-byte deployment id for signing input (default: empty)            |
 //! | `--confirmation-depth <N>`      | no       | L1 confirmations before forwarding (default: 12)                    |
 //! | `--poll-interval-ms <N>`        | no       | Polling interval in milliseconds (default: 12000)                   |
@@ -71,7 +73,8 @@ use knomosis_l1_ingest::action::EthAddress;
 use knomosis_l1_ingest::key::BridgeActorKey;
 use knomosis_l1_ingest::source::json_rpc::JsonRpcL1Source;
 use knomosis_l1_ingest::submitter::http::HttpSubmitter;
-use knomosis_l1_ingest::submitter::SubmitError;
+use knomosis_l1_ingest::submitter::raw_tcp::RawTcpSubmitter;
+use knomosis_l1_ingest::submitter::{SubmitError, Submitter};
 use knomosis_l1_ingest::watcher::{WatcherConfig, WatcherError, WatcherLoop};
 use knomosis_l1_ingest::INGEST_IDENTIFIER;
 use tracing::{error, info, Level};
@@ -125,12 +128,36 @@ fn main() -> ExitCode {
         }
     };
 
-    // Wire up submitter.
-    let submitter = match HttpSubmitter::new(parsed.knomosis_host_url) {
-        Ok(s) => s,
-        Err(e) => {
-            error!(error = %e, "invalid --knomosis-host-url");
-            return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
+    // Wire up submitter (FQ.13a).  The canonical raw-TCP submitter when
+    // `--knomosis-host-tcp` is given (optionally emitting Rung-1 signer
+    // hints), else the HTTP placeholder.  Boxed as `dyn Submitter` so the
+    // generic `WatcherLoop` is monomorphised once for either transport.
+    let submitter: Box<dyn Submitter> = if let Some(tcp_addr) = parsed.knomosis_host_tcp {
+        match RawTcpSubmitter::new(tcp_addr) {
+            Ok(s) => {
+                let s = s.with_emit_hints(parsed.emit_signer_hints);
+                info!(
+                    addr = s.addr(),
+                    emit_signer_hints = s.emits_hints(),
+                    "using raw-TCP knomosis-host submitter"
+                );
+                Box::new(s)
+            }
+            Err(e) => {
+                error!(error = %e, "invalid --knomosis-host-tcp");
+                return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
+            }
+        }
+    } else {
+        let url = parsed
+            .knomosis_host_url
+            .expect("parse validation guarantees exactly one of --knomosis-host-url / -tcp");
+        match HttpSubmitter::new(url) {
+            Ok(s) => Box::new(s),
+            Err(e) => {
+                error!(error = %e, "invalid --knomosis-host-url");
+                return ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8);
+            }
         }
     };
 
@@ -194,7 +221,18 @@ fn classify_error(e: &WatcherError) -> OperatorExitCode {
 struct ParsedArgs {
     l1_rpc: String,
     keystore_path: PathBuf,
-    knomosis_host_url: String,
+    /// `--knomosis-host-url <URL>`: the HTTP/1.1 submitter endpoint
+    /// (placeholder transport).  Mutually exclusive with
+    /// `knomosis_host_tcp`; exactly one is required.
+    knomosis_host_url: Option<String>,
+    /// `--knomosis-host-tcp <ADDR>` (FQ.13a): the canonical raw-TCP
+    /// `knomosis-host` listener endpoint (`host:port`).  Mutually
+    /// exclusive with `knomosis_host_url`.
+    knomosis_host_tcp: Option<String>,
+    /// `--emit-signer-hints` (FQ.13a): emit Rung-1 `KNH2` preamble +
+    /// per-frame signer hints on the raw-TCP submitter (requires
+    /// `knomosis_host_tcp`).
+    emit_signer_hints: bool,
     bridge_contract: EthAddress,
     identity_registry: EthAddress,
     state_file: PathBuf,
@@ -206,6 +244,7 @@ struct ParsedArgs {
 
 /// Result of CLI parsing.  `Help` / `Version` exit cleanly;
 /// `Error` carries a diagnostic.
+#[derive(Debug)]
 enum ParseExit {
     Help,
     Version,
@@ -219,6 +258,8 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
     let mut l1_rpc = None;
     let mut keystore_path = None;
     let mut knomosis_host_url = None;
+    let mut knomosis_host_tcp = None;
+    let mut emit_signer_hints = false;
     let mut bridge_contract = None;
     let mut identity_registry = None;
     let mut state_file = None;
@@ -244,6 +285,14 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
                         .clone(),
                 );
             }
+            "--knomosis-host-tcp" => {
+                knomosis_host_tcp = Some(
+                    iter.next()
+                        .ok_or_else(|| missing("--knomosis-host-tcp"))?
+                        .clone(),
+                );
+            }
+            "--emit-signer-hints" => emit_signer_hints = true,
             "--bridge-contract" => {
                 let hex = iter.next().ok_or_else(|| missing("--bridge-contract"))?;
                 bridge_contract = Some(parse_address(hex).map_err(ParseExit::Error)?);
@@ -285,12 +334,36 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, ParseExit> {
             }
         }
     }
+    // FQ.13a: exactly one submitter endpoint is required.
+    match (&knomosis_host_url, &knomosis_host_tcp) {
+        (None, None) => {
+            return Err(ParseExit::Error(
+                "one of --knomosis-host-url or --knomosis-host-tcp is required".into(),
+            ))
+        }
+        (Some(_), Some(_)) => {
+            return Err(ParseExit::Error(
+                "--knomosis-host-url and --knomosis-host-tcp are mutually exclusive".into(),
+            ))
+        }
+        _ => {}
+    }
+    // Signer hints are a raw-TCP-only feature: the HTTP placeholder does
+    // not speak the canonical knomosis-host wire format.
+    if emit_signer_hints && knomosis_host_tcp.is_none() {
+        return Err(ParseExit::Error(
+            "--emit-signer-hints requires --knomosis-host-tcp (the HTTP submitter \
+             does not speak the canonical wire format)"
+                .into(),
+        ));
+    }
     Ok(ParsedArgs {
         l1_rpc: l1_rpc.ok_or_else(|| ParseExit::Error("--l1-rpc is required".into()))?,
         keystore_path: keystore_path
             .ok_or_else(|| ParseExit::Error("--bridge-actor-keystore is required".into()))?,
-        knomosis_host_url: knomosis_host_url
-            .ok_or_else(|| ParseExit::Error("--knomosis-host-url is required".into()))?,
+        knomosis_host_url,
+        knomosis_host_tcp,
+        emit_signer_hints,
         bridge_contract: bridge_contract
             .ok_or_else(|| ParseExit::Error("--bridge-contract is required".into()))?,
         identity_registry: identity_registry
@@ -368,16 +441,120 @@ fn print_help(prog: &str) {
     println!("Required options:");
     println!("  --l1-rpc <URL>                  Ethereum JSON-RPC endpoint");
     println!("  --bridge-actor-keystore <PATH>  Raw 32-byte secp256k1 private key file");
-    println!("  --knomosis-host-url <URL>          knomosis-host POST endpoint");
     println!("  --bridge-contract <HEX>         L1 KnomosisBridge address (20-byte hex)");
     println!("  --identity-registry <HEX>       L1 KnomosisIdentityRegistry address (20-byte hex)");
     println!("  --state-file <PATH>             Watcher persistent state file");
     println!();
+    println!("Submitter (exactly one required):");
+    println!("  --knomosis-host-url <URL>       knomosis-host HTTP POST endpoint (placeholder transport)");
+    println!("  --knomosis-host-tcp <ADDR>      knomosis-host raw-TCP listener (host:port; canonical wire format)");
+    println!();
     println!("Optional options:");
+    println!("  --emit-signer-hints             Emit Rung-1 KNH2 signer hints (requires --knomosis-host-tcp; default off)");
     println!("  --deployment-id <HEX>           Deployment id for signing input (default: empty)");
     println!("  --confirmation-depth <N>        L1 confirmations before forwarding (default: 12)");
     println!("  --poll-interval-ms <N>          Polling interval in ms (default: 12000)");
     println!("  --until-block <N>               Exit once last_confirmed_block >= N");
     println!("  -h, --help                      Print this help");
     println!("  -v, --version                   Print version and exit");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_args, ParseExit};
+
+    fn argv(extra: &[&str]) -> Vec<String> {
+        let mut v = vec!["knomosis-l1-ingest".to_string()];
+        v.extend(extra.iter().map(|s| (*s).to_string()));
+        v
+    }
+
+    /// Everything required EXCEPT a submitter endpoint, so submitter
+    /// flags can be appended.  (The submitter-endpoint validation runs
+    /// before the other `required` checks, so the error tests need only
+    /// these to reach it; the OK tests need the full set.)
+    fn base() -> Vec<&'static str> {
+        vec![
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--bridge-actor-keystore",
+            "/dev/null",
+            "--bridge-contract",
+            "0x1111111111111111111111111111111111111111",
+            "--identity-registry",
+            "0x2222222222222222222222222222222222222222",
+            "--state-file",
+            "/tmp/knomosis-ingest-state.jsonl",
+        ]
+    }
+
+    fn err_message(args: &[&str]) -> String {
+        match parse_args(&argv(args)) {
+            Err(ParseExit::Error(e)) => e,
+            Err(ParseExit::Help) => "HELP".into(),
+            Err(ParseExit::Version) => "VERSION".into(),
+            Ok(_) => "OK".into(),
+        }
+    }
+
+    /// FQ.13a: neither submitter endpoint → a clear "one of" error.
+    #[test]
+    fn neither_submitter_endpoint_is_error() {
+        assert!(err_message(&base()).contains("one of --knomosis-host-url"));
+    }
+
+    /// FQ.13a: both endpoints → "mutually exclusive".
+    #[test]
+    fn both_submitter_endpoints_is_error() {
+        let mut args = base();
+        args.extend_from_slice(&[
+            "--knomosis-host-url",
+            "http://localhost:9000",
+            "--knomosis-host-tcp",
+            "127.0.0.1:7654",
+        ]);
+        assert!(err_message(&args).contains("mutually exclusive"));
+    }
+
+    /// FQ.13a: `--emit-signer-hints` without `--knomosis-host-tcp` is
+    /// rejected (the HTTP path can't speak the canonical wire format).
+    #[test]
+    fn emit_hints_without_tcp_is_error() {
+        let mut args = base();
+        args.extend_from_slice(&[
+            "--knomosis-host-url",
+            "http://localhost:9000",
+            "--emit-signer-hints",
+        ]);
+        assert!(err_message(&args).contains("--emit-signer-hints requires --knomosis-host-tcp"));
+    }
+
+    /// FQ.13a: the HTTP endpoint alone parses cleanly (no hints).
+    #[test]
+    fn http_endpoint_alone_parses() {
+        let mut args = base();
+        args.extend_from_slice(&["--knomosis-host-url", "http://localhost:9000"]);
+        let parsed = parse_args(&argv(&args)).expect("parses");
+        assert_eq!(
+            parsed.knomosis_host_url.as_deref(),
+            Some("http://localhost:9000")
+        );
+        assert!(parsed.knomosis_host_tcp.is_none());
+        assert!(!parsed.emit_signer_hints);
+    }
+
+    /// FQ.13a: the raw-TCP endpoint with hints parses and sets the flag.
+    #[test]
+    fn tcp_endpoint_with_hints_parses() {
+        let mut args = base();
+        args.extend_from_slice(&[
+            "--knomosis-host-tcp",
+            "127.0.0.1:7654",
+            "--emit-signer-hints",
+        ]);
+        let parsed = parse_args(&argv(&args)).expect("parses");
+        assert_eq!(parsed.knomosis_host_tcp.as_deref(), Some("127.0.0.1:7654"));
+        assert!(parsed.knomosis_host_url.is_none());
+        assert!(parsed.emit_signer_hints);
+    }
 }

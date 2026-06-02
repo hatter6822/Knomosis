@@ -1160,7 +1160,17 @@ hint-spamming connection to a bounded slice of the scheduler's memory
 instance, on BOTH the FIFO and DRR schedulers — the negotiation is a wire
 concern, not a scheduler one, so a v2 client works against a FIFO host
 (de-framed correctly, gaining no fairness).  This is exercised
-end-to-end by `runtime/knomosis-host/tests/wire_compat.rs`.
+end-to-end by `runtime/knomosis-host/tests/wire_compat.rs` and by the
+real `knomosis-l1-ingest` raw-TCP submitter
+(`submitter::raw_tcp::RawTcpSubmitter`, opt-in `--emit-signer-hints`),
+whose framing is byte-pinned against the canonical `encode_frame` /
+`encode_hinted_frame` encoders.
+
+**Client encoders.**  `knomosis_host::frame::encode_frame` (v1) and
+`encode_hinted_frame` (v2) are the canonical client-side encoders — the
+single source of truth for the wire layout.  `knomosis-bench
+--emit-hints` calls them directly; the `knomosis-l1-ingest` raw-TCP
+submitter hand-rolls the framing but byte-pins it against them in a test.
 
 ### 10.5 Connection lifecycle
 
