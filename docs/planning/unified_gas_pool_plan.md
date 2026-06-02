@@ -5928,6 +5928,16 @@ does what, in what file, in what order).
 
 ### Phase GP.8 — Sequencer integration
 
+> **Superseded for implementation by
+> [`GP.8_SEQUENCER_INTEGRATION_PLAN.md`](GP.8_SEQUENCER_INTEGRATION_PLAN.md).**
+> That document is the unified, canonical sequencer plan: it reproduces
+> WUs GP.8.1–GP.8.4 below (corrected against the shipped code and
+> subdivided into GP.8.1a–c), adds the deferred v2 receipt-verified claim
+> (GP.8.5), and folds in Workstream FQ as the inbound-liveness arm
+> (Track A).  Only this §GP.8 section is superseded — the rest of
+> Workstream GP remains owned by this document.  Where the two disagree on
+> any sequencer-facing matter, the unified plan wins.
+
 #### WU GP.8.1: Sequencer-claim mechanism (v1, honour-system)
 
   * **Goal.**  Document and implement the sequencer's claim flow
