@@ -38,7 +38,7 @@ use std::io::{Read, Write};
 use std::time::Duration;
 
 use crate::frame::{read_frame, FrameError};
-use crate::queue::{BoundedQueue, SubmitOutcome};
+use crate::queue::{ConnId, QueueHandle, SubmitOutcome};
 use crate::verdict::{Verdict, VerdictResponse};
 
 /// Default read / write timeout per connection.  10 seconds is
@@ -227,10 +227,17 @@ impl HandleOutcome {
 /// Used by all three listener variants (TCP, TLS, Unix) — the
 /// stream abstraction is `impl Read + Write` so each variant can
 /// pass its native socket type.
+///
+/// `conn_id` is the connection's monotonic [`ConnId`] (FQ.3).  It is
+/// forwarded to [`QueueHandle::submit`] as the DRR routing key; the
+/// FIFO arm ignores it, so the FIFO path is byte-for-byte unchanged.
+/// The id is a *classification* hint only and never affects
+/// admissibility (`GP.8` §2.6 invariant 1).
 pub fn handle_connection<S: Read + Write>(
     stream: &mut S,
-    queue: &BoundedQueue,
+    handle: &QueueHandle,
     config: &HandlerConfig,
+    conn_id: ConnId,
 ) -> HandleOutcome {
     // 1. Read the request frame.
     let payload = match read_frame(stream, config.max_frame_size) {
@@ -254,8 +261,9 @@ pub fn handle_connection<S: Read + Write>(
         }
     };
 
-    // 2. Try to submit to the bounded queue.
-    let reply_rx = match queue.try_submit(payload) {
+    // 2. Try to submit through the scheduler-agnostic queue handle.
+    //    The connection id is the DRR routing key (ignored by FIFO).
+    let reply_rx = match handle.submit(conn_id, payload) {
         SubmitOutcome::Enqueued(rx) => rx,
         SubmitOutcome::Busy => {
             // Queue full → respond Busy.
@@ -301,11 +309,11 @@ pub fn handle_connection<S: Read + Write>(
 pub mod tcp {
     use std::io::Write;
     use std::net::{TcpListener as StdTcpListener, TcpStream};
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
 
-    use crate::queue::BoundedQueue;
+    use crate::queue::{ConnId, QueueHandle};
     use crate::verdict::{Verdict, VerdictResponse};
 
     use super::{backoff_on_accept_error, handle_connection, ConnectionSlot, HandlerConfig};
@@ -343,12 +351,17 @@ pub mod tcp {
         /// [`super::handle_connection`] on its own thread, gated by
         /// the shared `connection_counter` against
         /// `config.max_concurrent_connections`.
+        ///
+        /// `conn_seq` is the process-wide monotonic [`ConnId`] source
+        /// (FQ.3): each accepted connection takes the next id and
+        /// threads it to the submit call (the DRR routing key).
         pub fn accept_loop(
             &self,
-            queue: BoundedQueue,
+            handle: QueueHandle,
             config: HandlerConfig,
             stop: Arc<AtomicBool>,
             connection_counter: Arc<AtomicUsize>,
+            conn_seq: Arc<AtomicU64>,
         ) {
             let mut consecutive_errors = 0u32;
             while !stop.load(Ordering::Relaxed) {
@@ -363,10 +376,13 @@ pub mod tcp {
                             config.max_concurrent_connections,
                         ) {
                             Some(slot) => {
-                                let queue = queue.clone();
+                                let conn_id = conn_seq.fetch_add(1, Ordering::Relaxed);
+                                let handle = handle.clone();
                                 let config = config.clone();
                                 thread::spawn(move || {
-                                    handle_single_connection(stream, peer, queue, config, slot);
+                                    handle_single_connection(
+                                        stream, peer, handle, config, slot, conn_id,
+                                    );
                                 });
                             }
                             None => {
@@ -408,18 +424,19 @@ pub mod tcp {
     fn handle_single_connection(
         mut stream: TcpStream,
         peer: std::net::SocketAddr,
-        queue: BoundedQueue,
+        handle: QueueHandle,
         config: HandlerConfig,
         _slot: ConnectionSlot,
+        conn_id: ConnId,
     ) {
         // _slot is held for the lifetime of this function; the
         // RAII Drop releases the connection-counter slot when
         // the handler exits, regardless of panic / early return.
         let _ = stream.set_read_timeout(Some(config.connection_timeout));
         let _ = stream.set_write_timeout(Some(config.connection_timeout));
-        let span = tracing::info_span!("conn", proto = "tcp", peer = %peer);
+        let span = tracing::info_span!("conn", proto = "tcp", peer = %peer, conn = conn_id);
         let _enter = span.enter();
-        let outcome = handle_connection(&mut stream, &queue, &config);
+        let outcome = handle_connection(&mut stream, &handle, &config, conn_id);
         tracing::info!(outcome = outcome.name(), "request handled");
     }
 }
@@ -428,13 +445,13 @@ pub mod tcp {
 /// with `rustls` termination.
 pub mod tls {
     use std::net::{TcpListener as StdTcpListener, TcpStream};
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
 
     use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
-    use crate::queue::BoundedQueue;
+    use crate::queue::{ConnId, QueueHandle};
 
     use super::{backoff_on_accept_error, handle_connection, ConnectionSlot, HandlerConfig};
 
@@ -467,12 +484,16 @@ pub mod tls {
 
         /// Run the accept loop.  Blocks the calling thread until
         /// `stop` is set.
+        ///
+        /// `conn_seq` is the process-wide monotonic [`ConnId`] source
+        /// (FQ.3), shared across all listeners.
         pub fn accept_loop(
             &self,
-            queue: BoundedQueue,
+            handle: QueueHandle,
             config: HandlerConfig,
             stop: Arc<AtomicBool>,
             connection_counter: Arc<AtomicUsize>,
+            conn_seq: Arc<AtomicU64>,
         ) {
             let mut consecutive_errors = 0u32;
             while !stop.load(Ordering::Relaxed) {
@@ -484,12 +505,13 @@ pub mod tls {
                             config.max_concurrent_connections,
                         ) {
                             Some(slot) => {
-                                let queue = queue.clone();
+                                let conn_id = conn_seq.fetch_add(1, Ordering::Relaxed);
+                                let handle = handle.clone();
                                 let config = config.clone();
                                 let tls_config = Arc::clone(&self.tls_config);
                                 thread::spawn(move || {
                                     handle_tls_connection(
-                                        stream, peer, queue, config, tls_config, slot,
+                                        stream, peer, handle, config, tls_config, slot, conn_id,
                                     );
                                 });
                             }
@@ -528,10 +550,11 @@ pub mod tls {
     fn handle_tls_connection(
         stream: TcpStream,
         peer: std::net::SocketAddr,
-        queue: BoundedQueue,
+        handle: QueueHandle,
         config: HandlerConfig,
         tls_config: Arc<ServerConfig>,
         _slot: ConnectionSlot,
+        conn_id: ConnId,
     ) {
         // _slot RAII releases the connection-counter slot.
         let _ = stream.set_read_timeout(Some(config.connection_timeout));
@@ -539,7 +562,7 @@ pub mod tls {
         // Required to switch the socket back to blocking mode for
         // the synchronous `rustls::StreamOwned` adapter.
         let _ = stream.set_nonblocking(false);
-        let span = tracing::info_span!("conn", proto = "tls", peer = %peer);
+        let span = tracing::info_span!("conn", proto = "tls", peer = %peer, conn = conn_id);
         let _enter = span.enter();
         // Build the TLS connection.  ServerConnection::new only
         // fails on `rustls` mis-configuration (impossible if the
@@ -552,7 +575,7 @@ pub mod tls {
             }
         };
         let mut tls_stream = StreamOwned::new(connection, stream);
-        let outcome = handle_connection(&mut tls_stream, &queue, &config);
+        let outcome = handle_connection(&mut tls_stream, &handle, &config, conn_id);
         tracing::info!(outcome = outcome.name(), "request handled");
     }
 }
@@ -566,11 +589,11 @@ pub mod unix {
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::{UnixListener as StdUnixListener, UnixStream};
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
 
-    use crate::queue::BoundedQueue;
+    use crate::queue::{ConnId, QueueHandle};
     use crate::verdict::{Verdict, VerdictResponse};
 
     use super::{backoff_on_accept_error, handle_connection, ConnectionSlot, HandlerConfig};
@@ -687,12 +710,16 @@ pub mod unix {
 
         /// Run the accept loop.  Blocks the calling thread until
         /// `stop` is set.
+        ///
+        /// `conn_seq` is the process-wide monotonic [`ConnId`] source
+        /// (FQ.3), shared across all listeners.
         pub fn accept_loop(
             &self,
-            queue: BoundedQueue,
+            handle: QueueHandle,
             config: HandlerConfig,
             stop: Arc<AtomicBool>,
             connection_counter: Arc<AtomicUsize>,
+            conn_seq: Arc<AtomicU64>,
         ) {
             let mut consecutive_errors = 0u32;
             while !stop.load(Ordering::Relaxed) {
@@ -704,10 +731,13 @@ pub mod unix {
                             config.max_concurrent_connections,
                         ) {
                             Some(slot) => {
-                                let queue = queue.clone();
+                                let conn_id = conn_seq.fetch_add(1, Ordering::Relaxed);
+                                let handle = handle.clone();
                                 let config = config.clone();
                                 thread::spawn(move || {
-                                    handle_single_unix_connection(stream, queue, config, slot);
+                                    handle_single_unix_connection(
+                                        stream, handle, config, slot, conn_id,
+                                    );
                                 });
                             }
                             None => {
@@ -751,16 +781,17 @@ pub mod unix {
 
     fn handle_single_unix_connection(
         mut stream: UnixStream,
-        queue: BoundedQueue,
+        handle: QueueHandle,
         config: HandlerConfig,
         _slot: ConnectionSlot,
+        conn_id: ConnId,
     ) {
         // _slot RAII releases the connection-counter slot.
         let _ = stream.set_read_timeout(Some(config.connection_timeout));
         let _ = stream.set_write_timeout(Some(config.connection_timeout));
-        let span = tracing::info_span!("conn", proto = "unix");
+        let span = tracing::info_span!("conn", proto = "unix", conn = conn_id);
         let _enter = span.enter();
-        let outcome = handle_connection(&mut stream, &queue, &config);
+        let outcome = handle_connection(&mut stream, &handle, &config, conn_id);
         tracing::info!(outcome = outcome.name(), "request handled");
     }
 }

@@ -31,7 +31,10 @@
 //! | `--epoch-length <N>`   | optional | Admitted actions per budget epoch (0 = no advance)   |
 //! | `--gas-pool-eth-cap <N>`| optional | GP.7.4 gas-pool genesis: ETH-leg per-action cap     |
 //! | `--gas-pool-bold-cap <N>`| optional | GP.7.4 gas-pool genesis: BOLD-leg per-action cap   |
-//! | `--max-queue-depth <N>`| optional | Bounded queue size (default 256)                     |
+//! | `--scheduler {fifo\|drr}`| optional | Worker scheduler (FQ Rung 0; default `fifo`)        |
+//! | `--per-flow-cap <N>`   | optional | DRR per-connection backlog cap (default 64; drr only)|
+//! | `--max-flows <N>`      | optional | DRR distinct-flow cap (default 4096; drr only)       |
+//! | `--max-queue-depth <N>`| optional | Bounded queue size / DRR global cap (default 256)    |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
 //! | `--help` / `-h`        |          | Print usage                                          |
@@ -44,8 +47,67 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use crate::budget::BudgetPolicy;
+use crate::fair::drr::{Caps, DEFAULT_MAX_FLOWS, DEFAULT_PER_FLOW_CAP, HARD_MAX_FLOWS};
+
+/// Which worker scheduler the host runs (Workstream GP.8, Track A /
+/// FQ).  `Fifo` is the unchanged default baseline; `Drr` selects the
+/// optional per-connection fair scheduler (Rung 0).
+///
+/// Parsed from `--scheduler {fifo|drr}` via [`FromStr`]; an
+/// unrecognised value is a CLI usage error
+/// ([`ParseError::InvalidValue`]), consistent with every other typed
+/// value flag (a malformed enum value is a parse error, not a
+/// cross-field semantic [`ConfigError`]).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Scheduler {
+    /// FIFO bounded queue — the historical, default behaviour.  No
+    /// fairness, no wire change, lowest overhead.
+    #[default]
+    Fifo,
+    /// Deficit-Round-Robin per-connection fair scheduler (Rung 0).
+    /// Bounds, under contention, the share any one connection takes of
+    /// the serial worker.  Default-OFF; opt in with `--scheduler drr`.
+    Drr,
+}
+
+impl Scheduler {
+    /// Stable lowercase name for flags / diagnostics (the inverse of
+    /// [`FromStr`]).  Downstream log scrapers may rely on these exact
+    /// strings.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Fifo => "fifo",
+            Self::Drr => "drr",
+        }
+    }
+}
+
+impl std::fmt::Display for Scheduler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Error returned when a `--scheduler` value is neither `fifo` nor
+/// `drr`.
+#[derive(Debug, thiserror::Error)]
+#[error("unknown scheduler '{0}'; valid values are 'fifo' or 'drr'")]
+pub struct SchedulerParseError(String);
+
+impl FromStr for Scheduler {
+    type Err = SchedulerParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "fifo" => Ok(Self::Fifo),
+            "drr" => Ok(Self::Drr),
+            other => Err(SchedulerParseError(other.to_string())),
+        }
+    }
+}
 
 /// Parsed knomosis-host configuration.
 #[derive(Clone, Debug)]
@@ -98,6 +160,16 @@ pub struct Config {
     /// `--gas-pool-bold-cap <N>` value (GP.7.4): the BOLD-leg per-action
     /// drain cap.  See `gas_pool_eth_cap`.
     pub gas_pool_bold_cap: Option<u64>,
+    /// `--scheduler {fifo|drr}` (FQ Rung 0): the worker scheduler.
+    /// Default [`Scheduler::Fifo`] preserves the historical behaviour
+    /// byte-for-byte.
+    pub scheduler: Scheduler,
+    /// `--per-flow-cap <N>` (FQ.5): the DRR per-connection backlog cap.
+    /// Ignored unless `scheduler == Drr`.
+    pub per_flow_cap: usize,
+    /// `--max-flows <N>` (FQ.5): the DRR cap on distinct active flows.
+    /// Ignored unless `scheduler == Drr`.
+    pub max_flows: usize,
 }
 
 impl Config {
@@ -126,6 +198,9 @@ impl Config {
             budget_epoch_length: None,
             gas_pool_eth_cap: None,
             gas_pool_bold_cap: None,
+            scheduler: Scheduler::Fifo,
+            per_flow_cap: DEFAULT_PER_FLOW_CAP,
+            max_flows: DEFAULT_MAX_FLOWS,
         }
     }
 
@@ -182,6 +257,16 @@ impl Config {
             (None, None) => None,
             (eth, bold) => Some((eth.unwrap_or(0), bold.unwrap_or(0))),
         }
+    }
+
+    /// The DRR capacity caps (FQ.5), built from the per-flow / max-flows
+    /// flags with the host's `--max-queue-depth` reused as the global
+    /// cap.  Passed to [`crate::queue::FairQueue`] when
+    /// `scheduler == Drr`.  [`Caps::new`] applies the defence-in-depth
+    /// ceilings on top of the CLI validation.
+    #[must_use]
+    pub fn caps(&self) -> Caps {
+        Caps::new(self.per_flow_cap, self.max_flows, self.max_queue_depth)
     }
 
     /// Returns true if at least one listener is configured.
@@ -254,6 +339,28 @@ impl Config {
         if let Some(mode) = self.budget_mode.as_deref() {
             if mode != "bounded" {
                 return Err(ConfigError::UnknownBudgetMode(mode.to_string()));
+            }
+        }
+        // FQ.5: the DRR caps are validated ONLY under `--scheduler drr`,
+        // so a FIFO deployment (the default) is byte-for-byte unaffected
+        // — a small `--max-queue-depth` no longer conflicts with the
+        // default per-flow cap it ignores.  `Caps::new` additionally
+        // clamps these to the hard ceilings as defence in depth.
+        if self.scheduler == Scheduler::Drr {
+            if self.per_flow_cap == 0 {
+                return Err(ConfigError::PerFlowCapZero);
+            }
+            if self.per_flow_cap > self.max_queue_depth {
+                return Err(ConfigError::PerFlowCapExceedsQueueDepth {
+                    per_flow_cap: self.per_flow_cap,
+                    max_queue_depth: self.max_queue_depth,
+                });
+            }
+            if self.max_flows == 0 {
+                return Err(ConfigError::MaxFlowsZero);
+            }
+            if self.max_flows > HARD_MAX_FLOWS {
+                return Err(ConfigError::MaxFlowsTooLarge(self.max_flows));
             }
         }
         Ok(())
@@ -334,6 +441,30 @@ pub enum ConfigError {
     /// `--budget-policy` supplied with a value other than `bounded`.
     #[error("--budget-policy '{0}' unrecognised; the only supported mode is 'bounded'")]
     UnknownBudgetMode(String),
+    /// `--scheduler drr` with `--per-flow-cap 0` (a flow could buffer
+    /// nothing).
+    #[error("--per-flow-cap cannot be zero under --scheduler drr")]
+    PerFlowCapZero,
+    /// `--scheduler drr` with `--per-flow-cap` exceeding the global
+    /// `--max-queue-depth` (a per-flow cap above the global cap can
+    /// never bind).
+    #[error(
+        "--per-flow-cap {per_flow_cap} exceeds --max-queue-depth {max_queue_depth} \
+         (the per-flow cap must not exceed the global cap)"
+    )]
+    PerFlowCapExceedsQueueDepth {
+        /// The configured per-flow cap.
+        per_flow_cap: usize,
+        /// The configured global (queue-depth) cap.
+        max_queue_depth: usize,
+    },
+    /// `--scheduler drr` with `--max-flows 0` (no flow could ever be
+    /// admitted).
+    #[error("--max-flows cannot be zero under --scheduler drr")]
+    MaxFlowsZero,
+    /// `--scheduler drr` with `--max-flows` above the hard ceiling.
+    #[error("--max-flows {0} exceeds hard ceiling")]
+    MaxFlowsTooLarge(usize),
 }
 
 /// Parse command-line arguments into a `Config`.
@@ -494,6 +625,49 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 })?;
                 cfg.gas_pool_bold_cap = Some(n);
             }
+            "--scheduler" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--scheduler".into()))?;
+                // A malformed enum value is a CLI usage error, exactly
+                // like a malformed number — surfaced as InvalidValue so
+                // it routes to the usage-error exit path (mirrors every
+                // other typed flag).
+                cfg.scheduler =
+                    value
+                        .parse::<Scheduler>()
+                        .map_err(|e| ParseError::InvalidValue {
+                            flag: "--scheduler".into(),
+                            value: value.clone(),
+                            reason: e.to_string(),
+                        })?;
+            }
+            "--per-flow-cap" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--per-flow-cap".into()))?;
+                let n = value
+                    .parse::<usize>()
+                    .map_err(|e| ParseError::InvalidValue {
+                        flag: "--per-flow-cap".into(),
+                        value: value.clone(),
+                        reason: e.to_string(),
+                    })?;
+                cfg.per_flow_cap = n;
+            }
+            "--max-flows" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--max-flows".into()))?;
+                let n = value
+                    .parse::<usize>()
+                    .map_err(|e| ParseError::InvalidValue {
+                        flag: "--max-flows".into(),
+                        value: value.clone(),
+                        reason: e.to_string(),
+                    })?;
+                cfg.max_flows = n;
+            }
             "--max-queue-depth" => {
                 let value = iter
                     .next()
@@ -577,8 +751,13 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --gas-pool-eth-cap <N>    Enable the GP.7.4 gas-pool genesis (ETH-leg per-action cap)\n\
          \x20 --gas-pool-bold-cap <N>   Gas-pool BOLD-leg per-action cap (enables if either is set)\n\
          \n\
+         Fair sequencing (FQ Rung 0; optional, default off):\n\
+         \x20 --scheduler <fifo|drr>    Worker scheduler (default fifo; drr = per-connection DRR)\n\
+         \x20 --per-flow-cap <N>        DRR per-connection backlog cap (default 64; drr only)\n\
+         \x20 --max-flows <N>           DRR cap on distinct active flows (default 4096; drr only)\n\
+         \n\
          Tuning:\n\
-         \x20 --max-queue-depth <N>     Bounded queue size (default 256)\n\
+         \x20 --max-queue-depth <N>     Bounded queue size / DRR global cap (default 256)\n\
          \x20 --max-frame-size <N>      Max accepted frame size in bytes (default 1 MiB)\n\
          \x20 --max-concurrent-connections <N>\n\
          \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20Cap on simultaneous connection handlers (default 1024)\n\
@@ -1125,5 +1304,261 @@ mod tests {
             Err(ParseError::InvalidValue { flag, .. }) => assert_eq!(flag, "--epoch-length"),
             other => panic!("expected InvalidValue, got {other:?}"),
         }
+    }
+
+    // ----- FQ Rung 0: scheduler + DRR caps ---------------------------
+
+    /// The default scheduler is FIFO (the unchanged baseline).
+    #[test]
+    fn scheduler_defaults_to_fifo() {
+        use super::Scheduler;
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert_eq!(cfg.scheduler, Scheduler::Fifo);
+        cfg.validate().unwrap();
+    }
+
+    /// `--scheduler drr` / `--scheduler fifo` parse to the right variant.
+    #[test]
+    fn scheduler_flag_parses_both_values() {
+        use super::Scheduler;
+        let drr = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+        ]))
+        .unwrap();
+        assert_eq!(drr.scheduler, Scheduler::Drr);
+        drr.validate().unwrap();
+        let fifo = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "fifo",
+        ]))
+        .unwrap();
+        assert_eq!(fifo.scheduler, Scheduler::Fifo);
+        fifo.validate().unwrap();
+    }
+
+    /// An unrecognised scheduler value is a clear parse error.
+    #[test]
+    fn scheduler_invalid_value_is_parse_error() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "bogus",
+        ])) {
+            Err(ParseError::InvalidValue {
+                flag,
+                value,
+                reason,
+            }) => {
+                assert_eq!(flag, "--scheduler");
+                assert_eq!(value, "bogus");
+                assert!(reason.contains("fifo") && reason.contains("drr"));
+            }
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
+    }
+
+    /// `Scheduler` round-trips through `FromStr` / `Display` / `name`.
+    #[test]
+    fn scheduler_fromstr_display_roundtrip() {
+        use super::Scheduler;
+        for (s, name) in [(Scheduler::Fifo, "fifo"), (Scheduler::Drr, "drr")] {
+            assert_eq!(s.name(), name);
+            assert_eq!(format!("{s}"), name);
+            assert_eq!(name.parse::<Scheduler>().unwrap(), s);
+        }
+        assert!("nope".parse::<Scheduler>().is_err());
+    }
+
+    /// The DRR cap flags parse and `caps()` assembles them (global =
+    /// max-queue-depth).
+    #[test]
+    fn drr_caps_parse_and_assemble() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--per-flow-cap",
+            "8",
+            "--max-flows",
+            "100",
+            "--max-queue-depth",
+            "200",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.per_flow_cap, 8);
+        assert_eq!(cfg.max_flows, 100);
+        let caps = cfg.caps();
+        assert_eq!(caps.per_flow, 8);
+        assert_eq!(caps.max_flows, 100);
+        assert_eq!(caps.global, 200);
+    }
+
+    /// The DRR caps default to the documented values.
+    #[test]
+    fn drr_caps_have_documented_defaults() {
+        use super::{DEFAULT_MAX_FLOWS, DEFAULT_PER_FLOW_CAP};
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert_eq!(cfg.per_flow_cap, DEFAULT_PER_FLOW_CAP);
+        assert_eq!(cfg.max_flows, DEFAULT_MAX_FLOWS);
+    }
+
+    /// A non-numeric `--per-flow-cap` / `--max-flows` is a parse error.
+    #[test]
+    fn drr_caps_non_numeric_are_parse_errors() {
+        for flag in ["--per-flow-cap", "--max-flows"] {
+            match parse_args(&args(&[
+                "--listen",
+                "127.0.0.1:7654",
+                "--mock",
+                flag,
+                "lots",
+            ])) {
+                Err(ParseError::InvalidValue { flag: f, .. }) => assert_eq!(f, flag),
+                other => panic!("expected InvalidValue for {flag}, got {other:?}"),
+            }
+        }
+    }
+
+    /// `--scheduler drr --per-flow-cap 0` is rejected.
+    #[test]
+    fn drr_per_flow_cap_zero_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--per-flow-cap",
+            "0",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::PerFlowCapZero) => {}
+            other => panic!("expected PerFlowCapZero, got {other:?}"),
+        }
+    }
+
+    /// `--scheduler drr` with per-flow-cap above the global queue depth
+    /// is rejected.
+    #[test]
+    fn drr_per_flow_cap_above_queue_depth_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--per-flow-cap",
+            "500",
+            "--max-queue-depth",
+            "256",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::PerFlowCapExceedsQueueDepth {
+                per_flow_cap,
+                max_queue_depth,
+            }) => {
+                assert_eq!(per_flow_cap, 500);
+                assert_eq!(max_queue_depth, 256);
+            }
+            other => panic!("expected PerFlowCapExceedsQueueDepth, got {other:?}"),
+        }
+    }
+
+    /// `--scheduler drr --max-flows 0` is rejected.
+    #[test]
+    fn drr_max_flows_zero_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--max-flows",
+            "0",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxFlowsZero) => {}
+            other => panic!("expected MaxFlowsZero, got {other:?}"),
+        }
+    }
+
+    /// `--scheduler drr --max-flows <huge>` is rejected.
+    #[test]
+    fn drr_max_flows_too_large_fails() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "drr",
+            "--max-flows",
+            "99999999",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::MaxFlowsTooLarge(_)) => {}
+            other => panic!("expected MaxFlowsTooLarge, got {other:?}"),
+        }
+    }
+
+    /// FQ.5 regression: a FIFO deployment with a small `--max-queue-depth`
+    /// and the *default* per-flow cap still validates — the cap checks
+    /// are gated on `--scheduler drr`, so FIFO behaviour is unchanged.
+    #[test]
+    fn fifo_small_queue_depth_unaffected_by_caps() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--max-queue-depth",
+            "8",
+        ]))
+        .unwrap();
+        // Default per_flow_cap (64) > max_queue_depth (8), but FIFO mode
+        // never validates it.
+        assert!(cfg.per_flow_cap > cfg.max_queue_depth);
+        cfg.validate().unwrap();
+    }
+
+    /// The bad DRR caps are accepted in FIFO mode (validation is gated).
+    #[test]
+    fn fifo_mode_ignores_bad_drr_caps() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--scheduler",
+            "fifo",
+            "--per-flow-cap",
+            "0",
+            "--max-flows",
+            "0",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+    }
+
+    /// Help text mentions the FQ scheduler / cap flags.
+    #[test]
+    fn help_text_mentions_scheduler_flags() {
+        let text = super::help_text("knomosis-host");
+        assert!(text.contains("--scheduler"));
+        assert!(text.contains("--per-flow-cap"));
+        assert!(text.contains("--max-flows"));
     }
 }

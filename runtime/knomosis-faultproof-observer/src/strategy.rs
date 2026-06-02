@@ -1091,6 +1091,26 @@ mod tests {
         out
     }
 
+    /// Call `commit_at` against a freshly-written + chmod'd mock script,
+    /// retrying to absorb a transient `ETXTBSY` ("text file busy") exec
+    /// race.  Under parallel test execution a *different* test thread's
+    /// `fork` (for its own subprocess) can momentarily hold a writable
+    /// file descriptor to the just-written script, so the `spawn` inside
+    /// `commit_at` fails and surfaces as `None`.  The mock script is
+    /// valid, so any `None` here is that purely-environmental race — we
+    /// retry a bounded number of times with a short backoff.  (Production
+    /// never hits this: the real `knomosis` binary is not freshly written
+    /// next to its own exec, so `commit_at` is left to fail fast there.)
+    fn commit_at_retrying(oracle: &super::SubprocessTruthOracle, idx: u64) -> Option<StateCommit> {
+        for _ in 0..10 {
+            if let Some(c) = oracle.commit_at(idx) {
+                return Some(c);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        None
+    }
+
     fn fresh_game(low: u64, high: u64, turn: TurnSide) -> GameState {
         GameState {
             sequencer: 1,
@@ -1397,7 +1417,7 @@ mod tests {
         let log_path = dir.path().join("empty.log");
         std::fs::write(&log_path, b"").unwrap();
         let oracle = SubprocessTruthOracle::new(mock_knomosis_path, log_path);
-        let result = oracle.commit_at(42);
+        let result = commit_at_retrying(&oracle, 42);
         let mut expected = [0u8; 32];
         // The mock prints %064x of 42, which is 30 leading zero hex chars + "2a" at the end (decimal 42 in hex padding to 32 bytes).
         expected[31] = 0x2a;
@@ -1475,12 +1495,12 @@ mod tests {
 
         let oracle_without =
             SubprocessTruthOracle::new(mock_knomosis_path.clone(), log_path.clone());
-        let r1 = oracle_without.commit_at(0).unwrap();
+        let r1 = commit_at_retrying(&oracle_without, 0).unwrap();
         assert_eq!(r1, [0xbb; 32]);
 
         let oracle_with = SubprocessTruthOracle::new(mock_knomosis_path, log_path)
             .with_flag("--deployment-id", "deadbeef");
-        let r2 = oracle_with.commit_at(0).unwrap();
+        let r2 = commit_at_retrying(&oracle_with, 0).unwrap();
         assert_eq!(r2, [0xaa; 32]);
     }
 

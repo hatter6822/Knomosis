@@ -1048,6 +1048,31 @@ The recommended client policy on `Busy`:
      successful prior admission are rejected as
      `NotAdmissible`, not silently accepted.
 
+#### 10.4.1 Optional fair scheduling (Workstream GP.8 / FQ — Rung 0)
+
+By default the worker drains the bounded queue strictly FIFO.  Under
+`--scheduler drr` it instead runs a work-conserving
+**Deficit-Round-Robin** scheduler keyed by the connection id, so that
+under contention for the single serial worker no one connection can
+monopolise it (a flooding connection delays only itself; an honest
+connection keeps its share and its enqueue capacity).  The DRR caps
+are `--per-flow-cap <N>` (per-connection backlog, default 64),
+`--max-flows <N>` (distinct active connections, default 4096), and the
+existing `--max-queue-depth <N>` (reused as the global cap).
+
+**Rung 0 introduces NO wire-format change.**  It is host-internal: the
+request/response layout (§10.1), the verdict byte table (§10.2), and
+`PROTOCOL_VERSION` (= 1) are all unchanged.  A client cannot observe
+which scheduler the host runs except through the relative *timing* of
+responses under contention; the fairness is a pure
+ordering/`Busy`-drop concern and never affects admissibility (the
+connection id is a classification hint only — `GP.8` §2.6 invariant 1).
+A future Rung-1 extension adds an optional, version-gated per-frame
+signer hint (a wire-format superset that bumps `PROTOCOL_VERSION` to
+2); it is not part of Rung 0.  See
+`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.3–§2.8 for the
+design.
+
 ### 10.5 Connection lifecycle
 
 Each connection handles exactly one request/response cycle, then

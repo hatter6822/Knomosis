@@ -44,9 +44,18 @@
 //!     `InsufficientBudget` under `Verdict::NotAdmissible`) and the
 //!     `CommandKernel`'s budget-policy flag pass-through to the Lean
 //!     `knomosis` binary.
-//!   * [`queue`] — `BoundedQueue` wrapping a `sync_channel` with a
-//!     non-blocking `try_submit` API.  Returns the `Busy` verdict
-//!     when full rather than blocking the listener.
+//!   * [`queue`] — the worker queue(s).  `BoundedQueue` wraps a
+//!     `sync_channel` with a non-blocking `try_submit` API (the FIFO
+//!     default), returning the `Busy` verdict when full rather than
+//!     blocking the listener.  `FairQueue` is the optional
+//!     Deficit-Round-Robin fair queue (FQ Rung 0), and `QueueHandle`
+//!     unifies the two behind one scheduler-agnostic `submit` call.
+//!   * [`fair`] — the optional per-connection fair scheduler
+//!     (Workstream GP.8, Track A / FQ — Rung 0).  [`fair::drr`] is the
+//!     pure, I/O-free Deficit-Round-Robin core; the concurrency wrapper
+//!     ([`queue::FairQueue`]) and the server wiring build on it.  Ships
+//!     behind the default-OFF `--scheduler drr` flag; FIFO stays the
+//!     baseline.
 //!   * [`tls`] — TLS configuration loader.  Parses PEM certificate
 //!     and private-key files into a `rustls::ServerConfig`.
 //!   * [`listener`] — per-protocol acceptors (TCP, Unix socket,
@@ -119,13 +128,16 @@
 //! the audit surface narrow:
 //!
 //!   * One thread per listener (TCP, Unix, TLS-on-TCP) doing
-//!     `accept()` in a loop.
+//!     `accept()` in a loop.  Each accepted connection is assigned a
+//!     monotonic, transport-authenticated `ConnId` from a shared
+//!     counter (FQ.3).
 //!   * One thread per accepted connection doing the
 //!     request/response cycle.
-//!   * One dedicated worker thread draining the bounded queue and
-//!     calling `kernel.submit()`.  Serial — the Kernel may hold
-//!     mutable state (e.g. the knomosis log file) that requires
-//!     sequential access.
+//!   * One dedicated worker thread draining the queue and calling
+//!     `kernel.submit()`.  Serial — the Kernel may hold mutable state
+//!     (e.g. the knomosis log file) that requires sequential access.
+//!     **This single serial worker is the contended resource the fair
+//!     scheduler bounds.**
 //!
 //! This trades some peak throughput vs an async runtime for a
 //! significantly smaller dependency tree (`tokio` would add 80+
@@ -133,6 +145,41 @@
 //! sequencer + a small set of API consumers) this is the right
 //! tradeoff.  See the engineering plan §RH-C for the original
 //! tokio-based architecture sketch.
+//!
+//! ## Optional fair scheduling (FQ Rung 0)
+//!
+//! By default the worker drains a FIFO `BoundedQueue`.  Under
+//! `--scheduler drr` it instead drains a [`queue::FairQueue`] — a
+//! work-conserving Deficit-Round-Robin scheduler keyed by the
+//! connection's `ConnId` — so that, **under contention for the serial
+//! worker**, no one connection can monopolise it: a flooding connection
+//! delays only itself (HOL blocking is removed at the dequeue end, and
+//! a per-flow buffer cap removes it at the enqueue end), while a
+//! productive burst on an idle host is throttled by nothing.  The
+//! design (`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md`
+//! §2.3–§2.8) is governed by these load-bearing invariants:
+//!
+//!   * **Classification-only routing (§2.6 invariant 1).**  The routing
+//!     key (`ConnId`) influences *order and drop* only, never
+//!     admissibility.  A scheduling bug can reorder or drop, never admit
+//!     an inadmissible action nor reject an admissible one — exactly the
+//!     latitude security property #1 already grants the FIFO path.  The
+//!     host still parses no CBE bytes.
+//!   * **The scheduler is bounded (§2.6 invariant 4).**  Distinct flows
+//!     (`--max-flows`), a per-flow backlog (`--per-flow-cap`), and the
+//!     total buffered count (`--max-queue-depth`, reused as the global
+//!     cap) are all capped, with empty flows evicted immediately, so the
+//!     flow map cannot grow without bound.
+//!   * **Deterministic, I/O-free decision (§2.7).**  The DRR `pick` reads
+//!     no clock and performs no I/O, so it is reproducible — the seam a
+//!     future accountable-fairness layer would replay against.
+//!   * **Lock-free dispatch (§2.8).**  The worker pops a request under
+//!     the scheduler lock and dispatches it *after* releasing the lock,
+//!     so a slow `kernel.submit` never serializes producers.
+//!
+//! Rung 0 requires **no wire-format change** (host-internal only);
+//! `PROTOCOL_VERSION` stays `1`.  The Rung-1 signer-hint extension
+//! (a superset, `PROTOCOL_VERSION` 2) is future work.
 //!
 //! ## What this crate does NOT provide
 //!
@@ -158,6 +205,7 @@
 pub mod admission;
 pub mod budget;
 pub mod config;
+pub mod fair;
 pub mod frame;
 pub mod kernel;
 pub mod listener;

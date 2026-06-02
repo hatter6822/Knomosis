@@ -25,9 +25,20 @@
 //! `SyncSender`, which is cheap to `Clone`.
 
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendError};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
+use crate::fair::drr::{Caps, DrrState, DrrStats};
 use crate::kernel::KernelResponse;
+
+/// A monotonic per-accepted-connection identifier (FQ.3).
+///
+/// Assigned at `accept()` from a process-wide counter ([`crate::server`]),
+/// so it is transport-authenticated (unspoofable) and never reused —
+/// an evicted DRR flow can therefore never alias a later connection.
+/// Rung 0 routes the fair scheduler by this value; the FIFO path
+/// ignores it.
+pub type ConnId = u64;
 
 /// Default maximum queue depth.  256 in-flight requests is enough
 /// headroom for a sequencer at moderate load without consuming
@@ -158,6 +169,185 @@ impl BoundedQueue {
     }
 }
 
+/// A work-conserving Deficit-Round-Robin fair queue (FQ Rung 0).
+///
+/// The concurrency wrapper around the pure [`DrrState`] core: it adds a
+/// `Mutex` (for serialized access to the scheduler state) and a
+/// `Condvar` (so the worker parks while the queue is empty and wakes on
+/// the next submission).  Cloneable — each clone shares the same
+/// `Arc`-backed state, matching [`BoundedQueue`]'s producer-handle
+/// ergonomics: listeners hold producer clones (calling
+/// [`FairQueue::try_submit`]) and the single worker holds a consumer
+/// clone (calling [`FairQueue::next`] / [`FairQueue::try_next`]).
+///
+/// Unlike [`BoundedQueue`], the fair queue is NOT channel-backed, so it
+/// carries no "disconnected" signal: the worker owns shutdown via the
+/// server's stop flag (`GP.8` §2.8), and the queue needs no reference
+/// to it.
+#[derive(Clone, Debug)]
+pub struct FairQueue {
+    /// The pure DRR scheduler state, guarded for serialized mutation.
+    inner: Arc<Mutex<DrrState<ConnId>>>,
+    /// Signalled on every successful submission so a parked worker
+    /// wakes promptly; also used by the server's shutdown wake
+    /// ([`FairQueue::wake_all`]).
+    not_empty: Arc<Condvar>,
+}
+
+/// Outcome of [`FairQueue::next`].
+#[derive(Debug)]
+pub enum NextOutcome {
+    /// A request was dequeued in fair order — dispatch it.  The
+    /// scheduler lock is already released when this is returned, so the
+    /// slow `kernel.submit` call runs lock-free (the §2.8 throughput
+    /// property): producers keep enqueuing while a dispatch is in
+    /// flight.
+    Dispatch(QueuedRequest),
+    /// No work became available within the timeout.  The worker should
+    /// re-check its stop flag and call [`FairQueue::next`] again.
+    Idle,
+}
+
+impl FairQueue {
+    /// Construct an empty fair queue with the given capacity caps.
+    #[must_use]
+    pub fn new(caps: Caps) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(DrrState::new(caps))),
+            not_empty: Arc::new(Condvar::new()),
+        }
+    }
+
+    /// Try to enqueue `payload` under connection `conn`.
+    ///
+    /// Builds the capacity-1 reply channel (as the FIFO path does),
+    /// routes the request through the DRR core's cap checks, and on
+    /// success notifies the worker.  On any cap breach the request (and
+    /// its reply sender) is dropped and `Busy` is returned — the
+    /// per-flow cap means a flooding connection back-pressures *itself*
+    /// while other connections still enqueue.
+    ///
+    /// Poison-recovering: a thread that panicked while holding the lock
+    /// does not wedge the queue (the next caller recovers the guard via
+    /// `into_inner`).
+    pub fn try_submit(&self, conn: ConnId, payload: Vec<u8>) -> SubmitOutcome {
+        let (reply_tx, reply_rx) = sync_channel::<KernelResponse>(1);
+        let request = QueuedRequest {
+            payload,
+            reply: reply_tx,
+        };
+        let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        match guard.enqueue(conn, request) {
+            Ok(()) => {
+                // Release the lock BEFORE notifying so the woken worker
+                // does not immediately re-block on a still-held lock.
+                drop(guard);
+                self.not_empty.notify_one();
+                SubmitOutcome::Enqueued(reply_rx)
+            }
+            Err(_returned) => {
+                // The returned request (carrying its reply sender) and
+                // the matching `reply_rx` are both dropped here.  The
+                // per-reason breakdown lives in `stats()`; we keep the
+                // hot path quiet (a single debug line, never `info`
+                // spam — FQ.6).
+                drop(guard);
+                tracing::debug!(conn, "fair queue: request rejected (cap reached)");
+                SubmitOutcome::Busy
+            }
+        }
+    }
+
+    /// Block up to `timeout` for the next request, then dispatch it.
+    ///
+    /// Uses the textbook `Condvar` predicate-loop with a deadline: it
+    /// re-checks the "queue non-empty" predicate after every wakeup
+    /// (tolerating spurious wakeups without busy-spinning) and caps the
+    /// TOTAL wait at `timeout` so the worker re-checks its stop flag on
+    /// that cadence.  On success the request is returned **by value with
+    /// the lock already released**, so the subsequent dispatch is
+    /// lock-free.  Holds no reference to any stop flag (§2.8).
+    pub fn next(&self, timeout: Duration) -> NextOutcome {
+        let deadline = Instant::now() + timeout;
+        let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        while guard.is_empty() {
+            let now = Instant::now();
+            if now >= deadline {
+                // Whole timeout elapsed with no work: let the worker
+                // re-check `stop`.
+                return NextOutcome::Idle;
+            }
+            let remaining = deadline - now; // > 0 since now < deadline
+            let (next_guard, _timed_out) = self
+                .not_empty
+                .wait_timeout(guard, remaining)
+                .unwrap_or_else(|p| p.into_inner());
+            guard = next_guard;
+            // Loop re-evaluates `is_empty()`: a real notify with work
+            // exits the loop and dispatches; a spurious wakeup or
+            // timeout re-checks against the deadline.
+        }
+        match guard.pick() {
+            // `guard` drops at the `return`, releasing the lock before
+            // the caller dispatches (lock-free dispatch).
+            Some(req) => NextOutcome::Dispatch(req),
+            // Defensive: a non-empty queue always yields `Some`.
+            None => NextOutcome::Idle,
+        }
+    }
+
+    /// Non-blocking analogue of [`FairQueue::next`]: pop the next request
+    /// in fair order if one is ready, else `None`.  Used by the worker's
+    /// shutdown drain (`GP.8` §2.8).
+    pub fn try_next(&self) -> Option<QueuedRequest> {
+        let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        guard.pick()
+    }
+
+    /// Wake every parked worker (a single broadcast).  Called by the
+    /// server on shutdown so a worker parked in [`FairQueue::next`]
+    /// notices the stop flag immediately instead of after the next
+    /// `timeout`.  Correctness does not depend on it (the timeout bounds
+    /// the wait regardless); it only sharpens shutdown latency.
+    pub fn wake_all(&self) {
+        self.not_empty.notify_all();
+    }
+
+    /// Snapshot the scheduler's aggregate counters (FQ.6).  Internally
+    /// consistent because it is read under the same lock that guards
+    /// every mutation.
+    #[must_use]
+    pub fn stats(&self) -> DrrStats {
+        self.inner.lock().unwrap_or_else(|p| p.into_inner()).stats()
+    }
+}
+
+/// A scheduler-agnostic producer handle (FQ.4a).
+///
+/// Unifies the FIFO [`BoundedQueue`] and the fair [`FairQueue`] behind
+/// one [`QueueHandle::submit`] call so connection handlers are identical
+/// on both paths: the listener threads carry a `QueueHandle` and submit
+/// through it regardless of which scheduler the server built.  The
+/// `Fifo` arm ignores the connection id; the `Fair` arm routes by it.
+#[derive(Clone, Debug)]
+pub enum QueueHandle {
+    /// The historical FIFO bounded queue.
+    Fifo(BoundedQueue),
+    /// The optional per-connection DRR fair queue (Rung 0).
+    Fair(FairQueue),
+}
+
+impl QueueHandle {
+    /// Submit `payload` for connection `conn`.  The `Fifo` arm discards
+    /// `conn` (FIFO is connection-agnostic); the `Fair` arm routes by it.
+    pub fn submit(&self, conn: ConnId, payload: Vec<u8>) -> SubmitOutcome {
+        match self {
+            Self::Fifo(q) => q.try_submit(payload),
+            Self::Fair(q) => q.try_submit(conn, payload),
+        }
+    }
+}
+
 /// Outcome of [`drain_one`].
 #[derive(Debug)]
 pub enum DrainOutcome {
@@ -234,15 +424,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        drain_one, try_drain_one, BoundedQueue, DrainOutcome, SubmitOutcome,
-        DEFAULT_MAX_QUEUE_DEPTH, HARD_MAX_QUEUE_DEPTH,
+        drain_one, try_drain_one, BoundedQueue, DrainOutcome, FairQueue, NextOutcome, QueueHandle,
+        SubmitOutcome, DEFAULT_MAX_QUEUE_DEPTH, HARD_MAX_QUEUE_DEPTH,
     };
+    use crate::fair::drr::Caps;
     use crate::kernel::KernelResponse;
     use crate::verdict::Verdict;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     /// Constants are stable.
     #[test]
@@ -516,5 +707,366 @@ mod tests {
             SubmitOutcome::Busy => {}
             other => panic!("expected Busy on disconnected, got {other:?}"),
         }
+    }
+
+    // ===== FairQueue (FQ Rung 0) =====================================
+
+    /// Build a fair queue with explicit caps.
+    fn fair(per_flow: usize, max_flows: usize, global: usize) -> FairQueue {
+        FairQueue::new(Caps::new(per_flow, max_flows, global))
+    }
+
+    /// FQ.2a — per-flow cap is targeted: one connection saturating its
+    /// per-flow cap gets `Busy`, while a second connection still
+    /// enqueues.  Asserted directly via the queue API (no kernel).
+    #[test]
+    fn fair_per_flow_cap_is_targeted() {
+        let q = fair(2, 10, 100);
+        // Whale (conn 1): first two Enqueued, third Busy.
+        assert!(matches!(
+            q.try_submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert!(matches!(
+            q.try_submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert!(matches!(q.try_submit(1, vec![1]), SubmitOutcome::Busy));
+        // Small (conn 2): still enqueues — targeted backpressure.
+        assert!(matches!(
+            q.try_submit(2, vec![2]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        let s = q.stats();
+        assert_eq!(s.rejected_per_flow, 1);
+        assert_eq!(s.total_depth, 3);
+    }
+
+    /// FQ.2a — the `global` cap returns `Busy`.
+    #[test]
+    fn fair_global_cap_busy() {
+        let q = fair(10, 10, 2);
+        assert!(matches!(
+            q.try_submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert!(matches!(
+            q.try_submit(2, vec![2]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert!(matches!(q.try_submit(3, vec![3]), SubmitOutcome::Busy));
+        assert_eq!(q.stats().rejected_global, 1);
+    }
+
+    /// FQ.2a — the `max_flows` cap returns `Busy` for a new connection.
+    #[test]
+    fn fair_max_flows_cap_busy() {
+        let q = fair(10, 2, 100);
+        assert!(matches!(
+            q.try_submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert!(matches!(
+            q.try_submit(2, vec![2]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        // Third distinct connection breaches max_flows.
+        assert!(matches!(q.try_submit(3, vec![3]), SubmitOutcome::Busy));
+        // But an existing connection still enqueues.
+        assert!(matches!(
+            q.try_submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert_eq!(q.stats().rejected_max_flows, 1);
+    }
+
+    /// FQ.2a — a poisoned lock still serves (poison recovery), rather
+    /// than wedging every subsequent caller.
+    #[test]
+    fn fair_poison_recovery_still_serves() {
+        let q = fair(10, 10, 100);
+        let q2 = q.clone();
+        // Poison the inner mutex by panicking while holding it.
+        let _ = thread::spawn(move || {
+            let _guard = q2.inner.lock().unwrap();
+            panic!("poison the lock");
+        })
+        .join();
+        // The queue still works.
+        assert!(matches!(
+            q.try_submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert!(q.try_next().is_some());
+    }
+
+    /// FQ.2b — `next` blocks on an empty queue and dispatches promptly
+    /// after a concurrent `try_submit` + notify.
+    #[test]
+    fn fair_next_blocks_then_dispatches() {
+        let q = fair(64, 64, 64);
+        let qc = q.clone();
+        let consumer = thread::spawn(move || match qc.next(Duration::from_secs(2)) {
+            NextOutcome::Dispatch(req) => {
+                let _ = req
+                    .reply
+                    .try_send(KernelResponse::from_verdict(Verdict::Ok));
+                Some(req.payload)
+            }
+            NextOutcome::Idle => None,
+        });
+        // Let the consumer park on `next`.
+        thread::sleep(Duration::from_millis(100));
+        let SubmitOutcome::Enqueued(reply_rx) = q.try_submit(7, vec![42]) else {
+            panic!("expected Enqueued");
+        };
+        let served = consumer.join().expect("consumer join");
+        assert_eq!(served, Some(vec![42]));
+        let resp = reply_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("reply within deadline");
+        assert_eq!(resp.verdict, Verdict::Ok);
+    }
+
+    /// FQ.2b — `next` returns `Idle` within roughly `timeout` when the
+    /// queue stays empty (and does not return early).
+    #[test]
+    fn fair_next_idle_on_timeout() {
+        let q: FairQueue = fair(64, 64, 64);
+        let start = Instant::now();
+        let outcome = q.next(Duration::from_millis(60));
+        let elapsed = start.elapsed();
+        assert!(matches!(outcome, NextOutcome::Idle));
+        // It actually waited (did not return instantly)...
+        assert!(
+            elapsed >= Duration::from_millis(30),
+            "returned too early: {elapsed:?}"
+        );
+        // ...but did not hang.
+        assert!(
+            elapsed < Duration::from_millis(800),
+            "blocked too long: {elapsed:?}"
+        );
+    }
+
+    /// FQ.2b — `try_next` never blocks: it returns immediately whether
+    /// or not work is available.
+    #[test]
+    fn fair_try_next_is_immediate() {
+        let q = fair(64, 64, 64);
+        let start = Instant::now();
+        assert!(q.try_next().is_none());
+        assert!(
+            start.elapsed() < Duration::from_millis(50),
+            "try_next blocked"
+        );
+        let _ = q.try_submit(1, vec![1]);
+        assert!(q.try_next().is_some());
+        assert!(q.try_next().is_none());
+    }
+
+    /// FQ.2b/§2.8 — the dispatched request is returned with the lock
+    /// ALREADY released, so a producer can submit while a (simulated)
+    /// slow dispatch is in flight.  If `next` held the lock across the
+    /// return, this same-thread `try_submit` would deadlock.
+    #[test]
+    fn fair_dispatch_happens_outside_the_lock() {
+        let q = fair(64, 64, 64);
+        let _ = q.try_submit(1, vec![1]);
+        let NextOutcome::Dispatch(req) = q.next(Duration::from_millis(200)) else {
+            panic!("expected Dispatch");
+        };
+        // `req` is held (slow dispatch).  The lock must be free.
+        match q.try_submit(2, vec![2]) {
+            SubmitOutcome::Enqueued(_) => {}
+            other => panic!("submit blocked while a dispatch was in flight: {other:?}"),
+        }
+        drop(req);
+    }
+
+    /// FQ.7a (queue-level) — DRR fairness order: a whale's backlog does
+    /// not bury a small connection's request.  Under FIFO the small
+    /// request would be served 4th (1,1,1,2); DRR serves it 2nd.
+    #[test]
+    fn fair_drr_order_does_not_bury_small_flow() {
+        let q = fair(64, 64, 64);
+        for _ in 0..3 {
+            let _ = q.try_submit(1, vec![1]); // whale, conn 1
+        }
+        let _ = q.try_submit(2, vec![2]); // small, conn 2 (enqueued last)
+        let mut order = Vec::new();
+        while let Some(req) = q.try_next() {
+            order.push(req.payload[0]);
+        }
+        assert_eq!(order, vec![1, 2, 1, 1], "DRR must interleave, not FIFO");
+    }
+
+    /// FQ.2c — multi-producer / single-consumer: every submitted request
+    /// is dispatched exactly once and every reply arrives.
+    #[test]
+    fn fair_mpsc_exactly_once_and_replies_arrive() {
+        let q = fair(64, 64, 256);
+        let served: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+        let producers_done = Arc::new(AtomicBool::new(false));
+
+        // Consumer: dispatch every request, reply Ok, record payload.
+        let qc = q.clone();
+        let served_c = Arc::clone(&served);
+        let done_c = Arc::clone(&producers_done);
+        let consumer = thread::spawn(move || loop {
+            match qc.next(Duration::from_millis(100)) {
+                NextOutcome::Dispatch(req) => {
+                    served_c.lock().unwrap().push(req.payload[0]);
+                    let _ = req
+                        .reply
+                        .try_send(KernelResponse::from_verdict(Verdict::Ok));
+                }
+                NextOutcome::Idle => {
+                    if done_c.load(Ordering::Acquire) && qc.stats().total_depth == 0 {
+                        break;
+                    }
+                }
+            }
+        });
+
+        // 4 producers × 4 distinct payloads each (16 total, 0..16).
+        let mut producers = Vec::new();
+        for p in 0..4u8 {
+            let qp = q.clone();
+            producers.push(thread::spawn(move || {
+                let mut rxs = Vec::new();
+                for j in 0..4u8 {
+                    let payload = vec![p * 4 + j];
+                    if let SubmitOutcome::Enqueued(rx) = qp.try_submit(u64::from(p), payload) {
+                        rxs.push(rx);
+                    }
+                }
+                // Block until each request's reply arrives (proving it
+                // was dispatched).
+                for rx in rxs {
+                    let r = rx.recv_timeout(Duration::from_secs(5)).expect("reply");
+                    assert_eq!(r.verdict, Verdict::Ok);
+                }
+            }));
+        }
+        for h in producers {
+            h.join().expect("producer join");
+        }
+        producers_done.store(true, Ordering::Release);
+        consumer.join().expect("consumer join");
+
+        let mut got = served.lock().unwrap().clone();
+        got.sort_unstable();
+        let expected: Vec<u8> = (0..16).collect();
+        assert_eq!(got, expected, "exactly-once dispatch of all payloads");
+    }
+
+    /// FQ.2c — targeted backpressure under concurrency: a whale flooding
+    /// its own connection cannot starve a concurrent small connection,
+    /// because the per-flow cap bounds the whale's share of the global
+    /// buffer (so the global cap never fills on the whale's behalf).
+    #[test]
+    fn fair_targeted_backpressure_under_concurrency() {
+        let q = fair(2, 16, 64); // per_flow 2 ≪ global 64
+        let small_ok = Arc::new(AtomicBool::new(false));
+
+        let qw = q.clone();
+        let whale = thread::spawn(move || {
+            // Flood: only 2 ever enqueue (per_flow), the rest Busy.
+            for _ in 0..1000 {
+                let _ = qw.try_submit(1, vec![1]);
+            }
+        });
+        let qs = q.clone();
+        let small_ok_c = Arc::clone(&small_ok);
+        let small = thread::spawn(move || {
+            // The small connection's single request always enqueues:
+            // the whale cannot have filled the global buffer (it is
+            // capped at per_flow = 2).
+            for _ in 0..50 {
+                if matches!(qs.try_submit(2, vec![2]), SubmitOutcome::Enqueued(_)) {
+                    small_ok_c.store(true, Ordering::Release);
+                }
+                let _ = qs.try_next(); // drain the small flow so it can re-submit
+            }
+        });
+        whale.join().unwrap();
+        small.join().unwrap();
+        assert!(
+            small_ok.load(Ordering::Acquire),
+            "small connection was starved by the whale"
+        );
+    }
+
+    /// FQ.2c — shutdown-drain shape: after producers stop, `try_next`
+    /// empties the queue and then returns `None`.
+    #[test]
+    fn fair_shutdown_drain_shape() {
+        let q = fair(64, 64, 64);
+        for i in 0..5u8 {
+            let _ = q.try_submit(u64::from(i), vec![i]);
+        }
+        let mut drained = 0;
+        while q.try_next().is_some() {
+            drained += 1;
+        }
+        assert_eq!(drained, 5);
+        assert!(q.try_next().is_none());
+        assert_eq!(q.stats().total_depth, 0);
+    }
+
+    /// FQ.6 — `stats()` reflects dispatches and per-reason rejections.
+    #[test]
+    fn fair_stats_track_dispatches_and_rejections() {
+        let q = fair(2, 2, 10);
+        // 2 on conn 1 (Ok), 1 more on conn 1 (per_flow reject).
+        let _ = q.try_submit(1, vec![1]);
+        let _ = q.try_submit(1, vec![1]);
+        let _ = q.try_submit(1, vec![1]); // per_flow reject
+                                          // conn 2 Ok, conn 3 (max_flows reject).
+        let _ = q.try_submit(2, vec![2]);
+        let _ = q.try_submit(3, vec![3]); // max_flows reject
+                                          // Dispatch two.
+        let _ = q.try_next();
+        let _ = q.try_next();
+        let s = q.stats();
+        assert_eq!(s.rejected_per_flow, 1);
+        assert_eq!(s.rejected_max_flows, 1);
+        assert_eq!(s.dispatched, 2);
+        assert_eq!(s.total_depth, 1); // 3 enqueued − 2 dispatched
+    }
+
+    /// FairQueue + QueueHandle are `Clone + Send + Sync` (required for
+    /// sharing across listener / worker threads).
+    #[test]
+    fn fair_queue_is_clone_send_sync() {
+        fn assert_send_sync_clone<T: Send + Sync + Clone>() {}
+        assert_send_sync_clone::<FairQueue>();
+        assert_send_sync_clone::<QueueHandle>();
+    }
+
+    /// FQ.4a — `QueueHandle::submit` dispatches to the right arm: the
+    /// `Fifo` arm ignores the conn id; the `Fair` arm routes by it.
+    #[test]
+    fn queue_handle_routes_both_arms() {
+        // FIFO arm: conn id ignored, behaves like BoundedQueue.
+        let (fifo, _rx) = BoundedQueue::new(4);
+        let handle = QueueHandle::Fifo(fifo);
+        assert!(matches!(
+            handle.submit(999, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+
+        // Fair arm: routes by conn id (per-flow cap applies per conn).
+        let handle = QueueHandle::Fair(fair(1, 10, 10));
+        assert!(matches!(
+            handle.submit(1, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        assert!(matches!(handle.submit(1, vec![1]), SubmitOutcome::Busy)); // per_flow 1
+        assert!(matches!(
+            handle.submit(2, vec![2]),
+            SubmitOutcome::Enqueued(_)
+        ));
     }
 }
