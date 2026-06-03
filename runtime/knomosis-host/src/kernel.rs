@@ -1371,10 +1371,43 @@ pub mod command {
     #[cfg(test)]
     mod tests {
         use super::{CommandKernel, CommandKernelError, MAX_SUBPROCESS_OUTPUT};
-        use crate::kernel::Kernel;
+        use crate::kernel::{Kernel, KernelResponse};
         use crate::verdict::Verdict;
         use std::path::PathBuf;
         use std::time::Duration;
+
+        /// Submit `bytes`, retrying on a transient `ETXTBSY` ("text file
+        /// busy") spawn race.
+        ///
+        /// Under parallel test execution a DIFFERENT test thread's `fork`
+        /// (for its own subprocess) can momentarily hold a writable file
+        /// descriptor to THIS test's freshly-written mock script —
+        /// O_CLOEXEC closes the inherited fd only on the racing child's
+        /// *exec*, leaving a fork→exec window — so the `spawn` inside
+        /// `submit` transiently fails and surfaces as a
+        /// `Verdict::NotAdmissible` with a `"subprocess spawn error"`
+        /// reason (see the `Err` arm of the spawn match).  The mock
+        /// scripts here are all valid, so that specific reason is purely
+        /// the environmental race; the window clears in microseconds, so
+        /// we respawn past it.  Any OTHER response (the script actually
+        /// ran) is returned immediately, so a normal run takes exactly one
+        /// iteration with no sleep.
+        ///
+        /// Production never hits this: the real `knomosis` binary is not
+        /// freshly written next to its own exec, so `submit` is left to
+        /// fail fast there.  This mirrors `strategy.rs`'s
+        /// `commit_at_retrying` (the same race, the same test-only fix).
+        #[cfg(unix)]
+        fn submit_retrying_spawn(kernel: &CommandKernel, bytes: &[u8]) -> KernelResponse {
+            for _ in 0..50 {
+                let resp = kernel.submit(bytes);
+                if !resp.reason.contains("subprocess spawn error") {
+                    return resp;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            kernel.submit(bytes)
+        }
 
         /// Constants are stable.
         #[test]
@@ -1480,7 +1513,7 @@ pub mod command {
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
             let work = temp.path().join("work");
             let kernel = CommandKernel::new(script, temp.path().join("log.bin"), work).unwrap();
-            let resp = kernel.submit(b"\x00");
+            let resp = submit_retrying_spawn(&kernel, b"\x00");
             assert_eq!(resp.verdict, Verdict::NotAdmissible);
             assert_eq!(resp.reason, "InsufficientBudget");
         }
@@ -1501,7 +1534,7 @@ pub mod command {
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
             let work = temp.path().join("work");
             let kernel = CommandKernel::new(script, temp.path().join("log.bin"), work).unwrap();
-            let resp = kernel.submit(b"\x00");
+            let resp = submit_retrying_spawn(&kernel, b"\x00");
             assert_eq!(resp.verdict, Verdict::NotAdmissible);
             // The generic path returns the raw stderr verbatim (a
             // trailing newline is part of the pre-existing behaviour the
@@ -1594,7 +1627,7 @@ pub mod command {
             let kernel = CommandKernel::new(script, log, work)
                 .unwrap()
                 .with_budget_policy(BudgetPolicy::mk_bounded(5, 2, 1));
-            let resp = kernel.submit(b"x");
+            let resp = submit_retrying_spawn(&kernel, b"x");
             assert_eq!(resp.verdict, Verdict::Ok);
             let argv = std::fs::read_to_string(&argv_out).unwrap();
             let lines: Vec<&str> = argv.lines().collect();
@@ -1637,7 +1670,7 @@ pub mod command {
                 .with_budget_policy(BudgetPolicy::mk_bounded(1, 1, 1))
                 .with_epoch_length(4);
             assert_eq!(kernel.epoch_length(), Some(4));
-            assert_eq!(kernel.submit(b"x").verdict, Verdict::Ok);
+            assert_eq!(submit_retrying_spawn(&kernel, b"x").verdict, Verdict::Ok);
             let argv = std::fs::read_to_string(&argv_out).unwrap();
             let lines: Vec<&str> = argv.lines().collect();
             assert!(lines.contains(&"--epoch-length"), "argv: {argv}");
@@ -1663,7 +1696,7 @@ pub mod command {
                 .unwrap()
                 .with_epoch_length(0);
             assert_eq!(kernel.epoch_length(), None);
-            kernel.submit(b"x");
+            submit_retrying_spawn(&kernel, b"x");
             let argv = std::fs::read_to_string(&argv_out).unwrap();
             assert!(!argv.contains("--epoch-length"), "argv: {argv}");
         }
@@ -1683,7 +1716,7 @@ pub mod command {
                 .unwrap()
                 .with_gas_pool_policy(1000, 3000);
             assert_eq!(kernel.gas_pool(), Some((1000, 3000)));
-            assert_eq!(kernel.submit(b"x").verdict, Verdict::Ok);
+            assert_eq!(submit_retrying_spawn(&kernel, b"x").verdict, Verdict::Ok);
             let argv = std::fs::read_to_string(&argv_out).unwrap();
             let lines: Vec<&str> = argv.lines().collect();
             assert!(lines.contains(&"--gas-pool-eth-cap"), "argv: {argv}");
@@ -1714,7 +1747,7 @@ pub mod command {
             let work = temp.path().join("work");
             let kernel = CommandKernel::new(script, log, work).unwrap();
             assert_eq!(kernel.gas_pool(), None);
-            kernel.submit(b"x");
+            submit_retrying_spawn(&kernel, b"x");
             let argv = std::fs::read_to_string(&argv_out).unwrap();
             assert!(!argv.contains("--gas-pool-eth-cap"), "argv: {argv}");
             assert!(!argv.contains("--gas-pool-bold-cap"), "argv: {argv}");
@@ -1732,7 +1765,7 @@ pub mod command {
             let work = temp.path().join("work");
             let kernel = CommandKernel::new(script, log, work).unwrap();
             assert!(kernel.budget_policy().is_none());
-            kernel.submit(b"x");
+            submit_retrying_spawn(&kernel, b"x");
             let argv = std::fs::read_to_string(&argv_out).unwrap();
             assert!(!argv.contains("--budget-policy"), "argv: {argv}");
             assert!(!argv.contains("--free-tier"), "argv: {argv}");
@@ -1822,7 +1855,7 @@ pub mod command {
                 .unwrap()
                 .with_timeout(Duration::from_millis(200));
             let start = std::time::Instant::now();
-            let response = kernel.submit(b"some bytes");
+            let response = submit_retrying_spawn(&kernel, b"some bytes");
             let elapsed = start.elapsed();
             assert!(
                 elapsed < Duration::from_secs(3),
