@@ -27,7 +27,7 @@ namespace LegalKernel.Test.Bridge.AccountingTests
 
 /-- A bridge state with one deposit (id=1, resource=1, amount=100). -/
 def bs1 : BridgeState :=
-  BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
+  BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
 
 /-- A bridge state with one deposit + one withdrawal at the same r. -/
 def bs2 : BridgeState :=
@@ -38,15 +38,15 @@ def bs2 : BridgeState :=
     (userAmount 60, poolAmount 40, budgetGrant 9). -/
 def bsFee : BridgeState :=
   BridgeState.empty.markConsumed 1
-    { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9 }
+    { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9, depositTime := 0 }
 
 /-- GP.4.2: a bridge state mixing a legacy deposit (id 1, user 100,
     pool 0) and two fee deposits (id 2: user 30/pool 20 at r=1; id 3:
     user 75/pool 25 at r=2). -/
 def bsMixed : BridgeState :=
   (bs1.markConsumed 2
-      { resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5 }).markConsumed 3
-      { resource := 2, userAmount := 75, poolAmount := 25, budgetGrant := 7 }
+      { resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5, depositTime := 0 }).markConsumed 3
+      { resource := 2, userAmount := 75, poolAmount := 25, budgetGrant := 7, depositTime := 0 }
 
 /-- Wrap a `BridgeState` into a minimal `ExtendedState` for the
     accounting fold helpers. -/
@@ -91,14 +91,14 @@ def tests : List TestCase :=
   , { name := "totalDeposited: two deposits at the same r accumulate"
     , body := do
         let bs := bs1.markConsumed 2
-          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0 })
+          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
         assertEq (expected := (150 : Nat))
                  (actual := totalDeposited (es bs) 1) "150"
     }
   , { name := "totalDeposited: two deposits at different r"
     , body := do
         let bs := bs1.markConsumed 2
-          ({ resource := 2, userAmount := 75, poolAmount := 0, budgetGrant := 0 })
+          ({ resource := 2, userAmount := 75, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
         assertEq (expected := (100 : Nat))
                  (actual := totalDeposited (es bs) 1) "r=1"
         assertEq (expected := (75 : Nat))
@@ -113,7 +113,7 @@ def tests : List TestCase :=
     }
   , { name := "DepositRecord.amountAt projects correctly"
     , body := do
-        let drec : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
+        let drec : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 }
         assertEq (expected := (100 : Nat)) (actual := drec.amountAt 1) "r=1"
         assertEq (expected := (0 : Nat))   (actual := drec.amountAt 2) "r=2"
     }
@@ -121,7 +121,7 @@ def tests : List TestCase :=
     , body := do
         -- A fee-bearing deposit record: the total L2 credit is the
         -- sum of the user and pool legs; budgetGrant is excluded.
-        let drec : DepositRecord := { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9 }
+        let drec : DepositRecord := { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9, depositTime := 0 }
         assertEq (expected := (100 : Nat)) (actual := drec.amountAt 1) "60 + 40 = 100"
         assertEq (expected := (0 : Nat))   (actual := drec.amountAt 2) "resource mismatch ⇒ 0"
     }
@@ -132,7 +132,7 @@ def tests : List TestCase :=
         --   fee deposit:    userAmount 30,  poolAmount 20 → 50
         -- totalDeposited r=1 = 150.
         let bs := bs1.markConsumed 2
-          ({ resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5 })
+          ({ resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5, depositTime := 0 })
         assertEq (expected := (150 : Nat)) (actual := totalDeposited (es bs) 1)
           "100 + (30 + 20) = 150"
     }
@@ -182,7 +182,7 @@ def tests : List TestCase :=
         let _t : ∀ (bs : BridgeState) (r : ResourceId) (recipient : ActorId)
                    (amount : Amount) (d : DepositId) (idx : Nat),
                    applyActionToBridgeState bs (.deposit r recipient amount d) idx =
-                   bs.markConsumed d ({ resource := r, userAmount := amount, poolAmount := 0, budgetGrant := 0 }) :=
+                   bs.markConsumed d ({ resource := r, userAmount := amount, poolAmount := 0, budgetGrant := 0, depositTime := idx }) :=
           applyActionToBridgeState_deposit
         pure ()
     }
@@ -279,7 +279,7 @@ def tests : List TestCase :=
     }
   , { name := "GP.4.2 DepositRecord.userAmountAt / poolAmountAt project legs"
     , body := do
-        let drec : DepositRecord := { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9 }
+        let drec : DepositRecord := { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9, depositTime := 0 }
         assertEq (expected := (60 : Nat)) (actual := drec.userAmountAt 1) "user r=1"
         assertEq (expected := (40 : Nat)) (actual := drec.poolAmountAt 1) "pool r=1"
         assertEq (expected := (0 : Nat))  (actual := drec.userAmountAt 2) "user r=2 ⇒ 0"
@@ -287,7 +287,7 @@ def tests : List TestCase :=
     }
   , { name := "GP.4.2 userAmountAt + poolAmountAt = amountAt (per-record split)"
     , body := do
-        let drec : DepositRecord := { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9 }
+        let drec : DepositRecord := { resource := 1, userAmount := 60, poolAmount := 40, budgetGrant := 9, depositTime := 0 }
         assertEq (expected := drec.amountAt 1) (actual := drec.userAmountAt 1 + drec.poolAmountAt 1)
           "60 + 40 = amountAt"
         assertEq (expected := drec.amountAt 2) (actual := drec.userAmountAt 2 + drec.poolAmountAt 2)
@@ -352,7 +352,7 @@ def tests : List TestCase :=
   , { name := "GP.4.2 two fee deposits accumulate per leg"
     , body := do
         let bs := bsFee.markConsumed 2
-          { resource := 1, userAmount := 10, poolAmount := 5, budgetGrant := 1 }
+          { resource := 1, userAmount := 10, poolAmount := 5, budgetGrant := 1, depositTime := 0 }
         assertEq (expected := (70 : Nat)) (actual := totalUserDeposited (es bs) 1) "60 + 10"
         assertEq (expected := (45 : Nat)) (actual := totalPoolDeposited (es bs) 1) "40 + 5"
     }
@@ -406,7 +406,7 @@ def tests : List TestCase :=
                    applyActionToBridgeState bs
                      (.depositWithFee r recipient poolActor ua pa bg d) idx =
                    bs.markConsumed d
-                     { resource := r, userAmount := ua, poolAmount := pa, budgetGrant := bg } :=
+                     { resource := r, userAmount := ua, poolAmount := pa, budgetGrant := bg, depositTime := idx } :=
           applyActionToBridgeState_depositWithFee
         pure ()
     }

@@ -6147,6 +6147,58 @@ amortisation window `T`.  Conservation: the refund is a
 `gasPoolActor → user` transfer, fully provable.  Bounded above by
 the original fee — the user cannot reclaim more than they paid in.
 
+**Status: Lean-side mechanism complete** (the kernel/bridge core
+of GP.9.1).  Shipped:
+
+  * `DepositRecord` widened with `depositTime : Nat` (the dwell-time
+    anchor), sourced from `l2LogIndex` at deposit time in
+    `applyActionToBridgeState` and threaded through the full CBE
+    codec, the EI.6 encoder-injectivity ladder, the
+    `ExtendedState.CanonicalBounds` fault-proof commit bounds, and
+    the bridge accounting reconstruction lemmas.
+  * `LegalKernel/Bridge/RefundOnExit.lean` — the refund mechanism:
+    - `refundAmount fee elapsed window = fee * (window − elapsed) /
+      window`, the integer time-decay, with its full theory:
+      `refundAmount_le_fee` (**bounded by fee** — "cannot reclaim
+      more than they paid in"), `refundAmount_eq_fee_of_elapsed_zero`
+      (full refund at deposit), `refundAmount_zero_of_elapsed_ge_window`
+      (fully amortised past `T`), `refundAmount_zero_window` /
+      `refundAmount_zero_fee` (degenerate cases),
+      `refundAmount_antitone_in_elapsed` (monotone decay), and
+      `refundAmount_monotone_in_fee`.
+    - `refundForDeposit rec now window` reads `(poolAmount,
+      depositTime)` off a recorded `DepositRecord`;
+      `refundForDeposit_le_poolAmount` is the headline economic
+      bound (the refund never exceeds the recorded pool fee).
+    - `refundTransition` realises the refund as the
+      **`gasPoolActor → user` `Laws.transfer`** the plan specifies,
+      inheriting conservation (`refundTransition_conserves`),
+      locality (`LocalTo [rec.resource]`), and freeze-preservation;
+      `refund_credits_recipient` / `refund_debits_pool` pin the
+      per-actor deltas.
+    - `applyRefund` looks the deposit up in the bridge ledger and
+      applies the transfer to an `ExtendedState`'s base, with
+      `applyRefund_conserves` (**conservation, unconditional, at
+      every resource**) and `applyRefund_pool_balance_lower_bound`
+      (the pool never loses more than the recorded `poolAmount`).
+  * Every theorem depends only on the canonical
+    `{propext, Classical.choice, Quot.sound}` axioms (the pure
+    arithmetic uses just `propext`); no kernel TCB delta; no new
+    `opaque`s.  Test suite `bridge-refund-on-exit` (36 cases:
+    value-level decay / boundedness / conservation sweeps over a
+    real `ExtendedState`, plus term-level API stability for every
+    headline theorem).
+
+**Follow-up (out of scope for the mechanism WU):** the runnable
+`Action.claimRefund` constructor + its CBE encoding + step-VM arm
++ cross-stack mirrors; the admission-time authorisation that the
+claimant was the original depositor; and the once-per-deposit
+replay guard (a `refunded` set, mirroring `depositWithFee`'s
+`consumed` replay protection).  These are the *integration* layer
+on top of the proven mechanism — every theorem above holds for an
+arbitrary `recipient`, so conservation and the fee bound are
+independent of how a deployment wires the claim.
+
 #### WU GP.9.2: Yield-bearing pool (Lido / Rocket Pool)
 
 L1 contract amendment: `_registerDepositWithFee`'s `poolAmount`

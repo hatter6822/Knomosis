@@ -48,7 +48,11 @@ Design notes:
     (GP.4.1) further splits the single `amount` field into the
     `(userAmount, poolAmount, budgetGrant)` triple; the pre-widening
     two-field shape survives as `LegacyDepositRecord` with a lossless
-    `DepositRecord.fromLegacy` lift.
+    `DepositRecord.fromLegacy` lift.  The GP.9.1 refund-on-exit
+    widening adds a fifth field `depositTime` — the L2 log index at
+    which the deposit was applied — so the refund-on-exit mechanism
+    (`LegalKernel/Bridge/RefundOnExit.lean`) can compute the
+    elapsed-dwell decay `now - depositTime` from per-deposit state.
 
   * `BridgeState` is a structural record; deployments construct
     `BridgeState.empty` at genesis and let the kernel-side machinery
@@ -146,11 +150,14 @@ abbrev WithdrawalId : Type := Nat
 
 /-- Per-deposit metadata recorded in `BridgeState.consumed`: which
     resource was credited, the amount credited to the user-facing
-    recipient, the amount credited to the gas-pool actor, and the
+    recipient, the amount credited to the gas-pool actor, the
     action-budget grant credited to the recipient at the admission
-    layer.  Required by the bridge accounting theorems (§7.6 / §15E)
-    so the per-resource `totalUserDeposited` / `totalPoolDeposited`
-    folds can sum each per-deposit quantity at a fixed resource.
+    layer, and the L2 log index at which the deposit was applied.
+    Required by the bridge accounting theorems (§7.6 / §15E) so the
+    per-resource `totalUserDeposited` / `totalPoolDeposited` folds can
+    sum each per-deposit quantity at a fixed resource, and by the
+    GP.9.1 refund-on-exit mechanism so the time-decayed refund can be
+    computed from the recorded `(poolAmount, depositTime)` pair.
 
     The `(userAmount, poolAmount)` split separates the two L2-credit
     destinations of a single L1 deposit:
@@ -169,9 +176,11 @@ abbrev WithdrawalId : Type := Nat
     Workstream-GP widening (GP.4.1) further splits the single
     `amount` field into the `(userAmount, poolAmount, budgetGrant)`
     triple so the unified-gas-pool accounting split (GP.4.2) can sum
-    the user-credit and pool-credit terms independently.  A fee-less
-    `Action.deposit` round-trips to / from the pre-widening two-field
-    shape via `LegacyDepositRecord` (see below). -/
+    the user-credit and pool-credit terms independently.  The GP.9.1
+    refund-on-exit widening adds `depositTime` (the dwell-time
+    anchor).  A fee-less `Action.deposit` round-trips to / from the
+    pre-widening two-field shape via `LegacyDepositRecord` (see
+    below). -/
 structure DepositRecord where
   /-- The resource that was credited. -/
   resource    : ResourceId
@@ -189,6 +198,14 @@ structure DepositRecord where
       from the L1 exchange rate (which is L1 contract state, not L2
       state). -/
   budgetGrant : Nat
+  /-- The L2 log index at which this deposit was applied (GP.9.1
+      refund-on-exit).  Sourced from the `l2LogIndex` threaded into
+      `applyActionToBridgeState`, this is the monotonic clock anchor
+      against which a later refund's dwell time is measured: a refund
+      claimed at log index `now` decays by `(now - depositTime) / T`
+      over an amortisation window `T`.  Zero for legacy / fee-less
+      `Action.deposit` events, which carry no pool fee to refund. -/
+  depositTime : Nat
   deriving Repr, DecidableEq
 
 /-! ### Legacy deposit-record compatibility
@@ -212,13 +229,15 @@ structure LegacyDepositRecord where
 
 /-- Lift a legacy two-field deposit record into the current
     `DepositRecord` form: the credited amount becomes the user-facing
-    `userAmount`, with no pool credit and no budget grant (matching
-    the semantics of a fee-less `Action.deposit`). -/
+    `userAmount`, with no pool credit, no budget grant, and a zero
+    dwell-time anchor (matching the semantics of a fee-less
+    `Action.deposit`, which carries no pool fee to refund). -/
 @[inline] def DepositRecord.fromLegacy (lr : LegacyDepositRecord) : DepositRecord where
   resource    := lr.resource
   userAmount  := lr.amount
   poolAmount  := 0
   budgetGrant := 0
+  depositTime := 0
 
 /-- Project a `DepositRecord` back onto the legacy two-field shape,
     discarding the pool credit and budget grant.  Left inverse of
@@ -236,20 +255,22 @@ theorem DepositRecord.toLegacy_fromLegacy (lr : LegacyDepositRecord) :
   | mk resource amount => rfl
 
 /-- Reverse round-trip on the legacy subspace: a `DepositRecord` with
-    no pool credit and no budget grant — i.e. one that could have come
-    from a fee-less `Action.deposit` — is recovered exactly by
-    projecting to its legacy form and lifting back.  Together with
-    `toLegacy_fromLegacy` this exhibits `LegacyDepositRecord` as
-    precisely the `poolAmount = budgetGrant = 0` subspace of
+    no pool credit, no budget grant, and a zero dwell-time anchor —
+    i.e. one that could have come from a fee-less `Action.deposit` —
+    is recovered exactly by projecting to its legacy form and lifting
+    back.  Together with `toLegacy_fromLegacy` this exhibits
+    `LegacyDepositRecord` as precisely the
+    `poolAmount = budgetGrant = depositTime = 0` subspace of
     `DepositRecord`. -/
 theorem DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget
     (rec : DepositRecord) (h_pool : rec.poolAmount = 0)
-    (h_budget : rec.budgetGrant = 0) :
+    (h_budget : rec.budgetGrant = 0) (h_time : rec.depositTime = 0) :
     DepositRecord.fromLegacy rec.toLegacy = rec := by
   cases rec with
-  | mk resource userAmount poolAmount budgetGrant =>
+  | mk resource userAmount poolAmount budgetGrant depositTime =>
     subst h_pool
     subst h_budget
+    subst h_time
     rfl
 
 /-! ## PendingWithdrawal -/

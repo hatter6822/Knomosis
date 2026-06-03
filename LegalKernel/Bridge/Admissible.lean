@@ -162,16 +162,27 @@ and the counter is bumped. -/
     matching the deposit-accounting invariant that `consumed` tracks
     "the L2 supply expansion attributable to this L1 event".  A
     fee-less `.deposit` records `userAmount := amount` with
-    `poolAmount = budgetGrant = 0`. -/
+    `poolAmount = budgetGrant = 0`.
+
+    GP.9.1 closure: both deposit arms stamp `depositTime := l2LogIndex`
+    — the L2 log index at which the deposit is applied — so the
+    refund-on-exit mechanism (`Bridge/RefundOnExit.lean`) can measure a
+    later refund's dwell time `now - depositTime` against per-deposit
+    state.  A fee-less `.deposit` carries no pool fee, so its
+    `depositTime` is recorded for shape uniformity but is never
+    consulted (a zero `poolAmount` yields a zero refund regardless of
+    elapsed time). -/
 def applyActionToBridgeState (bs : BridgeState) (action : Action)
     (l2LogIndex : Nat) : BridgeState :=
   match action with
   | .deposit r _recipient amount d =>
     bs.markConsumed d ({ resource := r, userAmount := amount,
-                         poolAmount := 0, budgetGrant := 0 })
+                         poolAmount := 0, budgetGrant := 0,
+                         depositTime := l2LogIndex })
   | .depositWithFee r _recipient _poolActor userAmount poolAmount budgetGrant d =>
     bs.markConsumed d ({ resource := r, userAmount := userAmount,
-                         poolAmount := poolAmount, budgetGrant := budgetGrant })
+                         poolAmount := poolAmount, budgetGrant := budgetGrant,
+                         depositTime := l2LogIndex })
   | .withdraw r _sender amount rcp =>
     bs.appendWithdrawal
       { resource    := r
@@ -575,11 +586,13 @@ theorem deposit_marks_consumed
   show (applyActionToBridgeState es.bridge st.action idx).consumed.contains d = true
   rw [heq]
   show (es.bridge.markConsumed d ({ resource := r, userAmount := amount,
-                                    poolAmount := 0, budgetGrant := 0 })).consumed.contains d
+                                    poolAmount := 0, budgetGrant := 0,
+                                    depositTime := idx })).consumed.contains d
        = true
   unfold BridgeState.markConsumed
   show (es.bridge.consumed.insert d ({ resource := r, userAmount := amount,
-                                       poolAmount := 0, budgetGrant := 0 })).contains d = true
+                                       poolAmount := 0, budgetGrant := 0,
+                                       depositTime := idx })).contains d = true
   exact Std.TreeMap.contains_insert_self
 
 /-- §7.0a / audit-1: a successful deposit-bridge-admissible

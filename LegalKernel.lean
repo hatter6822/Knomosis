@@ -250,6 +250,11 @@ import LegalKernel.Bridge.GasPoolPolicy
 -- GP.7.2 gas-pool authority discipline, `gasPoolActor`'s ETH-leg
 -- balance cannot have decreased by more than `n × maxDrainPerActionEth`.
 import LegalKernel.Bridge.PoolDrainBound
+-- Workstream GP.9.1 — refund-on-exit: a withdrawing user reclaims a
+-- time-decayed portion of the gas-pool fee they paid on deposit,
+-- realised as a conservative, fee-bounded `gasPoolActor → user`
+-- transfer over the `DepositRecord.depositTime` dwell-time anchor.
+import LegalKernel.Bridge.RefundOnExit
 import LegalKernel.Bridge.WithdrawalRoot
 import LegalKernel.Bridge.WithdrawalProof
 import LegalKernel.Bridge.Finalisation

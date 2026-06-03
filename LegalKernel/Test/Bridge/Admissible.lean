@@ -214,7 +214,8 @@ def tests : List TestCase :=
         -- (e.g., from a prior `.depositWithFee` admission).
         let bs : BridgeState :=
           BridgeState.empty.markConsumed 42
-            ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
+            ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0,
+               depositTime := 0 })
         -- `BridgeAdmissibleWith` conjunct 6b says: for any
         -- `.depositWithFee` action with depositId `d`,
         -- `consumed.contains d = false`.  When the pre-state's

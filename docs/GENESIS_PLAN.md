@@ -5958,6 +5958,7 @@ structure DepositRecord where
   userAmount  : Amount
   poolAmount  : Amount
   budgetGrant : Nat
+  depositTime : Nat              -- GP.9.1 refund dwell-time anchor
 
 structure PendingWithdrawal where
   resource    : ResourceId
@@ -5974,9 +5975,13 @@ amendment widened `consumed`'s value type from `Unit` to
 `totalDeposited`.  The Workstream-GP widening (GP.4.1, §15E.10)
 further split `DepositRecord`'s single `amount` field into the
 `(userAmount, poolAmount, budgetGrant)` triple so the deposit-fee
-split is recoverable from L2 state alone; the pre-widening two-field
-shape survives as `LegacyDepositRecord` with a lossless lift.  See
-`LegalKernel/Bridge/State.lean`.
+split is recoverable from L2 state alone; the GP.9.1 refund-on-exit
+widening appends `depositTime` (the L2 log index at which the
+deposit was applied), the dwell-time anchor against which a
+refund's `(now − depositTime) / T` time-decay is computed.  The
+pre-widening two-field shape survives as `LegacyDepositRecord` with
+a lossless lift.  See `LegalKernel/Bridge/State.lean` and
+`LegalKernel/Bridge/RefundOnExit.lean`.
 
 **Accounting equation.**  For every reachable bridge state, the
 following identity holds across reachable transitions
@@ -6763,6 +6768,23 @@ state), leaving the GP.4.2 split into per-leg `totalUserDeposited` /
 widening carries through the CBE codec, the encoder-injectivity
 ladder (EI.6 / EI.7), and the state-commitment canonical-bounds
 bundle; it introduces no new opaque trust hook and no new axiom.
+
+The GP.9.1 refund-on-exit mechanism appends one further field,
+`depositTime : Nat` — the L2 log index at which the deposit was
+applied (sourced from the `l2LogIndex` threaded into
+`applyActionToBridgeState`).  It is the dwell-time anchor a refund
+measures against: a refund claimed at log index `now` over an
+amortisation window `T` decays as `poolAmount × max(0, 1 − (now −
+depositTime) / T)`, realised as a conservative, fee-bounded
+`gasPoolActor → user` `Laws.transfer`
+(`LegalKernel/Bridge/RefundOnExit.lean`; `refundAmount_le_fee`,
+`refundForDeposit_le_poolAmount`, `applyRefund_conserves`).  The
+extra segment threads through the same CBE codec, EI.6/EI.7
+injectivity ladder, and canonical-bounds bundle as the GP.4.1
+fields, again with no new opaque and no new axiom.  A fee-less
+`Action.deposit` records `depositTime` for shape uniformity but
+carries no pool fee to refund, so the field is never consulted for
+it (`poolAmount = 0` ⇒ zero refund).
 
 ### 15E.11 Accounting-equation split (GP.4.2)
 

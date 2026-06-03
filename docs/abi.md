@@ -2487,8 +2487,11 @@ Where:
     `[(WithdrawalId, PendingWithdrawal.encodeAsBytes)]`.
   * Each `DepositRecord` encodes as
     `CBE-uint(resource.toNat) ++ CBE-uint(userAmount) ++
-     CBE-uint(poolAmount) ++ CBE-uint(budgetGrant)` (the GP.4.1
-     four-field widening; the pre-widening form was the two-segment
+     CBE-uint(poolAmount) ++ CBE-uint(budgetGrant) ++
+     CBE-uint(depositTime)` (the GP.4.1 four-field widening plus the
+     GP.9.1 `depositTime` refund-on-exit dwell-time anchor; the
+     pre-widening forms were the four-segment GP.4.1 record and,
+     before that, the two-segment
      `CBE-uint(resource.toNat) ++ CBE-uint(amount)`).
   * Each `PendingWithdrawal` encodes as
     `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++

@@ -56,13 +56,13 @@ def tests : List TestCase :=
     }
   , { name := "BridgeState.markConsumed inserts the deposit record"
     , body := do
-        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
+        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
         assertEq (expected := true) (actual := bs.isConsumed 42) "consumed"
         assertEq (expected := false) (actual := bs.isConsumed 43) "not consumed"
     }
   , { name := "BridgeState.markConsumed leaves pending unchanged"
     , body := do
-        let bs := BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
+        let bs := BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
         assertEq (expected := (0 : Nat)) (actual := bs.pending.size) "pending empty"
         assertEq (expected := (0 : Nat)) (actual := bs.nextWdId) "nextWdId 0"
     }
@@ -76,7 +76,7 @@ def tests : List TestCase :=
     }
   , { name := "BridgeState.appendWithdrawal preserves consumed"
     , body := do
-        let bs0 := BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
+        let bs0 := BridgeState.empty.markConsumed 1 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
         let wd : PendingWithdrawal :=
           { resource := 1, recipient := EthAddress.zero, amount := 50, l2LogIndex := 0 }
         let bs1 := bs0.appendWithdrawal wd
@@ -102,15 +102,18 @@ def tests : List TestCase :=
     }
   , { name := "DepositRecord equality is decidable"
     , body := do
-        let r1 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
-        let r2 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
-        let r3 : DepositRecord := { resource := 2, userAmount := 100, poolAmount := 0, budgetGrant := 0 }
-        let r4 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 5, budgetGrant := 0 }
-        let r5 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 7 }
+        let r1 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 }
+        let r2 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 }
+        let r3 : DepositRecord := { resource := 2, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 }
+        let r4 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 5, budgetGrant := 0, depositTime := 0 }
+        let r5 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 7, depositTime := 0 }
+        let r6 : DepositRecord := { resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 9 }
         assert (r1 == r2) "equal records"
         assert (! (r1 == r3)) "distinct resources"
         assert (! (r1 == r4)) "distinct poolAmount"
         assert (! (r1 == r5)) "distinct budgetGrant"
+        -- GP.9.1: depositTime participates in structural equality.
+        assert (! (r1 == r6)) "distinct depositTime"
     }
   , { name := "PendingWithdrawal equality is decidable"
     , body := do
@@ -183,7 +186,7 @@ def tests : List TestCase :=
   -- to a different byte stream than empty.
   , { name := "Non-empty BridgeState distinguishable from empty"
     , body := do
-        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })
+        let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
         let b1 := Encodable.encode (T := BridgeState) bs
         let b2 := Encodable.encode (T := BridgeState) BridgeState.empty
         if b1 == b2 then
@@ -195,7 +198,7 @@ def tests : List TestCase :=
   , { name := "markConsumed then isConsumed: insert-then-contains semantics"
     , body := do
         let bs := BridgeState.empty.markConsumed 7
-          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0 })
+          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0, depositTime := 0 })
         assertEq (expected := true) (actual := bs.isConsumed 7) "freshly consumed"
         -- A different deposit-id is NOT consumed.
         assertEq (expected := false) (actual := bs.isConsumed 8) "absent"
@@ -209,6 +212,7 @@ def tests : List TestCase :=
         assertEq (expected := (77 : Amount)) (actual := dr.userAmount) "amount → userAmount"
         assertEq (expected := (0 : Amount)) (actual := dr.poolAmount) "poolAmount zeroed"
         assertEq (expected := (0 : Nat)) (actual := dr.budgetGrant) "budgetGrant zeroed"
+        assertEq (expected := (0 : Nat)) (actual := dr.depositTime) "depositTime zeroed"
     }
   , { name := "DepositRecord.toLegacy_fromLegacy: round-trip is the identity (value-level)"
     , body := do
@@ -228,14 +232,14 @@ def tests : List TestCase :=
         -- A record in the legacy subspace (poolAmount = budgetGrant = 0)
         -- round-trips through toLegacy ∘ fromLegacy.
         let dr : DepositRecord :=
-          { resource := 4, userAmount := 88, poolAmount := 0, budgetGrant := 0 }
+          { resource := 4, userAmount := 88, poolAmount := 0, budgetGrant := 0, depositTime := 0 }
         assert (decide (DepositRecord.fromLegacy dr.toLegacy = dr))
           "fromLegacy ∘ toLegacy = id on the legacy subspace"
     }
   , { name := "DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget: term-level API (GP.4.1)"
     , body := do
         let _t : ∀ (rec : DepositRecord),
-                   rec.poolAmount = 0 → rec.budgetGrant = 0 →
+                   rec.poolAmount = 0 → rec.budgetGrant = 0 → rec.depositTime = 0 →
                    DepositRecord.fromLegacy rec.toLegacy = rec :=
           DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget
         pure ()
@@ -249,7 +253,7 @@ def tests : List TestCase :=
         let bs : BridgeState :=
           { consumed := (∅ : Std.TreeMap DepositId DepositRecord compare).insert
               (1 : DepositId)
-              { resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5 }
+              { resource := 1, userAmount := 30, poolAmount := 20, budgetGrant := 5, depositTime := 8 }
             pending  := ∅
             nextWdId := 0 }
         match Bridge.BridgeState.decode (Bridge.BridgeState.encode bs) with
@@ -262,6 +266,7 @@ def tests : List TestCase :=
                 assertEq (expected := (30 : Amount)) (actual := rec.userAmount) "userAmount"
                 assertEq (expected := (20 : Amount)) (actual := rec.poolAmount) "poolAmount"
                 assertEq (expected := (5 : Nat)) (actual := rec.budgetGrant) "budgetGrant"
+                assertEq (expected := (8 : Nat)) (actual := rec.depositTime) "depositTime"
             | none =>
                 throw <| IO.userError "BridgeState round-trip: consumed record missing after decode"
         | .error e =>

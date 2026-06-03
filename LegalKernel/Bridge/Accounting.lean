@@ -816,7 +816,8 @@ theorem applyActionToBridgeState_deposit
     (amount : Amount) (d : DepositId) (idx : Nat) :
     applyActionToBridgeState bs (.deposit r recipient amount d) idx =
     bs.markConsumed d ({ resource := r, userAmount := amount,
-                         poolAmount := 0, budgetGrant := 0 }) := by
+                         poolAmount := 0, budgetGrant := 0,
+                         depositTime := idx }) := by
   unfold applyActionToBridgeState
   rfl
 
@@ -830,7 +831,8 @@ theorem applyActionToBridgeState_depositWithFee
     applyActionToBridgeState bs
       (.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant d) idx =
     bs.markConsumed d ({ resource := r, userAmount := userAmount,
-                         poolAmount := poolAmount, budgetGrant := budgetGrant }) := by
+                         poolAmount := poolAmount, budgetGrant := budgetGrant,
+                         depositTime := idx }) := by
   unfold applyActionToBridgeState
   rfl
 

@@ -222,7 +222,9 @@ knomosis/
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6) + incentive amendment
 │   ├── LocalPolicy/           -- Workstream LP classification typeclasses
 │   ├── Bridge/                -- Workstreams A–D: crypto adaptors, identity,
-│   │                             bridge laws, withdrawal proofs
+│   │                             bridge laws, withdrawal proofs; Workstream GP
+│   │                             gas-pool governance (GasPoolPolicy, PoolDrainBound)
+│   │                             + GP.9.1 refund-on-exit (RefundOnExit)
 │   ├── FaultProof/            -- Workstream H: state-commitment scheme,
 │   │                             kernel-step type, bisection-game state
 │   │                             machine, convergence / honesty / settlement
@@ -763,6 +765,7 @@ Selected headline theorems by tier:
 | GP.7.1 | Reserved gas-pool actors are pairwise distinct; genesis `nextActorId` advances to 3 so `assign` never issues a reserved slot (Rust adaptor mirrors the genesis) | `gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`, `AddressBook.addressBook_empty_nextActorId`, `empty_assign_id_avoids_reserved` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
 | GP.7.2 | Gas-pool outflow is a capped sequencer-only `transfer` of the pool's OWN funds (`sender = gasPoolActor`); the policy permits EXACTLY that set, is silent off the two gas legs, and the LP.7 meta-action exemption + the sender-debit drain vector are closed by a complementary `AuthorityPolicy` | `gasPoolPolicy_denies_all_non_transfer`, `gasPoolPolicy_permits_transfer_iff`, `gasPoolPolicy_admission_permits_meta_actions`, `gasPoolAuthorityPolicy_rejects_meta`, `gasPoolAuthorityPolicy_rejects_non_pool_sender`, `gasPoolAuthorityPolicy_intersect_rejects_meta` | `Bridge/GasPoolPolicy.lean` |
 | GP.7.3 | Per-epoch pool drain is bounded **per-resource**: across any contiguous trace of `n` admitted SignedActions respecting the gas-pool discipline, `gasPoolActor`'s leg-`rLeg` balance cannot have decreased by more than `n × legCap mEth mBold rLeg` (inductive promotion of the GP.7.2 per-action cap; rests on `gasPoolAuthorityPolicy`, the sender-blind `LocalPolicy` being insufficient; the non-pool obligation is discharged exhaustively over every `Action`; the literal executable fold ships as `applyTrace`; the per-step bound lifts onto the budget-gated runtime entry) | `pool_drain_bounded_by_action_count_per_resource`, `pool_drain_bounded_by_action_count{,_bold}`, `pool_balance_lower_bound_via_trace`, `pool_nondecreasing_of_does_not_debit`, `per_resource_pool_independence`, `applyTrace_drain_bounded_per_resource`, `pool_signed_step_drain_le_budget` | `Bridge/PoolDrainBound.lean` |
+| GP.9.1 | Refund-on-exit is a conservative, fee-bounded `gasPoolActor → user` transfer of a time-decayed `poolAmount × max(0, 1 − (now − depositTime)/T)`; the user can never reclaim more than they paid in, and total supply is invariant | `refundAmount_le_fee`, `refundForDeposit_le_poolAmount`, `refundTransition_conserves`, `applyRefund_conserves`, `applyRefund_pool_balance_lower_bound` | `Bridge/RefundOnExit.lean` |
 | E-C   | Deposit / withdraw replay impossible  | `deposit_replay_blocked_by_consumed`, `withdraw_bumps_nextWdId` | `Bridge/Admissible.lean` |
 | E-D   | SMT verifier completeness + soundness | `verifyProof_complete`, `verifyProof_sound` | `Bridge/WithdrawalRoot.lean` |
 | E-D   | Finalisation is monotonic in L1 block | `isFinalised_monotonic_in_currentBlock` | `Bridge/Finalisation.lean`        |
@@ -961,7 +964,17 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 753 tests across 141 suites (the GP.7.4 genesis
+**Test count.**  ~2 789 tests across 142 suites (the GP.9.1
+refund-on-exit mechanism adds the `bridge-refund-on-exit` suite, 36
+cases — value-level `refundAmount` decay / boundedness / floor checks,
+the `refundForDeposit` per-deposit computation off a recorded
+`DepositRecord`, the `gasPoolActor → user` `applyRefund` transfer over a
+real `ExtendedState` (pool debited, user credited, supply conserved,
+unknown / fully-amortised deposit a no-op, pool-loss ≤ `poolAmount`),
+plus term-level API stability for every headline theorem — and widens
+`encoding-injectivity` 78 → 84 and `bridge-state` 25 → 26 with the
+`DepositRecord.depositTime` codec / injectivity / equality coverage.
+Earlier, the GP.7.4 genesis
 ratification adds the `deployments-gas-pool-example` suite, 17 cases —
 the end-to-end ETH+BOLD `depositWithFee` → user+pool credit → L2
 budget-grant → dual capped sequencer-claim worked sequence run through
@@ -3557,6 +3570,45 @@ contributions surviving in current code:
     axioms (the pure policy theorems use only `propext`; the state-half +
     example theorems use `{propext, Classical.choice, Quot.sound}` via
     `Std.TreeMap` / `ExtendedState`).
+  * **GP.9.1** Refund-on-exit — Lean-side mechanism
+    (`LegalKernel/Bridge/RefundOnExit.lean`).  A withdrawing user
+    reclaims a *time-decayed* portion of the gas-pool fee they paid on
+    deposit.  Shipped: (a) the `DepositRecord` widening with
+    `depositTime : Nat` — the L2 log index at which the deposit was
+    applied, sourced from `l2LogIndex` in `applyActionToBridgeState` and
+    threaded through the full CBE codec, the EI.6 encoder-injectivity
+    ladder, the `ExtendedState.CanonicalBounds` fault-proof commit
+    bounds, and the bridge-accounting reconstruction lemmas (no
+    cross-stack Rust/Solidity change — the `DepositRecord` byte layout is
+    Lean-internal, and `commitBridgeState` is hashed to 32 bytes); (b)
+    `refundAmount fee elapsed window = fee * (window − elapsed) / window`
+    + its full theory — `refundAmount_le_fee` (**bounded by the fee** —
+    the user cannot reclaim more than they paid),
+    `refundAmount_eq_fee_of_elapsed_zero` (full refund at deposit),
+    `refundAmount_zero_of_elapsed_ge_window` (fully amortised past the
+    window), `refundAmount_zero_window` / `_zero_fee` (degenerate cases),
+    `refundAmount_antitone_in_elapsed` (monotone decay), and
+    `refundAmount_monotone_in_fee`; (c) `refundForDeposit` reading
+    `(poolAmount, depositTime)` off a recorded `DepositRecord`, with the
+    headline `refundForDeposit_le_poolAmount`; (d) `refundTransition`
+    realising the refund as the **`gasPoolActor → user` `Laws.transfer`**
+    the plan specifies, inheriting `refundTransition_conserves` /
+    `IsConservative` / `LocalTo [rec.resource]` / freeze-preservation,
+    with `refund_credits_recipient` / `refund_debits_pool` pinning the
+    per-actor deltas; and (e) `applyRefund` looking the deposit up in the
+    bridge ledger and applying the transfer to an `ExtendedState`'s base,
+    with `applyRefund_conserves` (**conservation, unconditional, at every
+    resource**) and `applyRefund_pool_balance_lower_bound` (the pool never
+    loses more than the recorded `poolAmount`).  Every theorem depends
+    only on the canonical `{propext, Classical.choice, Quot.sound}`
+    axioms (the pure arithmetic uses only `propext`); no kernel TCB
+    delta; no new `opaque`s.  Test suite `bridge-refund-on-exit` (36
+    cases).  The runnable `Action.claimRefund` constructor + admission
+    authorisation (claimant = original depositor) + once-per-deposit
+    replay guard + cross-stack mirrors are the *integration* follow-up;
+    every theorem above holds for an arbitrary `recipient`, so
+    conservation and the fee bound are independent of how a deployment
+    wires the claim.
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the

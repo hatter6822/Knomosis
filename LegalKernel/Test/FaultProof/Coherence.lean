@@ -318,7 +318,8 @@ def tests : List TestCase :=
         -- Pre-state carrying one already-consumed deposit (non-empty bridge).
         let es0 := ExtendedState.empty
         let bridge0 := Bridge.BridgeState.empty.markConsumed 7
-          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0 })
+          ({ resource := 1, userAmount := 50, poolAmount := 0, budgetGrant := 0,
+             depositTime := 0 })
         let es : ExtendedState := { es0 with bridge := bridge0 }
         -- Apply a FRESH deposit (depositId 99) via the fault-proof
         -- reference kernel step.
