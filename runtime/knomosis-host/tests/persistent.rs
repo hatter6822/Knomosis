@@ -428,3 +428,66 @@ fn graceful_shutdown_with_open_persistent_connection() {
     // genuinely open across the stop.
     drop(stream);
 }
+
+/// Regression for the unbounded-channel OOM finding: the reader→writer
+/// hand-off is a BOUNDED channel sized to the per-connection in-flight
+/// bound, so a client that pipelines far MORE requests than that bound
+/// does not grow host memory without bound — the reader back-pressures
+/// (blocks on the bounded `send`) instead.
+///
+/// Setup: a small `max_conn_backlog` (4) sizes the channel; a gated
+/// kernel stalls the writer so the channel fills and the host reader
+/// back-pressures partway through the client's N=16 (>> 4) frames.  After
+/// the gate releases, ALL 16 still drain correctly, in order, with no
+/// deadlock and no loss.  A concurrent reader thread on the client is
+/// what a well-behaved pipelining client does (read while sending), so
+/// the client's own send never deadlocks against the host's
+/// back-pressure.
+#[test]
+fn persistent_bounded_channel_backpressures_without_deadlock() {
+    let caps = Caps::new(64, 64, 1024)
+        .with_max_signers(64)
+        .with_max_conn_backlog(4); // ⇒ reader→writer channel capacity 4
+    let state = Arc::new(RecordState::default());
+    let kernel = Box::new(RecordingKernel::new(Arc::clone(&state), true));
+    let (addr, stop, server) = spawn_persistent_server(Scheduler::Drr, caps, kernel);
+
+    let n: usize = 16; // >> the per-connection bound (4)
+    let mut send_stream = TcpStream::connect(addr).unwrap();
+    send_stream
+        .set_write_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut read_stream = send_stream.try_clone().unwrap();
+    read_stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+
+    // Concurrent reader (a well-behaved pipelining client reads while it
+    // sends, so its own send never deadlocks against host back-pressure).
+    let reader = thread::spawn(move || read_n_verdicts(&mut read_stream, n));
+
+    let mut buf = KNH2_PREAMBLE.to_vec();
+    for t in 0..n as u64 {
+        buf.extend_from_slice(&encode_hinted_frame(1, &tagged_payload(t)).unwrap());
+    }
+    send_stream.write_all(&buf).unwrap();
+    send_stream.flush().unwrap();
+    send_stream.shutdown(Shutdown::Write).unwrap();
+
+    // Let the host fill the bounded channel + back-pressure its reader
+    // (the gate stalls the writer), then release.
+    thread::sleep(Duration::from_millis(200));
+    release_gate(&state);
+
+    let verdicts = reader.join().unwrap();
+    assert_eq!(verdicts.len(), n, "every pipelined request got a response");
+    // Each is Ok (admitted) or Busy (queue full) — never lost, never a
+    // hang; the bounded channel converted memory growth into back-pressure.
+    for v in &verdicts {
+        assert!(
+            *v == Verdict::Ok.to_byte() || *v == Verdict::Busy.to_byte(),
+            "unexpected verdict byte {v}"
+        );
+    }
+    join_server(&stop, server);
+}

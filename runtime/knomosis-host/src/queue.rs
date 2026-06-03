@@ -414,6 +414,20 @@ impl FairQueue {
     pub fn stats(&self) -> DrrStats {
         self.inner.lock().unwrap_or_else(|p| p.into_inner()).stats()
     }
+
+    /// The per-connection in-flight bound (the Rung-1.5 `max_conn_backlog`
+    /// aggregate cap).  Used by the persistent-connection handler to size
+    /// its bounded reader→writer response channel so a client that stops
+    /// reading responses back-pressures the reader (bounded memory)
+    /// rather than letting the channel grow without bound.
+    #[must_use]
+    pub fn pipeline_capacity(&self) -> usize {
+        self.inner
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .caps()
+            .max_conn_backlog
+    }
 }
 
 /// A scheduler-agnostic producer handle (FQ.4a).
@@ -441,6 +455,21 @@ impl QueueHandle {
         match self {
             Self::Fifo(q) => q.try_submit(payload),
             Self::Fair(q) => q.try_submit(conn, signer, payload),
+        }
+    }
+
+    /// The per-connection in-flight bound for the persistent (pipelined)
+    /// connection mode: the FIFO global capacity (a single FIFO
+    /// connection can fill the whole queue), or the DRR per-connection
+    /// `max_conn_backlog`.  [`crate::listener::run_persistent`] sizes its
+    /// bounded reader→writer response channel to this so a client that
+    /// stops reading responses back-pressures the reader (bounded memory)
+    /// rather than letting the channel grow without bound.
+    #[must_use]
+    pub fn pipeline_capacity(&self) -> usize {
+        match self {
+            Self::Fifo(q) => q.capacity(),
+            Self::Fair(q) => q.pipeline_capacity(),
         }
     }
 }

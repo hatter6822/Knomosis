@@ -327,9 +327,30 @@ fn spawn_standalone(
     cfg: &CliConfig,
     listener: &StandaloneListener,
 ) -> Result<(Endpoint, TransportKind, Option<StandaloneServer>), BenchmarkRunError> {
-    let queue_depth = cfg
-        .queue_depth
-        .unwrap_or(knomosis_host::queue::DEFAULT_MAX_QUEUE_DEPTH);
+    // Size the standalone host's queue.  In persistent (pipelined) mode
+    // the offered in-flight load is up to `worker_count × pipeline_batch`
+    // — far above the default 256 — and the runner treats a `Busy`
+    // response as a fatal error (it benchmarks a known-Ok kernel), so a
+    // too-small queue would abort the run.  When the operator hasn't
+    // pinned `--queue-depth`, default it to the offered load (clamped to
+    // the host's hard ceiling) so a throughput run is accepted, not
+    // rejected.  One-shot keeps the historical 256 default (≤1 in-flight
+    // per worker, so 64 workers stay well under it).
+    let queue_depth = cfg.queue_depth.unwrap_or_else(|| {
+        if cfg.persistent {
+            // Clamp the offered load into [default, hard ceiling].  The
+            // bounds are constants with default <= ceiling, so `clamp`
+            // never panics.
+            cfg.worker_count
+                .saturating_mul(knomosis_bench::runner::DEFAULT_PIPELINE_BATCH)
+                .clamp(
+                    knomosis_host::queue::DEFAULT_MAX_QUEUE_DEPTH,
+                    knomosis_host::queue::HARD_MAX_QUEUE_DEPTH,
+                )
+        } else {
+            knomosis_host::queue::DEFAULT_MAX_QUEUE_DEPTH
+        }
+    });
     let max_frame_size = cfg
         .max_frame_size
         .unwrap_or(knomosis_host::frame::DEFAULT_MAX_FRAME_SIZE);

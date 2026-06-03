@@ -126,11 +126,15 @@ diverge from FIFO.  What ships:
     `run_persistent`): the reader negotiates once, then loops
     `ConnReader::read_next` (previously this state machine was built +
     tested but unused by the one-shot server).  A dedicated writer thread
-    delivers responses in submission order; the per-connection in-flight
-    depth is bounded by `--max-conn-backlog` (the Rung-1.5 cap doubles as
-    the pipelining-depth bound).  TLS stays one-shot (the rustls session
-    is single-owner); a one-shot client is a degenerate subset and works
-    unchanged.
+    delivers responses in submission order; the reader→writer hand-off is
+    a BOUNDED `sync_channel` sized to the queue's per-connection in-flight
+    capacity (`QueueHandle::pipeline_capacity` — `--max-conn-backlog` on
+    DRR, `--max-queue-depth` on FIFO), so a client that pipelines frames
+    but never reads its responses back-pressures the reader (OS recv-buffer
+    + TCP flow control bound memory) instead of growing the channel without
+    bound — an OOM DoS an unbounded channel would have allowed.  TLS stays
+    one-shot (the rustls session is single-owner); a one-shot client is a
+    degenerate subset and works unchanged.
   * **Fair scheduling under contention is exercised through the wire**
     (`tests/persistent.rs`): a deterministic, gated-kernel integration
     test stages a flood + honest contention over REAL TCP and asserts that

@@ -395,13 +395,19 @@ enum PendingResponse {
 ///     cross-connection latency benefit — an honest connection not stuck
 ///     behind a flooder — is real).
 ///
-/// ## Back-pressure
+/// ## Back-pressure (bounded memory)
 ///
-/// The per-connection in-flight count is bounded by `--max-conn-backlog`:
-/// the queue returns `Busy` (written in order) once a connection's
-/// aggregate backlog hits the cap, so the ordered channel never grows
-/// without bound — the Rung-1.5 aggregate cap doubles as the
-/// pipelining-depth bound.
+/// The reader→writer hand-off is a BOUNDED `sync_channel` sized to the
+/// queue's per-connection in-flight bound ([`QueueHandle::pipeline_capacity`]
+/// — `max_conn_backlog` on the DRR path, the global queue depth on the
+/// FIFO path).  When it fills, the reader BLOCKS on `send`, so it stops
+/// reading frames; the OS receive buffer then fills and TCP flow control
+/// stops the client from sending more.  This is the load-bearing memory
+/// bound: without it, a client that pipelines frames but never reads its
+/// responses would make the writer block on `write_all` (its recv buffer
+/// full) while the reader kept pushing `PendingResponse`s, growing the
+/// channel without bound (an OOM DoS).  The bounded channel converts that
+/// into back-pressure instead.
 ///
 /// ## Termination
 ///
@@ -427,10 +433,16 @@ where
     R: Read,
     W: Write + Send + 'static,
 {
-    // Ordered hand-off reader → writer.  Bounded in practice by
-    // `--max-conn-backlog` (the queue rejects beyond it with `Busy`,
-    // pushed as `Immediate`), so an unbounded channel is safe.
-    let (resp_tx, resp_rx) = std::sync::mpsc::channel::<PendingResponse>();
+    // Ordered hand-off reader → writer, BOUNDED to the queue's
+    // per-connection in-flight capacity.  This is the memory bound: when
+    // the channel fills (a client that stops reading its responses, so
+    // the writer blocks on `write_all`), the reader BLOCKS on `send` and
+    // therefore stops reading frames — OS receive-buffer fill + TCP flow
+    // control then bound total memory.  An unbounded channel here would
+    // be an OOM DoS (the reader would keep pushing while the writer
+    // stalled).  `.max(1)` avoids a degenerate rendezvous channel.
+    let buffer = handle.pipeline_capacity().max(1);
+    let (resp_tx, resp_rx) = std::sync::mpsc::sync_channel::<PendingResponse>(buffer);
     let kernel_reply_timeout = config.kernel_reply_timeout;
     // Shared "connection is dead" flag so a writer-side I/O error stops
     // the reader promptly (it stops submitting otherwise-discarded work).

@@ -720,6 +720,16 @@ impl DrrState {
         }
     }
 
+    /// The (clamped) capacity caps this scheduler enforces.  Exposed so
+    /// the persistent-connection handler can size its bounded
+    /// reader→writer response channel to the per-connection in-flight
+    /// bound (`max_conn_backlog`).  `Caps` is `Copy`, so this is a cheap
+    /// snapshot.
+    #[must_use]
+    pub fn caps(&self) -> Caps {
+        self.caps
+    }
+
     /// Enqueue `req` under `(conn, signer)`.
     ///
     /// Enforces, in order, the `global` (total depth) cap, then routes

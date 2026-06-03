@@ -1213,13 +1213,17 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 918 tests across the 11 workspace
-crates (the persistent + pipelined connection mode adds ~16 tests — the
+**Rust-side test count.**  ~1 919 tests across the 11 workspace
+crates (the persistent + pipelined connection mode adds ~17 tests — the
 opt-in `--persistent-connections` host flag + `run_persistent`
-reader/writer pipelined handler wiring `ConnReader`'s persistent path;
-`tests/persistent.rs` (6 e2e cases over REAL TCP: v2 + v1 pipelining,
+reader/writer pipelined handler wiring `ConnReader`'s persistent path,
+with a BOUNDED reader→writer `sync_channel` (sized to
+`QueueHandle::pipeline_capacity`) so a non-reading client back-pressures
+instead of growing host memory (an OOM-DoS an unbounded channel allowed);
+`tests/persistent.rs` (7 e2e cases over REAL TCP: v2 + v1 pipelining,
 one-shot back-compat, the DRR-bites-through-the-wire fairness test + its
-FIFO contrast, graceful shutdown with an open connection); the
+FIFO contrast, graceful shutdown with an open connection, and the
+bounded-channel back-pressure regression); the
 `knomosis-host` `config.rs` flag tests; the `knomosis-bench --persistent`
 pipelined client (2 standalone smoke cases) + its `--persistent` config
 test + the `report.rs` persistent wire-mode-mismatch `NotComparable` test;
@@ -1342,7 +1346,7 @@ landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~321  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
-| `knomosis-host`                     | ~425  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + `--max-conn-backlog` aggregate cap + `--persistent-connections` pipelined mode (DRR exercised over the wire) |
+| `knomosis-host`                     | ~426  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + `--max-conn-backlog` aggregate cap + `--persistent-connections` pipelined mode (DRR exercised over the wire) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
@@ -1683,10 +1687,18 @@ FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
     delivers in order while the reader keeps reading; the §10.1 response
     frame is unchanged).  This is where `ConnReader`'s persistent
     read-state path is finally USED (`run_persistent` in `src/listener.rs`):
-    it negotiates once, then loops `ConnReader::read_next`.  Per-connection
-    in-flight depth is bounded by `--max-conn-backlog`; TLS stays one-shot
-    (the rustls session is single-owner); a one-shot client is a degenerate
-    subset that works unchanged.  **Fair scheduling under contention is now
+    it negotiates once, then loops `ConnReader::read_next`.  The
+    reader→writer hand-off is a BOUNDED `sync_channel` sized to the queue's
+    per-connection in-flight capacity (`QueueHandle::pipeline_capacity` =
+    `--max-conn-backlog` on the DRR path, `--max-queue-depth` on FIFO): a
+    client that pipelines frames but never reads its responses makes the
+    writer block on `write_all`, the channel fills, and the reader BLOCKS
+    on `send` — OS receive-buffer fill + TCP flow control then bound total
+    memory (an unbounded channel here would be an OOM DoS; pinned by
+    `persistent_bounded_channel_backpressures_without_deadlock`).  TLS
+    stays one-shot (the rustls session is single-owner); a one-shot client
+    is a degenerate subset that works unchanged.  **Fair scheduling under
+    contention is now
     exercised through the wire** (`tests/persistent.rs`): a deterministic
     gated-kernel integration test over REAL TCP shows DRR interleaving an
     honest connection into a flood (≤ ~half the flood precedes the honest

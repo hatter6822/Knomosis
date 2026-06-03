@@ -1215,10 +1215,16 @@ one verdict per request **in submission order** (the §10.1 response frame
 is unchanged).  The host negotiates once (the v2 preamble is read once per
 connection, not per frame — `ConnReader`), then reads successive frames
 per the fixed v1/v2 classification.  Internally a dedicated writer thread
-delivers responses in order while a reader thread keeps reading; the
-per-connection in-flight depth is bounded by `--max-conn-backlog`, and a
-well-behaved client half-closes its write side after its last frame
-(immediate clean EOF).  This is the mode under which **fair scheduling
+delivers responses in order while a reader thread keeps reading.  The
+reader→writer hand-off is a **bounded** channel sized to the queue's
+per-connection in-flight capacity (`--max-conn-backlog` on the DRR path,
+`--max-queue-depth` on the FIFO path): when it fills — e.g. a client that
+pipelines frames but never reads its responses, so the writer blocks on
+`write_all` — the reader BLOCKS on the channel, OS receive-buffer fill
+plus TCP flow control then bound total memory.  (Without that bound, the
+reader would keep buffering responses while the writer stalled — an OOM
+DoS.)  A well-behaved client half-closes its write side after its last
+frame (immediate clean EOF).  This is the mode under which **fair scheduling
 under contention is exercised over the wire**: a single connection can now
 hold multiple queued requests, so with `--scheduler drr` a flooding
 pipelined connection no longer buries an honest connection — the honest
