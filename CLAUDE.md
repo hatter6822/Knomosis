@@ -3587,6 +3587,25 @@ BOLD) gas-pool inflow views, and GP.6.5's BOLD-specific tri-stack
 cross-stack fixture corpus (above) close all five sub-WUs of the
 Phase-GP.6 Rust runtime amendment — Phase GP.6 is complete.
 
+Phase GP.9.1 (refund-on-exit) has its Lean-side core landed:
+`Laws.claimBudgetRefund` (the `gasPoolActor → claimant` kernel leg
+with the full §4.11 classification ladder) and `Bridge.BudgetRefund`
+(the `refundableBudget` / `refundAmount` functionals + the four
+soundness theorems — free-tier immunity, round-trip non-profitability
+via floor division, no double refund, and free-tier preservation —
+plus the law↔ledger composites at the canonical `gasPoolActor`).  A
+refund lets an actor retire EXACTLY their remaining *purchased* action
+budget (`currentBudget − actionCost − freeTier`, which excludes the
+free-tier subsidy) for a `budgetUnits × weiPerBudgetUnit` gas payout
+out of the pool, redesigning OQ-GP-10's earlier `poolAmount`+time
+sketch (the per-actor `EpochBudgetState` already tracks remaining
+budget, so there is no per-deposit state-bloat).  Suite
+`bridge-budget-refund` (12 cases); axioms ⊆ the canonical three.  The
+signable-action wiring (a new `Action.claimBudgetRefund` constructor,
+the §13.6 admission-gate refund arm, and the cross-stack CBE / step-VM
+/ Solidity / Rust mirrors) is scoped in
+`docs/planning/unified_gas_pool_plan.md` §GP.9.1.
+
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H
 theorem returns a subset of `[propext, Classical.choice,

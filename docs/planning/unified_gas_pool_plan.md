@@ -6138,14 +6138,200 @@ These are explicitly *deferred* from v1 but planned in enough
 detail that they can be picked up as v2 work without re-litigating
 the design.
 
-#### WU GP.9.1: Refund-on-exit
+#### WU GP.9.1: Refund-on-exit (refund the remaining action budget)
 
-Track `depositTime : Nat` on each `DepositRecord`.  On `withdraw`,
-allow an optional `claimRefund` companion action that credits the
-user with `originalFee × max(0, 1 - (now - depositTime) / T)` for
-amortisation window `T`.  Conservation: the refund is a
-`gasPoolActor → user` transfer, fully provable.  Bounded above by
-the original fee — the user cannot reclaim more than they paid in.
+  * **Goal.**  Let an actor withdraw **exactly the action budget they
+    have left** — converting their own remaining, *purchased* budget
+    back into a gas-resource payout from the unified pool, rather than
+    the v1.1 sketch's `poolAmount × time-decay` refund.
+
+  * **Why refund *budget*, not `poolAmount + time` (the design
+    reversal).**  The v1.1 sketch (kept below under the superseded
+    OQ-GP-10 resolution) refunded a time-amortised slice of the
+    `poolAmount` fee, explicitly *avoiding* "refund the unused budget"
+    on the grounds that tracking per-deposit budget consumption would
+    require a `(depositId, remainingBudget)` linked-list per actor —
+    significant state-bloat.  **That rationale no longer holds.**  The
+    GP.1 per-actor budget ledger (`EpochBudgetState`, a
+    `TreeMap ActorId ActorBudget`) ALREADY tracks each actor's
+    remaining budget as a single counter
+    (`EpochBudgetState.currentBudget`).  Refunding "the remaining
+    budget" therefore reads a quantity the kernel already maintains —
+    **no per-deposit tracking, no linked-list, zero new state-bloat**.
+    The refund is computed from `currentBudget`, which is strictly
+    simpler and more honest than the time-decay heuristic (a user who
+    *spent* their budget on L2 service has a smaller `currentBudget`,
+    so gets a smaller refund automatically — exactly the prepaid-
+    service economics the v1.1 note wanted, now exact instead of
+    approximated).
+
+  * **The refundable amount.**  For claimant `a` with
+    `C = currentBudget a` under a `bounded freeTier actionCost
+    currentEpoch` budget policy:
+
+    ```
+    refundableBudget a = C - (actionCost + freeTier)      -- Nat truncated
+    refundAmount       = budgetUnits × weiPerBudgetUnit    -- budgetUnits ≤ refundableBudget
+    ```
+
+    Two reserves are subtracted from `C` and are **never refundable**:
+
+    1. `actionCost` — the refund action, like every action, costs the
+       claimant `actionCost` budget; that cost is not itself refunded.
+    2. `freeTier` — the per-epoch free allowance is a *subsidy*, not
+       purchased budget, so it can never be converted into gas.  This
+       is the load-bearing **anti-drain** subtraction: without it,
+       every actor could drain `freeTier × weiPerBudgetUnit` of real
+       gas out of the pool *per epoch* (the free tier is topped back
+       up next epoch — so refunding it is minting money).
+
+    The exchange rate `weiPerBudgetUnit` is the **trusted** deployment
+    constant (per resource: `weiPerBudgetUnitEth` / `weiPerBudgetUnitBold`),
+    the same rate the deposit grant uses (GP.5.1 / GP.5.4).  It is
+    **not** a free user field — the admission gate pins
+    `action.weiPerBudgetUnit = trustedRate[gasResource]`, so a refund
+    can never inflate its own payout.
+
+  * **Mathematical soundness (all four proven in Lean — see "Landed"
+    below).**
+
+    1. *Free-tier immunity.*  An actor at (or below) the free tier has
+       `refundableBudget = 0`
+       (`refundableBudget_eq_zero_of_le_reserves`): the subsidy never
+       leaks.
+    2. *Round-trip non-profitability.*  Refunding the budget a deposit
+       granted (`poolAmount / weiPerBudgetUnit`, the floor-division
+       grant) pays back at most the fee:
+       `refundAmount (poolAmount / rate) rate ≤ poolAmount`
+       (`refundAmount_le_deposit_fee`, by `Nat.div_mul_le_self`).  The
+       floor-division residue stays in the pool; adding the per-action
+       cost of the refund itself makes the cycle strictly lossy — so a
+       deposit→refund loop can never extract more gas than was paid in.
+    3. *No double refund.*  A successful refund consumes
+       `actionCost + budgetUnits`, strictly lowering `currentBudget`
+       (`currentBudget_after_refund_lt`), so the same budget cannot be
+       refunded twice.
+    4. *Free tier preserved.*  Bounding `budgetUnits ≤ refundableBudget`
+       keeps the post-refund budget `≥ freeTier`
+       (`currentBudget_after_refund_ge_free_tier`).
+
+  * **The kernel leg (shipped — `Laws.claimBudgetRefund`).**  A
+    `poolActor → claimant` transfer of `refundAmount` at `gasResource`
+    — the exact mirror of `Laws.topUpActionBudget`'s
+    `claimant → poolActor` direction.  Precondition:
+    `getBalance s gasResource poolActor ≥ refundAmount` (the pool is
+    solvent; otherwise `step_impl` makes it a no-op).  Conservation is
+    a `gasPoolActor → user` transfer, fully provable — the law inherits
+    the complete §4.11 ladder (`IsConservative`, `IsMonotonic`,
+    `LocalTo [gasResource]`, `FreezePreserving`, per-actor deltas).
+
+  * **Victim-balance safety (why a refund CANNOT be a generic
+    `transfer`).**  A refund debits `gasPoolActor`'s balance but is
+    signed by the *claimant* (a user).  `gasPoolAuthorityPolicy`
+    (GP.7.2) authorises every action whose `signer ≠ gasPoolActor`
+    (the `else True` branch), so a generic `transfer` with
+    `sender = gasPoolActor` signed by ANY user would let that user
+    drain the pool to themselves.  The refund is therefore a
+    **dedicated `Action.claimBudgetRefund` constructor** with bespoke
+    admission logic — never a reused `transfer` — whose payout the
+    gate bounds to the signer's own refundable budget and whose
+    `poolActor` field the gate pins to `gasPoolActor`.
+
+  * **The signable-action wiring (the remaining landing).**
+
+    1. *`Action.claimBudgetRefund` constructor* at the next frozen
+       index **22** (it lands ahead of the GP.11 `ammSwap`, which then
+       takes index 23).  Fields:
+       `(gasResource : ResourceId) (budgetUnits : Nat)
+        (weiPerBudgetUnit : Nat) (poolActor : ActorId)`.  The signer
+       (claimant) is the enclosing `SignedAction.signer`, per the
+       standard Phase-3 pattern — never a field.
+    2. *`Action.toTransition`* threads the signer:
+       `claimBudgetRefund signer poolActor gasResource
+        (budgetUnits × weiPerBudgetUnit)`.  The amount uses the
+       action's (gate-verified) fields, so `toTransition` needs only
+       the signer — exactly like `topUpActionBudget` — and the kernel
+       step is NOT budget-ledger-dependent.
+    3. *Admission gate* (`apply_admissible_with_budget` +
+       `apply_bridge_admissible_with_budget`, §13.6 two-reviewer):
+       a new `claimBudgetRefund_gate` (mirroring
+       `topUpActionBudgetFor_gate`) enforcing, for a
+       `claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit
+       poolActor` signed by `S`:
+         * `S ≠ Bridge.bridgeActor` and `S ≠ poolActor` (the standard
+           consume-exemption / self-pool defences);
+         * `poolActor = Bridge.gasPoolActor` (the victim-drain pin);
+         * `weiPerBudgetUnit = trustedRate gasResource` (rate pin);
+         * `1 ≤ budgetUnits ≤ refundableBudget es.epochBudgets S
+           currentEpoch freeTier actionCost` (the free-tier-excluding
+           bound);
+         * `getBalance es.base gasResource poolActor ≥
+           budgetUnits × weiPerBudgetUnit` (pool solvency).
+       The refund's budget effect is a **consume** of
+       `actionCost + budgetUnits` (the standard action cost PLUS the
+       retired units) rather than the `applyGrant` top-up the deposit /
+       top-up actions use.  The trusted per-resource rate is a new
+       `BudgetPolicy` / genesis-config field
+       (`weiPerBudgetUnitEth` / `weiPerBudgetUnitBold`), surfaced to L2
+       (the deposit side receives `budgetGrant` precomputed by L1, but
+       the refund is L2-initiated so L2 must know the rate).
+    4. *`kernelOnlyApply` mirror* (`Disputes/Evidence.lean`) threading
+       the same `toTransition`, so `apply_admissible_with_eq_kernelOnlyApply`
+       stays by `rfl` and the fault-proof prefix-replay is unchanged.
+    5. *Append-only authority arms*: `applyActionToRegistry` /
+       `applyActionToLocalPolicies` no-op; `bridgeAuthorizedAction`
+       gets a `claimBudgetRefund => false` arm (it is user-initiated,
+       never bridge-signed); the `gasPoolPolicy` `gasPoolDeniedTags`
+       bumps to `List.range 24` (covering the new tag 22 + the reserved
+       ammSwap 23) and `Action.tag_lt_denyListBound` to `tag < 24`.
+    6. *New `Event.budgetRefunded`* (next frozen event index) emitted
+       by `extractEvents`; the claimant's gas credit and the pool debit
+       additionally surface as `balanceChanged` events.
+    7. *Cross-stack*: CBE encode/decode + tag pin (`Encoding/Action.lean`);
+       step-VM (`actionKindByte` / `actionFieldsForL1` / `readOnlyCells`
+       / `writeCells` / `stepVMHash` dispatcher arm + the Solidity
+       `KnomosisStepVM` mirror + `executeStep` byte-equivalence corpus);
+       the `KnomosisBridge` L1 redemption path for the refunded gas; and
+       the Rust mirrors (`knomosis-l1-ingest` action encoder,
+       `knomosis-host` gate, `knomosis-event-subscribe` /
+       `knomosis-indexer` event tag).  Each is gated by an exhaustive-
+       match forcing function, so the landing is atomic per surface.
+
+  * **Landed (this WU's Lean-side core).**
+    * `LegalKernel/Laws/ClaimBudgetRefund.lean` — the kernel leg + full
+      §4.11 classification ladder (no `sorry`; axioms ⊆ `{propext,
+      Classical.choice, Quot.sound}`).
+    * `LegalKernel/Bridge/BudgetRefund.lean` — the `refundableBudget` /
+      `refundAmount` functionals and the four soundness theorems above,
+      plus the law↔ledger composites
+      (`refund_pays_exact_amount_from_pool`, `refund_conserves_supply`,
+      `refund_pre_iff_pool_solvent`) at the canonical `gasPoolActor`.
+    * `LegalKernel/Test/Bridge/BudgetRefund.lean` — suite
+      `bridge-budget-refund` (12 cases).
+
+  * **Files (remaining landing).**  `Authority/Action.lean`,
+    `Authority/SignedAction.lean` (two-reviewer), `Disputes/Evidence.lean`,
+    `Bridge/BridgeActor.lean`, `Bridge/GasPoolPolicy.lean`,
+    `Encoding/Action.lean`, `Events/{Types,Extract}.lean`,
+    `FaultProof/{StepVMCoherence,SolidityStepVMCommit}.lean`,
+    `solidity/src/contracts/{KnomosisStepVM,KnomosisBridge}.sol`,
+    `runtime/knomosis-l1-ingest`, `runtime/knomosis-host`,
+    `runtime/knomosis-indexer`.
+
+  * **Acceptance criteria.**  Two reviewers (touches the GP.3.2
+    admission gate).  The four soundness theorems (free-tier immunity,
+    round-trip non-profitability, no double refund, free-tier
+    preservation) are mechanised; the cross-stack `executeStep`
+    byte-equivalence corpus gains `claimBudgetRefund` entries;
+    `lake test` / `forge test` / `cargo test` green.
+
+  * **Dependencies.**  GP.3.2 (the budget admission gate), GP.7.1 /
+    GP.7.2 (the `gasPoolActor` reservation + policy), GP.5.1 / GP.5.4
+    (the deposit-side `weiPerBudgetUnit` rate), and GP.3.3 / GP.5.3
+    (the step-VM dispatcher pattern the new variant follows).
+
+  * **Estimated effort.**  ~16 hours for the remaining cross-stack
+    landing (the Lean-side core is complete).
 
 #### WU GP.9.2: Yield-bearing pool (Lido / Rocket Pool)
 
@@ -7887,22 +8073,39 @@ becomes effective.
 How does the v1.1 "user-chosen fee with budget grant" interact
 with the deferred GP.9.1 refund-on-exit mechanism?
 
-**v1.1 resolution:** refund-on-exit operates over `poolAmount`
-(the fee paid), not over `budgetGrant` (the budget received).
-A withdrawing user reclaims a pro-rata portion of their
-`poolAmount` based on dwell time, regardless of whether they
-spent the budget grant or not.  This is the simpler design;
-tying refund to "unused budget remaining" would require tracking
-per-deposit budget consumption (linked-list of
-`(depositId, remainingBudget)` per actor), which is significant
-state-bloat.  The simple "refund based on poolAmount + time"
-formulation is sufficient: super-users who paid high fees and
-used their budgets get less refund per unit time (they consumed
-the service); super-users who paid high fees and *didn't* use
-their budgets also get less refund (their fee was the price for
-optionality, not for actual consumption).  This is consistent
-with prepaid-service economics elsewhere (gym memberships,
-cloud-compute reservations).
+**v1.1 resolution (SUPERSEDED — kept for amendment history):**
+refund-on-exit operates over `poolAmount` (the fee paid), not over
+`budgetGrant` (the budget received).  A withdrawing user reclaims a
+pro-rata portion of their `poolAmount` based on dwell time,
+regardless of whether they spent the budget grant or not.  This was
+chosen as the simpler design; tying refund to "unused budget
+remaining" was thought to require tracking per-deposit budget
+consumption (a `(depositId, remainingBudget)` linked-list per actor),
+which would be significant state-bloat.
+
+**Current resolution (refund the remaining action budget):** the
+state-bloat objection above was mistaken.  The GP.1 budget ledger
+(`EpochBudgetState`) tracks remaining budget **per actor as a single
+counter** (`currentBudget`), NOT per deposit — there is no
+linked-list and no per-deposit tracking.  Refund-on-exit therefore
+operates over the claimant's **remaining, purchased action budget**:
+the claimant retires `budgetUnits ≤ refundableBudget` units and is
+paid `budgetUnits × weiPerBudgetUnit` gas out of `gasPoolActor`,
+where `refundableBudget = currentBudget − (actionCost + freeTier)`
+excludes the free-tier subsidy and the refund's own per-action cost.
+This is exact (not a time-decay approximation) and strictly simpler:
+a user who consumed the service has a smaller `currentBudget` and so
+a smaller refund automatically.  The `budgetGrant` / `poolAmount`
+relationship is reused only to bound the round trip — refunding the
+budget a deposit granted pays back at most the fee
+(`(poolAmount / rate) × rate ≤ poolAmount`, floor division), so a
+deposit→refund cycle is never profitable.  Free-tier immunity (the
+subsidy is never refundable), no double refund (the budget is
+consumed atomically), and victim-balance safety (the refund is a
+dedicated `Action.claimBudgetRefund` whose `poolActor` is pinned to
+`gasPoolActor`, never a generic `transfer`) round out the soundness
+argument.  See WU GP.9.1 for the full mechanism and the landed
+Lean-side core (`Laws.claimBudgetRefund`, `Bridge.BudgetRefund`).
 
 ### OQ-GP-11 — Resource enumeration policy (v1.2)
 

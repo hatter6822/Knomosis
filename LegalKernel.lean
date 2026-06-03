@@ -161,6 +161,7 @@ import LegalKernel.Laws.Withdraw
 import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Laws.TopUpActionBudgetFor
+import LegalKernel.Laws.ClaimBudgetRefund
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.Action
 import LegalKernel.Authority.Identity
@@ -250,6 +251,11 @@ import LegalKernel.Bridge.GasPoolPolicy
 -- GP.7.2 gas-pool authority discipline, `gasPoolActor`'s ETH-leg
 -- balance cannot have decreased by more than `n × maxDrainPerActionEth`.
 import LegalKernel.Bridge.PoolDrainBound
+-- Workstream GP.9.1 — refund-on-exit accounting: the claimant retires
+-- their own purchased action budget for gas, paid out of `gasPoolActor`.
+-- Free-tier immunity + round-trip non-profitability + no double refund.
+-- Non-TCB; the kernel leg lives in `Laws.ClaimBudgetRefund`.
+import LegalKernel.Bridge.BudgetRefund
 import LegalKernel.Bridge.WithdrawalRoot
 import LegalKernel.Bridge.WithdrawalProof
 import LegalKernel.Bridge.Finalisation

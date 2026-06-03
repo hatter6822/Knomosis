@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1cf210c485069473cdb056d77fc19b5671651f48dda093b4495b281df6c9daa3"
+    "source_digest": "13f9b42e53591122e04c3ca03d1f00f3385092cef750d68f4712a211f6e7084b"
   },
   "summary": {
-    "module_count": 287,
-    "declaration_count": 4727
+    "module_count": 290,
+    "declaration_count": 4776
   },
   "modules": [
     {
@@ -509,13 +509,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 296,
+          "line": 302,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 309,
+          "line": 315,
           "called": [
             "LegalKernel"
           ]
@@ -556,6 +556,7 @@
             "depositWithFee",
             "distributeOthers",
             "freezeResource",
+            "gasResource",
             "mint",
             "policy",
             "poolActor",
@@ -620,6 +621,7 @@
             "Action.compileTransition",
             "ActorId",
             "Transition",
+            "gasResource",
             "poolActor",
             "topUpActionBudget",
             "topUpActionBudgetFor"
@@ -657,6 +659,7 @@
             "ActorId",
             "Amount",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudget"
           ]
@@ -670,6 +673,7 @@
             "ActorId",
             "Amount",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor"
           ]
@@ -820,7 +824,9 @@
           "name": "normalise",
           "line": 36,
           "called": [
-            "ActorBudget"
+            "ActorBudget",
+            "freeTier",
+            "now"
           ]
         },
         {
@@ -828,7 +834,9 @@
           "name": "consume",
           "line": 43,
           "called": [
-            "ActorBudget"
+            "ActorBudget",
+            "freeTier",
+            "now"
           ]
         },
         {
@@ -836,7 +844,9 @@
           "name": "topUp",
           "line": 51,
           "called": [
-            "ActorBudget"
+            "ActorBudget",
+            "freeTier",
+            "now"
           ]
         },
         {
@@ -845,7 +855,8 @@
           "line": 55,
           "called": [
             "ActorBudget",
-            "normalise"
+            "normalise",
+            "now"
           ]
         },
         {
@@ -854,7 +865,8 @@
           "line": 59,
           "called": [
             "ActorBudget",
-            "normalise"
+            "normalise",
+            "now"
           ]
         },
         {
@@ -863,7 +875,8 @@
           "line": 66,
           "called": [
             "ActorBudget",
-            "normalise"
+            "normalise",
+            "now"
           ]
         },
         {
@@ -872,7 +885,8 @@
           "line": 72,
           "called": [
             "ActorBudget",
-            "normalise"
+            "normalise",
+            "now"
           ]
         },
         {
@@ -883,7 +897,8 @@
             "ActorBudget",
             "normalise",
             "normalise_lastSeenEpoch_eq_max",
-            "normalise_noop_if_current"
+            "normalise_noop_if_current",
+            "now"
           ]
         },
         {
@@ -892,7 +907,8 @@
           "line": 95,
           "called": [
             "ActorBudget",
-            "consume"
+            "consume",
+            "now"
           ]
         },
         {
@@ -901,7 +917,8 @@
           "line": 110,
           "called": [
             "ActorBudget",
-            "consume"
+            "consume",
+            "now"
           ]
         },
         {
@@ -910,7 +927,8 @@
           "line": 120,
           "called": [
             "ActorBudget",
-            "consume"
+            "consume",
+            "now"
           ]
         },
         {
@@ -919,7 +937,8 @@
           "line": 129,
           "called": [
             "ActorBudget",
-            "consume"
+            "consume",
+            "now"
           ]
         },
         {
@@ -929,7 +948,8 @@
           "called": [
             "ActorBudget",
             "consume_some_lastSeenEpoch_ge",
-            "normalise_noop_if_current"
+            "normalise_noop_if_current",
+            "now"
           ]
         },
         {
@@ -939,6 +959,7 @@
           "called": [
             "ActorBudget",
             "normalise_lastSeenEpoch_eq_max",
+            "now",
             "topUp"
           ]
         },
@@ -948,6 +969,7 @@
           "line": 156,
           "called": [
             "ActorBudget",
+            "now",
             "topUp"
           ]
         },
@@ -959,6 +981,7 @@
             "ActorBudget",
             "normalise",
             "normalise_noop_if_current",
+            "now",
             "topUp_lastSeenEpoch_ge"
           ]
         },
@@ -1001,7 +1024,9 @@
           "called": [
             "ActorId",
             "EpochBudgetState",
-            "normalise"
+            "freeTier",
+            "normalise",
+            "now"
           ]
         },
         {
@@ -1010,7 +1035,9 @@
           "line": 185,
           "called": [
             "ActorId",
-            "EpochBudgetState"
+            "EpochBudgetState",
+            "freeTier",
+            "now"
           ]
         },
         {
@@ -1019,7 +1046,9 @@
           "line": 192,
           "called": [
             "ActorId",
-            "EpochBudgetState"
+            "EpochBudgetState",
+            "freeTier",
+            "now"
           ]
         },
         {
@@ -1031,7 +1060,8 @@
             "EpochBudgetState",
             "consume",
             "currentBudget",
-            "normalise"
+            "normalise",
+            "now"
           ]
         },
         {
@@ -1042,7 +1072,8 @@
             "ActorId",
             "EpochBudgetState",
             "consume",
-            "currentBudget"
+            "currentBudget",
+            "now"
           ]
         },
         {
@@ -1054,7 +1085,8 @@
             "EpochBudgetState",
             "consume",
             "currentBudget",
-            "normalise"
+            "normalise",
+            "now"
           ]
         },
         {
@@ -1064,7 +1096,8 @@
           "called": [
             "ActorId",
             "EpochBudgetState",
-            "consume_eq_none_iff"
+            "consume_eq_none_iff",
+            "now"
           ]
         },
         {
@@ -1076,6 +1109,7 @@
             "EpochBudgetState",
             "currentBudget",
             "normalise",
+            "now",
             "topUp"
           ]
         },
@@ -1088,6 +1122,7 @@
             "EpochBudgetState",
             "currentBudget",
             "normalise",
+            "now",
             "topUp"
           ]
         },
@@ -1098,7 +1133,8 @@
           "called": [
             "ActorId",
             "EpochBudgetState",
-            "currentBudget"
+            "currentBudget",
+            "now"
           ]
         },
         {
@@ -1899,7 +1935,10 @@
           "kind": "inductive",
           "name": "BudgetPolicy",
           "line": 70,
-          "called": []
+          "called": [
+            "actionCost",
+            "freeTier"
+          ]
         },
         {
           "kind": "namespace",
@@ -1912,7 +1951,9 @@
           "name": "mkBounded",
           "line": 80,
           "called": [
-            "BudgetPolicy"
+            "BudgetPolicy",
+            "actionCost",
+            "freeTier"
           ]
         },
         {
@@ -2417,6 +2458,7 @@
             "ActorId",
             "ExtendedState",
             "es",
+            "gasResource",
             "getBalance",
             "poolActor",
             "topUpActionBudget"
@@ -2488,6 +2530,7 @@
             "ExtendedState",
             "delegatedTopUpConsentBool",
             "es",
+            "gasResource",
             "getBalance",
             "poolActor",
             "topUpActionBudgetFor"
@@ -2518,10 +2561,12 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_admissible_with",
             "depositWithFee",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
@@ -2681,11 +2726,13 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee",
             "depositWithFee_signerCheck",
             "depositWithFee_signerCheck_true_of_ne_depositWithFee",
             "es",
+            "freeTier",
             "poolActor",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -2706,6 +2753,7 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_admissible_with_budget",
             "burn",
             "consume_some_of_admit_non_bridge",
@@ -2715,6 +2763,7 @@
             "depositWithFee_signerCheck_true_of_ne_depositWithFee",
             "distributeOthers",
             "es",
+            "freeTier",
             "freezeResource",
             "mint",
             "poolActor",
@@ -2741,9 +2790,11 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -2759,6 +2810,7 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_admissible_with_budget",
             "burn",
             "deposit",
@@ -2766,6 +2818,7 @@
             "depositWithFee_signerCheck",
             "distributeOthers",
             "es",
+            "freeTier",
             "freezeResource",
             "mint",
             "poolActor",
@@ -2795,10 +2848,12 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "poolActor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
@@ -2818,10 +2873,13 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
+            "other",
             "poolActor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
@@ -2841,9 +2899,12 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
+            "gasResource",
             "getBalance",
             "poolActor",
             "topUpActionBudget",
@@ -2863,6 +2924,7 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_admissible_with_budget",
             "burn",
             "consume_some_of_admit_non_bridge",
@@ -2872,8 +2934,10 @@
             "depositWithFee_signerCheck_true_of_ne_depositWithFee",
             "distributeOthers",
             "es",
+            "freeTier",
             "freezeResource",
             "mint",
+            "other",
             "poolActor",
             "proportionalDilute",
             "reward",
@@ -2893,7 +2957,8 @@
           "line": 1728,
           "called": [
             "ActorId",
-            "EpochBudgetState"
+            "EpochBudgetState",
+            "now"
           ]
         },
         {
@@ -2923,6 +2988,7 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "admissibleWith_nonce",
             "advanceNonce",
             "apply_admissible_with",
@@ -2931,6 +2997,7 @@
             "es",
             "expectsNonce",
             "expectsNonce_strict_mono",
+            "freeTier",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -2965,10 +3032,12 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "delegatedTopUpConsentBool",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
@@ -2988,9 +3057,11 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_facts",
@@ -3031,9 +3102,11 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_facts",
@@ -3054,9 +3127,12 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
+            "other",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
             "topUpActionBudgetFor_gate_true_facts",
@@ -3569,6 +3645,7 @@
             "Amount",
             "RegistryPreserving",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudget"
           ]
@@ -3584,6 +3661,7 @@
             "LegalKernel",
             "RegistryPreserving",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor"
           ]
@@ -5148,11 +5226,13 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_bridge_admissible_with",
             "bridgeActor",
             "depositWithFee",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
@@ -5353,10 +5433,12 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_admissible_with_budget",
             "apply_bridge_admissible_with_budget",
             "depositWithFee_signerCheck",
             "es",
+            "freeTier",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -5406,9 +5488,11 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_bridge_admissible_with",
             "apply_bridge_admissible_with_budget",
-            "es"
+            "es",
+            "freeTier"
           ]
         },
         {
@@ -5422,11 +5506,13 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "admission_consumes_budget_on_success",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "depositWithFee",
             "es",
+            "freeTier",
             "poolActor",
             "topUpActionBudget",
             "topUpActionBudgetFor"
@@ -5443,10 +5529,12 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "admission_rejected_when_budget_zero",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_none_iff",
-            "es"
+            "es",
+            "freeTier"
           ]
         },
         {
@@ -5460,11 +5548,13 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "bridgeActor_budget_exempt",
             "depositWithFee",
             "es",
+            "freeTier",
             "poolActor",
             "topUpActionBudget",
             "topUpActionBudgetFor"
@@ -5485,11 +5575,13 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "depositWithFee",
             "depositWithFee_grants_budget",
             "es",
+            "freeTier",
             "poolActor"
           ]
         },
@@ -5508,11 +5600,14 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "depositWithFee",
             "depositWithFee_budget_locality",
             "es",
+            "freeTier",
+            "other",
             "poolActor"
           ]
         },
@@ -5530,9 +5625,12 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "es",
+            "freeTier",
+            "gasResource",
             "poolActor",
             "topUpActionBudget",
             "topUpActionBudget_net_budget_change"
@@ -5550,11 +5648,14 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "actionCost",
             "admission_locality_in_budget",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "depositWithFee",
             "es",
+            "freeTier",
+            "other",
             "poolActor",
             "topUpActionBudget",
             "topUpActionBudgetFor"
@@ -5574,11 +5675,13 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_none_iff",
             "delegatedTopUpConsentBool",
             "delegatedTopUp_requires_allowTopUpFrom",
             "es",
+            "freeTier",
             "topUpActionBudgetFor"
           ]
         },
@@ -5596,10 +5699,12 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "delegatedTopUp_grants_budget_to_recipient",
             "es",
+            "freeTier",
             "topUpActionBudgetFor"
           ]
         },
@@ -5617,10 +5722,12 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "delegatedTopUp_signer_budget_consumed",
             "es",
+            "freeTier",
             "topUpActionBudgetFor"
           ]
         },
@@ -5640,10 +5747,13 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
             "delegatedTopUp_budget_locality",
             "es",
+            "freeTier",
+            "other",
             "topUpActionBudgetFor"
           ]
         }
@@ -6016,6 +6126,7 @@
             "bridgeActor",
             "bridgeAuthorizedAction",
             "bridgePolicy",
+            "gasResource",
             "poolActor",
             "topUpActionBudget"
           ]
@@ -6031,6 +6142,7 @@
             "bridgeActor",
             "bridgeAuthorizedAction",
             "bridgePolicy",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor"
           ]
@@ -6093,6 +6205,256 @@
             "poolActor",
             "sequencerActor",
             "transfer"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Bridge.BudgetRefund",
+      "path": "LegalKernel/Bridge/BudgetRefund.lean",
+      "declaration_count": 20,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Bridge",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "refundableBudget",
+          "line": 101,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "refundAmount",
+          "line": 110,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "refundableBudget_le_currentBudget",
+          "line": 117,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now",
+            "refundableBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refundableBudget_eq_zero_of_le_reserves",
+          "line": 129,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now",
+            "refundableBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refundableBudget_eq_zero_at_free_tier",
+          "line": 139,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now",
+            "refundableBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "sufficient_of_refundableBudget_pos",
+          "line": 149,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now",
+            "refundableBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_consume_succeeds",
+          "line": 168,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now",
+            "refundableBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "currentBudget_after_refund_consume",
+          "line": 180,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "currentBudget_after_refund_ge_free_tier",
+          "line": 194,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "currentBudget_after_refund_consume",
+            "freeTier",
+            "now",
+            "refundableBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "currentBudget_after_refund_lt",
+          "line": 211,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "currentBudget_after_refund_consume",
+            "freeTier",
+            "now"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "currentBudget_after_refund_other",
+          "line": 231,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refundAmount_le_of_budgetUnits_le",
+          "line": 244,
+          "called": [
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refundAmount_le_deposit_fee",
+          "line": 258,
+          "called": [
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refundAmount_le_max",
+          "line": 266,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "actionCost",
+            "freeTier",
+            "now",
+            "refundAmount",
+            "refundAmount_le_of_budgetUnits_le",
+            "refundableBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_pre_iff_pool_solvent",
+          "line": 280,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_pays_exact_amount_from_pool",
+          "line": 301,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "claimant",
+            "gasPoolActor",
+            "gasResource",
+            "getBalance",
+            "refundAmount",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_conserves_supply",
+          "line": 322,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_other_actor_untouched",
+          "line": 334,
+          "called": [
+            "ActorId",
+            "Amount",
+            "Bridge",
+            "LegalKernel",
+            "ResourceId",
+            "State",
+            "claimant",
+            "gasPoolActor",
+            "gasResource",
+            "getBalance",
+            "other",
+            "step_impl"
           ]
         }
       ]
@@ -8152,6 +8514,7 @@
             "es",
             "freezeResource",
             "gasPoolActor",
+            "gasResource",
             "getBalance",
             "getBalance_credit_nondecreasing",
             "getBalance_foldl_credit_nondecreasing",
@@ -12528,6 +12891,7 @@
             "depositWithFee",
             "distributeOthers",
             "freezeResource",
+            "gasResource",
             "mint",
             "poolActor",
             "proportionalDilute",
@@ -12563,6 +12927,7 @@
             "depositWithFee",
             "distributeOthers",
             "freezeResource",
+            "gasResource",
             "mint",
             "poolActor",
             "proportionalDilute",
@@ -12610,7 +12975,9 @@
             "depositWithFee",
             "distributeOthers",
             "freezeResource",
+            "gasResource",
             "mint",
+            "other",
             "poolActor",
             "proportionalDilute",
             "receiver",
@@ -12675,6 +13042,7 @@
             "dispute_roundtrip",
             "distributeOthers",
             "freezeResource",
+            "gasResource",
             "localPolicy_roundtrip",
             "mint",
             "nat_roundtrip",
@@ -13119,7 +13487,8 @@
           "called": [
             "DecodeError",
             "DisputeClaim",
-            "Stream"
+            "Stream",
+            "other"
           ]
         },
         {
@@ -13187,7 +13556,8 @@
           "called": [
             "DecodeError",
             "EvidenceVerdict",
-            "Stream"
+            "Stream",
+            "other"
           ]
         },
         {
@@ -13562,7 +13932,8 @@
             "cborHeadDecode",
             "cborHeadEncode",
             "decode",
-            "encode"
+            "encode",
+            "other"
           ]
         },
         {
@@ -13574,7 +13945,8 @@
             "cbeTagUint",
             "cborHeadDecode",
             "cborHeadEncode",
-            "cborHeadRoundtrip_append"
+            "cborHeadRoundtrip_append",
+            "other"
           ]
         },
         {
@@ -13899,7 +14271,8 @@
             "cborHeadDecode",
             "cborHeadEncode",
             "decode",
-            "encode"
+            "encode",
+            "other"
           ]
         },
         {
@@ -13913,7 +14286,8 @@
             "cbeTagArray",
             "cborHeadDecode",
             "cborHeadEncode",
-            "cborHeadRoundtrip_append"
+            "cborHeadRoundtrip_append",
+            "other"
           ]
         },
         {
@@ -14194,6 +14568,7 @@
             "LocalPolicy.encodeAsBytes",
             "Stream",
             "challenger",
+            "gasResource",
             "policy",
             "poolActor",
             "sender"
@@ -14211,6 +14586,7 @@
             "LocalPolicy.decode",
             "Stream",
             "challenger",
+            "gasResource",
             "policy",
             "poolActor",
             "sender"
@@ -14322,7 +14698,8 @@
             "TurnSide.encode",
             "challenger",
             "decode",
-            "encode"
+            "encode",
+            "other"
           ]
         },
         {
@@ -14343,7 +14720,8 @@
             "GameStatus.encode",
             "Stream",
             "decode",
-            "encode"
+            "encode",
+            "other"
           ]
         },
         {
@@ -14436,7 +14814,8 @@
             "Encodable",
             "Stream",
             "decode",
-            "encode"
+            "encode",
+            "other"
           ]
         },
         {
@@ -14606,7 +14985,8 @@
             "ActorId",
             "DecodeError",
             "LocalPolicyClause",
-            "Stream"
+            "Stream",
+            "other"
           ]
         },
         {
@@ -15535,7 +15915,9 @@
           "line": 867,
           "called": [
             "BudgetPolicy",
-            "Stream"
+            "Stream",
+            "actionCost",
+            "freeTier"
           ]
         },
         {
@@ -15545,7 +15927,9 @@
           "called": [
             "BudgetPolicy",
             "DecodeError",
-            "Stream"
+            "Stream",
+            "actionCost",
+            "freeTier"
           ]
         },
         {
@@ -15593,6 +15977,8 @@
             "BudgetPolicy.decode",
             "BudgetPolicy.encode",
             "Stream",
+            "actionCost",
+            "freeTier",
             "nat_roundtrip"
           ]
         },
@@ -16106,6 +16492,7 @@
             "depositWithFee",
             "distributeOthers",
             "freezeResource",
+            "gasResource",
             "mint",
             "poolActor",
             "proportionalDilute",
@@ -16125,10 +16512,12 @@
             "Event",
             "ExtendedState",
             "SignedAction",
+            "actionCost",
             "actionEvents",
             "deposit",
             "depositWithFee",
             "expectsNonce",
+            "gasResource",
             "poolActor",
             "sender",
             "topUpActionBudget",
@@ -16294,6 +16683,7 @@
             "ResourceId",
             "Signature",
             "extractEvents",
+            "gasResource",
             "poolActor",
             "topUpActionBudget"
           ]
@@ -16307,7 +16697,9 @@
             "ExtendedState",
             "LegalKernel",
             "SignedAction",
-            "extractEvents"
+            "actionCost",
+            "extractEvents",
+            "freeTier"
           ]
         }
       ]
@@ -16340,6 +16732,7 @@
             "PublicKey",
             "ResourceId",
             "challenger",
+            "gasResource",
             "policy",
             "poolActor",
             "sender"
@@ -18739,6 +19132,7 @@
             "ResourceId",
             "commitExtendedState",
             "es",
+            "gasResource",
             "kernelOnlyApply",
             "poolActor",
             "recomputeCommitment",
@@ -18759,6 +19153,7 @@
             "ResourceId",
             "commitExtendedState",
             "es",
+            "gasResource",
             "kernelOnlyApply",
             "poolActor",
             "recomputeCommitment",
@@ -19133,6 +19528,7 @@
             "applyCellWrites_eq_signedActionToLogEntry",
             "applyCellWrites_to_state",
             "es",
+            "gasResource",
             "kernelOnlyApply",
             "poolActor",
             "signedActionToLogEntry",
@@ -19154,6 +19550,7 @@
             "applyCellWrites_eq_signedActionToLogEntry",
             "applyCellWrites_to_state",
             "es",
+            "gasResource",
             "kernelOnlyApply",
             "poolActor",
             "signedActionToLogEntry",
@@ -20277,6 +20674,7 @@
           "name": "stepCommitTopUpActionBudget",
           "line": 439,
           "called": [
+            "gasResource",
             "poolActor",
             "tagTopUpActionBudget",
             "uint256BE",
@@ -20288,6 +20686,7 @@
           "name": "stepCommitTopUpActionBudgetFor",
           "line": 465,
           "called": [
+            "gasResource",
             "poolActor",
             "tagTopUpActionBudgetFor",
             "uint256BE",
@@ -20521,6 +20920,7 @@
             "depositWithFee",
             "distributeOthers",
             "freezeResource",
+            "gasResource",
             "mint",
             "policy",
             "poolActor",
@@ -20587,6 +20987,7 @@
           "called": [
             "CellProofBundle",
             "decodeCellNat",
+            "gasResource",
             "maxRecipientsPerBulkAction",
             "poolActor",
             "readCellValue",
@@ -20895,6 +21296,7 @@
           "called": [
             "CellProofBundle",
             "decodeCellNat",
+            "gasResource",
             "poolActor",
             "readCellValue",
             "readUint64BE",
@@ -20909,6 +21311,7 @@
           "called": [
             "CellProofBundle",
             "decodeCellNat",
+            "gasResource",
             "poolActor",
             "readCellValue",
             "readUint64BE",
@@ -22962,6 +23365,292 @@
       ]
     },
     {
+      "module": "LegalKernel.Laws.ClaimBudgetRefund",
+      "path": "LegalKernel/Laws/ClaimBudgetRefund.lean",
+      "declaration_count": 17,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 73,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Laws",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "claimBudgetRefund",
+          "line": 90,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "Transition",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "poolActor",
+            "refundAmount",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_apply_eq_transfer",
+          "line": 109,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimBudgetRefund",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "refundAmount",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_arithmetic",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_conserves",
+          "line": 140,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "claimBudgetRefund",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "poolActor",
+            "refundAmount",
+            "refund_arithmetic",
+            "setBalance",
+            "step_impl",
+            "totalSupply_setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_other_resource_untouched",
+          "line": 180,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimBudgetRefund",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "poolActor",
+            "refundAmount",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_does_not_touch_other_resources",
+          "line": 198,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimBudgetRefund",
+            "claimBudgetRefund_other_resource_untouched",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "poolActor",
+            "refundAmount",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_conserves_other_resource",
+          "line": 209,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "claimBudgetRefund",
+            "claimBudgetRefund_other_resource_untouched",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "refundAmount",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_pool_debited",
+          "line": 230,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimBudgetRefund",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "poolActor",
+            "refundAmount",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_claimant_credited",
+          "line": 252,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimBudgetRefund",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "poolActor",
+            "refundAmount",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_other_actor_untouched",
+          "line": 275,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "claimBudgetRefund",
+            "claimant",
+            "gasResource",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "other",
+            "poolActor",
+            "refundAmount",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "claimBudgetRefund_isConservative",
+          "line": 298,
+          "called": [
+            "ActorId",
+            "Amount",
+            "IsConservative",
+            "ResourceId",
+            "claimBudgetRefund",
+            "claimBudgetRefund_conserves",
+            "claimBudgetRefund_conserves_other_resource",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "claimBudgetRefund_isMonotonic",
+          "line": 312,
+          "called": [
+            "ActorId",
+            "Amount",
+            "IsMonotonic",
+            "ResourceId",
+            "claimBudgetRefund",
+            "claimBudgetRefund_isConservative",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "claimBudgetRefund_localTo",
+          "line": 324,
+          "called": [
+            "ActorId",
+            "Amount",
+            "LocalTo",
+            "ResourceId",
+            "claimBudgetRefund",
+            "claimBudgetRefund_does_not_touch_other_resources",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "claimBudgetRefund_freezePreserving",
+          "line": 341,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "ResourceId",
+            "claimBudgetRefund",
+            "claimBudgetRefund_other_resource_untouched",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "claimBudgetRefund_freezePreserving_empty",
+          "line": 359,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "Laws",
+            "LegalKernel",
+            "ResourceId",
+            "claimBudgetRefund",
+            "claimBudgetRefund_freezePreserving",
+            "claimant",
+            "gasResource",
+            "poolActor",
+            "refundAmount"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Laws.Deposit",
       "path": "LegalKernel/Laws/Deposit.lean",
       "declaration_count": 13,
@@ -24276,6 +24965,7 @@
             "LegalKernel",
             "ResourceId",
             "Transition",
+            "gasResource",
             "getBalance",
             "poolActor",
             "setBalance"
@@ -24309,6 +24999,7 @@
             "Amount",
             "ResourceId",
             "Transition",
+            "gasResource",
             "getBalance",
             "poolActor",
             "setBalance"
@@ -24323,6 +25014,7 @@
             "Amount",
             "ResourceId",
             "State",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor",
             "transfer"
@@ -24344,6 +25036,7 @@
             "ResourceId",
             "State",
             "TotalSupply",
+            "gasResource",
             "getBalance",
             "poolActor",
             "setBalance",
@@ -24363,6 +25056,7 @@
             "ResourceId",
             "State",
             "TotalSupply",
+            "gasResource",
             "poolActor",
             "step_impl",
             "topUpActionBudgetFor",
@@ -24378,6 +25072,7 @@
             "Amount",
             "ResourceId",
             "State",
+            "gasResource",
             "getBalance",
             "poolActor",
             "setBalance",
@@ -24394,6 +25089,7 @@
             "Amount",
             "ResourceId",
             "State",
+            "gasResource",
             "getBalance",
             "poolActor",
             "step_impl",
@@ -24411,6 +25107,7 @@
             "ResourceId",
             "State",
             "TotalSupply",
+            "gasResource",
             "poolActor",
             "step_impl",
             "topUpActionBudgetFor",
@@ -24426,6 +25123,7 @@
             "Amount",
             "ResourceId",
             "State",
+            "gasResource",
             "getBalance",
             "getBalance_setBalance_other",
             "getBalance_setBalance_same",
@@ -24443,6 +25141,7 @@
             "Amount",
             "ResourceId",
             "State",
+            "gasResource",
             "getBalance",
             "getBalance_setBalance_other",
             "getBalance_setBalance_same",
@@ -24460,8 +25159,10 @@
             "Amount",
             "ResourceId",
             "State",
+            "gasResource",
             "getBalance",
             "getBalance_setBalance_other",
+            "other",
             "poolActor",
             "step_impl",
             "topUpActionBudgetFor"
@@ -24476,6 +25177,7 @@
             "Amount",
             "IsConservative",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_conserves",
@@ -24491,6 +25193,7 @@
             "Amount",
             "IsMonotonic",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_isConservative"
@@ -24505,6 +25208,7 @@
             "Amount",
             "LocalTo",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_does_not_touch_other_resources"
@@ -24519,6 +25223,7 @@
             "Amount",
             "FreezePreserving",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_other_resource_untouched"
@@ -24535,6 +25240,7 @@
             "Laws",
             "LegalKernel",
             "ResourceId",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_freezePreserving"
@@ -25310,7 +26016,10 @@
           "kind": "structure",
           "name": "BudgetConfig",
           "line": 47,
-          "called": []
+          "called": [
+            "actionCost",
+            "freeTier"
+          ]
         },
         {
           "kind": "def",
@@ -25319,6 +26028,8 @@
           "called": [
             "BudgetConfig",
             "BudgetPolicy",
+            "actionCost",
+            "freeTier",
             "policy"
           ]
         },
@@ -25365,6 +26076,8 @@
           "line": 90,
           "called": [
             "BudgetConfig",
+            "actionCost",
+            "freeTier",
             "magic"
           ]
         },
@@ -26903,9 +27616,11 @@
             "ExtendedState",
             "NonceState.empty",
             "State",
+            "actionCost",
             "delegateA",
             "delegateB",
             "emptyState",
+            "freeTier",
             "gasRes",
             "mockPubKey",
             "poolActor",
@@ -28710,7 +29425,9 @@
             "ExtendedState",
             "NonceState.empty",
             "State",
+            "actionCost",
             "emptyState",
+            "freeTier",
             "mockPubKey",
             "setBalance"
           ]
@@ -28739,9 +29456,11 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "assertEq",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28757,8 +29476,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28796,9 +29517,11 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "assertEq",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28860,10 +29583,12 @@
             "AdmissibleWith",
             "ExtendedState",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "assertEq",
             "es",
             "es0",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28890,8 +29615,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28926,8 +29653,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28943,9 +29672,11 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "assertEq",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28962,8 +29693,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -28979,8 +29712,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -29016,8 +29751,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -29033,8 +29770,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -29049,7 +29788,9 @@
           "line": 515,
           "called": [
             "TestCase",
+            "actionCost",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -29149,9 +29890,11 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "assertEq",
             "es",
+            "freeTier",
             "getBalance",
             "mkExtendedState",
             "mkSignedAction",
@@ -29173,10 +29916,12 @@
             "Signature",
             "SignedAction",
             "TestCase",
+            "actionCost",
             "admission_consumes_budget_on_success",
             "apply_admissible_with_budget",
             "depositWithFee",
             "es",
+            "freeTier",
             "poolActor",
             "topUpActionBudget",
             "topUpActionBudgetFor"
@@ -29194,9 +29939,11 @@
             "Signature",
             "SignedAction",
             "TestCase",
+            "actionCost",
             "admission_rejected_when_budget_zero",
             "apply_admissible_with_budget",
-            "es"
+            "es",
+            "freeTier"
           ]
         },
         {
@@ -29325,8 +30072,10 @@
           "line": 886,
           "called": [
             "TestCase",
+            "actionCost",
             "assertEq",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -29364,9 +30113,11 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "assertEq",
             "es",
+            "freeTier",
             "getBalance",
             "mkExtendedState",
             "mkSignedAction",
@@ -29383,8 +30134,10 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "assertEq",
             "es",
+            "freeTier",
             "mint",
             "mkExtendedState",
             "mkSignedAction",
@@ -29424,9 +30177,11 @@
           "called": [
             "AdmissibleWith",
             "TestCase",
+            "actionCost",
             "apply_admissible_with_budget",
             "assertEq",
             "es",
+            "freeTier",
             "mkExtendedState",
             "mkSignedAction",
             "mockVerify",
@@ -30133,6 +30888,152 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.BudgetRefund",
+      "path": "LegalKernel/Test/Bridge/BudgetRefund.lean",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "BudgetRefundTests",
+          "line": 38,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "claimant",
+          "line": 48,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "other",
+          "line": 51,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasResource",
+          "line": 54,
+          "called": [
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "now",
+          "line": 57,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "freeTier",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "actionCost",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ledger",
+          "line": 64,
+          "called": [
+            "EpochBudgetState",
+            "claimant",
+            "now"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fundedPool",
+          "line": 68,
+          "called": [
+            "State",
+            "claimant",
+            "gasPoolActor",
+            "gasResource",
+            "genesisState",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "emptyPool",
+          "line": 72,
+          "called": [
+            "State",
+            "claimant",
+            "gasPoolActor",
+            "gasResource",
+            "genesisState",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 78,
+          "called": [
+            "BudgetRefundTests",
+            "EpochBudgetState",
+            "LegalKernel.Test.Bridge",
+            "TestCase",
+            "TotalSupply",
+            "actionCost",
+            "assert",
+            "assertEq",
+            "claimant",
+            "currentBudget_after_refund_consume",
+            "currentBudget_after_refund_ge_free_tier",
+            "currentBudget_after_refund_lt",
+            "currentBudget_after_refund_other",
+            "emptyPool",
+            "freeTier",
+            "fundedPool",
+            "gasPoolActor",
+            "gasResource",
+            "getBalance",
+            "ledger",
+            "now",
+            "other",
+            "refundAmount",
+            "refundAmount_le_deposit_fee",
+            "refundAmount_le_max",
+            "refundAmount_le_of_budgetUnits_le",
+            "refund_conserves_supply",
+            "refund_consume_succeeds",
+            "refund_other_actor_untouched",
+            "refund_pays_exact_amount_from_pool",
+            "refund_pre_iff_pool_solvent",
+            "refundableBudget",
+            "refundableBudget_eq_zero_at_free_tier",
+            "refundableBudget_eq_zero_of_le_reserves",
+            "refundableBudget_le_currentBudget",
+            "setBalance",
+            "step_impl",
+            "sufficient_of_refundableBudget_pos"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.BisectionGame",
       "path": "LegalKernel/Test/Bridge/CrossCheck/BisectionGame.lean",
       "declaration_count": 9,
@@ -30340,6 +31241,7 @@
             "PublicKey",
             "ResourceId",
             "Signature",
+            "actionCost",
             "apply_admissible_with_budget",
             "depositWithFee",
             "depositWithFee_grants_budget",
@@ -31237,6 +32139,7 @@
             "Action",
             "Json",
             "encodeActionHex",
+            "gasResource",
             "poolActor",
             "topUpActionBudget"
           ]
@@ -31249,6 +32152,7 @@
             "Action",
             "Json",
             "encodeActionHex",
+            "gasResource",
             "poolActor",
             "topUpActionBudgetFor"
           ]
@@ -33909,6 +34813,7 @@
             "encodeActionFields",
             "encodeSignedAction",
             "es",
+            "gasResource",
             "poolActor",
             "recomputeCommitment",
             "stateWithBalances",
@@ -33934,6 +34839,7 @@
             "encodeActionFields",
             "encodeSignedAction",
             "es",
+            "gasResource",
             "poolActor",
             "recomputeCommitment",
             "stateWithBalances",
@@ -37347,6 +38253,7 @@
             "fileDispute",
             "genesis",
             "getBalance",
+            "other",
             "plantedDispute",
             "plantedLog",
             "preDisputeLog",
@@ -37366,6 +38273,7 @@
             "assert",
             "genesis",
             "getBalance",
+            "other",
             "plantedLog",
             "proposeAndApplyVerdict",
             "qpZero",
@@ -37469,6 +38377,7 @@
             "checkPreconditionFalse",
             "emptyLog",
             "genesis",
+            "other",
             "twoEntryLog"
           ]
         },
@@ -37540,6 +38449,7 @@
             "genesis",
             "mockVerify",
             "oracleReject",
+            "other",
             "registeredEs",
             "signedEntry",
             "twoEntryLog"
@@ -37554,7 +38464,8 @@
             "TestCase",
             "checkNonceMismatch",
             "emptyLog",
-            "genesis"
+            "genesis",
+            "other"
           ]
         },
         {
@@ -37571,7 +38482,8 @@
             "checkOracleMisreported_inconclusive_on_out_of_range",
             "fixtureLogEntry",
             "oracleReject",
-            "oracleUphold"
+            "oracleUphold",
+            "other"
           ]
         },
         {
@@ -37586,6 +38498,7 @@
             "checkDoubleApply_rejects_self",
             "emptyLog",
             "fixtureLogEntry",
+            "other",
             "transfer",
             "twoEntryLog"
           ]
@@ -37608,6 +38521,7 @@
             "genesis",
             "oracleReject",
             "oracleUphold",
+            "other",
             "twoEntryLog"
           ]
         },
@@ -37821,6 +38735,7 @@
             "fileDispute_rejects_duplicateDispute",
             "fileDispute_rejects_indexOutOfRange",
             "findPriorDisputeIdx",
+            "other",
             "threeEntryLog"
           ]
         },
@@ -37866,6 +38781,7 @@
             "TestCase",
             "disputeAndVerdictLog",
             "disputeStatus",
+            "other",
             "threeEntryLog"
           ]
         },
@@ -38489,6 +39405,7 @@
             "es",
             "fixtureDispute",
             "fixtureVerdictUpheld",
+            "other",
             "policy",
             "union_adjudicator_left_bias_fallthrough",
             "union_adjudicator_left_bias_some",
@@ -38531,6 +39448,7 @@
             "fixtureVerdictRejected",
             "fixtureVerdictUpheld",
             "freezeResource",
+            "other",
             "policy",
             "proportionalChallengerReward_returns_none_on_amountless_impugned",
             "proportionalChallengerReward_value_correct",
@@ -38746,6 +39664,7 @@
             "fixturePolicy",
             "fundedEs",
             "getBalance",
+            "other",
             "poorEs"
           ]
         },
@@ -38910,6 +39829,7 @@
             "assert",
             "baseEs",
             "oracleUphold",
+            "other",
             "proposeVerdict",
             "qpSingleton",
             "transferThenDisputeLog"
@@ -38934,6 +39854,7 @@
             "baseEs",
             "es",
             "genesis",
+            "other",
             "transferThenDisputeLog",
             "verdictAgainstDispute1"
           ]
@@ -39010,6 +39931,7 @@
             "es",
             "genesis",
             "oracleUphold",
+            "other",
             "proposeAndApplyVerdict",
             "proposeAndApplyVerdict_deterministic",
             "proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok",
@@ -39807,7 +40729,8 @@
             "DisputeClaim.fieldsBounded",
             "TestCase",
             "assert",
-            "disputeClaim_roundtrip"
+            "disputeClaim_roundtrip",
+            "other"
           ]
         },
         {
@@ -39817,7 +40740,8 @@
           "called": [
             "EvidenceVerdict",
             "TestCase",
-            "assert"
+            "assert",
+            "other"
           ]
         },
         {
@@ -39849,7 +40773,8 @@
             "TestCase",
             "assert",
             "dispute_roundtrip_empty",
-            "fixtureDispute"
+            "fixtureDispute",
+            "other"
           ]
         },
         {
@@ -39887,6 +40812,7 @@
             "assert",
             "assertEq",
             "fixtureVerdict",
+            "other",
             "verdict_encode_deterministic",
             "verdict_roundtrip_empty"
           ]
@@ -40270,7 +41196,8 @@
           "called": [
             "Event.decode",
             "TestCase",
-            "assertEq"
+            "assertEq",
+            "other"
           ]
         },
         {
@@ -42071,7 +42998,9 @@
             "BudgetPolicy.encode",
             "Stream",
             "TestCase",
-            "budgetPolicy_bounded_roundtrip"
+            "actionCost",
+            "budgetPolicy_bounded_roundtrip",
+            "freeTier"
           ]
         },
         {
@@ -42378,8 +43307,10 @@
             "ExtendedState",
             "SignedAction",
             "TestCase",
+            "actionCost",
             "extractEvents",
-            "extractEvents_emits_budgetConsumed_for_non_bridge_signer"
+            "extractEvents_emits_budgetConsumed_for_non_bridge_signer",
+            "freeTier"
           ]
         },
         {
@@ -44447,7 +45378,8 @@
             "TestCase",
             "bootstrapFromAttestedSnapshotWith",
             "goodAttestation",
-            "mockVerify"
+            "mockVerify",
+            "other"
           ]
         },
         {
@@ -44475,6 +45407,7 @@
             "attestorRegistry",
             "bootstrapFromAttestedSnapshotWith",
             "mockVerify",
+            "other",
             "tamperedAttestation"
           ]
         },
@@ -45091,6 +46024,7 @@
             "TestCase",
             "bootstrapFromSnapshot",
             "hashEncodable",
+            "other",
             "wrongSeedHash"
           ]
         },
@@ -47271,7 +48205,9 @@
           "name": "sampleConfigs",
           "line": 25,
           "called": [
-            "BudgetConfig"
+            "BudgetConfig",
+            "actionCost",
+            "freeTier"
           ]
         },
         {
@@ -47293,8 +48229,10 @@
           "called": [
             "BudgetConfig",
             "TestCase",
+            "actionCost",
             "assertEq",
-            "decode"
+            "decode",
+            "freeTier"
           ]
         },
         {
@@ -47313,7 +48251,9 @@
           "line": 65,
           "called": [
             "TestCase",
+            "actionCost",
             "assert",
+            "freeTier",
             "isDefault"
           ]
         },
@@ -47546,6 +48486,7 @@
             "mkRuntimeState",
             "mkSignedAction",
             "mockVerify",
+            "other",
             "policy",
             "processSignedActionWith",
             "testDeploymentId",
@@ -48127,7 +49068,8 @@
             "TestCase",
             "decodeFrame",
             "dummyEntry",
-            "encodeFrame"
+            "encodeFrame",
+            "other"
           ]
         },
         {
@@ -48138,7 +49080,8 @@
             "TestCase",
             "decodeFrame",
             "dummyEntry",
-            "encodeFrame"
+            "encodeFrame",
+            "other"
           ]
         },
         {
@@ -48517,6 +49460,7 @@
             "bootstrapFromSnapshot",
             "genesis",
             "hashStream",
+            "other",
             "policy",
             "takeSnapshot",
             "zeroHash"
@@ -48540,6 +49484,7 @@
             "assertEq",
             "bootstrapFromSnapshot",
             "genesis",
+            "other",
             "policy",
             "takeSnapshot",
             "zeroHash"
@@ -48594,6 +49539,7 @@
             "bootstrapFromSnapshot",
             "genesis",
             "hashStream",
+            "other",
             "policy",
             "replay",
             "takeSnapshot",
@@ -49141,6 +50087,7 @@
             "chainBroken",
             "genesis",
             "hashStream",
+            "other",
             "policy",
             "replay",
             "syntheticEntry"
@@ -49153,6 +50100,7 @@
           "called": [
             "TestCase",
             "genesis",
+            "other",
             "policy",
             "replay",
             "syntheticEntry"
@@ -49180,6 +50128,7 @@
             "chainBroken",
             "genesis",
             "hashStream",
+            "other",
             "policy",
             "replayFromSeed",
             "syntheticEntry"
@@ -49195,6 +50144,7 @@
             "TestCase",
             "genesis",
             "hashStream",
+            "other",
             "policy",
             "replay",
             "syntheticEntry",
@@ -50355,7 +51305,8 @@
           "name": "PropertyKind.ofString",
           "line": 88,
           "called": [
-            "PropertyKind"
+            "PropertyKind",
+            "other"
           ]
         },
         {
@@ -50432,6 +51383,7 @@
             "burn",
             "freezeResource",
             "mint",
+            "other",
             "reward"
           ]
         },
@@ -50446,6 +51398,7 @@
             "burn",
             "freezeResource",
             "mint",
+            "other",
             "reward"
           ]
         },
@@ -50479,6 +51432,7 @@
             "burn",
             "freezeResource",
             "mint",
+            "other",
             "reward"
           ]
         },
@@ -50492,6 +51446,7 @@
             "burn",
             "freezeResource",
             "mint",
+            "other",
             "reward"
           ]
         },
@@ -50505,6 +51460,7 @@
             "burn",
             "freezeResource",
             "mint",
+            "other",
             "reward"
           ]
         },
@@ -51579,6 +52535,7 @@
             "freezeResource",
             "lookupProofOverride",
             "mint",
+            "other",
             "parsePropertyList",
             "reward",
             "synth_conservative",
@@ -52255,6 +53212,7 @@
             "fixtureRegistry",
             "fixtureReservedRange",
             "formatRegistry",
+            "other",
             "parseRegistry",
             "parseRegistryLine",
             "stripWhitespace",
@@ -55305,7 +56263,10 @@
           "kind": "structure",
           "name": "GlobalFlags",
           "line": 855,
-          "called": []
+          "called": [
+            "actionCost",
+            "freeTier"
+          ]
         },
         {
           "kind": "namespace",
@@ -55382,7 +56343,9 @@
           "line": 984,
           "called": [
             "GlobalFlags",
+            "actionCost",
             "decodeHexString",
+            "freeTier",
             "recordNatFlag"
           ]
         },
@@ -55539,7 +56502,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 203,
+          "line": 204,
           "called": [
             "runAll"
           ]
