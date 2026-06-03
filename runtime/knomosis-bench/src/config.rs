@@ -19,6 +19,7 @@
 //!
 //! | Flag                       | Default            | Description                                                |
 //! |----------------------------|--------------------|------------------------------------------------------------|
+//! | `--persistent`             | (off)              | Pipeline requests on one reused connection per worker (makes DRR bite over the wire).|
 //! | `--standalone`             | (implicit default) | Spawn an in-process knomosis-host (default if no `--connect`).|
 //! | `--connect <ENDPOINT>`     | (none)             | Connect to an existing knomosis-host (excludes `--standalone`).|
 //! | `--unix-socket <PATH>`     | auto tempdir       | Standalone-mode Unix-socket path.                          |
@@ -91,6 +92,23 @@ pub struct CliConfig {
     pub target_p99_ms: Option<f64>,
     /// Suppress stdout human summary.
     pub quiet: bool,
+    /// Emit Rung-1 (v2) signer hints on the wire (FQ.13c).  When set,
+    /// the harness opens each connection with the `KNH2` preamble and
+    /// prepends each frame's 8-byte signer hint (the sender `ActorId`
+    /// the fixture already determines), exercising the two-tier DRR
+    /// path.  Default OFF emits byte-identical legacy v1 frames (no
+    /// regression).
+    pub emit_hints: bool,
+    /// `--persistent`: drive the host's persistent + pipelined connection
+    /// mode (each worker reuses ONE connection and pipelines requests in
+    /// batches) instead of one connect-per-request.  This is the mode
+    /// under which two-tier DRR diverges from FIFO over the wire, so a
+    /// throughput run measures the actual fair-scheduling path.  In
+    /// `--standalone` mode the embedded host is started with
+    /// `--persistent-connections` automatically; against a `--connect`
+    /// target the host MUST be started with `--persistent-connections`.
+    /// Default OFF (one-shot).
+    pub persistent: bool,
 }
 
 /// Benchmark mode: spawn an in-process server or connect to an
@@ -143,6 +161,8 @@ impl CliConfig {
             target_tps: None,
             target_p99_ms: None,
             quiet: false,
+            emit_hints: false,
+            persistent: false,
         }
     }
 
@@ -358,6 +378,14 @@ pub fn parse_args(args: &[String]) -> Result<CliConfig, ParseError> {
                 cfg.quiet = true;
                 i += 1;
             }
+            "--persistent" => {
+                cfg.persistent = true;
+                i += 1;
+            }
+            "--emit-hints" => {
+                cfg.emit_hints = true;
+                i += 1;
+            }
             other => return Err(ParseError::UnknownFlag(other.to_string())),
         }
     }
@@ -520,6 +548,11 @@ WORKLOAD:
     --worker-count <N>         Concurrent submitter threads (default 64).
     --warmup-requests <N>      Warmup requests excluded from latency (default 1000).
     --seed <N>                 Fixture seed (decimal or 0x-prefixed hex).
+    --emit-hints               Emit Rung-1 (v2) signer hints on the wire (default off;
+                               exercises the two-tier DRR path under --scheduler drr).
+    --persistent               Pipeline requests on one reused connection per worker
+                               (default off; makes DRR bite over the wire — standalone
+                               enables the host's --persistent-connections automatically).
 
 SERVER (standalone mode):
     --queue-depth <N>          Server queue depth (default knomosis-host's default).
@@ -569,6 +602,24 @@ mod tests {
             cfg.mode,
             BenchMode::Standalone(StandaloneListener::UnixSocket(None))
         ));
+        // FQ.13c: hint emission is OFF by default (legacy v1 frames).
+        assert!(!cfg.emit_hints);
+    }
+
+    /// FQ.13c: `--emit-hints` sets the flag.
+    #[test]
+    fn emit_hints_flag_parses() {
+        let cfg = parse_args(&argv(&["--emit-hints"])).unwrap();
+        assert!(cfg.emit_hints);
+    }
+
+    /// `--persistent` is OFF by default and set by the flag.
+    #[test]
+    fn persistent_flag_parses() {
+        let default = parse_args(&argv(&[])).unwrap();
+        assert!(!default.persistent, "one-shot by default");
+        let cfg = parse_args(&argv(&["--persistent"])).unwrap();
+        assert!(cfg.persistent);
     }
 
     /// `--help` returns the typed error.
@@ -863,6 +914,7 @@ mod tests {
         assert!(s.contains("--connect"));
         assert!(s.contains("--actor-count"));
         assert!(s.contains("--target-tps"));
+        assert!(s.contains("--emit-hints"));
     }
 
     /// `--unix-socket` sets the standalone listener correctly.

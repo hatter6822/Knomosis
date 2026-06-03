@@ -11,9 +11,12 @@
 //!
 //!   1. Receive a generated [`crate::fixture::Fixture`] and a
 //!      benchmark [`Endpoint`] (Unix-socket path or TCP address).
-//!   2. Frame every payload up-front (4-byte BE length prefix +
-//!      raw CBE bytes) so the worker hot path is one
-//!      `write_all(framed_bytes)` per request.
+//!   2. Frame every payload up-front so the worker hot path is one
+//!      `write_all(framed_bytes)` per request.  Default: a legacy v1
+//!      frame (4-byte BE length prefix + raw CBE bytes).  Under
+//!      `--emit-hints` (FQ.13c): the `KNH2` preamble + an 8-byte signer
+//!      hint + the length-prefixed payload (the Rung-1 wire format),
+//!      both via the canonical `knomosis_host::frame` encoders.
 //!   3. Partition the pre-generated payloads across `worker_count`
 //!      submitter threads via a shared `AtomicUsize` cursor.
 //!   4. Each worker thread:
@@ -259,6 +262,27 @@ pub struct RunnerConfig {
     pub warmup_requests: usize,
     /// Per-request connect+request+response timeout.
     pub request_timeout: Duration,
+    /// Emit Rung-1 (v2) signer hints on the wire (FQ.13c).  When set,
+    /// each pre-framed request becomes `KNH2` preamble + an 8-byte
+    /// signer hint + the length-prefixed payload (the canonical Rung-1
+    /// frame, via [`knomosis_host::frame::encode_hinted_frame`]); the
+    /// hint is the sender `ActorId` the fixture's round-robin
+    /// determines.  Default `false` emits byte-identical legacy v1
+    /// frames.
+    pub emit_hints: bool,
+    /// Drive the host's persistent + pipelined connection mode
+    /// (`--persistent`): each worker reuses ONE connection and pipelines
+    /// requests in batches (write a batch, read the batch's verdicts,
+    /// repeat) rather than one connect-per-request.  This is the mode
+    /// under which two-tier DRR diverges from FIFO over the wire, so a
+    /// throughput run here measures the actual fair-scheduling path.  The
+    /// target host MUST be started with `--persistent-connections`.
+    /// Default `false` (one-shot, byte-identical to the historical path).
+    pub persistent: bool,
+    /// Pipelining depth per batch in persistent mode (how many requests a
+    /// worker writes before reading their verdicts).  Bounded in practice
+    /// by the host's `--max-conn-backlog`.  Ignored unless `persistent`.
+    pub pipeline_batch: usize,
 }
 
 impl RunnerConfig {
@@ -276,9 +300,18 @@ impl RunnerConfig {
             // Per-request budget under the 10k tx/sec target is
             // 100µs, so 30s is 5+ orders of magnitude of margin.
             request_timeout: Duration::from_secs(30),
+            emit_hints: false,
+            persistent: false,
+            pipeline_batch: DEFAULT_PIPELINE_BATCH,
         }
     }
 }
+
+/// Default pipelining depth per batch in persistent mode.  32 keeps a
+/// worker's in-flight backlog comfortably under the host's default
+/// `--max-conn-backlog` (= `--per-flow-cap` = 64) while amortising the
+/// per-batch round trip across enough requests to keep the worker busy.
+pub const DEFAULT_PIPELINE_BATCH: usize = 32;
 
 /// Errors surfaced by the runner.
 #[derive(Debug, thiserror::Error)]
@@ -441,6 +474,14 @@ struct SharedRunState {
     /// runner's return value.  Locked only on worker error
     /// (off the hot path).
     first_error: Mutex<Option<SubmissionError>>,
+    /// Whether the wire frames are v2 (hinted).  In persistent mode the
+    /// worker uses this to send the `KNH2` preamble once per connection
+    /// (the pre-framed entries are bare hinted frames).  Read once per
+    /// connection, not per request.
+    emit_hints: bool,
+    /// Pipelining depth per batch in persistent mode (ignored by the
+    /// one-shot worker).
+    pipeline_batch: usize,
 }
 
 /// Per-worker return value: the local histogram plus the most-recent
@@ -469,19 +510,51 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
         });
     }
 
-    // 1. Frame every payload up-front.  Frame = 4-byte BE length +
-    //    payload bytes.  Pre-framing means the runner hot path
-    //    is one `write_all(framed_bytes)` per request — no
-    //    per-request allocation, no per-request encoder call.
+    // 1. Frame every payload up-front so the runner hot path is one
+    //    `write_all(framed_bytes)` per request — no per-request
+    //    allocation, no per-request encoder call.
+    //
+    //    Legacy (default): frame = `[4-byte BE length][payload]`.
+    //
+    //    Rung-1 (`--emit-hints`, FQ.13c): because the host is
+    //    one-shot-per-connection, each framed entry is one connection's
+    //    ENTIRE write, so it carries the `KNH2` preamble + an 8-byte
+    //    signer hint + the length-prefixed payload.  The hint is the
+    //    sender `ActorId`, which the fixture's round-robin assigns
+    //    deterministically as `i % actor_count` (see
+    //    `fixture::generate`).  Both paths use the canonical
+    //    `knomosis_host::frame` encoders (the single source of truth for
+    //    the wire layout — FQ.9), so the bench can never drift from the
+    //    host's `read_request`.
+    //    In PERSISTENT mode the `KNH2` preamble is a per-CONNECTION
+    //    concern (sent once by the worker at connection open), so the
+    //    pre-framed entries are BARE hinted frames; in one-shot mode each
+    //    entry is one connection's entire write, so it bakes the preamble
+    //    in.  Either way the bytes on the wire are identical.
+    let actor_count = fixture.config.actor_count.max(1);
     let framed_payloads: Vec<Vec<u8>> = fixture
         .payloads
         .iter()
-        .map(|p| {
-            let len = u32::try_from(p.len()).expect("payload fits u32");
-            let mut buf = Vec::with_capacity(4 + p.len());
-            buf.extend_from_slice(&len.to_be_bytes());
-            buf.extend_from_slice(p);
-            buf
+        .enumerate()
+        .map(|(i, p)| {
+            if config.emit_hints {
+                let signer = (i % actor_count) as u64;
+                let hinted =
+                    knomosis_host::frame::encode_hinted_frame(signer, p).expect("payload fits u32");
+                if config.persistent {
+                    // Bare hinted frame; the worker sends the preamble once.
+                    hinted
+                } else {
+                    let mut buf = Vec::with_capacity(
+                        knomosis_host::frame::KNH2_PREAMBLE.len() + hinted.len(),
+                    );
+                    buf.extend_from_slice(&knomosis_host::frame::KNH2_PREAMBLE);
+                    buf.extend_from_slice(&hinted);
+                    buf
+                }
+            } else {
+                knomosis_host::frame::encode_frame(p).expect("payload fits u32")
+            }
         })
         .collect();
     let framed_payloads = Arc::new(framed_payloads);
@@ -497,6 +570,8 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
         measured_count: AtomicUsize::new(0),
         abort: AtomicBool::new(false),
         first_error: Mutex::new(None),
+        emit_hints: config.emit_hints,
+        pipeline_batch: config.pipeline_batch.max(1),
     });
 
     // 2. Spawn workers.  Graceful handling on spawn failure
@@ -504,14 +579,20 @@ pub fn run(fixture: &Fixture, config: &RunnerConfig) -> Result<RunOutcome, Runne
     //    knomosis-host audit-pass-2 C-NEW-3 fix: surface the OS error
     //    as a typed `RunnerError::SpawnFailed` rather than panicking.
     let mut handles: Vec<JoinHandle<WorkerOutcome>> = Vec::with_capacity(config.worker_count);
+    let persistent = config.persistent;
     for worker_id in 0..config.worker_count {
         let shared_for_closure = Arc::clone(&shared);
         let endpoint = config.endpoint.clone();
         let timeout = config.request_timeout;
         match std::thread::Builder::new()
             .name(format!("knomosis-bench-worker-{worker_id}"))
-            .spawn(move || worker_loop(&shared_for_closure, &endpoint, timeout))
-        {
+            .spawn(move || {
+                if persistent {
+                    worker_loop_persistent(&shared_for_closure, &endpoint, timeout)
+                } else {
+                    worker_loop(&shared_for_closure, &endpoint, timeout)
+                }
+            }) {
             Ok(handle) => handles.push(handle),
             Err(source) => {
                 // Signal abort so already-spawned workers exit
@@ -781,6 +862,154 @@ fn submit_once(
         verdict_byte,
         reason,
     })
+}
+
+/// Read one response from a PERSISTENT connection and verify it is `Ok`.
+///
+/// Unlike [`submit_once`]'s happy-path fast-exit (which leaves any reason
+/// bytes unread because the socket closes immediately), this MUST consume
+/// the full response — header AND reason — so the byte stream stays framed
+/// for the next pipelined response.  For the always-`Ok`, empty-reason
+/// MockKernel the reason length is `0`, so the consume is a no-op and the
+/// hot path stays allocation-free.
+///
+/// # Errors
+///
+/// See [`SubmissionError`].
+fn read_and_verify_verdict<R: Read>(conn: &mut R) -> Result<(), SubmissionError> {
+    let mut header = [0u8; 5];
+    read_exact_with_eof(conn, &mut header, ReadKind::Header)?;
+    let verdict_byte = header[0];
+    let reason_len = u32::from_be_bytes([header[1], header[2], header[3], header[4]]) as usize;
+    if reason_len > MAX_REASON_BYTES {
+        return Err(SubmissionError::ResponseTooLarge {
+            declared: reason_len,
+            max: MAX_REASON_BYTES,
+        });
+    }
+    // Consume the reason (if any) to keep the stream framed.
+    let reason = if reason_len > 0 {
+        let mut reason_bytes = vec![0u8; reason_len];
+        read_exact_with_eof(
+            conn,
+            &mut reason_bytes,
+            ReadKind::Reason {
+                declared: reason_len,
+            },
+        )?;
+        Some(String::from_utf8_lossy(&reason_bytes).into_owned())
+    } else {
+        None
+    };
+    if verdict_byte == 0 {
+        return Ok(());
+    }
+    Err(SubmissionError::UnexpectedVerdict {
+        verdict_byte,
+        reason: reason.unwrap_or_default(),
+    })
+}
+
+/// Per-worker loop for the PERSISTENT + pipelined mode (`--persistent`):
+/// one reused connection per worker, requests written in pipelined
+/// batches (write a batch, then read the batch's verdicts in order),
+/// driving the host's persistent path under which two-tier DRR diverges
+/// from FIFO over the wire.  Per-request latency is measured as
+/// `response_read - request_write`, which under in-order delivery captures
+/// the pipelining queue + processing time.
+fn worker_loop_persistent(
+    shared: &SharedRunState,
+    endpoint: &Endpoint,
+    timeout: Duration,
+) -> WorkerOutcome {
+    let measurable = shared.total_requests.saturating_sub(shared.warmup_requests);
+    let per_worker_cap = measurable.div_ceil(shared.worker_count.max(1)).min(1 << 20);
+    let mut local_hist = Histogram::with_capacity(per_worker_cap);
+    let mut last_completion: Option<Instant> = None;
+
+    if let Err(e) = persistent_session(
+        shared,
+        endpoint,
+        timeout,
+        &mut local_hist,
+        &mut last_completion,
+    ) {
+        let mut guard = shared.first_error.lock().unwrap_or_else(|p| p.into_inner());
+        if guard.is_none() {
+            *guard = Some(e);
+        }
+        drop(guard);
+        shared.abort.store(true, Ordering::Release);
+    }
+    WorkerOutcome {
+        histogram: local_hist,
+        last_completion,
+    }
+}
+
+/// The fallible body of [`worker_loop_persistent`]: open one connection,
+/// send the v2 preamble once (if hinted), then pipeline batches until the
+/// shared cursor is exhausted, recording per-request latencies.
+fn persistent_session(
+    shared: &SharedRunState,
+    endpoint: &Endpoint,
+    timeout: Duration,
+    hist: &mut Histogram,
+    last: &mut Option<Instant>,
+) -> Result<(), SubmissionError> {
+    let mut conn = endpoint.connect_with_timeout(DEFAULT_CONNECT_TIMEOUT)?;
+    conn.set_timeout(timeout)?;
+    // The `KNH2` preamble is a per-connection concern in persistent mode
+    // (the pre-framed entries are bare hinted frames), so send it once.
+    if shared.emit_hints {
+        conn.write_all(&knomosis_host::frame::KNH2_PREAMBLE)?;
+    }
+    let batch = shared.pipeline_batch.max(1);
+    let mut write_times: Vec<Instant> = Vec::with_capacity(batch);
+    loop {
+        if shared.abort.load(Ordering::Acquire) {
+            break;
+        }
+        // Claim a contiguous batch of request indices.
+        let start = shared.cursor.fetch_add(batch, Ordering::AcqRel);
+        if start >= shared.total_requests {
+            break;
+        }
+        let end = (start + batch).min(shared.total_requests);
+        write_times.clear();
+        // Write the batch pipelined (no per-request response wait).
+        for idx in start..end {
+            if idx >= shared.warmup_requests && !shared.measurement_started.load(Ordering::Acquire)
+            {
+                let mut guard = shared
+                    .measurement_start
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
+                if guard.is_none() {
+                    *guard = Some(Instant::now());
+                    shared.measurement_started.store(true, Ordering::Release);
+                }
+                drop(guard);
+            }
+            write_times.push(Instant::now());
+            conn.write_all(&shared.framed_payloads[idx])?;
+        }
+        conn.flush()?;
+        // Read the batch's verdicts in order, pairing each with its write
+        // timestamp (responses are delivered in submission order).
+        for (k, idx) in (start..end).enumerate() {
+            read_and_verify_verdict(&mut conn)?;
+            let completion = Instant::now();
+            if idx >= shared.warmup_requests {
+                hist.record(completion.duration_since(write_times[k]));
+                shared.measured_count.fetch_add(1, Ordering::AcqRel);
+                *last = Some(completion);
+            }
+        }
+    }
+    // Clean half-close so the host sees an immediate EOF.
+    let _ = conn.shutdown_write();
+    Ok(())
 }
 
 /// Read exactly `buf.len()` bytes from `reader`, returning a typed

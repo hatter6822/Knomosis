@@ -42,6 +42,10 @@
 //!     outside the threshold in the worse direction (throughput
 //!     dropped, p99 grew).  Carries a typed `RegressionDetail`
 //!     per metric so callers can report each independently.
+//!   * `NotComparable { ... }` — the two reports were measured under
+//!     different wire modes (`emit_hints` differs), so the metrics
+//!     are not directly comparable; the caller must re-baseline in
+//!     the same mode rather than trust a pass/fail.
 //!
 //! "Worse" is direction-aware:
 //!
@@ -97,6 +101,30 @@ pub struct BenchmarkReport {
     pub latency: LatencySummary,
     /// The transport the benchmark used.
     pub transport: TransportKind,
+    /// Whether the run used the v2 hinted wire path (`--emit-hints`):
+    /// each frame is prefixed with the `KNH2` preamble + an 8-byte signer
+    /// hint (FQ.13c).  This is a distinct benchmark *mode* — the hinted
+    /// path carries extra per-frame bytes and exercises the host's
+    /// negotiation — so a hinted candidate and a legacy (un-hinted)
+    /// baseline measure different things and MUST NOT be regression-
+    /// compared (see [`compare_against_baseline`]).
+    ///
+    /// `#[serde(default)]` so a pre-Rung-1 baseline (recorded before this
+    /// field existed) loads as `false`, which is exactly the legacy v1
+    /// wire mode it was measured under — no false equivalence.
+    #[serde(default)]
+    pub emit_hints: bool,
+    /// Whether the run drove the host's persistent + pipelined connection
+    /// mode (`--persistent`).  This is a distinct benchmark *mode* — a
+    /// pipelined run amortises connection setup and queues many requests
+    /// per connection, so its throughput is not comparable to a one-shot
+    /// run.  Together with [`Self::emit_hints`] it forms the run's wire
+    /// mode; [`compare_against_baseline`] refuses to compare across modes.
+    ///
+    /// `#[serde(default)]` so a pre-persistent baseline loads as `false`
+    /// (the one-shot mode it was measured under).
+    #[serde(default)]
+    pub persistent: bool,
 }
 
 /// Snapshot of `FixtureConfig` fields included in the report.  We
@@ -359,6 +387,19 @@ impl BenchmarkReport {
             self.identifier, self.harness_version, self.protocol_version
         ));
         out.push_str(&format!("  Transport       : {}\n", self.transport.name()));
+        out.push_str(&format!(
+            "  Wire mode       : {}{}\n",
+            if self.emit_hints {
+                "v2-hinted (--emit-hints)"
+            } else {
+                "v1-legacy"
+            },
+            if self.persistent {
+                " + persistent (--persistent)"
+            } else {
+                " + one-shot"
+            }
+        ));
         out.push_str(&format!("  Workers         : {}\n", self.worker_count));
         out.push_str(&format!(
             "  Actors          : {}\n",
@@ -425,6 +466,25 @@ pub enum RegressionVerdict {
         /// `WithinTolerance`).
         details: Vec<RegressionDetail>,
     },
+    /// The two reports were measured under DIFFERENT wire modes — the
+    /// hinted (`emit_hints`) and/or persistent (`persistent`) dimensions
+    /// differ — so the metrics are not directly comparable: the v2 hinted
+    /// path carries extra per-frame bytes, and the persistent path
+    /// pipelines requests / amortises connection setup, so a cross-mode
+    /// comparison would silently hide or misattribute regressions.  The
+    /// caller MUST treat this as "the requested regression check could not
+    /// be performed" (operator action: re-baseline in the same mode)
+    /// rather than a pass.
+    NotComparable {
+        /// The baseline's hinted-wire dimension.
+        baseline_emit_hints: bool,
+        /// The candidate's hinted-wire dimension.
+        candidate_emit_hints: bool,
+        /// The baseline's persistent-connection dimension.
+        baseline_persistent: bool,
+        /// The candidate's persistent-connection dimension.
+        candidate_persistent: bool,
+    },
 }
 
 /// Per-metric regression detail.
@@ -482,6 +542,16 @@ impl RegressionMetric {
 /// Speed improvements (lower latency, higher throughput) NEVER
 /// trigger a regression.
 ///
+/// ## Wire-mode guard (Rung 1.5)
+///
+/// If the two reports were measured under different wire modes
+/// (`emit_hints` differs), the result is `NotComparable` BEFORE any
+/// metric is examined: the v2 hinted path (`--emit-hints`) carries extra
+/// per-frame bytes and exercises the host's negotiation, so a
+/// hinted-vs-legacy comparison would silently hide or misattribute
+/// regressions.  The CLI maps `NotComparable` to an operator-action exit
+/// (re-baseline in the same mode), never a pass.
+///
 /// ## Non-finite defense
 ///
 /// If `threshold` is non-finite (NaN / ±∞) the result is
@@ -496,6 +566,19 @@ pub fn compare_against_baseline(
     candidate: &BenchmarkReport,
     threshold: f64,
 ) -> RegressionVerdict {
+    // Wire-mode guard FIRST: a candidate measured under a different wire
+    // mode (hinted and/or persistent) than the baseline measures a
+    // different benchmark, so refuse to emit a (possibly misleading)
+    // pass/fail verdict.
+    if baseline.emit_hints != candidate.emit_hints || baseline.persistent != candidate.persistent {
+        return RegressionVerdict::NotComparable {
+            baseline_emit_hints: baseline.emit_hints,
+            candidate_emit_hints: candidate.emit_hints,
+            baseline_persistent: baseline.persistent,
+            candidate_persistent: candidate.persistent,
+        };
+    }
+
     let mut details: Vec<RegressionDetail> = Vec::new();
 
     // Defensive: a non-finite threshold can't produce a meaningful
@@ -636,6 +719,8 @@ mod tests {
                 p999_ns,
             },
             transport: TransportKind::UnixSocket,
+            emit_hints: false,
+            persistent: false,
         }
     }
 
@@ -1126,6 +1211,149 @@ mod tests {
         assert!(s.contains("p99"));
         assert!(s.contains("p999"));
         assert!(s.contains("unix-socket"));
+        // The wire mode is surfaced (legacy by default).
+        assert!(s.contains("Wire mode"));
+        assert!(s.contains("v1-legacy"));
+    }
+
+    /// `to_human_summary` surfaces the hinted wire mode.
+    #[test]
+    fn human_summary_shows_hinted_wire_mode() {
+        let mut report = make_report(10_000.0, 100_000, 500_000, 1_000_000);
+        report.emit_hints = true;
+        let s = report.to_human_summary();
+        assert!(s.contains("v2-hinted"));
+        assert!(s.contains("--emit-hints"));
+    }
+
+    /// Rung 1.5 — a hinted candidate vs a legacy baseline is
+    /// `NotComparable` (different wire modes measure different things),
+    /// regardless of how the metrics themselves compare.
+    #[test]
+    fn wire_mode_mismatch_is_not_comparable() {
+        let baseline = make_report(10_000.0, 100_000, 500_000, 1_000_000);
+        let mut candidate = baseline.clone();
+        candidate.emit_hints = true; // hinted candidate vs legacy baseline
+                                     // Even though every metric is identical, the comparison is
+                                     // refused because the modes differ.
+        let v = compare_against_baseline(&baseline, &candidate, 0.10);
+        match v {
+            RegressionVerdict::NotComparable {
+                baseline_emit_hints,
+                candidate_emit_hints,
+                ..
+            } => {
+                assert!(!baseline_emit_hints);
+                assert!(candidate_emit_hints);
+            }
+            other => panic!("expected NotComparable, got {other:?}"),
+        }
+        // Symmetric: legacy candidate vs hinted baseline is also refused.
+        let v = compare_against_baseline(&candidate, &baseline, 0.10);
+        assert!(matches!(v, RegressionVerdict::NotComparable { .. }));
+    }
+
+    /// Rung 1.5 — a persistent candidate vs a one-shot baseline is also
+    /// `NotComparable` (the persistent path pipelines / amortises
+    /// connection setup, so its throughput is a different benchmark).
+    #[test]
+    fn persistent_mode_mismatch_is_not_comparable() {
+        let baseline = make_report(10_000.0, 100_000, 500_000, 1_000_000);
+        let mut candidate = baseline.clone();
+        candidate.persistent = true; // persistent candidate vs one-shot baseline
+        let v = compare_against_baseline(&baseline, &candidate, 0.10);
+        match v {
+            RegressionVerdict::NotComparable {
+                baseline_persistent,
+                candidate_persistent,
+                ..
+            } => {
+                assert!(!baseline_persistent);
+                assert!(candidate_persistent);
+            }
+            other => panic!("expected NotComparable, got {other:?}"),
+        }
+    }
+
+    /// Rung 1.5 — when BOTH reports share the same wire mode (both
+    /// hinted), the comparison proceeds normally (a real regression is
+    /// still detected).
+    #[test]
+    fn same_wire_mode_compares_normally() {
+        let mut baseline = make_report(10_000.0, 100_000, 500_000, 1_000_000);
+        baseline.emit_hints = true;
+        let mut candidate = make_report(8_000.0, 100_000, 500_000, 1_000_000);
+        candidate.emit_hints = true;
+        // 20% throughput drop under matching (hinted) modes ⇒ regression.
+        let v = compare_against_baseline(&baseline, &candidate, 0.10);
+        match v {
+            RegressionVerdict::Regression { details } => {
+                assert!(details
+                    .iter()
+                    .any(|d| d.metric == RegressionMetric::ThroughputDropped));
+            }
+            other => panic!("expected Regression, got {other:?}"),
+        }
+    }
+
+    /// A pre-Rung-1 baseline JSON (no `emit_hints` field) loads via the
+    /// serde default as `false` — the legacy v1 wire mode it was actually
+    /// measured under — so it round-trips and compares as legacy.
+    #[test]
+    fn legacy_baseline_without_emit_hints_loads_as_false() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("legacy.json");
+        // Note: no "emit_hints" key — a baseline recorded before the
+        // field existed.
+        let json = r#"{
+            "identifier": "knomosis-bench/v1",
+            "harness_version": "0.3.0",
+            "protocol_version": 1,
+            "fixture_config": {
+                "seed": 1,
+                "actor_count": 10,
+                "transfer_count": 100,
+                "resource_id": 0,
+                "transfer_amount": 1,
+                "deployment_id_hex": "00"
+            },
+            "worker_count": 64,
+            "warmup_requests": 1000,
+            "elapsed_ns": 1000000000,
+            "measured_requests": 9000,
+            "throughput_ops_per_sec": 1000.0,
+            "latency": {
+                "count": 9000,
+                "min_ns": 100,
+                "max_ns": 1000000,
+                "mean_ns": 500.0,
+                "stddev_ns": 100.0,
+                "p50_ns": 500,
+                "p90_ns": 900,
+                "p99_ns": 990,
+                "p999_ns": 999
+            },
+            "transport": "unix-socket"
+        }"#;
+        std::fs::write(&path, json).unwrap();
+        let loaded = BenchmarkReport::load(&path).expect("legacy baseline loads");
+        assert!(
+            !loaded.emit_hints,
+            "missing emit_hints defaults to false (legacy v1 mode)"
+        );
+    }
+
+    /// The `emit_hints` field survives a save/load round-trip.
+    #[test]
+    fn emit_hints_round_trips() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("hinted.json");
+        let mut report = make_report(10_000.0, 100_000, 500_000, 1_000_000);
+        report.emit_hints = true;
+        report.save(&path).unwrap();
+        let loaded = BenchmarkReport::load(&path).unwrap();
+        assert!(loaded.emit_hints);
+        assert_eq!(report, loaded);
     }
 
     /// `RegressionDetail` carries the documented fields.

@@ -37,8 +37,35 @@ use crate::kernel::KernelResponse;
 /// so it is transport-authenticated (unspoofable) and never reused —
 /// an evicted DRR flow can therefore never alias a later connection.
 /// Rung 0 routes the fair scheduler by this value; the FIFO path
-/// ignores it.
+/// ignores it.  Rung 1 keeps it as the *outer* routing tier (the
+/// unspoofable one), with the per-frame [`SignerHint`] as the inner
+/// tier.
 pub type ConnId = u64;
+
+/// An advisory per-frame signer hint (Rung 1, FQ.9 / FQ.10b).
+///
+/// A Rung-1 client prepends this 8-byte value (big-endian on the wire)
+/// to each frame to declare the action's signer `ActorId`, so the fair
+/// scheduler can bucket the connection's requests by signer (the inner
+/// DRR tier).  It is a **classification hint only**: the kernel still
+/// reads the real signer from the CBE body and verifies the signature,
+/// so a forged hint can only disturb *scheduling*, never admissibility
+/// (`GP.8` §2.6 invariants 1 & 2).  A legacy (un-hinted, v1) connection
+/// uses the single [`LEGACY_SIGNER_HINT`] sentinel, collapsing its inner
+/// tier to one flow ⇒ exactly Rung-0 per-connection behaviour.
+pub type SignerHint = u64;
+
+/// The signer hint a legacy (un-hinted, v1) connection routes every
+/// request to (`GP.8` §2.6 invariant 3).
+///
+/// Because the value is per-connection and advisory, the exact sentinel
+/// is immaterial: it only groups one legacy connection's own frames
+/// into a single inner flow (so the two-tier scheduler behaves exactly
+/// like Rung 0 for it), and never crosses a connection boundary (the
+/// outer `ConnId` tier keeps connections disjoint).  `0` is chosen for
+/// clarity; a v2 connection genuinely hinting `0` is a *different*
+/// `ConnId`, so the two never share an inner flow.
+pub const LEGACY_SIGNER_HINT: SignerHint = 0;
 
 /// Assign the next [`ConnId`] from a shared monotonic source (FQ.3).
 ///
@@ -199,11 +226,11 @@ impl BoundedQueue {
 /// to it.
 #[derive(Clone, Debug)]
 pub struct FairQueue {
-    /// The pure DRR scheduler state, guarded for serialized mutation.
-    /// Also holds the `closed` lifecycle bit, so the closed check, an
-    /// `enqueue`, and the worker's `close` + drain are all serialized by
-    /// this one `Mutex` (no enqueue-after-shutdown TOCTOU).
-    inner: Arc<Mutex<DrrState<ConnId>>>,
+    /// The pure two-tier DRR scheduler state, guarded for serialized
+    /// mutation.  Also holds the `closed` lifecycle bit, so the closed
+    /// check, an `enqueue`, and the worker's `close` + drain are all
+    /// serialized by this one `Mutex` (no enqueue-after-shutdown TOCTOU).
+    inner: Arc<Mutex<DrrState>>,
     /// Signalled on every successful submission so a parked worker
     /// wakes promptly; also used by the server's shutdown wake
     /// ([`FairQueue::wake_all`]).
@@ -234,19 +261,26 @@ impl FairQueue {
         }
     }
 
-    /// Try to enqueue `payload` under connection `conn`.
+    /// Try to enqueue `payload` under connection `conn` and signer hint
+    /// `signer`.
     ///
     /// Builds the capacity-1 reply channel (as the FIFO path does),
-    /// routes the request through the DRR core's cap checks, and on
-    /// success notifies the worker.  On any cap breach the request (and
-    /// its reply sender) is dropped and `Busy` is returned — the
-    /// per-flow cap means a flooding connection back-pressures *itself*
-    /// while other connections still enqueue.
+    /// routes the request through the two-tier DRR core's cap checks
+    /// (`conn` = outer tier, `signer` = inner tier), and on success
+    /// notifies the worker.  On any cap breach the request (and its
+    /// reply sender) is dropped and `Busy` is returned — the per-flow
+    /// cap means a flooding `(conn, signer)` flow back-pressures
+    /// *itself* while other flows still enqueue, and the per-connection
+    /// `max_signers` cap confines a hint-spamming connection.
+    ///
+    /// `signer` is an advisory routing hint only (`GP.8` §2.6); a legacy
+    /// connection passes [`LEGACY_SIGNER_HINT`], collapsing to Rung-0
+    /// per-connection behaviour.
     ///
     /// Poison-recovering: a thread that panicked while holding the lock
     /// does not wedge the queue (the next caller recovers the guard via
     /// `into_inner`).
-    pub fn try_submit(&self, conn: ConnId, payload: Vec<u8>) -> SubmitOutcome {
+    pub fn try_submit(&self, conn: ConnId, signer: SignerHint, payload: Vec<u8>) -> SubmitOutcome {
         let (reply_tx, reply_rx) = sync_channel::<KernelResponse>(1);
         let request = QueuedRequest {
             payload,
@@ -274,7 +308,7 @@ impl FairQueue {
         // single-consumer worker model; revisit if multiple workers are
         // ever added.
         let was_empty = guard.is_empty();
-        match guard.enqueue(conn, request) {
+        match guard.enqueue(conn, signer, request) {
             Ok(()) => {
                 // Release the lock BEFORE notifying so the woken worker
                 // does not immediately re-block on a still-held lock.
@@ -380,6 +414,20 @@ impl FairQueue {
     pub fn stats(&self) -> DrrStats {
         self.inner.lock().unwrap_or_else(|p| p.into_inner()).stats()
     }
+
+    /// The per-connection in-flight bound (the Rung-1.5 `max_conn_backlog`
+    /// aggregate cap).  Used by the persistent-connection handler to size
+    /// its bounded reader→writer response channel so a client that stops
+    /// reading responses back-pressures the reader (bounded memory)
+    /// rather than letting the channel grow without bound.
+    #[must_use]
+    pub fn pipeline_capacity(&self) -> usize {
+        self.inner
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .caps()
+            .max_conn_backlog
+    }
 }
 
 /// A scheduler-agnostic producer handle (FQ.4a).
@@ -388,22 +436,40 @@ impl FairQueue {
 /// one [`QueueHandle::submit`] call so connection handlers are identical
 /// on both paths: the listener threads carry a `QueueHandle` and submit
 /// through it regardless of which scheduler the server built.  The
-/// `Fifo` arm ignores the connection id; the `Fair` arm routes by it.
+/// `Fifo` arm ignores the connection id and signer hint; the `Fair` arm
+/// routes by `(conn, signer)`.
 #[derive(Clone, Debug)]
 pub enum QueueHandle {
     /// The historical FIFO bounded queue.
     Fifo(BoundedQueue),
-    /// The optional per-connection DRR fair queue (Rung 0).
+    /// The optional two-tier DRR fair queue (Rung 0 / Rung 1).
     Fair(FairQueue),
 }
 
 impl QueueHandle {
-    /// Submit `payload` for connection `conn`.  The `Fifo` arm discards
-    /// `conn` (FIFO is connection-agnostic); the `Fair` arm routes by it.
-    pub fn submit(&self, conn: ConnId, payload: Vec<u8>) -> SubmitOutcome {
+    /// Submit `payload` for connection `conn` and signer hint `signer`.
+    /// The `Fifo` arm discards both routing values (FIFO is
+    /// scheduling-agnostic); the `Fair` arm routes by `(conn, signer)`.
+    /// A legacy / un-hinted frame passes [`LEGACY_SIGNER_HINT`].
+    pub fn submit(&self, conn: ConnId, signer: SignerHint, payload: Vec<u8>) -> SubmitOutcome {
         match self {
             Self::Fifo(q) => q.try_submit(payload),
-            Self::Fair(q) => q.try_submit(conn, payload),
+            Self::Fair(q) => q.try_submit(conn, signer, payload),
+        }
+    }
+
+    /// The per-connection in-flight bound for the persistent (pipelined)
+    /// connection mode: the FIFO global capacity (a single FIFO
+    /// connection can fill the whole queue), or the DRR per-connection
+    /// `max_conn_backlog`.  [`crate::listener::run_persistent`] sizes its
+    /// bounded reader→writer response channel to this so a client that
+    /// stops reading responses back-pressures the reader (bounded memory)
+    /// rather than letting the channel grow without bound.
+    #[must_use]
+    pub fn pipeline_capacity(&self) -> usize {
+        match self {
+            Self::Fifo(q) => q.capacity(),
+            Self::Fair(q) => q.pipeline_capacity(),
         }
     }
 }
@@ -485,7 +551,7 @@ where
 mod tests {
     use super::{
         drain_one, try_drain_one, BoundedQueue, DrainOutcome, FairQueue, NextOutcome, QueueHandle,
-        SubmitOutcome, DEFAULT_MAX_QUEUE_DEPTH, HARD_MAX_QUEUE_DEPTH,
+        SubmitOutcome, DEFAULT_MAX_QUEUE_DEPTH, HARD_MAX_QUEUE_DEPTH, LEGACY_SIGNER_HINT,
     };
     use crate::fair::drr::Caps;
     use crate::kernel::KernelResponse;
@@ -784,17 +850,20 @@ mod tests {
         let q = fair(2, 10, 100);
         // Whale (conn 1): first two Enqueued, third Busy.
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
-        assert!(matches!(q.try_submit(1, vec![1]), SubmitOutcome::Busy));
+        assert!(matches!(
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
+            SubmitOutcome::Busy
+        ));
         // Small (conn 2): still enqueues — targeted backpressure.
         assert!(matches!(
-            q.try_submit(2, vec![2]),
+            q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
             SubmitOutcome::Enqueued(_)
         ));
         let s = q.stats();
@@ -807,14 +876,17 @@ mod tests {
     fn fair_global_cap_busy() {
         let q = fair(10, 10, 2);
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
         assert!(matches!(
-            q.try_submit(2, vec![2]),
+            q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
             SubmitOutcome::Enqueued(_)
         ));
-        assert!(matches!(q.try_submit(3, vec![3]), SubmitOutcome::Busy));
+        assert!(matches!(
+            q.try_submit(3, LEGACY_SIGNER_HINT, vec![3]),
+            SubmitOutcome::Busy
+        ));
         assert_eq!(q.stats().rejected_global, 1);
     }
 
@@ -823,18 +895,21 @@ mod tests {
     fn fair_max_flows_cap_busy() {
         let q = fair(10, 2, 100);
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
         assert!(matches!(
-            q.try_submit(2, vec![2]),
+            q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
             SubmitOutcome::Enqueued(_)
         ));
         // Third distinct connection breaches max_flows.
-        assert!(matches!(q.try_submit(3, vec![3]), SubmitOutcome::Busy));
+        assert!(matches!(
+            q.try_submit(3, LEGACY_SIGNER_HINT, vec![3]),
+            SubmitOutcome::Busy
+        ));
         // But an existing connection still enqueues.
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
         assert_eq!(q.stats().rejected_max_flows, 1);
@@ -854,7 +929,7 @@ mod tests {
         .join();
         // The queue still works.
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
         assert!(q.try_next().is_some());
@@ -890,7 +965,8 @@ mod tests {
         });
         // Let the consumer park on `next`, then submit.
         thread::sleep(Duration::from_millis(100));
-        let SubmitOutcome::Enqueued(reply_rx) = q.try_submit(7, vec![42]) else {
+        let SubmitOutcome::Enqueued(reply_rx) = q.try_submit(7, LEGACY_SIGNER_HINT, vec![42])
+        else {
             panic!("expected Enqueued");
         };
         let served = consumer.join().expect("consumer join");
@@ -959,19 +1035,28 @@ mod tests {
         let q = fair(64, 64, 64);
         // Pre-close: a request enqueues normally.
         assert!(matches!(
-            q.try_submit(1, vec![1]),
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
         q.close();
         // Post-close: new submissions are Busy (any connection).
-        assert!(matches!(q.try_submit(1, vec![1]), SubmitOutcome::Busy));
-        assert!(matches!(q.try_submit(2, vec![2]), SubmitOutcome::Busy));
+        assert!(matches!(
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
+            SubmitOutcome::Busy
+        ));
+        assert!(matches!(
+            q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
+            SubmitOutcome::Busy
+        ));
         // The pre-close request is still drainable.
         assert!(q.try_next().is_some());
         assert!(q.try_next().is_none());
         // close() is idempotent.
         q.close();
-        assert!(matches!(q.try_submit(3, vec![3]), SubmitOutcome::Busy));
+        assert!(matches!(
+            q.try_submit(3, LEGACY_SIGNER_HINT, vec![3]),
+            SubmitOutcome::Busy
+        ));
     }
 
     /// FQ.4b/§2.8 — after `close()` returns, EVERY submission is `Busy`,
@@ -986,7 +1071,12 @@ mod tests {
         for c in 0..8u64 {
             let q = q.clone();
             producers.push(thread::spawn(move || {
-                (0..100).all(|_| matches!(q.try_submit(c, vec![c as u8]), SubmitOutcome::Busy))
+                (0..100).all(|_| {
+                    matches!(
+                        q.try_submit(c, LEGACY_SIGNER_HINT, vec![c as u8]),
+                        SubmitOutcome::Busy
+                    )
+                })
             }));
         }
         for p in producers {
@@ -1010,7 +1100,7 @@ mod tests {
             start.elapsed() < Duration::from_millis(50),
             "try_next blocked"
         );
-        let _ = q.try_submit(1, vec![1]);
+        let _ = q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]);
         assert!(q.try_next().is_some());
         assert!(q.try_next().is_none());
     }
@@ -1022,12 +1112,12 @@ mod tests {
     #[test]
     fn fair_dispatch_happens_outside_the_lock() {
         let q = fair(64, 64, 64);
-        let _ = q.try_submit(1, vec![1]);
+        let _ = q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]);
         let NextOutcome::Dispatch(req) = q.next(Duration::from_millis(200)) else {
             panic!("expected Dispatch");
         };
         // `req` is held (slow dispatch).  The lock must be free.
-        match q.try_submit(2, vec![2]) {
+        match q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]) {
             SubmitOutcome::Enqueued(_) => {}
             other => panic!("submit blocked while a dispatch was in flight: {other:?}"),
         }
@@ -1041,9 +1131,9 @@ mod tests {
     fn fair_drr_order_does_not_bury_small_flow() {
         let q = fair(64, 64, 64);
         for _ in 0..3 {
-            let _ = q.try_submit(1, vec![1]); // whale, conn 1
+            let _ = q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]); // whale, conn 1
         }
-        let _ = q.try_submit(2, vec![2]); // small, conn 2 (enqueued last)
+        let _ = q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]); // small, conn 2 (enqueued last)
         let mut order = Vec::new();
         while let Some(req) = q.try_next() {
             order.push(req.payload[0]);
@@ -1087,7 +1177,9 @@ mod tests {
                 let mut rxs = Vec::new();
                 for j in 0..4u8 {
                     let payload = vec![p * 4 + j];
-                    if let SubmitOutcome::Enqueued(rx) = qp.try_submit(u64::from(p), payload) {
+                    if let SubmitOutcome::Enqueued(rx) =
+                        qp.try_submit(u64::from(p), LEGACY_SIGNER_HINT, payload)
+                    {
                         rxs.push(rx);
                     }
                 }
@@ -1124,7 +1216,7 @@ mod tests {
         let whale = thread::spawn(move || {
             // Flood: only 2 ever enqueue (per_flow), the rest Busy.
             for _ in 0..1000 {
-                let _ = qw.try_submit(1, vec![1]);
+                let _ = qw.try_submit(1, LEGACY_SIGNER_HINT, vec![1]);
             }
         });
         let qs = q.clone();
@@ -1134,7 +1226,10 @@ mod tests {
             // the whale cannot have filled the global buffer (it is
             // capped at per_flow = 2).
             for _ in 0..50 {
-                if matches!(qs.try_submit(2, vec![2]), SubmitOutcome::Enqueued(_)) {
+                if matches!(
+                    qs.try_submit(2, LEGACY_SIGNER_HINT, vec![2]),
+                    SubmitOutcome::Enqueued(_)
+                ) {
                     small_ok_c.store(true, Ordering::Release);
                 }
                 let _ = qs.try_next(); // drain the small flow so it can re-submit
@@ -1154,7 +1249,7 @@ mod tests {
     fn fair_shutdown_drain_shape() {
         let q = fair(64, 64, 64);
         for i in 0..5u8 {
-            let _ = q.try_submit(u64::from(i), vec![i]);
+            let _ = q.try_submit(u64::from(i), LEGACY_SIGNER_HINT, vec![i]);
         }
         let mut drained = 0;
         while q.try_next().is_some() {
@@ -1170,13 +1265,13 @@ mod tests {
     fn fair_stats_track_dispatches_and_rejections() {
         let q = fair(2, 2, 10);
         // 2 on conn 1 (Ok), 1 more on conn 1 (per_flow reject).
-        let _ = q.try_submit(1, vec![1]);
-        let _ = q.try_submit(1, vec![1]);
-        let _ = q.try_submit(1, vec![1]); // per_flow reject
-                                          // conn 2 Ok, conn 3 (max_flows reject).
-        let _ = q.try_submit(2, vec![2]);
-        let _ = q.try_submit(3, vec![3]); // max_flows reject
-                                          // Dispatch two.
+        let _ = q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]);
+        let _ = q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]);
+        let _ = q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]); // per_flow reject
+                                                              // conn 2 Ok, conn 3 (max_flows reject).
+        let _ = q.try_submit(2, LEGACY_SIGNER_HINT, vec![2]);
+        let _ = q.try_submit(3, LEGACY_SIGNER_HINT, vec![3]); // max_flows reject
+                                                              // Dispatch two.
         let _ = q.try_next();
         let _ = q.try_next();
         let s = q.stats();
@@ -1199,23 +1294,68 @@ mod tests {
     /// `Fifo` arm ignores the conn id; the `Fair` arm routes by it.
     #[test]
     fn queue_handle_routes_both_arms() {
-        // FIFO arm: conn id ignored, behaves like BoundedQueue.
+        // FIFO arm: conn id + signer hint ignored, behaves like
+        // BoundedQueue.
         let (fifo, _rx) = BoundedQueue::new(4);
         let handle = QueueHandle::Fifo(fifo);
         assert!(matches!(
-            handle.submit(999, vec![1]),
+            handle.submit(999, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
 
-        // Fair arm: routes by conn id (per-flow cap applies per conn).
-        let handle = QueueHandle::Fair(fair(1, 10, 10));
+        // Fair arm: routes by (conn, signer); per-flow cap applies per
+        // (conn, signer) leaf flow.  An explicit loose `max_conn_backlog`
+        // (10) keeps the Rung-1.5 per-connection aggregate cap out of the
+        // way so this test isolates the per-leaf routing; otherwise the
+        // default `max_conn_backlog == per_flow == 1` would (correctly)
+        // confine conn 1 to one buffered request total.
+        let handle = QueueHandle::Fair(FairQueue::new(
+            Caps::new(1, 10, 10).with_max_conn_backlog(10),
+        ));
         assert!(matches!(
-            handle.submit(1, vec![1]),
+            handle.submit(1, LEGACY_SIGNER_HINT, vec![1]),
             SubmitOutcome::Enqueued(_)
         ));
-        assert!(matches!(handle.submit(1, vec![1]), SubmitOutcome::Busy)); // per_flow 1
+        // Second on the same (conn, signer) leaf flow → Busy (per_flow 1).
         assert!(matches!(
-            handle.submit(2, vec![2]),
+            handle.submit(1, LEGACY_SIGNER_HINT, vec![1]),
+            SubmitOutcome::Busy
+        ));
+        assert!(matches!(
+            handle.submit(2, LEGACY_SIGNER_HINT, vec![2]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        // A DIFFERENT signer hint on conn 1 is a distinct leaf flow, so
+        // it enqueues despite conn 1's first flow being at its per_flow
+        // cap (the Rung-1 inner tier) — the aggregate cap (10) has room.
+        assert!(matches!(
+            handle.submit(1, 42, vec![3]),
+            SubmitOutcome::Enqueued(_)
+        ));
+    }
+
+    /// Rung 1.5 — at the DEFAULT (`max_conn_backlog == per_flow`),
+    /// rotating signer hints does NOT let a connection evade its
+    /// per-connection backpressure: conn 1's aggregate is capped at one
+    /// `per_flow`'s worth across ALL its hints, so a second distinct hint
+    /// is `Busy` even though its own leaf is empty.  This is the
+    /// regression the per-connection aggregate cap closes.
+    #[test]
+    fn default_conn_backlog_confines_hint_rotation() {
+        // per_flow = 1 ⇒ default max_conn_backlog = 1 (one buffered
+        // request per connection, summed across hints).
+        let q = fair(1, 10, 10);
+        assert!(matches!(
+            q.try_submit(1, LEGACY_SIGNER_HINT, vec![1]),
+            SubmitOutcome::Enqueued(_)
+        ));
+        // A DIFFERENT hint on conn 1: its leaf is empty, but the
+        // connection's aggregate is already at the cap ⇒ Busy.
+        assert!(matches!(q.try_submit(1, 42, vec![2]), SubmitOutcome::Busy));
+        assert_eq!(q.stats().rejected_conn_backlog, 1);
+        // A SECOND connection is unaffected (per-connection cap).
+        assert!(matches!(
+            q.try_submit(2, LEGACY_SIGNER_HINT, vec![3]),
             SubmitOutcome::Enqueued(_)
         ));
     }

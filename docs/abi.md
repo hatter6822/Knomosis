@@ -803,6 +803,12 @@ Default `max_frame_size` is 1 MiB; operators override via
 `--max-frame-size <bytes>`.  Hard ceiling is 16 MiB, matching
 `runtime/knomosis-cross-stack`'s `MAX_RECORD_BYTES`.
 
+The layout above is the **v1** (legacy) framing and remains the default.
+Since the FQ Rung-1 amendment (`PROTOCOL_VERSION == 2`) a client may
+optionally opt into a per-frame **signer hint** by opening the connection
+with a 4-byte magic preamble; this is an additive superset (v1 clients are
+unaffected and keep working) specified in §10.4.2.
+
 ### 10.2 Verdict byte table
 
 | Byte | Variant         | Semantics                                                       |
@@ -1072,26 +1078,161 @@ never changes is **admissibility**: for any action the kernel admits, the
 `Ok` / `NotAdmissible` verdict is identical on both paths.  The connection
 id is a classification hint that influences ordering and `Busy`-drop
 only, never the kernel's verdict (`GP.8` §2.6 invariant 1).
-A future Rung-1 extension adds an optional, version-gated per-frame
-signer hint (a wire-format superset that bumps `PROTOCOL_VERSION` to
-2); it is not part of Rung 0.  See
-`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.3–§2.8 for the
+The Rung-1 extension (§10.4.2) adds an optional, version-gated per-frame
+signer hint; it is the inner DRR tier layered on top of this same core.
+See `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.3–§2.8 for the
 design.
 
-Because the connection lifecycle is one-shot (§10.5 — one frame, one
-verdict, then close), connection-keyed fairness is meaningful only when
-a connection carries multiple in-flight requests (a persistent-connection
-mode, future) or when the host fronts a sequencer aggregating many
-actors; under strict one-shot, every connection is a single-request flow
-and DRR coincides with FIFO.  This is a deployment-topology property, not
-a wire-format one — the wire format is unchanged either way.
+Because the *default* (one-shot) connection lifecycle holds one frame per
+connection, connection-keyed fairness is meaningful only when a connection
+carries multiple in-flight requests — which is exactly what the
+`--persistent-connections` pipelined mode provides (§10.5).  Under one-shot
+every connection is a single-request flow and DRR coincides with FIFO;
+under `--scheduler drr --persistent-connections` a connection can hold
+multiple simultaneously-queued requests and DRR genuinely arbitrates them
+(an honest connection is not buried behind a flooder).  This is a
+deployment-topology property, not a wire-format one — the v1 wire format
+is unchanged either way.
+
+#### 10.4.2 Rung-1 signer hint (Workstream GP.8 / FQ — `PROTOCOL_VERSION 2`)
+
+Rung 1 refines the fair scheduler into **two tiers**: the unspoofable
+connection id (the outer tier, as in Rung 0) and an optional, advisory
+per-frame **signer hint** (the inner tier).  The host buckets a
+connection's requests by hint, so even when many distinct actors
+multiplex one upstream connection, no one actor's burst starves the
+others — and a connection that spams many (possibly forged) hints is
+confined to its own single outer share (`GP.8` §2.6 invariant 2).
+
+**Opt-in negotiation (a strict superset).**  A Rung-1 (v2) client opens
+the connection by sending the 4-byte magic preamble
+
+```text
+    b"KNH2"   (= 0x4B4E4832 big-endian; "KNomosis Host, protocol 2")
+```
+
+The host peeks the first 4 bytes of every connection exactly once:
+
+  * **equal to the preamble** ⇒ a **v2 connection**; the preamble is
+    consumed and every subsequent request is
+
+    ```text
+    offset  size  field
+    ------  ----  -------------------------------------------------
+        0    8    signer hint (big-endian u64; advisory routing only)
+        8    4    payload length N (big-endian u32; 1 ≤ N ≤ max_frame_size)
+       12    N    payload (CBE-encoded SignedAction; opaque to the host)
+    ```
+
+  * **not equal to the preamble** ⇒ a **legacy (v1) connection**; those
+    4 bytes ARE the v1 length prefix (§10.1) and are read intact.
+
+A connection's v1/v2 classification is fixed for its lifetime (no
+mid-connection renegotiation).  The response framing (§10.1) is
+**unchanged** in both directions for both generations.
+
+**Collision-proof disambiguation (the load-bearing correctness claim).**
+The peek is sound — a *valid* v1 length can never equal the preamble —
+because the magic (`0x4B4E4832` ≈ 1.18 GiB) is strictly above the
+compile-time `HARD_MAX_FRAME_SIZE` (16 MiB), and any valid v1 length is
+`≤ max_frame_size ≤ HARD_MAX_FRAME_SIZE`.  This `HARD_MAX_FRAME_SIZE <
+KNH2_MAGIC` invariant is pinned by a `const` assertion AND a unit test in
+`runtime/knomosis-host/src/frame.rs`; `--max-frame-size` is clamped below
+the ceiling.  A v1 client that sends an over-`HARD_MAX_FRAME_SIZE` length
+is already an oversize-frame protocol error, so at worst a misbehaving
+client turns one error into another — never a misadmission.
+
+**Advisory + untrusted (safety boundary).**  The hint influences
+*scheduling order and `Busy`-drop only*, never admissibility.  The kernel
+authoritatively reads the real signer from the CBE body and verifies the
+signature, so a **forged or wrong hint is a fairness-only concern**
+(`GP.8` §2.6 invariants 1 & 2): a connection that lies about its hint can
+only sub-divide its OWN outer share among its fakes (self-harm), never
+steal another connection's share (the unspoofable connection-id outer
+tier confines it).  A legacy connection (no hint) is treated as a single
+implicit flow — exactly Rung-0 behaviour (§2.6 invariant 3).
+
+**Bounded scheduler state (Rung-1 DoS surface).**  The inner per-tier map
+is bounded by `--max-signers-per-conn <N>` (default 256): a connection's
+`(N+1)`-th distinct hint receives a targeted `Busy`, confining a
+hint-spamming connection to a bounded slice of the scheduler's memory
+(`GP.8` §2.6 invariant 4).  The outer `--max-flows` and leaf
+`--per-flow-cap` caps are as in Rung 0.
+
+**Per-connection aggregate backlog (`--max-conn-backlog <N>`).**  Because
+the two-tier split lets one connection own several signer leaves, a
+hint-rotating connection could otherwise buffer up to
+`max_signers × per_flow` requests — relaxing the Rung-0 per-connection
+bound (which was exactly one `per_flow`, the connection's single leaf).
+`--max-conn-backlog` restores it: it caps a connection's *aggregate*
+backlog summed across ALL its hints, and **defaults to `--per-flow-cap`**
+(so out of the box a connection is confined to one `per_flow`'s worth no
+matter how it spreads its hints — spoofed hints stay self-confined).
+The cap is checked AFTER the leaf `--per-flow-cap` (so a single-leaf
+flood is still attributed to `per_flow`) and BEFORE a new hint is
+admitted, so the two counters stay distinct even when they coincide at
+the default.  An operator who genuinely multiplexes many signers behind
+one persistent / sequencer-fronted connection RAISES it (up to
+`--max-queue-depth`, which it must not exceed under `--scheduler drr`).
+Like the other DRR caps it is ignored under `--scheduler fifo` and never
+affects admissibility — only ordering and `Busy`-drop.
+
+**Interop.**  v1 and v2 clients interoperate against the same host
+instance, on BOTH the FIFO and DRR schedulers — the negotiation is a wire
+concern, not a scheduler one, so a v2 client works against a FIFO host
+(de-framed correctly, gaining no fairness).  This is exercised
+end-to-end by `runtime/knomosis-host/tests/wire_compat.rs` and by the
+real `knomosis-l1-ingest` raw-TCP submitter
+(`submitter::raw_tcp::RawTcpSubmitter`, opt-in `--emit-signer-hints`),
+whose framing is byte-pinned against the canonical `encode_frame` /
+`encode_hinted_frame` encoders.
+
+**Client encoders.**  `knomosis_host::frame::encode_frame` (v1) and
+`encode_hinted_frame` (v2) are the canonical client-side encoders — the
+single source of truth for the wire layout.  `knomosis-bench
+--emit-hints` calls them directly; the `knomosis-l1-ingest` raw-TCP
+submitter hand-rolls the framing but byte-pins it against them in a test.
 
 ### 10.5 Connection lifecycle
 
-Each connection handles exactly one request/response cycle, then
-closes (HTTP-style one-shot).  Persistent / multiplexed
-connections are not supported in v1; they're a forward-extension
-point if a future workload justifies the complexity.
+There are two connection modes, selected by `--persistent-connections`.
+
+**One-shot (default).**  Each connection handles exactly one
+request/response cycle, then closes (HTTP-style).  A Rung-1 (v2)
+connection (§10.4.2) performs its one-time magic-peek negotiation at the
+start of the connection, then reads its single hinted frame — so on a v2
+connection the bytes on the wire are `KNH2` preamble + `[8-byte
+hint][4-byte length][payload]`, one request, then close.  Under the
+one-shot lifecycle each connection holds at most one in-flight request,
+which is why two-tier DRR and FIFO coincide end-to-end (§10.4.1) — the
+fairness signal needs a connection multiplexing several simultaneously-
+queued requests.
+
+**Persistent + pipelined (`--persistent-connections`).**  A TCP / Unix
+connection may send many frames back-to-back (pipelined) — it does NOT
+wait for each verdict before sending the next — and the host replies with
+one verdict per request **in submission order** (the §10.1 response frame
+is unchanged).  The host negotiates once (the v2 preamble is read once per
+connection, not per frame — `ConnReader`), then reads successive frames
+per the fixed v1/v2 classification.  Internally a dedicated writer thread
+delivers responses in order while a reader thread keeps reading.  The
+reader→writer hand-off is a **bounded** channel sized to the queue's
+per-connection in-flight capacity (`--max-conn-backlog` on the DRR path,
+`--max-queue-depth` on the FIFO path): when it fills — e.g. a client that
+pipelines frames but never reads its responses, so the writer blocks on
+`write_all` — the reader BLOCKS on the channel, OS receive-buffer fill
+plus TCP flow control then bound total memory.  (Without that bound, the
+reader would keep buffering responses while the writer stalled — an OOM
+DoS.)  A well-behaved client half-closes its write side after its last
+frame (immediate clean EOF).  This is the mode under which **fair scheduling
+under contention is exercised over the wire**: a single connection can now
+hold multiple queued requests, so with `--scheduler drr` a flooding
+pipelined connection no longer buries an honest connection — the honest
+connection's requests are interleaved into the dispatch stream (the outer
+round-robin across connections).  TLS connections are always one-shot
+(the rustls session is single-owner and cannot be split across a
+reader/writer pair).  A one-shot client (one frame, then close) is a
+degenerate subset and works unchanged against a persistent host.
 
 ### 10.6 Exit codes
 

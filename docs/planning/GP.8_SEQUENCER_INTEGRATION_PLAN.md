@@ -55,8 +55,105 @@ shutdown + FIFO-parity + throughput suites.  All four §2.6 invariants
 and the §2.8 concurrency contract hold; FIFO remains the unchanged
 default.  See the workstream snapshot in `CLAUDE.md`.
 
-**Remaining: Track A — Rung 1 (FQ.9 – FQ.15) and Tracks B–D.  Planned.
-Not started.**  Every prerequisite is met:
+**Track A — Rung 1 (FQ.9 – FQ.15): Complete.**  The signer-hint wire
+amendment + two-tier DRR ship behind the same default-OFF `--scheduler
+drr` flag, with `PROTOCOL_VERSION` bumped 1 → 2 for the additive,
+opt-in wire superset.  Delivered: the `KNH2`-preamble negotiation +
+per-frame hint readers + the canonical `encode_hinted_frame` client
+primitive + the compile-time `HARD_MAX_FRAME_SIZE < KNH2_MAGIC`
+collision invariant (`src/frame.rs`, FQ.9 / FQ.10a / FQ.10b); the DRR
+core refactored into ONE generic `Tier<K, S>` reused at both tiers
+(`Tier<ConnId, ConnBucket>` outer, `Tier<SignerHint, RequestFifo>`
+inner — the single-tier FQ.1 suite runs green against the extracted
+`Tier`), with the two-tier `pick` + spoof-confinement property test
+(`src/fair/drr.rs`, FQ.11a / FQ.11b); the `(conn, signer)` routing
+threaded through `FairQueue::try_submit` / `QueueHandle::submit` /
+`handle_connection` + the `--max-signers-per-conn` cap (`src/queue.rs`,
+`src/listener.rs`, `src/config.rs`, FQ.12); the client emitters
+(`knomosis-bench --emit-hints`, FQ.13c, AND the FQ.13a
+`knomosis-l1-ingest` raw-TCP submitter — `RawTcpSubmitter` + the opt-in
+`--emit-signer-hints` / `--knomosis-host-tcp` daemon flags, the first
+real l1-ingest → knomosis-host forwarder, byte-pinned against the
+canonical `encode_hinted_frame` + driven end-to-end against a live host);
+and the two-tier-fairness + spoof-resistance (queue-level) + v1/v2
+wire-interop (`tests/fair_queue.rs`, `tests/wire_compat.rs`, FQ.14a /
+FQ.14b) suites.  Every §2.6 invariant — including "forged hints are
+self-confined" (invariant 2) and "legacy clients degrade safely"
+(invariant 3) — holds, evidenced by tests.  FQ.13b is N/A as a literal
+client edit: the `knomosis-faultproof-observer` submitters speak L1
+JSON-RPC (game-move calldata), never a `SignedAction` to the host, so
+there is nothing to hint; the reusable `encode_hinted_frame` primitive
+remains the ready drop-in if it ever forwards to the host.  See the
+workstream snapshot in `CLAUDE.md`.
+
+**Track A — Rung 1 post-review hardening: Complete.**  Two gaps surfaced
+by PR review of the Rung-1 landing are closed.  (1) *Per-connection
+aggregate backlog cap.*  The two-tier split would otherwise let one
+hint-rotating connection buffer `max_signers × per_flow` requests —
+relaxing the Rung-0 per-connection bound (one `per_flow`, the
+connection's single leaf) and letting a single connection crowd the
+global queue.  A fourth DRR cap `--max-conn-backlog <N>` bounds a
+connection's aggregate backlog across ALL its hints, checked AFTER the
+leaf `per_flow` cap (so a single-leaf flood is still attributed to
+`per_flow`) and BEFORE a new hint is admitted; it **defaults to
+`--per-flow-cap`**, restoring the Rung-0 per-connection bound out of the
+box (spoofed hints stay self-confined), and an operator RAISES it for a
+legitimately-multiplexing connection (`src/fair/drr.rs`,
+`src/config.rs`, `src/server.rs`; new `RejectReason::ConnBacklog` +
+`DrrStats::rejected_conn_backlog`).  (2) *Benchmark wire-mode in
+reports.*  `BenchmarkReport` gains an `emit_hints` field
+(`#[serde(default)]` so a pre-Rung-1 baseline loads as the legacy v1
+mode it was measured under), and `compare_against_baseline` returns a new
+`RegressionVerdict::NotComparable` — mapped by the CLI to an
+operator-action exit — when the candidate and baseline wire modes differ,
+so a hinted-vs-legacy comparison can no longer silently hide or
+misattribute a regression (`knomosis-bench/src/report.rs`,
+`src/main.rs`).
+
+**Track A — Persistent + pipelined connection mode: Complete.**  This
+closes the §2.5 topology gap — the load-bearing one, surfaced by a
+self-audit: under the one-shot connection lifecycle every connection holds
+at most one in-flight request, so two-tier DRR and FIFO coincide
+*end-to-end* and the fairness mechanism, though correct, never bit over
+the wire.  The opt-in `--persistent-connections` flag (default off, like
+`--scheduler drr`) wires a persistent, **pipelined** TCP / Unix connection
+mode: a connection may send many frames back-to-back, and the host replies
+one verdict per request in submission order (the §10.1 response frame is
+unchanged).  This is the only condition under which a single flow holds
+multiple simultaneously-queued requests — the prerequisite for DRR to
+diverge from FIFO.  What ships:
+  * **`ConnReader`'s persistent path is now wired** (`src/listener.rs`,
+    `run_persistent`): the reader negotiates once, then loops
+    `ConnReader::read_next` (previously this state machine was built +
+    tested but unused by the one-shot server).  A dedicated writer thread
+    delivers responses in submission order; the reader→writer hand-off is
+    a BOUNDED `sync_channel` sized to the queue's per-connection in-flight
+    capacity (`QueueHandle::pipeline_capacity` — `--max-conn-backlog` on
+    DRR, `--max-queue-depth` on FIFO), so a client that pipelines frames
+    but never reads its responses back-pressures the reader (OS recv-buffer
+    + TCP flow control bound memory) instead of growing the channel without
+    bound — an OOM DoS an unbounded channel would have allowed.  TLS stays
+    one-shot (the rustls session is single-owner); a one-shot client is a
+    degenerate subset and works unchanged.
+  * **Fair scheduling under contention is exercised through the wire**
+    (`tests/persistent.rs`): a deterministic, gated-kernel integration
+    test stages a flood + honest contention over REAL TCP and asserts that
+    under `--scheduler drr --persistent-connections` the honest
+    connection's requests are interleaved into the first few dispatches
+    (≤ ~half the flood precedes its last request), while the FIFO contrast
+    test proves the flood buries the honest connection without DRR — so
+    the property is real, not vacuous.  Graceful shutdown with an open
+    persistent connection is covered too.
+  * **A shipping client drives it** (`knomosis-bench --persistent`): each
+    worker reuses one connection and pipelines requests in batches,
+    measuring the actual fair-scheduling throughput path; the standalone
+    host enables `--persistent-connections` automatically.  The benchmark
+    report records the persistent dimension alongside `emit_hints`, and
+    `compare_against_baseline` refuses to compare across either mode
+    dimension (`RegressionVerdict::NotComparable`).
+
+**Remaining: Tracks B–D.  Planned.  Not started.**  Every prerequisite
+is met:
 
   * **RH-C (`knomosis-host`) — Complete.**  Track A (FQ) extends it.
   * **GP.6.2 (`knomosis-host` budget admission gate) — Complete.**
@@ -2008,15 +2105,23 @@ The unified sequencer integration is **Complete** when:
 
 ### Track A — Rung 1
 
-  * [ ] FQ.9, FQ.10a–b, FQ.11a–b, FQ.12, FQ.13a–c, FQ.14a–b, FQ.15 merged,
-        each its own commit.
-  * [ ] One DRR implementation (`Tier<K>`) reused at both tiers; the
-        single-tier suite runs green against it.
-  * [ ] Spoof-confinement property test (FQ.11b) + end-to-end spoof test
-        (FQ.14a) green.
-  * [ ] v1/v2 wire interop (FQ.14b) green; legacy clients unaffected.
-  * [ ] abi.md §10 + roadmap updated; CLAUDE.md ≡ AGENTS.md; versions
-        lockstepped; `PROTOCOL_VERSION == 2`.
+  * [x] FQ.9, FQ.10a–b, FQ.11a–b, FQ.12, FQ.13a, FQ.13c, FQ.14a–b, FQ.15
+        landed.  FQ.13a = the `knomosis-l1-ingest` `RawTcpSubmitter` (the
+        canonical raw-TCP forwarder + opt-in `--emit-signer-hints`,
+        byte-pinned against `encode_hinted_frame` + driven end-to-end
+        against a live host); FQ.13c = `knomosis-bench --emit-hints`.
+        FQ.13b is N/A (the observer speaks L1 JSON-RPC, never a
+        `SignedAction` to the host), with `encode_hinted_frame` the ready
+        drop-in if that ever changes.
+  * [x] One DRR implementation (`Tier<K, S>`) reused at both tiers; the
+        single-tier FQ.1 suite runs green against the extracted `Tier`.
+  * [x] Spoof-confinement property test (FQ.11b, `drr.rs`) +
+        queue-level end-to-end spoof test (FQ.14a, `tests/fair_queue.rs`)
+        green.
+  * [x] v1/v2 wire interop (FQ.14b, `tests/wire_compat.rs`) green on both
+        FIFO and DRR schedulers; legacy clients unaffected.
+  * [x] abi.md §10.4.2 + roadmap updated; CLAUDE.md ≡ AGENTS.md; versions
+        lockstepped (0.3.21); `PROTOCOL_VERSION == 2`.
 
 ### Track B — Reimbursement claims
 

@@ -116,6 +116,14 @@ proptest = { workspace = true }
 # `tempfile` provides isolated tempdirs for the storage / resume
 # tests.  Pin lives at the workspace level.
 tempfile = { workspace = true }
+# `knomosis-host` is a DEV-only dependency (FQ.13a): the raw-TCP
+# submitter's framing is hand-rolled (keeping the runtime tree lean,
+# matching this crate's hand-rolled-CBE philosophy), and the tests pin
+# it byte-for-byte against the canonical `knomosis_host::frame` encoders
+# (single source of truth) and drive it end-to-end against a real
+# in-process `knomosis-host`.  Acyclic: knomosis-host does not depend on
+# this crate.
+knomosis-host = { path = "../knomosis-host" }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

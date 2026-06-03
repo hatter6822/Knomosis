@@ -928,43 +928,54 @@ mod tests {
         .unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        let ext = SubprocessExtractor::new(script.clone(), PathBuf::from("/tmp/knomosis-test.log"))
-            .with_global_args(vec!["--deployment-id".into(), "deadbeef".into()]);
-        // `extract` spawns the fake, which exits 0 without a valid
-        // response; the extractor errors (and kill+waits the child).
-        let _ = ext.extract(1, b"payload");
+        // Spawn the fake and read back its recorded argv, RETRYING on a
+        // transient spawn failure.
+        //
+        // Why a retry is the correct fix (not just a longer poll): on a
+        // SUCCESSFUL spawn the fake writes `argfile` (`printf > argfile`)
+        // BEFORE it exits, and the extractor's `read_exact` blocks until
+        // the child exits (no read timeout) — so `argfile` is guaranteed
+        // present the instant `extract` returns.  The ONLY way `argfile`
+        // is absent afterwards is therefore a spawn FAILURE, which a
+        // longer poll can never cure (the child never ran).  Under a
+        // heavily-parallel test run the culprit is `ETXTBSY` ("text file
+        // busy"): another test thread can `fork()` during this test's
+        // `std::fs::write(&script)` window and inherit the still-open
+        // write fd (O_CLOEXEC closes it on the racing child's *exec*, not
+        // on fork), so exec'ing the freshly-written script transiently
+        // fails.  The window clears in microseconds, so a respawn
+        // succeeds.  The script is written ONCE (above); each attempt
+        // uses a FRESH extractor so no spawn-failure backoff accumulates,
+        // and the loop is bounded generously.
+        //
+        // The happy path takes exactly one iteration with no sleep, so a
+        // normal run is unaffected; only the rare race retries.
+        let overall_deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let recorded = loop {
+            let ext =
+                SubprocessExtractor::new(script.clone(), PathBuf::from("/tmp/knomosis-test.log"))
+                    .with_global_args(vec!["--deployment-id".into(), "deadbeef".into()]);
+            // Spawns the fake, which exits 0 without a valid response, so
+            // the extractor errors (and kill+waits the child); we ignore
+            // the expected error and inspect the recorded argv instead.
+            let _ = ext.extract(1, b"payload");
 
-        // The fake's argv-recording (`printf ... > argfile`) runs
-        // CONCURRENTLY with the parent's stdin-write / stdout-read; the
-        // parent's `read_exact` can observe EOF and return — dropping
-        // (and killing) the child — before the shell has flushed
-        // `argfile`.  So we must NOT assume the file exists the instant
-        // `extract` returns.  Poll for it with a bounded timeout
-        // instead of reading immediately (the previous unconditional
-        // `read_to_string(...).expect(...)` raced the child and flaked
-        // intermittently on loaded CI runners with a `NotFound`).
-        let recorded = {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-            loop {
-                // A non-empty read means the redirection completed (the
-                // shell writes all args in one `printf`, so a
-                // partial-then-empty read is not a concern here).  An
-                // `Err` or empty read maps to `None`, so we keep polling.
-                match std::fs::read_to_string(&argfile)
-                    .ok()
-                    .filter(|s| !s.is_empty())
-                {
-                    Some(s) => break s,
-                    None => {
-                        assert!(
-                            std::time::Instant::now() < deadline,
-                            "fake never recorded its argv within 5s (file: {})",
-                            argfile.display()
-                        );
-                        std::thread::sleep(std::time::Duration::from_millis(10));
-                    }
-                }
+            if let Some(s) = std::fs::read_to_string(&argfile)
+                .ok()
+                .filter(|s| !s.is_empty())
+            {
+                break s;
             }
+            // `argfile` absent ⇒ the spawn failed (e.g. transient
+            // `ETXTBSY`); respawn after yielding briefly, until the
+            // overall deadline.
+            assert!(
+                std::time::Instant::now() < overall_deadline,
+                "fake never recorded its argv within 30s — the spawn kept \
+                 failing (file: {})",
+                argfile.display()
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
         };
         let argv: Vec<&str> = recorded.lines().collect();
         assert_eq!(

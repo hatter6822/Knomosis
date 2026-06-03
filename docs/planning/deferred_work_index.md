@@ -35,8 +35,8 @@ counts in parentheses give the total granular landing surface.
 | `lex_v2_v3_roadmap_plan.md` | LX2 / LX3 — Lex v2 + v3 evolution | 13 (~40) | ~22 wks total | forward-roadmap; demand-driven | LX3.3 triggers kernel amendment |
 | `cleanup_and_consolidation_plan.md` | CL — documentation + visibility tidy-up | 5 (~21 with CL.2 itemization) | ~5 days | the project's "tidy-up" PR sequence | CL.4 depends on EI.8 |
 | `step_vm_coherence_plan.md` | SVC — L1 step-VM cross-stack coherence + observer terminate wiring | 5 (~25) | ~9 wks (~5–6 wks with 2 engineers) | gates `HonestMove::TerminateOnSingleStep` wiring in the off-chain fault-proof observer; retires `SubmitError::TerminateNotImplemented` | builds on SC (SMT cell proofs); RH-G's observer is the consumer |
-| `fair_queuing_plan.md` | FQ — per-actor fair queuing / burst resistance | 2 rungs (28 WUs) | ~17 days | **Planned; not started.**  Rung 0 (connection-keyed DRR, no wire change) + Rung 1 (signer-hint, two-tier, version-gated).  **Unified into `GP.8_SEQUENCER_INTEGRATION_PLAN.md` as Track A — that document is the canonical implementation surface.** | builds on RH-C (`knomosis-host`, Complete); complements GP (kernel-side stock bound); liveness layer, no kernel touch |
-| `GP.8_SEQUENCER_INTEGRATION_PLAN.md` | GP.8 — sequencer integration (unifies FQ + GP §GP.8) | 4 tracks (~35 WUs) | ~21 days | **Planned; not started.**  Canonical sequencer plan: Track A = FQ (inbound liveness); Tracks B–D = GP §GP.8 (reimbursement claim, configuration, operations) — incl. the subdivided GP.8.1a–c claim + the deferred v2 GP.8.5. | builds on RH-C + GP.6.2 + GP.7 + Workstream H (all Complete); supersedes `fair_queuing_plan.md` + `unified_gas_pool_plan.md` §GP.8 for the sequencer |
+| `fair_queuing_plan.md` | FQ — per-actor fair queuing / burst resistance | 2 rungs (28 WUs) | ~17 days | **Complete (Track A of GP.8).**  Rung 0 (connection-keyed DRR, no wire change) + Rung 1 (signer-hint, two-tier, `PROTOCOL_VERSION 2`) both ship in `knomosis-host` behind the default-OFF `--scheduler drr` flag.  **Unified into `GP.8_SEQUENCER_INTEGRATION_PLAN.md` as Track A — that document is the canonical implementation surface.** | builds on RH-C (`knomosis-host`, Complete); complements GP (kernel-side stock bound); liveness layer, no kernel touch |
+| `GP.8_SEQUENCER_INTEGRATION_PLAN.md` | GP.8 — sequencer integration (unifies FQ + GP §GP.8) | 4 tracks (~35 WUs) | ~21 days | **Track A complete; Tracks B–D planned.**  Track A = FQ inbound liveness (Rungs 0+1, shipped, incl. the FQ.13a `knomosis-l1-ingest` raw-TCP submitter); Tracks B–D = GP §GP.8 (reimbursement claim, configuration, operations) — incl. the subdivided GP.8.1a–c claim + the deferred v2 GP.8.5 — remain future work. | builds on RH-C + GP.6.2 + GP.7 + Workstream H (all Complete); supersedes `fair_queuing_plan.md` + `unified_gas_pool_plan.md` §GP.8 for the sequencer |
 | `open_questions.md` | (registry) | 30+ open questions | n/a | living design-decision document | referenced by every plan |
 | `deferred_work_index.md` | (this index) | n/a | n/a | navigator | none |
 
@@ -131,7 +131,7 @@ Tier 3 (large, post-EI, parallel-when-resources-allow):
   RH Rust host runtime                                  (~14–22 weeks)
 
 Tier 4 (forward-roadmap, demand-driven):
-  FQ per-actor fair-queuing                             (~17 days; sole prereq RH-C, met)
+  FQ per-actor fair-queuing                             (Track A COMPLETE — Rungs 0+1 shipped; GP.8 Tracks B–D pending)
   LX2 Lex v2                                            (~8 weeks)
   LX3 Lex v3                                            (~18 weeks)
   P7 Phase 7 (pick sub-workstreams)                     (20+ weeks)
@@ -176,7 +176,7 @@ that workstream.  When a sub-unit lands:
 | LX3 | "Lex roadmap" v3 entry "Complete" | kernel amendment for LX3.3 |
 | CL | various comment / docstring cleanup | minor §15C.6 retirement (post-CL.3) |
 | P7 | per-sub-workstream rows | §12 / new chapters |
-| FQ | new "FQ" roadmap row → "Complete" at closeout; planning-list entry; lib.rs + `abi.md` §10 (Rung 1) | none (liveness layer; no kernel / formal-model change) |
+| FQ | "FQ" roadmap row at "Track A complete" (Rungs 0+1); planning-list entry; lib.rs + `abi.md` §10.4.2 (Rung 1) — DONE | none (liveness layer; no kernel / formal-model change) |
 
 ## References
 
