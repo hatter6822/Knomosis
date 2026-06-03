@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5eec7a6e1e090e20159acf83843e0afe94af93c013ac1a7ad0e1ccac898765d9"
+    "source_digest": "c7d94cbc241bef043da0103531ec3afccd0bb063bc0d5e8b5e30694aec6fc893"
   },
   "summary": {
-    "module_count": 135,
-    "declaration_count": 4532
+    "module_count": 136,
+    "declaration_count": 4555
   },
   "modules": [
     {
@@ -30781,6 +30781,311 @@
             "submit_one_unix",
             "to_byte",
             "unix"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-host::tests::persistent",
+      "path": "runtime/knomosis-host/tests/persistent.rs",
+      "declaration_count": 23,
+      "declarations": [
+        {
+          "kind": "fn",
+          "name": "spawn_persistent_server",
+          "line": 55,
+          "called": [
+            "Caps",
+            "HandlerConfig",
+            "Kernel",
+            "Scheduler",
+            "addr",
+            "build",
+            "caps",
+            "fair_caps",
+            "handle",
+            "handler",
+            "kernel",
+            "listener",
+            "local_addr",
+            "max_queue_depth",
+            "run",
+            "scheduler",
+            "stop",
+            "tcp"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "join_server",
+          "line": 81,
+          "called": [
+            "handle",
+            "stop"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "tagged_payload",
+          "line": 96,
+          "called": [
+            "tag",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "pipeline_v2",
+          "line": 103,
+          "called": [
+            "KNH2_PREAMBLE",
+            "addr",
+            "encode_hinted_frame",
+            "flush",
+            "stream",
+            "tagged_payload",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "pipeline_v1",
+          "line": 120,
+          "called": [
+            "addr",
+            "encode_frame",
+            "flush",
+            "stream",
+            "tagged_payload"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_n_verdicts",
+          "line": 137,
+          "called": [
+            "head",
+            "push",
+            "read_exact",
+            "reason",
+            "stream"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "RecordState",
+          "line": 160,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "RecordingKernel",
+          "line": 176,
+          "called": [
+            "RecordState",
+            "state"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "RecordingKernel",
+          "line": 181,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "new",
+          "line": 182,
+          "called": [
+            "RecordState",
+            "state"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Kernel for RecordingKernel",
+          "line": 187,
+          "called": [
+            "Kernel",
+            "RecordingKernel"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "submit",
+          "line": 188,
+          "called": [
+            "KernelResponse",
+            "len",
+            "lock",
+            "min",
+            "push",
+            "state",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "identifier",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "release_gate",
+          "line": 213,
+          "called": [
+            "RecordState",
+            "lock",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "open_caps",
+          "line": 219,
+          "called": [
+            "Caps",
+            "with_max_conn_backlog",
+            "with_max_signers"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "persistent_v2_pipelines_many_requests_on_one_connection",
+          "line": 233,
+          "called": [
+            "addr",
+            "iter",
+            "join_server",
+            "len",
+            "open_caps",
+            "pipeline_v2",
+            "read_n_verdicts",
+            "server",
+            "spawn_persistent_server",
+            "stop",
+            "stream",
+            "to_byte"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "persistent_v1_pipelines_many_requests_on_one_connection",
+          "line": 251,
+          "called": [
+            "addr",
+            "iter",
+            "join_server",
+            "len",
+            "open_caps",
+            "pipeline_v1",
+            "read_n_verdicts",
+            "server",
+            "spawn_persistent_server",
+            "stop",
+            "stream",
+            "to_byte"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "one_shot_client_works_against_persistent_host",
+          "line": 266,
+          "called": [
+            "addr",
+            "join_server",
+            "open_caps",
+            "pipeline_v1",
+            "read_n_verdicts",
+            "server",
+            "spawn_persistent_server",
+            "stop",
+            "stream",
+            "to_byte"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "staged_contention_order",
+          "line": 286,
+          "called": [
+            "Scheduler",
+            "addr",
+            "clone",
+            "iter",
+            "join_server",
+            "kernel",
+            "len",
+            "lock",
+            "open_caps",
+            "pipeline_v2",
+            "read_n_verdicts",
+            "release_gate",
+            "scheduler",
+            "server",
+            "spawn_persistent_server",
+            "state",
+            "stop",
+            "to_byte"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "floods_before_last_honest",
+          "line": 327,
+          "called": [
+            "count",
+            "iter"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "drr_persistent_fair_scheduling_bites_through_the_wire",
+          "line": 346,
+          "called": [
+            "floods_before_last_honest",
+            "staged_contention_order"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fifo_persistent_buries_honest_connection",
+          "line": 371,
+          "called": [
+            "floods_before_last_honest",
+            "staged_contention_order"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "graceful_shutdown_with_open_persistent_connection",
+          "line": 389,
+          "called": [
+            "HandlerConfig",
+            "KNH2_PREAMBLE",
+            "addr",
+            "build",
+            "drop",
+            "encode_hinted_frame",
+            "fair_caps",
+            "flush",
+            "handler",
+            "join_server",
+            "listener",
+            "local_addr",
+            "max_queue_depth",
+            "open_caps",
+            "read_n_verdicts",
+            "run",
+            "scheduler",
+            "server",
+            "stop",
+            "stream",
+            "tagged_payload",
+            "tcp",
+            "to_byte",
+            "to_vec"
           ]
         }
       ]
