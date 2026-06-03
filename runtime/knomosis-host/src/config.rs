@@ -36,6 +36,7 @@
 //! | `--max-flows <N>`      | optional | DRR distinct-connection cap (default 4096; drr only) |
 //! | `--max-signers-per-conn <N>`| optional | Rung-1 distinct-signer-per-conn cap (default 256; drr only)|
 //! | `--max-conn-backlog <N>`| optional | Rung-1.5 per-connection aggregate backlog cap (default = `--per-flow-cap`; drr only)|
+//! | `--persistent-connections`| optional | Pipeline many requests per TCP/Unix connection (default off; makes DRR bite over the wire)|
 //! | `--max-queue-depth <N>`| optional | Bounded queue size / DRR global cap (default 256)    |
 //! | `--max-frame-size <N>` | optional | Max request frame size in bytes (default 1 MiB)      |
 //! | `--mock`               | optional | Use `MockKernel` (always returns Ok)                 |
@@ -142,6 +143,15 @@ pub struct Config {
     pub max_frame_size: usize,
     /// Maximum simultaneous connection handler threads (DoS cap).
     pub max_concurrent_connections: usize,
+    /// `--persistent-connections`: run TCP / Unix connections in
+    /// persistent + pipelined mode (default `false` ⇒ one-shot per
+    /// connection).  When enabled, a single connection may pipeline many
+    /// in-flight requests and receives one verdict per request in
+    /// submission order; this is the mode under which two-tier DRR
+    /// actually diverges from FIFO over the wire (`GP.8` §2.5).  TLS
+    /// connections are always one-shot.  Pairs with `--scheduler drr` +
+    /// `--max-conn-backlog` (the per-connection pipelining-depth bound).
+    pub persistent_connections: bool,
     /// Use the in-memory mock kernel.
     pub use_mock_kernel: bool,
     /// Raw `--budget-policy <mode>` value (GP.6.2).  The only
@@ -226,6 +236,7 @@ impl Config {
             max_queue_depth: crate::queue::DEFAULT_MAX_QUEUE_DEPTH,
             max_frame_size: crate::frame::DEFAULT_MAX_FRAME_SIZE,
             max_concurrent_connections: crate::listener::DEFAULT_MAX_CONCURRENT_CONNECTIONS,
+            persistent_connections: false,
             use_mock_kernel: false,
             budget_mode: None,
             budget_free_tier: None,
@@ -620,6 +631,7 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
             "--help" | "-h" => return Err(ParseError::HelpRequested),
             "--version" | "-v" => return Err(ParseError::VersionRequested),
             "--mock" => cfg.use_mock_kernel = true,
+            "--persistent-connections" => cfg.persistent_connections = true,
             "--listen" => {
                 let value = iter
                     .next()
@@ -920,6 +932,7 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --max-signers-per-conn <N>\n\
          \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20Rung-1 cap on distinct signer hints within one connection (default 256; drr only)\n\
          \x20 --max-conn-backlog <N>    Per-connection aggregate backlog cap (default = --per-flow-cap; drr only)\n\
+         \x20 --persistent-connections  Pipeline many requests per TCP/Unix connection (default off; makes DRR bite over the wire)\n\
          \n\
          Tuning:\n\
          \x20 --max-queue-depth <N>     Bounded queue size / DRR global cap (default 256)\n\
@@ -1997,6 +2010,33 @@ mod tests {
             }
             other => panic!("expected MaxConnBacklogExceedsQueueDepth, got {other:?}"),
         }
+    }
+
+    // ----- --persistent-connections (pipelined wire mode) ------------
+
+    /// `--persistent-connections` parses to `true` and plumbs into the
+    /// handler config; the default is `false`.
+    #[test]
+    fn persistent_connections_flag_parses() {
+        let default = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert!(!default.persistent_connections, "default is one-shot");
+
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--persistent-connections",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert!(cfg.persistent_connections);
+    }
+
+    /// The help text mentions `--persistent-connections`.
+    #[test]
+    fn help_text_mentions_persistent_connections() {
+        let text = super::help_text("knomosis-host");
+        assert!(text.contains("--persistent-connections"));
     }
 
     /// The same `--max-conn-backlog > --max-queue-depth` shape is NOT a

@@ -96,25 +96,23 @@ fn main() -> ExitCode {
 
     match run_benchmark(&cfg) {
         Ok(exit) => exit,
-        Err(BenchmarkRunError::Setup(msg)) => {
-            error!(error = %msg, "benchmark setup failed");
-            ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8)
-        }
-        Err(BenchmarkRunError::Run(msg)) => {
-            error!(error = %msg, "benchmark run failed");
-            ExitCode::from(OperatorExitCode::GeneralFailure.as_i32() as u8)
-        }
-        Err(BenchmarkRunError::TargetMiss(msg)) => {
-            error!(error = %msg, "benchmark missed target");
-            ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8)
-        }
-        Err(BenchmarkRunError::Regression(msg)) => {
-            error!(error = %msg, "benchmark regressed against baseline");
-            ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8)
-        }
-        Err(BenchmarkRunError::BaselineNotComparable(msg)) => {
-            error!(error = %msg, "baseline not comparable (wire-mode mismatch)");
-            ExitCode::from(OperatorExitCode::OperatorAction.as_i32() as u8)
+        Err(e) => {
+            // Per-variant logging (the message differs); the exit code is
+            // the single-source-of-truth `exit_code_for`.
+            match &e {
+                BenchmarkRunError::Setup(msg) => error!(error = %msg, "benchmark setup failed"),
+                BenchmarkRunError::Run(msg) => error!(error = %msg, "benchmark run failed"),
+                BenchmarkRunError::TargetMiss(msg) => {
+                    error!(error = %msg, "benchmark missed target");
+                }
+                BenchmarkRunError::Regression(msg) => {
+                    error!(error = %msg, "benchmark regressed against baseline");
+                }
+                BenchmarkRunError::BaselineNotComparable(msg) => {
+                    error!(error = %msg, "baseline not comparable (wire-mode mismatch)");
+                }
+            }
+            ExitCode::from(exit_code_for(&e).as_i32() as u8)
         }
     }
 }
@@ -171,6 +169,7 @@ fn run_benchmark(cfg: &CliConfig) -> Result<ExitCode, BenchmarkRunError> {
     runner_cfg.worker_count = cfg.worker_count;
     runner_cfg.warmup_requests = cfg.warmup_requests;
     runner_cfg.emit_hints = cfg.emit_hints;
+    runner_cfg.persistent = cfg.persistent;
 
     info!(
         transport = %transport.name(),
@@ -210,6 +209,7 @@ fn run_benchmark(cfg: &CliConfig) -> Result<ExitCode, BenchmarkRunError> {
         latency: summary,
         transport,
         emit_hints: cfg.emit_hints,
+        persistent: cfg.persistent,
     };
 
     // 6. Emit human + JSON output.
@@ -246,46 +246,78 @@ fn run_benchmark(cfg: &CliConfig) -> Result<ExitCode, BenchmarkRunError> {
         let baseline = BenchmarkReport::load(baseline_path)
             .map_err(|e| BenchmarkRunError::Setup(format!("failed to load baseline: {e}")))?;
         let verdict = compare_against_baseline(&baseline, &report, cfg.threshold);
-        match verdict {
-            RegressionVerdict::WithinTolerance => {
-                info!("baseline regression check: within tolerance");
-            }
-            RegressionVerdict::Regression { details } => {
-                let mut msg = String::from("regression details:");
-                for detail in &details {
-                    msg.push_str(&format!(
-                        "\n  {} : baseline {:.3}, candidate {:.3} (drift {:+.2}%; threshold {:.0}%)",
-                        detail.metric.name(),
-                        detail.baseline,
-                        detail.candidate,
-                        detail.relative_drift * 100.0,
-                        detail.threshold * 100.0,
-                    ));
-                }
-                return Err(BenchmarkRunError::Regression(msg));
-            }
-            RegressionVerdict::NotComparable {
-                baseline_emit_hints,
-                candidate_emit_hints,
-            } => {
-                // The baseline and candidate used different wire modes, so
-                // a regression check would be misleading.  Refuse it
-                // loudly (operator action: re-baseline in the same mode)
-                // rather than emit a possibly-false pass.
-                let mode = |hinted: bool| if hinted { "v2-hinted" } else { "v1-legacy" };
-                return Err(BenchmarkRunError::BaselineNotComparable(format!(
-                    "baseline wire mode ({}) differs from candidate ({}); \
-                     re-record the baseline with the same --emit-hints setting \
-                     before comparing (a hinted-vs-legacy comparison would hide \
-                     or misattribute regressions)",
-                    mode(baseline_emit_hints),
-                    mode(candidate_emit_hints),
-                )));
-            }
+        match regression_verdict_to_result(verdict) {
+            Ok(()) => info!("baseline regression check: within tolerance"),
+            Err(e) => return Err(e),
         }
     }
 
     Ok(ExitCode::from(OperatorExitCode::Success.as_i32() as u8))
+}
+
+/// Map a baseline-comparison [`RegressionVerdict`] to the benchmark
+/// driver's result.  Pure (no logging / I/O) so the exit-code-relevant
+/// mapping is unit-testable: `WithinTolerance` → `Ok`; `Regression` →
+/// `BenchmarkRunError::Regression`; `NotComparable` →
+/// `BenchmarkRunError::BaselineNotComparable` (both operator-action
+/// exits).
+fn regression_verdict_to_result(verdict: RegressionVerdict) -> Result<(), BenchmarkRunError> {
+    match verdict {
+        RegressionVerdict::WithinTolerance => Ok(()),
+        RegressionVerdict::Regression { details } => {
+            let mut msg = String::from("regression details:");
+            for detail in &details {
+                msg.push_str(&format!(
+                    "\n  {} : baseline {:.3}, candidate {:.3} (drift {:+.2}%; threshold {:.0}%)",
+                    detail.metric.name(),
+                    detail.baseline,
+                    detail.candidate,
+                    detail.relative_drift * 100.0,
+                    detail.threshold * 100.0,
+                ));
+            }
+            Err(BenchmarkRunError::Regression(msg))
+        }
+        RegressionVerdict::NotComparable {
+            baseline_emit_hints,
+            candidate_emit_hints,
+            baseline_persistent,
+            candidate_persistent,
+        } => {
+            // The baseline and candidate used different wire modes, so a
+            // regression check would be misleading.  Refuse it loudly
+            // (operator action: re-baseline in the same mode) rather than
+            // emit a possibly-false pass.
+            let mode = |hinted: bool, persistent: bool| {
+                format!(
+                    "{}/{}",
+                    if hinted { "v2-hinted" } else { "v1-legacy" },
+                    if persistent { "persistent" } else { "one-shot" }
+                )
+            };
+            Err(BenchmarkRunError::BaselineNotComparable(format!(
+                "baseline wire mode ({}) differs from candidate ({}); \
+                 re-record the baseline with the same --emit-hints / --persistent \
+                 settings before comparing (a cross-mode comparison would hide \
+                 or misattribute regressions)",
+                mode(baseline_emit_hints, baseline_persistent),
+                mode(candidate_emit_hints, candidate_persistent),
+            )))
+        }
+    }
+}
+
+/// Map a benchmark-driver error to its operator exit code.  Pure +
+/// testable; the single source of truth `main` uses for the process exit
+/// status (the per-variant logging stays at the call site).
+fn exit_code_for(err: &BenchmarkRunError) -> OperatorExitCode {
+    match err {
+        BenchmarkRunError::Setup(_)
+        | BenchmarkRunError::TargetMiss(_)
+        | BenchmarkRunError::Regression(_)
+        | BenchmarkRunError::BaselineNotComparable(_) => OperatorExitCode::OperatorAction,
+        BenchmarkRunError::Run(_) => OperatorExitCode::GeneralFailure,
+    }
 }
 
 /// Spawn a standalone knomosis-host backed by MockKernel.  Returns
@@ -308,6 +340,9 @@ fn spawn_standalone(
     let handler = HandlerConfig {
         max_frame_size,
         max_concurrent_connections: max_concurrent,
+        // Enable the host's persistent + pipelined path when the bench
+        // drives it, so the embedded standalone host matches the client.
+        persistent_connections: cfg.persistent,
         ..HandlerConfig::default()
     };
 
@@ -381,5 +416,80 @@ fn connect_endpoint(
         knomosis_bench::config::ConnectTarget::Tcp(addr) => {
             (Endpoint::Tcp(*addr), TransportKind::Tcp, None)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{exit_code_for, regression_verdict_to_result, BenchmarkRunError};
+    use knomosis_bench::report::{RegressionDetail, RegressionMetric, RegressionVerdict};
+    use knomosis_cli_common::exit::OperatorExitCode;
+
+    /// `WithinTolerance` → `Ok` (the benchmark passes the baseline gate).
+    #[test]
+    fn within_tolerance_maps_to_ok() {
+        assert!(regression_verdict_to_result(RegressionVerdict::WithinTolerance).is_ok());
+    }
+
+    /// `Regression` → `BenchmarkRunError::Regression`.
+    #[test]
+    fn regression_maps_to_regression_error() {
+        let verdict = RegressionVerdict::Regression {
+            details: vec![RegressionDetail {
+                metric: RegressionMetric::ThroughputDropped,
+                baseline: 100.0,
+                candidate: 50.0,
+                relative_drift: 0.5,
+                threshold: 0.10,
+            }],
+        };
+        match regression_verdict_to_result(verdict) {
+            Err(BenchmarkRunError::Regression(_)) => {}
+            other => panic!("expected Regression, got {other:?}"),
+        }
+    }
+
+    /// A wire-mode mismatch (`NotComparable`) maps to
+    /// `BaselineNotComparable`, which `exit_code_for` maps to the
+    /// operator-action exit (2) — the full CLI glue closing audit 4a.
+    #[test]
+    fn not_comparable_maps_to_operator_action_exit() {
+        let verdict = RegressionVerdict::NotComparable {
+            baseline_emit_hints: false,
+            candidate_emit_hints: true,
+            baseline_persistent: false,
+            candidate_persistent: true,
+        };
+        let err = match regression_verdict_to_result(verdict) {
+            Err(e @ BenchmarkRunError::BaselineNotComparable(_)) => e,
+            other => panic!("expected BaselineNotComparable, got {other:?}"),
+        };
+        assert_eq!(exit_code_for(&err), OperatorExitCode::OperatorAction);
+        assert_eq!(exit_code_for(&err).as_i32(), 2);
+    }
+
+    /// Every error variant maps to its documented exit code.
+    #[test]
+    fn exit_code_for_all_variants() {
+        assert_eq!(
+            exit_code_for(&BenchmarkRunError::Setup("x".into())),
+            OperatorExitCode::OperatorAction
+        );
+        assert_eq!(
+            exit_code_for(&BenchmarkRunError::Run("x".into())),
+            OperatorExitCode::GeneralFailure
+        );
+        assert_eq!(
+            exit_code_for(&BenchmarkRunError::TargetMiss("x".into())),
+            OperatorExitCode::OperatorAction
+        );
+        assert_eq!(
+            exit_code_for(&BenchmarkRunError::Regression("x".into())),
+            OperatorExitCode::OperatorAction
+        );
+        assert_eq!(
+            exit_code_for(&BenchmarkRunError::BaselineNotComparable("x".into())),
+            OperatorExitCode::OperatorAction
+        );
     }
 }

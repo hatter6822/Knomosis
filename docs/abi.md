@@ -1083,13 +1083,16 @@ signer hint; it is the inner DRR tier layered on top of this same core.
 See `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2.3–§2.8 for the
 design.
 
-Because the connection lifecycle is one-shot (§10.5 — one frame, one
-verdict, then close), connection-keyed fairness is meaningful only when
-a connection carries multiple in-flight requests (a persistent-connection
-mode, future) or when the host fronts a sequencer aggregating many
-actors; under strict one-shot, every connection is a single-request flow
-and DRR coincides with FIFO.  This is a deployment-topology property, not
-a wire-format one — the v1 wire format is unchanged either way.
+Because the *default* (one-shot) connection lifecycle holds one frame per
+connection, connection-keyed fairness is meaningful only when a connection
+carries multiple in-flight requests — which is exactly what the
+`--persistent-connections` pipelined mode provides (§10.5).  Under one-shot
+every connection is a single-request flow and DRR coincides with FIFO;
+under `--scheduler drr --persistent-connections` a connection can hold
+multiple simultaneously-queued requests and DRR genuinely arbitrates them
+(an honest connection is not buried behind a flooder).  This is a
+deployment-topology property, not a wire-format one — the v1 wire format
+is unchanged either way.
 
 #### 10.4.2 Rung-1 signer hint (Workstream GP.8 / FQ — `PROTOCOL_VERSION 2`)
 
@@ -1192,21 +1195,38 @@ submitter hand-rolls the framing but byte-pins it against them in a test.
 
 ### 10.5 Connection lifecycle
 
-Each connection handles exactly one request/response cycle, then
-closes (HTTP-style one-shot).  Persistent / multiplexed
-connections are not supported yet; they're a forward-extension
-point if a future workload justifies the complexity.
+There are two connection modes, selected by `--persistent-connections`.
 
-A Rung-1 (v2) connection (§10.4.2) performs its one-time magic-peek
-negotiation at the start of the connection, then reads its single hinted
-frame — so on a v2 connection the bytes on the wire are
-`KNH2` preamble + `[8-byte hint][4-byte length][payload]`, one request,
-then close.  The v2 per-frame format is defined for multiple frames (so a
-future persistent-connection mode is a drop-in), but under the current
-one-shot lifecycle each connection carries exactly one frame, which is
-why connection-keyed fairness coincides with FIFO end-to-end (§10.4.1) —
-the fairness signal is realised when a connection multiplexes many
-in-flight requests (a future mode or a sequencer-fronted topology).
+**One-shot (default).**  Each connection handles exactly one
+request/response cycle, then closes (HTTP-style).  A Rung-1 (v2)
+connection (§10.4.2) performs its one-time magic-peek negotiation at the
+start of the connection, then reads its single hinted frame — so on a v2
+connection the bytes on the wire are `KNH2` preamble + `[8-byte
+hint][4-byte length][payload]`, one request, then close.  Under the
+one-shot lifecycle each connection holds at most one in-flight request,
+which is why two-tier DRR and FIFO coincide end-to-end (§10.4.1) — the
+fairness signal needs a connection multiplexing several simultaneously-
+queued requests.
+
+**Persistent + pipelined (`--persistent-connections`).**  A TCP / Unix
+connection may send many frames back-to-back (pipelined) — it does NOT
+wait for each verdict before sending the next — and the host replies with
+one verdict per request **in submission order** (the §10.1 response frame
+is unchanged).  The host negotiates once (the v2 preamble is read once per
+connection, not per frame — `ConnReader`), then reads successive frames
+per the fixed v1/v2 classification.  Internally a dedicated writer thread
+delivers responses in order while a reader thread keeps reading; the
+per-connection in-flight depth is bounded by `--max-conn-backlog`, and a
+well-behaved client half-closes its write side after its last frame
+(immediate clean EOF).  This is the mode under which **fair scheduling
+under contention is exercised over the wire**: a single connection can now
+hold multiple queued requests, so with `--scheduler drr` a flooding
+pipelined connection no longer buries an honest connection — the honest
+connection's requests are interleaved into the dispatch stream (the outer
+round-robin across connections).  TLS connections are always one-shot
+(the rustls session is single-owner and cannot be split across a
+reader/writer pair).  A one-shot client (one frame, then close) is a
+degenerate subset and works unchanged against a persistent host.
 
 ### 10.6 Exit codes
 

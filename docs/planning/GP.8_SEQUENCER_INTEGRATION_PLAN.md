@@ -110,6 +110,44 @@ so a hinted-vs-legacy comparison can no longer silently hide or
 misattribute a regression (`knomosis-bench/src/report.rs`,
 `src/main.rs`).
 
+**Track A — Persistent + pipelined connection mode: Complete.**  This
+closes the §2.5 topology gap — the load-bearing one, surfaced by a
+self-audit: under the one-shot connection lifecycle every connection holds
+at most one in-flight request, so two-tier DRR and FIFO coincide
+*end-to-end* and the fairness mechanism, though correct, never bit over
+the wire.  The opt-in `--persistent-connections` flag (default off, like
+`--scheduler drr`) wires a persistent, **pipelined** TCP / Unix connection
+mode: a connection may send many frames back-to-back, and the host replies
+one verdict per request in submission order (the §10.1 response frame is
+unchanged).  This is the only condition under which a single flow holds
+multiple simultaneously-queued requests — the prerequisite for DRR to
+diverge from FIFO.  What ships:
+  * **`ConnReader`'s persistent path is now wired** (`src/listener.rs`,
+    `run_persistent`): the reader negotiates once, then loops
+    `ConnReader::read_next` (previously this state machine was built +
+    tested but unused by the one-shot server).  A dedicated writer thread
+    delivers responses in submission order; the per-connection in-flight
+    depth is bounded by `--max-conn-backlog` (the Rung-1.5 cap doubles as
+    the pipelining-depth bound).  TLS stays one-shot (the rustls session
+    is single-owner); a one-shot client is a degenerate subset and works
+    unchanged.
+  * **Fair scheduling under contention is exercised through the wire**
+    (`tests/persistent.rs`): a deterministic, gated-kernel integration
+    test stages a flood + honest contention over REAL TCP and asserts that
+    under `--scheduler drr --persistent-connections` the honest
+    connection's requests are interleaved into the first few dispatches
+    (≤ ~half the flood precedes its last request), while the FIFO contrast
+    test proves the flood buries the honest connection without DRR — so
+    the property is real, not vacuous.  Graceful shutdown with an open
+    persistent connection is covered too.
+  * **A shipping client drives it** (`knomosis-bench --persistent`): each
+    worker reuses one connection and pipelines requests in batches,
+    measuring the actual fair-scheduling throughput path; the standalone
+    host enables `--persistent-connections` automatically.  The benchmark
+    report records the persistent dimension alongside `emit_hints`, and
+    `compare_against_baseline` refuses to compare across either mode
+    dimension (`RegressionVerdict::NotComparable`).
+
 **Remaining: Tracks B–D.  Planned.  Not started.**  Every prerequisite
 is met:
 

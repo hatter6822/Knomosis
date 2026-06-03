@@ -21,23 +21,43 @@
 //!
 //! ## Connection lifecycle
 //!
-//! Each accepted connection runs in its own `std::thread`:
+//! Each accepted connection runs in its own `std::thread`.  There are
+//! two modes, selected by `--persistent-connections`:
 //!
-//!   1. Read one wire frame via [`crate::frame::read_frame`].
-//!   2. Try to submit to the [`crate::queue::BoundedQueue`].
-//!   3. If queue is full: respond `Busy` immediately, close.
+//! **One-shot (default).**  HTTP-style — simpler, and matches the plan's
+//! §RH-C.3 "HTTP-style one-shot is also acceptable, simpler":
+//!
+//!   1. Read one wire frame via [`crate::frame::read_request`].
+//!   2. Try to submit to the queue ([`crate::queue::QueueHandle`]).
+//!   3. If the queue is full: respond `Busy` immediately, close.
 //!   4. Otherwise: block on the reply channel (capacity 1).
 //!   5. Write the response via [`crate::verdict::VerdictResponse::encode`].
 //!   6. Close the connection.
 //!
-//! Single-shot per connection.  HTTP-style — simpler than
-//! persistent-connection multiplexing, and matches the plan's
-//! §RH-C.3 "HTTP-style one-shot is also acceptable, simpler".
+//! Under one-shot, every connection holds at most one in-flight request,
+//! so two-tier DRR and FIFO coincide end-to-end regardless of scheduler
+//! (`GP.8` §2.5 topology caveat).
+//!
+//! **Persistent + pipelined (`--persistent-connections`).**  A single
+//! TCP / Unix connection may pipeline many in-flight requests — it does
+//! NOT wait for each verdict before sending the next — so one flow can
+//! hold multiple simultaneously-queued requests for the scheduler to
+//! arbitrate.  This is the mode under which fair scheduling under
+//! contention is actually exercised over the wire (see
+//! [`run_persistent`]).  A dedicated writer thread delivers responses in
+//! submission order (the §10.1 response framing is unchanged), and the
+//! per-connection in-flight depth is bounded by `--max-conn-backlog`.
+//! TLS connections always use the one-shot handler (the rustls session is
+//! single-owner and cannot be split across reader/writer threads).
 
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
+use std::sync::Arc;
 use std::time::Duration;
 
-use crate::frame::{read_request, FrameError};
+use crate::frame::{read_request, ConnReader, FrameError};
+use crate::kernel::KernelResponse;
 use crate::queue::{ConnId, QueueHandle, SubmitOutcome};
 use crate::verdict::{Verdict, VerdictResponse};
 
@@ -88,6 +108,15 @@ pub struct HandlerConfig {
     /// New connections beyond this limit receive `Busy` and the
     /// socket is closed immediately.
     pub max_concurrent_connections: usize,
+    /// Whether to run TCP / Unix connections in persistent + pipelined
+    /// mode (`--persistent-connections`).  When `false` (the default)
+    /// every connection is one-shot (one frame → one verdict → close),
+    /// byte-for-byte the historical behaviour.  When `true`, a TCP / Unix
+    /// connection may pipeline many in-flight requests and receives one
+    /// verdict per request in submission order ([`run_persistent`]); this
+    /// is what makes two-tier DRR diverge from FIFO over the wire.  TLS
+    /// connections are always one-shot regardless of this flag.
+    pub persistent_connections: bool,
 }
 
 impl Default for HandlerConfig {
@@ -97,6 +126,7 @@ impl Default for HandlerConfig {
             connection_timeout: DEFAULT_CONNECTION_TIMEOUT,
             kernel_reply_timeout: DEFAULT_KERNEL_REPLY_TIMEOUT,
             max_concurrent_connections: DEFAULT_MAX_CONCURRENT_CONNECTIONS,
+            persistent_connections: false,
         }
     }
 }
@@ -202,6 +232,13 @@ pub enum HandleOutcome {
     /// a request frame.  No response was owed.  This is the
     /// normal "client went away" case; not an error.
     ClientClosedBeforeRequest,
+    /// A persistent connection closed after serving `served` requests
+    /// (the pipelined `--persistent-connections` path).  `served` counts
+    /// every frame the reader accepted (including ones answered `Busy`).
+    PersistentClosed {
+        /// Number of request frames served on this connection.
+        served: u64,
+    },
 }
 
 impl HandleOutcome {
@@ -212,6 +249,7 @@ impl HandleOutcome {
         match self {
             Self::Responded(v) => v.name(),
             Self::ClientClosedBeforeRequest => "client_closed_before_request",
+            Self::PersistentClosed { .. } => "persistent_closed",
         }
     }
 }
@@ -318,6 +356,181 @@ pub fn handle_connection<S: Read + Write>(
     HandleOutcome::Responded(verdict)
 }
 
+/// A response awaiting delivery on a persistent connection, queued in
+/// strict submission order so the client reads one verdict per request
+/// in the order it sent them (the §10.1 response framing is unchanged).
+enum PendingResponse {
+    /// The request was enqueued for the worker; await its verdict on this
+    /// one-shot reply channel.
+    Enqueued(Receiver<KernelResponse>),
+    /// The request was rejected before the worker (queue `Busy`, or a
+    /// fatal frame error); the verdict is already known.
+    Immediate(VerdictResponse),
+}
+
+/// Run the persistent, **pipelined** request/response cycle over the
+/// split read/write halves of one connection (TCP / Unix).
+///
+/// This is the mode under which two-tier DRR actually diverges from FIFO
+/// *over the wire*.  A single connection may pipeline many in-flight
+/// requests — it does NOT wait for each verdict before sending the next —
+/// so one flow can hold multiple simultaneously-queued requests for the
+/// scheduler to arbitrate.  Under the one-shot [`handle_connection`] every
+/// connection has at most one queued request, so DRR and FIFO coincide
+/// regardless of scheduler (`GP.8` §2.5 topology caveat); persistent +
+/// pipelined is what makes the fairness mechanism live in production.
+///
+/// ## Concurrency (one extra thread per connection)
+///
+///   * The **reader** (this thread) loops [`ConnReader::read_next`] —
+///     wiring the persistent path of the Rung-1 read-state machine
+///     (negotiate once, then read frames per the fixed v1/v2
+///     classification) — submitting each frame to the queue and pushing
+///     the resulting [`PendingResponse`] onto an ordered channel.
+///   * The **writer** ([`persistent_writer_loop`], a spawned thread)
+///     drains that channel in order, resolving each pending verdict and
+///     writing it to the client.  Responses are therefore delivered in
+///     submission order even though the worker may DISPATCH them out of
+///     order (the fairness reordering is invisible to the client, but the
+///     cross-connection latency benefit — an honest connection not stuck
+///     behind a flooder — is real).
+///
+/// ## Back-pressure
+///
+/// The per-connection in-flight count is bounded by `--max-conn-backlog`:
+/// the queue returns `Busy` (written in order) once a connection's
+/// aggregate backlog hits the cap, so the ordered channel never grows
+/// without bound — the Rung-1.5 aggregate cap doubles as the
+/// pipelining-depth bound.
+///
+/// ## Termination
+///
+///   * A clean inter-frame close (`EofBeforeHeader`) or an idle / slow
+///     read timeout ends the read loop gracefully: the reader drops its
+///     sender, the writer drains the already-queued responses in order,
+///     then both exit.  A well-behaved pipelining client half-closes its
+///     write side after its last frame, so the reader sees an immediate
+///     EOF rather than waiting out the read timeout.
+///   * A fatal framing error writes one final `ParseError` (in order) and
+///     ends the connection — the byte stream cannot be resynchronised.
+///   * `stop` (graceful server shutdown) and a writer-side I/O error (the
+///     shared `dead` flag) both end the read loop within one read timeout.
+fn run_persistent<R, W>(
+    mut read_half: R,
+    write_half: W,
+    handle: &QueueHandle,
+    config: &HandlerConfig,
+    conn_id: ConnId,
+    stop: &Arc<AtomicBool>,
+) -> HandleOutcome
+where
+    R: Read,
+    W: Write + Send + 'static,
+{
+    // Ordered hand-off reader → writer.  Bounded in practice by
+    // `--max-conn-backlog` (the queue rejects beyond it with `Busy`,
+    // pushed as `Immediate`), so an unbounded channel is safe.
+    let (resp_tx, resp_rx) = std::sync::mpsc::channel::<PendingResponse>();
+    let kernel_reply_timeout = config.kernel_reply_timeout;
+    // Shared "connection is dead" flag so a writer-side I/O error stops
+    // the reader promptly (it stops submitting otherwise-discarded work).
+    let dead = Arc::new(AtomicBool::new(false));
+    let writer_dead = Arc::clone(&dead);
+    let writer = std::thread::Builder::new()
+        .name("knomosis-host-persist-writer".into())
+        .spawn(move || {
+            persistent_writer_loop(write_half, resp_rx, kernel_reply_timeout, &writer_dead);
+        })
+        .expect("spawn persistent writer thread");
+
+    let mut reader = ConnReader::new();
+    let mut served: u64 = 0;
+    loop {
+        if stop.load(Ordering::Relaxed) || dead.load(Ordering::Relaxed) {
+            break;
+        }
+        match reader.read_next(&mut read_half, config.max_frame_size) {
+            Ok((signer_hint, payload)) => {
+                let pending = match handle.submit(conn_id, signer_hint, payload) {
+                    SubmitOutcome::Enqueued(rx) => PendingResponse::Enqueued(rx),
+                    SubmitOutcome::Busy => {
+                        PendingResponse::Immediate(VerdictResponse::from_verdict(Verdict::Busy))
+                    }
+                };
+                if resp_tx.send(pending).is_err() {
+                    break; // writer gone (it errored and returned)
+                }
+                served = served.saturating_add(1);
+            }
+            // Clean inter-frame close: the client is done sending.
+            Err(FrameError::EofBeforeHeader) => break,
+            // Idle / slow read timeout at a frame boundary (or mid-frame
+            // for a stalled client): treat as end-of-requests.  A
+            // well-behaved pipelining client half-closes after its last
+            // frame and hits `EofBeforeHeader` first; this only bounds an
+            // idle or slow-loris connection (and lets `stop` be observed).
+            Err(FrameError::Io(ref e))
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                break;
+            }
+            // Fatal framing error: emit one final `ParseError` in order,
+            // then stop (the byte stream cannot be resynchronised).
+            Err(e) => {
+                tracing::debug!(error = ?e, "persistent frame read failure");
+                let resp =
+                    VerdictResponse::with_reason(Verdict::ParseError, format!("frame read: {e}"));
+                let _ = resp_tx.send(PendingResponse::Immediate(resp));
+                break;
+            }
+        }
+    }
+    // Signal the writer that no more responses are coming; it drains the
+    // remaining queued responses in order, then exits.
+    drop(resp_tx);
+    let _ = writer.join();
+    tracing::debug!(served, "persistent connection closed");
+    HandleOutcome::PersistentClosed { served }
+}
+
+/// The writer half of [`run_persistent`]: drain `resp_rx` in order,
+/// resolving each pending verdict (blocking up to `kernel_reply_timeout`
+/// on an enqueued request's reply channel) and writing it to the client.
+///
+/// On any write error the client is gone: set the shared `dead` flag (so
+/// the reader stops) and return, abandoning the remaining responses.
+fn persistent_writer_loop<W: Write>(
+    mut write_half: W,
+    resp_rx: Receiver<PendingResponse>,
+    kernel_reply_timeout: Duration,
+    dead: &AtomicBool,
+) {
+    while let Ok(pending) = resp_rx.recv() {
+        let response = match pending {
+            PendingResponse::Enqueued(rx) => match rx.recv_timeout(kernel_reply_timeout) {
+                Ok(r) => r,
+                Err(_) => {
+                    // Kernel didn't reply in time (or the worker dropped
+                    // the sender).  Mirror the one-shot handler's choice:
+                    // a `NotAdmissible` with a timeout reason (the wire
+                    // verdict set is fixed; no "kernel timeout" byte).
+                    VerdictResponse::with_reason(Verdict::NotAdmissible, "kernel timeout")
+                }
+            },
+            PendingResponse::Immediate(v) => v,
+        };
+        let bytes = response.encode();
+        if write_half.write_all(&bytes).is_err() || write_half.flush().is_err() {
+            // Client gone: stop the reader and abandon the rest.
+            dead.store(true, Ordering::Relaxed);
+            return;
+        }
+    }
+}
+
 /// Plain TCP listener.
 pub mod tcp {
     use std::io::Write;
@@ -392,9 +605,10 @@ pub mod tcp {
                                 let conn_id = crate::queue::assign_conn_id(&conn_seq);
                                 let handle = handle.clone();
                                 let config = config.clone();
+                                let conn_stop = Arc::clone(&stop);
                                 thread::spawn(move || {
                                     handle_single_connection(
-                                        stream, peer, handle, config, slot, conn_id,
+                                        stream, peer, handle, config, slot, conn_id, conn_stop,
                                     );
                                 });
                             }
@@ -441,6 +655,7 @@ pub mod tcp {
         config: HandlerConfig,
         _slot: ConnectionSlot,
         conn_id: ConnId,
+        stop: Arc<AtomicBool>,
     ) {
         // _slot is held for the lifetime of this function; the
         // RAII Drop releases the connection-counter slot when
@@ -449,8 +664,26 @@ pub mod tcp {
         let _ = stream.set_write_timeout(Some(config.connection_timeout));
         let span = tracing::info_span!("conn", proto = "tcp", peer = %peer, conn = conn_id);
         let _enter = span.enter();
-        let outcome = handle_connection(&mut stream, &handle, &config, conn_id);
-        tracing::info!(outcome = outcome.name(), "request handled");
+        let outcome = if config.persistent_connections {
+            // Persistent + pipelined: split into independent read / write
+            // halves (a second handle to the same socket; concurrent read
+            // on one + write on the other is safe for TCP), then run the
+            // pipelined reader/writer cycle.  On a `try_clone` failure fall
+            // back to the one-shot path (correct, just not pipelined).
+            match stream.try_clone() {
+                Ok(write_half) => {
+                    let _ = write_half.set_write_timeout(Some(config.connection_timeout));
+                    super::run_persistent(stream, write_half, &handle, &config, conn_id, &stop)
+                }
+                Err(e) => {
+                    tracing::warn!(error = ?e, "try_clone failed; one-shot fallback");
+                    handle_connection(&mut stream, &handle, &config, conn_id)
+                }
+            }
+        } else {
+            handle_connection(&mut stream, &handle, &config, conn_id)
+        };
+        tracing::info!(outcome = outcome.name(), "connection handled");
     }
 }
 
@@ -747,9 +980,10 @@ pub mod unix {
                                 let conn_id = crate::queue::assign_conn_id(&conn_seq);
                                 let handle = handle.clone();
                                 let config = config.clone();
+                                let conn_stop = Arc::clone(&stop);
                                 thread::spawn(move || {
                                     handle_single_unix_connection(
-                                        stream, handle, config, slot, conn_id,
+                                        stream, handle, config, slot, conn_id, conn_stop,
                                     );
                                 });
                             }
@@ -798,13 +1032,28 @@ pub mod unix {
         config: HandlerConfig,
         _slot: ConnectionSlot,
         conn_id: ConnId,
+        stop: Arc<AtomicBool>,
     ) {
         // _slot RAII releases the connection-counter slot.
         let _ = stream.set_read_timeout(Some(config.connection_timeout));
         let _ = stream.set_write_timeout(Some(config.connection_timeout));
         let span = tracing::info_span!("conn", proto = "unix", conn = conn_id);
         let _enter = span.enter();
-        let outcome = handle_connection(&mut stream, &handle, &config, conn_id);
-        tracing::info!(outcome = outcome.name(), "request handled");
+        let outcome = if config.persistent_connections {
+            // Persistent + pipelined (see the TCP handler / `run_persistent`).
+            match stream.try_clone() {
+                Ok(write_half) => {
+                    let _ = write_half.set_write_timeout(Some(config.connection_timeout));
+                    super::run_persistent(stream, write_half, &handle, &config, conn_id, &stop)
+                }
+                Err(e) => {
+                    tracing::warn!(error = ?e, "try_clone failed; one-shot fallback");
+                    handle_connection(&mut stream, &handle, &config, conn_id)
+                }
+            }
+        } else {
+            handle_connection(&mut stream, &handle, &config, conn_id)
+        };
+        tracing::info!(outcome = outcome.name(), "connection handled");
     }
 }

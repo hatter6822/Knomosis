@@ -871,7 +871,7 @@ work units.  Status:
 | SC.3      | SMT cell proofs: cross-stack soundness + corpus | Complete |
 | SVC       | L1 step-VM cross-stack coherence + observer terminate wiring | Complete (Lean + Rust; cross-stack fixture corpus with cell-proof bundles emitted per fixture entry — 218 entries / 134 happy at SVC close, since widened by GP.3.3 → 238 and GP.5.3 → 248 / 152 happy; every happy fixture byte-equivalence-tested against Solidity `executeStep` under `isKeccak256Linked = true` via a single uniform driver) |
 | E-G       | Ethereum: documentation + amendment | Complete (GENESIS_PLAN §15D + ABI §16 + extraction_notes §2.X + std_dependencies refresh) |
-| FQ / GP.8 | Per-actor fair queuing / burst resistance (knomosis-host) | Track A complete: Rung 0 (connection-keyed DRR) + Rung 1 (signer-hint wire `PROTOCOL_VERSION 2` + two-tier DRR), default-OFF `--scheduler drr`; Tracks B–D (reimbursement claim / config guidance / runbook) future work — see `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` |
+| FQ / GP.8 | Per-actor fair queuing / burst resistance (knomosis-host) | Track A complete: Rung 0 (connection-keyed DRR) + Rung 1 (signer-hint wire `PROTOCOL_VERSION 2` + two-tier DRR), default-OFF `--scheduler drr`, + the `--persistent-connections` pipelined mode under which DRR fair scheduling is exercised through the wire (`tests/persistent.rs`); Tracks B–D (reimbursement claim / config guidance / runbook) future work — see `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` |
 | 7         | Advanced capabilities              | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -1213,8 +1213,20 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 902 tests across the 11 workspace
-crates (the FQ Rung-1 post-review hardening adds ~17 tests — the
+**Rust-side test count.**  ~1 918 tests across the 11 workspace
+crates (the persistent + pipelined connection mode adds ~16 tests — the
+opt-in `--persistent-connections` host flag + `run_persistent`
+reader/writer pipelined handler wiring `ConnReader`'s persistent path;
+`tests/persistent.rs` (6 e2e cases over REAL TCP: v2 + v1 pipelining,
+one-shot back-compat, the DRR-bites-through-the-wire fairness test + its
+FIFO contrast, graceful shutdown with an open connection); the
+`knomosis-host` `config.rs` flag tests; the `knomosis-bench --persistent`
+pipelined client (2 standalone smoke cases) + its `--persistent` config
+test + the `report.rs` persistent wire-mode-mismatch `NotComparable` test;
+and the 4 `knomosis-bench` `main.rs` exit-path unit tests
+(`regression_verdict_to_result` / `exit_code_for`, closing the
+untested-CLI-glue gap).  The FQ Rung-1 post-review hardening adds ~17 tests
+— the
 per-connection aggregate-backlog cap `--max-conn-backlog` (default =
 `--per-flow-cap`, restoring the Rung-0 per-connection bound the two-tier
 split would otherwise relax to `max_signers × per_flow`; new
@@ -1224,10 +1236,10 @@ leaf-first check ordering so `per_flow` stays attributable, the
 `src/config.rs` flag parse / default / zero / too-large / cross-field
 tests, the `src/queue.rs` hint-rotation-confinement test, and the
 `tests/fair_queue.rs` queue-level aggregate-cap test) plus the
-`knomosis-bench` `BenchmarkReport.emit_hints` wire-mode field
-(`#[serde(default)]` legacy-baseline load + the
-`RegressionVerdict::NotComparable` wire-mode guard so a hinted candidate
-is never silently compared against a legacy baseline); the FQ Rung-1
+`knomosis-bench` `BenchmarkReport.emit_hints` / `persistent` wire-mode
+fields (`#[serde(default)]` legacy-baseline load + the
+`RegressionVerdict::NotComparable` wire-mode guard so a hinted / persistent
+candidate is never silently compared against a legacy baseline); the FQ Rung-1
 signer-hint wire amendment + two-tier DRR
 adds ~60 tests — incl. an audit-pass round closing coverage gaps: the
 `--max-signers-per-conn` config flag's parse / default / non-numeric /
@@ -1330,11 +1342,11 @@ landing:
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
 | `knomosis-l1-ingest`                | ~321  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 genesis-3 reservation lockstep + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
-| `knomosis-host`                     | ~417  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + per-connection `--max-conn-backlog` aggregate cap |
+| `knomosis-host`                     | ~425  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + `--max-conn-backlog` aggregate cap + `--persistent-connections` pipelined mode (DRR exercised over the wire) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
 | `knomosis-indexer`                  | ~205  | RH-E.1 SQLite event indexer daemon + GP.6.3 Lean-event round-trip + GP.6.4 budget / pool views |
-| `knomosis-bench`                    | ~139  | RH-F transfer-throughput benchmark + FQ.13c `--emit-hints` + `BenchmarkReport.emit_hints` wire-mode guard |
+| `knomosis-bench`                    | ~147  | RH-F transfer-throughput benchmark + FQ.13c `--emit-hints` + `--persistent` pipelined client + `BenchmarkReport.emit_hints`/`persistent` wire-mode guard + exit-path unit tests |
 | `knomosis-faultproof-observer`      | ~312  | RH-G off-chain bisection-game observer                     |
 
 Per-WU + per-audit completion narratives live in git history
@@ -1660,18 +1672,29 @@ FQ.0 – FQ.8; Rung 1 = FQ.9 – FQ.15).  What ships and where:
     reason for a single-leaf flood) and BEFORE a new hint, and is RAISED
     by an operator for a legitimately-multiplexing connection.  Closes the
     PR-review regression the two-tier split introduced.
-  * **Topology caveat (§2.5).**  Fairness is connection- and
-    signer-keyed, so it bites only when a connection carries multiple
-    in-flight requests across distinct signers.  The host is
-    one-shot-per-connection (one frame → one verdict → close), so under
-    that lifecycle every connection is a single-request flow and DRR
-    coincides with FIFO end-to-end — the mechanism ships correct and
-    ready, but its real bite needs a persistent-connection mode (future)
-    or a sequencer-fronted topology (where the Rung-1 signer hint makes
-    the single-upstream-connection case fair).  The fairness *property*
-    is therefore pinned at the queue-API level (where multi-request,
-    multi-signer flows are constructable), not through the one-shot TCP
-    server.
+  * **Persistent + pipelined connection mode (`--persistent-connections`).**
+    Closes the §2.5 topology gap.  Fairness bites only when a connection
+    carries multiple simultaneously-queued requests; the DEFAULT one-shot
+    lifecycle (one frame → one verdict → close) holds at most one, so DRR
+    coincides with FIFO end-to-end.  The opt-in `--persistent-connections`
+    flag (default off) wires a persistent, PIPELINED TCP / Unix mode: a
+    connection sends many frames back-to-back and the host replies one
+    verdict per request in submission order (a dedicated writer thread
+    delivers in order while the reader keeps reading; the §10.1 response
+    frame is unchanged).  This is where `ConnReader`'s persistent
+    read-state path is finally USED (`run_persistent` in `src/listener.rs`):
+    it negotiates once, then loops `ConnReader::read_next`.  Per-connection
+    in-flight depth is bounded by `--max-conn-backlog`; TLS stays one-shot
+    (the rustls session is single-owner); a one-shot client is a degenerate
+    subset that works unchanged.  **Fair scheduling under contention is now
+    exercised through the wire** (`tests/persistent.rs`): a deterministic
+    gated-kernel integration test over REAL TCP shows DRR interleaving an
+    honest connection into a flood (≤ ~half the flood precedes the honest
+    connection's last request), with a FIFO contrast test proving the flood
+    buries it without DRR.  The fairness *property* is therefore pinned
+    BOTH at the queue-API level AND end-to-end through the TCP server.  A
+    shipping client drives it: `knomosis-bench --persistent` (each worker
+    reuses one connection and pipelines batches).
   * **Throughput (FQ.7c).**  Three measurements (all always-on
     queue-op microbenches except the e2e one).  (1) Single-tier queue-op
     overhead in ISOLATION (no-op kernel): Rung-0 DRR is ~1.8× the per-op

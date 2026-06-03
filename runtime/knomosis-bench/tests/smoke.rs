@@ -132,6 +132,76 @@ fn smoke_emit_hints_end_to_end() {
     assert!(outcome.throughput_ops_per_sec() > 0.0);
 }
 
+/// Persistent + pipelined end-to-end: a persistent host + persistent
+/// runner, each worker reusing ONE connection and pipelining batches.
+/// Every request is admitted (a framing bug in the pipelined path would
+/// surface as an `UnexpectedVerdict` or a truncated read).
+#[test]
+fn smoke_persistent_end_to_end() {
+    let handler = HandlerConfig {
+        persistent_connections: true,
+        ..HandlerConfig::default()
+    };
+    let mut server = StandaloneServer::spawn_tcp("127.0.0.1:0".parse().unwrap(), 256, handler)
+        .expect("spawn tcp server");
+    let local_addr = server.tcp_local_addr().unwrap();
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 64,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::Tcp(local_addr));
+    runner_cfg.worker_count = 4;
+    runner_cfg.warmup_requests = 8;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+    runner_cfg.persistent = true; // <-- the pipelined wire path
+    runner_cfg.pipeline_batch = 8;
+
+    let outcome = run(&fixture, &runner_cfg).expect("run persistent benchmark");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    assert_eq!(outcome.measured_requests, 56);
+    assert!(outcome.throughput_ops_per_sec() > 0.0);
+}
+
+/// Persistent + hinted (the full Rung-1 wire path): the v2 preamble is
+/// sent once per connection and the pipelined hinted frames de-frame
+/// correctly across many requests on one connection.
+#[test]
+fn smoke_persistent_hinted_end_to_end() {
+    let handler = HandlerConfig {
+        persistent_connections: true,
+        ..HandlerConfig::default()
+    };
+    let mut server = StandaloneServer::spawn_tcp("127.0.0.1:0".parse().unwrap(), 256, handler)
+        .expect("spawn tcp server");
+    let local_addr = server.tcp_local_addr().unwrap();
+
+    let fixture_cfg = FixtureConfig {
+        actor_count: 4,
+        transfer_count: 64,
+        ..Default::default()
+    };
+    let fixture = generate(&fixture_cfg).expect("generate fixture");
+
+    let mut runner_cfg = RunnerConfig::defaults_for(Endpoint::Tcp(local_addr));
+    runner_cfg.worker_count = 4;
+    runner_cfg.warmup_requests = 8;
+    runner_cfg.request_timeout = Duration::from_secs(5);
+    runner_cfg.persistent = true;
+    runner_cfg.emit_hints = true; // preamble once + bare hinted frames
+    runner_cfg.pipeline_batch = 8;
+
+    let outcome = run(&fixture, &runner_cfg).expect("run persistent hinted benchmark");
+    server.stop(Duration::from_secs(5)).expect("stop server");
+
+    assert_eq!(outcome.measured_requests, 56);
+    assert!(outcome.throughput_ops_per_sec() > 0.0);
+}
+
 /// A complete report can be saved + loaded + summarised.
 #[cfg(unix)]
 #[test]
@@ -178,6 +248,7 @@ fn smoke_full_report_round_trip() {
         latency: summary,
         transport: TransportKind::UnixSocket,
         emit_hints: false,
+        persistent: false,
     };
 
     // Save + reload.

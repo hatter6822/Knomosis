@@ -21,10 +21,13 @@
 //!   * v1 and v2 connections under concurrent mixed load all get the
 //!     correct verdict.
 //!
-//! The fairness SIGNAL itself lives in `tests/fair_queue.rs` (queue
-//! level), because the one-shot-per-connection server makes every TCP
-//! connection a single-request flow (`GP.8` §2.5).  Here we prove only
-//! that the wire format de-frames correctly for both client generations.
+//! The fairness SIGNAL itself is proven two ways: at the queue level in
+//! `tests/fair_queue.rs`, and END-TO-END THROUGH THE TCP SERVER in
+//! `tests/persistent.rs` (which drives the `--persistent-connections`
+//! pipelined mode — the topology under which a connection holds multiple
+//! in-flight requests, so DRR diverges from FIFO over the wire, `GP.8`
+//! §2.5).  Here we prove only that the wire format de-frames correctly
+//! for both client generations.
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
