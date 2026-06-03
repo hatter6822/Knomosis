@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c7d94cbc241bef043da0103531ec3afccd0bb063bc0d5e8b5e30694aec6fc893"
+    "source_digest": "c22086aac7adbb9bc0d7bb3cc61be8ad104f209b35906aae4608795c92521bff"
   },
   "summary": {
     "module_count": 136,
-    "declaration_count": 4555
+    "declaration_count": 4556
   },
   "modules": [
     {
@@ -25522,7 +25522,7 @@
     {
       "module": "runtime::knomosis-host::src::kernel",
       "path": "runtime/knomosis-host/src/kernel.rs",
-      "declaration_count": 169,
+      "declaration_count": 170,
       "declarations": [
         {
           "kind": "type",
@@ -26275,13 +26275,30 @@
           "called": [
             "CommandKernel",
             "CommandKernelError",
-            "MAX_SUBPROCESS_OUTPUT"
+            "Kernel",
+            "KernelResponse",
+            "MAX_SUBPROCESS_OUTPUT",
+            "unix"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "submit_retrying_spawn",
+          "line": 1401,
+          "called": [
+            "CommandKernel",
+            "KernelResponse",
+            "_",
+            "bytes",
+            "kernel",
+            "reason",
+            "submit"
           ]
         },
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 1381,
+          "line": 1414,
           "called": [
             "MAX_SUBPROCESS_OUTPUT"
           ]
@@ -26289,7 +26306,7 @@
         {
           "kind": "fn",
           "name": "missing_binary_returns_error",
-          "line": 1387,
+          "line": 1420,
           "called": [
             "Err",
             "clone",
@@ -26299,7 +26316,7 @@
         {
           "kind": "fn",
           "name": "construct_with_existing_binary",
-          "line": 1403,
+          "line": 1436,
           "called": [
             "clone",
             "kernel",
@@ -26312,7 +26329,7 @@
         {
           "kind": "fn",
           "name": "work_dir_created",
-          "line": 1421,
+          "line": 1454,
           "called": [
             "clone",
             "path"
@@ -26321,7 +26338,7 @@
         {
           "kind": "fn",
           "name": "submit_with_true_returns_ok",
-          "line": 1436,
+          "line": 1469,
           "called": [
             "b",
             "kernel",
@@ -26333,7 +26350,7 @@
         {
           "kind": "fn",
           "name": "submit_with_false_returns_not_admissible",
-          "line": 1451,
+          "line": 1484,
           "called": [
             "b",
             "kernel",
@@ -26345,33 +26362,33 @@
         {
           "kind": "fn",
           "name": "submit_surfaces_knomosis_reason_marker",
-          "line": 1471,
+          "line": 1504,
           "called": [
             "b",
             "kernel",
             "path",
             "reason",
-            "submit",
+            "submit_retrying_spawn",
             "verdict"
           ]
         },
         {
           "kind": "fn",
           "name": "submit_keeps_generic_reason_without_marker",
-          "line": 1492,
+          "line": 1525,
           "called": [
             "b",
             "kernel",
             "path",
             "reason",
-            "submit",
+            "submit_retrying_spawn",
             "verdict"
           ]
         },
         {
           "kind": "fn",
           "name": "submit_cleans_up_temp_file",
-          "line": 1515,
+          "line": 1548,
           "called": [
             "_",
             "b",
@@ -26385,7 +26402,7 @@
         {
           "kind": "fn",
           "name": "with_deployment_id_succeeds",
-          "line": 1537,
+          "line": 1570,
           "called": [
             "b",
             "kernel",
@@ -26398,7 +26415,7 @@
         {
           "kind": "fn",
           "name": "with_timeout_succeeds",
-          "line": 1553,
+          "line": 1586,
           "called": [
             "path",
             "unix",
@@ -26408,7 +26425,7 @@
         {
           "kind": "fn",
           "name": "write_argv_capture_script",
-          "line": 1570,
+          "line": 1603,
           "called": [
             "unix"
           ]
@@ -26416,14 +26433,14 @@
         {
           "kind": "fn",
           "name": "budget_policy_flags_passed_to_subprocess",
-          "line": 1587,
+          "line": 1620,
           "called": [
             "argv",
             "b",
             "iter",
             "kernel",
             "path",
-            "submit",
+            "submit_retrying_spawn",
             "unix",
             "verdict",
             "with_budget_policy",
@@ -26433,7 +26450,7 @@
         {
           "kind": "fn",
           "name": "epoch_length_flag_passed_to_subprocess",
-          "line": 1628,
+          "line": 1661,
           "called": [
             "argv",
             "b",
@@ -26441,7 +26458,7 @@
             "iter",
             "kernel",
             "path",
-            "submit",
+            "submit_retrying_spawn",
             "unix",
             "verdict",
             "with_budget_policy",
@@ -26452,14 +26469,14 @@
         {
           "kind": "fn",
           "name": "epoch_length_zero_forwards_no_flag",
-          "line": 1656,
+          "line": 1689,
           "called": [
             "argv",
             "b",
             "epoch_length",
             "kernel",
             "path",
-            "submit",
+            "submit_retrying_spawn",
             "unix",
             "with_epoch_length",
             "write_argv_capture_script"
@@ -26468,7 +26485,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_caps_flags_passed_to_subprocess",
-          "line": 1676,
+          "line": 1709,
           "called": [
             "argv",
             "b",
@@ -26476,7 +26493,7 @@
             "iter",
             "kernel",
             "path",
-            "submit",
+            "submit_retrying_spawn",
             "unix",
             "verdict",
             "with_gas_pool_policy",
@@ -26486,14 +26503,14 @@
         {
           "kind": "fn",
           "name": "no_gas_pool_policy_passes_no_gas_pool_flags",
-          "line": 1709,
+          "line": 1742,
           "called": [
             "argv",
             "b",
             "gas_pool",
             "kernel",
             "path",
-            "submit",
+            "submit_retrying_spawn",
             "unix",
             "write_argv_capture_script"
           ]
@@ -26501,21 +26518,21 @@
         {
           "kind": "fn",
           "name": "no_budget_policy_passes_no_budget_flags",
-          "line": 1727,
+          "line": 1760,
           "called": [
             "argv",
             "b",
             "budget_policy",
             "kernel",
             "path",
-            "submit",
+            "submit_retrying_spawn",
             "write_argv_capture_script"
           ]
         },
         {
           "kind": "fn",
           "name": "with_budget_policy_records",
-          "line": 1745,
+          "line": 1778,
           "called": [
             "budget_policy",
             "kernel",
@@ -26526,7 +26543,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 1765,
+          "line": 1798,
           "called": [
             "identifier",
             "kernel",
@@ -26536,13 +26553,13 @@
         {
           "kind": "fn",
           "name": "is_send_sync",
-          "line": 1779,
+          "line": 1812,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1780,
+          "line": 1813,
           "called": [
             "CommandKernel"
           ]
@@ -26550,13 +26567,13 @@
         {
           "kind": "fn",
           "name": "error_is_send_sync",
-          "line": 1787,
+          "line": 1820,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1788,
+          "line": 1821,
           "called": [
             "CommandKernelError"
           ]
@@ -26564,13 +26581,13 @@
         {
           "kind": "fn",
           "name": "timeout_bounds_subprocess_wall_time",
-          "line": 1803,
+          "line": 1836,
           "called": [
             "b",
             "kernel",
             "path",
             "reason",
-            "submit",
+            "submit_retrying_spawn",
             "verdict",
             "with_timeout"
           ]
@@ -26578,7 +26595,7 @@
         {
           "kind": "fn",
           "name": "temp_file_creation_doesnt_follow_symlinks",
-          "line": 1851,
+          "line": 1884,
           "called": [
             "b",
             "clone",
@@ -26591,7 +26608,7 @@
         {
           "kind": "fn",
           "name": "spawn_lock_poisoning_recovers",
-          "line": 1897,
+          "line": 1930,
           "called": [
             "_",
             "b",
@@ -26606,7 +26623,7 @@
         {
           "kind": "fn",
           "name": "concurrent_calls_serialise",
-          "line": 1926,
+          "line": 1959,
           "called": [
             "_",
             "b",
@@ -26620,7 +26637,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1948,
+          "line": 1981,
           "called": [
             "AdmissionReceipt",
             "AdmissionStage",
@@ -26633,19 +26650,19 @@
         {
           "kind": "fn",
           "name": "kernel_trait_is_object_safe",
-          "line": 1954,
+          "line": 1987,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1955,
+          "line": 1988,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 1956,
+          "line": 1989,
           "called": [
             "Kernel",
             "Stub"
@@ -26654,7 +26671,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 1957,
+          "line": 1990,
           "called": [
             "KernelResponse",
             "_"
@@ -26663,7 +26680,7 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 1960,
+          "line": 1993,
           "called": [
             "Kernel",
             "Stub"
@@ -26672,19 +26689,19 @@
         {
           "kind": "fn",
           "name": "default_ok_stage_is_finalized",
-          "line": 1972,
+          "line": 2005,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1973,
+          "line": 2006,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 1974,
+          "line": 2007,
           "called": [
             "Kernel",
             "Stub"
@@ -26693,7 +26710,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 1975,
+          "line": 2008,
           "called": [
             "KernelResponse",
             "_"
@@ -26702,7 +26719,7 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 1978,
+          "line": 2011,
           "called": [
             "Stub",
             "ok_admission_stage"
@@ -26711,19 +26728,19 @@
         {
           "kind": "fn",
           "name": "subscribable_kernel_is_object_safe",
-          "line": 1989,
+          "line": 2022,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 1990,
+          "line": 2023,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 1991,
+          "line": 2024,
           "called": [
             "Kernel",
             "Stub"
@@ -26732,7 +26749,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 1992,
+          "line": 2025,
           "called": [
             "KernelResponse",
             "_"
@@ -26741,13 +26758,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 1995,
+          "line": 2028,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel for Stub",
-          "line": 1999,
+          "line": 2032,
           "called": [
             "Stub",
             "SubscribableKernel"
@@ -26756,7 +26773,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2000,
+          "line": 2033,
           "called": [
             "Stub",
             "SubscribableKernel",
@@ -26767,19 +26784,19 @@
         {
           "kind": "fn",
           "name": "default_action_id_is_empty",
-          "line": 2010,
+          "line": 2043,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 2011,
+          "line": 2044,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 2012,
+          "line": 2045,
           "called": [
             "Kernel",
             "Stub"
@@ -26788,7 +26805,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2013,
+          "line": 2046,
           "called": [
             "KernelResponse",
             "_"
@@ -26797,13 +26814,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2016,
+          "line": 2049,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel for Stub",
-          "line": 2020,
+          "line": 2053,
           "called": [
             "Stub",
             "SubscribableKernel"
@@ -26812,7 +26829,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2021,
+          "line": 2054,
           "called": [
             "Stub",
             "Subscription",
@@ -26825,19 +26842,19 @@
         {
           "kind": "fn",
           "name": "default_receipt_matches_ok_stage_and_action_id",
-          "line": 2033,
+          "line": 2066,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 2034,
+          "line": 2067,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 2035,
+          "line": 2068,
           "called": [
             "Kernel",
             "Stub"
@@ -26846,7 +26863,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2036,
+          "line": 2069,
           "called": [
             "KernelResponse",
             "_"
@@ -26855,13 +26872,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2039,
+          "line": 2072,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 2042,
+          "line": 2075,
           "called": [
             "AdmissionStage"
           ]
@@ -26869,7 +26886,7 @@
         {
           "kind": "impl",
           "name": "SubscribableKernel for Stub",
-          "line": 2046,
+          "line": 2079,
           "called": [
             "Stub",
             "SubscribableKernel"
@@ -26878,7 +26895,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2047,
+          "line": 2080,
           "called": [
             "Subscription",
             "_"
@@ -26887,7 +26904,7 @@
         {
           "kind": "fn",
           "name": "action_id_for",
-          "line": 2050,
+          "line": 2083,
           "called": [
             "Stub",
             "b",
@@ -26899,7 +26916,7 @@
         {
           "kind": "fn",
           "name": "subscription_try_recv_arm_semantics",
-          "line": 2066,
+          "line": 2099,
           "called": [
             "AdmissionStage",
             "Err",
@@ -26911,7 +26928,7 @@
         {
           "kind": "fn",
           "name": "subscription_drains_before_reporting_disconnected",
-          "line": 2093,
+          "line": 2126,
           "called": [
             "AdmissionStage",
             "Err",
@@ -26923,13 +26940,13 @@
         {
           "kind": "fn",
           "name": "staging_kernel_emits_strictly_monotonic_chain",
-          "line": 2129,
+          "line": 2162,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ActionSlot",
-          "line": 2138,
+          "line": 2171,
           "called": [
             "AdmissionStage"
           ]
@@ -26937,7 +26954,7 @@
         {
           "kind": "struct",
           "name": "StagingKernel",
-          "line": 2147,
+          "line": 2180,
           "called": [
             "ActionSlot"
           ]
@@ -26945,13 +26962,13 @@
         {
           "kind": "impl",
           "name": "StagingKernel",
-          "line": 2151,
+          "line": 2184,
           "called": []
         },
         {
           "kind": "fn",
           "name": "advance",
-          "line": 2156,
+          "line": 2189,
           "called": [
             "AdmissionStage",
             "lock",
@@ -26961,7 +26978,7 @@
         {
           "kind": "impl",
           "name": "Kernel for StagingKernel",
-          "line": 2170,
+          "line": 2203,
           "called": [
             "Kernel",
             "StagingKernel"
@@ -26970,7 +26987,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2171,
+          "line": 2204,
           "called": [
             "ActionSlot",
             "KernelResponse",
@@ -26983,13 +27000,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2184,
+          "line": 2217,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 2187,
+          "line": 2220,
           "called": [
             "AdmissionStage"
           ]
@@ -26997,7 +27014,7 @@
         {
           "kind": "impl",
           "name": "SubscribableKernel for StagingKernel",
-          "line": 2192,
+          "line": 2225,
           "called": [
             "StagingKernel",
             "SubscribableKernel"
@@ -27006,7 +27023,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2193,
+          "line": 2226,
           "called": [
             "Subscription",
             "events",
@@ -27016,7 +27033,7 @@
         {
           "kind": "fn",
           "name": "action_id_for",
-          "line": 2208,
+          "line": 2241,
           "called": [
             "StagingKernel",
             "advance",
@@ -27036,13 +27053,13 @@
         {
           "kind": "fn",
           "name": "subscribe_during_advance_no_duplicate_events",
-          "line": 2289,
+          "line": 2322,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ActionSlot",
-          "line": 2295,
+          "line": 2328,
           "called": [
             "AdmissionStage"
           ]
@@ -27050,7 +27067,7 @@
         {
           "kind": "struct",
           "name": "StagingKernel",
-          "line": 2300,
+          "line": 2333,
           "called": [
             "ActionSlot"
           ]
@@ -27058,13 +27075,13 @@
         {
           "kind": "impl",
           "name": "StagingKernel",
-          "line": 2303,
+          "line": 2336,
           "called": []
         },
         {
           "kind": "fn",
           "name": "advance",
-          "line": 2304,
+          "line": 2337,
           "called": [
             "AdmissionStage",
             "_",
@@ -27075,7 +27092,7 @@
         {
           "kind": "impl",
           "name": "Kernel for StagingKernel",
-          "line": 2313,
+          "line": 2346,
           "called": [
             "Kernel",
             "StagingKernel"
@@ -27084,7 +27101,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2314,
+          "line": 2347,
           "called": [
             "ActionSlot",
             "KernelResponse",
@@ -27097,13 +27114,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2326,
+          "line": 2359,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 2329,
+          "line": 2362,
           "called": [
             "AdmissionStage"
           ]
@@ -27111,7 +27128,7 @@
         {
           "kind": "impl",
           "name": "SubscribableKernel for StagingKernel",
-          "line": 2333,
+          "line": 2366,
           "called": [
             "StagingKernel",
             "SubscribableKernel"
@@ -27120,7 +27137,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2334,
+          "line": 2367,
           "called": [
             "StagingKernel",
             "Subscription",
