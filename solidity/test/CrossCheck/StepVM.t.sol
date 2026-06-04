@@ -6,8 +6,9 @@ import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
-///         `step_vm.json` fixture (248 entries post-GP.5.3; #226 /
-///         #251 coherence corpus).
+///         `step_vm.json` fixture (258 entries post-GP.9.1, after the
+///         claimBudgetRefund kind-22 arm added 10; #226 / #251
+///         coherence corpus).
 ///
 /// @dev    **Two commits per entry.**  Each fixture entry carries
 ///         two distinct 32-byte hashes:

@@ -230,8 +230,8 @@ def tests : List TestCase :=
               (actual := ebs'.currentBudget other now freeTier) "other budget untouched"
         | none => assert false "refund consume should succeed"
     }
-  , -- ## Admission gate (the seven safety conjuncts)
-    { name := "refund gate ACCEPTS a valid refund (all seven conjuncts hold)"
+  , -- ## Admission gate (the nine safety conjuncts)
+    { name := "refund gate ACCEPTS a valid refund (all nine conjuncts hold)"
     , body := do
         -- claimant 5 (≠ bridge 0, ≠ pool 1), pool = gasPoolActor (1),
         -- rate 1 = trustedRate 0, 1 ≤ 89 ≤ refundableBudget (89),

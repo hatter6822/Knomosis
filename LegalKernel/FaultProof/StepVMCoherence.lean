@@ -194,28 +194,29 @@ def actionKindByte : Action → UInt8
   -- L1-fault-proof-executable (see `stepVMHash`'s kind-21 arm).
   | .topUpActionBudgetFor _ _ _ _ _ => 21
   -- Workstream GP (GP.9.1): refund-on-exit.  Dispatcher index 22.
-  -- The `actionFieldsForL1` layout + `readOnlyCells` / `writeCells`
-  -- cell sets ship here, so the cell-proof bundle is well-formed; the
-  -- `stepVMHash` EXECUTION arm (kind 22) + the Solidity `_step22`
-  -- decoder + cross-stack fixtures are the L1-fault-proof follow-on
-  -- (so `stepVMHash` returns the empty-hash sentinel for kind 22 — see
-  -- `stepVMHash_unknown_kind_empty` — exactly as kind 21 awaited
-  -- GP.5.3 after landing at GP.3.4).
+  -- The `stepVMHash` EXECUTION arm (kind 22, `stepCommitClaimBudgetRefund`),
+  -- the Solidity `_stepClaimBudgetRefund` decoder, and the cross-stack
+  -- fixtures all ship, so kind 22 is L1-fault-proof-*executable* (the
+  -- `actionFieldsForL1` layout + `readOnlyCells` / `writeCells` cell sets
+  -- ship here too, so the cell-proof bundle is well-formed).  `stepVMHash`
+  -- now returns the empty-hash sentinel only for kinds `≥ 23` (see
+  -- `stepVMHash_unknown_kind_empty`).
   | .claimBudgetRefund _ _ _ _      => 22
 
-/-- The `stepVMHash`-*dispatched* kind range, `0..21` — the 22
+/-- The `stepVMHash`-*dispatched* kind range, `0..22` — the 23
     variants for which the L1 step-VM has a real execution arm with a
     cross-stack Solidity counterpart.  Used by the coverage regression
     test (`for kind in actionKindByteCases`) to assert each dispatched
     kind yields a non-empty hash.
 
-    Note (GP.5.3): index `21` (`topUpActionBudgetFor`) joined this list
-    once its `stepVMHash` execution arm (and the Solidity `_step21`
-    decoder + cross-stack fixtures) landed; `stepVMHash` now returns the
-    empty-hash sentinel only for kinds `≥ 22` (see
-    `stepVMHash_unknown_kind_empty`).  This list enumerates the kinds
-    that are currently L1-fault-proof-*executable*, which is the
-    property the coverage test needs. -/
+    Note (GP.9.1): index `22` (`claimBudgetRefund`) joined this list
+    once its `stepVMHash` execution arm (`stepCommitClaimBudgetRefund`)
+    and the Solidity `_stepClaimBudgetRefund` decoder + cross-stack
+    fixtures landed; `stepVMHash` now returns the empty-hash sentinel
+    only for kinds `≥ 23` (see `stepVMHash_unknown_kind_empty`).  This
+    list enumerates the kinds that are currently
+    L1-fault-proof-*executable*, which is the property the coverage test
+    needs. -/
 def actionKindByteCases : List UInt8 :=
   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 

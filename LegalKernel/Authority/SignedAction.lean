@@ -992,7 +992,7 @@ theorem refundConsumeExtra_eq_zero_of_ne_refund (action : Action)
     Returns `true` iff the refund can safely proceed.  For a
     `claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor`
     signed by `S` under a `bounded freeTier actionCost currentEpoch`
-    policy, the gate enforces EIGHT conjuncts — the union of the
+    policy, the gate enforces NINE conjuncts — the union of the
     standard gas-pool defences (mirroring `topUpActionBudgetFor_gate`)
     and the refund-specific economic-soundness checks:
 
@@ -1010,6 +1010,16 @@ theorem refundConsumeExtra_eq_zero_of_ne_refund (action : Action)
         pinning the pool a claimant could name an arbitrary rich actor
         as `poolActor` and drain THEM.  The refund may only ever be
         paid from the canonical gas pool.
+      * `gasResource = 0 ∨ gasResource = 1` — the **canonical-gas-leg
+        pin**.  The gas pool operates only at `ResourceId 0` (ETH) and
+        `1` (BOLD); the kernel leg debits `gasPoolActor` at the action's
+        `gasResource`, so without this a claimant could name an off-leg
+        resource at which an accidental pool balance had accrued and
+        drain it via a custom `refundRate` that blesses that resource
+        (`RefundRateConfig.toRefundRate` zeroes off-leg rates for CLI
+        deployments, but a caller supplying a raw `refundRate` function
+        is not bound by that — so the pin is enforced here at the gate,
+        not deferred to the rate function).
       * `weiPerBudgetUnit = refundRate gasResource` — the **rate pin**.
         The exchange rate is the deployment's trusted per-resource
         constant (the same rate the GP.5.1 / GP.5.4 deposit grant uses),
@@ -2485,9 +2495,10 @@ EXACTLY their remaining purchased budget for a gas payout the gate
 proves is bounded, rate-pinned, pool-pinned, and solvent. -/
 
 /-- **GP.9.1 gate characterisation (single source of truth).**  The
-    refund gate passes for a `claimBudgetRefund` iff all seven
+    refund gate passes for a `claimBudgetRefund` iff all nine
     conjuncts hold: the consume-exempt / self-pool defences, the
-    victim-drain pool pin (`poolActor = gasPoolActor`), the rate pin
+    victim-drain pool pin (`poolActor = gasPoolActor`), the
+    canonical-gas-leg pin (`gasResource ∈ {0, 1}`), the rate pin
     (`weiPerBudgetUnit = refundRate gasResource`), the positive +
     free-tier-excluding budget bound, and pool solvency. -/
 theorem claimBudgetRefund_gate_characterization

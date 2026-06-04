@@ -6256,9 +6256,12 @@ the design.
        logged action alone — replay / fault-proof determinism).
     2. *Admission gate* (`apply_admissible_with_budget` +
        `apply_bridge_admissible_with_budget`, §13.6 two-reviewer): the
-       new `claimBudgetRefund_gate` enforces the EIGHT conjuncts —
+       new `claimBudgetRefund_gate` enforces the NINE conjuncts —
        `S ≠ bridgeActor`, `S ≠ poolActor`, `poolActor = gasPoolActor`
-       (victim-drain pin), `weiPerBudgetUnit = refundRate gasResource`
+       (victim-drain pin), `gasResource ∈ {0,1}` (canonical-gas-leg pin,
+       so an off-leg resource — where an accidental pool balance could
+       accrue — can never be drained via a custom `refundRate`),
+       `weiPerBudgetUnit = refundRate gasResource`
        (rate pin), `1 ≤ weiPerBudgetUnit` (the refund-ENABLED check, so
        the default `refundRate = 0` genuinely REJECTS refunds rather
        than admitting them as a budget-burning zero-payout no-op),
@@ -6278,11 +6281,13 @@ the design.
        `claimBudgetRefund_gate_characterization` (the gate's exact
        reach), `admission_refund_consumes_budget` (budget retired =
        `actionCost + budgetUnits`), `admission_refund_preserves_free_tier`
-       (the anti-drain guarantee, end-to-end), and the FIVE rejection
+       (the anti-drain guarantee, end-to-end), and the SIX rejection
        corollaries `refund_rejected_when_{pool_not_canonical,
-       rate_mismatch,over_refundable,pool_insolvent,rate_disabled}`
-       (the last pins that the disabled default genuinely rejects, via
-       the `1 ≤ weiPerBudgetUnit` gate conjunct).  The two POSITIVE
+       non_canonical_resource,rate_mismatch,over_refundable,
+       pool_insolvent,rate_disabled}`
+       (`rate_disabled` pins that the disabled default genuinely rejects,
+       via the `1 ≤ weiPerBudgetUnit` gate conjunct;
+       `non_canonical_resource` pins the `gasResource ∈ {0,1}` leg pin).  The two POSITIVE
        guarantees are mirrored on the production (bridge-aware) path —
        at an ARBITRARY deployment `refundRate`, NOT only the disabled
        default — by `admission_refund_consumes_budget_bridge` /
@@ -6352,20 +6357,24 @@ the design.
        (no admission gate, uses the LOGGED `weiPerBudgetUnit`), so the
        terminate bundle is refund-rate-independent (as it is
        budget-config-independent).
-    11. *Tests*: `bridge-budget-refund` grows to 26 cases (the gate
-       accept + the five rejection classes + `refundConsumeExtra` + two
-       END-TO-END bridge-path admission cases driving
-       `apply_bridge_admissible_with_budget` at a nonzero rate + the
-       Action-layer / admission-theorem / bridge-mirror API stability);
-       `runtime-loop-happy-path` grows by 2 (a refund admitted /
-       rejected through the literal `processSignedActionWith` runtime
-       entry); the new `runtime-refund-rate-sidecar` suite (9 cases —
+    11. *Tests*: `bridge-budget-refund` grows to 30 cases (the gate
+       accept + the six rejection classes — incl. the canonical-gas-leg
+       pin — + `refundConsumeExtra` + two END-TO-END bridge-path
+       admission cases driving `apply_bridge_admissible_with_budget` at a
+       nonzero rate + the four round-trip-seal cases (the
+       `topUpRoundTripCheck` value sweep + three END-TO-END top-up
+       admissions: cheap mint rejected at an active rate, the same mint
+       admitted at the disabled default, a fairly-priced mint admitted) +
+       the Action-layer / admission-theorem / bridge-mirror API
+       stability); `runtime-loop-happy-path` grows by 2 (a refund admitted
+       / rejected through the literal `processSignedActionWith` runtime
+       entry); the new `runtime-refund-rate-sidecar` suite (10 cases —
        codec round-trip, `toRefundRate`, `isDefault`, the
-       `checkConsistent` / `writeSidecarIfAbsent` discipline);
-       `encoding-action` grows by 4 (round-trip, tag-22 pin, distinctness,
-       field injectivity).  CLI smoke-tested end-to-end (the binary
-       writes the sidecar, rejects a forgotten / mismatched rate, accepts
-       the matching rate).
+       `checkConsistent` / `writeSidecarIfAbsent` discipline, and the
+       auditor `load` reconstruction); `encoding-action` grows by 4
+       (round-trip, tag-22 pin, distinctness, field injectivity).  CLI
+       smoke-tested end-to-end (the binary writes the sidecar, rejects a
+       forgotten / mismatched rate, accepts the matching rate).
 
   * **Deployment-calibration sharp-edges (documented, not bugs).**
     * *Cross-resource rate consistency (N1).*  A claimant's budget is a

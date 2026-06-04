@@ -1230,6 +1230,24 @@ def claimBudgetRefundFixtures : List StepVMFixture :=
     let gasResource : ResourceId := ((i % 2) : Nat).toUInt64
     let signer : ActorId := ((i + 10) : Nat).toUInt64
     let poolActor : ActorId := ((i + 20) : Nat).toUInt64
+    -- NOTE on the `uint256` product (`_stepClaimBudgetRefund` decodes
+    -- `budgetUnits`/`weiPerBudgetUnit` into `uint256` and multiplies
+    -- there): a happy fixture CANNOT exercise a product `≥ 2^64`.  Every
+    -- balance cell is encoded as a fixed 8-byte LE `uint64` (see the
+    -- `cellValueHex` shape `0x00 <8B LE>`), so a refund whose
+    -- `refundAmount = budgetUnits × weiPerBudgetUnit ≥ 2^64` cannot be
+    -- paid — the pool that would have to hold it overflows the `uint64`
+    -- balance cell.  The admission gate enforces this upstream (pool
+    -- solvency `getBalance gasPoolActor ≥ refundAmount`, and balances are
+    -- `uint64`-bounded by `CanonicalBounds`), so an ADMITTED refund
+    -- always has `refundAmount < 2^64`.  The `uint256` multiply is thus
+    -- defence-in-depth: a hypothetical `≥ 2^64` product is correctly
+    -- REJECTED (`InsufficientBalance`, since no `uint64` pool can fund
+    -- it) rather than silently truncated-and-accepted by a `uint64`
+    -- multiply.  The full-width `uint256BE` encoding of the commit's
+    -- `newSignerBalance` / `newPoolBalance` fields is covered keccak-
+    -- independently by the `packedLayoutGoldens` data-flow goldens, so
+    -- these fixtures stay within the realistic `uint64` balance domain.
     let budgetUnits : Nat := i + 1            -- > 0 always
     let weiPerBudgetUnit : Nat := i + 2       -- > 0 always
     let refundAmount : Nat := budgetUnits * weiPerBudgetUnit

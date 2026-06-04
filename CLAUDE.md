@@ -3607,11 +3607,12 @@ frozen index 22 with full CBE codec / `Action.toTransition` /
 `kernelOnlyApply` mirror / step-VM cell layout
 (`actionKindByte`/`actionFieldsForL1`/`readOnlyCells`/`writeCells`) /
 `bridgeAuthorizedAction => false` / the sound `doesNotDebitPoolAt` arm;
-the §13.6 admission gate (`claimBudgetRefund_gate`, EIGHT safety
+the §13.6 admission gate (`claimBudgetRefund_gate`, NINE safety
 conjuncts: rate pin, refund-ENABLED check `1 ≤ weiPerBudgetUnit` — so
 the default `refundRate = 0` genuinely rejects refunds rather than
-burning budget for a zero payout — pool-actor pin, free-tier-excluding
-bound, solvency, consume-exempt / self-pool defences) on BOTH the
+burning budget for a zero payout — pool-actor pin, canonical-gas-leg
+pin (`gasResource ∈ {0,1}`), free-tier-excluding bound, solvency,
+consume-exempt / self-pool defences) on BOTH the
 kernel and bridge-aware entries; the COMPANION `topUpRoundTripCheck`
 gate on those same two entries seals the top-up → refund round-trip by
 tying a top-up's `budgetIncrement` to its `gasAmount` at the refund
@@ -3630,10 +3631,11 @@ kernel step uses the action's logged `weiPerBudgetUnit`, so replay /
 fault-proof stay deterministic); the headline admission theorems
 (`claimBudgetRefund_gate_characterization`,
 `admission_refund_consumes_budget`,
-`admission_refund_preserves_free_tier`, the five
+`admission_refund_preserves_free_tier`, the six
 `refund_rejected_when_*` corollaries — incl.
-`refund_rejected_when_rate_disabled`, which pins that a `0` rate
-genuinely rejects).  The two POSITIVE guarantees are mirrored on the
+`refund_rejected_when_non_canonical_resource` (the canonical-gas-leg
+pin) and `refund_rejected_when_rate_disabled`, which pins that a `0`
+rate genuinely rejects).  The two POSITIVE guarantees are mirrored on the
 PRODUCTION (bridge-aware) path at an ARBITRARY deployment `refundRate`
 — not only the disabled default — by
 `admission_refund_consumes_budget_bridge` /

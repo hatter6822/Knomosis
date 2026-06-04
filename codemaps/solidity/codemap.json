@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c584baef6224e9cc93e3f27eba9fa7290500d56d2420d7f63ad731c0d290873e"
+    "source_digest": "3d188cbcda02cffcbf4a0d30367b7851f04ad3e67abc7780edd5c1c17c28f3a2"
   },
   "summary": {
     "module_count": 62,
@@ -7893,7 +7893,7 @@
         {
           "kind": "contract",
           "name": "StepVMCrossCheck",
-          "line": 43,
+          "line": 44,
           "called": [
             "CrossCheckFramework"
           ]
@@ -7901,7 +7901,7 @@
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
-          "line": 49,
+          "line": 50,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -7910,7 +7910,7 @@
         {
           "kind": "function",
           "name": "test_perVariant_counts",
-          "line": 72,
+          "line": 73,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -7919,7 +7919,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
-          "line": 111,
+          "line": 112,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -7929,7 +7929,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
-          "line": 133,
+          "line": 134,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -7939,7 +7939,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
-          "line": 163,
+          "line": 164,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -7949,7 +7949,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_stepVMCommit_present_and_well_formed",
-          "line": 205,
+          "line": 206,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -7959,7 +7959,7 @@
         {
           "kind": "function",
           "name": "_executeStepFromFixture",
-          "line": 259,
+          "line": 260,
           "called": [
             "_parseCellProofs"
           ]
@@ -7967,7 +7967,7 @@
         {
           "kind": "function",
           "name": "_checkEntryAtIndex",
-          "line": 278,
+          "line": 279,
           "called": [
             "_executeStepFromFixture"
           ]
@@ -7975,7 +7975,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_byte_equivalence_all_happy",
-          "line": 293,
+          "line": 294,
           "called": [
             "_checkEntryAtIndex",
             "_skipWithReason",
@@ -7986,13 +7986,13 @@
         {
           "kind": "function",
           "name": "_assertWitnessBinding",
-          "line": 348,
+          "line": 349,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 362,
+          "line": 363,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -8003,7 +8003,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 389,
+          "line": 390,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -8013,7 +8013,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 414,
+          "line": 415,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -8023,13 +8023,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 450,
+          "line": 451,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 465,
+          "line": 466,
           "called": [
             "_parseCellProof"
           ]
@@ -8037,7 +8037,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 498,
+          "line": 499,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -8047,7 +8047,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 545,
+          "line": 546,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -8058,7 +8058,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 570,
+          "line": 571,
           "called": [
             "KnomosisStepVM"
           ]
