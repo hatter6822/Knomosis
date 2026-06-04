@@ -38,6 +38,7 @@
 //! | 19  | `DepositWithFee`          | `r, recipient, pool_actor, user_amount, pool_amount, budget_grant, deposit_id` |
 //! | 20  | `TopUpActionBudget`       | `gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 21  | `TopUpActionBudgetFor`    | `recipient, gas_resource, gas_amount, budget_increment, pool_actor` |
+//! | 22  | `ClaimBudgetRefund`       | `gas_resource, budget_units, wei_per_budget_unit, pool_actor` |
 //!
 //! ## What this crate models
 //!
@@ -392,6 +393,27 @@ pub enum Action {
         /// The gas-pool actor receiving the gas payment.
         pool_actor: ActorId,
     },
+    /// `claimBudgetRefund(gasResource, budgetUnits, weiPerBudgetUnit,
+    /// poolActor)`.  Tag 22 (Workstream GP.9.1 refund-on-exit).  The
+    /// signer (claimant) is CREDITED `budgetUnits × weiPerBudgetUnit`
+    /// of `gasResource` OUT OF the gas pool — the mirror of
+    /// `TopUpActionBudget` (debit/credit reversed).  Never an
+    /// L1-ingested event (it is an L2 user action); included for
+    /// `Action`-mirror completeness + cross-stack CBE byte-equivalence
+    /// (the Lean→Rust differential pins it).
+    ClaimBudgetRefund {
+        /// The resource the refund is paid in (0 = native ETH, 1 = BOLD).
+        gas_resource: ResourceId,
+        /// The number of purchased action-budget units being retired.
+        /// `u64` on the wire; the Lean side stores it as a `Nat`,
+        /// encoded byte-equivalently via the standard CBE uint head.
+        budget_units: u64,
+        /// The trusted budget→gas exchange rate (wei per budget unit).
+        /// Pinned by the admission gate; same `Nat`-as-CBE encoding.
+        wei_per_budget_unit: u64,
+        /// The gas-pool actor the refund is paid from.
+        pool_actor: ActorId,
+    },
 }
 
 impl Action {
@@ -419,6 +441,7 @@ impl Action {
             Self::DepositWithFee { .. } => 19,
             Self::TopUpActionBudget { .. } => 20,
             Self::TopUpActionBudgetFor { .. } => 21,
+            Self::ClaimBudgetRefund { .. } => 22,
         }
     }
 }

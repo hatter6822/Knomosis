@@ -367,6 +367,24 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_u64(*budget_increment));
             out.extend_from_slice(&encode_u64(*pool_actor));
         }
+        Action::ClaimBudgetRefund {
+            gas_resource,
+            budget_units,
+            wei_per_budget_unit,
+            pool_actor,
+        } => {
+            // Field order matches `Encoding/Action.lean::Action.encode`'s
+            // `.claimBudgetRefund` arm:
+            //   gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖ poolActor.
+            // All four are CBE uints (9-byte heads), matching Lean's
+            // `Encodable.encode (T := Nat)` of each field (budgetUnits /
+            // weiPerBudgetUnit are `Nat`, bounded < 2^64, like tag-20's
+            // budgetIncrement).
+            out.extend_from_slice(&encode_u64(*gas_resource));
+            out.extend_from_slice(&encode_u64(*budget_units));
+            out.extend_from_slice(&encode_u64(*wei_per_budget_unit));
+            out.extend_from_slice(&encode_u64(*pool_actor));
+        }
     }
     Ok(out)
 }
@@ -1058,6 +1076,31 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             // gas_amount 100 = 0x64.
             0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // budget_increment 5.
+            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    /// Known-vector test for `ClaimBudgetRefund` — pinned against
+    /// `LegalKernel.Encoding.Action.encode
+    /// (.claimBudgetRefund 0 50 5 2)`.
+    #[test]
+    fn encode_claim_budget_refund_known_vector() {
+        let action = Action::ClaimBudgetRefund {
+            gas_resource: 0,
+            budget_units: 50,
+            wei_per_budget_unit: 5,
+            pool_actor: 2,
+        };
+        let actual = encode_action(&action).unwrap();
+        let expected: Vec<u8> = vec![
+            // Tag 22 (CBE uint head, value 22 = 0x16).
+            0x00, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // gas_resource 0.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // budget_units 50 = 0x32.
+            0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // wei_per_budget_unit 5.
             0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
             0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
