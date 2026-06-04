@@ -189,6 +189,8 @@ def tagDepositWithFee       : ByteArray := hashString "depositWithFee"
 def tagTopUpActionBudget    : ByteArray := hashString "topUpActionBudget"
 /-- Tag hash for `topUpActionBudgetFor` (Workstream GP, action-index 21). -/
 def tagTopUpActionBudgetFor : ByteArray := hashString "topUpActionBudgetFor"
+/-- Tag hash for `claimBudgetRefund` (Workstream GP.9.1, action-index 22). -/
+def tagClaimBudgetRefund    : ByteArray := hashString "claimBudgetRefund"
 
 /-! ## Per-variant commit functions (one per Action constructor) -/
 
@@ -468,6 +470,34 @@ def stepCommitTopUpActionBudgetFor
     (newSignerBalance newPoolBalance : Nat) : ByteArray :=
   LegalKernel.Runtime.hashBytes
     (preCommit ++ tagTopUpActionBudgetFor ++
+     uint64BE gasResource ++ uint64BE signer ++
+     uint256BE newSignerBalance ++ uint64BE poolActor ++
+     uint256BE newPoolBalance)
+
+/-- `claimBudgetRefund` step-VM commit (Workstream GP.9.1, action-index
+    22 — the refund-on-exit mirror of `topUpActionBudget`).
+    `keccak256(preCommit || TAG_CLAIMBUDGETREFUND || gasResource ||
+    signer || newSignerGasBalance || poolActor || newPoolGasBalance)`.
+    The pre-state gas balances of `signer` (the claimant) and
+    `poolActor` come from the cell-proof bundle; the new balances are
+    signer + refundAmount and poolActor - refundAmount respectively
+    (`refundAmount = budgetUnits × weiPerBudgetUnit`) — the same commit
+    SHAPE as `stepCommitTopUpActionBudget`, but the debit/credit
+    direction is REVERSED (the pool is debited, the claimant credited),
+    computed by the `stepVMHash` dispatcher.  `budgetUnits` /
+    `weiPerBudgetUnit` are admission-layer effects (the kernel-state
+    writes are gas balances only — the claimant's epoch-budget consume
+    happens at the admission gate, not by a step-VM cell write), so
+    neither appears in the L1 step-VM hash.  The DISTINCT tag
+    (`tagClaimBudgetRefund` ≠ `tagTopUpActionBudget`) separates this
+    variant's commit from the top-up variants even when the gas-transfer
+    fields coincide. -/
+def stepCommitClaimBudgetRefund
+    (preCommit : ByteArray)
+    (gasResource signer poolActor : Nat)
+    (newSignerBalance newPoolBalance : Nat) : ByteArray :=
+  LegalKernel.Runtime.hashBytes
+    (preCommit ++ tagClaimBudgetRefund ++
      uint64BE gasResource ++ uint64BE signer ++
      uint256BE newSignerBalance ++ uint64BE poolActor ++
      uint256BE newPoolBalance)

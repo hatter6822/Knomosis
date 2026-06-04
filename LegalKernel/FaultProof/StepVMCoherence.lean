@@ -217,7 +217,7 @@ def actionKindByte : Action → UInt8
     that are currently L1-fault-proof-*executable*, which is the
     property the coverage test needs. -/
 def actionKindByteCases : List UInt8 :=
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 
 /-! ## `actionFieldsForL1` — canonical byte layout per variant
 
@@ -786,9 +786,44 @@ def stepVMHash
         poolBalance + gasAmount
     stepCommitTopUpActionBudgetFor preCommit gasResource signer poolActor
       newSignerBalance newPoolBalance
-  -- Unknown kind: return empty bytes (won't match any L1 output).
-  -- With kinds 19 / 20 / 21 above, the dispatcher now covers the full
-  -- 0..21 range that `actionKindByte` produces.  Any future Action
+  -- GP.9.1 refund-on-exit (action-index 22).  Layout
+  -- `gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖ poolActor`
+  -- (4 × uint64BE).  The claimant (signer) is CREDITED `budgetUnits ×
+  -- weiPerBudgetUnit` OUT OF the pool — the MIRROR of
+  -- `topUpActionBudget` with the debit/credit direction REVERSED.  The
+  -- product is a `Nat` (≤ ~2^128 since each factor is `fieldsBounded`
+  -- < 2^64); the Solidity `_step22` computes it in `uint256`.
+  -- `budgetUnits` / `weiPerBudgetUnit` drive the amount, but the
+  -- claimant's epoch-budget consume is an admission-layer effect (not a
+  -- cell write), so they do not separately appear in the hash — exactly
+  -- as kinds 19 / 20 / 21 exclude their budget fields.  The
+  -- `signer = poolActor` net-zero branch is defended at admission
+  -- (`claimBudgetRefund_gate` requires `signer ≠ poolActor`); the
+  -- explicit handling defends against a malformed bundle reaching here.
+  | 22 =>
+    let gasResource      := readUint64BE fields 0
+    let budgetUnits      := readUint64BE fields 8
+    let weiPerBudgetUnit := readUint64BE fields 16
+    let poolActor        := readUint64BE fields 24
+    let refundAmount     := budgetUnits * weiPerBudgetUnit
+    let signerBalance :=
+      decodeCellNat (readCellValue bundle
+                      (.balance gasResource.toUInt64 signer.toUInt64))
+    let newSignerBalance : Nat :=
+      if signer = poolActor then signerBalance  -- net zero (defended at admission)
+      else signerBalance + refundAmount         -- claimant CREDITED
+    let newPoolBalance : Nat :=
+      if signer = poolActor then signerBalance
+      else
+        let poolBalance :=
+          decodeCellNat (readCellValue bundle
+                          (.balance gasResource.toUInt64 poolActor.toUInt64))
+        poolBalance - refundAmount               -- pool DEBITED (Nat sub; unreachable for admitted)
+    stepCommitClaimBudgetRefund preCommit gasResource signer poolActor
+      newSignerBalance newPoolBalance
+  -- Unknown kind (≥ 23): return empty bytes (won't match any L1 output).
+  -- With kinds 19 / 20 / 21 / 22 above, the dispatcher now covers the
+  -- full 0..22 range that `actionKindByte` produces.  Any future Action
   -- constructor addition MUST extend this match before merging —
   -- enforced by the `actionKindByteCases` coverage regression test.
   | _ => ByteArray.empty
@@ -1177,17 +1212,51 @@ theorem stepVMHash_topUpActionBudgetFor_kind
      stepCommitTopUpActionBudgetFor preCommit gasResource signer poolActor
        newSignerBalance newPoolBalance) := rfl
 
-/-- For unknown kinds (≥ 22), `stepVMHash` returns empty bytes.
+/-- Dispatch reduction for kind 22 (`claimBudgetRefund`, GP.9.1).  The
+    refund layout is `gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖
+    poolActor` (offsets 0 / 8 / 16 / 24); the claimant (signer) is
+    CREDITED `budgetUnits × weiPerBudgetUnit` out of the pool (the
+    debit/credit MIRROR of `topUpActionBudget`).  `budgetUnits` /
+    `weiPerBudgetUnit` drive the amount but the budget consume is an
+    admission-layer effect, excluded from the hash.  The admission gate
+    rejects `signer = poolActor` upstream, so the no-op branch is
+    unreachable on the canonical path. -/
+theorem stepVMHash_claimBudgetRefund_kind
+    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
+    (bundle : CellProofBundle) :
+    stepVMHash preCommit 22 fields signer bundle =
+    (let gasResource      := readUint64BE fields 0
+     let budgetUnits      := readUint64BE fields 8
+     let weiPerBudgetUnit := readUint64BE fields 16
+     let poolActor        := readUint64BE fields 24
+     let refundAmount     := budgetUnits * weiPerBudgetUnit
+     let signerBalance :=
+       decodeCellNat (readCellValue bundle
+                       (.balance gasResource.toUInt64 signer.toUInt64))
+     let newSignerBalance : Nat :=
+       if signer = poolActor then signerBalance
+       else signerBalance + refundAmount
+     let newPoolBalance : Nat :=
+       if signer = poolActor then signerBalance
+       else
+         let poolBalance :=
+           decodeCellNat (readCellValue bundle
+                           (.balance gasResource.toUInt64 poolActor.toUInt64))
+         poolBalance - refundAmount
+     stepCommitClaimBudgetRefund preCommit gasResource signer poolActor
+       newSignerBalance newPoolBalance) := rfl
 
-    Note: `actionKindByte` is provably in `0..21` after the
-    Workstream-GP extension (kinds 19 / 20 / 21 for `.depositWithFee` /
-    `.topUpActionBudget` / `.topUpActionBudgetFor`), so the catch-all
-    path is unreachable from `stepVMHashFromAction`; this property is
-    only relevant for caller-supplied raw `UInt8` inputs ≥ 22. -/
+/-- For unknown kinds (≥ 23), `stepVMHash` returns empty bytes.
+
+    Note: `actionKindByte` is provably in `0..22` after the
+    Workstream-GP extension (kinds 19 / 20 / 21 / 22 for `.depositWithFee` /
+    `.topUpActionBudget` / `.topUpActionBudgetFor` / `.claimBudgetRefund`),
+    so the catch-all path is unreachable from `stepVMHashFromAction`; this
+    property is only relevant for caller-supplied raw `UInt8` inputs ≥ 23. -/
 theorem stepVMHash_unknown_kind_empty
     (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
     (bundle : CellProofBundle) :
-    stepVMHash preCommit 22 fields signer bundle = ByteArray.empty := rfl
+    stepVMHash preCommit 23 fields signer bundle = ByteArray.empty := rfl
 
 /-! ## `stepVMHashFromAction` — the action-driven convenience form
 
