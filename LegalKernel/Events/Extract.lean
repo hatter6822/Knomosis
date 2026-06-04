@@ -294,6 +294,21 @@ def actionEvents
       [Event.balanceChanged gasResource poolActor poolOld poolNew]
     else
       []
+  | .claimBudgetRefund gasResource _budgetUnits _weiPerBudgetUnit poolActor =>
+    -- Workstream GP §15E (GP.9.1): refund-on-exit.  The signer
+    -- (claimant, whose balance is CREDITED from the pool) is not in
+    -- scope at the action-only `actionEvents` layer; the signer's
+    -- `balanceChanged` is emitted by `extractEvents` (which has the
+    -- signer in scope).  We emit the poolActor's balance change here
+    -- (the pool is DEBITED; signer-independent).  The refund's budget
+    -- DEBIT surfaces via the `budgetConsumed` event in `extractEvents`,
+    -- whose amount includes the retired `budgetUnits`.
+    let poolOld := LegalKernel.getBalance preState  gasResource poolActor
+    let poolNew := LegalKernel.getBalance postState gasResource poolActor
+    if poolOld != poolNew then
+      [Event.balanceChanged gasResource poolActor poolOld poolNew]
+    else
+      []
   -- Workstream-LX (LX.19): codegen-managed Lex `actionEvents`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no `Action` constructor, so it has no
@@ -413,6 +428,15 @@ def extractEvents
         [Event.balanceChanged gasResource st.signer oldV newV]
       else
         []
+    | .claimBudgetRefund gasResource _budgetUnits _w _poolActor =>
+      -- GP.9.1: the signer (claimant) is CREDITED from the pool; emit
+      -- the signer's gas-balance change as a delta-filtered event.
+      let oldV := LegalKernel.getBalance preState.base  gasResource st.signer
+      let newV := LegalKernel.getBalance postState.base gasResource st.signer
+      if oldV != newV then
+        [Event.balanceChanged gasResource st.signer oldV newV]
+      else
+        []
     | _                                     => []
   -- Workstream GP / GP.6.4: budget-consumption event.  Emitted on
   -- every admitted action whose signer is NOT exempt from
@@ -442,8 +466,19 @@ def extractEvents
     else
       match preState.budgetPolicy with
       | .bounded _freeTier actionCost _currentEpoch =>
-        if actionCost > 0 then
-          [Event.budgetConsumed st.signer actionCost]
+        -- GP.9.1: a `claimBudgetRefund` consumes `actionCost +
+        -- budgetUnits` (the retired purchased budget ON TOP of the
+        -- per-action cost), exactly matching the admission gate's
+        -- refund-aware consume amount, so the indexer's per-epoch
+        -- "consumed this epoch" tally stays an EXACT mirror of the
+        -- kernel.  For every other action the extra is `0`, so the
+        -- emitted amount is `actionCost` (the pre-GP.9.1 behaviour).
+        let consumed := actionCost +
+          (match st.action with
+           | .claimBudgetRefund _ budgetUnits _ _ => budgetUnits
+           | _ => 0)
+        if consumed > 0 then
+          [Event.budgetConsumed st.signer consumed]
         else
           []  -- zero-cost configuration: nothing to emit
   let oldN     := expectsNonce preState  st.signer
@@ -761,14 +796,24 @@ theorem extractEvents_emits_budgetConsumed_for_non_bridge_signer
     (h_not_bridge : st.signer ≠ Bridge.bridgeActor)
     (h_policy : ∃ freeTier currentEpoch,
       pre.budgetPolicy = .bounded freeTier actionCost currentEpoch)
-    (h_cost : actionCost > 0) :
+    (h_cost : actionCost > 0)
+    (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa) :
     Event.budgetConsumed st.signer actionCost ∈ extractEvents pre post st := by
   obtain ⟨freeTier, currentEpoch, h_eq⟩ := h_policy
+  -- GP.9.1: off the refund path the refund-extra `budgetUnits` is `0`,
+  -- so the consume amount is exactly `actionCost`.
+  have hmatch : (match st.action with
+                 | .claimBudgetRefund _ budgetUnits _ _ => budgetUnits
+                 | _ => 0) = 0 := by
+    cases hact : st.action with
+    | claimBudgetRefund gr bu w pa => exact absurd hact (hne_refund gr bu w pa)
+    | _ => rfl
   unfold extractEvents
   -- The budgetConsumedEvts is in the post-GP.6.4 7th segment of an
-  -- 8-segment output list; reduce the if-then-else to its non-empty
-  -- branch using the three hypotheses.
-  simp only [h_eq, if_neg h_not_bridge, if_pos h_cost]
+  -- 8-segment output list; reduce the refund-extra match to `0`, then
+  -- collapse the if-then-else to its non-empty branch.
+  rw [hmatch]
+  simp only [h_eq, if_neg h_not_bridge, Nat.add_zero, if_pos h_cost]
   -- Now budgetConsumedEvts = [Event.budgetConsumed st.signer actionCost];
   -- it's in position 7.
   refine List.mem_append.mpr (Or.inl ?_)

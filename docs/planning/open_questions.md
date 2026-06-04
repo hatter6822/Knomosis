@@ -1230,14 +1230,16 @@ ships this layout.
   * OQ-GP-10 — Bridge-actor automation failure-domain isolation.
   * OQ-GP-11 — Whether the L1 step-VM commit (`stepVMHash` /
     `KnomosisStepVM.executeStep`) should bind the `epochBudgets`
-    ledger.  **Current decision (GP.3.3 / GP.5.3): no.**  The step-VM
-    commit binds only the balance / registry / bridge cells that have
-    a `CellTag`; the admission-layer budget effects of `depositWithFee`
-    (`budgetGrant`), `topUpActionBudget` (`budgetIncrement`), and
-    `topUpActionBudgetFor` (`recipient` + `budgetIncrement`) — like the
-    nonce for every variant — are excluded by design, so a sequencer
-    lie about a budget effect is not caught by the bisection game's
-    single-step re-execution.  Binding it would require an
+    ledger.  **Current decision (GP.3.3 / GP.5.3 / GP.9.1): no.**  The
+    step-VM commit binds only the balance / registry / bridge cells that
+    have a `CellTag`; the admission-layer budget effects of
+    `depositWithFee` (`budgetGrant`), `topUpActionBudget`
+    (`budgetIncrement`), `topUpActionBudgetFor` (`recipient` +
+    `budgetIncrement`), and `claimBudgetRefund` (the `action_cost +
+    budget_units` budget consume — only the two balance writes are
+    bound) — like the nonce for every variant — are excluded by design,
+    so a sequencer lie about a budget effect is not caught by the
+    bisection game's single-step re-execution.  Binding it would require an
     `epochBudgets` `CellTag` + cell-proof construction (Lean) and a
     matching decoder (Solidity) — a §13.6 amendment, deliberately out
     of GP.5.3 scope.  Detailed rationale: `FaultProof/StepVMCoherence.lean`

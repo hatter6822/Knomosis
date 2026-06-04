@@ -77,9 +77,13 @@ def extractEventsStepWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray)
     (P : AuthorityPolicy) (state : ExtendedState) (prevHash : ContentHash)
-    (e : LogEntry) (idx : Nat) (epochLength : Nat := 0) :
+    (e : LogEntry) (idx : Nat) (epochLength : Nat := 0)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     Except ReplayError (ExtendedState × List Event) :=
-  match replayStepWith verify d P state prevHash e idx epochLength with
+  -- GP.9.1: thread `refundRate` so extraction re-replays a refund under
+  -- the producing rate (else a logged `claimBudgetRefund` is rejected
+  -- here and its events are silently dropped).
+  match replayStepWith verify d P state prevHash e idx epochLength refundRate with
   | .error err => .error err
   | .ok nextState =>
     -- `replayStepWith` validated the entry and produced `nextState`
@@ -96,11 +100,12 @@ def extractEventsStepWith
 theorem extractEventsStepWith_state_eq_replayStepWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray) (P : AuthorityPolicy) (state : ExtendedState)
-    (prevHash : ContentHash) (e : LogEntry) (idx : Nat) (epochLength : Nat) :
-    (extractEventsStepWith verify d P state prevHash e idx epochLength).map Prod.fst =
-    replayStepWith verify d P state prevHash e idx epochLength := by
+    (prevHash : ContentHash) (e : LogEntry) (idx : Nat) (epochLength : Nat)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
+    (extractEventsStepWith verify d P state prevHash e idx epochLength refundRate).map Prod.fst =
+    replayStepWith verify d P state prevHash e idx epochLength refundRate := by
   unfold extractEventsStepWith
-  cases replayStepWith verify d P state prevHash e idx epochLength <;> rfl
+  cases replayStepWith verify d P state prevHash e idx epochLength refundRate <;> rfl
 
 /-! ## `extract-events` wire framing (RH-D / GP.6.3)
 

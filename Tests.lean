@@ -107,6 +107,7 @@ import LegalKernel.Test.Runtime.Loop
 import LegalKernel.Test.Runtime.LoopHappyPath
 import LegalKernel.Test.Runtime.BudgetSidecar
 import LegalKernel.Test.Runtime.GasPoolSidecar
+import LegalKernel.Test.Runtime.RefundRateSidecar
 import LegalKernel.Test.Runtime.BridgeAdmission
 import LegalKernel.Test.Runtime.ExtractEvents
 import LegalKernel.Test.Disputes.Filing
@@ -126,6 +127,7 @@ import LegalKernel.Test.Bridge.AddressBook
 import LegalKernel.Test.Bridge.BridgeActor
 import LegalKernel.Test.Bridge.GasPoolPolicy
 import LegalKernel.Test.Bridge.PoolDrainBound
+import LegalKernel.Test.Bridge.BudgetRefund
 import LegalKernel.Test.Bridge.Ingest
 import LegalKernel.Test.Bridge.State
 import LegalKernel.Test.Bridge.Admissible
@@ -285,6 +287,8 @@ def main : IO UInt32 := do
                                     Runtime.BudgetSidecarTests.tests)
   failed := failed + (← runAll "runtime-gas-pool-sidecar"
                                     Runtime.GasPoolSidecarTests.tests)
+  failed := failed + (← runAll "runtime-refund-rate-sidecar"
+                                    Runtime.RefundRateSidecarTests.tests)
   failed := failed + (← runAll "runtime-bridge-admission"
                                     Runtime.BridgeAdmission.tests)
   failed := failed + (← runAll "runtime-extract-events"
@@ -326,6 +330,8 @@ def main : IO UInt32 := do
                                     Bridge.GasPoolPolicyTests.tests)
   failed := failed + (← runAll "bridge-pool-drain-bound"
                                     Bridge.PoolDrainBoundTests.tests)
+  failed := failed + (← runAll "bridge-budget-refund"
+                                    Bridge.BudgetRefundTests.tests)
   failed := failed + (← runAll "bridge-ingest"
                                     Bridge.IngestTests.tests)
   failed := failed + (← runAll "bridge-state"

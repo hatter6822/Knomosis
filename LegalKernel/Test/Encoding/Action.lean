@@ -551,6 +551,57 @@ def topUpActionBudgetForFieldInjective : TestCase := {
     else pure ()
 }
 
+/-! ## GP.9.1 — claimBudgetRefund (refund-on-exit) encoding -/
+
+/-- Round-trip of `Action.claimBudgetRefund 0 89 1000 1` (gas leg 0,
+    89 budget units, rate 1000, pool actor 1). -/
+def claimBudgetRefundRT : TestCase := {
+  name := "Action.claimBudgetRefund roundtrip"
+  body := do
+    let a : Action := .claimBudgetRefund 0 89 1000 1
+    match Encodable.decode (T := Action) (Encodable.encode a) with
+    | .ok (a', rest) =>
+      assertEq a a' "decoded action"
+      assertEq (0 : Nat) rest.length "no residual"
+    | .error _ => throw <| IO.userError "decode failed"
+}
+
+/-- `Action.tag` for `claimBudgetRefund` is 22 (frozen). -/
+def claimBudgetRefundTagPin : TestCase := {
+  name := "Action.tag claimBudgetRefund = 22 (frozen)"
+  body := do
+    assertEq (expected := 22) (actual := Action.tag (.claimBudgetRefund 0 1 2 3))
+      "claimBudgetRefund tag"
+}
+
+/-- `Action.claimBudgetRefund` and `Action.topUpActionBudget` (its
+    mirror) produce distinct encodings — different tags (22 vs 20). -/
+def claimBudgetRefundVsTopUpBytes : TestCase := {
+  name := "Action.claimBudgetRefund ≠ Action.topUpActionBudget (distinct tags)"
+  body := do
+    let b1 := Encodable.encode (T := Action) (.claimBudgetRefund 0 89 1000 1)
+    let b2 := Encodable.encode (T := Action) (.topUpActionBudget 0 89 1000 1)
+    if b1 == b2 then
+      throw <| IO.userError "claimBudgetRefund and topUpActionBudget encoded identically"
+    else pure ()
+}
+
+/-- Distinct `claimBudgetRefund` actions encode differently — the
+    `budgetUnits` and `weiPerBudgetUnit` fields are both encoded, so two
+    refunds differing only in retired units or rate are distinguishable. -/
+def claimBudgetRefundFieldInjective : TestCase := {
+  name := "Action.claimBudgetRefund per-field injectivity (units + rate distinguished)"
+  body := do
+    let b0 := Encodable.encode (T := Action) (.claimBudgetRefund 0 89 1000 1)
+    let bUnits := Encodable.encode (T := Action) (.claimBudgetRefund 0 90 1000 1)
+    let bRate := Encodable.encode (T := Action) (.claimBudgetRefund 0 89 2000 1)
+    if b0 == bUnits then
+      throw <| IO.userError "claimBudgetRefund with distinct budgetUnits encoded identically"
+    else if b0 == bRate then
+      throw <| IO.userError "claimBudgetRefund with distinct weiPerBudgetUnit encoded identically"
+    else pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferRT, mintRT, burnRT, freezeRT, replaceKeyRT, rewardRT,
@@ -571,7 +622,10 @@ def tests : List TestCase :=
    depositWithFeeFieldInjective, topUpActionBudgetFieldInjective,
    -- GP.3.4:
    topUpActionBudgetForRT, topUpActionBudgetForVsTopUpActionBudgetBytes,
-   topUpActionBudgetForTagPin, topUpActionBudgetForFieldInjective]
+   topUpActionBudgetForTagPin, topUpActionBudgetForFieldInjective,
+   -- GP.9.1:
+   claimBudgetRefundRT, claimBudgetRefundTagPin,
+   claimBudgetRefundVsTopUpBytes, claimBudgetRefundFieldInjective]
 
 end ActionTests
 end LegalKernel.Test.Encoding

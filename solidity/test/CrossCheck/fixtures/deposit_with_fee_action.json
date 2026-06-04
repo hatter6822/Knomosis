@@ -1,10 +1,11 @@
 {
   "header": {
     "identifier": "knomosis-l1-ingest/deposit-with-fee-action/v1",
-    "count": 18,
+    "count": 23,
     "countDepositWithFee": 8,
     "countTopUpBudget": 5,
     "countTopUpBudgetFor": 5,
+    "countClaimBudgetRefund": 5,
     "maxBudgetPerDeposit": 1000000000000,
     "note": "expectedCbe is Lean Encoding.Action.encode of the constructor; Rust encode_action must match byte-for-byte"
   },
@@ -199,6 +200,51 @@
       "budgetIncrement": 1,
       "poolActor": 2,
       "expectedCbe": "0x001500000000000000000900000000000000000500000000000000000100000000000000000100000000000000000200000000000000"
+    },
+    {
+      "kind": "claimBudgetRefund",
+      "category": "claimBudgetRefund:all-zero",
+      "gasResource": 0,
+      "budgetUnits": 0,
+      "weiPerBudgetUnit": 0,
+      "poolActor": 0,
+      "expectedCbe": "0x001600000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "kind": "claimBudgetRefund",
+      "category": "claimBudgetRefund:canonical",
+      "gasResource": 0,
+      "budgetUnits": 50,
+      "weiPerBudgetUnit": 5,
+      "poolActor": 2,
+      "expectedCbe": "0x001600000000000000000000000000000000003200000000000000000500000000000000000200000000000000"
+    },
+    {
+      "kind": "claimBudgetRefund",
+      "category": "claimBudgetRefund:bold-rate",
+      "gasResource": 1,
+      "budgetUnits": 1000,
+      "weiPerBudgetUnit": 3000000000000000,
+      "poolActor": 1,
+      "expectedCbe": "0x00160000000000000000010000000000000000e80300000000000000008053ee7ba80a00000100000000000000"
+    },
+    {
+      "kind": "claimBudgetRefund",
+      "category": "claimBudgetRefund:max-u64",
+      "gasResource": 0,
+      "budgetUnits": 18446744073709551615,
+      "weiPerBudgetUnit": 18446744073709551615,
+      "poolActor": 18446744073709551615,
+      "expectedCbe": "0x00160000000000000000000000000000000000ffffffffffffffff00ffffffffffffffff00ffffffffffffffff"
+    },
+    {
+      "kind": "claimBudgetRefund",
+      "category": "claimBudgetRefund:small",
+      "gasResource": 5,
+      "budgetUnits": 1,
+      "weiPerBudgetUnit": 1,
+      "poolActor": 9,
+      "expectedCbe": "0x001600000000000000000500000000000000000100000000000000000100000000000000000900000000000000"
     }
   ]
 }

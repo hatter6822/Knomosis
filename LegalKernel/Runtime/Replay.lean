@@ -314,7 +314,8 @@ def replayStepWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray)
     (P : AuthorityPolicy) (state : ExtendedState) (prevHash : ContentHash)
-    (e : LogEntry) (idx : Nat) (epochLength : Nat := 0) :
+    (e : LogEntry) (idx : Nat) (epochLength : Nat := 0)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     Except ReplayError ExtendedState :=
   -- 1. Chain check.
   if e.prevHash.toList ≠ prevHash.toList then
@@ -328,8 +329,12 @@ def replayStepWith
     -- 2. Admissibility check (bridge-aware, RB.1 / RB.3).
     if h : BridgeAdmissibleWith verify P d esEff e.signedAction then
       -- 3. Bridge-aware admission + budget gate + bridge-state advance.
+      --    GP.9.1: thread the producer's refund rate so refund actions
+      --    admit/reject identically on replay (the kernel STATE effect
+      --    uses the action's logged `weiPerBudgetUnit`, so the recomputed
+      --    post-state hash is independent of this rate).
       match apply_bridge_admissible_with_budget verify P d esEff
-              e.signedAction idx h with
+              e.signedAction idx h refundRate with
       | some nextState =>
         -- 4. Post-state hash check.
         if (hashEncodable nextState).toList ≠ e.postStateHash.toList then
@@ -367,13 +372,18 @@ def replayStep
 def replayLoopWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray)
-    (P : AuthorityPolicy) (epochLength : Nat) :
+    (P : AuthorityPolicy) (epochLength : Nat)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     Nat → ContentHash → ExtendedState → List LogEntry →
     Except ReplayError ExtendedState
   | _idx, _prevHash, state, []      => .ok state
   | idx,  prevHash,  state, e :: rest =>
-    match replayStepWith verify d P state prevHash e idx epochLength with
-    | .ok state'  => replayLoopWith verify d P epochLength (idx + 1) (LogEntry.hash e) state' rest
+    -- GP.9.1: thread `refundRate` (the producer's trusted budget→gas
+    -- rate) into every step so a refund-containing log admits/rejects
+    -- identically on replay.
+    match replayStepWith verify d P state prevHash e idx epochLength refundRate with
+    | .ok state'  =>
+      replayLoopWith verify d P epochLength refundRate (idx + 1) (LogEntry.hash e) state' rest
     | .error err  => .error err
 
 /-- Internal recursive replay: walk through the entries in order,
@@ -399,9 +409,9 @@ def replayWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray)
     (P : AuthorityPolicy) (genesis : ExtendedState) (entries : List LogEntry)
-    (epochLength : Nat := 0) :
+    (epochLength : Nat := 0) (refundRate : ResourceId → Nat := fun _ => 0) :
     Except ReplayError ExtendedState :=
-  replayLoopWith verify d P epochLength 0 zeroHash genesis entries
+  replayLoopWith verify d P epochLength refundRate 0 zeroHash genesis entries
 
 /-- Replay the log against the genesis state under policy `P`.
 
@@ -420,9 +430,9 @@ def replayWith
     uses `replayWith` directly. -/
 def replay
     (P : AuthorityPolicy) (genesis : ExtendedState) (entries : List LogEntry)
-    (epochLength : Nat := 0) :
+    (epochLength : Nat := 0) (refundRate : ResourceId → Nat := fun _ => 0) :
     Except ReplayError ExtendedState :=
-  replayWith Verify ByteArray.empty P genesis entries epochLength
+  replayWith Verify ByteArray.empty P genesis entries epochLength refundRate
 
 /-- AR.2.4 — parameterised seed-replay.  Like `replayWith` but
     starts from a non-genesis `(seedHash, seedState)`.  Used by
@@ -432,13 +442,15 @@ def replayFromSeedWith
     (verify : PublicKey → ByteArray → Signature → Bool)
     (d : ByteArray)
     (P : AuthorityPolicy) (seedHash : ContentHash) (seedState : ExtendedState)
-    (entries : List LogEntry) (startIdx : Nat := 0) (epochLength : Nat := 0) :
+    (entries : List LogEntry) (startIdx : Nat := 0) (epochLength : Nat := 0)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     Except ReplayError ExtendedState :=
   -- GP.6.2: `startIdx` is the ABSOLUTE log index of the first tail
   -- entry (the snapshot's `baseIdx`).  The budget epoch advances on
   -- absolute indices, so a snapshot-restored replica computes the
-  -- same effective epochs as a from-genesis replay.
-  replayLoopWith verify d P epochLength startIdx seedHash seedState entries
+  -- same effective epochs as a from-genesis replay.  GP.9.1: `refundRate`
+  -- is threaded identically so refund admission is replay-deterministic.
+  replayLoopWith verify d P epochLength refundRate startIdx seedHash seedState entries
 
 /-- Like `replay`, but starts from a non-genesis seed hash and state.
     Used by the snapshot tool (WU 5.12): a replica restored from a

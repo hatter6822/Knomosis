@@ -167,6 +167,14 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- recipient budget grant is an admission-layer effect that
   -- `kernelOnlyApply` deliberately doesn't model).
   | .topUpActionBudgetFor _ _ _ _ _ => es''
+  -- Workstream GP (GP.9.1): refund-on-exit.  The signer-aware kernel
+  -- effect (`Laws.claimBudgetRefund signer poolActor gasResource
+  -- (budgetUnits × weiPerBudgetUnit)`, crediting the claimant from the
+  -- pool) is handled by the `let t := Action.toTransition action
+  -- signer` step above; no further registry / local-policy mutation at
+  -- this layer (the refund's budget DEBIT is an admission-layer effect
+  -- that `kernelOnlyApply` deliberately doesn't model).
+  | .claimBudgetRefund _ _ _ _     => es''
 
 /-- **Bridge-scope invariant.**  `kernelOnlyApply` leaves the bridge
     sub-state (`consumed` / `pending` / `nextWdId`) completely
@@ -636,6 +644,7 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- paths use `Laws.topUpActionBudgetFor recipient signer …` via
   -- `Action.toTransition`, wrapped in `step_impl`.
   | topUpActionBudgetFor _ _ _ _ _ => rfl
+  | claimBudgetRefund _ _ _ _     => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

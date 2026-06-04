@@ -132,6 +132,29 @@ def checkConsistent (logPath : System.FilePath) (current : Option GasPoolConfig)
   else
     pure (.ok ())
 
+/-- IO: LOAD the persisted gas-pool config from the sidecar.  Unlike
+    `checkConsistent` (which compares a CLI-supplied config against disk),
+    this RECONSTRUCTS the config from disk — for the auditor path
+    (`knomosis-replay`), which has no gas-pool flags and must re-derive the
+    genesis gas-pool policy the producer wired (it participates in every
+    post-state hash via `commitLocalPolicies`).  Returns `ok none` when no
+    sidecar exists (gas pool disabled), `ok (some cfg)` when it decodes,
+    and `error` when the sidecar is present but corrupt (the auditor must
+    fail loudly, never silently audit under the wrong policy). -/
+def load (logPath : System.FilePath) :
+    IO (Except String (Option GasPoolConfig)) := do
+  let path := sidecarPath logPath
+  if ← path.pathExists then
+    let contents ← IO.FS.readFile path
+    match decode contents with
+    | none =>
+      pure (.error
+        s!"gas-pool-config sidecar {path} is corrupt or unrecognised; \
+           expected `{magic} <ethCap> <boldCap>`")
+    | some cfg => pure (.ok (some cfg))
+  else
+    pure (.ok none)
+
 /-- IO: write the sidecar iff it does NOT already exist AND the gas pool
     is enabled (`current = some cfg`).  Called by the writer (`process`)
     after a successful bootstrap, so a gas-pool-disabled deployment never

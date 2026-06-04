@@ -12,9 +12,10 @@ LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction — Workstream GP.6.1.
 
 Generates the `deposit_with_fee_action.json` cross-stack fixture: a
 set of `(Action constructor fields → expected CBE bytes)` reference
-vectors for the three Workstream-GP `Action` constructors —
+vectors for the four Workstream-GP `Action` constructors —
 `depositWithFee` (frozen index 19), `topUpActionBudget` (index 20),
-and `topUpActionBudgetFor` (index 21).
+`topUpActionBudgetFor` (index 21), and `claimBudgetRefund`
+(index 22, GP.9.1).
 
 **Why this fixture exists.**  The Rust `knomosis-l1-ingest` crate
 hand-rolls a CBE encoder (`encoding.rs::encode_action`) that MUST
@@ -146,6 +147,23 @@ def mkTopUpActionBudgetFor (recipient gasResource gasAmount budgetIncrement pool
     , ("expectedCbe",     .str (encodeActionHex a))
     ]
 
+/-- Build a `claimBudgetRefund` (index 22, GP.9.1) entry.  Field order:
+    `gasResource ‖ budgetUnits ‖ weiPerBudgetUnit ‖ poolActor`. -/
+def mkClaimBudgetRefund (gasResource budgetUnits weiPerBudgetUnit poolActor : Nat)
+    (category : String) : Json :=
+  let a : Action :=
+    .claimBudgetRefund (UInt64.ofNat gasResource) budgetUnits weiPerBudgetUnit
+      (UInt64.ofNat poolActor)
+  .obj
+    [ ("kind",             .str "claimBudgetRefund")
+    , ("category",         .str category)
+    , ("gasResource",      .num gasResource)
+    , ("budgetUnits",      .num budgetUnits)
+    , ("weiPerBudgetUnit", .num weiPerBudgetUnit)
+    , ("poolActor",        .num poolActor)
+    , ("expectedCbe",      .str (encodeActionHex a))
+    ]
+
 /-! ## Reference vectors
 
 A representative subset spanning the byte-layout corners: all-zero
@@ -158,8 +176,8 @@ resource-parametric byte-equality is pinned end-to-end. -/
     without truncation. -/
 def maxU64 : Nat := 18446744073709551615
 
-/-- The fixture entries (18 total: 8 depositWithFee + 5
-    topUpActionBudget + 5 topUpActionBudgetFor). -/
+/-- The fixture entries (23 total: 8 depositWithFee + 5
+    topUpActionBudget + 5 topUpActionBudgetFor + 5 claimBudgetRefund). -/
 def entries : List Json :=
   [ -- depositWithFee (ETH leg, r = 0)
     mkDepositWithFee 0 0 0 0 0 0 0 "depositWithFee:all-zero"
@@ -184,6 +202,12 @@ def entries : List Json :=
   , mkTopUpActionBudgetFor 3 1 (10 ^ 12) 1000 1 "topUpActionBudgetFor:bold-rate"
   , mkTopUpActionBudgetFor maxU64 0 maxU64 maxU64 maxU64 "topUpActionBudgetFor:max-u64"
   , mkTopUpActionBudgetFor 9 5 1 1 2 "topUpActionBudgetFor:small"
+    -- claimBudgetRefund (index 22, GP.9.1)
+  , mkClaimBudgetRefund 0 0 0 0 "claimBudgetRefund:all-zero"
+  , mkClaimBudgetRefund 0 50 5 2 "claimBudgetRefund:canonical"
+  , mkClaimBudgetRefund 1 1000 (3 * 10 ^ 15) 1 "claimBudgetRefund:bold-rate"
+  , mkClaimBudgetRefund 0 maxU64 maxU64 maxU64 "claimBudgetRefund:max-u64"
+  , mkClaimBudgetRefund 5 1 1 9 "claimBudgetRefund:small"
   ]
 
 /-- The fixture's JSON value: a header + the entries array. -/
@@ -194,6 +218,7 @@ def buildFixture : Json :=
     , ("countDepositWithFee", .num 8)
     , ("countTopUpBudget",    .num 5)
     , ("countTopUpBudgetFor", .num 5)
+    , ("countClaimBudgetRefund", .num 5)
     , ("maxBudgetPerDeposit", .num maxBudgetPerDeposit)
     , ("note",
         .str "expectedCbe is Lean Encoding.Action.encode of the constructor; Rust encode_action must match byte-for-byte")
@@ -212,10 +237,10 @@ def fixtureName : String := "deposit_with_fee_action.json"
     multiple), self-consistency against a hand-pinned vector, the
     constitutional-constant pin, and the fixture-file write. -/
 def tests : List TestCase :=
-  [ { name := "GP.6.1: deposit_with_fee_action fixture has 18 entries"
+  [ { name := "GP.6.1/9.1: deposit_with_fee_action fixture has 23 entries"
     , body := do
-        if entries.length ≠ 18 then
-          throw <| IO.userError s!"expected 18 entries, got {entries.length}"
+        if entries.length ≠ 23 then
+          throw <| IO.userError s!"expected 23 entries, got {entries.length}"
     }
   , { name := "GP.6.1: fixture JSON contains one entry-record per built entry"
     , body := do
@@ -271,7 +296,7 @@ def tests : List TestCase :=
             | _ => throw <| IO.userError "entry missing string expectedCbe"
           | _ => throw <| IO.userError "entry is not a JSON object"
     }
-  , { name := "GP.6.1: every entry's leading tag byte is 19 / 20 / 21 per kind"
+  , { name := "GP.6.1/9.1: every entry's leading tag byte is 19 / 20 / 21 / 22 per kind"
     , body := do
         for e in entries do
           match e with
@@ -284,12 +309,14 @@ def tests : List TestCase :=
               | _ => ""
             -- The tag is the SECOND byte of the stream (the first is
             -- the CBE uint type-tag 0x00); on the "0x"-prefixed hex
-            -- that is chars [4,6).  19 = "13", 20 = "14", 21 = "15".
+            -- that is chars [4,6).  19 = "13", 20 = "14", 21 = "15",
+            -- 22 = "16".
             let tagHex := if hex.length ≥ 6 then String.ofList ((hex.toList.drop 4).take 2) else ""
             let expectedTag := match kind with
               | "depositWithFee"       => "13"
               | "topUpActionBudget"    => "14"
               | "topUpActionBudgetFor" => "15"
+              | "claimBudgetRefund"    => "16"
               | _                      => "??"
             if tagHex ≠ expectedTag then
               throw <| IO.userError

@@ -218,7 +218,8 @@ knomosis/
 │   │                             under the top-level `Lex/DSL/`.
 │   ├── Events/                -- §8.9.2 Event inductive + extractEvents
 │   ├── Runtime/               -- Hash, LogFile, Replay, EventStream, Snapshot, Loop (Phase 5);
-│   │                             BudgetSidecar (GP.6.2) + GasPoolSidecar (GP.7.4) config persistence
+│   │                             BudgetSidecar (GP.6.2) + GasPoolSidecar (GP.7.4) +
+│   │                             RefundRateSidecar (GP.9.1) config persistence
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6) + incentive amendment
 │   ├── LocalPolicy/           -- Workstream LP classification typeclasses
 │   ├── Bridge/                -- Workstreams A–D: crypto adaptors, identity,
@@ -1164,8 +1165,8 @@ Notable Lean suites at the current build tag:
     sections are likewise complete: 22 `Action` pins (0..21) and
     21 `Event` pins (0..20, after the GP.6.4 `budgetConsumed`).
 
-  * `faultproof-stepvm-coherence` (109 cases, GP.3.3 + GP.5.3) —
-    pins the 22-variant step-VM dispatcher byte-for-byte against
+  * `faultproof-stepvm-coherence` (115 cases, GP.3.3 + GP.5.3 + GP.9.1) —
+    pins the 23-variant step-VM dispatcher byte-for-byte against
     Solidity's `executeStep`, including the bulk-variant
     256-recipient cap, adversarial-input regressions on
     `decodeCellNat`, and the Workstream-GP additions: per-variant
@@ -1182,8 +1183,8 @@ Notable Lean suites at the current build tag:
     pre-balances from the observer bundle (distinct, self-credit,
     topUp, delegated-topUp, absent-pool-pre-balance, and
     zero/absent-pre-balance cases).
-  * `crosscheck-step-vm` (39 cases, GP.3.3 + GP.5.3) — pins
-    per-variant fixture counts for the 248-entry corpus (218 from
+  * `crosscheck-step-vm` (40 cases, GP.3.3 + GP.5.3 + GP.9.1) — pins
+    per-variant fixture counts for the 258-entry corpus (218 from
     SVC.5.e + 30 Workstream-GP additions: depositWithFee +
     topUpActionBudget + topUpActionBudgetFor at 10 each), the
     well-formedness of the data-flow packed-layout goldens
@@ -3586,6 +3587,132 @@ arm.  GP.6.1's Rust-side encoder mirror, GP.6.2's
 BOLD) gas-pool inflow views, and GP.6.5's BOLD-specific tri-stack
 cross-stack fixture corpus (above) close all five sub-WUs of the
 Phase-GP.6 Rust runtime amendment — Phase GP.6 is complete.
+
+Phase GP.9.1 (refund-on-exit) has its **full L2 signable action**
+landed — end-to-end "click-to-withdraw" through every layer of the
+Lean runtime.  A user signs a `claimBudgetRefund` to retire EXACTLY
+their remaining *purchased* action budget
+(`currentBudget − actionCost − freeTier`, which EXCLUDES the free-tier
+subsidy) for a `budgetUnits × weiPerBudgetUnit` gas payout out of
+`gasPoolActor`, redesigning OQ-GP-10's earlier `poolAmount`+time sketch
+(the per-actor `EpochBudgetState` already tracks remaining budget, so
+there is no per-deposit state-bloat).  Shipped:
+`Laws.claimBudgetRefund` (the `gasPoolActor → claimant` kernel leg —
+the MIRROR of `topUpActionBudget` — with the full §4.11 classification
+ladder); `Bridge.BudgetRefund` (the `refundableBudget` / `refundAmount`
+functionals + the four soundness theorems: free-tier immunity,
+round-trip non-profitability via floor division, no double refund,
+free-tier preservation); the `Action.claimBudgetRefund` constructor at
+frozen index 22 with full CBE codec / `Action.toTransition` /
+`kernelOnlyApply` mirror / step-VM cell layout
+(`actionKindByte`/`actionFieldsForL1`/`readOnlyCells`/`writeCells`) /
+`bridgeAuthorizedAction => false` / the sound `doesNotDebitPoolAt` arm;
+the §13.6 admission gate (`claimBudgetRefund_gate`, NINE safety
+conjuncts: rate pin, refund-ENABLED check `1 ≤ weiPerBudgetUnit` — so
+the default `refundRate = 0` genuinely rejects refunds rather than
+burning budget for a zero payout — pool-actor pin, canonical-gas-leg
+pin (`gasResource ∈ {0,1}`), free-tier-excluding bound, solvency,
+consume-exempt / self-pool defences) on BOTH the
+kernel and bridge-aware entries; the COMPANION `topUpRoundTripCheck`
+gate on those same two entries seals the top-up → refund round-trip by
+tying a top-up's `budgetIncrement` to its `gasAmount` at the refund
+rate (`budgetIncrement × refundRate gasResource ≤ gasAmount`), so a
+claimant cannot mint cheap budget via `topUpActionBudget` /
+`topUpActionBudgetFor` and refund it at the pinned rate to drain the
+pool (the rate pin alone bounded the price of a retired unit, not how
+cheaply it was acquired) — vacuous at the default `refundRate = 0` so
+pre-refund deployments stay byte-unchanged, and the bound is extracted
+on both paths by
+`topUpActionBudget{,For}_roundtrip_not_profitable{,_bridge}`; the
+trusted per-resource rate is
+threaded as
+ADMISSION config (`refundRate : ResourceId → Nat`, NOT persisted — the
+kernel step uses the action's logged `weiPerBudgetUnit`, so replay /
+fault-proof stay deterministic); the headline admission theorems
+(`claimBudgetRefund_gate_characterization`,
+`admission_refund_consumes_budget`,
+`admission_refund_preserves_free_tier`, the six
+`refund_rejected_when_*` corollaries — incl.
+`refund_rejected_when_non_canonical_resource` (the canonical-gas-leg
+pin) and `refund_rejected_when_rate_disabled`, which pins that a `0`
+rate genuinely rejects).  The two POSITIVE guarantees are mirrored on the
+PRODUCTION (bridge-aware) path at an ARBITRARY deployment `refundRate`
+— not only the disabled default — by
+`admission_refund_consumes_budget_bridge` /
+`admission_refund_preserves_free_tier_bridge`, which lift through the
+now rate-generic agreement corollaries
+(`apply_bridge_admissible_with_budget_{epochBudgets_eq,none_iff,
+kernel_epochBudgets,base_bridge_eq}` all thread `refundRate`); this
+closes a soundness gap where the original mirrors excluded refunds
+(`hne_refund`) and proved bridge↔kernel agreement only at rate 0, so
+the production path's refund correctness was unproven at the only
+configuration in which refunds function.  Plus
+`balanceChanged` + a widened `budgetConsumed`
+(`actionCost + budgetUnits`) event emission (NO new `Event`
+constructor); runtime threading of `RuntimeState.refundRate`
+through `processSignedActionWith` / `processPure` / `replayStepWith` /
+the full replay chain (`replayLoopWith` / `replayWith` /
+`replayFromSeedWith`) AND the restart-reconstruction path (`bootstrap`
+/ `replay`) AND event extraction (`extractEventsStepWith`); and the
+**operator CLI + sidecar** — the `--wei-per-budget-unit-eth` /
+`--wei-per-budget-unit-bold` flags thread the trusted rate into every
+log-touching subcommand (`process` / `replay` / `bootstrap` /
+`snapshot` / `replay-up-to` / `export-cell-proofs` /
+`extract-events`), persisting a non-default rate to a
+`<LOG>.refundratecfg` `RefundRateSidecar` cross-checked on every such
+command (a forgotten / changed rate fails with a clear `refund-rate
+error`, not a silently-dropped refund on replay; `export-terminate-bundle`
+is refund-rate-independent — `kernelOnlyReplay`, no gate — and so
+untouched).  Refunds DISABLED by default (rate 0, no sidecar).  The
+standalone `knomosis-replay` auditor binary (which has no config flags)
+RECONSTRUCTS the full deployment config from the three persisted sidecars
+— budget policy + epoch via `BudgetSidecar.load`, gas-pool policy via
+`GasPoolSidecar.load`, refund rate via `RefundRateSidecar.load` (each
+`load`: absent ⇒ default, present ⇒ decoded, corrupt ⇒ loud error) — so a
+config-bearing log audits to the SAME state hash the producer's `knomosis
+replay` yields, instead of being rejected (a refund whose rate-pin is
+unmet) or diverging (a budget / gas-pool genesis the deny-all default
+omits).
+Suites `bridge-budget-refund` (30 cases — incl. two END-TO-END
+bridge-path admission cases driving `apply_bridge_admissible_with_budget`
+at a nonzero rate + the kernel-path signed admission / disabled-rate
+rejection / event emission, plus the four round-trip-seal cases: the
+`topUpRoundTripCheck` value-level reject/accept/vacuous sweep and three
+END-TO-END top-up admissions proving a cheap mint is rejected at an
+active rate, the same mint is admitted at the disabled default rate, and
+a fairly-priced mint is admitted) + `runtime-loop-happy-path` (+2, a refund
+admitted / rejected through the literal `processSignedActionWith`) +
+the new `runtime-refund-rate-sidecar` (10 — codec round-trip /
+`toRefundRate` / `isDefault` / `checkConsistent` /
+`writeSidecarIfAbsent` / the auditor `load`) + `encoding-action` (+4); all axioms ⊆ the
+canonical three; no `gasPoolDeniedTags` bump needed (tag 22 ∈
+`List.range 23`).  Two deployment sharp-edges are documented (not bugs):
+cross-resource rate consistency (a single shared budget refunds at the
+richest blessed leg — calibrate per-resource rates to equal value) and
+the Solidity `_step22`'s `uint256` payout (the
+`budgetUnits × weiPerBudgetUnit` product can reach ~2^128).  **The L1
+step-VM execution arm + the Rust mirrors are now COMPLETE**: the Lean
+`stepVMHash` kind-22 recipe (`stepCommitClaimBudgetRefund` + the
+dispatcher arm + `stepVMHash_claimBudgetRefund_kind`;
+`actionKindByteCases` → 22; `stepVMHash_unknown_kind_empty` re-pinned
+at 23) + the parity theorems `coherence_claimBudgetRefund` /
+`cellwrites_claimBudgetRefund`; the Solidity
+`KnomosisStepVM._stepClaimBudgetRefund` (uint256 payout;
+credit-claimant / debit-pool; pool-solvency guard); the cross-stack
+`step_vm.json` corpus widened 248 → 258 (the keccak-gated driver
+byte-matches all 158 happy fixtures under the linked build); and the
+Rust mirrors (`knomosis-l1-ingest` `Action::ClaimBudgetRefund` encoder
+byte-pinned against Lean via the `deposit_with_fee_action.json`
+differential; the `knomosis-host` budget-gate refund arm — consume
+`action_cost + budget_units`, the policy-independent rejections,
+strict-mode pool solvency — + `CommandKernel::with_refund_rate`
+forwarding of the `--wei-per-budget-unit-*` flags + the daemon config
+flags; the `knomosis-faultproof-observer`
+`ActionKind::ClaimBudgetRefund = 22`; and the `knomosis-indexer`, which
+needs NO code change — the widened `budgetConsumed` flows through the
+existing tag-20 decoder).  **No `KnomosisBridge` redemption path is
+needed** — the refund is an L2 balance credit, withdrawn via the
+existing `withdrawWithProof`.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

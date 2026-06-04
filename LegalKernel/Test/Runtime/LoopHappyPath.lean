@@ -438,6 +438,88 @@ def epochAdvanceReplenishesAndReplays : TestCase := {
     IO.FS.removeFile tmp
 }
 
+/-! ## GP.9.1 — Refund-on-exit through the production runtime entry
+
+These pin the `RuntimeState.refundRate` threading (`Loop.lean`,
+`processSignedActionWith` → `apply_bridge_admissible_with_budget …
+rs.refundRate`): the runtime admits a signed `claimBudgetRefund` ONLY
+when it carries the deployment's calibrated rate, pays the claimant from
+the pool, retires the budget, and writes the log entry — the
+binary-level "click-to-withdraw" end-to-end.  The second case pins the
+fail-safe: omitting the rate (the default `fun _ => 0`) makes the
+runtime reject the very same refund. -/
+
+/-- The refund claimant (a regular user actor). -/
+def refundClaimant : ActorId := 10
+
+/-- Pre-state for the refund tests: the gas pool (`Bridge.gasPoolActor`)
+    holds 5000 at the ETH-leg resource 0, the claimant holds 100 there
+    and carries 100 purchased budget units, registered with a mock
+    pubkey, under a `bounded 10 1 0` policy (so `refundableBudget = 100 −
+    (1 + 10) = 89`). -/
+def esRefund : ExtendedState :=
+  { base := setBalance (setBalance emptyState 0 Bridge.gasPoolActor 5000) 0 refundClaimant 100
+  , nonces := NonceState.empty
+  , registry := KeyRegistry.empty.register refundClaimant (mockPubKey refundClaimant.toNat)
+  , epochBudgets := EpochBudgetState.empty.topUp refundClaimant 0 0 100
+  , budgetPolicy := .bounded 10 1 0 }
+
+/-- The deployment's active ETH-leg refund rate (5 wei / budget unit;
+    refunds disabled at every other resource). -/
+def refundRateActive : ResourceId → Nat := fun r => if r = 0 then 5 else 0
+
+/-- GP.9.1: a signed `claimBudgetRefund` is admitted through the runtime
+    entry when `RuntimeState.refundRate` carries the active rate; the
+    claimant is paid `89 × 5` from the pool and the budget is retired to
+    the free tier. -/
+def refundThroughRuntimeAdmitted : TestCase := {
+  name := "GP.9.1: processSignedActionWith admits a refund under the active rate (click-to-withdraw)"
+  body := do
+    let tmp := s!"/tmp/knomosis-gp91-refund-{(← IO.monoNanosNow)}.log"
+    let rs0 : RuntimeState :=
+      { policy := policy, state := esRefund, prevHash := zeroHash, logIndex := 0
+      , logPath := System.FilePath.mk tmp, deploymentId := testDeploymentId
+      , refundRate := refundRateActive }
+    let st := mkSignedAction (.claimBudgetRefund 0 89 5 Bridge.gasPoolActor) refundClaimant esRefund
+    let result ← processSignedActionWith mockVerify testDeploymentId rs0 st
+    match result with
+    | .ok pr =>
+      assertEq (expected := 545) (actual := getBalance pr.state.state.base 0 refundClaimant)
+        "claimant paid 89 × 5 (100 → 545)"
+      assertEq (expected := 4555) (actual := getBalance pr.state.state.base 0 Bridge.gasPoolActor)
+        "pool debited 89 × 5 (5000 → 4555)"
+      assertEq (expected := 10)
+        (actual := pr.state.state.epochBudgets.currentBudget refundClaimant 0 10)
+        "budget retired to the free tier (anti-drain)"
+      assertEq (expected := 1) (actual := pr.state.logIndex) "logIndex advanced"
+      -- The rate is preserved into the next runtime state, so a
+      -- multi-step refund chain stays enabled.
+      assert (decide (pr.state.refundRate 0 = 5)) "refundRate preserved into rs'"
+    | .error e =>
+      throw <| IO.userError s!"refund should be admitted under the active rate; got: {repr e}"
+    IO.FS.removeFile tmp
+}
+
+/-- GP.9.1: the SAME signed refund is REJECTED through the runtime entry
+    when `RuntimeState.refundRate` is the disabled default — base
+    admissible, but the budget gate refuses (the rate pin fails), so the
+    runtime returns `.budgetRejected` and writes no log entry. -/
+def refundThroughRuntimeRejectedByDefault : TestCase := {
+  name := "GP.9.1: processSignedActionWith rejects the refund under the disabled default rate"
+  body := do
+    let tmp := s!"/tmp/knomosis-gp91-refund-off-{(← IO.monoNanosNow)}.log"
+    -- rs0 OMITS refundRate ⇒ defaults to `fun _ => 0` (refunds disabled).
+    let rs0 : RuntimeState :=
+      { policy := policy, state := esRefund, prevHash := zeroHash, logIndex := 0
+      , logPath := System.FilePath.mk tmp, deploymentId := testDeploymentId }
+    let st := mkSignedAction (.claimBudgetRefund 0 89 5 Bridge.gasPoolActor) refundClaimant esRefund
+    match (← processSignedActionWith mockVerify testDeploymentId rs0 st) with
+    | .ok _ => throw <| IO.userError "refund must be rejected when the runtime rate is disabled"
+    | .error .budgetRejected => pure ()
+    | .error e => throw <| IO.userError s!"expected budgetRejected; got: {repr e}"
+    if ← (System.FilePath.mk tmp).pathExists then IO.FS.removeFile tmp
+}
+
 /-! ## Term-level API stability -/
 
 /-- Term-level: `processSignedActionWith` is callable. -/
@@ -470,6 +552,9 @@ def tests : List TestCase :=
   -- GP.6.2 epoch advancement (OQ-GP-4):
   , advanceEpochFormula
   , epochAdvanceReplenishesAndReplays
+  -- GP.9.1 refund-on-exit (click-to-withdraw through the runtime):
+  , refundThroughRuntimeAdmitted
+  , refundThroughRuntimeRejectedByDefault
   ]
 
 end LoopHappyPath

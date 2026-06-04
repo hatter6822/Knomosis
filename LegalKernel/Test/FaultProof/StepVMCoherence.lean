@@ -579,14 +579,14 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=18 ⇒ stepCommitFaultProofResolution dispatch"
     }
-  , { name := "stepVMHash: unknown kind 22 returns empty"
+  , { name := "stepVMHash: unknown kind 23 returns empty"
     , body := do
-        -- Kinds 19 (`.depositWithFee`), 20 (`.topUpActionBudget`), and
-        -- 21 (`.topUpActionBudgetFor`, GP.5.3) are now wired through
-        -- the dispatcher.  The catch-all path fires only for kinds
-        -- ≥ 22.
+        -- Kinds 19 (`.depositWithFee`), 20 (`.topUpActionBudget`),
+        -- 21 (`.topUpActionBudgetFor`, GP.5.3), and 22
+        -- (`.claimBudgetRefund`, GP.9.1) are now wired through the
+        -- dispatcher.  The catch-all path fires only for kinds ≥ 23.
         let pc := ByteArray.mk #[(0xAA : UInt8)]
-        let h := stepVMHash pc 22 ByteArray.empty 7 { proofs := [] }
+        let h := stepVMHash pc 23 ByteArray.empty 7 { proofs := [] }
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
     }
@@ -909,6 +909,103 @@ def tests : List TestCase :=
         let h2 := stepVMHash pc 21 fields2 10 bundle
         assertEq (expected := h1) (actual := h2)
           "different recipient/budgetIncrement ⇒ same step-VM hash"
+    }
+    -- ## GP.9.1 value-level dispatch tests (kind 22, claimBudgetRefund)
+  , { name := "stepVMHash: kind=22 (ClaimBudgetRefund) dispatches credit-claimant / debit-pool"
+    , body := do
+        -- Mirror Solidity's `_stepClaimBudgetRefund` byte-for-byte:
+        -- gasResource=2, budgetUnits=3, weiPerBudgetUnit=5 ⇒ refundAmount=15,
+        -- poolActor=99.  Signer (claimant) = 10 pre-balance 100; pool
+        -- pre-balance 50.  The claimant is CREDITED and the pool DEBITED
+        -- (the MIRROR of kind 20/21's debit-signer/credit-pool).
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .claimBudgetRefund (2 : UInt64) (3 : Nat) (5 : Nat) (99 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let bal50 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 50).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal50, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 22 fields 10 bundle
+        -- Expected: newSignerBal = 100 + 15 = 115, newPoolBal = 50 - 15 = 35.
+        let h2 := stepCommitClaimBudgetRefund pc 2 10 99 115 35
+        assertEq (expected := h2) (actual := h1)
+          "kind=22 distinct claimant/pool ⇒ credit-claimant / debit-pool"
+    }
+  , { name := "stepVMHash: kind=22 distinct from kind=20/21 via the claimBudgetRefund tag"
+    , body := do
+        -- The refund commit must differ from BOTH top-up commits even
+        -- on identical (gasResource, signer, poolActor, newSigner,
+        -- newPool) inputs — the distinct `claimBudgetRefund` tag is what
+        -- separates them, so a bisection opponent cannot substitute a
+        -- top-up commit for a refund commit.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let hRefund := stepCommitClaimBudgetRefund pc 2 10 99 115 35
+        let hTopUp  := stepCommitTopUpActionBudget pc 2 10 99 115 35
+        let hTopUpFor := stepCommitTopUpActionBudgetFor pc 2 10 99 115 35
+        assert (hRefund ≠ hTopUp ∧ hRefund ≠ hTopUpFor)
+          "claimBudgetRefund tag ⇒ distinct commit from both top-up variants"
+    }
+  , { name := "stepVMHash: kind=22 (ClaimBudgetRefund) self-pool defended branch is no-op"
+    , body := do
+        -- Defence-in-depth: signer = poolActor.  The admission gate
+        -- rejects this upstream (`claimBudgetRefund_gate` requires
+        -- `signer ≠ poolActor`); the dispatcher's defended branch
+        -- produces a net-zero kernel-state hash (newSigner = newPool =
+        -- pre-balance), matching the law's `poolActor = claimant`
+        -- net-zero corner.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .claimBudgetRefund (2 : UInt64) (3 : Nat) (5 : Nat) (10 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal100 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 100).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal100, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner] }
+        let h1 := stepVMHash pc 22 fields 10 bundle
+        -- Expected: newSigner = newPool = 100 (self-pool branch).
+        let h2 := stepCommitClaimBudgetRefund pc 2 10 10 100 100
+        assertEq (expected := h2) (actual := h1)
+          "kind=22 self-pool ⇒ defended no-op (both writes equal pre-balance)"
+    }
+  , { name := "stepVMHash: kind=22 exact-pool-drain zeroes the pool (Nat boundary)"
+    , body := do
+        -- Boundary parity with Solidity's pool-solvency guard:
+        -- refundAmount = poolBalance ⇒ newPool = 0.  On the Lean side
+        -- this is the `poolBalance - refundAmount = 0` Nat boundary; the
+        -- hash must match Solidity's exact-drain commit so cross-stack
+        -- equivalence holds at the edge.  gasResource=2, budgetUnits=5,
+        -- weiPerBudgetUnit=10 ⇒ refundAmount=50; claimant=10 pre-balance
+        -- 20; pool=99 pre-balance 50 (exactly the refund).
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .claimBudgetRefund (2 : UInt64) (5 : Nat) (10 : Nat) (99 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal20 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 20).toArray
+        let bal50 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 50).toArray
+        let pSigner : CellProof :=
+          { cellTag := .balance (2 : UInt64) (10 : UInt64),
+            cellValue := bal20, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (2 : UInt64) (99 : UInt64),
+            cellValue := bal50, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
+        let h1 := stepVMHash pc 22 fields 10 bundle
+        -- Expected: newSigner = 20 + 50 = 70; newPool = 50 - 50 = 0.
+        let h2 := stepCommitClaimBudgetRefund pc 2 10 99 70 0
+        assertEq (expected := h2) (actual := h1)
+          "kind=22 exact-pool-drain ⇒ newPool=0, claimant credited full amount"
     }
     -- ## stepVMHashFromAction: composition
   , { name := "stepVMHashFromAction: composition equality"
@@ -1315,6 +1412,11 @@ def tests : List TestCase :=
   , { name := "stepVMHash_topUpActionBudgetFor_kind API stable"
     , body := do
         let _ := @stepVMHash_topUpActionBudgetFor_kind
+        assert true "API exists"
+    }
+  , { name := "stepVMHash_claimBudgetRefund_kind API stable"
+    , body := do
+        let _ := @stepVMHash_claimBudgetRefund_kind
         assert true "API exists"
     }
   ]

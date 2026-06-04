@@ -399,6 +399,24 @@ theorem coherence_topUpActionBudgetFor
         signer := signer, nonce := nonce, sig := sig })) :=
   recomputeCommitment_eq_signedActionToLogEntry es _
 
+/-- Commit coherence for `claimBudgetRefund` (GP.9.1): the recomputed
+    commitment over the refund's SignedAction equals the commit of the
+    `kernelOnlyApply` post-state — the fault-proof prefix-replay reads
+    the refund's kernel-state effect (pool debit + claimant credit)
+    coherently, independent of the step-VM execution arm. -/
+theorem coherence_claimBudgetRefund
+    (es : ExtendedState)
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    recomputeCommitment es
+      { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+      { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+        signer := signer, nonce := nonce, sig := sig })) :=
+  recomputeCommitment_eq_signedActionToLogEntry es _
+
 /-! ## #251.* — Per-variant cell-write semantic agreement.
 
 `applyCellWrites_to_state` agrees with `kernelOnlyApply` on the
@@ -722,6 +740,25 @@ theorem cellwrites_topUpActionBudgetFor
     kernelOnlyApply es (signedActionToLogEntry
       { action := .topUpActionBudgetFor recipient gasResource gasAmount
                                          budgetIncrement poolActor,
+        signer := signer, nonce := nonce, sig := sig }) :=
+  applyCellWrites_eq_signedActionToLogEntry es _
+
+/-- #251.claimBudgetRefund (GP.9.1) — semantic agreement for
+    `Action.claimBudgetRefund`: its static cell-write set
+    (`Action.writeCells` = `[.balance gr signer, .balance gr pa,
+    .nonce signer]`) applied via `applyCellWrites_to_state` matches
+    `kernelOnlyApply`, so the static cell declaration is semantically
+    correct for the refund variant. -/
+theorem cellwrites_claimBudgetRefund
+    (es : ExtendedState)
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    applyCellWrites_to_state es
+      { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    kernelOnlyApply es (signedActionToLogEntry
+      { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
         signer := signer, nonce := nonce, sig := sig }) :=
   applyCellWrites_eq_signedActionToLogEntry es _
 

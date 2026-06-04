@@ -78,6 +78,8 @@ struct Header {
     count_top_up_budget: usize,
     /// Sub-count: topUpActionBudgetFor entries.
     count_top_up_budget_for: usize,
+    /// Sub-count: claimBudgetRefund entries (GP.9.1).
+    count_claim_budget_refund: usize,
     /// Per-deposit budget-grant ceiling (the constitutional
     /// constant); cross-checked against the Rust
     /// `MAX_BUDGET_PER_DEPOSIT` by
@@ -119,6 +121,9 @@ struct Entry {
     gas_resource: Option<u64>,
     gas_amount: Option<u64>,
     budget_increment: Option<u64>,
+    // ── claimBudgetRefund fields (GP.9.1; None for the others) ──
+    budget_units: Option<u64>,
+    wei_per_budget_unit: Option<u64>,
     /// The Lean-computed expected CBE bytes, 0x-prefixed lowercase
     /// hex.  The headline cross-stack value the Rust encoder must
     /// reproduce.
@@ -280,6 +285,25 @@ fn entry_to_action(e: &Entry) -> Action {
                 pool_actor: req(e.pool_actor, "poolActor"),
             }
         }
+        "claimBudgetRefund" => {
+            // GP.9.1 refund: shares only gasResource + poolActor with
+            // the other variants; carries budgetUnits + weiPerBudgetUnit.
+            // Forbid every field belonging to another variant.
+            forbid(e.r, "r");
+            forbid(e.recipient, "recipient");
+            forbid(e.user_amount, "userAmount");
+            forbid(e.pool_amount, "poolAmount");
+            forbid(e.budget_grant, "budgetGrant");
+            forbid(e.deposit_id, "depositId");
+            forbid(e.gas_amount, "gasAmount");
+            forbid(e.budget_increment, "budgetIncrement");
+            Action::ClaimBudgetRefund {
+                gas_resource: req(e.gas_resource, "gasResource"),
+                budget_units: req(e.budget_units, "budgetUnits"),
+                wei_per_budget_unit: req(e.wei_per_budget_unit, "weiPerBudgetUnit"),
+                pool_actor: req(e.pool_actor, "poolActor"),
+            }
+        }
         other => panic!("entry {}: unknown kind {other}", e.category),
     }
 }
@@ -317,7 +341,7 @@ fn lean_action_corpus_byte_equivalence() {
     }
 }
 
-/// Coverage: the fixture exercises all three GP-family constructors,
+/// Coverage: the fixture exercises all four GP-family constructors,
 /// and the per-kind counts match the header's declared partition.
 #[test]
 fn lean_action_corpus_coverage() {
@@ -329,11 +353,13 @@ fn lean_action_corpus_coverage() {
     let mut n_dwf = 0usize;
     let mut n_tub = 0usize;
     let mut n_tubf = 0usize;
+    let mut n_cbr = 0usize;
     for e in &fixture.entries {
         match e.kind.as_str() {
             "depositWithFee" => n_dwf += 1,
             "topUpActionBudget" => n_tub += 1,
             "topUpActionBudgetFor" => n_tubf += 1,
+            "claimBudgetRefund" => n_cbr += 1,
             other => panic!("unexpected kind {other}"),
         }
     }
@@ -349,8 +375,12 @@ fn lean_action_corpus_coverage() {
         n_tubf, fixture.header.count_top_up_budget_for,
         "topUpActionBudgetFor count disagrees with header"
     );
+    assert_eq!(
+        n_cbr, fixture.header.count_claim_budget_refund,
+        "claimBudgetRefund count disagrees with header"
+    );
     assert!(
-        n_dwf > 0 && n_tub > 0 && n_tubf > 0,
+        n_dwf > 0 && n_tub > 0 && n_tubf > 0 && n_cbr > 0,
         "every kind must be present"
     );
 }
@@ -395,9 +425,9 @@ fn lean_action_corpus_max_budget_constant_agrees() {
 }
 
 /// Per-kind leading-tag pin: every entry's Lean-computed bytes start
-/// with the constructor's frozen CBE tag (19 / 20 / 21), independent
-/// of the Rust encoder.  Catches a Lean-side frozen-index drift even
-/// if (hypothetically) the Rust encoder drifted in lockstep.
+/// with the constructor's frozen CBE tag (19 / 20 / 21 / 22),
+/// independent of the Rust encoder.  Catches a Lean-side frozen-index
+/// drift even if (hypothetically) the Rust encoder drifted in lockstep.
 #[test]
 fn lean_action_corpus_leading_tag_per_kind() {
     let Some(fixture) = load_fixture() else {
@@ -421,6 +451,7 @@ fn lean_action_corpus_leading_tag_per_kind() {
             "depositWithFee" => 19,
             "topUpActionBudget" => 20,
             "topUpActionBudgetFor" => 21,
+            "claimBudgetRefund" => 22,
             other => panic!("unknown kind {other}"),
         };
         assert_eq!(

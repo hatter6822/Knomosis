@@ -189,6 +189,35 @@ def gasPoolOfConfigSomeWiresBoth : TestCase := {
       "opt-in policy authorises the capped sequencer claim"
 }
 
+/-- `load` RECONSTRUCTS the config from disk (the `knomosis-replay`
+    auditor path, which has no gas-pool flags and must re-derive the
+    genesis gas-pool policy): absent → `ok none` (gas pool disabled),
+    present + valid → `ok (some cfg)`, present + corrupt → `error` (fail
+    loudly rather than silently audit under the wrong policy). -/
+def gasPoolSidecarLoad : TestCase := {
+  name := "GasPoolSidecar.load: absent → none, present → some, corrupt → error"
+  body := do
+    let logA ← tmpLog
+    match (← load logA) with
+    | .ok none => pure ()
+    | .ok (some c) => throw <| IO.userError s!"absent sidecar should load as none, got {repr c}"
+    | .error m => throw <| IO.userError s!"absent sidecar should be ok none, got error: {m}"
+    let log ← tmpLog
+    let cfg : GasPoolConfig := { maxDrainPerActionEth := 1000, maxDrainPerActionBold := 3000 }
+    writeSidecarIfAbsent log (some cfg)
+    match (← load log) with
+    | .ok (some c) => assertEq cfg c "load recovers the persisted config"
+    | .ok none => throw <| IO.userError "present sidecar should load as some"
+    | .error m => throw <| IO.userError s!"present sidecar should load, got error: {m}"
+    IO.FS.removeFile (sidecarPath log)
+    let logC ← tmpLog
+    IO.FS.writeFile (sidecarPath logC) "garbage not a gas-pool config\n"
+    match (← load logC) with
+    | .ok _ => throw <| IO.userError "BUG: corrupt sidecar loaded without error"
+    | .error _ => pure ()
+    IO.FS.removeFile (sidecarPath logC)
+}
+
 /-- The full GP.7.4 sidecar + config-builder suite. -/
 def tests : List TestCase :=
   [ gasPoolSidecarRoundTrip
@@ -199,6 +228,7 @@ def tests : List TestCase :=
   , gasPoolSidecarWriteIsIdempotent
   , gasPoolSidecarCorruptRejected
   , gasPoolOfConfigNoneIsNoOp
-  , gasPoolOfConfigSomeWiresBoth ]
+  , gasPoolOfConfigSomeWiresBoth
+  , gasPoolSidecarLoad ]
 
 end LegalKernel.Test.Runtime.GasPoolSidecarTests

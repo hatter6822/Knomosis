@@ -547,6 +547,30 @@ pub enum ActionBudgetKind {
         /// The budget units credited to `recipient`.
         budget_increment: u64,
     },
+    /// `Action.claimBudgetRefund` (tag 22, GP.9.1).  CONSUMES
+    /// `action_cost + budget_units` from the signer (claimant) — a
+    /// refund retires purchased budget, so it is a budget DEBIT, not a
+    /// grant.  The pool is debited / the claimant credited at the
+    /// kernel layer (out of the budget gate's scope).  The gate
+    /// enforces the policy/balance-INDEPENDENT conjuncts (signer ≠
+    /// bridge / pool, positive rate + units) and DEFERS the rate-pin
+    /// (`wei == refundRate(gas_resource)`), the `pool_actor ==
+    /// gasPoolActor` pin, the `budget_units ≤ refundableBudget` bound,
+    /// and pool solvency to the authoritative Lean kernel via
+    /// `CommandKernel` — exactly the GP.6.2 deferred-conjunct posture.
+    ClaimBudgetRefund {
+        /// The gas resource the refund is paid in (captured for the
+        /// strict-mode pool-solvency check).
+        gas_resource: u64,
+        /// The gas-pool actor the refund is debited from.
+        pool_actor: u64,
+        /// The purchased budget units being retired — the EXTRA
+        /// consume on top of `action_cost`.
+        budget_units: u64,
+        /// The trusted budget→gas exchange rate (`≥ 1` enables the
+        /// refund; `0` is the disabled default the gate rejects).
+        wei_per_budget_unit: u64,
+    },
 }
 
 /// The budget-relevant projection of a decoded `SignedAction`: the
@@ -877,6 +901,20 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
                 budget_increment,
             }
         }
+        // claimBudgetRefund(22): gasResource, budgetUnits,
+        // weiPerBudgetUnit, poolActor.  GP.9.1 refund-on-exit.
+        22 => {
+            let gas_resource = cur.read_uint()?;
+            let budget_units = cur.read_uint()?;
+            let wei_per_budget_unit = cur.read_uint()?;
+            let pool_actor = cur.read_uint()?;
+            ActionBudgetKind::ClaimBudgetRefund {
+                gas_resource,
+                pool_actor,
+                budget_units,
+                wei_per_budget_unit,
+            }
+        }
         // dispute(8) / verdict(10) / declareLocalPolicy(15): nested
         // encodings not modelled here.
         8 | 10 | 15 => return Err(BudgetDecodeError::UnsupportedActionTag { tag }),
@@ -950,6 +988,38 @@ pub enum GateRejection {
     /// gate is in strict mode with a consent oracle.
     #[error("BudgetGateDelegationNotAuthorized")]
     DelegationNotAuthorized,
+    /// GP.9.1: a `claimBudgetRefund` was signed by the bridge actor
+    /// (consume-exempt, so a self-refund would drain the pool for
+    /// free).
+    #[error("BudgetGateRefundByBridgeActor")]
+    RefundByBridgeActor,
+    /// GP.9.1: a `claimBudgetRefund` named the signer as its own pool
+    /// (net-zero kernel effect; rejected so the claimant cannot be the
+    /// pool).
+    #[error("BudgetGateRefundToSelfPool")]
+    RefundToSelfPool,
+    /// GP.9.1: a `claimBudgetRefund` carried `weiPerBudgetUnit == 0`
+    /// (refunds disabled — the default; the Lean gate's `1 <=
+    /// weiPerBudgetUnit` refund-enabled conjunct).
+    #[error("BudgetGateRefundRateDisabled")]
+    RefundRateDisabled,
+    /// GP.9.1: a `claimBudgetRefund` carried `budgetUnits == 0` (a
+    /// zero-payout no-op the gate rejects).
+    #[error("BudgetGateRefundZeroUnits")]
+    RefundZeroUnits,
+    /// GP.9.1 (review fix): a `claimBudgetRefund` named a non-canonical
+    /// gas resource (neither 0 = ETH nor 1 = BOLD); the gas pool
+    /// operates only at those legs, so the refund is rejected regardless
+    /// of the deployment's rate function.
+    #[error("BudgetGateRefundNonCanonicalResource")]
+    RefundNonCanonicalResource,
+    /// STRICT MODE ONLY: a `claimBudgetRefund`'s pool balance at the
+    /// gas resource was below `budgetUnits * weiPerBudgetUnit` (the
+    /// Lean gate's pool-solvency conjunct).  Only raised when the gate
+    /// is in strict mode with a balance oracle; otherwise deferred to
+    /// the Lean kernel.
+    #[error("BudgetGateRefundInsufficientPool")]
+    RefundInsufficientPool,
 }
 
 impl GateRejection {
@@ -967,6 +1037,12 @@ impl GateRejection {
             Self::NonBridgeDepositWithFee => "BudgetGateNonBridgeDepositWithFee",
             Self::InsufficientGas => "BudgetGateInsufficientGas",
             Self::DelegationNotAuthorized => "BudgetGateDelegationNotAuthorized",
+            Self::RefundByBridgeActor => "BudgetGateRefundByBridgeActor",
+            Self::RefundToSelfPool => "BudgetGateRefundToSelfPool",
+            Self::RefundRateDisabled => "BudgetGateRefundRateDisabled",
+            Self::RefundZeroUnits => "BudgetGateRefundZeroUnits",
+            Self::RefundNonCanonicalResource => "BudgetGateRefundNonCanonicalResource",
+            Self::RefundInsufficientPool => "BudgetGateRefundInsufficientPool",
         }
     }
 }
@@ -1171,6 +1247,15 @@ impl BudgetGate {
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
                 }
+                // GP.9.1 round-trip non-profitability: the Lean gate ALSO
+                // enforces `budget_increment * refundRate(gas_resource) <=
+                // gas_amount` (the `topUpRoundTripCheck` conjunct that seals
+                // the top-up -> refund pool-drain — minting cheap budget and
+                // refunding it at the deployment rate).  That conjunct is
+                // RATE-dependent, so — exactly like the refund rate-pin
+                // below — it is deferred to the authoritative Lean kernel via
+                // `CommandKernel`; the mock stays a strictly-weaker pre-filter
+                // on this dimension.
                 if self.strict && self.balance_of(gas_resource, signer) < gas_amount {
                     return Err(GateRejection::InsufficientGas);
                 }
@@ -1194,6 +1279,13 @@ impl BudgetGate {
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
                 }
+                // GP.9.1 round-trip non-profitability (delegated variant):
+                // the Lean gate enforces `budget_increment *
+                // refundRate(gas_resource) <= gas_amount` here too (the
+                // delegate pays gas for the recipient's budget; the
+                // recipient's later refund is bounded by the same
+                // inequality).  Rate-dependent ⇒ deferred to the Lean kernel
+                // via `CommandKernel`, like the refund rate-pin.
                 if self.strict {
                     if self.balance_of(gas_resource, signer) < gas_amount {
                         return Err(GateRejection::InsufficientGas);
@@ -1208,14 +1300,67 @@ impl BudgetGate {
                     return Err(GateRejection::NonBridgeDepositWithFee);
                 }
             }
+            ActionBudgetKind::ClaimBudgetRefund {
+                gas_resource,
+                pool_actor,
+                budget_units,
+                wei_per_budget_unit,
+            } => {
+                // GP.9.1: the policy/balance-INDEPENDENT conjuncts of
+                // `claimBudgetRefund_gate`.  The rate-pin
+                // (`wei == refundRate(gas_resource)`), the `pool_actor ==
+                // gasPoolActor` pin, and the `budget_units <=
+                // refundableBudget` bound are deferred to the
+                // authoritative Lean kernel via `CommandKernel`.
+                if signer == BRIDGE_ACTOR {
+                    return Err(GateRejection::RefundByBridgeActor);
+                }
+                if signer == pool_actor {
+                    return Err(GateRejection::RefundToSelfPool);
+                }
+                // Canonical-resource pin (review fix): the gas pool
+                // operates only at resource 0 (ETH) / 1 (BOLD), so a
+                // refund at any other resource is rejected regardless of
+                // the deployment's rate function (policy-independent, so
+                // enforced here, not deferred).
+                if gas_resource != 0 && gas_resource != 1 {
+                    return Err(GateRejection::RefundNonCanonicalResource);
+                }
+                if wei_per_budget_unit == 0 {
+                    return Err(GateRejection::RefundRateDisabled);
+                }
+                if budget_units == 0 {
+                    return Err(GateRejection::RefundZeroUnits);
+                }
+                if self.strict {
+                    // Pool solvency (uint128: the payout can reach ~2^128).
+                    let refund_amount = u128::from(budget_units) * u128::from(wei_per_budget_unit);
+                    if u128::from(self.balance_of(gas_resource, pool_actor)) < refund_amount {
+                        return Err(GateRejection::RefundInsufficientPool);
+                    }
+                }
+            }
             ActionBudgetKind::Ordinary => {}
         }
 
         let mut ledger = self.ledger.clone();
 
         // Consume step: the bridge actor is exempt (OQ-GP-6); every
-        // other signer is debited `action_cost`.
-        if signer != BRIDGE_ACTOR && !ledger.consume_in_place(signer, now, free_tier, action_cost) {
+        // other signer is debited `action_cost` PLUS, for a
+        // `claimBudgetRefund`, the retired `budget_units` (GP.9.1: the
+        // refund is a budget DEBIT of `action_cost + budget_units`).
+        let refund_extra = match view.kind {
+            ActionBudgetKind::ClaimBudgetRefund { budget_units, .. } => budget_units,
+            _ => 0,
+        };
+        if signer != BRIDGE_ACTOR
+            && !ledger.consume_in_place(
+                signer,
+                now,
+                free_tier,
+                action_cost.saturating_add(refund_extra),
+            )
+        {
             return Err(GateRejection::InsufficientBudget);
         }
 
@@ -1234,7 +1379,11 @@ impl BudgetGate {
                 budget_increment,
                 ..
             } => ledger.top_up_in_place(recipient, now, free_tier, budget_increment),
-            ActionBudgetKind::Ordinary => {}
+            // GP.9.1: a refund grants NO budget — its budget effect is
+            // the `action_cost + budget_units` consume above; `Ordinary`
+            // likewise grants nothing (combined to satisfy
+            // `clippy::match_same_arms`).
+            ActionBudgetKind::ClaimBudgetRefund { .. } | ActionBudgetKind::Ordinary => {}
         }
 
         Ok(ledger)
@@ -1705,12 +1854,14 @@ mod tests {
     }
 
     /// An out-of-range constructor tag reports `UnknownActionTag`.
+    /// Tag 23 is the first unknown tag (GP.9.1 added 22 =
+    /// claimBudgetRefund; 23 is the reserved future GP.11 `ammSwap`).
     #[test]
     fn decode_unknown_tag() {
-        let action = cat(&[u(22)]);
+        let action = cat(&[u(23)]);
         let sa = signed(&action, 5);
         match decode_budget_view(&sa) {
-            Err(BudgetDecodeError::UnknownActionTag { tag }) => assert_eq!(tag, 22),
+            Err(BudgetDecodeError::UnknownActionTag { tag }) => assert_eq!(tag, 23),
             other => panic!("expected UnknownActionTag, got {other:?}"),
         }
     }
@@ -1865,6 +2016,99 @@ mod tests {
         assert!(gate.admit(&v).is_ok());
         // 1 (free tier) - 1 (consume) + 100 (grant) = 100.
         assert_eq!(gate.current_budget(10), 100);
+    }
+
+    /// GP.9.1: a `claimBudgetRefund` consumes `action_cost +
+    /// budget_units` (the per-action cost PLUS the retired purchased
+    /// budget) and grants nothing.
+    #[test]
+    fn gate_refund_consumes_action_cost_plus_units() {
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(100, 1, 1));
+        let v = view(
+            10,
+            ActionBudgetKind::ClaimBudgetRefund {
+                gas_resource: 0,
+                pool_actor: 2,
+                budget_units: 10,
+                wei_per_budget_unit: 5,
+            },
+        );
+        assert!(gate.admit(&v).is_ok());
+        // 100 (free tier) - 1 (action cost) - 10 (retired units) = 89.
+        assert_eq!(gate.current_budget(10), 89);
+    }
+
+    /// GP.9.1: the refund's policy/balance-INDEPENDENT rejection
+    /// conjuncts (signer ≠ bridge / pool, positive rate + units).
+    #[test]
+    fn gate_refund_rejections() {
+        let mk = || BudgetGate::new(BudgetPolicy::mk_bounded(100, 1, 1));
+        let refund = |signer, pool_actor, budget_units, wei| {
+            view(
+                signer,
+                ActionBudgetKind::ClaimBudgetRefund {
+                    gas_resource: 0,
+                    pool_actor,
+                    budget_units,
+                    wei_per_budget_unit: wei,
+                },
+            )
+        };
+        assert_eq!(
+            mk().admit(&refund(BRIDGE_ACTOR, 2, 10, 5)),
+            Err(GateRejection::RefundByBridgeActor)
+        );
+        assert_eq!(
+            mk().admit(&refund(2, 2, 10, 5)),
+            Err(GateRejection::RefundToSelfPool)
+        );
+        assert_eq!(
+            mk().admit(&refund(10, 2, 10, 0)),
+            Err(GateRejection::RefundRateDisabled)
+        );
+        assert_eq!(
+            mk().admit(&refund(10, 2, 0, 5)),
+            Err(GateRejection::RefundZeroUnits)
+        );
+        // Non-canonical gas resource (2) rejected even with a positive
+        // rate + units (the canonical-resource pin, review fix).
+        assert_eq!(
+            mk().admit(&view(
+                10,
+                ActionBudgetKind::ClaimBudgetRefund {
+                    gas_resource: 2,
+                    pool_actor: 99,
+                    budget_units: 10,
+                    wei_per_budget_unit: 5,
+                },
+            )),
+            Err(GateRejection::RefundNonCanonicalResource)
+        );
+    }
+
+    /// GP.9.1 STRICT MODE: pool solvency is enforced when a balance
+    /// oracle is supplied (otherwise deferred to the Lean kernel).
+    /// refundAmount = 10 × 5 = 50; the boundary (pool == 50) admits.
+    #[test]
+    fn strict_gate_refund_enforces_pool_solvency() {
+        let v = view(
+            10,
+            ActionBudgetKind::ClaimBudgetRefund {
+                gas_resource: 0,
+                pool_actor: 2,
+                budget_units: 10,
+                wei_per_budget_unit: 5,
+            },
+        );
+        let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(100, 1, 1)).with_strict_checks();
+        gate.set_balance(0, 2, 40); // pool 40 < 50 => reject
+        assert_eq!(
+            gate.evaluate(&v),
+            Err(GateRejection::RefundInsufficientPool)
+        );
+        gate.set_balance(0, 2, 50); // pool exactly 50 => admitted
+        assert!(gate.admit(&v).is_ok());
+        assert_eq!(gate.current_budget(10), 89);
     }
 
     /// `depositWithFee` (bridge-signed) grants the recipient without
@@ -2578,6 +2822,18 @@ mod tests {
                 u(budget_increment),
                 u(pool_actor),
             ]),
+            ActionBudgetKind::ClaimBudgetRefund {
+                gas_resource,
+                pool_actor,
+                budget_units,
+                wei_per_budget_unit,
+            } => cat(&[
+                u(22),
+                u(gas_resource),
+                u(budget_units),
+                u(wei_per_budget_unit),
+                u(pool_actor),
+            ]),
         };
         signed(&action, signer)
     }
@@ -2604,6 +2860,12 @@ mod tests {
                 pool_actor: 9,
                 gas_amount: 10,
                 budget_increment: 11,
+            },
+            ActionBudgetKind::ClaimBudgetRefund {
+                gas_resource: 0,
+                pool_actor: 1,
+                budget_units: 50,
+                wei_per_budget_unit: 5,
             },
         ];
         for kind in kinds {

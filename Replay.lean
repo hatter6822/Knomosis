@@ -122,13 +122,53 @@ def usage : IO UInt32 := do
 def runReplay (logPath : System.FilePath)
     (snapshotPath : Option System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty) : IO UInt32 := do
+  -- Step 0 — deployment-config reconstruction.  The auditor has no CLI
+  -- config flags (unlike `knomosis replay`, which re-supplies them and
+  -- only cross-checks the sidecars).  It must instead RE-DERIVE the
+  -- producer's config from the persisted sidecars: the budget policy +
+  -- epoch length (`<LOG>.budgetcfg`), the gas-pool policy
+  -- (`<LOG>.gaspoolcfg`), and the refund rate (`<LOG>.refundratecfg`).
+  -- All three participate in the log's post-state hashes (the refund
+  -- rate additionally gates which `claimBudgetRefund` actions are
+  -- admissible), so without reconstructing them a config-bearing log
+  -- would be rejected or would replay to a divergent hash.  A corrupt
+  -- sidecar fails loudly — the auditor must never silently audit under
+  -- the wrong config.
+  let budgetCfg? ← match ← BudgetSidecar.load logPath with
+    | .error msg => IO.println s!"CONFIG_ERROR {msg}"; return 1
+    | .ok c => pure c
+  let gasPoolCfg? ← match ← GasPoolSidecar.load logPath with
+    | .error msg => IO.println s!"CONFIG_ERROR {msg}"; return 1
+    | .ok c => pure c
+  let refundCfg? ← match ← RefundRateSidecar.load logPath with
+    | .error msg => IO.println s!"CONFIG_ERROR {msg}"; return 1
+    | .ok c => pure c
+  -- Replay PARAMS (applied regardless of snapshot, since they are not
+  -- captured in the snapshot's state): epoch length, refund rate, and the
+  -- gas-pool-intersected AuthorityPolicy.
+  let epochLength : Nat := (budgetCfg?.map (·.epochLength)).getD 0
+  let refundRate : ResourceId → Nat :=
+    (refundCfg?.map (·.toRefundRate)).getD (fun _ => 0)
+  let auditorPolicy : AuthorityPolicy :=
+    Bridge.gasPoolGenesisPolicyOfConfig replayPolicy gasPoolCfg?
+  -- The from-genesis seed STATE must carry the producer's budget policy +
+  -- gas-pool localPolicies; a snapshot already captures both in its
+  -- restored state (and its budget policy's `currentEpoch` may have
+  -- advanced past genesis), so the snapshot path below uses its state
+  -- as-is and only this from-genesis seed is reconstructed.
+  let reconstructedGenesis :=
+    Bridge.gasPoolGenesisStateOfConfig
+      ((budgetCfg?.map (fun bc =>
+          { replayGenesis with budgetPolicy := BudgetSidecar.toPolicy bc })).getD
+        replayGenesis)
+      gasPoolCfg?
   -- Step 1: optionally load the snapshot.  Fail fast on error.
   -- The seed triple is (seedHash, seedState, snapLogIndex); snapLogIndex
   -- is 0 when no snapshot is provided, otherwise the snapshot's
   -- recorded `logIndex` (used to slice the log to post-snapshot entries).
   let seedResult : Except String (ContentHash × ExtendedState × Nat) ←
     match snapshotPath with
-    | none => pure (Except.ok (zeroHash, replayGenesis, 0))
+    | none => pure (Except.ok (zeroHash, reconstructedGenesis, 0))
     | some p => do
       match (← loadSnapshot p) with
       | .ok snap =>
@@ -155,9 +195,14 @@ def runReplay (logPath : System.FilePath)
       -- Step 4: replay the post-snapshot tail.  AR.2.4: deploymentId
       -- is threaded into the parameterised `replayFromSeedWith` so
       -- cross-deployment-replay rejection is observable in the
-      -- auditor binary.
-      match replayFromSeedWith Verify deploymentId replayPolicy seedHash
-              seedState tail with
+      -- auditor binary.  GP.9.1 auditor fix: the reconstructed
+      -- `auditorPolicy` (gas-pool-intersected) and the persisted
+      -- `epochLength` / `refundRate` are threaded so a config-bearing
+      -- log audits to the same state hash `knomosis replay` produces;
+      -- `snapLogIndex` is the absolute start index, so a snapshot
+      -- replay advances budget epochs from the correct base.
+      match replayFromSeedWith Verify deploymentId auditorPolicy seedHash
+              seedState tail snapLogIndex epochLength refundRate with
       | .ok finalState =>
         let h := hashEncodable finalState
         IO.println s!"OK {formatHashHex h} via={hashImplementationIdentifier ()}"

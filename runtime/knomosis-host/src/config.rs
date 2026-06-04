@@ -31,6 +31,8 @@
 //! | `--epoch-length <N>`   | optional | Admitted actions per budget epoch (0 = no advance)   |
 //! | `--gas-pool-eth-cap <N>`| optional | GP.7.4 gas-pool genesis: ETH-leg per-action cap     |
 //! | `--gas-pool-bold-cap <N>`| optional | GP.7.4 gas-pool genesis: BOLD-leg per-action cap   |
+//! | `--wei-per-budget-unit-eth <N>` | optional | GP.9.1 refund-on-exit: ETH-leg rate (0 = off) |
+//! | `--wei-per-budget-unit-bold <N>`| optional | GP.9.1 refund-on-exit: BOLD-leg rate (0 = off) |
 //! | `--scheduler {fifo\|drr}`| optional | Worker scheduler (FQ Rung 0/1; default `fifo`)      |
 //! | `--per-flow-cap <N>`   | optional | DRR per-(conn,signer) backlog cap (default 64; drr only)|
 //! | `--max-flows <N>`      | optional | DRR distinct-connection cap (default 4096; drr only) |
@@ -175,6 +177,15 @@ pub struct Config {
     /// `--gas-pool-bold-cap <N>` value (GP.7.4): the BOLD-leg per-action
     /// drain cap.  See `gas_pool_eth_cap`.
     pub gas_pool_bold_cap: Option<u64>,
+    /// `--wei-per-budget-unit-eth <N>` value (GP.9.1): the ETH-leg
+    /// refund-on-exit rate.  Supplying this OR `--wei-per-budget-unit-bold`
+    /// enables `claimBudgetRefund` admission (forwarded to the `knomosis`
+    /// binary, which does the authoritative gating); a missing rate
+    /// defaults to `0` (refunds disabled at that leg).
+    pub refund_rate_eth: Option<u64>,
+    /// `--wei-per-budget-unit-bold <N>` value (GP.9.1): the BOLD-leg
+    /// refund-on-exit rate.  See `refund_rate_eth`.
+    pub refund_rate_bold: Option<u64>,
     /// `--scheduler {fifo|drr}` (FQ Rung 0): the resolved worker
     /// scheduler.  Default [`Scheduler::Fifo`] preserves the historical
     /// behaviour byte-for-byte.  An unrecognised value leaves this at
@@ -245,6 +256,8 @@ impl Config {
             budget_epoch_length: None,
             gas_pool_eth_cap: None,
             gas_pool_bold_cap: None,
+            refund_rate_eth: None,
+            refund_rate_bold: None,
             scheduler: Scheduler::Fifo,
             scheduler_unrecognized: None,
             per_flow_cap: DEFAULT_PER_FLOW_CAP,
@@ -304,6 +317,22 @@ impl Config {
     #[must_use]
     pub fn gas_pool_caps(&self) -> Option<(u64, u64)> {
         match (self.gas_pool_eth_cap, self.gas_pool_bold_cap) {
+            (None, None) => None,
+            (eth, bold) => Some((eth.unwrap_or(0), bold.unwrap_or(0))),
+        }
+    }
+
+    /// The configured GP.9.1 refund-on-exit rate `(eth_rate, bold_rate)`,
+    /// if refunds are enabled.  `Some((eth, bold))` when EITHER
+    /// `--wei-per-budget-unit-eth` or `--wei-per-budget-unit-bold` is
+    /// supplied (a missing rate defaults to `0`, i.e. refunds disabled at
+    /// that leg); `None` when neither is supplied (refunds fully
+    /// disabled).  Forwarded to the `CommandKernel` via
+    /// `with_refund_rate`, which passes the two rates to the `knomosis`
+    /// binary's `claimBudgetRefund` admission gate.
+    #[must_use]
+    pub fn refund_rate(&self) -> Option<(u64, u64)> {
+        match (self.refund_rate_eth, self.refund_rate_bold) {
             (None, None) => None,
             (eth, bold) => Some((eth.unwrap_or(0), bold.unwrap_or(0))),
         }
@@ -772,6 +801,28 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 })?;
                 cfg.gas_pool_bold_cap = Some(n);
             }
+            "--wei-per-budget-unit-eth" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--wei-per-budget-unit-eth".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--wei-per-budget-unit-eth".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.refund_rate_eth = Some(n);
+            }
+            "--wei-per-budget-unit-bold" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--wei-per-budget-unit-bold".into()))?;
+                let n = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--wei-per-budget-unit-bold".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
+                cfg.refund_rate_bold = Some(n);
+            }
             "--scheduler" => {
                 let value = iter
                     .next()
@@ -924,6 +975,8 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --epoch-length <N>        Admitted actions per budget epoch (0 = no advancement)\n\
          \x20 --gas-pool-eth-cap <N>    Enable the GP.7.4 gas-pool genesis (ETH-leg per-action cap)\n\
          \x20 --gas-pool-bold-cap <N>   Gas-pool BOLD-leg per-action cap (enables if either is set)\n\
+         \x20 --wei-per-budget-unit-eth <N>  Enable GP.9.1 refund-on-exit (ETH-leg rate; 0 = off)\n\
+         \x20 --wei-per-budget-unit-bold <N> Refund-on-exit BOLD-leg rate (enables if either is set)\n\
          \n\
          Fair sequencing (FQ Rung 0/1; optional, default off):\n\
          \x20 --scheduler <fifo|drr>    Worker scheduler (default fifo; drr = two-tier DRR)\n\
@@ -1381,6 +1434,68 @@ mod tests {
         assert!(text.contains("--action-cost"));
         assert!(text.contains("--current-epoch"));
         assert!(text.contains("--epoch-length"));
+        // GP.9.1 refund-on-exit rate flags.
+        assert!(text.contains("--wei-per-budget-unit-eth"));
+        assert!(text.contains("--wei-per-budget-unit-bold"));
+    }
+
+    /// GP.9.1: both refund-rate flags parse and assemble into
+    /// `refund_rate()`.
+    #[test]
+    fn refund_rate_flags_parse_and_assemble() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--wei-per-budget-unit-eth",
+            "1000",
+            "--wei-per-budget-unit-bold",
+            "3000",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.refund_rate(), Some((1000, 3000)));
+    }
+
+    /// GP.9.1: no refund-rate flags → refunds disabled (back-compat).
+    #[test]
+    fn no_refund_rate_flags_disabled() {
+        let cfg = parse_args(&args(&["--listen", "127.0.0.1:7654", "--mock"])).unwrap();
+        assert!(cfg.refund_rate().is_none());
+        cfg.validate().unwrap();
+    }
+
+    /// GP.9.1: supplying ONLY one rate enables refunds with the other
+    /// leg defaulting to `0` (refunds disabled at that leg).
+    #[test]
+    fn refund_rate_single_leg_defaults_other_to_zero() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--wei-per-budget-unit-bold",
+            "3000",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.refund_rate(), Some((0, 3000)));
+    }
+
+    /// GP.9.1: a non-numeric refund rate is a parse error.
+    #[test]
+    fn refund_rate_invalid_rejected() {
+        match parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--mock",
+            "--wei-per-budget-unit-eth",
+            "lots",
+        ])) {
+            Err(ParseError::InvalidValue { flag, .. }) => {
+                assert_eq!(flag, "--wei-per-budget-unit-eth");
+            }
+            other => panic!("expected InvalidValue, got {other:?}"),
+        }
     }
 
     /// GP.7.4: both gas-pool caps parse and assemble into
