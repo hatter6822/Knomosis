@@ -245,6 +245,17 @@ def tests : List TestCase :=
         assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 1 2)
           claimant es trustedRate) "non-canonical pool rejected"
     }
+  , { name := "refund gate REJECTS a non-canonical gas resource (review-fix pin)"
+    , body := do
+        -- A CUSTOM refundRate blessing resource 2 (rate 1) would, absent
+        -- the canonical-resource pin, admit a refund there (the rate
+        -- matches and is ≥ 1) and let the pool's resource-2 balance be
+        -- drained.  The kernel pin rejects it regardless of the rate
+        -- function (the gas pool operates only at resources 0 / 1).
+        let blessAll : ResourceId → Nat := fun _ => 1
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund 2 89 1 gasPoolActor)
+          claimant es blessAll) "non-canonical resource 2 rejected despite a blessing rate"
+    }
   , { name := "refund gate REJECTS a rate mismatch (rate pin)"
     , body := do
         -- weiPerBudgetUnit = 2 ≠ trustedRate 0 (= 1).
@@ -463,6 +474,7 @@ def tests : List TestCase :=
         let _t6 := @Authority.admission_refund_consumes_budget
         let _t7 := @Authority.admission_refund_preserves_free_tier
         let _t8 := @Authority.refund_rejected_when_pool_not_canonical
+        let _t8b := @Authority.refund_rejected_when_non_canonical_resource
         let _t9 := @Authority.refund_rejected_when_rate_mismatch
         let _t10 := @Authority.refund_rejected_when_over_refundable
         let _t11 := @Authority.refund_rejected_when_pool_insolvent

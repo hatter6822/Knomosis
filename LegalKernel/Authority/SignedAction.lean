@@ -968,6 +968,7 @@ def claimBudgetRefund_gate (action : Action) (signer : ActorId)
         decide (signer ≠ Bridge.bridgeActor ∧
                 signer ≠ poolActor ∧
                 poolActor = Bridge.gasPoolActor ∧
+                (gasResource = 0 ∨ gasResource = 1) ∧
                 weiPerBudgetUnit = refundRate gasResource ∧
                 1 ≤ weiPerBudgetUnit ∧
                 1 ≤ budgetUnits ∧
@@ -2292,6 +2293,7 @@ theorem claimBudgetRefund_gate_characterization
         signer es refundRate = true ↔
       (signer ≠ Bridge.bridgeActor ∧ signer ≠ poolActor ∧
        poolActor = Bridge.gasPoolActor ∧
+       (gasResource = 0 ∨ gasResource = 1) ∧
        weiPerBudgetUnit = refundRate gasResource ∧
        1 ≤ weiPerBudgetUnit ∧
        1 ≤ budgetUnits ∧
@@ -2380,7 +2382,7 @@ theorem admission_refund_preserves_free_tier
     freeTier ≤ EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier := by
   have hchar := (claimBudgetRefund_gate_characterization gasResource budgetUnits
     weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost currentEpoch hpolicy).mp hgate
-  obtain ⟨_, _, _, _, _, _hpos, hbound, _⟩ := hchar
+  obtain ⟨_, _, _, _, _, _, _hpos, hbound, _⟩ := hchar
   rw [admission_refund_consumes_budget verify P d es gasResource budgetUnits weiPerBudgetUnit
     poolActor signer nonce sig h refundRate freeTier actionCost currentEpoch hpolicy hsigner
     hgate hsuc]
@@ -2407,10 +2409,35 @@ theorem refund_rejected_when_pool_not_canonical
         (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
         signer es refundRate ≠ true := by
   intro hg
-  obtain ⟨_, _, hpin, _, _, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+  obtain ⟨_, _, hpin, _, _, _, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
     budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
     currentEpoch hpolicy).mp hg
   exact h hpin
+
+/-- **Canonical-resource pin (GP.9.1 hardening, review fix).**  A refund
+    whose `gasResource` is neither the ETH leg (0) nor the BOLD leg (1)
+    fails the gate — so even a deployment whose trusted `refundRate`
+    blesses a non-gas resource (a custom `refundRate` function, not the
+    CLI's `toRefundRate` which is `0` off-leg) cannot drain the pool's
+    balance at that resource.  The gas pool operates only at resources
+    0 / 1 (GP.7.1 / GP.7.2), so the kernel hard-restricts refunds to
+    those legs regardless of the deployment's rate function. -/
+theorem refund_rejected_when_non_canonical_resource
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (es : ExtendedState) (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h : gasResource ≠ 0 ∧ gasResource ≠ 1) :
+    claimBudgetRefund_gate
+        (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+        signer es refundRate ≠ true := by
+  intro hg
+  obtain ⟨_, _, _, hres, _, _, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+    budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
+    currentEpoch hpolicy).mp hg
+  rcases hres with h0 | h1
+  · exact h.1 h0
+  · exact h.2 h1
 
 /-- **Rate pin.**  A refund whose `weiPerBudgetUnit` does not match the
     deployment's trusted `refundRate` fails the gate (so a claimant
@@ -2425,7 +2452,7 @@ theorem refund_rejected_when_rate_mismatch
         (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
         signer es refundRate ≠ true := by
   intro hg
-  obtain ⟨_, _, _, hrate, _, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+  obtain ⟨_, _, _, _, hrate, _, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
     budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
     currentEpoch hpolicy).mp hg
   exact h hrate
@@ -2444,7 +2471,7 @@ theorem refund_rejected_when_over_refundable
         (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
         signer es refundRate ≠ true := by
   intro hg
-  obtain ⟨_, _, _, _, _, _, hbound, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+  obtain ⟨_, _, _, _, _, _, _, hbound, _⟩ := (claimBudgetRefund_gate_characterization gasResource
     budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
     currentEpoch hpolicy).mp hg
   exact Nat.not_le_of_gt h hbound
@@ -2462,7 +2489,7 @@ theorem refund_rejected_when_pool_insolvent
         (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
         signer es refundRate ≠ true := by
   intro hg
-  obtain ⟨_, _, _, _, _, _, _, hsolv⟩ := (claimBudgetRefund_gate_characterization gasResource
+  obtain ⟨_, _, _, _, _, _, _, _, hsolv⟩ := (claimBudgetRefund_gate_characterization gasResource
     budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
     currentEpoch hpolicy).mp hg
   exact Nat.not_le_of_gt h hsolv
@@ -2484,7 +2511,7 @@ theorem refund_rejected_when_rate_disabled
         (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
         signer es refundRate ≠ true := by
   intro hg
-  obtain ⟨_, _, _, hrate, hpos, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+  obtain ⟨_, _, _, _, hrate, hpos, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
     budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
     currentEpoch hpolicy).mp hg
   rw [hrate, h] at hpos

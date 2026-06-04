@@ -1007,6 +1007,12 @@ pub enum GateRejection {
     /// zero-payout no-op the gate rejects).
     #[error("BudgetGateRefundZeroUnits")]
     RefundZeroUnits,
+    /// GP.9.1 (review fix): a `claimBudgetRefund` named a non-canonical
+    /// gas resource (neither 0 = ETH nor 1 = BOLD); the gas pool
+    /// operates only at those legs, so the refund is rejected regardless
+    /// of the deployment's rate function.
+    #[error("BudgetGateRefundNonCanonicalResource")]
+    RefundNonCanonicalResource,
     /// STRICT MODE ONLY: a `claimBudgetRefund`'s pool balance at the
     /// gas resource was below `budgetUnits * weiPerBudgetUnit` (the
     /// Lean gate's pool-solvency conjunct).  Only raised when the gate
@@ -1035,6 +1041,7 @@ impl GateRejection {
             Self::RefundToSelfPool => "BudgetGateRefundToSelfPool",
             Self::RefundRateDisabled => "BudgetGateRefundRateDisabled",
             Self::RefundZeroUnits => "BudgetGateRefundZeroUnits",
+            Self::RefundNonCanonicalResource => "BudgetGateRefundNonCanonicalResource",
             Self::RefundInsufficientPool => "BudgetGateRefundInsufficientPool",
         }
     }
@@ -1294,6 +1301,14 @@ impl BudgetGate {
                 }
                 if signer == pool_actor {
                     return Err(GateRejection::RefundToSelfPool);
+                }
+                // Canonical-resource pin (review fix): the gas pool
+                // operates only at resource 0 (ETH) / 1 (BOLD), so a
+                // refund at any other resource is rejected regardless of
+                // the deployment's rate function (policy-independent, so
+                // enforced here, not deferred).
+                if gas_resource != 0 && gas_resource != 1 {
+                    return Err(GateRejection::RefundNonCanonicalResource);
                 }
                 if wei_per_budget_unit == 0 {
                     return Err(GateRejection::RefundRateDisabled);
@@ -2038,6 +2053,20 @@ mod tests {
         assert_eq!(
             mk().admit(&refund(10, 2, 0, 5)),
             Err(GateRejection::RefundZeroUnits)
+        );
+        // Non-canonical gas resource (2) rejected even with a positive
+        // rate + units (the canonical-resource pin, review fix).
+        assert_eq!(
+            mk().admit(&view(
+                10,
+                ActionBudgetKind::ClaimBudgetRefund {
+                    gas_resource: 2,
+                    pool_actor: 99,
+                    budget_units: 10,
+                    wei_per_budget_unit: 5,
+                },
+            )),
+            Err(GateRejection::RefundNonCanonicalResource)
         );
     }
 
