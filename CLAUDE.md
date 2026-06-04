@@ -3587,24 +3587,47 @@ BOLD) gas-pool inflow views, and GP.6.5's BOLD-specific tri-stack
 cross-stack fixture corpus (above) close all five sub-WUs of the
 Phase-GP.6 Rust runtime amendment — Phase GP.6 is complete.
 
-Phase GP.9.1 (refund-on-exit) has its Lean-side core landed:
-`Laws.claimBudgetRefund` (the `gasPoolActor → claimant` kernel leg
-with the full §4.11 classification ladder) and `Bridge.BudgetRefund`
-(the `refundableBudget` / `refundAmount` functionals + the four
-soundness theorems — free-tier immunity, round-trip non-profitability
-via floor division, no double refund, and free-tier preservation —
-plus the law↔ledger composites at the canonical `gasPoolActor`).  A
-refund lets an actor retire EXACTLY their remaining *purchased* action
-budget (`currentBudget − actionCost − freeTier`, which excludes the
-free-tier subsidy) for a `budgetUnits × weiPerBudgetUnit` gas payout
-out of the pool, redesigning OQ-GP-10's earlier `poolAmount`+time
-sketch (the per-actor `EpochBudgetState` already tracks remaining
-budget, so there is no per-deposit state-bloat).  Suite
-`bridge-budget-refund` (12 cases); axioms ⊆ the canonical three.  The
-signable-action wiring (a new `Action.claimBudgetRefund` constructor,
-the §13.6 admission-gate refund arm, and the cross-stack CBE / step-VM
-/ Solidity / Rust mirrors) is scoped in
-`docs/planning/unified_gas_pool_plan.md` §GP.9.1.
+Phase GP.9.1 (refund-on-exit) has its **full L2 signable action**
+landed — end-to-end "click-to-withdraw" through every layer of the
+Lean runtime.  A user signs a `claimBudgetRefund` to retire EXACTLY
+their remaining *purchased* action budget
+(`currentBudget − actionCost − freeTier`, which EXCLUDES the free-tier
+subsidy) for a `budgetUnits × weiPerBudgetUnit` gas payout out of
+`gasPoolActor`, redesigning OQ-GP-10's earlier `poolAmount`+time sketch
+(the per-actor `EpochBudgetState` already tracks remaining budget, so
+there is no per-deposit state-bloat).  Shipped:
+`Laws.claimBudgetRefund` (the `gasPoolActor → claimant` kernel leg —
+the MIRROR of `topUpActionBudget` — with the full §4.11 classification
+ladder); `Bridge.BudgetRefund` (the `refundableBudget` / `refundAmount`
+functionals + the four soundness theorems: free-tier immunity,
+round-trip non-profitability via floor division, no double refund,
+free-tier preservation); the `Action.claimBudgetRefund` constructor at
+frozen index 22 with full CBE codec / `Action.toTransition` /
+`kernelOnlyApply` mirror / step-VM cell layout
+(`actionKindByte`/`actionFieldsForL1`/`readOnlyCells`/`writeCells`) /
+`bridgeAuthorizedAction => false` / the sound `doesNotDebitPoolAt` arm;
+the §13.6 admission gate (`claimBudgetRefund_gate`, SEVEN safety
+conjuncts: rate pin, pool-actor pin, free-tier-excluding bound,
+solvency, consume-exempt / self-pool defences) on BOTH the kernel and
+bridge-aware entries, with the trusted per-resource rate threaded as
+ADMISSION config (`refundRate : ResourceId → Nat`, NOT persisted — the
+kernel step uses the action's logged `weiPerBudgetUnit`, so replay /
+fault-proof stay deterministic); the headline admission theorems
+(`claimBudgetRefund_gate_characterization`,
+`admission_refund_consumes_budget`,
+`admission_refund_preserves_free_tier`, the four
+`refund_rejected_when_*` corollaries) + their bridge-aware mirrors;
+`balanceChanged` + a widened `budgetConsumed`
+(`actionCost + budgetUnits`) event emission (NO new `Event`
+constructor); and runtime threading of `RuntimeState.refundRate`
+through `processSignedActionWith` / `processPure` / `replayStepWith`.
+Suites `bridge-budget-refund` (20 cases) + `encoding-action` (+4); all
+axioms ⊆ the canonical three; no `gasPoolDeniedTags` bump needed (tag
+22 ∈ `List.range 23`).  Remaining (GP.5.3-style follow-ons, scoped in
+`docs/planning/unified_gas_pool_plan.md` §GP.9.1): the operator CLI
+flags + sidecar persistence of the rate, the L1 step-VM execution arm
+(`stepVMHash` kind 22 + Solidity `_step22` + cross-stack corpus), and
+the Rust mirrors.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

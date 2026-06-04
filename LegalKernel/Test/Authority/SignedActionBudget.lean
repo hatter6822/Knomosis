@@ -706,6 +706,7 @@ def admissionConsumesBudgetAPI : TestCase := {
           st.action ≠ .topUpActionBudget gr ga bi pa) →
         (∀ recipient gr ga bi pa,
           st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa) →
+        (∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa) →
         ∀ {es' : ExtendedState},
         apply_admissible_with_budget verify P d es st h = some es' →
         EpochBudgetState.currentBudget es'.epochBudgets st.signer currentEpoch freeTier =

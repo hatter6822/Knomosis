@@ -6237,93 +6237,115 @@ the design.
     gate bounds to the signer's own refundable budget and whose
     `poolActor` field the gate pins to `gasPoolActor`.
 
-  * **The signable-action wiring (the remaining landing).**
+  * **Landed (the full L2 signable action — complete, proven, tested).**
+    The end-to-end L2 "click-to-withdraw" is wired through every layer
+    of the Lean runtime; a user can sign a `claimBudgetRefund`, the
+    admission gate proves it bounded / rate-pinned / pool-pinned /
+    solvent, the kernel pays the claimant from the pool, the budget is
+    retired, the log replays deterministically, and events are emitted.
 
-    1. *`Action.claimBudgetRefund` constructor* at the next frozen
-       index **22** (it lands ahead of the GP.11 `ammSwap`, which then
-       takes index 23).  Fields:
-       `(gasResource : ResourceId) (budgetUnits : Nat)
-        (weiPerBudgetUnit : Nat) (poolActor : ActorId)`.  The signer
-       (claimant) is the enclosing `SignedAction.signer`, per the
-       standard Phase-3 pattern — never a field.
-    2. *`Action.toTransition`* threads the signer:
-       `claimBudgetRefund signer poolActor gasResource
-        (budgetUnits × weiPerBudgetUnit)`.  The amount uses the
-       action's (gate-verified) fields, so `toTransition` needs only
-       the signer — exactly like `topUpActionBudget` — and the kernel
-       step is NOT budget-ledger-dependent.
-    3. *Admission gate* (`apply_admissible_with_budget` +
-       `apply_bridge_admissible_with_budget`, §13.6 two-reviewer):
-       a new `claimBudgetRefund_gate` (mirroring
-       `topUpActionBudgetFor_gate`) enforcing, for a
-       `claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit
-       poolActor` signed by `S`:
-         * `S ≠ Bridge.bridgeActor` and `S ≠ poolActor` (the standard
-           consume-exemption / self-pool defences);
-         * `poolActor = Bridge.gasPoolActor` (the victim-drain pin);
-         * `weiPerBudgetUnit = trustedRate gasResource` (rate pin);
-         * `1 ≤ budgetUnits ≤ refundableBudget es.epochBudgets S
-           currentEpoch freeTier actionCost` (the free-tier-excluding
-           bound);
-         * `getBalance es.base gasResource poolActor ≥
-           budgetUnits × weiPerBudgetUnit` (pool solvency).
-       The refund's budget effect is a **consume** of
-       `actionCost + budgetUnits` (the standard action cost PLUS the
-       retired units) rather than the `applyGrant` top-up the deposit /
-       top-up actions use.  The trusted per-resource rate is a new
-       `BudgetPolicy` / genesis-config field
-       (`weiPerBudgetUnitEth` / `weiPerBudgetUnitBold`), surfaced to L2
-       (the deposit side receives `budgetGrant` precomputed by L1, but
-       the refund is L2-initiated so L2 must know the rate).
-    4. *`kernelOnlyApply` mirror* (`Disputes/Evidence.lean`) threading
-       the same `toTransition`, so `apply_admissible_with_eq_kernelOnlyApply`
-       stays by `rfl` and the fault-proof prefix-replay is unchanged.
-    5. *Append-only authority arms*: `applyActionToRegistry` /
-       `applyActionToLocalPolicies` no-op; `bridgeAuthorizedAction`
-       gets a `claimBudgetRefund => false` arm (it is user-initiated,
-       never bridge-signed); the `gasPoolPolicy` `gasPoolDeniedTags`
-       bumps to `List.range 24` (covering the new tag 22 + the reserved
-       ammSwap 23) and `Action.tag_lt_denyListBound` to `tag < 24`.
-    6. *New `Event.budgetRefunded`* (next frozen event index) emitted
-       by `extractEvents`; the claimant's gas credit and the pool debit
-       additionally surface as `balanceChanged` events.
-    7. *Cross-stack*: CBE encode/decode + tag pin (`Encoding/Action.lean`);
-       step-VM (`actionKindByte` / `actionFieldsForL1` / `readOnlyCells`
-       / `writeCells` / `stepVMHash` dispatcher arm + the Solidity
-       `KnomosisStepVM` mirror + `executeStep` byte-equivalence corpus);
-       the `KnomosisBridge` L1 redemption path for the refunded gas; and
-       the Rust mirrors (`knomosis-l1-ingest` action encoder,
-       `knomosis-host` gate, `knomosis-event-subscribe` /
-       `knomosis-indexer` event tag).  Each is gated by an exhaustive-
-       match forcing function, so the landing is atomic per surface.
+    1. *`Action.claimBudgetRefund` constructor* at frozen index **22**
+       (`Authority/Action.lean`).  Fields `(gasResource : ResourceId)
+       (budgetUnits : Nat) (weiPerBudgetUnit : Nat) (poolActor :
+       ActorId)`; the signer (claimant) is the enclosing
+       `SignedAction.signer`.  `Action.compileTransition` no-ops;
+       `Action.toTransition` threads the signer into
+       `Laws.claimBudgetRefund signer poolActor gasResource
+       (budgetUnits × weiPerBudgetUnit)` (the amount uses the action's
+       gate-verified fields, so the kernel step is reproducible from the
+       logged action alone — replay / fault-proof determinism).
+    2. *Admission gate* (`apply_admissible_with_budget` +
+       `apply_bridge_admissible_with_budget`, §13.6 two-reviewer): the
+       new `claimBudgetRefund_gate` enforces the SEVEN conjuncts —
+       `S ≠ bridgeActor`, `S ≠ poolActor`, `poolActor = gasPoolActor`
+       (victim-drain pin), `weiPerBudgetUnit = refundRate gasResource`
+       (rate pin), `1 ≤ budgetUnits ≤ refundableBudget` (free-tier-
+       excluding bound), and pool solvency.  The refund's budget effect
+       is a **consume** of `actionCost + budgetUnits`
+       (`refundConsumeExtra`), not an `applyGrant` top-up.  The trusted
+       per-resource rate is threaded as ADMISSION CONFIG (`refundRate :
+       ResourceId → Nat`, a trailing-default parameter — `fun _ => 0`
+       disables refunds), NOT persisted state: the kernel step uses the
+       action's logged `weiPerBudgetUnit`, so the rate never enters the
+       state commit.  This was simpler + sounder than the earlier
+       sketch's `BudgetPolicy`/genesis-config field (which would have
+       churned every committed-state golden hash).
+    3. *Headline soundness theorems* (`Authority/SignedAction.lean`,
+       axioms ⊆ the canonical three):
+       `claimBudgetRefund_gate_characterization` (the gate's exact
+       reach), `admission_refund_consumes_budget` (budget retired =
+       `actionCost + budgetUnits`), `admission_refund_preserves_free_tier`
+       (the anti-drain guarantee, end-to-end), and the four rejection
+       corollaries `refund_rejected_when_{pool_not_canonical,
+       rate_mismatch,over_refundable,pool_insolvent}`.  All mirrored on
+       the production (bridge-aware) path via the GP.3.2 agreement
+       lemma (`admission_consumes_budget_on_success_bridge` et al.,
+       extended with the `hne_refund` exclusion).
+    4. *`kernelOnlyApply` mirror* (`Disputes/Evidence.lean`) threads the
+       same `toTransition`, so `apply_admissible_with_eq_kernelOnlyApply`
+       stays by `rfl` (fault-proof prefix-replay unchanged).
+    5. *Append-only authority + classifier arms*: `bridgeAuthorizedAction
+       => false` (user-initiated, never bridge-signed);
+       `applyActionToBridgeState` no-op; `Action.doesNotDebitPoolAt`
+       gains the correct `claimBudgetRefund` arm (a refund DOES debit
+       the pool — `gr ≠ rLeg ∨ pa ≠ gasPoolActor` — closing the GP.7.3
+       pool-drain classifier soundly; the unsound catch-all `True` is
+       NOT used).  No `gasPoolDeniedTags` bump is needed: the deny-list
+       `List.range 23` already covers tag 22, and `tag_lt_denyListBound
+       : tag < 23` still holds (the bump to `List.range 24` is now
+       deferred to the GP.11 `ammSwap` at index 23).
+    6. *Events* (`Events/Extract.lean`): the claimant's gas credit and
+       the pool debit surface as `balanceChanged` events, and the
+       refund's budget debit is folded into the GP.6.4 `budgetConsumed`
+       event's amount (`actionCost + budgetUnits`) — so the indexer's
+       per-epoch consumed tally stays an EXACT mirror of the kernel.
+       NO new `Event` constructor was needed (the existing events fully
+       capture the refund), avoiding the entire Event cross-stack ripple.
+    7. *CBE* (`Encoding/Action.lean`): encode / decode / `action_roundtrip`
+       / `Action.tag_matches_encode_tag` / `fieldsBounded` + tag pin at
+       22 + per-field injectivity.
+    8. *Step-VM cell layout* (`FaultProof/{StepVMCoherence,StepVariants}.lean`):
+       `actionKindByte` (→ 22), `actionFieldsForL1` (the frozen 4×uint64BE
+       layout), `readOnlyCells`, `writeCells` (`[balance gr signer,
+       balance gr pa, nonce signer]` — the MIRROR of `topUpActionBudget`).
+       The cell-proof bundle is well-formed; `stepVMHash` returns the
+       empty-hash sentinel for kind 22 (the L1-execution arm is the
+       GP.5.3-style follow-on — exactly as kind 21 awaited GP.5.3 after
+       GP.3.4).
+    9. *Runtime threading* (`Runtime/Loop.lean`, `Runtime/Replay.lean`):
+       a `RuntimeState.refundRate` field (default `fun _ => 0`) threaded
+       into `processSignedActionWith` / `processPure` / `replayStepWith`;
+       a deployment that offers refunds supplies its calibrated rate and
+       refunds work end-to-end through the production gate.
+    10. *Tests*: `bridge-budget-refund` grows to 20 cases (the gate
+       accept + the five rejection classes + `refundConsumeExtra` +
+       the Action-layer / admission-theorem API stability);
+       `encoding-action` grows by 4 (round-trip, tag-22 pin, distinctness,
+       field injectivity).
 
-  * **Landed (this WU's Lean-side core).**
-    * `LegalKernel/Laws/ClaimBudgetRefund.lean` — the kernel leg + full
-      §4.11 classification ladder (no `sorry`; axioms ⊆ `{propext,
-      Classical.choice, Quot.sound}`).
-    * `LegalKernel/Bridge/BudgetRefund.lean` — the `refundableBudget` /
-      `refundAmount` functionals and the four soundness theorems above,
-      plus the law↔ledger composites
-      (`refund_pays_exact_amount_from_pool`, `refund_conserves_supply`,
-      `refund_pre_iff_pool_solvent`) at the canonical `gasPoolActor`.
-    * `LegalKernel/Test/Bridge/BudgetRefund.lean` — suite
-      `bridge-budget-refund` (12 cases).
-
-  * **Files (remaining landing).**  `Authority/Action.lean`,
-    `Authority/SignedAction.lean` (two-reviewer), `Disputes/Evidence.lean`,
-    `Bridge/BridgeActor.lean`, `Bridge/GasPoolPolicy.lean`,
-    `Encoding/Action.lean`, `Events/{Types,Extract}.lean`,
-    `FaultProof/{StepVMCoherence,SolidityStepVMCommit}.lean`,
-    `solidity/src/contracts/{KnomosisStepVM,KnomosisBridge}.sol`,
-    `runtime/knomosis-l1-ingest`, `runtime/knomosis-host`,
-    `runtime/knomosis-indexer`.
+  * **Remaining (operator CLI + L1 fault-proof + cross-stack mirrors).**
+    These are the established GP.5.3-style follow-on surfaces — each
+    independent and non-blocking for the L2 mechanism:
+    * *Operator CLI + sidecar*: `--wei-per-budget-unit-eth/bold` flags on
+      the `knomosis` binary (threaded into `RuntimeState.refundRate`) +
+      persisting the rate in the budget sidecar so every log-touching
+      subcommand (incl. the fault-proof oracle's `replay-up-to` /
+      `export-cell-proofs`) replays a refund-containing log under the
+      producer's rate.
+    * *L1 step-VM execution arm*: the Lean `stepVMHash` kind-22 recipe +
+      the Solidity `KnomosisStepVM._step22` + the cross-stack `step_vm.json`
+      corpus (so a refund step is L1-fault-proof-executable), and the
+      `KnomosisBridge` L1 redemption path for the refunded gas.
+    * *Rust mirrors*: the `knomosis-l1-ingest` action encoder (tag 22),
+      the `knomosis-host` budget gate's refund arm, and the
+      `knomosis-indexer` budget-view treatment of the widened
+      `budgetConsumed` amount.
 
   * **Acceptance criteria.**  Two reviewers (touches the GP.3.2
-    admission gate).  The four soundness theorems (free-tier immunity,
-    round-trip non-profitability, no double refund, free-tier
-    preservation) are mechanised; the cross-stack `executeStep`
-    byte-equivalence corpus gains `claimBudgetRefund` entries;
-    `lake test` / `forge test` / `cargo test` green.
+    admission gate).  The soundness theorems are mechanised (axioms ⊆
+    the canonical three); `lake build` warning-free; `lake test` green
+    (incl. the 20 + 4 new cases); the audit gates (`count_sorries` /
+    `tcb_audit` / `naming_audit` / `deferral_audit` / …) pass.
 
   * **Dependencies.**  GP.3.2 (the budget admission gate), GP.7.1 /
     GP.7.2 (the `gasPoolActor` reservation + policy), GP.5.1 / GP.5.4

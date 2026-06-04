@@ -139,6 +139,7 @@ def emitsBudgetConsumedAPI : TestCase := {
         (∃ freeTier currentEpoch,
           pre.budgetPolicy = .bounded freeTier actionCost currentEpoch) →
         actionCost > 0 →
+        (∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa) →
         Event.budgetConsumed st.signer actionCost ∈ extractEvents pre post st :=
       extractEvents_emits_budgetConsumed_for_non_bridge_signer
     pure ()

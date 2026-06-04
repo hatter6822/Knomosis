@@ -391,6 +391,13 @@ def Action.doesNotDebitPoolAt (rLeg : ResourceId) (signer : ActorId) : Action �
   | .withdraw r sender _ _          => r ≠ rLeg ∨ sender ≠ gasPoolActor
   | .topUpActionBudget gr _ _ _     => gr ≠ rLeg ∨ signer ≠ gasPoolActor
   | .topUpActionBudgetFor _ gr _ _ _ => gr ≠ rLeg ∨ signer ≠ gasPoolActor
+  -- GP.9.1: a refund DEBITS its `poolActor` field (the pool, when
+  -- `poolActor = gasPoolActor`).  It misses the pool's `rLeg` slot
+  -- exactly when the resource differs OR the named pool actor is not
+  -- `gasPoolActor`.  (When it DOES debit the pool it is a legitimate
+  -- pool outflow handled by the bound's debit path, not this external-
+  -- non-interference classifier.)
+  | .claimBudgetRefund gr _ _ pa    => gr ≠ rLeg ∨ pa ≠ gasPoolActor
   | _                               => True
 
 /-- `Action.doesNotDebitPoolAt` is decidable (each branch is a decidable
@@ -507,6 +514,23 @@ theorem pool_nondecreasing_of_does_not_debit
       refine Nat.le_trans (Nat.le_of_eq ?_)
         (getBalance_credit_nondecreasing _ gasResource rLeg poolActor gasPoolActor gasAmount)
       exact (getBalance_setBalance_other es.base gasResource rLeg st.signer gasPoolActor _
+        hsafe).symm
+  | claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
+      -- GP.9.1: a refund DEBITS `poolActor` and CREDITS the claimant
+      -- (`st.signer`).  Mirror of `topUpActionBudget` with the debit /
+      -- credit roles swapped: the outer (credit) write at `st.signer`
+      -- is non-decreasing for the pool; the inner (debit) write at
+      -- `poolActor` misses `gasPoolActor`'s `rLeg` slot under `hsafe`
+      -- (`gasResource ≠ rLeg ∨ poolActor ≠ gasPoolActor`).
+      intro hsafe; simp only [Action.doesNotDebitPoolAt] at hsafe
+      show getBalance es.base rLeg gasPoolActor ≤
+        getBalance ((Laws.claimBudgetRefund st.signer poolActor gasResource
+          (budgetUnits * weiPerBudgetUnit)).apply_impl es.base) rLeg gasPoolActor
+      simp only [Laws.claimBudgetRefund]
+      refine Nat.le_trans (Nat.le_of_eq ?_)
+        (getBalance_credit_nondecreasing _ gasResource rLeg st.signer gasPoolActor
+          (budgetUnits * weiPerBudgetUnit))
+      exact (getBalance_setBalance_other es.base gasResource rLeg poolActor gasPoolActor _
         hsafe).symm
   | freezeResource r            => intro _; exact Nat.le_refl _
   | replaceKey actor key        => intro _; exact Nat.le_refl _

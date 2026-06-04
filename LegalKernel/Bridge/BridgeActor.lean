@@ -320,6 +320,14 @@ def bridgeAuthorizedAction : Action → Bool
   -- `bridgePolicy_rejects_topUpActionBudgetFor`.
   | .topUpActionBudget _ _ _ _    => false
   | .topUpActionBudgetFor _ _ _ _ _ => false
+  -- The GP.9.1 refund-on-exit `claimBudgetRefund` (index 22) is
+  -- user-initiated (a claimant retires their OWN remaining action
+  -- budget for a gas payout), NOT a bridge attestation.  It is not
+  -- `isBridgeOnly`, and the GP.9.1 admission gate additionally rejects
+  -- a bridgeActor signer for it (defense in depth: the bridgeActor is
+  -- consume-exempt, so a refund signed by it would have no budget to
+  -- retire).
+  | .claimBudgetRefund _ _ _ _    => false
 
 /-- The bridge actor's authorisation policy.  Authorises an action
     iff:

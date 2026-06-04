@@ -60,16 +60,18 @@ characterisation theorems, which GP.7.3 consumes.
 **Deny-list maintenance contract (forcing function).**
 `gasPoolDeniedTags` is `(List.range 23).filter (· ≠ 0)` =
 `[1, 2, …, 22]` — every Action tag except `transfer`, covering the
-current frozen set (0..21) plus one reserved slot for the
-GP.11 `ammSwap` (index 22), which the pool actor must likewise be
-forbidden from signing.  This range is a manually-maintained
-constant: whenever a NEW Action constructor is appended at index N,
-this constant (and the GP.11 `ammReservePolicy`) must be bumped to
-`List.range (N+1)`.  The maintenance is mechanically enforced by
-`Action.tag_lt_denyListBound`, whose exhaustive `cases action` proof
-fails to elaborate the moment an Action constructor whose tag is
-`≥ 23` is added; `gasPoolPolicy_denies_all_non_transfer` consumes
-that bound (via `mem_gasPoolDeniedTags_of_tag_ne_zero`), so a
+current frozen set (0..22, including the GP.9.1 `claimBudgetRefund`
+at index 22, which the pool actor must likewise be forbidden from
+signing — a refund retires a CLAIMANT's own budget, not the pool's).
+The next Action constructor (the GP.11 `ammSwap`) appends at index
+23, which this range does NOT yet cover.  This range is a
+manually-maintained constant: whenever a NEW Action constructor is
+appended at index N, this constant (and the GP.11 `ammReservePolicy`)
+must be bumped to `List.range (N+1)`.  The maintenance is mechanically
+enforced by `Action.tag_lt_denyListBound`, whose exhaustive `cases
+action` proof fails to elaborate the moment an Action constructor
+whose tag is `≥ 23` is added; `gasPoolPolicy_denies_all_non_transfer`
+consumes that bound (via `mem_gasPoolDeniedTags_of_tag_ne_zero`), so a
 forgotten range bump is a build break rather than a silent
 pool-outflow escalation.
 
@@ -99,12 +101,12 @@ open LegalKernel.Encoding (Encodable)
     every constructor index EXCEPT `transfer` (tag 0).
 
     `(List.range 23).filter (· ≠ 0) = [1, 2, …, 22]` — the current
-    frozen Action set spans indices 0..21, and index 22 reserves the
-    GP.11 `ammSwap` slot (the pool actor must never swap its
-    reserves), so denying through 22 pre-secures that slot.  See the
-    module docstring's maintenance contract: a new constructor at
-    index ≥ 23 forces a bump here, caught at build time by
-    `gasPoolPolicy_denies_all_non_transfer`. -/
+    frozen Action set spans indices 0..22 (index 22 is the GP.9.1
+    `claimBudgetRefund`), all of which the pool actor must be forbidden
+    from signing.  The GP.11 `ammSwap` appends at index 23, NOT yet
+    covered.  See the module docstring's maintenance contract: a new
+    constructor at index ≥ 23 forces a bump here, caught at build time
+    by `gasPoolPolicy_denies_all_non_transfer`. -/
 def gasPoolDeniedTags : List Nat := (List.range 23).filter (· ≠ 0)
 
 /-- The canonical `LocalPolicy` governing `gasPoolActor` outflow.

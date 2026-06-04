@@ -193,6 +193,15 @@ def actionKindByte : Action → UInt8
   -- decoder + cross-stack fixtures, so this kind is now
   -- L1-fault-proof-executable (see `stepVMHash`'s kind-21 arm).
   | .topUpActionBudgetFor _ _ _ _ _ => 21
+  -- Workstream GP (GP.9.1): refund-on-exit.  Dispatcher index 22.
+  -- The `actionFieldsForL1` layout + `readOnlyCells` / `writeCells`
+  -- cell sets ship here, so the cell-proof bundle is well-formed; the
+  -- `stepVMHash` EXECUTION arm (kind 22) + the Solidity `_step22`
+  -- decoder + cross-stack fixtures are the L1-fault-proof follow-on
+  -- (so `stepVMHash` returns the empty-hash sentinel for kind 22 — see
+  -- `stepVMHash_unknown_kind_empty` — exactly as kind 21 awaited
+  -- GP.5.3 after landing at GP.3.4).
+  | .claimBudgetRefund _ _ _ _      => 22
 
 /-- The `stepVMHash`-*dispatched* kind range, `0..21` — the 22
     variants for which the L1 step-VM has a real execution arm with a
@@ -316,6 +325,19 @@ def actionFieldsForL1 : Action → ByteArray
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       uint64BE recipient.toNat ++ uint64BE gasResource.toNat ++
       uint64BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
+  -- Workstream GP (GP.9.1): claimBudgetRefund is a structured variant:
+  -- `uint64BE gasResource || uint64BE budgetUnits ||
+  -- uint64BE weiPerBudgetUnit || uint64BE poolActor`.  The kernel-state
+  -- effect (debit poolActor at gasResource by `budgetUnits ×
+  -- weiPerBudgetUnit`, credit the signer/claimant) is the MIRROR of
+  -- `topUpActionBudget`; `weiPerBudgetUnit` is decoded for layout
+  -- symmetry (it determines the refund amount) while the signer
+  -- (claimant) is provided to the L1 step VM via the SignedAction
+  -- payload, not encoded in the action fields.  This frozen layout is
+  -- what the GP.9.1 `stepVMHash`/Solidity `_step22` follow-on consumes.
+  | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
+      uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
+      uint64BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
 
 /-! ## Helpers for reading cell values from cell-proof bundles
 

@@ -111,6 +111,19 @@ structure RuntimeState where
       via `ExtendedState.withAdvancedEpoch`; deterministic on replay
       because it is a pure function of the log index. -/
   epochLength : Nat := 0
+  /-- GP.9.1: the deployment's TRUSTED per-resource budget→gas refund
+      exchange rate (`weiPerBudgetUnit` per `ResourceId`).  The
+      `claimBudgetRefund` admission gate pins a refund's
+      `weiPerBudgetUnit` field to this rate, so a claimant cannot
+      inflate their own payout.  Defaults to `fun _ => 0` — refunds
+      DISABLED (a refund must then carry `weiPerBudgetUnit = 0`,
+      yielding a zero payout); a deployment that offers refunds supplies
+      the calibrated ETH / BOLD rate (the same rate its GP.5.1 / GP.5.4
+      deposit grant used).  This is admission CONFIG (like `policy` /
+      `deploymentId`), NOT persisted state: the kernel refund step uses
+      the action's logged `weiPerBudgetUnit` field, so replay /
+      fault-proof remain deterministic regardless of this rate. -/
+  refundRate : ResourceId → Nat := fun _ => 0
 
 /-! ## Errors
 
@@ -205,7 +218,7 @@ def processSignedActionWith
   let esEff := rs.state.withAdvancedEpoch rs.epochLength rs.logIndex
   if h : BridgeAdmissibleWith verify rs.policy d esEff st then
     match apply_bridge_admissible_with_budget verify rs.policy d esEff st
-            rs.logIndex h with
+            rs.logIndex h rs.refundRate with
     | some newState =>
       let postHash := hashEncodable newState
       let entry : LogEntry :=
@@ -222,7 +235,8 @@ def processSignedActionWith
         , logIndex     := rs.logIndex + 1
         , logPath      := rs.logPath
         , deploymentId := rs.deploymentId
-        , epochLength  := rs.epochLength }
+        , epochLength  := rs.epochLength
+        , refundRate   := rs.refundRate }
       pure (.ok { state := rs', entry := entry, events := events })
     | none =>
       -- GP.6.2: base-admissible but the budget gate refused.
@@ -493,7 +507,7 @@ def processPure (rs : RuntimeState) (st : SignedAction) :
   let esEff := rs.state.withAdvancedEpoch rs.epochLength rs.logIndex
   if h : BridgeAdmissibleWith Verify rs.policy rs.deploymentId esEff st then
     match apply_bridge_admissible_with_budget Verify rs.policy rs.deploymentId
-            esEff st rs.logIndex h with
+            esEff st rs.logIndex h rs.refundRate with
     | some newState =>
       let entry : LogEntry :=
         { prevHash      := rs.prevHash
@@ -507,7 +521,8 @@ def processPure (rs : RuntimeState) (st : SignedAction) :
         , logIndex     := rs.logIndex + 1
         , logPath      := rs.logPath
         , deploymentId := rs.deploymentId
-        , epochLength  := rs.epochLength }
+        , epochLength  := rs.epochLength
+        , refundRate   := rs.refundRate }
       .ok (rs', entry, events)
     | none =>
       -- GP.6.2: base-admissible but the budget gate refused.

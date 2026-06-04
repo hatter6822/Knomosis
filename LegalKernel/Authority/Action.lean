@@ -84,6 +84,7 @@ import LegalKernel.Laws.Withdraw
 import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Laws.TopUpActionBudgetFor
+import LegalKernel.Laws.ClaimBudgetRefund
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.AddressBook
@@ -430,6 +431,48 @@ inductive Action
   | topUpActionBudgetFor (recipient : ActorId) (gasResource : ResourceId)
                          (gasAmount : Amount) (budgetIncrement : Nat)
                          (poolActor : ActorId)
+  /-- Workstream GP §15E (GP.9.1) — refund-on-exit (frozen index 22).
+      A user (the signer / claimant) retires `budgetUnits` of their own
+      remaining, *purchased* action budget in exchange for a gas-resource
+      payout `refundAmount = budgetUnits × weiPerBudgetUnit`, paid out of
+      the gas pool (`poolActor`, canonically `gasPoolActor`, GP.7.1).
+
+      Fields:
+        * `gasResource`      — the gas leg the refund is paid in
+                                (0 = ETH-mirror, 1 = BOLD-mirror).
+        * `budgetUnits`      — the amount of remaining action-budget the
+                                claimant retires.  Bounded by the admission
+                                gate to the claimant's `refundableBudget`
+                                (the purchased budget above the free tier),
+                                so the per-epoch free-tier subsidy is never
+                                refundable.
+        * `weiPerBudgetUnit` — the exchange rate.  Pinned by the admission
+                                gate to the deployment's trusted per-resource
+                                rate (the same rate the GP.5.1 / GP.5.4
+                                deposit grant uses), so a refund cannot
+                                inflate its own payout — `weiPerBudgetUnit`
+                                is carried as a field only so the kernel-leg
+                                amount `budgetUnits × weiPerBudgetUnit` is
+                                computable from the logged action (replay /
+                                fault-proof determinism), NOT so the user
+                                may choose it.
+        * `poolActor`        — the actor the refund is paid from
+                                (pinned to `gasPoolActor` by the gate).
+
+      The signer (claimant) is the enclosing `SignedAction.signer`, per
+      the standard Phase-3 signed-action pattern — never a field.
+
+      Kernel-level effect: `Laws.claimBudgetRefund`-shaped balance
+      transfer from `poolActor` to the signer at `gasResource`, of
+      `budgetUnits × weiPerBudgetUnit` (gated by pool solvency).  This is
+      the MIRROR of `topUpActionBudget` (which moves
+      `signer → poolActor`); the refund moves `poolActor → signer`.
+      Budget-level effect: the signer's `EpochBudgetState` slot is
+      DEBITED by `actionCost + budgetUnits` via the admission gate's
+      refund consume (the standard per-action cost PLUS the retired
+      units), leaving the signer at or above the free tier. -/
+  | claimBudgetRefund (gasResource : ResourceId) (budgetUnits : Nat)
+                      (weiPerBudgetUnit : Nat) (poolActor : ActorId)
   -- Workstream-LX (LX.17): codegen-managed Lex constructors land
   -- between the fence markers below.  M1's example law (frozen
   -- index 17) deliberately does not extend `Action` — it lives
@@ -437,9 +480,12 @@ inductive Action
   -- M1.  M2 (LX.22 – LX.30) populates this fence as the kernel-
   -- built-in laws are re-expressed in Lex.
   -- Workstream H reserves indices 17 and 18; Workstream GP reserves
-  -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`), and
-  -- 21 (`topUpActionBudgetFor`).
-  -- Future Lex-generated ctors (M2+) will append at index 22+.
+  -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`),
+  -- 21 (`topUpActionBudgetFor`), and 22 (`claimBudgetRefund`).
+  -- The GP.11 `ammSwap` now appends at index 23 (the GP.7.2
+  -- `gasPoolDeniedTags` deny-list already covers index 22 via
+  -- `List.range 23`; it bumps to `List.range 24` when `ammSwap` lands).
+  -- Future Lex-generated ctors (M2+) will append at index 23+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
   deriving Repr, DecidableEq
@@ -538,6 +584,16 @@ def Action.compileTransition : Action → Transition
   -- by `Action.toTransition` / `kernelOnlyApply` /
   -- `apply_admissible_with`, all of which have the signer in scope.
   | .topUpActionBudgetFor _ _ _ _ _ => Laws.freezeResource 0
+  -- Workstream GP (GP.9.1): refund-on-exit.  Like the two top-up
+  -- variants, the kernel-level effect is signer-aware (the signer is
+  -- the claimant, credited from the pool), so the signer-unaware
+  -- `compileTransition` returns the kernel-level no-op
+  -- `Laws.freezeResource 0`.  The real signer-bound effect
+  -- (`Laws.claimBudgetRefund signer poolActor gasResource
+  -- (budgetUnits × weiPerBudgetUnit)`) is applied by
+  -- `Action.toTransition` / `kernelOnlyApply` /
+  -- `apply_admissible_with`, all of which have the signer in scope.
+  | .claimBudgetRefund _ _ _ _      => Laws.freezeResource 0
   -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
   -- arms land between the fence markers below.  Empty in M1;
   -- populated in M2 once the kernel-built-in laws are re-expressed
@@ -613,10 +669,17 @@ def Action.toTransition (a : Action) (signer : ActorId) : Transition :=
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       Laws.topUpActionBudgetFor recipient signer gasResource gasAmount
         budgetIncrement poolActor
+  | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
+      -- GP.9.1: the claimant (signer) is credited `budgetUnits ×
+      -- weiPerBudgetUnit` out of `poolActor` at `gasResource`.  The
+      -- amount is computed from the action's (gate-verified) fields, so
+      -- the kernel step is reproducible from the logged action alone.
+      Laws.claimBudgetRefund signer poolActor gasResource
+        (budgetUnits * weiPerBudgetUnit)
   | _ => Action.compileTransition a
 
-/-- For every action that is neither `topUpActionBudget` nor
-    `topUpActionBudgetFor` (the two signer-aware actions),
+/-- For every action that is none of the three signer-aware actions
+    (`topUpActionBudget`, `topUpActionBudgetFor`, `claimBudgetRefund`),
     `Action.toTransition` coincides with `Action.compileTransition`
     regardless of signer.  This is the load-bearing equation
     downstream theorems use to reduce signer-aware reasoning to the
@@ -626,13 +689,15 @@ theorem Action.toTransition_eq_compileTransition_of_ne_topUp
     (a : Action) (signer : ActorId)
     (hne : ∀ gr ga bi pa, a ≠ .topUpActionBudget gr ga bi pa)
     (hneFor : ∀ recipient gr ga bi pa,
-      a ≠ .topUpActionBudgetFor recipient gr ga bi pa) :
+      a ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (hneRefund : ∀ gr bu w pa, a ≠ .claimBudgetRefund gr bu w pa) :
     Action.toTransition a signer = Action.compileTransition a := by
   unfold Action.toTransition
   cases hact : a with
   | topUpActionBudget gr ga bi pa => exact absurd hact (hne gr ga bi pa)
   | topUpActionBudgetFor recipient gr ga bi pa =>
       exact absurd hact (hneFor recipient gr ga bi pa)
+  | claimBudgetRefund gr bu w pa => exact absurd hact (hneRefund gr bu w pa)
   | transfer _ _ _ _              => rfl
   | mint _ _ _                    => rfl
   | burn _ _ _                    => rfl
@@ -673,6 +738,18 @@ theorem Action.toTransition_topUpActionBudgetFor
                           budgetIncrement poolActor) signer =
     Laws.topUpActionBudgetFor recipient signer gasResource gasAmount
       budgetIncrement poolActor := rfl
+
+/-- For `claimBudgetRefund` specifically, `toTransition` produces the
+    signer-bound `Laws.claimBudgetRefund` form, with the kernel-leg
+    `refundAmount` computed as `budgetUnits × weiPerBudgetUnit` from the
+    action's fields (the signer is the claimant credited from the pool). -/
+theorem Action.toTransition_claimBudgetRefund
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor : ActorId) (signer : ActorId) :
+    Action.toTransition (.claimBudgetRefund gasResource budgetUnits
+                          weiPerBudgetUnit poolActor) signer =
+    Laws.claimBudgetRefund signer poolActor gasResource
+      (budgetUnits * weiPerBudgetUnit) := rfl
 
 /-! ## Compilation injectivity (§4.13 / WU 3.2)
 
@@ -832,6 +909,10 @@ example (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
 example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : ActorId) :
     (Action.compile (.topUpActionBudgetFor recipient gr ga bi pa)).source =
       .topUpActionBudgetFor recipient gr ga bi pa := rfl
+
+example (gr : ResourceId) (bu : Nat) (w : Nat) (pa : ActorId) :
+    (Action.compile (.claimBudgetRefund gr bu w pa)).source =
+      .claimBudgetRefund gr bu w pa := rfl
 
 end Authority
 end LegalKernel

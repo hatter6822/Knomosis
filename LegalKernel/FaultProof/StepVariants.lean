@@ -96,6 +96,11 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- (the recipient-consent check reads the recipient's local policy
   -- at the admission layer, not at the L1 step-VM cell level).
   | .topUpActionBudgetFor _ _ _ _ _, signer => [.registry signer]
+  -- GP.9.1: refund-on-exit reads only the signer's registry entry.
+  -- The refundable-budget bound + rate pin are admission-layer checks
+  -- (over the signer's epoch budget + the trusted rate), not L1
+  -- step-VM cell reads.
+  | .claimBudgetRefund _ _ _ _,    signer => [.registry signer]
 
 /-- The cell tags an action writes.  Per the §4.13 contract,
     every action advances the signer's nonce; the per-action
@@ -182,6 +187,15 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- effect (out of scope for the L1 step VM's static cell
   -- declaration), so it is not a kernel-state cell write.
   | .topUpActionBudgetFor _ gr _ _ pa, signer =>
+      [.balance gr signer, .balance gr pa, .nonce signer]
+  -- GP.9.1: refund-on-exit writes the claimant's (signer's) gas
+  -- balance (CREDITED from the pool), the poolActor's gas balance
+  -- (DEBITED), and the signer's nonce.  The MIRROR of
+  -- `topUpActionBudget`'s writes (same two balance cells + nonce; only
+  -- the debit/credit direction differs).  The signer's epoch-budget
+  -- DEBIT is an admission-layer effect, out of scope for the L1
+  -- step-VM's static cell declaration.
+  | .claimBudgetRefund gr _ _ pa,  signer =>
       [.balance gr signer, .balance gr pa, .nonce signer]
 
 /-- The complete cell set an action touches: read-only ++ writes.

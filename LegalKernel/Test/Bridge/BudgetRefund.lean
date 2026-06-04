@@ -32,6 +32,8 @@ and its accounting layer (`LegalKernel/Bridge/BudgetRefund.lean`).  Coverage:
 -/
 
 import LegalKernel.Bridge.BudgetRefund
+import LegalKernel.Authority.SignedAction
+import LegalKernel.Bridge.Admissible
 import LegalKernel.Test.Framework
 
 namespace LegalKernel.Test.Bridge
@@ -71,6 +73,24 @@ def fundedPool : State :=
 /-- A state in which the gas pool is underfunded (holds only 100). -/
 def emptyPool : State :=
   setBalance (setBalance genesisState gasResource gasPoolActor 100) gasResource claimant 50
+
+/-- The deployment's trusted refund rate: `1` wei per budget unit on
+    the ETH leg, `0` (refunds disabled) elsewhere. -/
+def trustedRate : ResourceId → Nat := fun r => if r = 0 then 1 else 0
+
+/-- The genesis budget policy used by the admission-gate fixtures:
+    free tier `10`, action cost `1`, epoch `0` — so an actor with
+    `currentBudget = 100` has `refundableBudget = 100 − (1 + 10) = 89`. -/
+def policy : BudgetPolicy := .bounded freeTier actionCost 0
+
+/-- A funded `ExtendedState`: pool (`gasPoolActor`) holds 5000 ETH,
+    claimant holds 100 ETH and 100 budget units, under `policy`. -/
+def es : ExtendedState :=
+  { base := fundedPool
+  , nonces := NonceState.empty
+  , registry := KeyRegistry.empty
+  , epochBudgets := ledger
+  , budgetPolicy := policy }
 
 /-! ## Tests -/
 
@@ -183,6 +203,64 @@ def tests : List TestCase :=
               (actual := ebs'.currentBudget other now freeTier) "other budget untouched"
         | none => assert false "refund consume should succeed"
     }
+  , -- ## Admission gate (the seven safety conjuncts)
+    { name := "refund gate ACCEPTS a valid refund (all seven conjuncts hold)"
+    , body := do
+        -- claimant 5 (≠ bridge 0, ≠ pool 1), pool = gasPoolActor (1),
+        -- rate 1 = trustedRate 0, 1 ≤ 89 ≤ refundableBudget (89),
+        -- pool 5000 ≥ 89 × 1.
+        assert (claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 1 gasPoolActor)
+          claimant es trustedRate) "valid refund admitted by gate"
+    }
+  , { name := "refund gate REJECTS a non-canonical pool (victim-drain pin)"
+    , body := do
+        -- poolActor = 2 ≠ gasPoolActor (1).
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 1 2)
+          claimant es trustedRate) "non-canonical pool rejected"
+    }
+  , { name := "refund gate REJECTS a rate mismatch (rate pin)"
+    , body := do
+        -- weiPerBudgetUnit = 2 ≠ trustedRate 0 (= 1).
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 2 gasPoolActor)
+          claimant es trustedRate) "inflated rate rejected"
+    }
+  , { name := "refund gate REJECTS over-refundable budget (free-tier bound)"
+    , body := do
+        -- 90 > refundableBudget (89): would dip into the free tier.
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 90 1 gasPoolActor)
+          claimant es trustedRate) "over-refundable rejected"
+    }
+  , { name := "refund gate REJECTS an insolvent pool"
+    , body := do
+        -- Pool holds only 100; a refund of 89 × 2 = 178 > 100.
+        let esThin : ExtendedState :=
+          { base := emptyPool
+          , nonces := NonceState.empty
+          , registry := KeyRegistry.empty
+          , epochBudgets := ledger
+          , budgetPolicy := BudgetPolicy.bounded freeTier actionCost 0 }
+        -- rate must match for the solvency conjunct to be the binding one;
+        -- use a 2-wei rate (and a matching refundRate) so 89 × 2 = 178 > 100.
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 2 gasPoolActor)
+          claimant esThin (fun r => if r = 0 then 2 else 0)) "insolvent pool rejected"
+    }
+  , { name := "refund gate REJECTS a zero-unit refund and a bridge / self-pool signer"
+    , body := do
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 0 1 gasPoolActor)
+          claimant es trustedRate) "zero-unit refund rejected"
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 1 gasPoolActor)
+          Bridge.bridgeActor es trustedRate) "bridge-actor signer rejected"
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 1 gasPoolActor)
+          gasPoolActor es trustedRate) "self-pool signer rejected"
+    }
+  , { name := "refundConsumeExtra is budgetUnits for a refund, 0 otherwise"
+    , body := do
+        assertEq (expected := (89 : Nat))
+          (actual := refundConsumeExtra (.claimBudgetRefund gasResource 89 1 gasPoolActor))
+          "refund extra = budgetUnits"
+        assertEq (expected := (0 : Nat))
+          (actual := refundConsumeExtra (.transfer 0 5 6 10)) "non-refund extra = 0"
+    }
   , -- ## Term-level API stability
     { name := "GP.9.1: term-level API stability (law + accounting)"
     , body := do
@@ -219,6 +297,26 @@ def tests : List TestCase :=
         let _a15 := @refund_pays_exact_amount_from_pool
         let _a16 := @refund_conserves_supply
         let _a17 := @refund_other_actor_untouched
+        pure ()
+    }
+  , { name := "GP.9.1: term-level API stability (Action layer + admission gate)"
+    , body := do
+        -- Signable-action wiring.
+        let _t0 := @Authority.Action.toTransition_claimBudgetRefund
+        let _t1 := @Authority.claimBudgetRefund_gate
+        let _t2 := @Authority.refundConsumeExtra
+        let _t3 := @Authority.refundConsumeExtra_eq_zero_of_ne_refund
+        let _t4 := @Authority.claimBudgetRefund_gate_true_of_ne
+        -- Admission-gate soundness theorems (kernel).
+        let _t5 := @Authority.claimBudgetRefund_gate_characterization
+        let _t6 := @Authority.admission_refund_consumes_budget
+        let _t7 := @Authority.admission_refund_preserves_free_tier
+        let _t8 := @Authority.refund_rejected_when_pool_not_canonical
+        let _t9 := @Authority.refund_rejected_when_rate_mismatch
+        let _t10 := @Authority.refund_rejected_when_over_refundable
+        let _t11 := @Authority.refund_rejected_when_pool_insolvent
+        -- Production-path (bridge-aware) admission mirror.
+        let _t12 := @admission_consumes_budget_on_success_bridge
         pure ()
     }
   ]

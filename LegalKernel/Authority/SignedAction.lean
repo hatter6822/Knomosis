@@ -57,6 +57,7 @@ import LegalKernel.Authority.LocalPolicySemantics
 import LegalKernel.Authority.Nonce
 import LegalKernel.Authority.ActorBudget
 import LegalKernel.Bridge.BridgeActor
+import LegalKernel.Bridge.BudgetRefund
 import LegalKernel.Encoding.Action
 
 open Std
@@ -881,6 +882,103 @@ theorem topUpActionBudgetFor_gate_true_of_ne
       exact absurd hact (hne recipient gr ga bi pa)
   | _ => rfl
 
+/-- GP.9.1 refund-extra consume.  The extra action-budget a
+    `claimBudgetRefund` retires BEYOND the standard per-action cost: the
+    refund's `budgetUnits` for a refund action, `0` for every other
+    action.  The refund's total budget debit is therefore `actionCost +
+    refundConsumeExtra action`; off the refund path this reduces
+    definitionally to `actionCost` (via `Nat.add_zero`), so the budget
+    gate's behaviour for every existing action is byte-for-byte
+    unchanged. -/
+def refundConsumeExtra : Action → Nat
+  | .claimBudgetRefund _ budgetUnits _ _ => budgetUnits
+  | _                                    => 0
+
+/-- For every non-`claimBudgetRefund` action, the refund-extra consume
+    is `0`.  Lets the budget-gate proofs reduce the refund-aware consume
+    amount `actionCost + refundConsumeExtra action` to plain `actionCost`
+    off the refund path. -/
+theorem refundConsumeExtra_eq_zero_of_ne_refund (action : Action)
+    (hne : ∀ gr bu w pa, action ≠ .claimBudgetRefund gr bu w pa) :
+    refundConsumeExtra action = 0 := by
+  unfold refundConsumeExtra
+  cases hact : action with
+  | claimBudgetRefund gr bu w pa => exact absurd hact (hne gr bu w pa)
+  | _ => rfl
+
+/-- GP.9.1 admission gate for `claimBudgetRefund`.
+
+    Returns `true` iff the refund can safely proceed.  For a
+    `claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor`
+    signed by `S` under a `bounded freeTier actionCost currentEpoch`
+    policy, the gate enforces SEVEN conjuncts — the union of the
+    standard gas-pool defences (mirroring `topUpActionBudgetFor_gate`)
+    and the refund-specific economic-soundness checks:
+
+      * `S ≠ bridgeActor` — the bridge actor is consume-exempt, so a
+        refund signed by it would retire no budget while still paying
+        out gas (defence in depth; production rejects it at the
+        `bridgePolicy` layer, where `claimBudgetRefund` is not
+        bridge-authorised).
+      * `S ≠ poolActor` — self-pool defence: a `poolActor = S` refund
+        would credit and debit the same actor (net-zero kernel effect)
+        while still consuming budget.
+      * `poolActor = gasPoolActor` — the **victim-drain pin**.  The
+        kernel `claimBudgetRefund` law debits `poolActor`, and
+        `AdmissibleWith` verifies only `S`'s signature, so without
+        pinning the pool a claimant could name an arbitrary rich actor
+        as `poolActor` and drain THEM.  The refund may only ever be
+        paid from the canonical gas pool.
+      * `weiPerBudgetUnit = refundRate gasResource` — the **rate pin**.
+        The exchange rate is the deployment's trusted per-resource
+        constant (the same rate the GP.5.1 / GP.5.4 deposit grant uses),
+        NOT a value the claimant may choose.  Without this, a claimant
+        could inflate `weiPerBudgetUnit` to extract more gas per retired
+        budget unit than they paid in — breaking round-trip
+        non-profitability.
+      * `1 ≤ budgetUnits` — a zero-unit refund is a pointless no-op.
+      * `budgetUnits ≤ refundableBudget …` — the **free-tier-excluding
+        bound**: the claimant may retire only budget purchased ABOVE the
+        per-epoch free-tier subsidy, after reserving this action's own
+        `actionCost`.  This is the anti-drain guarantee: the free tier
+        is never refundable (`Bridge.refundableBudget`).
+      * `getBalance … poolActor ≥ budgetUnits × weiPerBudgetUnit` —
+        **pool solvency**: the pool can afford the payout, so the refund
+        is never a budget-consuming no-op (the kernel step's `step_impl`
+        would silently no-op on an insolvent pool; the gate rejects
+        upfront so the claimant never loses budget without receiving
+        gas).
+
+    For every other action constructor: vacuously `true`. -/
+def claimBudgetRefund_gate (action : Action) (signer : ActorId)
+    (es : ExtendedState) (refundRate : ResourceId → Nat) : Bool :=
+  match action with
+  | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
+      match es.budgetPolicy with
+      | .bounded freeTier actionCost currentEpoch =>
+        decide (signer ≠ Bridge.bridgeActor ∧
+                signer ≠ poolActor ∧
+                poolActor = Bridge.gasPoolActor ∧
+                weiPerBudgetUnit = refundRate gasResource ∧
+                1 ≤ budgetUnits ∧
+                budgetUnits ≤ Bridge.refundableBudget es.epochBudgets signer
+                  currentEpoch freeTier actionCost ∧
+                getBalance es.base gasResource poolActor ≥ budgetUnits * weiPerBudgetUnit)
+  | _ => true
+
+/-- For every non-`claimBudgetRefund` action, the GP.9.1 refund gate is
+    trivially `true`.  Used by the budget-gate proofs to discharge the
+    gate on every non-refund dispatch path. -/
+theorem claimBudgetRefund_gate_true_of_ne
+    (action : Action) (signer : ActorId) (es : ExtendedState)
+    (refundRate : ResourceId → Nat)
+    (hne : ∀ gr bu w pa, action ≠ .claimBudgetRefund gr bu w pa) :
+    claimBudgetRefund_gate action signer es refundRate = true := by
+  unfold claimBudgetRefund_gate
+  cases hact : action with
+  | claimBudgetRefund gr bu w pa => exact absurd hact (hne gr bu w pa)
+  | _ => rfl
+
 /-- GP.3.2 admission entry-point with budget-policy integration.
 
     Behaviour (under `BudgetPolicy.bounded freeTier actionCost currentEpoch`):
@@ -925,25 +1023,32 @@ theorem topUpActionBudgetFor_gate_true_of_ne
 def apply_admissible_with_budget
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
-    (st : SignedAction) (h : AdmissibleWith verify P d es st) :
+    (st : SignedAction) (h : AdmissibleWith verify P d es st)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 + GP.3.4 safety gates: three named action-specific
-      -- checks (gas-safety for `topUpActionBudget`, signer-authority
-      -- for `depositWithFee`, and gas-safety + default-deny
-      -- recipient-consent for the delegated `topUpActionBudgetFor`).
-      -- See helper docstrings for the per-attack-vector rationale.
+      -- GP.3.2 + GP.3.4 + GP.9.1 safety gates: four named action-
+      -- specific checks (gas-safety for `topUpActionBudget`, signer-
+      -- authority for `depositWithFee`, gas-safety + default-deny
+      -- recipient-consent for the delegated `topUpActionBudgetFor`, and
+      -- the rate-pin / pool-pin / free-tier-excluding-bound / solvency
+      -- checks for the `claimBudgetRefund` refund-on-exit).  See helper
+      -- docstrings for the per-attack-vector rationale.
       if ! topUpActionBudget_gasCheck st.action st.signer es then
         none
       else if ! depositWithFee_signerCheck st.action st.signer then
         none
       else if ! topUpActionBudgetFor_gate st.action st.signer es then
         none
+      else if ! claimBudgetRefund_gate st.action st.signer es refundRate then
+        none
       else
       -- Per-action budget-grant helper (inlined `let`).  Captures
       -- `freeTier` and `currentEpoch` from the enclosing match
-      -- so proofs can simp through cleanly.
+      -- so proofs can simp through cleanly.  `claimBudgetRefund` falls
+      -- through to `_ => ebs` (no grant): its budget effect is a DEBIT,
+      -- carried by the refund-aware consume amount below, not a topUp.
       let applyGrant (ebs : EpochBudgetState) : EpochBudgetState :=
         match st.action with
         | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
@@ -960,10 +1065,20 @@ def apply_admissible_with_budget
       if st.signer = Bridge.bridgeActor then
         -- GP.3.2.c: bridgeActor exemption (per OQ-GP-6).  Skip the
         -- consume step; bridge-signed actions are L1-gas-gated upstream.
+        -- (A `claimBudgetRefund` signed by bridgeActor never reaches
+        -- here — the refund gate's `signer ≠ bridgeActor` conjunct
+        -- rejects it earlier.)
         let applied := apply_admissible_with verify P d es st h
         some { applied with epochBudgets := applyGrant es.epochBudgets }
       else
-        match EpochBudgetState.consume es.epochBudgets st.signer currentEpoch freeTier actionCost with
+        -- GP.9.1: the refund-aware consume amount.  For a
+        -- `claimBudgetRefund`, the signer's budget is debited by
+        -- `actionCost + budgetUnits` (the standard per-action cost PLUS
+        -- the retired units, `refundConsumeExtra`); for every other
+        -- action `refundConsumeExtra = 0`, so the amount is exactly
+        -- `actionCost` (the pre-GP.9.1 behaviour, byte-for-byte).
+        match EpochBudgetState.consume es.epochBudgets st.signer currentEpoch freeTier
+                (actionCost + refundConsumeExtra st.action) with
         | none => none
         | some ebs' =>
             let applied := apply_admissible_with verify P d es st h
@@ -1010,7 +1125,8 @@ theorem apply_admissible_base
     (st : SignedAction) (h : Admissible P es st)
     (hne : ∀ gr ga bi pa, st.action ≠ .topUpActionBudget gr ga bi pa)
     (hneFor : ∀ recipient gr ga bi pa,
-      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa) :
+      st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (hneRefund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa) :
     (apply_admissible P es st h).base =
     (Action.compile st.action).transition.apply_impl es.base := by
   have hPre : (Action.compile st.action).transition.pre es.base := by
@@ -1023,6 +1139,8 @@ theorem apply_admissible_base
              Laws.topUpActionBudget st.signer gr ga bi pa
          | .topUpActionBudgetFor recipient gr ga bi pa =>
              Laws.topUpActionBudgetFor recipient st.signer gr ga bi pa
+         | .claimBudgetRefund gr bu w pa =>
+             Laws.claimBudgetRefund st.signer pa gr (bu * w)
          | _ => (Action.compile st.action).transition) =
        (Action.compile st.action).transition.apply_impl es.base
   -- For non-signer-aware actions, the match selects the `_` arm,
@@ -1032,6 +1150,7 @@ theorem apply_admissible_base
   | topUpActionBudget gr ga bi pa => exact absurd hact (hne gr ga bi pa)
   | topUpActionBudgetFor recipient gr ga bi pa =>
       exact absurd hact (hneFor recipient gr ga bi pa)
+  | claimBudgetRefund gr bu w pa => exact absurd hact (hneRefund gr bu w pa)
   | transfer _ _ _ _              => simp_all [step_impl]
   | mint _ _ _                    => simp_all [step_impl]
   | burn _ _ _                    => simp_all [step_impl]
@@ -1228,22 +1347,30 @@ private theorem consume_some_of_admit_non_bridge
       st.action ≠ .depositWithFee r recipient poolActor ua pa bg dep)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
     ∃ ebs',
       EpochBudgetState.consume es.epochBudgets st.signer
         currentEpoch freeTier actionCost = some ebs' := by
-  -- Establish: all three safety gates pass (vacuously) for non-topUp,
-  -- non-depositWithFee, non-delegated-top-up actions.
+  -- Establish: all four safety gates pass (vacuously) for non-topUp,
+  -- non-depositWithFee, non-delegated-top-up, non-refund actions.
   have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
     topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   have hdep : depositWithFee_signerCheck st.action st.signer = true :=
     depositWithFee_signerCheck_true_of_ne_depositWithFee st.action st.signer hne_dep
   have hForGate : topUpActionBudgetFor_gate st.action st.signer es = true :=
     topUpActionBudgetFor_gate_true_of_ne st.action st.signer es hne_topupFor
+  have hRefGate : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) = true :=
+    claimBudgetRefund_gate_true_of_ne st.action st.signer es (fun _ => 0) hne_refund
+  -- GP.9.1: off the refund path the refund-extra consume is 0, so the
+  -- refund-aware consume amount `actionCost + refundConsumeExtra` is
+  -- exactly `actionCost` (the pre-GP.9.1 amount).
+  have hExtra : refundConsumeExtra st.action = 0 :=
+    refundConsumeExtra_eq_zero_of_ne_refund st.action hne_refund
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  simp [hgas, hdep, hForGate, hne_bridge] at hsuc
+  simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge] at hsuc
   cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
                   currentEpoch freeTier actionCost with
   | none =>
@@ -1276,25 +1403,31 @@ theorem admission_consumes_budget_on_success
       st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets st.signer currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets st.signer currentEpoch freeTier - actionCost := by
   have ⟨ebs', hconsume⟩ :=
-    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hne_topupFor hsuc
-  -- For non-deposit non-topup non-delegated-top-up actions, the inline
-  -- `applyGrant` helper in `apply_admissible_with_budget` falls
-  -- through to `_ => ebs`, so es'.epochBudgets = ebs'.
+    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hne_topupFor
+      hne_refund hsuc
+  -- For non-deposit non-topup non-delegated-top-up non-refund actions,
+  -- the inline `applyGrant` helper in `apply_admissible_with_budget`
+  -- falls through to `_ => ebs`, so es'.epochBudgets = ebs'.
   have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
     topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   have hdep : depositWithFee_signerCheck st.action st.signer = true :=
     depositWithFee_signerCheck_true_of_ne_depositWithFee st.action st.signer hne_dep
   have hForGate : topUpActionBudgetFor_gate st.action st.signer es = true :=
     topUpActionBudgetFor_gate_true_of_ne st.action st.signer es hne_topupFor
+  have hRefGate : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) = true :=
+    claimBudgetRefund_gate_true_of_ne st.action st.signer es (fun _ => 0) hne_refund
+  have hExtra : refundConsumeExtra st.action = 0 :=
+    refundConsumeExtra_eq_zero_of_ne_refund st.action hne_refund
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hForGate, hne_bridge, hconsume] at hsuc
+    simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge, hconsume] at hsuc
     -- hsuc : { applied... epochBudgets := <match on st.action> } = es'
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
@@ -1302,6 +1435,7 @@ theorem admission_consumes_budget_on_success
     | topUpActionBudget gr ga bi pa => exact absurd hact (hne_topup gr ga bi pa)
     | topUpActionBudgetFor recipient gr ga bi pa =>
         exact absurd hact (hne_topupFor recipient gr ga bi pa)
+    | claimBudgetRefund gr bu w pa => exact absurd hact (hne_refund gr bu w pa)
     | transfer _ _ _ _              => rw [← hsuc]
     | mint _ _ _                    => rw [← hsuc]
     | burn _ _ _                    => rw [← hsuc]
@@ -1364,10 +1498,25 @@ theorem admission_rejected_when_budget_zero
           | false =>
               simp
           | true =>
-              simp [hne_bridge]
-              have hnone := (EpochBudgetState.consume_eq_none_iff
-                es.epochBudgets st.signer currentEpoch freeTier actionCost).mpr hbudget
-              rw [hnone]
+              -- GP.9.1: then case-split on the refund gate.
+              cases hrfp : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) with
+              | false =>
+                  simp
+              | true =>
+                  simp [hne_bridge]
+                  -- The refund-aware consume amount is `actionCost +
+                  -- refundConsumeExtra st.action ≥ actionCost`, so a budget
+                  -- strictly below `actionCost` is strictly below it too:
+                  -- the consume still fails, so the gate returns `none`.
+                  have hlt :
+                      EpochBudgetState.currentBudget es.epochBudgets st.signer
+                          currentEpoch freeTier
+                        < actionCost + refundConsumeExtra st.action :=
+                    Nat.lt_of_lt_of_le hbudget (Nat.le_add_right actionCost _)
+                  have hnone := (EpochBudgetState.consume_eq_none_iff
+                    es.epochBudgets st.signer currentEpoch freeTier
+                    (actionCost + refundConsumeExtra st.action)).mpr hlt
+                  rw [hnone]
 
 /-- §15E (v1.0) / GP.3.2.g — `bridgeActor_budget_exempt`.
 
@@ -1391,6 +1540,7 @@ theorem bridgeActor_budget_exempt
       st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
     (hne_dep_to_bridge : ∀ r recipient poolActor ua pa bg dep,
       st.action = .depositWithFee r recipient poolActor ua pa bg dep →
       recipient ≠ Bridge.bridgeActor)
@@ -1422,6 +1572,11 @@ theorem bridgeActor_budget_exempt
   -- GP.3.4 gate is vacuously `true` for non-delegated-top-up actions.
   have hForGate : topUpActionBudgetFor_gate st.action Bridge.bridgeActor es = true :=
     topUpActionBudgetFor_gate_true_of_ne st.action Bridge.bridgeActor es hne_topupFor
+  -- GP.9.1 refund gate is vacuously `true` for non-refund actions (a
+  -- refund signed by bridgeActor would fail its `signer ≠ bridgeActor`
+  -- conjunct, so it never reaches the bridgeActor exemption branch).
+  have hRefGate : claimBudgetRefund_gate st.action Bridge.bridgeActor es (fun _ => 0) = true :=
+    claimBudgetRefund_gate_true_of_ne st.action Bridge.bridgeActor es (fun _ => 0) hne_refund
   have h_eb : es'.epochBudgets = match st.action with
     | .depositWithFee _ recipient _ _ _ budgetGrant _ =>
         es.epochBudgets.topUp recipient currentEpoch freeTier budgetGrant
@@ -1432,7 +1587,7 @@ theorem bridgeActor_budget_exempt
     | _ => es.epochBudgets := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hForGate, hbridge] at hsuc
+    simp [hgas, hdep, hForGate, hRefGate, hbridge] at hsuc
     rw [← hsuc]
   rw [h_eb]
   -- Now case-split on st.action; in every branch except depositWithFee,
@@ -1442,6 +1597,7 @@ theorem bridgeActor_budget_exempt
   | topUpActionBudget gr ga bi pa => exact absurd hact (hne_topup gr ga bi pa)
   | topUpActionBudgetFor recipient gr ga bi pa =>
       exact absurd hact (hne_topupFor recipient gr ga bi pa)
+  | claimBudgetRefund gr bu w pa => rfl
   | depositWithFee r recipient poolActor ua pa bg dep =>
       have hne_recip : recipient ≠ Bridge.bridgeActor :=
         hne_dep_to_bridge r recipient poolActor ua pa bg dep hact
@@ -1499,12 +1655,13 @@ theorem depositWithFee_grants_budget
     EpochBudgetState.currentBudget es.epochBudgets recipient currentEpoch freeTier + budgetGrant := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  -- For depositWithFee: `topUpActionBudget_gasCheck` and the GP.3.4
-  -- `topUpActionBudgetFor_gate` are vacuously `true`;
+  -- For depositWithFee: `topUpActionBudget_gasCheck`, the GP.3.4
+  -- `topUpActionBudgetFor_gate`, and the GP.9.1 `claimBudgetRefund_gate`
+  -- are vacuously `true` (and `refundConsumeExtra = 0`);
   -- `depositWithFee_signerCheck` requires `signer = bridgeActor`.
   -- Non-bridge case is rejected at the signer-check gate.
   unfold topUpActionBudget_gasCheck depositWithFee_signerCheck
-    topUpActionBudgetFor_gate at hsuc
+    topUpActionBudgetFor_gate claimBudgetRefund_gate refundConsumeExtra at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
     have heq : es'.epochBudgets =
@@ -1549,11 +1706,12 @@ theorem depositWithFee_budget_locality
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  -- Unfold the gates; for .depositWithFee, both the gas check and the
-  -- GP.3.4 gate are vacuously `true`, and the signer check requires
+  -- Unfold the gates; for .depositWithFee, the gas check, the GP.3.4
+  -- gate, and the GP.9.1 refund gate are vacuously `true` (and
+  -- `refundConsumeExtra = 0`), and the signer check requires
   -- `signer = bridgeActor`.
   unfold topUpActionBudget_gasCheck depositWithFee_signerCheck
-    topUpActionBudgetFor_gate at hsuc
+    topUpActionBudgetFor_gate claimBudgetRefund_gate refundConsumeExtra at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
     have heq : es'.epochBudgets =
@@ -1617,8 +1775,9 @@ theorem topUpActionBudget_net_budget_change
                   getBalance es.base gasResource signer ≥ gasAmount
   · -- gas check passes.  After simp, hsuc may be a conjunction
     -- `(remaining-conjuncts) ∧ (body = es')` — destructure to get
-    -- the body equation.
-    simp [hne_bridge, hdep, hForGate] at hsuc
+    -- the body equation.  GP.9.1: `claimBudgetRefund_gate` is vacuously
+    -- `true` and `refundConsumeExtra = 0` for `.topUpActionBudget`.
+    simp [hne_bridge, hdep, hForGate, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
     obtain ⟨_, hsuc⟩ := hsuc
     cases hopt : EpochBudgetState.consume es.epochBudgets signer
                     currentEpoch freeTier actionCost with
@@ -1660,25 +1819,31 @@ theorem admission_locality_in_budget
       st.action ≠ .topUpActionBudget gr ga bi pa)
     (hne_topupFor : ∀ recipient gr ga bi pa,
       st.action ≠ .topUpActionBudgetFor recipient gr ga bi pa)
+    (hne_refund : ∀ gr bu w pa, st.action ≠ .claimBudgetRefund gr bu w pa)
     (other : ActorId) (hne : st.signer ≠ other)
     {es' : ExtendedState}
     (hsuc : apply_admissible_with_budget verify P d es st h = some es') :
     EpochBudgetState.currentBudget es'.epochBudgets other currentEpoch freeTier =
     EpochBudgetState.currentBudget es.epochBudgets other currentEpoch freeTier := by
   have ⟨ebs', hconsume⟩ :=
-    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hne_topupFor hsuc
+    consume_some_of_admit_non_bridge hpolicy hne_bridge hne_topup hne_dep hne_topupFor
+      hne_refund hsuc
   have hgas : topUpActionBudget_gasCheck st.action st.signer es = true :=
     topUpActionBudget_gasCheck_true_of_ne_topUp st.action st.signer es hne_topup
   have hdep : depositWithFee_signerCheck st.action st.signer = true :=
     depositWithFee_signerCheck_true_of_ne_depositWithFee st.action st.signer hne_dep
   have hForGate : topUpActionBudgetFor_gate st.action st.signer es = true :=
     topUpActionBudgetFor_gate_true_of_ne st.action st.signer es hne_topupFor
-  -- For non-deposit non-topup non-delegated-top-up, es'.epochBudgets =
-  -- ebs' (identity grant).
+  have hRefGate : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) = true :=
+    claimBudgetRefund_gate_true_of_ne st.action st.signer es (fun _ => 0) hne_refund
+  have hExtra : refundConsumeExtra st.action = 0 :=
+    refundConsumeExtra_eq_zero_of_ne_refund st.action hne_refund
+  -- For non-deposit non-topup non-delegated-top-up non-refund,
+  -- es'.epochBudgets = ebs' (identity grant).
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hForGate, hne_bridge, hconsume] at hsuc
+    simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge, hconsume] at hsuc
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
         exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
@@ -1686,6 +1851,7 @@ theorem admission_locality_in_budget
         exact absurd hact (hne_topup gr ga bi pa)
     | topUpActionBudgetFor recipient gr ga bi pa =>
         exact absurd hact (hne_topupFor recipient gr ga bi pa)
+    | claimBudgetRefund gr bu w pa => exact absurd hact (hne_refund gr bu w pa)
     | transfer _ _ _ _              => rw [← hsuc]
     | mint _ _ _                    => rw [← hsuc]
     | burn _ _ _                    => rw [← hsuc]
@@ -1804,17 +1970,25 @@ theorem replay_impossible_preserved
                     simp [hfgp] at hsuc
                 | true =>
                     simp [hfgp] at hsuc
-                    by_cases hb : st.signer = Bridge.bridgeActor
-                    · simp [hb] at hsuc
-                      rw [← hsuc]
-                    · simp [hb] at hsuc
-                      cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
-                                      currentEpoch freeTier actionCost with
-                      | none => rw [hopt] at hsuc; simp at hsuc
-                      | some ebs' =>
-                          rw [hopt] at hsuc
-                          simp at hsuc
+                    -- GP.9.1 safety gate: case-split on the refund gate.
+                    cases hrfp : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) with
+                    | false =>
+                        simp [hrfp] at hsuc
+                    | true =>
+                        simp [hrfp] at hsuc
+                        by_cases hb : st.signer = Bridge.bridgeActor
+                        · simp [hb] at hsuc
                           rw [← hsuc]
+                        · simp [hb] at hsuc
+                          -- GP.9.1: the refund-aware consume amount.
+                          cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
+                                          currentEpoch freeTier
+                                          (actionCost + refundConsumeExtra st.action) with
+                          | none => rw [hopt] at hsuc; simp at hsuc
+                          | some ebs' =>
+                              rw [hopt] at hsuc
+                              simp at hsuc
+                              rw [← hsuc]
   have h_advanced : expectsNonce es' st.signer = expectsNonce es st.signer + 1 := by
     show es'.nonces.next[st.signer]?.getD 0 = _
     rw [h_nonces_eq]
@@ -1936,7 +2110,7 @@ theorem delegatedTopUp_grants_budget_to_recipient
       obtain ⟨hbridge, _hpool, hrec, _hpos, _hbal, _hconsent⟩ :=
         topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
       -- non-bridge signer (from the gate): take the consume branch.
-      simp [hgas, hdep, hg3, hbridge] at hsuc
+      simp [hgas, hdep, hg3, hbridge, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
       cases hopt : EpochBudgetState.consume es.epochBudgets signer
                       currentEpoch freeTier actionCost with
       | none => rw [hopt] at hsuc; simp at hsuc
@@ -2011,7 +2185,7 @@ theorem delegatedTopUp_signer_budget_consumed
   | true =>
       obtain ⟨hbridge, _hpool, hrec, _hpos, _hbal, _hconsent⟩ :=
         topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
-      simp [hgas, hdep, hg3, hbridge] at hsuc
+      simp [hgas, hdep, hg3, hbridge, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
       cases hopt : EpochBudgetState.consume es.epochBudgets signer
                       currentEpoch freeTier actionCost with
       | none => rw [hopt] at hsuc; simp at hsuc
@@ -2063,7 +2237,7 @@ theorem delegatedTopUp_budget_locality
   | true =>
       obtain ⟨hbridge, _hpool, _hrec, _hpos, _hbal, _hconsent⟩ :=
         topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
-      simp [hgas, hdep, hg3, hbridge] at hsuc
+      simp [hgas, hdep, hg3, hbridge, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
       cases hopt : EpochBudgetState.consume es.epochBudgets signer
                       currentEpoch freeTier actionCost with
       | none => rw [hopt] at hsuc; simp at hsuc
@@ -2078,6 +2252,209 @@ theorem delegatedTopUp_budget_locality
           rw [EpochBudgetState.currentBudget_after_consume_other
                 es.epochBudgets signer other currentEpoch freeTier actionCost
                 ebs' hopt (Ne.symm hne_signer)]
+
+/-! ## GP.9.1 refund-on-exit admission theorems
+
+These characterise the `claimBudgetRefund` admission gate and prove
+the GP.9.1 soundness properties hold END-TO-END through the production
+admission entry: the gate's exact reach (rate pin / pool pin /
+free-tier-excluding bound / solvency), the exact budget consume
+(`actionCost + budgetUnits`), the exact pool→claimant payout, and
+free-tier preservation (the anti-drain guarantee).  Together with the
+kernel leg (`Laws.claimBudgetRefund`) and accounting layer
+(`Bridge.BudgetRefund`), they close the mechanism: a claimant retires
+EXACTLY their remaining purchased budget for a gas payout the gate
+proves is bounded, rate-pinned, pool-pinned, and solvent. -/
+
+/-- **GP.9.1 gate characterisation (single source of truth).**  The
+    refund gate passes for a `claimBudgetRefund` iff all seven
+    conjuncts hold: the consume-exempt / self-pool defences, the
+    victim-drain pool pin (`poolActor = gasPoolActor`), the rate pin
+    (`weiPerBudgetUnit = refundRate gasResource`), the positive +
+    free-tier-excluding budget bound, and pool solvency. -/
+theorem claimBudgetRefund_gate_characterization
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (es : ExtendedState) (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch) :
+    claimBudgetRefund_gate
+        (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+        signer es refundRate = true ↔
+      (signer ≠ Bridge.bridgeActor ∧ signer ≠ poolActor ∧
+       poolActor = Bridge.gasPoolActor ∧
+       weiPerBudgetUnit = refundRate gasResource ∧
+       1 ≤ budgetUnits ∧
+       budgetUnits ≤ Bridge.refundableBudget es.epochBudgets signer currentEpoch
+         freeTier actionCost ∧
+       getBalance es.base gasResource poolActor ≥ budgetUnits * weiPerBudgetUnit) := by
+  unfold claimBudgetRefund_gate
+  rw [hpolicy]
+  simp only [decide_eq_true_eq]
+
+/-- **The refund's budget debit equals `actionCost + budgetUnits`.**  A
+    `claimBudgetRefund` admitted under a passing refund gate reduces the
+    claimant's `currentBudget` by EXACTLY the per-action cost PLUS the
+    retired `budgetUnits` — no grant (the refund's budget effect is the
+    consume, not a top-up).  This is the ledger half of "retire exactly
+    the remaining budget". -/
+theorem admission_refund_consumes_budget
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+              signer, nonce, sig⟩)
+    (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hsigner : signer ≠ Bridge.bridgeActor)
+    (hgate : claimBudgetRefund_gate
+              (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+              signer es refundRate = true)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+                signer, nonce, sig⟩ h refundRate = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets signer currentEpoch freeTier
+      - (actionCost + budgetUnits) := by
+  -- The first three gates reduce to `true` (rfl) for a refund action;
+  -- the refund gate is `true` (`hgate`); `refundConsumeExtra` of a
+  -- refund is `budgetUnits`; and `hsigner` selects the consume branch
+  -- over the bridgeActor branch.
+  have hextra : refundConsumeExtra
+      (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor) = budgetUnits := rfl
+  unfold apply_admissible_with_budget at hsuc
+  rw [hpolicy] at hsuc
+  simp only [topUpActionBudget_gasCheck, depositWithFee_signerCheck,
+    topUpActionBudgetFor_gate, hgate, hextra, hsigner] at hsuc
+  cases hopt : EpochBudgetState.consume es.epochBudgets signer currentEpoch freeTier
+                  (actionCost + budgetUnits) with
+  | none => rw [hopt] at hsuc; simp at hsuc
+  | some ebs' =>
+      rw [hopt] at hsuc
+      injection hsuc with hsuc'
+      rw [← hsuc']
+      show EpochBudgetState.currentBudget ebs' signer currentEpoch freeTier = _
+      exact EpochBudgetState.currentBudget_after_consume_self
+        es.epochBudgets signer currentEpoch freeTier (actionCost + budgetUnits) ebs' hopt
+
+/-- **Free tier preserved (the anti-drain guarantee, end-to-end).**  A
+    refund admitted under a passing gate leaves the claimant's
+    post-state `currentBudget` at or ABOVE the free tier — the refund
+    retires only budget purchased above the per-epoch subsidy, never the
+    subsidy itself.  Combines `admission_refund_consumes_budget` with the
+    gate's free-tier-excluding bound (`budgetUnits ≤ refundableBudget`)
+    + positivity. -/
+theorem admission_refund_preserves_free_tier
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+              signer, nonce, sig⟩)
+    (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hsigner : signer ≠ Bridge.bridgeActor)
+    (hgate : claimBudgetRefund_gate
+              (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+              signer es refundRate = true)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+                signer, nonce, sig⟩ h refundRate = some es') :
+    freeTier ≤ EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier := by
+  have hchar := (claimBudgetRefund_gate_characterization gasResource budgetUnits
+    weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost currentEpoch hpolicy).mp hgate
+  obtain ⟨_, _, _, _, _hpos, hbound, _⟩ := hchar
+  rw [admission_refund_consumes_budget verify P d es gasResource budgetUnits weiPerBudgetUnit
+    poolActor signer nonce sig h refundRate freeTier actionCost currentEpoch hpolicy hsigner
+    hgate hsuc]
+  unfold Bridge.refundableBudget at hbound
+  omega
+
+/-! ### Refund-gate rejection corollaries (the safety pins, proven)
+
+Each states that the gate is NOT satisfied (so admission rejects) when
+a specific safety conjunct fails — directly from the characterisation.
+Together they pin: the victim-drain pool pin, the rate pin, the
+free-tier-excluding bound, and pool solvency. -/
+
+/-- **Victim-drain pin.**  A refund whose `poolActor` is not the
+    canonical `gasPoolActor` fails the gate (so a claimant cannot drain
+    an arbitrary actor by naming them as the pool). -/
+theorem refund_rejected_when_pool_not_canonical
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (es : ExtendedState) (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h : poolActor ≠ Bridge.gasPoolActor) :
+    claimBudgetRefund_gate
+        (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+        signer es refundRate ≠ true := by
+  intro hg
+  obtain ⟨_, _, hpin, _, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+    budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
+    currentEpoch hpolicy).mp hg
+  exact h hpin
+
+/-- **Rate pin.**  A refund whose `weiPerBudgetUnit` does not match the
+    deployment's trusted `refundRate` fails the gate (so a claimant
+    cannot inflate their payout per retired budget unit). -/
+theorem refund_rejected_when_rate_mismatch
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (es : ExtendedState) (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h : weiPerBudgetUnit ≠ refundRate gasResource) :
+    claimBudgetRefund_gate
+        (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+        signer es refundRate ≠ true := by
+  intro hg
+  obtain ⟨_, _, _, hrate, _, _, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+    budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
+    currentEpoch hpolicy).mp hg
+  exact h hrate
+
+/-- **Free-tier-excluding bound.**  A refund retiring more than the
+    claimant's `refundableBudget` (the purchased budget above the free
+    tier, net of this action's cost) fails the gate. -/
+theorem refund_rejected_when_over_refundable
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (es : ExtendedState) (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h : budgetUnits > Bridge.refundableBudget es.epochBudgets signer currentEpoch
+          freeTier actionCost) :
+    claimBudgetRefund_gate
+        (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+        signer es refundRate ≠ true := by
+  intro hg
+  obtain ⟨_, _, _, _, _, hbound, _⟩ := (claimBudgetRefund_gate_characterization gasResource
+    budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
+    currentEpoch hpolicy).mp hg
+  exact Nat.not_le_of_gt h hbound
+
+/-- **Pool solvency.**  A refund whose payout exceeds the pool's
+    balance fails the gate (so the claimant never loses budget without
+    receiving gas). -/
+theorem refund_rejected_when_pool_insolvent
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (es : ExtendedState) (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (h : getBalance es.base gasResource poolActor < budgetUnits * weiPerBudgetUnit) :
+    claimBudgetRefund_gate
+        (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+        signer es refundRate ≠ true := by
+  intro hg
+  obtain ⟨_, _, _, _, _, _, hsolv⟩ := (claimBudgetRefund_gate_characterization gasResource
+    budgetUnits weiPerBudgetUnit poolActor signer es refundRate freeTier actionCost
+    currentEpoch hpolicy).mp hg
+  exact Nat.not_le_of_gt h hsolv
 
 /-! ## Headline theorems (§8.5.2) -/
 
@@ -2208,6 +2585,7 @@ theorem non_registry_mutating_preserves_registry
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
+  | claimBudgetRefund _ _ _ _     => rfl
   -- Workstream-LX (LX.19): codegen-managed Lex
   -- `non_registry_mutating_preserves_registry` proof arms land
   -- between the fence markers below.  Each Lex law that compiles
@@ -2426,6 +2804,7 @@ theorem non_meta_preserves_localPolicies
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
+  | claimBudgetRefund _ _ _ _     => rfl
 
 /-- LP.5: a different actor's `localPolicies` entry is unchanged by
     `apply_admissible` regardless of the action.  The local-policy
@@ -2470,6 +2849,7 @@ theorem localPolicies_other_actor_untouched
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
+  | claimBudgetRefund _ _ _ _     => rfl
 
 /-- LP.5: field-projection: the post-application `localPolicies`
     equals the result of `applyActionToLocalPolicies` applied to
