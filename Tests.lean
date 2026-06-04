@@ -107,6 +107,7 @@ import LegalKernel.Test.Runtime.Loop
 import LegalKernel.Test.Runtime.LoopHappyPath
 import LegalKernel.Test.Runtime.BudgetSidecar
 import LegalKernel.Test.Runtime.GasPoolSidecar
+import LegalKernel.Test.Runtime.RefundRateSidecar
 import LegalKernel.Test.Runtime.BridgeAdmission
 import LegalKernel.Test.Runtime.ExtractEvents
 import LegalKernel.Test.Disputes.Filing
@@ -286,6 +287,8 @@ def main : IO UInt32 := do
                                     Runtime.BudgetSidecarTests.tests)
   failed := failed + (← runAll "runtime-gas-pool-sidecar"
                                     Runtime.GasPoolSidecarTests.tests)
+  failed := failed + (← runAll "runtime-refund-rate-sidecar"
+                                    Runtime.RefundRateSidecarTests.tests)
   failed := failed + (← runAll "runtime-bridge-admission"
                                     Runtime.BridgeAdmission.tests)
   failed := failed + (← runAll "runtime-extract-events"

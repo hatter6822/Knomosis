@@ -333,14 +333,18 @@ def bootstrap
     (policy : AuthorityPolicy) (genesis : ExtendedState)
     (logPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
-    (epochLength : Nat := 0) :
+    (epochLength : Nat := 0)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   let (entries, frameErr) ← loadAndTruncate logPath
   -- GP.6.2: replay under the same epoch schedule the runtime used so
   -- the reconstructed state's epoch + budgets match the recorded
   -- post-state hashes (a divergent `epochLength` fails loudly with a
   -- post-state-hash mismatch — the intended fail-closed behaviour).
-  match replay policy genesis entries epochLength with
+  -- GP.9.1: thread `refundRate` so a log that already contains admitted
+  -- `claimBudgetRefund` actions reconstructs under the producing rate
+  -- (a divergent rate would reject those entries during reconstruction).
+  match replay policy genesis entries epochLength refundRate with
   | .ok finalState =>
     let prevHash :=
       match entries.reverse with
@@ -353,7 +357,8 @@ def bootstrap
       , logIndex     := entries.length
       , logPath      := logPath
       , deploymentId := deploymentId
-      , epochLength  := epochLength }
+      , epochLength  := epochLength
+      , refundRate   := refundRate }
     pure (.ok (rs, frameErr))
   | .error e =>
     pure (.error (.replay e))

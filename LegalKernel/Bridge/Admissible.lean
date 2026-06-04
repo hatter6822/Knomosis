@@ -719,11 +719,12 @@ theorem apply_bridge_admissible_with_budget_epochBudgets_eq
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat)
-    (h : BridgeAdmissibleWith verify P d es st) :
+    (h : BridgeAdmissibleWith verify P d es st)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     Option.map (fun e => e.epochBudgets)
-      (apply_bridge_admissible_with_budget verify P d es st idx h) =
+      (apply_bridge_admissible_with_budget verify P d es st idx h refundRate) =
     Option.map (fun e => e.epochBudgets)
-      (apply_admissible_with_budget verify P d es st h.toAdmissibleWith) := by
+      (apply_admissible_with_budget verify P d es st h.toAdmissibleWith refundRate) := by
   -- Deliberately do NOT unfold `apply_bridge_admissible_with`: in every
   -- success leaf the `epochBudgets` field is OVERWRITTEN by the shared
   -- `applyGrant`, so the differing base record (`apply_bridge_admissible_with`
@@ -741,9 +742,10 @@ theorem apply_bridge_admissible_with_budget_epochBudgets_eq
         cases hg3 : topUpActionBudgetFor_gate st.action st.signer es with
         | false => simp
         | true =>
-          -- GP.9.1: both gates carry the same 4th (refund) gate; under
-          -- the default refundRate it is byte-identical on both sides.
-          cases hg4 : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) with
+          -- GP.9.1: both gates carry the same 4th (refund) gate, both
+          -- consulting the SAME `refundRate`, so it is byte-identical on
+          -- both sides at every rate (not just the default).
+          cases hg4 : claimBudgetRefund_gate st.action st.signer es refundRate with
           | false => simp
           | true =>
             by_cases hbr : st.signer = Bridge.bridgeActor
@@ -766,19 +768,20 @@ theorem apply_bridge_admissible_with_budget_none_iff
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat)
-    (h : BridgeAdmissibleWith verify P d es st) :
-    apply_bridge_admissible_with_budget verify P d es st idx h = none ↔
-    apply_admissible_with_budget verify P d es st h.toAdmissibleWith = none := by
-  have hmap := apply_bridge_admissible_with_budget_epochBudgets_eq verify P d es st idx h
+    (h : BridgeAdmissibleWith verify P d es st)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
+    apply_bridge_admissible_with_budget verify P d es st idx h refundRate = none ↔
+    apply_admissible_with_budget verify P d es st h.toAdmissibleWith refundRate = none := by
+  have hmap := apply_bridge_admissible_with_budget_epochBudgets_eq verify P d es st idx h refundRate
   constructor
   · intro hb
     rw [hb] at hmap
-    cases hk : apply_admissible_with_budget verify P d es st h.toAdmissibleWith with
+    cases hk : apply_admissible_with_budget verify P d es st h.toAdmissibleWith refundRate with
     | none => rfl
     | some _ => rw [hk] at hmap; simp at hmap
   · intro hk
     rw [hk] at hmap
-    cases hb : apply_bridge_admissible_with_budget verify P d es st idx h with
+    cases hb : apply_bridge_admissible_with_budget verify P d es st idx h refundRate with
     | none => rfl
     | some _ => rw [hb] at hmap; simp at hmap
 
@@ -794,13 +797,14 @@ theorem apply_bridge_admissible_with_budget_kernel_epochBudgets
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
+    {refundRate : ResourceId → Nat}
     {es' : ExtendedState}
-    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
-    ∃ esK, apply_admissible_with_budget verify P d es st h.toAdmissibleWith = some esK ∧
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h refundRate = some es') :
+    ∃ esK, apply_admissible_with_budget verify P d es st h.toAdmissibleWith refundRate = some esK ∧
            esK.epochBudgets = es'.epochBudgets := by
-  have hmap := apply_bridge_admissible_with_budget_epochBudgets_eq verify P d es st idx h
+  have hmap := apply_bridge_admissible_with_budget_epochBudgets_eq verify P d es st idx h refundRate
   rw [hsuc] at hmap
-  cases hk : apply_admissible_with_budget verify P d es st h.toAdmissibleWith with
+  cases hk : apply_admissible_with_budget verify P d es st h.toAdmissibleWith refundRate with
   | none => rw [hk] at hmap; simp at hmap
   | some esK =>
       refine ⟨esK, rfl, ?_⟩
@@ -825,8 +829,9 @@ theorem apply_bridge_admissible_with_budget_base_bridge_eq
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
     (st : SignedAction) (idx : Nat)
     (h : BridgeAdmissibleWith verify P d es st)
+    {refundRate : ResourceId → Nat}
     {es' : ExtendedState}
-    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h = some es') :
+    (hsuc : apply_bridge_admissible_with_budget verify P d es st idx h refundRate = some es') :
     es'.base = (apply_bridge_admissible_with verify P d es st idx h).base ∧
     es'.bridge = (apply_bridge_admissible_with verify P d es st idx h).bridge := by
   unfold apply_bridge_admissible_with_budget at hsuc
@@ -1130,6 +1135,87 @@ theorem delegatedTopUp_budget_locality_bridge
   exact delegatedTopUp_budget_locality verify P d es recipient gr ga bi pa
     signer nonce sig h.toAdmissibleWith freeTier actionCost currentEpoch hpolicy
     other hne_signer hne_recipient hk
+
+/-! ### GP.9.1 refund-on-exit — bridge (production-path) mirrors
+
+The runtime (`Runtime/Loop.lean`, `Runtime/Replay.lean`) admits a
+`claimBudgetRefund` through `apply_bridge_admissible_with_budget … rs.refundRate`
+with a *deployment-supplied* `refundRate`.  The kernel-only refund
+guarantees (`admission_refund_consumes_budget`,
+`admission_refund_preserves_free_tier` in `Authority/SignedAction.lean`)
+are stated for an ARBITRARY `refundRate`; the two mirrors below lift
+them to the production path for the SAME arbitrary rate — so the
+"retire exactly the remaining purchased budget" ledger guarantee and
+the free-tier anti-drain guarantee hold on the actual runtime entry at
+every configuration in which refunds function (not only the disabled
+default `fun _ => 0`).  Both lift uniformly through the (now
+rate-generic) `apply_bridge_admissible_with_budget_kernel_epochBudgets`
+agreement corollary, so there is still exactly one proof of the gate
+structure. -/
+
+/-- GP.9.1 (bridge mirror) — a `claimBudgetRefund` admitted on the
+    production path reduces the claimant's `currentBudget` by EXACTLY
+    `actionCost + budgetUnits` (the per-action cost plus the retired
+    purchased budget), at the deployment's `refundRate`. -/
+theorem admission_refund_consumes_budget_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+              signer, nonce, sig⟩)
+    (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hsigner : signer ≠ Bridge.bridgeActor)
+    (hgate : claimBudgetRefund_gate
+              (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+              signer es refundRate = true)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+                signer, nonce, sig⟩ idx h refundRate = some es') :
+    EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier =
+    EpochBudgetState.currentBudget es.epochBudgets signer currentEpoch freeTier
+      - (actionCost + budgetUnits) := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact admission_refund_consumes_budget verify P d es gasResource budgetUnits
+    weiPerBudgetUnit poolActor signer nonce sig h.toAdmissibleWith refundRate
+    freeTier actionCost currentEpoch hpolicy hsigner hgate hk
+
+/-- GP.9.1 (bridge mirror) — a `claimBudgetRefund` admitted on the
+    production path leaves the claimant's post-state `currentBudget` at
+    or ABOVE the free tier (the anti-drain guarantee, end-to-end on the
+    runtime entry, at the deployment's `refundRate`). -/
+theorem admission_refund_preserves_free_tier_bridge
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (gasResource : ResourceId) (budgetUnits weiPerBudgetUnit : Nat)
+    (poolActor signer : ActorId) (nonce : Nonce) (sig : Signature) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es
+            ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+              signer, nonce, sig⟩)
+    (refundRate : ResourceId → Nat)
+    (freeTier actionCost currentEpoch : Nat)
+    (hpolicy : es.budgetPolicy = .bounded freeTier actionCost currentEpoch)
+    (hsigner : signer ≠ Bridge.bridgeActor)
+    (hgate : claimBudgetRefund_gate
+              (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor)
+              signer es refundRate = true)
+    {es' : ExtendedState}
+    (hsuc : apply_bridge_admissible_with_budget verify P d es
+              ⟨.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+                signer, nonce, sig⟩ idx h refundRate = some es') :
+    freeTier ≤ EpochBudgetState.currentBudget es'.epochBudgets signer currentEpoch freeTier := by
+  obtain ⟨_, hk, heb⟩ :=
+    apply_bridge_admissible_with_budget_kernel_epochBudgets verify P d es _ idx h hsuc
+  rw [← heb]
+  exact admission_refund_preserves_free_tier verify P d es gasResource budgetUnits
+    weiPerBudgetUnit poolActor signer nonce sig h.toAdmissibleWith refundRate
+    freeTier actionCost currentEpoch hpolicy hsigner hgate hk
 
 end Bridge
 end LegalKernel

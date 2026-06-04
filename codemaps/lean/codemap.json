@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2d66c03dfc74cd85244f55e7b21b72f98cf2c112ea2851b29444b41b59f5a85d"
+    "source_digest": "e559debfeff4504f63200f4dd629c144159ffe2fac89a40a200fb33a1851bf74"
   },
   "summary": {
     "module_count": 290,
-    "declaration_count": 4795
+    "declaration_count": 4809
   },
   "modules": [
     {
@@ -362,6 +362,7 @@
           "called": [
             "Deployments.Examples.GasPoolExample",
             "RuntimeState",
+            "deploymentId",
             "entries",
             "exampleDeploymentId",
             "examplePolicy",
@@ -509,13 +510,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 302,
+          "line": 303,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 315,
+          "line": 316,
           "called": [
             "LegalKernel"
           ]
@@ -2175,7 +2176,7 @@
     {
       "module": "LegalKernel.Authority.SignedAction",
       "path": "LegalKernel/Authority/SignedAction.lean",
-      "declaration_count": 105,
+      "declaration_count": 106,
       "declarations": [
         {
           "kind": "namespace",
@@ -2208,7 +2209,8 @@
             "Action",
             "ActorId",
             "Nonce",
-            "SigningInput"
+            "SigningInput",
+            "deploymentId"
           ]
         },
         {
@@ -2255,6 +2257,7 @@
             "PublicKey",
             "Signature",
             "SignedAction",
+            "deploymentId",
             "es",
             "expectsNonce",
             "localPolicyPermits",
@@ -2590,7 +2593,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefund_gate",
-          "line": 953,
+          "line": 962,
           "called": [
             "Action",
             "ActorId",
@@ -2602,13 +2605,14 @@
             "freeTier",
             "gasResource",
             "getBalance",
-            "poolActor"
+            "poolActor",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_gate_true_of_ne",
-          "line": 972,
+          "line": 982,
           "called": [
             "Action",
             "ActorId",
@@ -2616,13 +2620,14 @@
             "ResourceId",
             "claimBudgetRefund",
             "claimBudgetRefund_gate",
-            "es"
+            "es",
+            "refundRate"
           ]
         },
         {
           "kind": "def",
           "name": "apply_admissible_with_budget",
-          "line": 1023,
+          "line": 1033,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -2640,6 +2645,7 @@
             "es",
             "freeTier",
             "refundConsumeExtra",
+            "refundRate",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
@@ -2649,7 +2655,7 @@
         {
           "kind": "def",
           "name": "apply_admissible",
-          "line": 1098,
+          "line": 1108,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -2663,7 +2669,7 @@
         {
           "kind": "theorem",
           "name": "apply_admissible_base",
-          "line": 1123,
+          "line": 1133,
           "called": [
             "Action.compile",
             "Admissible",
@@ -2691,7 +2697,7 @@
         {
           "kind": "theorem",
           "name": "apply_admissible_base_topUpActionBudget",
-          "line": 1185,
+          "line": 1195,
           "called": [
             "ActorId",
             "Admissible",
@@ -2710,7 +2716,7 @@
         {
           "kind": "theorem",
           "name": "apply_admissible_base_topUpActionBudgetFor",
-          "line": 1200,
+          "line": 1210,
           "called": [
             "ActorId",
             "Admissible",
@@ -2729,7 +2735,7 @@
         {
           "kind": "theorem",
           "name": "apply_admissible_registry",
-          "line": 1212,
+          "line": 1222,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -2743,7 +2749,7 @@
         {
           "kind": "theorem",
           "name": "expectsNonce_after_apply_admissible_other",
-          "line": 1224,
+          "line": 1234,
           "called": [
             "ActorId",
             "Admissible",
@@ -2761,7 +2767,7 @@
         {
           "kind": "theorem",
           "name": "expectsNonce_after_apply_admissible",
-          "line": 1246,
+          "line": 1256,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -2778,7 +2784,7 @@
         {
           "kind": "theorem",
           "name": "admissible_nonce_eq",
-          "line": 1282,
+          "line": 1292,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -2792,7 +2798,7 @@
         {
           "kind": "theorem",
           "name": "consume_some_of_admit_non_bridge",
-          "line": 1338,
+          "line": 1348,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -2824,7 +2830,7 @@
         {
           "kind": "theorem",
           "name": "admission_consumes_budget_on_success",
-          "line": 1393,
+          "line": 1403,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -2866,7 +2872,7 @@
         {
           "kind": "theorem",
           "name": "admission_rejected_when_budget_zero",
-          "line": 1470,
+          "line": 1480,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -2888,7 +2894,7 @@
         {
           "kind": "theorem",
           "name": "bridgeActor_budget_exempt",
-          "line": 1532,
+          "line": 1542,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -2926,7 +2932,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_grants_budget",
-          "line": 1637,
+          "line": 1647,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -2953,7 +2959,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_budget_locality",
-          "line": 1687,
+          "line": 1697,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -2981,7 +2987,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudget_net_budget_change",
-          "line": 1741,
+          "line": 1751,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3010,7 +3016,7 @@
         {
           "kind": "theorem",
           "name": "admission_locality_in_budget",
-          "line": 1809,
+          "line": 1819,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3054,7 +3060,7 @@
         {
           "kind": "theorem",
           "name": "replenishment_via_epoch_advance",
-          "line": 1894,
+          "line": 1904,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -3064,7 +3070,7 @@
         {
           "kind": "theorem",
           "name": "nonce_uniqueness_preserved",
-          "line": 1907,
+          "line": 1917,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -3080,7 +3086,7 @@
         {
           "kind": "theorem",
           "name": "replay_impossible_preserved",
-          "line": 1932,
+          "line": 1942,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -3107,7 +3113,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudgetFor_gate_true_facts",
-          "line": 2031,
+          "line": 2041,
           "called": [
             "ActorId",
             "Amount",
@@ -3123,7 +3129,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_requires_allowTopUpFrom",
-          "line": 2053,
+          "line": 2063,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3148,7 +3154,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_grants_budget_to_recipient",
-          "line": 2085,
+          "line": 2095,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3175,7 +3181,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_signer_balance_debited",
-          "line": 2139,
+          "line": 2149,
           "called": [
             "ActorId",
             "Admissible",
@@ -3195,7 +3201,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_signer_budget_consumed",
-          "line": 2161,
+          "line": 2171,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3222,7 +3228,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_budget_locality",
-          "line": 2212,
+          "line": 2222,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3250,7 +3256,7 @@
         {
           "kind": "theorem",
           "name": "claimBudgetRefund_gate_characterization",
-          "line": 2275,
+          "line": 2285,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -3262,13 +3268,14 @@
             "freeTier",
             "gasResource",
             "getBalance",
-            "poolActor"
+            "poolActor",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "admission_refund_consumes_budget",
-          "line": 2300,
+          "line": 2311,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3288,6 +3295,7 @@
             "gasResource",
             "poolActor",
             "refundConsumeExtra",
+            "refundRate",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -3295,7 +3303,7 @@
         {
           "kind": "theorem",
           "name": "admission_refund_preserves_free_tier",
-          "line": 2350,
+          "line": 2361,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -3314,13 +3322,14 @@
             "es",
             "freeTier",
             "gasResource",
-            "poolActor"
+            "poolActor",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "refund_rejected_when_pool_not_canonical",
-          "line": 2389,
+          "line": 2400,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -3332,13 +3341,14 @@
             "es",
             "freeTier",
             "gasResource",
-            "poolActor"
+            "poolActor",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "refund_rejected_when_rate_mismatch",
-          "line": 2407,
+          "line": 2418,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -3350,13 +3360,14 @@
             "es",
             "freeTier",
             "gasResource",
-            "poolActor"
+            "poolActor",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "refund_rejected_when_over_refundable",
-          "line": 2425,
+          "line": 2436,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -3368,13 +3379,14 @@
             "es",
             "freeTier",
             "gasResource",
-            "poolActor"
+            "poolActor",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "refund_rejected_when_pool_insolvent",
-          "line": 2444,
+          "line": 2455,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -3387,13 +3399,33 @@
             "freeTier",
             "gasResource",
             "getBalance",
-            "poolActor"
+            "poolActor",
+            "refundRate"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "refund_rejected_when_rate_disabled",
+          "line": 2477,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "actionCost",
+            "claimBudgetRefund",
+            "claimBudgetRefund_gate",
+            "claimBudgetRefund_gate_characterization",
+            "es",
+            "freeTier",
+            "gasResource",
+            "poolActor",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "nonce_uniqueness",
-          "line": 2466,
+          "line": 2500,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -3406,7 +3438,7 @@
         {
           "kind": "theorem",
           "name": "replay_impossible",
-          "line": 2488,
+          "line": 2522,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -3422,7 +3454,7 @@
         {
           "kind": "theorem",
           "name": "nonce_isolation",
-          "line": 2519,
+          "line": 2553,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -3435,7 +3467,7 @@
         {
           "kind": "theorem",
           "name": "replaceKey_updates_registry",
-          "line": 2530,
+          "line": 2564,
           "called": [
             "ActorId",
             "Admissible",
@@ -3454,7 +3486,7 @@
         {
           "kind": "theorem",
           "name": "non_registry_mutating_preserves_registry",
-          "line": 2554,
+          "line": 2588,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -3482,7 +3514,7 @@
         {
           "kind": "theorem",
           "name": "non_replaceKey_preserves_registry",
-          "line": 2603,
+          "line": 2637,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -3496,7 +3528,7 @@
         {
           "kind": "theorem",
           "name": "replaceKey_other_actor_untouched",
-          "line": 2614,
+          "line": 2648,
           "called": [
             "ActorId",
             "Admissible",
@@ -3515,7 +3547,7 @@
         {
           "kind": "theorem",
           "name": "registerIdentity_updates_registry",
-          "line": 2635,
+          "line": 2669,
           "called": [
             "ActorId",
             "Admissible",
@@ -3534,7 +3566,7 @@
         {
           "kind": "theorem",
           "name": "registerIdentity_other_actor_untouched",
-          "line": 2652,
+          "line": 2686,
           "called": [
             "ActorId",
             "Admissible",
@@ -3553,7 +3585,7 @@
         {
           "kind": "theorem",
           "name": "localPolicy_meta_action_independent",
-          "line": 2700,
+          "line": 2734,
           "called": [
             "Action",
             "ActorId",
@@ -3567,7 +3599,7 @@
         {
           "kind": "theorem",
           "name": "localPolicyPermits_no_policy",
-          "line": 2717,
+          "line": 2751,
           "called": [
             "Action",
             "ActorId",
@@ -3580,7 +3612,7 @@
         {
           "kind": "theorem",
           "name": "declareLocalPolicy_updates_localPolicies",
-          "line": 2741,
+          "line": 2775,
           "called": [
             "ActorId",
             "Admissible",
@@ -3601,7 +3633,7 @@
         {
           "kind": "theorem",
           "name": "revokeLocalPolicy_clears_localPolicies",
-          "line": 2759,
+          "line": 2793,
           "called": [
             "ActorId",
             "Admissible",
@@ -3621,7 +3653,7 @@
         {
           "kind": "theorem",
           "name": "non_meta_preserves_localPolicies",
-          "line": 2775,
+          "line": 2809,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -3649,7 +3681,7 @@
         {
           "kind": "theorem",
           "name": "localPolicies_other_actor_untouched",
-          "line": 2812,
+          "line": 2846,
           "called": [
             "ActorId",
             "Admissible",
@@ -3680,7 +3712,7 @@
         {
           "kind": "theorem",
           "name": "apply_admissible_localPolicies",
-          "line": 2858,
+          "line": 2892,
           "called": [
             "Admissible",
             "AuthorityPolicy",
@@ -3694,7 +3726,7 @@
         {
           "kind": "class",
           "name": "RegistryPreserving",
-          "line": 2901,
+          "line": 2935,
           "called": [
             "Action",
             "KeyRegistry",
@@ -3704,7 +3736,7 @@
         {
           "kind": "instance",
           "name": "transfer_registryPreserving",
-          "line": 2919,
+          "line": 2953,
           "called": [
             "ActorId",
             "Amount",
@@ -3718,7 +3750,7 @@
         {
           "kind": "instance",
           "name": "mint_registryPreserving",
-          "line": 2925,
+          "line": 2959,
           "called": [
             "ActorId",
             "Amount",
@@ -3730,7 +3762,7 @@
         {
           "kind": "instance",
           "name": "burn_registryPreserving",
-          "line": 2931,
+          "line": 2965,
           "called": [
             "ActorId",
             "Amount",
@@ -3742,7 +3774,7 @@
         {
           "kind": "instance",
           "name": "freezeResource_registryPreserving",
-          "line": 2937,
+          "line": 2971,
           "called": [
             "RegistryPreserving",
             "ResourceId",
@@ -3752,7 +3784,7 @@
         {
           "kind": "instance",
           "name": "reward_registryPreserving",
-          "line": 2942,
+          "line": 2976,
           "called": [
             "ActorId",
             "Amount",
@@ -3764,7 +3796,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_registryPreserving",
-          "line": 2948,
+          "line": 2982,
           "called": [
             "ActorId",
             "Amount",
@@ -3776,7 +3808,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_registryPreserving",
-          "line": 2954,
+          "line": 2988,
           "called": [
             "ActorId",
             "Amount",
@@ -3788,7 +3820,7 @@
         {
           "kind": "instance",
           "name": "dispute_registryPreserving",
-          "line": 2960,
+          "line": 2994,
           "called": [
             "RegistryPreserving"
           ]
@@ -3796,7 +3828,7 @@
         {
           "kind": "instance",
           "name": "disputeWithdraw_registryPreserving",
-          "line": 2965,
+          "line": 2999,
           "called": [
             "RegistryPreserving"
           ]
@@ -3804,7 +3836,7 @@
         {
           "kind": "instance",
           "name": "verdict_registryPreserving",
-          "line": 2970,
+          "line": 3004,
           "called": [
             "RegistryPreserving"
           ]
@@ -3812,7 +3844,7 @@
         {
           "kind": "instance",
           "name": "rollback_registryPreserving",
-          "line": 2975,
+          "line": 3009,
           "called": [
             "RegistryPreserving"
           ]
@@ -3820,7 +3852,7 @@
         {
           "kind": "instance",
           "name": "deposit_registryPreserving",
-          "line": 2980,
+          "line": 3014,
           "called": [
             "ActorId",
             "Amount",
@@ -3832,7 +3864,7 @@
         {
           "kind": "instance",
           "name": "withdraw_registryPreserving",
-          "line": 2987,
+          "line": 3021,
           "called": [
             "ActorId",
             "Amount",
@@ -3845,7 +3877,7 @@
         {
           "kind": "instance",
           "name": "declareLocalPolicy_registryPreserving",
-          "line": 2995,
+          "line": 3029,
           "called": [
             "LocalPolicy",
             "RegistryPreserving",
@@ -3855,7 +3887,7 @@
         {
           "kind": "instance",
           "name": "revokeLocalPolicy_registryPreserving",
-          "line": 3000,
+          "line": 3034,
           "called": [
             "RegistryPreserving"
           ]
@@ -3863,7 +3895,7 @@
         {
           "kind": "instance",
           "name": "faultProofChallenge_registryPreserving",
-          "line": 3007,
+          "line": 3041,
           "called": [
             "RegistryPreserving"
           ]
@@ -3871,7 +3903,7 @@
         {
           "kind": "instance",
           "name": "faultProofResolution_registryPreserving",
-          "line": 3013,
+          "line": 3047,
           "called": [
             "ActorId",
             "RegistryPreserving"
@@ -3880,7 +3912,7 @@
         {
           "kind": "instance",
           "name": "depositWithFee_registryPreserving",
-          "line": 3023,
+          "line": 3057,
           "called": [
             "ActorId",
             "Amount",
@@ -3893,7 +3925,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudget_registryPreserving",
-          "line": 3034,
+          "line": 3068,
           "called": [
             "ActorId",
             "Amount",
@@ -3907,7 +3939,7 @@
         {
           "kind": "instance",
           "name": "topUpActionBudgetFor_registryPreserving",
-          "line": 3044,
+          "line": 3078,
           "called": [
             "ActorId",
             "Amount",
@@ -5263,7 +5295,7 @@
     {
       "module": "LegalKernel.Bridge.Admissible",
       "path": "LegalKernel/Bridge/Admissible.lean",
-      "declaration_count": 40,
+      "declaration_count": 42,
       "declarations": [
         {
           "kind": "namespace",
@@ -5362,6 +5394,7 @@
             "Signature",
             "SignedAction",
             "bridgeActor",
+            "deploymentId",
             "deposit",
             "depositWithFee",
             "es",
@@ -5466,6 +5499,7 @@
             "SignedAction",
             "applyActionToBridgeState",
             "apply_admissible_with",
+            "deploymentId",
             "es"
           ]
         },
@@ -5491,6 +5525,7 @@
             "es",
             "freeTier",
             "refundConsumeExtra",
+            "refundRate",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "topUpActionBudgetFor_gate",
@@ -5689,6 +5724,7 @@
             "BridgeAdmissibleWith",
             "ExtendedState",
             "PublicKey",
+            "ResourceId",
             "Signature",
             "SignedAction",
             "actionCost",
@@ -5699,6 +5735,7 @@
             "es",
             "freeTier",
             "refundConsumeExtra",
+            "refundRate",
             "topUpActionBudgetFor_gate",
             "topUpActionBudget_gasCheck"
           ]
@@ -5706,59 +5743,65 @@
         {
           "kind": "theorem",
           "name": "apply_bridge_admissible_with_budget_none_iff",
-          "line": 765,
+          "line": 767,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
             "ExtendedState",
             "PublicKey",
+            "ResourceId",
             "Signature",
             "SignedAction",
             "apply_admissible_with_budget",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_epochBudgets_eq",
-            "es"
+            "es",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "apply_bridge_admissible_with_budget_kernel_epochBudgets",
-          "line": 792,
+          "line": 795,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
             "ExtendedState",
             "PublicKey",
+            "ResourceId",
             "Signature",
             "SignedAction",
             "apply_admissible_with_budget",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_epochBudgets_eq",
-            "es"
+            "es",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "apply_bridge_admissible_with_budget_base_bridge_eq",
-          "line": 823,
+          "line": 827,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
             "ExtendedState",
             "PublicKey",
+            "ResourceId",
             "Signature",
             "SignedAction",
             "actionCost",
             "apply_bridge_admissible_with",
             "apply_bridge_admissible_with_budget",
             "es",
-            "freeTier"
+            "freeTier",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "admission_consumes_budget_on_success_bridge",
-          "line": 865,
+          "line": 870,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -5782,7 +5825,7 @@
         {
           "kind": "theorem",
           "name": "admission_rejected_when_budget_zero_bridge",
-          "line": 890,
+          "line": 895,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -5801,7 +5844,7 @@
         {
           "kind": "theorem",
           "name": "bridgeActor_budget_exempt_bridge",
-          "line": 906,
+          "line": 911,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -5825,7 +5868,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_grants_budget_bridge",
-          "line": 933,
+          "line": 938,
           "called": [
             "ActorId",
             "Amount",
@@ -5850,7 +5893,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_budget_locality_bridge",
-          "line": 960,
+          "line": 965,
           "called": [
             "ActorId",
             "Amount",
@@ -5876,7 +5919,7 @@
         {
           "kind": "theorem",
           "name": "topUpActionBudget_net_budget_change_bridge",
-          "line": 989,
+          "line": 994,
           "called": [
             "ActorId",
             "Amount",
@@ -5901,7 +5944,7 @@
         {
           "kind": "theorem",
           "name": "admission_locality_in_budget_bridge",
-          "line": 1017,
+          "line": 1022,
           "called": [
             "ActorId",
             "AuthorityPolicy",
@@ -5927,7 +5970,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_requires_allowTopUpFrom_bridge",
-          "line": 1047,
+          "line": 1052,
           "called": [
             "ActorId",
             "Amount",
@@ -5951,7 +5994,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_grants_budget_to_recipient_bridge",
-          "line": 1065,
+          "line": 1070,
           "called": [
             "ActorId",
             "Amount",
@@ -5974,7 +6017,7 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_signer_budget_consumed_bridge",
-          "line": 1088,
+          "line": 1093,
           "called": [
             "ActorId",
             "Amount",
@@ -5997,15 +6040,13 @@
         {
           "kind": "theorem",
           "name": "delegatedTopUp_budget_locality_bridge",
-          "line": 1111,
+          "line": 1116,
           "called": [
             "ActorId",
             "Amount",
             "AuthorityPolicy",
-            "Bridge",
             "BridgeAdmissibleWith",
             "ExtendedState",
-            "LegalKernel",
             "Nonce",
             "PublicKey",
             "ResourceId",
@@ -6018,6 +6059,60 @@
             "freeTier",
             "other",
             "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "admission_refund_consumes_budget_bridge",
+          "line": 1160,
+          "called": [
+            "ActorId",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "Nonce",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "actionCost",
+            "admission_refund_consumes_budget",
+            "apply_bridge_admissible_with_budget",
+            "apply_bridge_admissible_with_budget_kernel_epochBudgets",
+            "claimBudgetRefund",
+            "claimBudgetRefund_gate",
+            "es",
+            "freeTier",
+            "gasResource",
+            "poolActor",
+            "refundRate"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "admission_refund_preserves_free_tier_bridge",
+          "line": 1193,
+          "called": [
+            "ActorId",
+            "AuthorityPolicy",
+            "Bridge",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "LegalKernel",
+            "Nonce",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "actionCost",
+            "admission_refund_preserves_free_tier",
+            "apply_bridge_admissible_with_budget",
+            "apply_bridge_admissible_with_budget_kernel_epochBudgets",
+            "claimBudgetRefund",
+            "claimBudgetRefund_gate",
+            "es",
+            "freeTier",
+            "gasResource",
+            "poolActor",
+            "refundRate"
           ]
         }
       ]
@@ -6902,7 +6997,8 @@
           "called": [
             "Action",
             "ActorId",
-            "Nonce"
+            "Nonce",
+            "deploymentId"
           ]
         },
         {
@@ -8749,7 +8845,7 @@
         {
           "kind": "instance",
           "name": "Action.doesNotDebitPoolAt_decidable",
-          "line": 405,
+          "line": 411,
           "called": [
             "Action",
             "Action.doesNotDebitPoolAt",
@@ -8760,7 +8856,7 @@
         {
           "kind": "theorem",
           "name": "pool_nondecreasing_of_does_not_debit",
-          "line": 423,
+          "line": 429,
           "called": [
             "Action.doesNotDebitPoolAt",
             "AdmissibleWith",
@@ -8801,7 +8897,7 @@
         {
           "kind": "theorem",
           "name": "transfer_other_sender_pool_nondecreasing",
-          "line": 551,
+          "line": 557,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -8825,7 +8921,7 @@
         {
           "kind": "theorem",
           "name": "pool_step_drain_le",
-          "line": 569,
+          "line": 575,
           "called": [
             "AdmissibleWith",
             "Amount",
@@ -8849,7 +8945,7 @@
         {
           "kind": "theorem",
           "name": "apply_bridge_admissible_with_budget_base_eq_apply",
-          "line": 603,
+          "line": 609,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -8867,7 +8963,7 @@
         {
           "kind": "theorem",
           "name": "pool_signed_step_drain_le_budget",
-          "line": 618,
+          "line": 624,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -8892,7 +8988,7 @@
         {
           "kind": "theorem",
           "name": "pool_nondecreasing_of_does_not_debit_budget",
-          "line": 637,
+          "line": 643,
           "called": [
             "Action.doesNotDebitPoolAt",
             "AuthorityPolicy",
@@ -8913,7 +9009,7 @@
         {
           "kind": "inductive",
           "name": "PoolBoundedTrace",
-          "line": 658,
+          "line": 664,
           "called": [
             "AdmissibleWith",
             "Amount",
@@ -8937,7 +9033,7 @@
         {
           "kind": "theorem",
           "name": "PoolBoundedTrace.headStep",
-          "line": 685,
+          "line": 691,
           "called": [
             "AdmissibleWith",
             "Amount",
@@ -8961,7 +9057,7 @@
         {
           "kind": "theorem",
           "name": "pool_drain_bounded_by_action_count_per_resource",
-          "line": 712,
+          "line": 718,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -8985,7 +9081,7 @@
         {
           "kind": "theorem",
           "name": "pool_drain_bounded_by_action_count",
-          "line": 732,
+          "line": 738,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -9004,7 +9100,7 @@
         {
           "kind": "theorem",
           "name": "pool_drain_bounded_by_action_count_bold",
-          "line": 745,
+          "line": 751,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -9023,7 +9119,7 @@
         {
           "kind": "theorem",
           "name": "pool_balance_lower_bound_via_trace_per_resource",
-          "line": 759,
+          "line": 765,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -9045,7 +9141,7 @@
         {
           "kind": "theorem",
           "name": "pool_balance_lower_bound_via_trace",
-          "line": 774,
+          "line": 780,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -9064,7 +9160,7 @@
         {
           "kind": "theorem",
           "name": "pool_cannot_drain_when_cap_zero",
-          "line": 788,
+          "line": 794,
           "called": [
             "Amount",
             "AuthorityPolicy",
@@ -9082,7 +9178,7 @@
         {
           "kind": "theorem",
           "name": "gasPoolActorAuthorized_of_admissible_intersect",
-          "line": 806,
+          "line": 812,
           "called": [
             "AdmissibleWith",
             "Amount",
@@ -9102,7 +9198,7 @@
         {
           "kind": "def",
           "name": "applyTrace",
-          "line": 829,
+          "line": 835,
           "called": [
             "AdmissibleWith",
             "AuthorityPolicy",
@@ -9117,7 +9213,7 @@
         {
           "kind": "theorem",
           "name": "applyTrace_drain_bounded_per_resource",
-          "line": 845,
+          "line": 851,
           "called": [
             "AdmissibleWith",
             "Amount",
@@ -9144,7 +9240,7 @@
         {
           "kind": "theorem",
           "name": "applyTrace_yields_poolBoundedTrace",
-          "line": 881,
+          "line": 887,
           "called": [
             "AdmissibleWith",
             "Amount",
@@ -15016,6 +15112,7 @@
             "Stream",
             "challenger",
             "decode",
+            "deploymentId",
             "encode"
           ]
         },
@@ -15655,7 +15752,8 @@
             "Nonce",
             "Stream",
             "cbeTagBytes",
-            "cborHeadEncode"
+            "cborHeadEncode",
+            "deploymentId"
           ]
         },
         {
@@ -18227,7 +18325,8 @@
             "DisputedRange",
             "GameStatus",
             "TurnSide",
-            "challenger"
+            "challenger",
+            "deploymentId"
           ]
         },
         {
@@ -21216,7 +21315,7 @@
         {
           "kind": "def",
           "name": "findCellProof",
-          "line": 351,
+          "line": 357,
           "called": [
             "CellProof",
             "CellProofBundle",
@@ -21226,7 +21325,7 @@
         {
           "kind": "def",
           "name": "readCellValue",
-          "line": 359,
+          "line": 365,
           "called": [
             "CellProofBundle",
             "CellTag",
@@ -21237,31 +21336,31 @@
         {
           "kind": "def",
           "name": "decodeCellNat",
-          "line": 402,
+          "line": 408,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint64BE",
-          "line": 447,
+          "line": 453,
           "called": []
         },
         {
           "kind": "def",
           "name": "sliceFrom",
-          "line": 463,
+          "line": 469,
           "called": []
         },
         {
           "kind": "def",
           "name": "maxRecipientsPerBulkAction",
-          "line": 473,
+          "line": 479,
           "called": []
         },
         {
           "kind": "def",
           "name": "stepVMHash",
-          "line": 488,
+          "line": 494,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21303,7 +21402,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_deterministic",
-          "line": 793,
+          "line": 799,
           "called": [
             "CellProofBundle",
             "stepVMHash"
@@ -21312,7 +21411,7 @@
         {
           "kind": "theorem",
           "name": "actionKindByte_deterministic",
-          "line": 803,
+          "line": 809,
           "called": [
             "Action",
             "actionKindByte"
@@ -21321,7 +21420,7 @@
         {
           "kind": "theorem",
           "name": "actionFieldsForL1_deterministic",
-          "line": 809,
+          "line": 815,
           "called": [
             "Action",
             "actionFieldsForL1"
@@ -21330,7 +21429,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_transfer_kind",
-          "line": 826,
+          "line": 832,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21345,7 +21444,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_mint_kind",
-          "line": 851,
+          "line": 857,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21358,7 +21457,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_burn_kind",
-          "line": 864,
+          "line": 870,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21371,7 +21470,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_freezeResource_kind",
-          "line": 877,
+          "line": 883,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -21382,7 +21481,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_replaceKey_kind",
-          "line": 884,
+          "line": 890,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -21394,7 +21493,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_reward_kind",
-          "line": 892,
+          "line": 898,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21407,7 +21506,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_distributeOthers_kind",
-          "line": 910,
+          "line": 916,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21421,7 +21520,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_proportionalDilute_kind",
-          "line": 937,
+          "line": 943,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21436,7 +21535,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_dispute_kind",
-          "line": 974,
+          "line": 980,
           "called": [
             "CellProofBundle",
             "stepCommitDispute",
@@ -21446,7 +21545,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_disputeWithdraw_kind",
-          "line": 981,
+          "line": 987,
           "called": [
             "CellProofBundle",
             "stepCommitDisputeWithdraw",
@@ -21456,7 +21555,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_verdict_kind",
-          "line": 988,
+          "line": 994,
           "called": [
             "CellProofBundle",
             "stepCommitVerdict",
@@ -21466,7 +21565,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_rollback_kind",
-          "line": 995,
+          "line": 1001,
           "called": [
             "CellProofBundle",
             "stepCommitRollback",
@@ -21476,7 +21575,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_registerIdentity_kind",
-          "line": 1002,
+          "line": 1008,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -21488,7 +21587,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_deposit_kind",
-          "line": 1010,
+          "line": 1016,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21501,7 +21600,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_withdraw_kind",
-          "line": 1025,
+          "line": 1031,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21516,7 +21615,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_declareLocalPolicy_kind",
-          "line": 1040,
+          "line": 1046,
           "called": [
             "CellProofBundle",
             "stepCommitDeclareLocalPolicy",
@@ -21526,7 +21625,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_revokeLocalPolicy_kind",
-          "line": 1047,
+          "line": 1053,
           "called": [
             "CellProofBundle",
             "stepCommitRevokeLocalPolicy",
@@ -21536,7 +21635,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofChallenge_kind",
-          "line": 1054,
+          "line": 1060,
           "called": [
             "CellProofBundle",
             "stepCommitFaultProofChallenge",
@@ -21546,7 +21645,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofResolution_kind",
-          "line": 1061,
+          "line": 1067,
           "called": [
             "CellProofBundle",
             "stepCommitFaultProofResolution",
@@ -21556,7 +21655,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_depositWithFee_kind",
-          "line": 1076,
+          "line": 1082,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21570,7 +21669,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_topUpActionBudget_kind",
-          "line": 1114,
+          "line": 1120,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21585,7 +21684,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_topUpActionBudgetFor_kind",
-          "line": 1151,
+          "line": 1157,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -21600,7 +21699,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_unknown_kind_empty",
-          "line": 1181,
+          "line": 1187,
           "called": [
             "CellProofBundle",
             "stepVMHash"
@@ -21609,7 +21708,7 @@
         {
           "kind": "def",
           "name": "stepVMHashFromAction",
-          "line": 1209,
+          "line": 1215,
           "called": [
             "Action",
             "ActorId",
@@ -21624,7 +21723,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_deterministic",
-          "line": 1217,
+          "line": 1223,
           "called": [
             "Action",
             "ActorId",
@@ -21636,7 +21735,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_dispute",
-          "line": 1237,
+          "line": 1243,
           "called": [
             "ActorId",
             "Dispute",
@@ -21651,7 +21750,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_disputeWithdraw",
-          "line": 1245,
+          "line": 1251,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21665,7 +21764,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_verdict",
-          "line": 1253,
+          "line": 1259,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21680,7 +21779,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_rollback",
-          "line": 1260,
+          "line": 1266,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21694,7 +21793,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_declareLocalPolicy",
-          "line": 1267,
+          "line": 1273,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21709,7 +21808,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_revokeLocalPolicy",
-          "line": 1274,
+          "line": 1280,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21723,7 +21822,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofChallenge",
-          "line": 1281,
+          "line": 1287,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21737,7 +21836,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofResolution",
-          "line": 1290,
+          "line": 1296,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21751,7 +21850,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_freezeResource",
-          "line": 1299,
+          "line": 1305,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21768,7 +21867,7 @@
         {
           "kind": "theorem",
           "name": "step_vm_dispatch_well_typed",
-          "line": 1345,
+          "line": 1351,
           "called": [
             "Action",
             "ActorId",
@@ -26151,7 +26250,8 @@
           "called": [
             "ActorId",
             "Signature",
-            "Snapshot"
+            "Snapshot",
+            "deploymentId"
           ]
         },
         {
@@ -26169,7 +26269,8 @@
             "Snapshot.encode",
             "Stream",
             "cbeTagBytes",
-            "cborHeadEncode"
+            "cborHeadEncode",
+            "deploymentId"
           ]
         },
         {
@@ -26256,6 +26357,7 @@
             "RuntimeState",
             "attestorRegistry",
             "bootstrapFromSnapshot",
+            "deploymentId",
             "policy",
             "verifyAttestationWith"
           ]
@@ -26276,6 +26378,7 @@
             "Verify",
             "attestorRegistry",
             "bootstrapFromAttestedSnapshotWith",
+            "deploymentId",
             "policy"
           ]
         }
@@ -26471,48 +26574,52 @@
             "LogEntry",
             "PublicKey",
             "ReplayError",
+            "ResourceId",
             "Signature",
             "extractEvents",
+            "refundRate",
             "replayStepWith"
           ]
         },
         {
           "kind": "theorem",
           "name": "extractEventsStepWith_state_eq_replayStepWith",
-          "line": 96,
+          "line": 100,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
             "ExtendedState",
             "LogEntry",
             "PublicKey",
+            "ResourceId",
             "Signature",
             "extractEventsStepWith",
+            "refundRate",
             "replayStepWith"
           ]
         },
         {
           "kind": "def",
           "name": "beU64",
-          "line": 115,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "beU32",
           "line": 120,
           "called": []
         },
         {
           "kind": "def",
+          "name": "beU32",
+          "line": 125,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "beToNat",
-          "line": 126,
+          "line": 131,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeExtractResponse",
-          "line": 133,
+          "line": 138,
           "called": [
             "LegalKernel",
             "Runtime",
@@ -27144,7 +27251,9 @@
             "ContentHash",
             "ExtendedState",
             "ResourceId",
-            "policy"
+            "deploymentId",
+            "policy",
+            "refundRate"
           ]
         },
         {
@@ -27179,9 +27288,11 @@
             "SignedAction",
             "appendEntry",
             "apply_bridge_admissible_with_budget",
+            "deploymentId",
             "extractEvents",
             "hashEncodable",
-            "policy"
+            "policy",
+            "refundRate"
           ]
         },
         {
@@ -27218,11 +27329,14 @@
             "ExtendedState",
             "FrameError",
             "LogEntry.hash",
+            "ResourceId",
             "RuntimeState",
+            "deploymentId",
             "entries",
             "genesis",
             "loadAndTruncate",
             "policy",
+            "refundRate",
             "replay",
             "zeroHash"
           ]
@@ -27230,7 +27344,7 @@
         {
           "kind": "def",
           "name": "bootstrapFromSnapshot",
-          "line": 386,
+          "line": 391,
           "called": [
             "AuthorityPolicy",
             "BootstrapError",
@@ -27238,6 +27352,7 @@
             "LogEntry.hash",
             "RuntimeState",
             "Snapshot",
+            "deploymentId",
             "entries",
             "loadAndTruncate",
             "policy",
@@ -27249,7 +27364,7 @@
         {
           "kind": "def",
           "name": "processBatch",
-          "line": 456,
+          "line": 461,
           "called": [
             "ProcessError",
             "ProcessResult",
@@ -27261,7 +27376,7 @@
         {
           "kind": "def",
           "name": "processPure",
-          "line": 503,
+          "line": 508,
           "called": [
             "BridgeAdmissibleWith",
             "Event",
@@ -27272,15 +27387,17 @@
             "SignedAction",
             "Verify",
             "apply_bridge_admissible_with_budget",
+            "deploymentId",
             "extractEvents",
             "hashEncodable",
-            "policy"
+            "policy",
+            "refundRate"
           ]
         },
         {
           "kind": "theorem",
           "name": "processPure_deterministic",
-          "line": 536,
+          "line": 541,
           "called": [
             "LegalKernel",
             "Runtime",
@@ -27424,7 +27541,8 @@
             "Signature",
             "apply_bridge_admissible_with_budget",
             "chainBroken",
-            "hashEncodable"
+            "hashEncodable",
+            "refundRate"
           ]
         },
         {
@@ -27453,14 +27571,16 @@
             "LogEntry.hash",
             "PublicKey",
             "ReplayError",
+            "ResourceId",
             "Signature",
+            "refundRate",
             "replayStepWith"
           ]
         },
         {
           "kind": "def",
           "name": "replayLoop",
-          "line": 386,
+          "line": 391,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -27474,16 +27594,18 @@
         {
           "kind": "def",
           "name": "replayWith",
-          "line": 403,
+          "line": 408,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "LogEntry",
             "PublicKey",
             "ReplayError",
+            "ResourceId",
             "Signature",
             "entries",
             "genesis",
+            "refundRate",
             "replayLoopWith",
             "zeroHash"
           ]
@@ -27491,22 +27613,24 @@
         {
           "kind": "def",
           "name": "replay",
-          "line": 426,
+          "line": 431,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "LogEntry",
             "ReplayError",
+            "ResourceId",
             "Verify",
             "entries",
             "genesis",
+            "refundRate",
             "replayWith"
           ]
         },
         {
           "kind": "def",
           "name": "replayFromSeedWith",
-          "line": 436,
+          "line": 441,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -27514,15 +27638,17 @@
             "LogEntry",
             "PublicKey",
             "ReplayError",
+            "ResourceId",
             "Signature",
             "entries",
+            "refundRate",
             "replayLoopWith"
           ]
         },
         {
           "kind": "def",
           "name": "replayFromSeed",
-          "line": 452,
+          "line": 459,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -27537,7 +27663,7 @@
         {
           "kind": "def",
           "name": "replayHash",
-          "line": 469,
+          "line": 476,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -27553,7 +27679,7 @@
         {
           "kind": "theorem",
           "name": "replay_deterministic",
-          "line": 484,
+          "line": 491,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -27566,7 +27692,7 @@
         {
           "kind": "theorem",
           "name": "replay_empty",
-          "line": 494,
+          "line": 501,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -31173,18 +31299,18 @@
     {
       "module": "LegalKernel.Test.Bridge.BudgetRefund",
       "path": "LegalKernel/Test/Bridge/BudgetRefund.lean",
-      "declaration_count": 15,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge",
-          "line": 39,
+          "line": 40,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "BudgetRefundTests",
-          "line": 40,
+          "line": 41,
           "called": [
             "LegalKernel",
             "LegalKernel.Bridge",
@@ -31194,14 +31320,6 @@
         {
           "kind": "def",
           "name": "claimant",
-          "line": 50,
-          "called": [
-            "ActorId"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "other",
           "line": 53,
           "called": [
             "ActorId"
@@ -31209,8 +31327,16 @@
         },
         {
           "kind": "def",
-          "name": "gasResource",
+          "name": "other",
           "line": 56,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gasResource",
+          "line": 59,
           "called": [
             "ResourceId"
           ]
@@ -31218,25 +31344,25 @@
         {
           "kind": "def",
           "name": "now",
-          "line": 59,
+          "line": 62,
           "called": []
         },
         {
           "kind": "def",
           "name": "freeTier",
-          "line": 61,
+          "line": 64,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionCost",
-          "line": 63,
+          "line": 66,
           "called": []
         },
         {
           "kind": "def",
           "name": "ledger",
-          "line": 66,
+          "line": 69,
           "called": [
             "EpochBudgetState",
             "claimant",
@@ -31246,7 +31372,7 @@
         {
           "kind": "def",
           "name": "fundedPool",
-          "line": 70,
+          "line": 73,
           "called": [
             "State",
             "claimant",
@@ -31259,7 +31385,7 @@
         {
           "kind": "def",
           "name": "emptyPool",
-          "line": 74,
+          "line": 77,
           "called": [
             "State",
             "claimant",
@@ -31272,7 +31398,7 @@
         {
           "kind": "def",
           "name": "trustedRate",
-          "line": 79,
+          "line": 82,
           "called": [
             "ResourceId"
           ]
@@ -31280,7 +31406,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 84,
+          "line": 87,
           "called": [
             "BudgetPolicy",
             "actionCost",
@@ -31290,7 +31416,7 @@
         {
           "kind": "def",
           "name": "es",
-          "line": 88,
+          "line": 91,
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
@@ -31302,9 +31428,57 @@
         },
         {
           "kind": "def",
-          "name": "tests",
-          "line": 98,
+          "name": "deploymentId",
+          "line": 99,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "refundRateActive",
+          "line": 103,
           "called": [
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "esAdmit",
+          "line": 108,
+          "called": [
+            "ExtendedState",
+            "NonceState.empty",
+            "claimant",
+            "fundedPool",
+            "ledger",
+            "mockPubKey",
+            "policy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mkSigned",
+          "line": 117,
+          "called": [
+            "Action",
+            "ActorId",
+            "SignedAction",
+            "deploymentId",
+            "esAdmit",
+            "expectsNonce",
+            "mockPubKey",
+            "mockSign",
+            "signingInput"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 125,
+          "called": [
+            "Action",
+            "AdmissibleWith",
+            "AuthorityPolicy.unrestricted",
+            "BridgeAdmissibleWith",
             "BudgetRefundTests",
             "EpochBudgetState",
             "ExtendedState",
@@ -31315,6 +31489,13 @@
             "TotalSupply",
             "actionCost",
             "admission_consumes_budget_on_success_bridge",
+            "admission_refund_consumes_budget_bridge",
+            "admission_refund_preserves_free_tier_bridge",
+            "apply_admissible_with_budget",
+            "apply_bridge_admissible_with_budget",
+            "apply_bridge_admissible_with_budget_epochBudgets_eq",
+            "apply_bridge_admissible_with_budget_kernel_epochBudgets",
+            "apply_bridge_admissible_with_budget_none_iff",
             "assert",
             "assertEq",
             "claimBudgetRefund",
@@ -31324,14 +31505,19 @@
             "currentBudget_after_refund_ge_free_tier",
             "currentBudget_after_refund_lt",
             "currentBudget_after_refund_other",
+            "deploymentId",
             "emptyPool",
             "es",
+            "esAdmit",
+            "extractEvents",
             "freeTier",
             "fundedPool",
             "gasPoolActor",
             "gasResource",
             "getBalance",
             "ledger",
+            "mkSigned",
+            "mockVerify",
             "now",
             "other",
             "refundAmount",
@@ -31339,6 +31525,7 @@
             "refundAmount_le_max",
             "refundAmount_le_of_budgetUnits_le",
             "refundConsumeExtra",
+            "refundRateActive",
             "refund_conserves_supply",
             "refund_consume_succeeds",
             "refund_other_actor_untouched",
@@ -31875,6 +32062,7 @@
           "name": "feeSplitReceiptPreimage",
           "line": 164,
           "called": [
+            "deploymentId",
             "feeSplitReceiptTail",
             "sender"
           ]
@@ -31884,6 +32072,7 @@
           "name": "computeFeeSplitReceiptHash",
           "line": 170,
           "called": [
+            "deploymentId",
             "feeSplitReceiptPreimage",
             "hashBytes",
             "sender"
@@ -31894,6 +32083,7 @@
           "name": "Entry",
           "line": 179,
           "called": [
+            "deploymentId",
             "sender"
           ]
         },
@@ -31904,6 +32094,7 @@
           "called": [
             "Entry",
             "computeFeeSplitReceiptHash",
+            "deploymentId",
             "feeSplit",
             "feeSplitReceiptTail",
             "sender"
@@ -32062,6 +32253,7 @@
           "line": 95,
           "called": [
             "boldTokenAddr20",
+            "deploymentId",
             "resourceIdBold",
             "sender"
           ]
@@ -32179,7 +32371,9 @@
           "kind": "structure",
           "name": "Entry",
           "line": 103,
-          "called": []
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "def",
@@ -32206,6 +32400,7 @@
           "line": 146,
           "called": [
             "concatBytes",
+            "deploymentId",
             "encodeAddressLeftPadded",
             "encodeUint256BE"
           ]
@@ -32215,6 +32410,7 @@
           "name": "computeReceiptHash",
           "line": 159,
           "called": [
+            "deploymentId",
             "hashBytes",
             "receiptPreimage"
           ]
@@ -32262,6 +32458,7 @@
             "Entry",
             "computeDeploymentId",
             "computeReceiptHash",
+            "deploymentId",
             "projectDepositId"
           ]
         },
@@ -34116,6 +34313,7 @@
             "TurnSide",
             "canonicalDeploymentId",
             "challenger",
+            "deploymentId",
             "mkCommit"
           ]
         },
@@ -35927,6 +36125,7 @@
           "line": 79,
           "called": [
             "Eip712Message",
+            "deploymentId",
             "transfer"
           ]
         },
@@ -36226,6 +36425,7 @@
           "line": 398,
           "called": [
             "TestCase",
+            "deploymentId",
             "eip712DomainSeparator",
             "eip712Wrap",
             "testDomain",
@@ -44690,6 +44890,7 @@
           "line": 31,
           "called": [
             "challenger",
+            "deploymentId",
             "initialRange"
           ]
         },
@@ -44948,6 +45149,7 @@
           "called": [
             "GameState",
             "challenger",
+            "deploymentId",
             "singleStepRange"
           ]
         },
@@ -44958,6 +45160,7 @@
           "called": [
             "GameState",
             "challenger",
+            "deploymentId",
             "singleStepRange"
           ]
         },
@@ -45426,7 +45629,8 @@
           "name": "trivialGameState",
           "line": 37,
           "called": [
-            "challenger"
+            "challenger",
+            "deploymentId"
           ]
         },
         {
@@ -45434,7 +45638,8 @@
           "name": "disagreeingGameState",
           "line": 53,
           "called": [
-            "challenger"
+            "challenger",
+            "deploymentId"
           ]
         },
         {
@@ -45691,6 +45896,7 @@
             "attestorActor",
             "attestorPk",
             "cliDeploymentId",
+            "deploymentId",
             "genesisSnap",
             "mockSign"
           ]
@@ -45809,7 +46015,8 @@
             "KeyRegistry",
             "RuntimeState",
             "TestCase",
-            "bootstrapFromAttestedSnapshot"
+            "bootstrapFromAttestedSnapshot",
+            "deploymentId"
           ]
         },
         {
@@ -45871,6 +46078,7 @@
             "ExtendedState.empty",
             "TestCase",
             "bootstrap",
+            "deploymentId",
             "deploymentId1",
             "deploymentId2"
           ]
@@ -47345,6 +47553,7 @@
             "Gen",
             "PropInput",
             "challenger",
+            "deploymentId",
             "genNat"
           ]
         },
@@ -47453,6 +47662,7 @@
             "Gen",
             "MultiRoundInput",
             "challenger",
+            "deploymentId",
             "genNat"
           ]
         },
@@ -47508,6 +47718,7 @@
             "BondConservationInput",
             "Gen",
             "challenger",
+            "deploymentId",
             "genNat"
           ]
         },
@@ -47555,6 +47766,7 @@
           "called": [
             "PerfInput",
             "challenger",
+            "deploymentId",
             "simulateNRounds"
           ]
         },
@@ -47610,6 +47822,7 @@
             "Gen",
             "HonestChallengerInput",
             "challenger",
+            "deploymentId",
             "genNat"
           ]
         },
@@ -47647,6 +47860,7 @@
             "BondAccountingInput",
             "Gen",
             "challenger",
+            "deploymentId",
             "genNat"
           ]
         },
@@ -48111,6 +48325,7 @@
             "attestationSigningInput",
             "attestorId",
             "baseSnap",
+            "deploymentId",
             "mockPubKey",
             "mockSign",
             "testDeploymentId"
@@ -48162,6 +48377,7 @@
             "attestorId",
             "attestorRegistry",
             "baseSnap",
+            "deploymentId",
             "mockVerify",
             "testDeploymentId",
             "verifyAttestationWith"
@@ -48343,6 +48559,7 @@
           "line": 117,
           "called": [
             "RuntimeState",
+            "deploymentId",
             "es0",
             "policy",
             "testDeploymentId",
@@ -48762,6 +48979,7 @@
           "line": 64,
           "called": [
             "RuntimeState",
+            "deploymentId",
             "es0",
             "policy",
             "testDeploymentId",
@@ -49748,6 +49966,7 @@
           "called": [
             "RuntimeState",
             "TestCase",
+            "deploymentId",
             "genesis",
             "policy",
             "processSignedAction",
@@ -49763,6 +49982,7 @@
             "RuntimeState",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "genesis",
             "policy",
             "processBatch",
@@ -49777,6 +49997,7 @@
           "called": [
             "RuntimeState",
             "TestCase",
+            "deploymentId",
             "genesis",
             "policy",
             "processPure",
@@ -49791,6 +50012,7 @@
           "called": [
             "RuntimeState",
             "TestCase",
+            "deploymentId",
             "genesis",
             "policy",
             "processPure",
@@ -49926,6 +50148,7 @@
           "called": [
             "RuntimeState",
             "TestCase",
+            "deploymentId",
             "genesis",
             "policy",
             "processSignedAction",
@@ -49940,6 +50163,7 @@
           "called": [
             "TestCase",
             "bootstrap",
+            "deploymentId",
             "genesis",
             "policy"
           ]
@@ -49951,6 +50175,7 @@
           "called": [
             "RuntimeState",
             "TestCase",
+            "deploymentId",
             "genesis",
             "policy",
             "processPure",
@@ -50004,7 +50229,7 @@
     {
       "module": "LegalKernel.Test.Runtime.LoopHappyPath",
       "path": "LegalKernel/Test/Runtime/LoopHappyPath.lean",
-      "declaration_count": 22,
+      "declaration_count": 27,
       "declarations": [
         {
           "kind": "namespace",
@@ -50184,6 +50409,7 @@
             "RuntimeState",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "es0",
             "getBalance",
             "mkSignedAction",
@@ -50206,6 +50432,7 @@
             "State",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "emptyState",
             "mkSignedAction",
             "mockPubKey",
@@ -50235,6 +50462,7 @@
             "RuntimeState",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "es0_oneShot",
             "getBalance",
             "mkSignedAction",
@@ -50254,6 +50482,7 @@
             "RuntimeState",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "es0_oneShot",
             "mkSignedAction",
             "mockVerify",
@@ -50272,6 +50501,7 @@
             "RuntimeState",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "es0_oneShot",
             "mkSignedAction",
             "mockVerify",
@@ -50300,6 +50530,7 @@
             "RuntimeState",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "entries",
             "es0_oneShot",
             "hashEncodable",
@@ -50315,8 +50546,80 @@
         },
         {
           "kind": "def",
+          "name": "refundClaimant",
+          "line": 453,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "esRefund",
+          "line": 460,
+          "called": [
+            "ExtendedState",
+            "NonceState.empty",
+            "emptyState",
+            "mockPubKey",
+            "refundClaimant",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "refundRateActive",
+          "line": 469,
+          "called": [
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "refundThroughRuntimeAdmitted",
+          "line": 475,
+          "called": [
+            "RuntimeState",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "claimBudgetRefund",
+            "deploymentId",
+            "esRefund",
+            "getBalance",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "processSignedActionWith",
+            "refundClaimant",
+            "refundRate",
+            "refundRateActive",
+            "testDeploymentId",
+            "zeroHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "refundThroughRuntimeRejectedByDefault",
+          "line": 507,
+          "called": [
+            "RuntimeState",
+            "TestCase",
+            "claimBudgetRefund",
+            "deploymentId",
+            "esRefund",
+            "mkSignedAction",
+            "mockVerify",
+            "policy",
+            "processSignedActionWith",
+            "refundClaimant",
+            "testDeploymentId",
+            "zeroHash"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "processSignedActionWithAPI",
-          "line": 444,
+          "line": 526,
           "called": [
             "ProcessError",
             "ProcessResult",
@@ -50331,7 +50634,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 456,
+          "line": 538,
           "called": [
             "LegalKernel.Test.Runtime",
             "LoopHappyPath",
@@ -50346,6 +50649,8 @@
             "mintHappyPath",
             "processSignedActionWithAPI",
             "processSignedActionWithHappyPath",
+            "refundThroughRuntimeAdmitted",
+            "refundThroughRuntimeRejectedByDefault",
             "replayProtection",
             "rewardHappyPath",
             "transferHappyPath",
@@ -50910,7 +51215,8 @@
           "called": [
             "AuthorityBinding",
             "InvariantClaim",
-            "LawBinding"
+            "LawBinding",
+            "deploymentId"
           ]
         },
         {
@@ -50920,14 +51226,17 @@
           "called": [
             "AuthorityBinding",
             "InvariantClaim",
-            "LawBinding"
+            "LawBinding",
+            "deploymentId"
           ]
         },
         {
           "kind": "def",
           "name": "encodeManifestHashInput",
           "line": 326,
-          "called": []
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "def",
@@ -50950,6 +51259,7 @@
           "name": "computeManifestHash",
           "line": 442,
           "called": [
+            "deploymentId",
             "encodeManifestHashInput"
           ]
         },
@@ -51073,6 +51383,7 @@
             "LawBinding",
             "ParsedDeployment",
             "decodeHexString",
+            "deploymentId",
             "encodeManifestHashInput",
             "invariantClaimKindTag",
             "invariantClaimScopeTag",
@@ -51122,6 +51433,7 @@
             "deploymentAuthorityPolicyDefName",
             "deploymentClaimDefName",
             "deploymentDefName",
+            "deploymentId",
             "deploymentIdDefName",
             "deploymentManifestHashDefName",
             "es",
@@ -52282,6 +52594,7 @@
             "Deployment",
             "TestCase",
             "assertEq",
+            "deploymentId",
             "fixtureDeploymentId"
           ]
         },
@@ -54084,7 +54397,9 @@
           "kind": "def",
           "name": "fixtureDeployment",
           "line": 468,
-          "called": []
+          "called": [
+            "deploymentId"
+          ]
         },
         {
           "kind": "def",
@@ -56364,7 +56679,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 36,
+      "declaration_count": 38,
       "declarations": [
         {
           "kind": "def",
@@ -56438,6 +56753,7 @@
             "bootstrap",
             "demoGenesis",
             "demoPolicy",
+            "deploymentId",
             "genesis",
             "hashEncodable",
             "policy",
@@ -56448,13 +56764,14 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 240,
+          "line": 250,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "Verify",
             "demoGenesis",
             "demoPolicy",
+            "deploymentId",
             "entries",
             "genesis",
             "policy",
@@ -56465,13 +56782,14 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 272,
+          "line": 289,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "bootstrap",
             "demoGenesis",
             "demoPolicy",
+            "deploymentId",
             "genesis",
             "policy"
           ]
@@ -56479,13 +56797,14 @@
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 302,
+          "line": 325,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "bootstrap",
             "demoGenesis",
             "demoPolicy",
+            "deploymentId",
             "genesis",
             "policy",
             "saveSnapshot",
@@ -56496,13 +56815,14 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 350,
+          "line": 379,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "Verify",
             "demoGenesis",
             "demoPolicy",
+            "deploymentId",
             "entries",
             "formatHashHex",
             "genesis",
@@ -56514,13 +56834,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 399,
+          "line": 435,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 418,
+          "line": 454,
           "called": [
             "ActorId",
             "AuthorityPolicy",
@@ -56528,6 +56848,7 @@
             "Verify",
             "demoGenesis",
             "demoPolicy",
+            "deploymentId",
             "entries",
             "genesis",
             "policy",
@@ -56538,10 +56859,11 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 529,
+          "line": 571,
           "called": [
             "ExtendedState",
             "demoGenesis",
+            "deploymentId",
             "entries",
             "genesis",
             "readAllEntries"
@@ -56550,7 +56872,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 578,
+          "line": 620,
           "called": [
             "formatHashHex"
           ]
@@ -56558,7 +56880,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 593,
+          "line": 635,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -56568,19 +56890,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 615,
+          "line": 657,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 695,
+          "line": 754,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 704,
+          "line": 763,
           "called": [
             "hexCharToNibble"
           ]
@@ -56588,43 +56910,47 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 743,
+          "line": 802,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 754,
+          "line": 813,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 769,
+          "line": 828,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
             "ExtendedState",
             "LogEntry.decode",
             "LogEntry.hash",
+            "ResourceId",
             "Verify",
             "beToNat",
+            "deploymentId",
             "encodeExtractResponse",
             "extractEventsStepWith",
             "maxExtractFrameBytes",
             "policy",
-            "readExactOrEof"
+            "readExactOrEof",
+            "refundRate"
           ]
         },
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 828,
+          "line": 887,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "demoGenesis",
             "demoPolicy",
+            "deploymentId",
             "extractEventsLoop",
             "genesis",
             "policy",
@@ -56634,22 +56960,23 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 855,
+          "line": 920,
           "called": [
             "actionCost",
+            "deploymentId",
             "freeTier"
           ]
         },
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 894,
+          "line": 969,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 905,
+          "line": 980,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -56658,7 +56985,7 @@
         {
           "kind": "def",
           "name": "gasPoolConfig?",
-          "line": 921,
+          "line": 996,
           "called": [
             "GlobalFlags",
             "maxDrainPerActionBold",
@@ -56668,7 +56995,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 934,
+          "line": 1009,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -56678,7 +57005,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 945,
+          "line": 1020,
           "called": [
             "AuthorityPolicy",
             "GlobalFlags",
@@ -56688,7 +57015,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 950,
+          "line": 1025,
           "called": [
             "GlobalFlags"
           ]
@@ -56696,15 +57023,32 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 957,
+          "line": 1032,
           "called": [
             "GlobalFlags"
           ]
         },
         {
           "kind": "def",
+          "name": "refundRateConfig",
+          "line": 1038,
+          "called": [
+            "GlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "refundRate",
+          "line": 1045,
+          "called": [
+            "GlobalFlags",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "recordNatFlag",
-          "line": 968,
+          "line": 1056,
           "called": [
             "GlobalFlags"
           ]
@@ -56712,11 +57056,12 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 984,
+          "line": 1072,
           "called": [
             "GlobalFlags",
             "actionCost",
             "decodeHexString",
+            "deploymentId",
             "freeTier",
             "recordNatFlag"
           ]
@@ -56724,13 +57069,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 1006,
+          "line": 1096,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 1017,
+          "line": 1107,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
@@ -56812,6 +57157,7 @@
             "ContentHash",
             "ExtendedState",
             "Verify",
+            "deploymentId",
             "entries",
             "hashEncodable",
             "loadSnapshot",
@@ -56874,7 +57220,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 204,
+          "line": 205,
           "called": [
             "runAll"
           ]

@@ -218,7 +218,8 @@ knomosis/
 │   │                             under the top-level `Lex/DSL/`.
 │   ├── Events/                -- §8.9.2 Event inductive + extractEvents
 │   ├── Runtime/               -- Hash, LogFile, Replay, EventStream, Snapshot, Loop (Phase 5);
-│   │                             BudgetSidecar (GP.6.2) + GasPoolSidecar (GP.7.4) config persistence
+│   │                             BudgetSidecar (GP.6.2) + GasPoolSidecar (GP.7.4) +
+│   │                             RefundRateSidecar (GP.9.1) config persistence
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6) + incentive amendment
 │   ├── LocalPolicy/           -- Workstream LP classification typeclasses
 │   ├── Bridge/                -- Workstreams A–D: crypto adaptors, identity,
@@ -3606,28 +3607,70 @@ frozen index 22 with full CBE codec / `Action.toTransition` /
 `kernelOnlyApply` mirror / step-VM cell layout
 (`actionKindByte`/`actionFieldsForL1`/`readOnlyCells`/`writeCells`) /
 `bridgeAuthorizedAction => false` / the sound `doesNotDebitPoolAt` arm;
-the §13.6 admission gate (`claimBudgetRefund_gate`, SEVEN safety
-conjuncts: rate pin, pool-actor pin, free-tier-excluding bound,
-solvency, consume-exempt / self-pool defences) on BOTH the kernel and
-bridge-aware entries, with the trusted per-resource rate threaded as
+the §13.6 admission gate (`claimBudgetRefund_gate`, EIGHT safety
+conjuncts: rate pin, refund-ENABLED check `1 ≤ weiPerBudgetUnit` — so
+the default `refundRate = 0` genuinely rejects refunds rather than
+burning budget for a zero payout — pool-actor pin, free-tier-excluding
+bound, solvency, consume-exempt / self-pool defences) on BOTH the
+kernel and bridge-aware entries, with the trusted per-resource rate
+threaded as
 ADMISSION config (`refundRate : ResourceId → Nat`, NOT persisted — the
 kernel step uses the action's logged `weiPerBudgetUnit`, so replay /
 fault-proof stay deterministic); the headline admission theorems
 (`claimBudgetRefund_gate_characterization`,
 `admission_refund_consumes_budget`,
-`admission_refund_preserves_free_tier`, the four
-`refund_rejected_when_*` corollaries) + their bridge-aware mirrors;
+`admission_refund_preserves_free_tier`, the five
+`refund_rejected_when_*` corollaries — incl.
+`refund_rejected_when_rate_disabled`, which pins that a `0` rate
+genuinely rejects).  The two POSITIVE guarantees are mirrored on the
+PRODUCTION (bridge-aware) path at an ARBITRARY deployment `refundRate`
+— not only the disabled default — by
+`admission_refund_consumes_budget_bridge` /
+`admission_refund_preserves_free_tier_bridge`, which lift through the
+now rate-generic agreement corollaries
+(`apply_bridge_admissible_with_budget_{epochBudgets_eq,none_iff,
+kernel_epochBudgets,base_bridge_eq}` all thread `refundRate`); this
+closes a soundness gap where the original mirrors excluded refunds
+(`hne_refund`) and proved bridge↔kernel agreement only at rate 0, so
+the production path's refund correctness was unproven at the only
+configuration in which refunds function.  Plus
 `balanceChanged` + a widened `budgetConsumed`
 (`actionCost + budgetUnits`) event emission (NO new `Event`
-constructor); and runtime threading of `RuntimeState.refundRate`
-through `processSignedActionWith` / `processPure` / `replayStepWith`.
-Suites `bridge-budget-refund` (20 cases) + `encoding-action` (+4); all
-axioms ⊆ the canonical three; no `gasPoolDeniedTags` bump needed (tag
-22 ∈ `List.range 23`).  Remaining (GP.5.3-style follow-ons, scoped in
-`docs/planning/unified_gas_pool_plan.md` §GP.9.1): the operator CLI
-flags + sidecar persistence of the rate, the L1 step-VM execution arm
-(`stepVMHash` kind 22 + Solidity `_step22` + cross-stack corpus), and
-the Rust mirrors.
+constructor); runtime threading of `RuntimeState.refundRate`
+through `processSignedActionWith` / `processPure` / `replayStepWith` /
+the full replay chain (`replayLoopWith` / `replayWith` /
+`replayFromSeedWith`) AND the restart-reconstruction path (`bootstrap`
+/ `replay`) AND event extraction (`extractEventsStepWith`); and the
+**operator CLI + sidecar** — the `--wei-per-budget-unit-eth` /
+`--wei-per-budget-unit-bold` flags thread the trusted rate into every
+log-touching subcommand (`process` / `replay` / `bootstrap` /
+`snapshot` / `replay-up-to` / `export-cell-proofs` /
+`extract-events`), persisting a non-default rate to a
+`<LOG>.refundratecfg` `RefundRateSidecar` cross-checked on every such
+command (a forgotten / changed rate fails with a clear `refund-rate
+error`, not a silently-dropped refund on replay; `export-terminate-bundle`
+is refund-rate-independent — `kernelOnlyReplay`, no gate — and so
+untouched).  Refunds DISABLED by default (rate 0, no sidecar).
+Suites `bridge-budget-refund` (26 cases — incl. two END-TO-END
+bridge-path admission cases driving `apply_bridge_admissible_with_budget`
+at a nonzero rate + the kernel-path signed admission / disabled-rate
+rejection / event emission) + `runtime-loop-happy-path` (+2, a refund
+admitted / rejected through the literal `processSignedActionWith`) +
+the new `runtime-refund-rate-sidecar` (9 — codec round-trip /
+`toRefundRate` / `isDefault` / `checkConsistent` /
+`writeSidecarIfAbsent`) + `encoding-action` (+4); all axioms ⊆ the
+canonical three; no `gasPoolDeniedTags` bump needed (tag 22 ∈
+`List.range 23`).  Two deployment sharp-edges are documented (not bugs):
+cross-resource rate consistency (a single shared budget refunds at the
+richest blessed leg — calibrate per-resource rates to equal value) and
+the future Solidity `_step22`'s `uint256` payout (the
+`budgetUnits × weiPerBudgetUnit` product can reach ~2^128).  Remaining
+(GP.5.3-style follow-ons, scoped in
+`docs/planning/unified_gas_pool_plan.md` §GP.9.1): the L1 step-VM
+execution arm (`stepVMHash` kind 22 + Solidity `_step22` + cross-stack
+corpus + L1 redemption path), and the Rust mirrors (ingest tag-22
+encoder, host gate refund arm + `CommandKernel` flag forwarding,
+indexer budget-view).
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H

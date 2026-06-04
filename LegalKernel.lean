@@ -228,6 +228,7 @@ import LegalKernel.Runtime.Hash
 import LegalKernel.Runtime.LogFile
 import LegalKernel.Runtime.BudgetSidecar
 import LegalKernel.Runtime.GasPoolSidecar
+import LegalKernel.Runtime.RefundRateSidecar
 import LegalKernel.Runtime.Replay
 import LegalKernel.Runtime.EventStream
 import LegalKernel.Runtime.Snapshot

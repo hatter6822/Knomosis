@@ -35,6 +35,7 @@ import LegalKernel.Bridge.BudgetRefund
 import LegalKernel.Authority.SignedAction
 import LegalKernel.Bridge.Admissible
 import LegalKernel.Test.Framework
+import LegalKernel.Test.MockCrypto
 
 namespace LegalKernel.Test.Bridge
 namespace BudgetRefundTests
@@ -42,7 +43,9 @@ namespace BudgetRefundTests
 open LegalKernel
 open LegalKernel.Authority
 open LegalKernel.Bridge
+open LegalKernel.Events
 open LegalKernel.Test
+open LegalKernel.Test.MockCrypto
 
 /-! ## Fixtures -/
 
@@ -91,6 +94,30 @@ def es : ExtendedState :=
   , registry := KeyRegistry.empty
   , epochBudgets := ledger
   , budgetPolicy := policy }
+
+/-- The test deployment id. -/
+def deploymentId : ByteArray := ByteArray.mk #[0x9A, 0x50]
+
+/-- An ACTIVE refund rate: 5 wei per budget unit on the ETH leg
+    (resource 0), 0 (disabled) elsewhere. -/
+def refundRateActive : ResourceId → Nat := fun r => if r = 0 then 5 else 0
+
+/-- The end-to-end admission fixture: like `es`, but with the claimant
+    REGISTERED (so `AdmissibleWith` holds and a signed refund can be
+    admitted through the production-style gate). -/
+def esAdmit : ExtendedState :=
+  { base := fundedPool
+  , nonces := NonceState.empty
+  , registry := KeyRegistry.empty.register claimant (mockPubKey claimant.toNat)
+  , epochBudgets := ledger
+  , budgetPolicy := policy }
+
+/-- Build a mock-signed `SignedAction` for `action` by `signer` at
+    `esAdmit`. -/
+def mkSigned (action : Action) (signer : ActorId) : SignedAction :=
+  let nonce := expectsNonce esAdmit signer
+  let msg := signingInput action signer nonce deploymentId
+  ⟨action, signer, nonce, mockSign (mockPubKey signer.toNat) msg⟩
 
 /-! ## Tests -/
 
@@ -261,6 +288,130 @@ def tests : List TestCase :=
         assertEq (expected := (0 : Nat))
           (actual := refundConsumeExtra (.transfer 0 5 6 10)) "non-refund extra = 0"
     }
+  , { name := "refund gate REJECTS a rate-0 (disabled) resource — refunds genuinely off"
+    , body := do
+        -- Under the default `refundRate = fun _ => 0`, the rate pin
+        -- forces weiPerBudgetUnit = 0, but the refund-enabled conjunct
+        -- requires ≥ 1 — so the refund is REJECTED, not admitted as a
+        -- budget-burning zero-payout no-op.
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund gasResource 89 0 gasPoolActor)
+          claimant es (fun _ => 0)) "rate-0 refund rejected (not budget-burned)"
+        -- A BOLD-leg refund under an ETH-only active rate (BOLD rate 0).
+        assert (! claimBudgetRefund_gate (.claimBudgetRefund 1 89 0 gasPoolActor)
+          claimant es refundRateActive) "BOLD-leg refund rejected when BOLD rate is 0"
+    }
+  , -- ## End-to-end admission (the production-style gate, mock-signed)
+    { name := "END-TO-END: a signed refund is admitted, pays the claimant, retires the budget"
+    , body := do
+        let action : Action := .claimBudgetRefund gasResource 89 5 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (AdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue h =>
+            match apply_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st h refundRateActive with
+            | some es' =>
+                -- payout = budgetUnits × rate = 89 × 5 = 445.
+                assertEq (expected := (100 + 445 : Nat))
+                  (actual := getBalance es'.base gasResource claimant)
+                  "claimant credited 89 × 5"
+                assertEq (expected := (5000 - 445 : Nat))
+                  (actual := getBalance es'.base gasResource gasPoolActor)
+                  "pool debited 89 × 5"
+                -- budget = 100 − (actionCost 1 + budgetUnits 89) = 10 = freeTier.
+                assertEq (expected := (10 : Nat))
+                  (actual := es'.epochBudgets.currentBudget claimant now freeTier)
+                  "budget retired down to the free tier (anti-drain preserved)"
+            | none => assert false "refund should be admitted under the active rate"
+        | .isFalse _ =>
+            assert false "AdmissibleWith should hold (claimant registered + signed)"
+    }
+  , { name := "END-TO-END: the SAME refund is REJECTED under the default (disabled) rate"
+    , body := do
+        let action : Action := .claimBudgetRefund gasResource 89 5 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (AdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue h =>
+            -- Same base-admissible action, but `refundRate = fun _ => 0`
+            -- ⇒ rate pin forces weiPerBudgetUnit = 5 ≠ 0 ⇒ gate rejects;
+            -- the budget is NOT consumed (admission returns none).
+            match apply_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st h (fun _ => 0) with
+            | some _ => assert false "refund must be rejected when refunds are disabled"
+            | none => pure ()
+        | .isFalse _ => assert false "AdmissibleWith should hold (claimant registered + signed)"
+    }
+  , { name := "END-TO-END: a refund emits claimant-credit + pool-debit + widened budgetConsumed"
+    , body := do
+        let action : Action := .claimBudgetRefund gasResource 89 5 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (AdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue h =>
+            match apply_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st h refundRateActive with
+            | some es' =>
+                let events := extractEvents esAdmit es' st
+                assert (decide (Event.balanceChanged gasResource claimant 100 545 ∈ events))
+                  "claimant gas-credit event (100 → 545)"
+                assert (decide (Event.balanceChanged gasResource gasPoolActor 5000 4555 ∈ events))
+                  "pool gas-debit event (5000 → 4555)"
+                -- the budgetConsumed amount is the WIDENED actionCost + budgetUnits = 1 + 89.
+                assert (decide (Event.budgetConsumed claimant 90 ∈ events))
+                  "widened budgetConsumed event (actionCost + budgetUnits)"
+            | none => assert false "refund should be admitted under the active rate"
+        | .isFalse _ => assert false "AdmissibleWith should hold (claimant registered + signed)"
+    }
+  , -- ## End-to-end admission on the PRODUCTION (bridge-aware) path.
+    -- The runtime (`Runtime/Loop.lean`, `Runtime/Replay.lean`) admits via
+    -- `apply_bridge_admissible_with_budget … rs.refundRate`, NOT the
+    -- kernel-only gate above.  These two cases value-check the literal
+    -- production entry at a NONZERO rate (the only configuration in which
+    -- refunds function) and at the disabled default — the empirical
+    -- counterpart to `admission_refund_{consumes_budget,preserves_free_tier}_bridge`.
+    { name := "END-TO-END (bridge path): a signed refund is admitted, pays the claimant, retires the budget"
+    , body := do
+        let action : Action := .claimBudgetRefund gasResource 89 5 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (BridgeAdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue hb =>
+            match apply_bridge_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st 0 hb refundRateActive with
+            | some es' =>
+                assertEq (expected := (100 + 445 : Nat))
+                  (actual := getBalance es'.base gasResource claimant)
+                  "claimant credited 89 × 5 (production path)"
+                assertEq (expected := (5000 - 445 : Nat))
+                  (actual := getBalance es'.base gasResource gasPoolActor)
+                  "pool debited 89 × 5 (production path)"
+                assertEq (expected := (10 : Nat))
+                  (actual := es'.epochBudgets.currentBudget claimant now freeTier)
+                  "budget retired to the free tier on the production path (anti-drain)"
+            | none => assert false "bridge refund should be admitted under the active rate"
+        | .isFalse _ =>
+            assert false "BridgeAdmissibleWith should hold (refund is not bridge-only; claimant registered)"
+    }
+  , { name := "END-TO-END (bridge path): the SAME refund is REJECTED under the default (disabled) rate"
+    , body := do
+        let action : Action := .claimBudgetRefund gasResource 89 5 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (BridgeAdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue hb =>
+            match apply_bridge_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st 0 hb (fun _ => 0) with
+            | some _ => assert false "bridge refund must be rejected when refunds are disabled"
+            | none => pure ()
+        | .isFalse _ =>
+            assert false "BridgeAdmissibleWith should hold (refund is not bridge-only; claimant registered)"
+    }
   , -- ## Term-level API stability
     { name := "GP.9.1: term-level API stability (law + accounting)"
     , body := do
@@ -315,8 +466,20 @@ def tests : List TestCase :=
         let _t9 := @Authority.refund_rejected_when_rate_mismatch
         let _t10 := @Authority.refund_rejected_when_over_refundable
         let _t11 := @Authority.refund_rejected_when_pool_insolvent
-        -- Production-path (bridge-aware) admission mirror.
+        let _t11b := @Authority.refund_rejected_when_rate_disabled
+        -- Production-path (bridge-aware) admission mirrors.  The two
+        -- refund-specific mirrors close the GP.9.1 soundness gap: the
+        -- runtime entry's refund consume + free-tier preservation are
+        -- proven for an ARBITRARY deployment `refundRate`, not only the
+        -- disabled default.
         let _t12 := @admission_consumes_budget_on_success_bridge
+        let _t13 := @admission_refund_consumes_budget_bridge
+        let _t14 := @admission_refund_preserves_free_tier_bridge
+        -- The four rate-generic agreement corollaries the mirrors rest on
+        -- now thread `refundRate` (the S1 generalisation).
+        let _t15 := @apply_bridge_admissible_with_budget_epochBudgets_eq
+        let _t16 := @apply_bridge_admissible_with_budget_none_iff
+        let _t17 := @apply_bridge_admissible_with_budget_kernel_epochBudgets
         pure ()
     }
   ]

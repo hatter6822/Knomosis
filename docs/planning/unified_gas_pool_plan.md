@@ -6256,11 +6256,14 @@ the design.
        logged action alone — replay / fault-proof determinism).
     2. *Admission gate* (`apply_admissible_with_budget` +
        `apply_bridge_admissible_with_budget`, §13.6 two-reviewer): the
-       new `claimBudgetRefund_gate` enforces the SEVEN conjuncts —
+       new `claimBudgetRefund_gate` enforces the EIGHT conjuncts —
        `S ≠ bridgeActor`, `S ≠ poolActor`, `poolActor = gasPoolActor`
        (victim-drain pin), `weiPerBudgetUnit = refundRate gasResource`
-       (rate pin), `1 ≤ budgetUnits ≤ refundableBudget` (free-tier-
-       excluding bound), and pool solvency.  The refund's budget effect
+       (rate pin), `1 ≤ weiPerBudgetUnit` (the refund-ENABLED check, so
+       the default `refundRate = 0` genuinely REJECTS refunds rather
+       than admitting them as a budget-burning zero-payout no-op),
+       `1 ≤ budgetUnits ≤ refundableBudget` (free-tier-excluding bound),
+       and pool solvency.  The refund's budget effect
        is a **consume** of `actionCost + budgetUnits`
        (`refundConsumeExtra`), not an `applyGrant` top-up.  The trusted
        per-resource rate is threaded as ADMISSION CONFIG (`refundRate :
@@ -6275,12 +6278,25 @@ the design.
        `claimBudgetRefund_gate_characterization` (the gate's exact
        reach), `admission_refund_consumes_budget` (budget retired =
        `actionCost + budgetUnits`), `admission_refund_preserves_free_tier`
-       (the anti-drain guarantee, end-to-end), and the four rejection
+       (the anti-drain guarantee, end-to-end), and the FIVE rejection
        corollaries `refund_rejected_when_{pool_not_canonical,
-       rate_mismatch,over_refundable,pool_insolvent}`.  All mirrored on
-       the production (bridge-aware) path via the GP.3.2 agreement
-       lemma (`admission_consumes_budget_on_success_bridge` et al.,
-       extended with the `hne_refund` exclusion).
+       rate_mismatch,over_refundable,pool_insolvent,rate_disabled}`
+       (the last pins that the disabled default genuinely rejects, via
+       the `1 ≤ weiPerBudgetUnit` gate conjunct).  The two POSITIVE
+       guarantees are mirrored on the production (bridge-aware) path —
+       at an ARBITRARY deployment `refundRate`, NOT only the disabled
+       default — by `admission_refund_consumes_budget_bridge` /
+       `admission_refund_preserves_free_tier_bridge`
+       (`Bridge/Admissible.lean`), which lift through the now
+       rate-generic agreement corollaries
+       (`apply_bridge_admissible_with_budget_{epochBudgets_eq,none_iff,
+       kernel_epochBudgets,base_bridge_eq}` all thread `refundRate`).
+       This closes a soundness gap the original mirrors left: they
+       EXCLUDED refunds via `hne_refund` and only proved bridge↔kernel
+       agreement at rate 0, so the production path's refund correctness
+       was unproven at the only configuration in which refunds function
+       (a nonzero rate) — exactly the "guaranteed-by-theorems" property
+       the whole system rests on.
     4. *`kernelOnlyApply` mirror* (`Disputes/Evidence.lean`) threads the
        same `toTransition`, so `apply_admissible_with_eq_kernelOnlyApply`
        stays by `rfl` (fault-proof prefix-replay unchanged).
@@ -6314,38 +6330,85 @@ the design.
        GP.3.4).
     9. *Runtime threading* (`Runtime/Loop.lean`, `Runtime/Replay.lean`):
        a `RuntimeState.refundRate` field (default `fun _ => 0`) threaded
-       into `processSignedActionWith` / `processPure` / `replayStepWith`;
-       a deployment that offers refunds supplies its calibrated rate and
-       refunds work end-to-end through the production gate.
-    10. *Tests*: `bridge-budget-refund` grows to 20 cases (the gate
-       accept + the five rejection classes + `refundConsumeExtra` +
-       the Action-layer / admission-theorem API stability);
+       into `processSignedActionWith` / `processPure` / `replayStepWith`
+       / `replayLoopWith` / `replayWith` / `replayFromSeedWith` /
+       `bootstrap` / `replay` (the restart-reconstruction path) /
+       `extractEventsStepWith` (event extraction).  A deployment that
+       offers refunds supplies its calibrated rate and refunds work
+       end-to-end through the production gate.
+    10. *Operator CLI + sidecar* (`Main.lean`,
+       `Runtime/RefundRateSidecar.lean`): the `--wei-per-budget-unit-eth`
+       / `--wei-per-budget-unit-bold` global flags thread the trusted
+       rate into the runtime (`RuntimeState.refundRate`) for every
+       log-touching subcommand (`process` / `replay` / `bootstrap` /
+       `snapshot` / `replay-up-to` / `export-cell-proofs` /
+       `extract-events`), and persist a non-default rate to a
+       `<LOG>.refundratecfg` sidecar cross-checked on every such command
+       (a forgotten / changed rate fails with a clear `refund-rate
+       error`, not a silently-rejected-and-dropped refund on replay).
+       Refunds DISABLED by default (rate 0, no sidecar — pre-GP.9.1
+       on-disk footprint preserved).  `export-terminate-bundle` is
+       deliberately untouched: it reconstructs via `kernelOnlyReplay`
+       (no admission gate, uses the LOGGED `weiPerBudgetUnit`), so the
+       terminate bundle is refund-rate-independent (as it is
+       budget-config-independent).
+    11. *Tests*: `bridge-budget-refund` grows to 26 cases (the gate
+       accept + the five rejection classes + `refundConsumeExtra` + two
+       END-TO-END bridge-path admission cases driving
+       `apply_bridge_admissible_with_budget` at a nonzero rate + the
+       Action-layer / admission-theorem / bridge-mirror API stability);
+       `runtime-loop-happy-path` grows by 2 (a refund admitted /
+       rejected through the literal `processSignedActionWith` runtime
+       entry); the new `runtime-refund-rate-sidecar` suite (9 cases —
+       codec round-trip, `toRefundRate`, `isDefault`, the
+       `checkConsistent` / `writeSidecarIfAbsent` discipline);
        `encoding-action` grows by 4 (round-trip, tag-22 pin, distinctness,
-       field injectivity).
+       field injectivity).  CLI smoke-tested end-to-end (the binary
+       writes the sidecar, rejects a forgotten / mismatched rate, accepts
+       the matching rate).
 
-  * **Remaining (operator CLI + L1 fault-proof + cross-stack mirrors).**
-    These are the established GP.5.3-style follow-on surfaces — each
-    independent and non-blocking for the L2 mechanism:
-    * *Operator CLI + sidecar*: `--wei-per-budget-unit-eth/bold` flags on
-      the `knomosis` binary (threaded into `RuntimeState.refundRate`) +
-      persisting the rate in the budget sidecar so every log-touching
-      subcommand (incl. the fault-proof oracle's `replay-up-to` /
-      `export-cell-proofs`) replays a refund-containing log under the
-      producer's rate.
+  * **Deployment-calibration sharp-edges (documented, not bugs).**
+    * *Cross-resource rate consistency (N1).*  A claimant's budget is a
+      single scalar but the payout is per-resource
+      (`budgetUnits × refundRate gasResource`), so a deployment with
+      asymmetric ETH / BOLD rates lets a claimant retire their one
+      shared budget at the richest leg.  The gate forbids a double
+      refund (single budget consumed once) and inflation (the rate is
+      pinned, not user-chosen), but does NOT police cross-resource
+      consistency: set `rate_eth : rate_bold` to the resources' real
+      relative value (e.g. equal USD-per-budget-unit, as the GP.6.5
+      calibration corpus does).  Warned in
+      `RefundRateSidecar.RefundRateConfig`'s docstring + the CLI help.
+    * *Cross-stack product overflow (N2, for the L1 follow-on).*
+      `budgetUnits` and `weiPerBudgetUnit` are each `fieldsBounded` < 2^64
+      (so each fits a `uint64` cell), but their PRODUCT (the payout) can
+      reach ~2^128, so the future Solidity `_step22` MUST compute it in
+      `uint256`.  Flagged at the `actionFieldsForL1` claimBudgetRefund
+      arm.
+
+  * **Remaining (L1 fault-proof + cross-stack mirrors).**  The operator
+    CLI + sidecar landed (Landed item 10 above); the remaining surfaces
+    are the established GP.5.3-style follow-ons — each independent and
+    non-blocking for the L2 mechanism:
     * *L1 step-VM execution arm*: the Lean `stepVMHash` kind-22 recipe +
-      the Solidity `KnomosisStepVM._step22` + the cross-stack `step_vm.json`
-      corpus (so a refund step is L1-fault-proof-executable), and the
-      `KnomosisBridge` L1 redemption path for the refunded gas.
+      the Solidity `KnomosisStepVM._step22` (computing the payout in
+      `uint256` per N2) + the cross-stack `step_vm.json` corpus (so a
+      refund step is L1-fault-proof-executable), and the `KnomosisBridge`
+      L1 redemption path for the refunded gas.
     * *Rust mirrors*: the `knomosis-l1-ingest` action encoder (tag 22),
-      the `knomosis-host` budget gate's refund arm, and the
+      the `knomosis-host` budget gate's refund arm + `CommandKernel`
+      forwarding of the `--wei-per-budget-unit-*` flags, and the
       `knomosis-indexer` budget-view treatment of the widened
       `budgetConsumed` amount.
 
   * **Acceptance criteria.**  Two reviewers (touches the GP.3.2
     admission gate).  The soundness theorems are mechanised (axioms ⊆
-    the canonical three); `lake build` warning-free; `lake test` green
-    (incl. the 20 + 4 new cases); the audit gates (`count_sorries` /
-    `tcb_audit` / `naming_audit` / `deferral_audit` / …) pass.
+    the canonical three — incl. the two new bridge-path refund mirrors);
+    `lake build` warning-free; `lake test` green (incl. the
+    `bridge-budget-refund` 26 + `runtime-loop-happy-path` +2 +
+    `runtime-refund-rate-sidecar` 9 + `encoding-action` +4 cases); the
+    audit gates (`count_sorries` / `tcb_audit` / `naming_audit` /
+    `deferral_audit` / …) pass.
 
   * **Dependencies.**  GP.3.2 (the budget admission gate), GP.7.1 /
     GP.7.2 (the `gasPoolActor` reservation + policy), GP.5.1 / GP.5.4

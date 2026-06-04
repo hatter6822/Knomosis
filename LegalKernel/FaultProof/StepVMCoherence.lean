@@ -335,6 +335,12 @@ def actionFieldsForL1 : Action → ByteArray
   -- (claimant) is provided to the L1 step VM via the SignedAction
   -- payload, not encoded in the action fields.  This frozen layout is
   -- what the GP.9.1 `stepVMHash`/Solidity `_step22` follow-on consumes.
+  -- OVERFLOW NOTE for that follow-on: `budgetUnits` and
+  -- `weiPerBudgetUnit` are each `fieldsBounded` to < 2^64, so each fits a
+  -- `uint64`, but their PRODUCT (the payout) can reach ~2^128 — the
+  -- Solidity `_step22` MUST compute `budgetUnits * weiPerBudgetUnit` in
+  -- `uint256`, never `uint64` (as `_stepTopUpActionBudget` handles its
+  -- own gas-transfer amount).
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
       uint64BE weiPerBudgetUnit ++ uint64BE poolActor.toNat

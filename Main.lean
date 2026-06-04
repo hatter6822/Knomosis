@@ -162,11 +162,14 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0)
     (policy : AuthorityPolicy := demoPolicy)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
-  -- GP.6.2 / GP.7.4: cross-check the budget + gas-pool configs against
-  -- the persisted sidecars BEFORE bootstrap, so a config mismatch yields
-  -- a clear error rather than an opaque post-state-hash mismatch in
-  -- replay (both configs participate in every entry's post-state hash).
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (refundRateCfg : RefundRateSidecar.RefundRateConfig :=
+      RefundRateSidecar.RefundRateConfig.disabled) : IO UInt32 := do
+  -- GP.6.2 / GP.7.4 / GP.9.1: cross-check the budget + gas-pool + refund-rate
+  -- configs against the persisted sidecars BEFORE bootstrap, so a config
+  -- mismatch yields a clear error rather than an opaque post-state-hash
+  -- mismatch (budget / gas-pool) or a silently-rejected refund (rate) in
+  -- replay.
   let cfg := BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength
   match (← BudgetSidecar.checkConsistent logPath cfg) with
   | .error msg =>
@@ -178,9 +181,15 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
     IO.eprintln s!"gas-pool-config error: {msg}"
     return 2
   | .ok () => pure ()
+  match (← RefundRateSidecar.checkConsistent logPath refundRateCfg) with
+  | .error msg =>
+    IO.eprintln s!"refund-rate error: {msg}"
+    return 2
+  | .ok () => pure ()
   -- 1. Bootstrap: load existing log (if any), truncate partial tail.
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap policy genesis logPath deploymentId epochLength) with
+  match (← bootstrap policy genesis logPath deploymentId epochLength
+            refundRateCfg.toRefundRate) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -194,6 +203,7 @@ def cmdProcess (logPath : System.FilePath) (inputPath : System.FilePath)
     -- or a pre-existing sidecar).
     BudgetSidecar.writeSidecarIfAbsent logPath cfg
     GasPoolSidecar.writeSidecarIfAbsent logPath gasPoolCfg
+    RefundRateSidecar.writeSidecarIfAbsent logPath refundRateCfg
     -- 2. Read the input SignedAction stream.
     match (← readSignedActionsFromFile inputPath) with
     | .error e =>
@@ -242,13 +252,18 @@ def cmdReplay (logPath : System.FilePath)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0)
     (policy : AuthorityPolicy := demoPolicy)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (refundRateCfg : RefundRateSidecar.RefundRateConfig :=
+      RefundRateSidecar.RefundRateConfig.disabled) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
   | .ok () => pure ()
   match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
   | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match (← RefundRateSidecar.checkConsistent logPath refundRateCfg) with
+  | .error msg => IO.eprintln s!"refund-rate error: {msg}"; return 2
   | .ok () => pure ()
   IO.println s!"replaying log {logPath}"
   let (entries, _, frameErr?) ← readAllEntries logPath
@@ -257,8 +272,10 @@ def cmdReplay (logPath : System.FilePath)
   IO.println s!"  parsed {entries.length} entries"
   -- AR.2.4 entry: route the admissibility check through the
   -- deploymentId-aware variant.  The result is hashed identically
-  -- to the legacy path.
-  match replayWith Verify deploymentId policy genesis entries epochLength with
+  -- to the legacy path.  GP.9.1: thread the refund rate so a
+  -- refund-containing log replays under the producing rate.
+  match replayWith Verify deploymentId policy genesis entries epochLength
+          refundRateCfg.toRefundRate with
   | .ok finalState =>
     IO.println s!"  final state hash: {formatHashHex (hashEncodable finalState)}"
     pure 0
@@ -274,7 +291,9 @@ def cmdBootstrap (logPath : System.FilePath)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0)
     (policy : AuthorityPolicy := demoPolicy)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (refundRateCfg : RefundRateSidecar.RefundRateConfig :=
+      RefundRateSidecar.RefundRateConfig.disabled) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
@@ -282,8 +301,12 @@ def cmdBootstrap (logPath : System.FilePath)
   match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
   | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
   | .ok () => pure ()
+  match (← RefundRateSidecar.checkConsistent logPath refundRateCfg) with
+  | .error msg => IO.eprintln s!"refund-rate error: {msg}"; return 2
+  | .ok () => pure ()
   IO.println s!"bootstrapping from log {logPath}"
-  match (← bootstrap policy genesis logPath deploymentId epochLength) with
+  match (← bootstrap policy genesis logPath deploymentId epochLength
+            refundRateCfg.toRefundRate) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -304,7 +327,9 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0)
     (policy : AuthorityPolicy := demoPolicy)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (refundRateCfg : RefundRateSidecar.RefundRateConfig :=
+      RefundRateSidecar.RefundRateConfig.disabled) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
@@ -312,8 +337,12 @@ def cmdSnapshot (logPath : System.FilePath) (snapPath : System.FilePath)
   match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
   | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
   | .ok () => pure ()
+  match (← RefundRateSidecar.checkConsistent logPath refundRateCfg) with
+  | .error msg => IO.eprintln s!"refund-rate error: {msg}"; return 2
+  | .ok () => pure ()
   IO.println s!"taking snapshot from log {logPath}"
-  match (← bootstrap policy genesis logPath deploymentId epochLength) with
+  match (← bootstrap policy genesis logPath deploymentId epochLength
+            refundRateCfg.toRefundRate) with
   | .error e =>
     IO.eprintln s!"bootstrap failed: {repr e}"
     pure 1
@@ -352,12 +381,15 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0)
     (policy : AuthorityPolicy := demoPolicy)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
-  -- GP.6.2 / GP.7.4: the observer's truth oracle relies on this
-  -- subcommand to compute the CANONICAL state commit.  A budget- OR
-  -- gas-pool-config mismatch would silently yield a WRONG commit (the
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (refundRateCfg : RefundRateSidecar.RefundRateConfig :=
+      RefundRateSidecar.RefundRateConfig.disabled) : IO UInt32 := do
+  -- GP.6.2 / GP.7.4 / GP.9.1: the observer's truth oracle relies on this
+  -- subcommand to compute the CANONICAL state commit.  A budget-, gas-pool-,
+  -- or refund-rate mismatch would silently yield a WRONG commit (the
   -- genesis localPolicies + the gate inside `replayWith` both depend on
-  -- the config), so cross-check both sidecars first and fail loudly
+  -- the config; an off-rate refund is rejected and dropped from the
+  -- prefix), so cross-check all three sidecars first and fail loudly
   -- rather than letting the observer defend the wrong state root.
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
@@ -365,6 +397,9 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
   | .ok () => pure ()
   match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
   | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match (← RefundRateSidecar.checkConsistent logPath refundRateCfg) with
+  | .error msg => IO.eprintln s!"refund-rate error: {msg}"; return 2
   | .ok () => pure ()
   match idxStr.toNat? with
   | none =>
@@ -380,7 +415,8 @@ def cmdReplayUpTo (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      match replayWith Verify deploymentId policy genesis prefix_ epochLength with
+      match replayWith Verify deploymentId policy genesis prefix_ epochLength
+              refundRateCfg.toRefundRate with
       | .error e =>
         IO.eprintln s!"replay-up-to failed: {repr e}"
         pure 1
@@ -420,18 +456,23 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
     (genesis : ExtendedState := demoGenesis)
     (epochLength : Nat := 0)
     (policy : AuthorityPolicy := demoPolicy)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) :
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (refundRateCfg : RefundRateSidecar.RefundRateConfig :=
+      RefundRateSidecar.RefundRateConfig.disabled) :
     IO UInt32 := do
-  -- GP.6.2 / GP.7.4: like `replay-up-to`, the cell-proof bundle is
-  -- computed from a config-gated prefix replay, so a budget- OR
-  -- gas-pool-config mismatch would build a bundle against the wrong
-  -- pre-state.  Cross-check both sidecars first.
+  -- GP.6.2 / GP.7.4 / GP.9.1: like `replay-up-to`, the cell-proof bundle is
+  -- computed from a config-gated prefix replay, so a budget-, gas-pool-, or
+  -- refund-rate mismatch would build a bundle against the wrong pre-state.
+  -- Cross-check all three sidecars first.
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
   | .ok () => pure ()
   match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
   | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
+  | .ok () => pure ()
+  match (← RefundRateSidecar.checkConsistent logPath refundRateCfg) with
+  | .error msg => IO.eprintln s!"refund-rate error: {msg}"; return 2
   | .ok () => pure ()
   match idxStr.toNat?, signerStr.toNat? with
   | none, _ =>
@@ -450,7 +491,8 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
       pure 2
     else
       let prefix_ := entries.take idx
-      match replayWith Verify deploymentId policy genesis prefix_ epochLength with
+      match replayWith Verify deploymentId policy genesis prefix_ epochLength
+              refundRateCfg.toRefundRate with
       | .error e =>
         IO.eprintln
           s!"knomosis export-cell-proofs: prefix replay failed at idx {idx} ({repr e})"
@@ -676,6 +718,23 @@ def cmdHelp : IO UInt32 := do
   IO.println "        persisted to a `<LOG>.gaspoolcfg` sidecar and cross-checked"
   IO.println "        on every log-touching command (it participates in the"
   IO.println "        log's post-state hashes), like the budget config."
+  IO.println "  --wei-per-budget-unit-eth <N>"
+  IO.println "        Enable GP.9.1 refund-on-exit at the ETH leg (resource 0):"
+  IO.println "        the trusted weiPerBudgetUnit a `claimBudgetRefund` action is"
+  IO.println "        pinned to (use the SAME rate the GP.5.1 deposit grant used)."
+  IO.println "        Omitting it keeps refunds DISABLED at ETH (the fail-safe"
+  IO.println "        default — a refund must then carry rate 0, a zero payout the"
+  IO.println "        gate rejects)."
+  IO.println "  --wei-per-budget-unit-bold <N>"
+  IO.println "        The BOLD-leg (resource 1) refund rate.  Supplying EITHER"
+  IO.println "        refund-rate flag enables refunds at that leg; a missing rate"
+  IO.println "        defaults to 0 (refunds disabled there).  A non-default rate"
+  IO.println "        is persisted to a `<LOG>.refundratecfg` sidecar and"
+  IO.println "        cross-checked on every log-touching command (the rate"
+  IO.println "        decides which refunds are admissible, so a refund-containing"
+  IO.println "        log replays correctly only under the producing rate), so a"
+  IO.println "        forgotten/changed flag fails with a clear `refund-rate"
+  IO.println "        error` rather than a silently-rejected refund."
   IO.println ""
   IO.println "Where:"
   IO.println "  LOG       path to the append-only transition log."
@@ -768,7 +827,7 @@ partial def readExactOrEof (h : IO.FS.Stream) (need : Nat)
     idx)` across stdin frames; returns the process exit code. -/
 partial def extractEventsLoop
     (stdin stdout : IO.FS.Stream) (deploymentId : ByteArray) (epochLength : Nat)
-    (policy : AuthorityPolicy)
+    (policy : AuthorityPolicy) (refundRate : ResourceId → Nat)
     (state : ExtendedState) (prevHash : ContentHash) (idx : Nat) : IO UInt32 := do
   match (← readExactOrEof stdin 12) with
   | none => return 0   -- clean EOF at a frame boundary: done.
@@ -793,7 +852,7 @@ partial def extractEventsLoop
           return 1
         else
           match extractEventsStepWith Verify deploymentId policy state prevHash entry idx
-                  epochLength with
+                  epochLength refundRate with
           | .error err =>
             IO.eprintln s!"extract-events: replay failed at idx {idx} (seq {seq}): {repr err}"
             return 1
@@ -801,7 +860,7 @@ partial def extractEventsLoop
             -- Pure, unit-tested wire encoding (see EventStream).
             stdout.write (encodeExtractResponse seq events)
             stdout.flush
-            extractEventsLoop stdin stdout deploymentId epochLength policy
+            extractEventsLoop stdin stdout deploymentId epochLength policy refundRate
               newState (LogEntry.hash entry) (idx + 1)
 
 /-- Subcommand: `knomosis extract-events --log LOG`.  Streams the
@@ -829,7 +888,9 @@ def cmdExtractEvents (logPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
     (genesis : ExtendedState := demoGenesis) (epochLength : Nat := 0)
     (policy : AuthorityPolicy := demoPolicy)
-    (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
+    (gasPoolCfg : Option Bridge.GasPoolConfig := none)
+    (refundRateCfg : RefundRateSidecar.RefundRateConfig :=
+      RefundRateSidecar.RefundRateConfig.disabled) : IO UInt32 := do
   match (← BudgetSidecar.checkConsistent logPath
             (BudgetSidecar.ofPolicy genesis.budgetPolicy epochLength)) with
   | .error msg => IO.eprintln s!"budget-config error: {msg}"; return 2
@@ -837,9 +898,13 @@ def cmdExtractEvents (logPath : System.FilePath)
   match (← GasPoolSidecar.checkConsistent logPath gasPoolCfg) with
   | .error msg => IO.eprintln s!"gas-pool-config error: {msg}"; return 2
   | .ok () => pure ()
+  match (← RefundRateSidecar.checkConsistent logPath refundRateCfg) with
+  | .error msg => IO.eprintln s!"refund-rate error: {msg}"; return 2
+  | .ok () => pure ()
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout
-  extractEventsLoop stdin stdout deploymentId epochLength policy genesis zeroHash 0
+  extractEventsLoop stdin stdout deploymentId epochLength policy
+    refundRateCfg.toRefundRate genesis zeroHash 0
 
 /-- Parsed global-flag bundle.  Carries the boolean / optional flag
     values plus the residual argument list (with recognised global
@@ -881,6 +946,16 @@ structure GlobalFlags where
   /-- `--gas-pool-bold-cap <n>` value (GP.7.4): the BOLD-leg (resource 1)
       per-action drain cap.  See `gasPoolEthCap`. -/
   gasPoolBoldCap : Option Nat := none
+  /-- `--wei-per-budget-unit-eth <n>` value (GP.9.1): the trusted ETH-leg
+      (resource 0) refund exchange rate the `claimBudgetRefund` admission
+      gate pins each refund's `weiPerBudgetUnit` to.  `none` / `0` keeps
+      refunds DISABLED at ETH (the fail-safe default); a deployment that
+      offers refunds supplies the SAME rate its GP.5.1 deposit grant
+      used. -/
+  refundRateEth : Option Nat := none
+  /-- `--wei-per-budget-unit-bold <n>` value (GP.9.1): the BOLD-leg
+      (resource 1) refund exchange rate.  See `refundRateEth`. -/
+  refundRateBold : Option Nat := none
   /-- First malformed numeric budget flag encountered, if any (e.g.
       `--free-tier ten`).  Recorded rather than silently dropped so
       `main` can FAIL loudly instead of running under a different
@@ -957,6 +1032,19 @@ def hasUnknownBudgetMode (g : GlobalFlags) : Bool :=
 def epochLengthValue (g : GlobalFlags) : Nat :=
   g.epochLength.getD 0
 
+/-- GP.9.1: the persisted refund-rate config implied by the flags
+    (`RefundRateConfig.ofFlags`, defaulting each missing leg to `0` —
+    refunds disabled at that resource). -/
+def refundRateConfig (g : GlobalFlags) : RefundRateSidecar.RefundRateConfig :=
+  RefundRateSidecar.RefundRateConfig.ofFlags
+    (g.refundRateEth.getD 0) (g.refundRateBold.getD 0)
+
+/-- GP.9.1: the trusted per-resource refund rate to thread into the
+    runtime (`RuntimeState.refundRate`).  `fun _ => 0` (refunds disabled)
+    when neither rate flag is supplied. -/
+def refundRate (g : GlobalFlags) : ResourceId → Nat :=
+  g.refundRateConfig.toRefundRate
+
 end GlobalFlags
 
 /-- GP.6.2: record a numeric budget flag into the flag bundle, or note
@@ -994,6 +1082,8 @@ def parseGlobalFlags (args : List String) : GlobalFlags :=
     | "--epoch-length" :: n :: rest => recordNatFlag (go rest) "--epoch-length" n (fun g v => { g with epochLength := some v })
     | "--gas-pool-eth-cap" :: n :: rest => recordNatFlag (go rest) "--gas-pool-eth-cap" n (fun g v => { g with gasPoolEthCap := some v })
     | "--gas-pool-bold-cap" :: n :: rest => recordNatFlag (go rest) "--gas-pool-bold-cap" n (fun g v => { g with gasPoolBoldCap := some v })
+    | "--wei-per-budget-unit-eth" :: n :: rest => recordNatFlag (go rest) "--wei-per-budget-unit-eth" n (fun g v => { g with refundRateEth := some v })
+    | "--wei-per-budget-unit-bold" :: n :: rest => recordNatFlag (go rest) "--wei-per-budget-unit-bold" n (fun g v => { g with refundRateBold := some v })
     | x :: rest =>
       let g := go rest
       { g with rest := x :: g.rest }
@@ -1038,6 +1128,10 @@ def main (args : List String) : IO UInt32 := do
   let policy := flags.policy
   let gasPoolCfg := flags.gasPoolConfig?
   let epochLength := flags.epochLengthValue
+  -- GP.9.1: the trusted per-resource refund rate (refunds disabled
+  -- unless `--wei-per-budget-unit-eth/bold` is supplied), threaded into
+  -- the runtime + persisted to the `<log>.refundratecfg` sidecar.
+  let refundRateCfg := flags.refundRateConfig
   if flags.hasUnknownBudgetMode then
     IO.eprintln
       "warning: --budget-policy accepts only 'bounded'; ignoring unrecognised value (using genesis default budget policy)"
@@ -1059,30 +1153,30 @@ def main (args : List String) : IO UInt32 := do
     let out := match tail with
       | []      => none
       | o :: _  => some (System.FilePath.mk o)
-    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out depId genesis epochLength policy gasPoolCfg
+    cmdProcess (System.FilePath.mk log) (System.FilePath.mk inp) out depId genesis epochLength policy gasPoolCfg refundRateCfg
   | ["replay", log]   => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdReplay (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg
+    cmdReplay (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg refundRateCfg
   | ["bootstrap", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdBootstrap (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg
+    cmdBootstrap (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg refundRateCfg
   | ["snapshot", log, snap] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap) depId genesis epochLength policy gasPoolCfg
+    cmdSnapshot (System.FilePath.mk log) (System.FilePath.mk snap) depId genesis epochLength policy gasPoolCfg refundRateCfg
   | ["withdrawal-proof", snap, idStr] => do
     warnIfFallbackHash allowFallbackHash
     cmdWithdrawalProof (System.FilePath.mk snap) idStr
   | ["replay-up-to", log, idxStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdReplayUpTo (System.FilePath.mk log) idxStr depId genesis epochLength policy gasPoolCfg
+    cmdReplayUpTo (System.FilePath.mk log) idxStr depId genesis epochLength policy gasPoolCfg refundRateCfg
   | ["export-cell-proofs", log, idxStr, signerStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId genesis epochLength policy gasPoolCfg
+    cmdExportCellProofs (System.FilePath.mk log) idxStr signerStr depId genesis epochLength policy gasPoolCfg refundRateCfg
   | ["export-terminate-bundle", log, idxStr] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
@@ -1090,7 +1184,7 @@ def main (args : List String) : IO UInt32 := do
   | ["extract-events", "--log", log] => do
     warnIfFallbackHash allowFallbackHash
     warnIfNoDeploymentId depId?
-    cmdExtractEvents (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg
+    cmdExtractEvents (System.FilePath.mk log) depId genesis epochLength policy gasPoolCfg refundRateCfg
   | _ => do
     IO.eprintln "knomosis: unrecognised arguments; try `knomosis help`."
     pure 2
