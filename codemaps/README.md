@@ -15,7 +15,9 @@ Each file records, per language:
 - `source_sync.source_digest` — a SHA-256 over the tracked source, so a
   reviewer can tell at a glance whether the map is in sync with the tree.
 - `modules[]` — one entry per source file that declares anything, with its
-  module name, path, and ordered `declarations[]`.  Only **named**
+  module name, path, and ordered `declarations[]`. Declaration `line` values
+  are zero-based schema/editor coordinates; add 1 for the line number shown by
+  `nl`, compiler diagnostics, and most human-facing editors. Only **named**
   declarations of the recognised kinds are recorded; constructs with no
   leading identifier name (anonymous Lean `instance : C where`, and
   metaprogramming such as `syntax` / `macro_rules` / `elab_rules`) are
