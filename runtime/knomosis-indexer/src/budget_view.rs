@@ -782,6 +782,37 @@ mod tests {
         assert_eq!(view.get_actor_budget_current_epoch_consumed(42).unwrap(), 1);
     }
 
+    /// GP.9.1 verification: a `claimBudgetRefund` emits NO new event
+    /// constructor — it reuses `BudgetConsumed` with the WIDENED amount
+    /// `actionCost + budgetUnits` (the kernel consumes both the
+    /// per-action cost and the retired purchased budget).  The indexer
+    /// has no refund concept; it just credits the widened amount to the
+    /// per-epoch consumed tally exactly, so the per-epoch "consumed this
+    /// epoch" view stays an exact mirror of the kernel — no indexer code
+    /// change is needed for the refund.
+    #[test]
+    fn dispatch_budget_consumed_widened_refund_amount() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut tx = s.begin_combined_tx().unwrap();
+        // actionCost 1 + budgetUnits 89 = 90 (a refund's widened consume).
+        dispatch_event(
+            &mut *tx,
+            &Event::BudgetConsumed {
+                actor: 42,
+                amount: 90,
+            },
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+        let view = BudgetReadView::new(&s);
+        assert_eq!(view.get_actor_budget(42).unwrap(), 0);
+        assert_eq!(
+            view.get_actor_budget_current_epoch_consumed(42).unwrap(),
+            90
+        );
+    }
+
     /// GasPoolClaim with no gas_pool_actor configured: no-op.
     #[test]
     fn gas_pool_claim_no_actor_is_noop() {

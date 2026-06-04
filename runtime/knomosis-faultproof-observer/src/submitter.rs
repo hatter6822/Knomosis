@@ -600,6 +600,15 @@ pub enum ActionKind {
     /// gated by that recipient's prior `allowTopUpFrom` consent.
     /// The L1 step-VM execution arm landed in GP.5.3.
     TopUpActionBudgetFor = 21,
+    /// `claimBudgetRefund(gasResource, budgetUnits, weiPerBudgetUnit,
+    /// poolActor)` — Workstream GP action-index 22 (GP.9.1
+    /// refund-on-exit).  The claimant (signer) is credited
+    /// `budgetUnits × weiPerBudgetUnit` out of the gas pool (the
+    /// debit/credit mirror of `TopUpActionBudget`).  The L1 step-VM
+    /// execution arm landed in GP.9.1.  Consistency only — the
+    /// production terminate-calldata path uses the raw `u8`, so kind 22
+    /// already flowed through.
+    ClaimBudgetRefund = 22,
 }
 
 /// Encode the FULL-FORM `terminateOnSingleStep` calldata.  The
@@ -1333,6 +1342,7 @@ mod tests {
         assert_eq!(ActionKind::DepositWithFee as u8, 19);
         assert_eq!(ActionKind::TopUpActionBudget as u8, 20);
         assert_eq!(ActionKind::TopUpActionBudgetFor as u8, 21);
+        assert_eq!(ActionKind::ClaimBudgetRefund as u8, 22);
     }
 
     /// Game id is encoded as 32-byte big-endian.
