@@ -894,6 +894,18 @@ pub mod command {
         /// gas-pool genesis `localPolicies` declaration participates in
         /// the per-log-entry post-state hash.
         gas_pool: Option<(u64, u64)>,
+        /// Optional GP.9.1 refund-on-exit rate: `Some((eth_rate,
+        /// bold_rate))` forwards `--wei-per-budget-unit-eth <eth_rate>
+        /// --wei-per-budget-unit-bold <bold_rate>` to the `knomosis`
+        /// binary, enabling `claimBudgetRefund` admission at those
+        /// per-resource rates (the binary does the authoritative refund
+        /// gating).  `None` (the default) passes no flag, leaving
+        /// refunds DISABLED (rate 0).  The rate is admission config (NOT
+        /// committed state — the kernel step uses the action's logged
+        /// `weiPerBudgetUnit`), persisted by the binary to a
+        /// `<log>.refundratecfg` sidecar and subject to the same
+        /// restart-consistency discipline.
+        refund_rate: Option<(u64, u64)>,
         /// Mutex guarding sequential subprocess access.  The
         /// worker is single-threaded today but the mutex
         /// future-proofs against an accidental parallel worker.
@@ -959,6 +971,7 @@ pub mod command {
                 budget_policy: None,
                 epoch_length: None,
                 gas_pool: None,
+                refund_rate: None,
                 spawn_lock: Mutex::new(()),
                 timeout: DEFAULT_TIMEOUT,
             })
@@ -1040,6 +1053,28 @@ pub mod command {
         #[must_use]
         pub fn gas_pool(&self) -> Option<(u64, u64)> {
             self.gas_pool
+        }
+
+        /// GP.9.1: enable refund-on-exit by forwarding
+        /// `--wei-per-budget-unit-eth <eth_rate>
+        /// --wei-per-budget-unit-bold <bold_rate>` to the `knomosis`
+        /// binary, so its admission gate accepts `claimBudgetRefund` at
+        /// those trusted per-resource rates.  The binary does the
+        /// authoritative refund gating (rate-pin / refundable-bound /
+        /// pool-solvency); the mock gate's refund arm enforces only the
+        /// policy-independent conjuncts.  See the `refund_rate` field
+        /// docstring for the sidecar / restart-consistency discipline.
+        #[must_use]
+        pub fn with_refund_rate(mut self, eth_rate: u64, bold_rate: u64) -> Self {
+            self.refund_rate = Some((eth_rate, bold_rate));
+            self
+        }
+
+        /// The configured refund rate `(eth_rate, bold_rate)`, if
+        /// refunds are enabled.  Diagnostic only.
+        #[must_use]
+        pub fn refund_rate(&self) -> Option<(u64, u64)> {
+            self.refund_rate
         }
 
         /// Override the default per-request timeout.
@@ -1208,6 +1243,16 @@ pub mod command {
                     .arg(eth_cap.to_string())
                     .arg("--gas-pool-bold-cap")
                     .arg(bold_cap.to_string());
+            }
+            // GP.9.1: forward the refund-on-exit rate so the `knomosis`
+            // admission gate accepts `claimBudgetRefund` at the trusted
+            // per-resource rate (persisted by the binary to the
+            // `<log>.refundratecfg` sidecar).
+            if let Some((eth_rate, bold_rate)) = self.refund_rate {
+                cmd.arg("--wei-per-budget-unit-eth")
+                    .arg(eth_rate.to_string())
+                    .arg("--wei-per-budget-unit-bold")
+                    .arg(bold_rate.to_string());
             }
             cmd.arg("process").arg(&self.log_path).arg(&temp_path);
             cmd.stdin(Stdio::null())
@@ -1733,6 +1778,61 @@ pub mod command {
                 gp_idx < process_idx,
                 "gas-pool flags must precede the subcommand: {argv}"
             );
+        }
+
+        /// GP.9.1: `with_refund_rate(eth, bold)` forwards
+        /// `--wei-per-budget-unit-eth eth --wei-per-budget-unit-bold bold`
+        /// ahead of the `process` subcommand with the exact rate values.
+        #[cfg(unix)]
+        #[test]
+        fn refund_rate_flags_passed_to_subprocess() {
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work)
+                .unwrap()
+                .with_refund_rate(1000, 3000);
+            assert_eq!(kernel.refund_rate(), Some((1000, 3000)));
+            assert_eq!(submit_retrying_spawn(&kernel, b"x").verdict, Verdict::Ok);
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            let lines: Vec<&str> = argv.lines().collect();
+            assert!(lines.contains(&"--wei-per-budget-unit-eth"), "argv: {argv}");
+            assert!(
+                lines.contains(&"--wei-per-budget-unit-bold"),
+                "argv: {argv}"
+            );
+            assert!(lines.contains(&"1000"), "eth rate value missing: {argv}");
+            assert!(lines.contains(&"3000"), "bold rate value missing: {argv}");
+            // Refund-rate flags precede the `process` subcommand.
+            let rr_idx = lines
+                .iter()
+                .position(|&l| l == "--wei-per-budget-unit-eth")
+                .unwrap();
+            let process_idx = lines.iter().position(|&l| l == "process").unwrap();
+            assert!(
+                rr_idx < process_idx,
+                "refund-rate flags must precede the subcommand: {argv}"
+            );
+        }
+
+        /// GP.9.1: without `with_refund_rate`, NO refund-rate flags are
+        /// passed (back-compat / refunds disabled by default).
+        #[cfg(unix)]
+        #[test]
+        fn no_refund_rate_passes_no_flags() {
+            let temp = tempfile::tempdir().unwrap();
+            let argv_out = temp.path().join("argv.txt");
+            let script = write_argv_capture_script(temp.path(), &argv_out);
+            let log = temp.path().join("log");
+            let work = temp.path().join("work");
+            let kernel = CommandKernel::new(script, log, work).unwrap();
+            assert_eq!(kernel.refund_rate(), None);
+            submit_retrying_spawn(&kernel, b"x");
+            let argv = std::fs::read_to_string(&argv_out).unwrap();
+            assert!(!argv.contains("--wei-per-budget-unit-eth"), "argv: {argv}");
+            assert!(!argv.contains("--wei-per-budget-unit-bold"), "argv: {argv}");
         }
 
         /// GP.7.4: without `with_gas_pool_policy`, NO gas-pool flags are

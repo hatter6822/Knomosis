@@ -236,6 +236,16 @@ fn build_kernel(cfg: &Config) -> Result<Box<dyn Kernel>, KernelBuildError> {
             );
             kernel = kernel.with_gas_pool_policy(eth_cap, bold_cap);
         }
+        // GP.9.1: forward the refund-on-exit rate so the Lean admission
+        // gate accepts `claimBudgetRefund` (see
+        // `CommandKernel::with_refund_rate`).
+        if let Some((eth_rate, bold_rate)) = cfg.refund_rate() {
+            info!(
+                eth_rate,
+                bold_rate, "forwarding refund rate to CommandKernel"
+            );
+            kernel = kernel.with_refund_rate(eth_rate, bold_rate);
+        }
         Ok(Box::new(kernel))
     }
 }
