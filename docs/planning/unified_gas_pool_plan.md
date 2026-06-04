@@ -6386,20 +6386,32 @@ the design.
       `uint256`.  Flagged at the `actionFieldsForL1` claimBudgetRefund
       arm.
 
-  * **Remaining (L1 fault-proof + cross-stack mirrors).**  The operator
-    CLI + sidecar landed (Landed item 10 above); the remaining surfaces
-    are the established GP.5.3-style follow-ons — each independent and
-    non-blocking for the L2 mechanism:
-    * *L1 step-VM execution arm*: the Lean `stepVMHash` kind-22 recipe +
-      the Solidity `KnomosisStepVM._step22` (computing the payout in
-      `uint256` per N2) + the cross-stack `step_vm.json` corpus (so a
-      refund step is L1-fault-proof-executable), and the `KnomosisBridge`
-      L1 redemption path for the refunded gas.
-    * *Rust mirrors*: the `knomosis-l1-ingest` action encoder (tag 22),
-      the `knomosis-host` budget gate's refund arm + `CommandKernel`
-      forwarding of the `--wei-per-budget-unit-*` flags, and the
-      `knomosis-indexer` budget-view treatment of the widened
-      `budgetConsumed` amount.
+  * **Solidity step-VM execution arm + Rust mirrors (LANDED).**  The
+    operator CLI + sidecar (Landed item 10 above) and now the L1
+    step-VM arm + the Rust mirrors are complete:
+    * *L1 step-VM execution arm* (LANDED): the Lean `stepVMHash` kind-22
+      recipe (`stepCommitClaimBudgetRefund` + the dispatcher arm +
+      `stepVMHash_claimBudgetRefund_kind`; `actionKindByteCases` widened
+      to 22, `stepVMHash_unknown_kind_empty` re-pinned at 23) + the
+      Solidity `KnomosisStepVM._stepClaimBudgetRefund` (the **uint256**
+      payout per N2; credit-claimant / debit-pool; pool-solvency guard)
+      + the cross-stack `step_vm.json` corpus widened 248 → 258 (6 happy
+      + 4 adversarial), so a refund step is L1-fault-proof-executable.
+      The two parity theorems `coherence_claimBudgetRefund` /
+      `cellwrites_claimBudgetRefund` close the GP.3.4-style gap.  **No
+      `KnomosisBridge` redemption path is needed**: the refund is an L2
+      balance credit, redeemed via the existing `withdrawWithProof`.
+    * *Rust mirrors* (LANDED): the `knomosis-l1-ingest`
+      `Action::ClaimBudgetRefund` encoder (tag 22; byte-pinned against
+      Lean via the `deposit_with_fee_action.json` differential), the
+      `knomosis-host` budget gate's refund arm (consume `action_cost +
+      budget_units`; the policy-independent rejections; strict-mode pool
+      solvency) + `CommandKernel` `with_refund_rate` forwarding of the
+      `--wei-per-budget-unit-*` flags + the daemon config flags, the
+      `knomosis-faultproof-observer` `ActionKind::ClaimBudgetRefund = 22`,
+      and the `knomosis-indexer` (verified: NO code change — the widened
+      `budgetConsumed` amount flows through the existing tag-20 decoder;
+      pinned by a test).
 
   * **Acceptance criteria.**  Two reviewers (touches the GP.3.2
     admission gate).  The soundness theorems are mechanised (axioms ⊆

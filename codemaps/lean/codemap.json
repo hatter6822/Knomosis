@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3c48ec1be0e844e8a53998adad0c5c61730cbb105f826b4b46be04bc5be0bd5a"
+    "source_digest": "4c2dd104e6d92d14a021403ccfb7fab045181d23deff9e5fa15e92908b79320f"
   },
   "summary": {
     "module_count": 292,
-    "declaration_count": 4841
+    "declaration_count": 4844
   },
   "modules": [
     {
@@ -32803,12 +32803,12 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction",
       "path": "LegalKernel/Test/Bridge/CrossCheck/DepositWithFeeAction.lean",
-      "declaration_count": 12,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck",
-          "line": 57,
+          "line": 58,
           "called": [
             "LegalKernel",
             "LegalKernel.Test"
@@ -32817,19 +32817,19 @@
         {
           "kind": "namespace",
           "name": "DepositWithFeeAction",
-          "line": 64,
+          "line": 65,
           "called": []
         },
         {
           "kind": "def",
           "name": "maxBudgetPerDeposit",
-          "line": 74,
+          "line": 75,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeActionHex",
-          "line": 88,
+          "line": 89,
           "called": [
             "Action",
             "hexFromBytes"
@@ -32838,7 +32838,7 @@
         {
           "kind": "def",
           "name": "mkDepositWithFee",
-          "line": 96,
+          "line": 97,
           "called": [
             "Action",
             "Json",
@@ -32850,7 +32850,7 @@
         {
           "kind": "def",
           "name": "mkTopUpActionBudget",
-          "line": 116,
+          "line": 117,
           "called": [
             "Action",
             "Json",
@@ -32863,7 +32863,7 @@
         {
           "kind": "def",
           "name": "mkTopUpActionBudgetFor",
-          "line": 133,
+          "line": 134,
           "called": [
             "Action",
             "Json",
@@ -32875,18 +32875,32 @@
         },
         {
           "kind": "def",
+          "name": "mkClaimBudgetRefund",
+          "line": 152,
+          "called": [
+            "Action",
+            "Json",
+            "claimBudgetRefund",
+            "encodeActionHex",
+            "gasResource",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "maxU64",
-          "line": 159,
+          "line": 177,
           "called": []
         },
         {
           "kind": "def",
           "name": "entries",
-          "line": 163,
+          "line": 181,
           "called": [
             "Json",
             "maxBudgetPerDeposit",
             "maxU64",
+            "mkClaimBudgetRefund",
             "mkDepositWithFee",
             "mkTopUpActionBudget",
             "mkTopUpActionBudgetFor"
@@ -32895,7 +32909,7 @@
         {
           "kind": "def",
           "name": "buildFixture",
-          "line": 190,
+          "line": 214,
           "called": [
             "Json",
             "entries",
@@ -32905,13 +32919,13 @@
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 207,
+          "line": 232,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 214,
+          "line": 239,
           "called": [
             "Action",
             "DepositWithFeeAction",
@@ -35173,7 +35187,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 63,
+      "declaration_count": 65,
       "declarations": [
         {
           "kind": "namespace",
@@ -35566,8 +35580,34 @@
         },
         {
           "kind": "def",
+          "name": "buildClaimBudgetRefundHappy",
+          "line": 723,
+          "called": [
+            "Action",
+            "ActorId",
+            "Nonce",
+            "ResourceId",
+            "SignedAction",
+            "StepVMFixture",
+            "actionKindByte",
+            "bundleToFixtureProofs",
+            "claimBudgetRefund",
+            "commitExtendedState",
+            "encodeActionFields",
+            "encodeSignedAction",
+            "es",
+            "gasResource",
+            "poolActor",
+            "recomputeCommitment",
+            "refundAmount",
+            "stateWithBalances",
+            "stepCommitClaimBudgetRefund"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "buildOpaqueHappy",
-          "line": 730,
+          "line": 774,
           "called": [
             "Action",
             "ActorId",
@@ -35588,7 +35628,7 @@
         {
           "kind": "def",
           "name": "buildDisputeWithdrawHappy",
-          "line": 757,
+          "line": 801,
           "called": [
             "ActorId",
             "Nonce",
@@ -35600,7 +35640,7 @@
         {
           "kind": "def",
           "name": "buildRollbackHappy",
-          "line": 764,
+          "line": 808,
           "called": [
             "ActorId",
             "Nonce",
@@ -35612,7 +35652,7 @@
         {
           "kind": "def",
           "name": "buildRevokeLocalPolicyHappy",
-          "line": 771,
+          "line": 815,
           "called": [
             "ActorId",
             "Nonce",
@@ -35624,7 +35664,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofChallengeHappy",
-          "line": 778,
+          "line": 822,
           "called": [
             "ActorId",
             "Nonce",
@@ -35636,7 +35676,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofResolutionHappy",
-          "line": 787,
+          "line": 831,
           "called": [
             "ActorId",
             "Nonce",
@@ -35648,7 +35688,7 @@
         {
           "kind": "def",
           "name": "buildProportionalDiluteHappy",
-          "line": 805,
+          "line": 849,
           "called": [
             "Action",
             "ActorId",
@@ -35675,7 +35715,7 @@
         {
           "kind": "def",
           "name": "minimalDispute",
-          "line": 876,
+          "line": 920,
           "called": [
             "ActorId",
             "Nonce",
@@ -35685,7 +35725,7 @@
         {
           "kind": "def",
           "name": "buildDisputeHappy",
-          "line": 885,
+          "line": 929,
           "called": [
             "ActorId",
             "Nonce",
@@ -35698,7 +35738,7 @@
         {
           "kind": "def",
           "name": "buildVerdictHappy",
-          "line": 894,
+          "line": 938,
           "called": [
             "ActorId",
             "Nonce",
@@ -35710,7 +35750,7 @@
         {
           "kind": "def",
           "name": "buildDeclareLocalPolicyHappy",
-          "line": 906,
+          "line": 950,
           "called": [
             "ActorId",
             "LocalPolicy",
@@ -35724,7 +35764,7 @@
         {
           "kind": "def",
           "name": "buildAdversarialBadPreCommit",
-          "line": 918,
+          "line": 962,
           "called": [
             "StepVMFixture",
             "actionKindByte"
@@ -35733,7 +35773,7 @@
         {
           "kind": "def",
           "name": "transferFixtures",
-          "line": 940,
+          "line": 984,
           "called": [
             "ActorId",
             "Amount",
@@ -35747,7 +35787,7 @@
         {
           "kind": "def",
           "name": "mintFixtures",
-          "line": 958,
+          "line": 1002,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35757,7 +35797,7 @@
         {
           "kind": "def",
           "name": "burnFixtures",
-          "line": 968,
+          "line": 1012,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -35768,7 +35808,7 @@
         {
           "kind": "def",
           "name": "freezeResourceFixtures",
-          "line": 979,
+          "line": 1023,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35778,7 +35818,7 @@
         {
           "kind": "def",
           "name": "replaceKeyFixtures",
-          "line": 987,
+          "line": 1031,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35788,7 +35828,7 @@
         {
           "kind": "def",
           "name": "rewardFixtures",
-          "line": 998,
+          "line": 1042,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -35799,7 +35839,7 @@
         {
           "kind": "def",
           "name": "distributeOthersFixtures",
-          "line": 1009,
+          "line": 1053,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35809,7 +35849,7 @@
         {
           "kind": "def",
           "name": "proportionalDiluteFixtures",
-          "line": 1018,
+          "line": 1062,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35819,7 +35859,7 @@
         {
           "kind": "def",
           "name": "disputeFixtures",
-          "line": 1027,
+          "line": 1071,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35829,7 +35869,7 @@
         {
           "kind": "def",
           "name": "disputeWithdrawFixtures",
-          "line": 1035,
+          "line": 1079,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35839,7 +35879,7 @@
         {
           "kind": "def",
           "name": "verdictFixtures",
-          "line": 1043,
+          "line": 1087,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35849,7 +35889,7 @@
         {
           "kind": "def",
           "name": "rollbackFixtures",
-          "line": 1051,
+          "line": 1095,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35859,7 +35899,7 @@
         {
           "kind": "def",
           "name": "registerIdentityFixtures",
-          "line": 1059,
+          "line": 1103,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35869,7 +35909,7 @@
         {
           "kind": "def",
           "name": "depositFixtures",
-          "line": 1070,
+          "line": 1114,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -35880,7 +35920,7 @@
         {
           "kind": "def",
           "name": "withdrawFixtures",
-          "line": 1085,
+          "line": 1129,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -35891,7 +35931,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeFixtures",
-          "line": 1105,
+          "line": 1149,
           "called": [
             "ActorId",
             "Amount",
@@ -35904,7 +35944,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetFixtures",
-          "line": 1133,
+          "line": 1177,
           "called": [
             "ActorId",
             "Amount",
@@ -35917,7 +35957,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForFixtures",
-          "line": 1159,
+          "line": 1203,
           "called": [
             "ActorId",
             "Amount",
@@ -35929,8 +35969,23 @@
         },
         {
           "kind": "def",
+          "name": "claimBudgetRefundFixtures",
+          "line": 1226,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "StepVMFixture",
+            "buildAdversarialBadPreCommit",
+            "buildClaimBudgetRefundHappy",
+            "gasResource",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "declareLocalPolicyFixtures",
-          "line": 1178,
+          "line": 1246,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35940,7 +35995,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyFixtures",
-          "line": 1186,
+          "line": 1254,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35950,7 +36005,7 @@
         {
           "kind": "def",
           "name": "faultProofChallengeFixtures",
-          "line": 1194,
+          "line": 1262,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35960,7 +36015,7 @@
         {
           "kind": "def",
           "name": "faultProofResolutionFixtures",
-          "line": 1204,
+          "line": 1272,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -35970,10 +36025,11 @@
         {
           "kind": "def",
           "name": "allFixtures",
-          "line": 1217,
+          "line": 1285,
           "called": [
             "StepVMFixture",
             "burnFixtures",
+            "claimBudgetRefundFixtures",
             "declareLocalPolicyFixtures",
             "depositFixtures",
             "depositWithFeeFixtures",
@@ -36000,7 +36056,7 @@
         {
           "kind": "def",
           "name": "cellProofForFixtureToJson",
-          "line": 1232,
+          "line": 1301,
           "called": [
             "CellProofForFixture"
           ]
@@ -36008,7 +36064,7 @@
         {
           "kind": "def",
           "name": "fixtureToJson",
-          "line": 1241,
+          "line": 1310,
           "called": [
             "StepVMFixture",
             "cellProofForFixtureToJson"
@@ -36017,19 +36073,19 @@
         {
           "kind": "def",
           "name": "packedLayoutU64Vals",
-          "line": 1277,
+          "line": 1346,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutU256Vals",
-          "line": 1284,
+          "line": 1353,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutGoldens",
-          "line": 1294,
+          "line": 1363,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -36038,7 +36094,7 @@
         {
           "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1311,
+          "line": 1380,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -36047,7 +36103,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1328,
+          "line": 1397,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "entries",

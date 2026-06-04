@@ -1165,8 +1165,8 @@ Notable Lean suites at the current build tag:
     sections are likewise complete: 22 `Action` pins (0..21) and
     21 `Event` pins (0..20, after the GP.6.4 `budgetConsumed`).
 
-  * `faultproof-stepvm-coherence` (109 cases, GP.3.3 + GP.5.3) —
-    pins the 22-variant step-VM dispatcher byte-for-byte against
+  * `faultproof-stepvm-coherence` (115 cases, GP.3.3 + GP.5.3 + GP.9.1) —
+    pins the 23-variant step-VM dispatcher byte-for-byte against
     Solidity's `executeStep`, including the bulk-variant
     256-recipient cap, adversarial-input regressions on
     `decodeCellNat`, and the Workstream-GP additions: per-variant
@@ -1183,8 +1183,8 @@ Notable Lean suites at the current build tag:
     pre-balances from the observer bundle (distinct, self-credit,
     topUp, delegated-topUp, absent-pool-pre-balance, and
     zero/absent-pre-balance cases).
-  * `crosscheck-step-vm` (39 cases, GP.3.3 + GP.5.3) — pins
-    per-variant fixture counts for the 248-entry corpus (218 from
+  * `crosscheck-step-vm` (40 cases, GP.3.3 + GP.5.3 + GP.9.1) — pins
+    per-variant fixture counts for the 258-entry corpus (218 from
     SVC.5.e + 30 Workstream-GP additions: depositWithFee +
     topUpActionBudget + topUpActionBudgetFor at 10 each), the
     well-formedness of the data-flow packed-layout goldens
@@ -3663,14 +3663,30 @@ canonical three; no `gasPoolDeniedTags` bump needed (tag 22 ∈
 `List.range 23`).  Two deployment sharp-edges are documented (not bugs):
 cross-resource rate consistency (a single shared budget refunds at the
 richest blessed leg — calibrate per-resource rates to equal value) and
-the future Solidity `_step22`'s `uint256` payout (the
-`budgetUnits × weiPerBudgetUnit` product can reach ~2^128).  Remaining
-(GP.5.3-style follow-ons, scoped in
-`docs/planning/unified_gas_pool_plan.md` §GP.9.1): the L1 step-VM
-execution arm (`stepVMHash` kind 22 + Solidity `_step22` + cross-stack
-corpus + L1 redemption path), and the Rust mirrors (ingest tag-22
-encoder, host gate refund arm + `CommandKernel` flag forwarding,
-indexer budget-view).
+the Solidity `_step22`'s `uint256` payout (the
+`budgetUnits × weiPerBudgetUnit` product can reach ~2^128).  **The L1
+step-VM execution arm + the Rust mirrors are now COMPLETE**: the Lean
+`stepVMHash` kind-22 recipe (`stepCommitClaimBudgetRefund` + the
+dispatcher arm + `stepVMHash_claimBudgetRefund_kind`;
+`actionKindByteCases` → 22; `stepVMHash_unknown_kind_empty` re-pinned
+at 23) + the parity theorems `coherence_claimBudgetRefund` /
+`cellwrites_claimBudgetRefund`; the Solidity
+`KnomosisStepVM._stepClaimBudgetRefund` (uint256 payout;
+credit-claimant / debit-pool; pool-solvency guard); the cross-stack
+`step_vm.json` corpus widened 248 → 258 (the keccak-gated driver
+byte-matches all 158 happy fixtures under the linked build); and the
+Rust mirrors (`knomosis-l1-ingest` `Action::ClaimBudgetRefund` encoder
+byte-pinned against Lean via the `deposit_with_fee_action.json`
+differential; the `knomosis-host` budget-gate refund arm — consume
+`action_cost + budget_units`, the policy-independent rejections,
+strict-mode pool solvency — + `CommandKernel::with_refund_rate`
+forwarding of the `--wei-per-budget-unit-*` flags + the daemon config
+flags; the `knomosis-faultproof-observer`
+`ActionKind::ClaimBudgetRefund = 22`; and the `knomosis-indexer`, which
+needs NO code change — the widened `budgetConsumed` flows through the
+existing tag-20 decoder).  **No `KnomosisBridge` redemption path is
+needed** — the refund is an L2 balance credit, withdrawn via the
+existing `withdrawWithProof`.
 
 **TCB audit (latest run).**  `#print axioms` on every kernel,
 Phase-2, Phase-3, Phase-4, Phase-5, Phase-6, and Workstream-H
