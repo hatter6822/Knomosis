@@ -423,6 +423,77 @@ def tests : List TestCase :=
         | .isFalse _ =>
             assert false "BridgeAdmissibleWith should hold (refund is not bridge-only; claimant registered)"
     }
+  , -- ## Round-trip non-profitability seal (the topUp → refund economic gate)
+    { name := "round-trip gate: rejects cheap mint, accepts fair price, vacuous at the disabled rate"
+    , body := do
+        let rate : ResourceId → Nat := fun r => if r = 0 then 30 else 0
+        -- Minting 5 budget units for 100 gas: at rate 30 those units would
+        -- refund for 5 × 30 = 150 > 100 — a pool-drain.  Rejected.
+        assert (! Authority.topUpRoundTripCheck (.topUpActionBudget 0 100 5 gasPoolActor) rate)
+          "cheap mint rejected (5 × 30 = 150 > 100)"
+        -- Minting 3 units for 100 gas: 3 × 30 = 90 ≤ 100 — non-profitable.
+        assert (Authority.topUpRoundTripCheck (.topUpActionBudget 0 100 3 gasPoolActor) rate)
+          "fair price accepted (3 × 30 = 90 ≤ 100)"
+        -- At the disabled default rate the gate is vacuous, even for a huge
+        -- mint — the pre-GP.9.1 behaviour (backward compatibility).
+        assert (Authority.topUpRoundTripCheck
+            (.topUpActionBudget 0 1 1000000 gasPoolActor) (fun _ => 0))
+          "vacuous at the disabled default rate (huge mint admitted)"
+        -- The delegated top-up carries the SAME constraint.
+        assert (! Authority.topUpRoundTripCheck
+            (.topUpActionBudgetFor other 0 100 5 gasPoolActor) rate)
+          "delegated cheap mint rejected"
+        -- Non-top-up actions are vacuously true at any rate.
+        assert (Authority.topUpRoundTripCheck (.transfer 0 claimant other 1) rate)
+          "non-top-up action vacuously admitted"
+    }
+  , { name := "END-TO-END: a top-up minting budget cheaper than the refund rate is REJECTED (round-trip seal)"
+    , body := do
+        -- Pay 50 gas to mint 100 budget units: at the active rate (5 wei /
+        -- unit) those units would refund for 100 × 5 = 500 ≫ 50 — exactly
+        -- the deposit → refund pool-drain.  The gate rejects upfront.
+        let action : Action := .topUpActionBudget gasResource 50 100 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (AdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue h =>
+            match apply_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st h refundRateActive with
+            | some _ => assert false "cheap-mint top-up must be rejected at an active refund rate"
+            | none => pure ()
+        | .isFalse _ => assert false "AdmissibleWith should hold (claimant registered + signed)"
+    }
+  , { name := "END-TO-END: the SAME top-up is ADMITTED under the disabled default rate (backward compat)"
+    , body := do
+        let action : Action := .topUpActionBudget gasResource 50 100 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (AdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue h =>
+            match apply_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st h (fun _ => 0) with
+            | some _ => pure ()
+            | none => assert false "top-up must be admitted when refunds are disabled (gate vacuous)"
+        | .isFalse _ => assert false "AdmissibleWith should hold (claimant registered + signed)"
+    }
+  , { name := "END-TO-END: a top-up priced at the refund rate is ADMITTED at an active rate"
+    , body := do
+        -- Pay 50 gas to mint 10 budget units: 10 × 5 = 50 ≤ 50 — break-even,
+        -- so the round-trip seal admits it.
+        let action : Action := .topUpActionBudget gasResource 50 10 gasPoolActor
+        let st := mkSigned action claimant
+        match (inferInstance :
+            Decidable (AdmissibleWith mockVerify AuthorityPolicy.unrestricted deploymentId
+              esAdmit st)) with
+        | .isTrue h =>
+            match apply_admissible_with_budget mockVerify AuthorityPolicy.unrestricted
+                    deploymentId esAdmit st h refundRateActive with
+            | some _ => pure ()
+            | none => assert false "fairly-priced top-up should be admitted at an active rate"
+        | .isFalse _ => assert false "AdmissibleWith should hold (claimant registered + signed)"
+    }
   , -- ## Term-level API stability
     { name := "GP.9.1: term-level API stability (law + accounting)"
     , body := do
@@ -492,6 +563,17 @@ def tests : List TestCase :=
         let _t15 := @apply_bridge_admissible_with_budget_epochBudgets_eq
         let _t16 := @apply_bridge_admissible_with_budget_none_iff
         let _t17 := @apply_bridge_admissible_with_budget_kernel_epochBudgets
+        -- GP.9.1 round-trip non-profitability seal — the economic gate
+        -- closing the top-up → refund pool-drain vector (the topUp side of
+        -- the refund mechanism: the rate pin alone could not bound how
+        -- cheaply budget was acquired).
+        let _t18 := @Authority.topUpRoundTripCheck
+        let _t19 := @Authority.topUpRoundTripCheck_true_of_ne
+        let _t20 := @Authority.topUpRoundTripCheck_true_of_zero_rate
+        let _t21 := @Authority.topUpActionBudget_roundtrip_not_profitable
+        let _t22 := @Authority.topUpActionBudgetFor_roundtrip_not_profitable
+        let _t23 := @topUpActionBudget_roundtrip_not_profitable_bridge
+        let _t24 := @topUpActionBudgetFor_roundtrip_not_profitable_bridge
         pure ()
     }
   ]

@@ -882,6 +882,87 @@ theorem topUpActionBudgetFor_gate_true_of_ne
       exact absurd hact (hne recipient gr ga bi pa)
   | _ => rfl
 
+/-- GP.9.1 round-trip non-profitability gate for the budget-top-up
+    actions.  Returns `true` iff acquiring `budgetIncrement` units of
+    action budget costs at least as much gas as refunding them would
+    later pay out — i.e. `budgetIncrement × refundRate gasResource ≤
+    gasAmount`.
+
+    This is the economic seal on the top-up → refund round-trip
+    introduced by GP.9.1's `claimBudgetRefund`.  WITHOUT it, a claimant
+    could `topUpActionBudget gr ga huge pa` — minting a large
+    `budgetIncrement` for a tiny `gasAmount` — and then
+    `claimBudgetRefund gr huge (refundRate gr) gasPoolActor`, retiring
+    that budget at the deployment's trusted refund rate for FAR more
+    pool gas than they paid in, draining the gas pool (other users'
+    deposited funds).  The `claimBudgetRefund_gate` already pins the
+    payout RATE to `refundRate gasResource`, but the rate pin alone is
+    insufficient: it controls the price of a retired unit, not how
+    cheaply that unit was acquired.  Pinning `budgetIncrement ×
+    refundRate gasResource ≤ gasAmount` at top-up time closes the loop —
+    any later refund pays out `budgetUnits × refundRate ≤ budgetIncrement
+    × refundRate ≤ gasAmount`, never exceeding the gas paid in, so the
+    round-trip is non-profitable for EVERY caller (modulo the documented
+    cross-resource rate-calibration sharp-edge, GP.9.1 §deployment
+    notes — a single shared budget bought at the cheapest blessed leg
+    and refunded at the richest; deployments calibrate per-resource
+    rates to equal value).
+
+    Applies to BOTH the self-funded `topUpActionBudget` (signer pays,
+    signer's budget credited) and the delegated `topUpActionBudgetFor`
+    (signer pays, recipient's budget credited): the same drain vector
+    exists via the recipient's later refund, so both top-up variants
+    carry the constraint.  For every other action constructor:
+    vacuously `true`.
+
+    **Backward compatibility.**  When refunds are disabled (`refundRate
+    = fun _ => 0`, the genesis default), the conjunct reduces to
+    `budgetIncrement × 0 = 0 ≤ gasAmount`, which is unconditionally
+    true — so the gate is byte-for-byte the pre-GP.9.1 behaviour for
+    every deployment that has not enabled refunds, and every GP.3.2 /
+    GP.3.4 budget theorem stated at the default rate is unaffected.
+
+    Defined as a named `def` (rather than an inline check, like the
+    sibling gas / signer / consent / refund gates) so the GP.3.2
+    admission theorems can discharge it cleanly via the `Decidable`
+    instance for `Bool`. -/
+def topUpRoundTripCheck (action : Action) (refundRate : ResourceId → Nat) : Bool :=
+  match action with
+  | .topUpActionBudget gasResource gasAmount budgetIncrement _ =>
+      decide (budgetIncrement * refundRate gasResource ≤ gasAmount)
+  | .topUpActionBudgetFor _ gasResource gasAmount budgetIncrement _ =>
+      decide (budgetIncrement * refundRate gasResource ≤ gasAmount)
+  | _ => true
+
+/-- For every non-top-up action, the GP.9.1 round-trip gate is trivially
+    `true` at ANY refund rate.  Used by the budget-gate proofs to
+    discharge the gate on every non-top-up dispatch path (the gate only
+    constrains the two budget-top-up constructors). -/
+theorem topUpRoundTripCheck_true_of_ne
+    (action : Action) (refundRate : ResourceId → Nat)
+    (hne_topup : ∀ gr ga bi pa, action ≠ .topUpActionBudget gr ga bi pa)
+    (hne_topupFor : ∀ recipient gr ga bi pa,
+      action ≠ .topUpActionBudgetFor recipient gr ga bi pa) :
+    topUpRoundTripCheck action refundRate = true := by
+  unfold topUpRoundTripCheck
+  cases hact : action with
+  | topUpActionBudget gr ga bi pa => exact absurd hact (hne_topup gr ga bi pa)
+  | topUpActionBudgetFor recipient gr ga bi pa =>
+      exact absurd hact (hne_topupFor recipient gr ga bi pa)
+  | _ => rfl
+
+/-- When refunds are disabled (`refundRate = fun _ => 0`, the genesis
+    default), the GP.9.1 round-trip gate is trivially `true` for EVERY
+    action: the top-up arms' `budgetIncrement × 0 ≤ gasAmount` conjunct
+    collapses to `0 ≤ gasAmount`.  This is the backward-compatibility
+    lemma — the pre-GP.9.1 admission behaviour and every GP.3.2 / GP.3.4
+    budget theorem stated at the default rate are unaffected by the
+    new gate. -/
+theorem topUpRoundTripCheck_true_of_zero_rate (action : Action) :
+    topUpRoundTripCheck action (fun _ => 0) = true := by
+  unfold topUpRoundTripCheck
+  cases action <;> simp
+
 /-- GP.9.1 refund-extra consume.  The extra action-budget a
     `claimBudgetRefund` retires BEYOND the standard per-action cost: the
     refund's `budgetUnits` for a refund action, `0` for every other
@@ -1039,11 +1120,13 @@ def apply_admissible_with_budget
     Option ExtendedState :=
   match es.budgetPolicy with
   | .bounded freeTier actionCost currentEpoch =>
-      -- GP.3.2 + GP.3.4 + GP.9.1 safety gates: four named action-
+      -- GP.3.2 + GP.3.4 + GP.9.1 safety gates: five named action-
       -- specific checks (gas-safety for `topUpActionBudget`, signer-
       -- authority for `depositWithFee`, gas-safety + default-deny
-      -- recipient-consent for the delegated `topUpActionBudgetFor`, and
-      -- the rate-pin / pool-pin / free-tier-excluding-bound / solvency
+      -- recipient-consent for the delegated `topUpActionBudgetFor`, the
+      -- round-trip non-profitability seal tying a top-up's
+      -- `budgetIncrement` to its `gasAmount` at the refund rate, and the
+      -- rate-pin / pool-pin / free-tier-excluding-bound / solvency
       -- checks for the `claimBudgetRefund` refund-on-exit).  See helper
       -- docstrings for the per-attack-vector rationale.
       if ! topUpActionBudget_gasCheck st.action st.signer es then
@@ -1051,6 +1134,8 @@ def apply_admissible_with_budget
       else if ! depositWithFee_signerCheck st.action st.signer then
         none
       else if ! topUpActionBudgetFor_gate st.action st.signer es then
+        none
+      else if ! topUpRoundTripCheck st.action refundRate then
         none
       else if ! claimBudgetRefund_gate st.action st.signer es refundRate then
         none
@@ -1381,7 +1466,8 @@ private theorem consume_some_of_admit_non_bridge
     refundConsumeExtra_eq_zero_of_ne_refund st.action hne_refund
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
-  simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge] at hsuc
+  simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge,
+    topUpRoundTripCheck_true_of_ne st.action (fun _ => 0) hne_topup hne_topupFor] at hsuc
   cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
                   currentEpoch freeTier actionCost with
   | none =>
@@ -1438,7 +1524,8 @@ theorem admission_consumes_budget_on_success
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge, hconsume] at hsuc
+    simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge, hconsume,
+      topUpRoundTripCheck_true_of_ne st.action (fun _ => 0) hne_topup hne_topupFor] at hsuc
     -- hsuc : { applied... epochBudgets := <match on st.action> } = es'
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
@@ -1509,25 +1596,32 @@ theorem admission_rejected_when_budget_zero
           | false =>
               simp
           | true =>
-              -- GP.9.1: then case-split on the refund gate.
-              cases hrfp : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) with
+              -- GP.9.1: then case-split on the round-trip non-profitability
+              -- gate (vacuously `true` at the default rate, but cased here so
+              -- every gate in the chain is reduced before the consume).
+              cases hrtp : topUpRoundTripCheck st.action (fun _ => 0) with
               | false =>
                   simp
               | true =>
-                  simp [hne_bridge]
-                  -- The refund-aware consume amount is `actionCost +
-                  -- refundConsumeExtra st.action ≥ actionCost`, so a budget
-                  -- strictly below `actionCost` is strictly below it too:
-                  -- the consume still fails, so the gate returns `none`.
-                  have hlt :
-                      EpochBudgetState.currentBudget es.epochBudgets st.signer
-                          currentEpoch freeTier
-                        < actionCost + refundConsumeExtra st.action :=
-                    Nat.lt_of_lt_of_le hbudget (Nat.le_add_right actionCost _)
-                  have hnone := (EpochBudgetState.consume_eq_none_iff
-                    es.epochBudgets st.signer currentEpoch freeTier
-                    (actionCost + refundConsumeExtra st.action)).mpr hlt
-                  rw [hnone]
+                  -- GP.9.1: then case-split on the refund gate.
+                  cases hrfp : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) with
+                  | false =>
+                      simp
+                  | true =>
+                      simp [hne_bridge]
+                      -- The refund-aware consume amount is `actionCost +
+                      -- refundConsumeExtra st.action ≥ actionCost`, so a budget
+                      -- strictly below `actionCost` is strictly below it too:
+                      -- the consume still fails, so the gate returns `none`.
+                      have hlt :
+                          EpochBudgetState.currentBudget es.epochBudgets st.signer
+                              currentEpoch freeTier
+                            < actionCost + refundConsumeExtra st.action :=
+                        Nat.lt_of_lt_of_le hbudget (Nat.le_add_right actionCost _)
+                      have hnone := (EpochBudgetState.consume_eq_none_iff
+                        es.epochBudgets st.signer currentEpoch freeTier
+                        (actionCost + refundConsumeExtra st.action)).mpr hlt
+                      rw [hnone]
 
 /-- §15E (v1.0) / GP.3.2.g — `bridgeActor_budget_exempt`.
 
@@ -1598,7 +1692,8 @@ theorem bridgeActor_budget_exempt
     | _ => es.epochBudgets := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hForGate, hRefGate, hbridge] at hsuc
+    simp [hgas, hdep, hForGate, hRefGate, hbridge,
+      topUpRoundTripCheck_true_of_ne st.action (fun _ => 0) hne_topup hne_topupFor] at hsuc
     rw [← hsuc]
   rw [h_eb]
   -- Now case-split on st.action; in every branch except depositWithFee,
@@ -1672,7 +1767,8 @@ theorem depositWithFee_grants_budget
   -- `depositWithFee_signerCheck` requires `signer = bridgeActor`.
   -- Non-bridge case is rejected at the signer-check gate.
   unfold topUpActionBudget_gasCheck depositWithFee_signerCheck
-    topUpActionBudgetFor_gate claimBudgetRefund_gate refundConsumeExtra at hsuc
+    topUpActionBudgetFor_gate topUpRoundTripCheck claimBudgetRefund_gate
+    refundConsumeExtra at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
     have heq : es'.epochBudgets =
@@ -1722,7 +1818,8 @@ theorem depositWithFee_budget_locality
   -- `refundConsumeExtra = 0`), and the signer check requires
   -- `signer = bridgeActor`.
   unfold topUpActionBudget_gasCheck depositWithFee_signerCheck
-    topUpActionBudgetFor_gate claimBudgetRefund_gate refundConsumeExtra at hsuc
+    topUpActionBudgetFor_gate topUpRoundTripCheck claimBudgetRefund_gate
+    refundConsumeExtra at hsuc
   by_cases hb : signer = Bridge.bridgeActor
   · simp [hb] at hsuc
     have heq : es'.epochBudgets =
@@ -1786,9 +1883,12 @@ theorem topUpActionBudget_net_budget_change
                   getBalance es.base gasResource signer ≥ gasAmount
   · -- gas check passes.  After simp, hsuc may be a conjunction
     -- `(remaining-conjuncts) ∧ (body = es')` — destructure to get
-    -- the body equation.  GP.9.1: `claimBudgetRefund_gate` is vacuously
-    -- `true` and `refundConsumeExtra = 0` for `.topUpActionBudget`.
-    simp [hne_bridge, hdep, hForGate, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
+    -- the body equation.  GP.9.1: the round-trip gate is `true` at the
+    -- default rate (`topUpRoundTripCheck_true_of_zero_rate`),
+    -- `claimBudgetRefund_gate` is vacuously `true`, and
+    -- `refundConsumeExtra = 0` for `.topUpActionBudget`.
+    simp [hne_bridge, hdep, hForGate, topUpRoundTripCheck_true_of_zero_rate,
+      claimBudgetRefund_gate, refundConsumeExtra] at hsuc
     obtain ⟨_, hsuc⟩ := hsuc
     cases hopt : EpochBudgetState.consume es.epochBudgets signer
                     currentEpoch freeTier actionCost with
@@ -1811,6 +1911,103 @@ theorem topUpActionBudget_net_budget_change
           getBalance es.base gasResource signer ≥ gasAmount) = false := by
       simp [hgas]
     simp [hgas_eq] at hsuc
+
+/-- **GP.9.1 round-trip non-profitability (the economic seal), self-funded
+    top-up.**  A `topUpActionBudget` admitted under deployment refund rate
+    `refundRate` proves its `budgetIncrement`, valued at the refund rate,
+    costs no more than the `gasAmount` paid in: `budgetIncrement ×
+    refundRate gasResource ≤ gasAmount`.
+
+    This is the property closing the GP.9.1 gas-pool drain vector that the
+    `claimBudgetRefund` rate pin alone could not.  Because any later
+    `claimBudgetRefund` retires `budgetUnits ≤ budgetIncrement` units at the
+    SAME pinned rate (`claimBudgetRefund_gate`'s `weiPerBudgetUnit =
+    refundRate gasResource` conjunct), its pool payout is `budgetUnits ×
+    refundRate gasResource ≤ budgetIncrement × refundRate gasResource ≤
+    gasAmount` — never more gas than the top-up paid into the pool.  The
+    top-up → refund round-trip is therefore non-profitable for EVERY caller,
+    so a claimant cannot mint cheap budget and drain the gas pool (other
+    users' deposited funds).  Extracted directly from the admission gate's
+    `topUpRoundTripCheck` conjunct: a passing admission witnesses the bound.
+
+    (Cross-resource caveat: deployments calibrate per-resource refund rates
+    to equal value — see the GP.9.1 deployment notes — so a single shared
+    budget bought at the cheapest blessed leg and refunded at the richest
+    cannot net a profit either.) -/
+theorem topUpActionBudget_roundtrip_not_profitable
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.topUpActionBudget gasResource gasAmount budgetIncrement poolActor,
+              signer, nonce, sig⟩)
+    (refundRate : ResourceId → Nat)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.topUpActionBudget gasResource gasAmount budgetIncrement poolActor,
+                signer, nonce, sig⟩ h refundRate = some es') :
+    budgetIncrement * refundRate gasResource ≤ gasAmount := by
+  -- A passing admission forces the round-trip gate `true`; extract the
+  -- bound from its `decide`.  (Lean-core proof: case-split on the gate's
+  -- Bool value rather than the Mathlib `by_contra`.)
+  cases hrt : topUpRoundTripCheck
+      (.topUpActionBudget gasResource gasAmount budgetIncrement poolActor) refundRate with
+  | true =>
+      unfold topUpRoundTripCheck at hrt
+      exact of_decide_eq_true hrt
+  | false =>
+      -- Gate `false` ⇒ the admission chain returns `none`, contradicting
+      -- `hsuc = some es'`.  Gates 2-3 are vacuous-true for a top-up; the
+      -- symbolic gas check (gate 1) closes by `ite_self` (both branches
+      -- reach `none` once the round-trip gate has fired).
+      exfalso
+      unfold apply_admissible_with_budget at hsuc
+      cases hpol : es.budgetPolicy with
+      | bounded freeTier actionCost currentEpoch =>
+          rw [hpol] at hsuc
+          simp [depositWithFee_signerCheck, topUpActionBudgetFor_gate, hrt] at hsuc
+
+/-- **GP.9.1 round-trip non-profitability (the economic seal), delegated
+    top-up.**  The `topUpActionBudgetFor` analogue of
+    `topUpActionBudget_roundtrip_not_profitable`: a delegated top-up
+    admitted under refund rate `refundRate` proves `budgetIncrement ×
+    refundRate gasResource ≤ gasAmount`.  The delegate pays gas for the
+    recipient's budget, but the recipient's later `claimBudgetRefund` is
+    bounded by the SAME inequality, so the delegated path is equally
+    non-profitable — closing the drain vector for BOTH top-up variants. -/
+theorem topUpActionBudgetFor_roundtrip_not_profitable
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (recipient : ActorId) (gasResource : ResourceId) (gasAmount : Amount)
+    (budgetIncrement : Nat) (poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : Signature)
+    (h : AdmissibleWith verify P d es
+            ⟨.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor,
+              signer, nonce, sig⟩)
+    (refundRate : ResourceId → Nat)
+    {es' : ExtendedState}
+    (hsuc : apply_admissible_with_budget verify P d es
+              ⟨.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor,
+                signer, nonce, sig⟩ h refundRate = some es') :
+    budgetIncrement * refundRate gasResource ≤ gasAmount := by
+  cases hrt : topUpRoundTripCheck
+      (.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor)
+      refundRate with
+  | true =>
+      unfold topUpRoundTripCheck at hrt
+      exact of_decide_eq_true hrt
+  | false =>
+      -- Gate `false` ⇒ `none`; gate 1 (gas check) is vacuous-true for a
+      -- delegated top-up, gate 2 (deposit) too, and the symbolic delegated
+      -- gate (gate 3) closes by `ite_self` once gate 4 has fired.
+      exfalso
+      unfold apply_admissible_with_budget at hsuc
+      cases hpol : es.budgetPolicy with
+      | bounded freeTier actionCost currentEpoch =>
+          rw [hpol] at hsuc
+          simp [topUpActionBudget_gasCheck, depositWithFee_signerCheck, hrt] at hsuc
 
 /-- §15E (v1.0) / GP.3.2.i — `admission_locality_in_budget`.
 
@@ -1854,7 +2051,8 @@ theorem admission_locality_in_budget
   have hgrant : es'.epochBudgets = ebs' := by
     unfold apply_admissible_with_budget at hsuc
     rw [hpolicy] at hsuc
-    simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge, hconsume] at hsuc
+    simp [hgas, hdep, hForGate, hRefGate, hExtra, hne_bridge, hconsume,
+      topUpRoundTripCheck_true_of_ne st.action (fun _ => 0) hne_topup hne_topupFor] at hsuc
     cases hact : st.action with
     | depositWithFee r recipient poolActor ua pa bg dep =>
         exact absurd hact (hne_dep r recipient poolActor ua pa bg dep)
@@ -1981,25 +2179,31 @@ theorem replay_impossible_preserved
                     simp [hfgp] at hsuc
                 | true =>
                     simp [hfgp] at hsuc
-                    -- GP.9.1 safety gate: case-split on the refund gate.
-                    cases hrfp : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) with
+                    -- GP.9.1 safety gate: case-split on the round-trip gate.
+                    cases hrtp : topUpRoundTripCheck st.action (fun _ => 0) with
                     | false =>
-                        simp [hrfp] at hsuc
+                        simp [hrtp] at hsuc
                     | true =>
-                        simp [hrfp] at hsuc
-                        by_cases hb : st.signer = Bridge.bridgeActor
-                        · simp [hb] at hsuc
-                          rw [← hsuc]
-                        · simp [hb] at hsuc
-                          -- GP.9.1: the refund-aware consume amount.
-                          cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
-                                          currentEpoch freeTier
-                                          (actionCost + refundConsumeExtra st.action) with
-                          | none => rw [hopt] at hsuc; simp at hsuc
-                          | some ebs' =>
-                              rw [hopt] at hsuc
-                              simp at hsuc
+                        simp [hrtp] at hsuc
+                        -- GP.9.1 safety gate: case-split on the refund gate.
+                        cases hrfp : claimBudgetRefund_gate st.action st.signer es (fun _ => 0) with
+                        | false =>
+                            simp [hrfp] at hsuc
+                        | true =>
+                            simp [hrfp] at hsuc
+                            by_cases hb : st.signer = Bridge.bridgeActor
+                            · simp [hb] at hsuc
                               rw [← hsuc]
+                            · simp [hb] at hsuc
+                              -- GP.9.1: the refund-aware consume amount.
+                              cases hopt : EpochBudgetState.consume es.epochBudgets st.signer
+                                              currentEpoch freeTier
+                                              (actionCost + refundConsumeExtra st.action) with
+                              | none => rw [hopt] at hsuc; simp at hsuc
+                              | some ebs' =>
+                                  rw [hopt] at hsuc
+                                  simp at hsuc
+                                  rw [← hsuc]
   have h_advanced : expectsNonce es' st.signer = expectsNonce es st.signer + 1 := by
     show es'.nonces.next[st.signer]?.getD 0 = _
     rw [h_nonces_eq]
@@ -2121,7 +2325,8 @@ theorem delegatedTopUp_grants_budget_to_recipient
       obtain ⟨hbridge, _hpool, hrec, _hpos, _hbal, _hconsent⟩ :=
         topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
       -- non-bridge signer (from the gate): take the consume branch.
-      simp [hgas, hdep, hg3, hbridge, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
+      simp [hgas, hdep, hg3, hbridge, topUpRoundTripCheck_true_of_zero_rate,
+        claimBudgetRefund_gate, refundConsumeExtra] at hsuc
       cases hopt : EpochBudgetState.consume es.epochBudgets signer
                       currentEpoch freeTier actionCost with
       | none => rw [hopt] at hsuc; simp at hsuc
@@ -2196,7 +2401,8 @@ theorem delegatedTopUp_signer_budget_consumed
   | true =>
       obtain ⟨hbridge, _hpool, hrec, _hpos, _hbal, _hconsent⟩ :=
         topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
-      simp [hgas, hdep, hg3, hbridge, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
+      simp [hgas, hdep, hg3, hbridge, topUpRoundTripCheck_true_of_zero_rate,
+        claimBudgetRefund_gate, refundConsumeExtra] at hsuc
       cases hopt : EpochBudgetState.consume es.epochBudgets signer
                       currentEpoch freeTier actionCost with
       | none => rw [hopt] at hsuc; simp at hsuc
@@ -2248,7 +2454,8 @@ theorem delegatedTopUp_budget_locality
   | true =>
       obtain ⟨hbridge, _hpool, _hrec, _hpos, _hbal, _hconsent⟩ :=
         topUpActionBudgetFor_gate_true_facts recipient gr ga bi pa signer es hg3
-      simp [hgas, hdep, hg3, hbridge, claimBudgetRefund_gate, refundConsumeExtra] at hsuc
+      simp [hgas, hdep, hg3, hbridge, topUpRoundTripCheck_true_of_zero_rate,
+        claimBudgetRefund_gate, refundConsumeExtra] at hsuc
       cases hopt : EpochBudgetState.consume es.epochBudgets signer
                       currentEpoch freeTier actionCost with
       | none => rw [hopt] at hsuc; simp at hsuc
@@ -2341,7 +2548,7 @@ theorem admission_refund_consumes_budget
   unfold apply_admissible_with_budget at hsuc
   rw [hpolicy] at hsuc
   simp only [topUpActionBudget_gasCheck, depositWithFee_signerCheck,
-    topUpActionBudgetFor_gate, hgate, hextra, hsigner] at hsuc
+    topUpActionBudgetFor_gate, topUpRoundTripCheck, hgate, hextra, hsigner] at hsuc
   cases hopt : EpochBudgetState.consume es.epochBudgets signer currentEpoch freeTier
                   (actionCost + budgetUnits) with
   | none => rw [hopt] at hsuc; simp at hsuc

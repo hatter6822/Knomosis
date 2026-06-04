@@ -1247,6 +1247,15 @@ impl BudgetGate {
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
                 }
+                // GP.9.1 round-trip non-profitability: the Lean gate ALSO
+                // enforces `budget_increment * refundRate(gas_resource) <=
+                // gas_amount` (the `topUpRoundTripCheck` conjunct that seals
+                // the top-up -> refund pool-drain — minting cheap budget and
+                // refunding it at the deployment rate).  That conjunct is
+                // RATE-dependent, so — exactly like the refund rate-pin
+                // below — it is deferred to the authoritative Lean kernel via
+                // `CommandKernel`; the mock stays a strictly-weaker pre-filter
+                // on this dimension.
                 if self.strict && self.balance_of(gas_resource, signer) < gas_amount {
                     return Err(GateRejection::InsufficientGas);
                 }
@@ -1270,6 +1279,13 @@ impl BudgetGate {
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
                 }
+                // GP.9.1 round-trip non-profitability (delegated variant):
+                // the Lean gate enforces `budget_increment *
+                // refundRate(gas_resource) <= gas_amount` here too (the
+                // delegate pays gas for the recipient's budget; the
+                // recipient's later refund is bounded by the same
+                // inequality).  Rate-dependent ⇒ deferred to the Lean kernel
+                // via `CommandKernel`, like the refund rate-pin.
                 if self.strict {
                     if self.balance_of(gas_resource, signer) < gas_amount {
                         return Err(GateRejection::InsufficientGas);

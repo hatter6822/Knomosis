@@ -3612,7 +3612,18 @@ conjuncts: rate pin, refund-ENABLED check `1 ≤ weiPerBudgetUnit` — so
 the default `refundRate = 0` genuinely rejects refunds rather than
 burning budget for a zero payout — pool-actor pin, free-tier-excluding
 bound, solvency, consume-exempt / self-pool defences) on BOTH the
-kernel and bridge-aware entries, with the trusted per-resource rate
+kernel and bridge-aware entries; the COMPANION `topUpRoundTripCheck`
+gate on those same two entries seals the top-up → refund round-trip by
+tying a top-up's `budgetIncrement` to its `gasAmount` at the refund
+rate (`budgetIncrement × refundRate gasResource ≤ gasAmount`), so a
+claimant cannot mint cheap budget via `topUpActionBudget` /
+`topUpActionBudgetFor` and refund it at the pinned rate to drain the
+pool (the rate pin alone bounded the price of a retired unit, not how
+cheaply it was acquired) — vacuous at the default `refundRate = 0` so
+pre-refund deployments stay byte-unchanged, and the bound is extracted
+on both paths by
+`topUpActionBudget{,For}_roundtrip_not_profitable{,_bridge}`; the
+trusted per-resource rate is
 threaded as
 ADMISSION config (`refundRate : ResourceId → Nat`, NOT persisted — the
 kernel step uses the action's logged `weiPerBudgetUnit`, so replay /
@@ -3651,10 +3662,14 @@ command (a forgotten / changed rate fails with a clear `refund-rate
 error`, not a silently-dropped refund on replay; `export-terminate-bundle`
 is refund-rate-independent — `kernelOnlyReplay`, no gate — and so
 untouched).  Refunds DISABLED by default (rate 0, no sidecar).
-Suites `bridge-budget-refund` (26 cases — incl. two END-TO-END
+Suites `bridge-budget-refund` (30 cases — incl. two END-TO-END
 bridge-path admission cases driving `apply_bridge_admissible_with_budget`
 at a nonzero rate + the kernel-path signed admission / disabled-rate
-rejection / event emission) + `runtime-loop-happy-path` (+2, a refund
+rejection / event emission, plus the four round-trip-seal cases: the
+`topUpRoundTripCheck` value-level reject/accept/vacuous sweep and three
+END-TO-END top-up admissions proving a cheap mint is rejected at an
+active rate, the same mint is admitted at the disabled default rate, and
+a fairly-priced mint is admitted) + `runtime-loop-happy-path` (+2, a refund
 admitted / rejected through the literal `processSignedActionWith`) +
 the new `runtime-refund-rate-sidecar` (9 — codec round-trip /
 `toRefundRate` / `isDefault` / `checkConsistent` /
