@@ -171,6 +171,38 @@ def refundRateSidecarCorruptRejected : TestCase := {
     IO.FS.removeFile (sidecarPath log)
 }
 
+/-- `load` RECONSTRUCTS the config from disk (the `knomosis-replay`
+    auditor path, which has no `--wei-per-budget-unit-*` flags): absent →
+    `ok none` (refunds disabled, the default), present + valid → `ok (some
+    cfg)`, present + corrupt → `error` (the auditor fails loudly rather
+    than silently auditing under the wrong rate). -/
+def refundRateSidecarLoad : TestCase := {
+  name := "RefundRateSidecar.load: absent → none, present → some, corrupt → error"
+  body := do
+    -- Absent: ok none (refunds were disabled, the default).
+    let logA ← tmpLog
+    match (← load logA) with
+    | .ok none => pure ()
+    | .ok (some c) => throw <| IO.userError s!"absent sidecar should load as none, got {repr c}"
+    | .error m => throw <| IO.userError s!"absent sidecar should be ok none, got error: {m}"
+    -- Present + valid: ok (some cfg) recovering the persisted config.
+    let log ← tmpLog
+    let cfg := ofFlags 5 3000
+    writeSidecarIfAbsent log cfg
+    match (← load log) with
+    | .ok (some c) => assertEq cfg c "load recovers the persisted config"
+    | .ok none => throw <| IO.userError "present sidecar should load as some"
+    | .error m => throw <| IO.userError s!"present sidecar should load, got error: {m}"
+    IO.FS.removeFile (sidecarPath log)
+    -- Present + corrupt: error (the auditor must fail loudly).
+    let logC ← tmpLog
+    IO.FS.writeFile (sidecarPath logC) "garbage not a refund-rate config\n"
+    match (← load logC) with
+    | .ok _ => throw <| IO.userError "BUG: corrupt sidecar loaded without error"
+    | .error _ => pure ()
+    IO.FS.removeFile (sidecarPath logC)
+}
+
 /-- The full GP.9.1 refund-rate sidecar suite. -/
 def tests : List TestCase :=
   [ refundRateSidecarRoundTrip
@@ -181,6 +213,7 @@ def tests : List TestCase :=
   , refundRateSidecarCheckAbsentOk
   , refundRateSidecarWriteAndCheck
   , refundRateSidecarWriteIsIdempotent
-  , refundRateSidecarCorruptRejected ]
+  , refundRateSidecarCorruptRejected
+  , refundRateSidecarLoad ]
 
 end LegalKernel.Test.Runtime.RefundRateSidecarTests

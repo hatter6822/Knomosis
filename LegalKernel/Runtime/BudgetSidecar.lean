@@ -147,6 +147,29 @@ def checkConsistent (logPath : System.FilePath) (current : BudgetConfig) :
   else
     pure (.ok ())
 
+/-- IO: LOAD the persisted budget config from the sidecar.  Unlike
+    `checkConsistent` (which compares a CLI-supplied config against disk),
+    this RECONSTRUCTS the config from disk — for the auditor path
+    (`knomosis-replay`), which has no budget flags and must re-derive the
+    genesis budget policy + epoch length the producer used (both
+    participate in every post-state hash).  Returns `ok none` when no
+    sidecar exists (default config), `ok (some cfg)` when it decodes, and
+    `error` when the sidecar is present but corrupt (the auditor must fail
+    loudly, never silently audit under the wrong policy). -/
+def load (logPath : System.FilePath) :
+    IO (Except String (Option BudgetConfig)) := do
+  let path := sidecarPath logPath
+  if ← path.pathExists then
+    let contents ← IO.FS.readFile path
+    match decode contents with
+    | none =>
+      pure (.error
+        s!"budget-config sidecar {path} is corrupt or unrecognised; \
+           expected `{magic} <freeTier> <actionCost> <currentEpoch> <epochLength>`")
+    | some cfg => pure (.ok (some cfg))
+  else
+    pure (.ok none)
+
 /-- IO: write the sidecar iff it does NOT already exist AND the config
     is non-default.  Called by the writer (`process`) after a
     successful bootstrap, so a default-config deployment never creates

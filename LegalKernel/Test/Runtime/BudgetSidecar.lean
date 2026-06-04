@@ -150,6 +150,35 @@ def budgetSidecarCorruptRejected : TestCase := {
     IO.FS.removeFile (sidecarPath log)
 }
 
+/-- `load` RECONSTRUCTS the config from disk (the `knomosis-replay`
+    auditor path, which has no budget flags and must re-derive the genesis
+    budget policy + epoch length): absent → `ok none` (default config),
+    present + valid → `ok (some cfg)`, present + corrupt → `error` (fail
+    loudly rather than silently audit under the wrong policy). -/
+def budgetSidecarLoad : TestCase := {
+  name := "BudgetSidecar.load: absent → none, present → some, corrupt → error"
+  body := do
+    let logA ← tmpLog
+    match (← load logA) with
+    | .ok none => pure ()
+    | .ok (some c) => throw <| IO.userError s!"absent sidecar should load as none, got {repr c}"
+    | .error m => throw <| IO.userError s!"absent sidecar should be ok none, got error: {m}"
+    let log ← tmpLog
+    let cfg := ofPolicy (.bounded 10 1 1) 5
+    writeSidecarIfAbsent log cfg
+    match (← load log) with
+    | .ok (some c) => assertEq cfg c "load recovers the persisted config"
+    | .ok none => throw <| IO.userError "present sidecar should load as some"
+    | .error m => throw <| IO.userError s!"present sidecar should load, got error: {m}"
+    IO.FS.removeFile (sidecarPath log)
+    let logC ← tmpLog
+    IO.FS.writeFile (sidecarPath logC) "garbage not a budget config\n"
+    match (← load logC) with
+    | .ok _ => throw <| IO.userError "BUG: corrupt sidecar loaded without error"
+    | .error _ => pure ()
+    IO.FS.removeFile (sidecarPath logC)
+}
+
 /-- The full GP.6.2 sidecar suite. -/
 def tests : List TestCase :=
   [ budgetSidecarRoundTrip
@@ -159,6 +188,7 @@ def tests : List TestCase :=
   , budgetSidecarCheckAbsentOk
   , budgetSidecarWriteAndCheck
   , budgetSidecarWriteIsIdempotent
-  , budgetSidecarCorruptRejected ]
+  , budgetSidecarCorruptRejected
+  , budgetSidecarLoad ]
 
 end LegalKernel.Test.Runtime.BudgetSidecarTests

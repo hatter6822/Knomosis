@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3b84d09b624e8d206162358310863115c58ce55ca09e0832c75bc953bbb699e4"
+    "source_digest": "aa8da0fbd02ad39829aa2b006f06834caec94c6e11e7f8ad7f13bbc63c133c9a"
   },
   "summary": {
     "module_count": 292,
-    "declaration_count": 4852
+    "declaration_count": 4858
   },
   "modules": [
     {
@@ -26636,7 +26636,7 @@
     {
       "module": "LegalKernel.Runtime.BudgetSidecar",
       "path": "LegalKernel/Runtime/BudgetSidecar.lean",
-      "declaration_count": 12,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
@@ -26733,8 +26733,18 @@
         },
         {
           "kind": "def",
+          "name": "load",
+          "line": 159,
+          "called": [
+            "BudgetConfig",
+            "decode",
+            "sidecarPath"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "writeSidecarIfAbsent",
-          "line": 154,
+          "line": 177,
           "called": [
             "BudgetConfig",
             "LegalKernel.Runtime.BudgetSidecar",
@@ -26881,7 +26891,7 @@
     {
       "module": "LegalKernel.Runtime.GasPoolSidecar",
       "path": "LegalKernel/Runtime/GasPoolSidecar.lean",
-      "declaration_count": 8,
+      "declaration_count": 9,
       "declarations": [
         {
           "kind": "namespace",
@@ -26943,8 +26953,18 @@
         },
         {
           "kind": "def",
+          "name": "load",
+          "line": 144,
+          "called": [
+            "GasPoolConfig",
+            "decode",
+            "sidecarPath"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "writeSidecarIfAbsent",
-          "line": 139,
+          "line": 162,
           "called": [
             "GasPoolConfig",
             "LegalKernel.Runtime.GasPoolSidecar",
@@ -27660,7 +27680,7 @@
     {
       "module": "LegalKernel.Runtime.RefundRateSidecar",
       "path": "LegalKernel/Runtime/RefundRateSidecar.lean",
-      "declaration_count": 14,
+      "declaration_count": 15,
       "declarations": [
         {
           "kind": "namespace",
@@ -27764,8 +27784,18 @@
         },
         {
           "kind": "def",
+          "name": "load",
+          "line": 190,
+          "called": [
+            "RefundRateConfig",
+            "decode",
+            "sidecarPath"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "writeSidecarIfAbsent",
-          "line": 185,
+          "line": 208,
           "called": [
             "LegalKernel.Runtime.RefundRateSidecar",
             "RefundRateConfig",
@@ -49212,7 +49242,7 @@
     {
       "module": "LegalKernel.Test.Runtime.BudgetSidecar",
       "path": "LegalKernel/Test/Runtime/BudgetSidecar.lean",
-      "declaration_count": 12,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
@@ -49336,8 +49366,22 @@
         },
         {
           "kind": "def",
+          "name": "budgetSidecarLoad",
+          "line": 158,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "load",
+            "ofPolicy",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 154,
+          "line": 183,
           "called": [
             "LegalKernel.Test.Runtime.BudgetSidecarTests",
             "TestCase",
@@ -49345,6 +49389,7 @@
             "budgetSidecarCorruptRejected",
             "budgetSidecarDecodeRejects",
             "budgetSidecarIsDefault",
+            "budgetSidecarLoad",
             "budgetSidecarRoundTrip",
             "budgetSidecarTolerantDecode",
             "budgetSidecarWriteAndCheck",
@@ -49610,7 +49655,7 @@
     {
       "module": "LegalKernel.Test.Runtime.GasPoolSidecar",
       "path": "LegalKernel/Test/Runtime/GasPoolSidecar.lean",
-      "declaration_count": 13,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "namespace",
@@ -49770,8 +49815,24 @@
         },
         {
           "kind": "def",
+          "name": "gasPoolSidecarLoad",
+          "line": 197,
+          "called": [
+            "GasPoolConfig",
+            "TestCase",
+            "assertEq",
+            "load",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 193,
+          "line": 222,
           "called": [
             "LegalKernel.Test.Runtime.GasPoolSidecarTests",
             "TestCase",
@@ -49780,6 +49841,7 @@
             "gasPoolSidecarCheckAbsentOk",
             "gasPoolSidecarCorruptRejected",
             "gasPoolSidecarDecodeRejects",
+            "gasPoolSidecarLoad",
             "gasPoolSidecarRoundTrip",
             "gasPoolSidecarTolerantDecode",
             "gasPoolSidecarWriteAndCheck",
@@ -51093,7 +51155,7 @@
     {
       "module": "LegalKernel.Test.Runtime.RefundRateSidecar",
       "path": "LegalKernel/Test/Runtime/RefundRateSidecar.lean",
-      "declaration_count": 13,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "namespace",
@@ -51224,8 +51286,22 @@
         },
         {
           "kind": "def",
+          "name": "refundRateSidecarLoad",
+          "line": 179,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "load",
+            "ofFlags",
+            "sidecarPath",
+            "tmpLog",
+            "writeSidecarIfAbsent"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 175,
+          "line": 207,
           "called": [
             "LegalKernel.Test.Runtime.RefundRateSidecarTests",
             "TestCase",
@@ -51233,6 +51309,7 @@
             "refundRateSidecarCorruptRejected",
             "refundRateSidecarDecodeRejects",
             "refundRateSidecarIsDefault",
+            "refundRateSidecarLoad",
             "refundRateSidecarRoundTrip",
             "refundRateSidecarTolerantDecode",
             "refundRateSidecarWriteAndCheck",
@@ -57737,25 +57814,29 @@
           "name": "runReplay",
           "line": 122,
           "called": [
+            "AuthorityPolicy",
             "ContentHash",
             "ExtendedState",
+            "ResourceId",
             "Verify",
             "deploymentId",
             "entries",
             "hashEncodable",
             "loadSnapshot",
             "readAllEntries",
+            "refundRate",
             "replayFromSeedWith",
             "replayGenesis",
             "replayPolicy",
             "restoreSnapshot",
+            "toRefundRate",
             "zeroHash"
           ]
         },
         {
           "kind": "def",
           "name": "checkHashGrade",
-          "line": 172,
+          "line": 217,
           "called": [
             "isProductionHash"
           ]
@@ -57763,13 +57844,13 @@
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 189,
+          "line": 234,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 196,
+          "line": 241,
           "called": [
             "hexCharToNibble"
           ]
@@ -57777,7 +57858,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 214,
+          "line": 259,
           "called": [
             "decodeHexString"
           ]
@@ -57785,7 +57866,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 239,
+          "line": 284,
           "called": [
             "checkHashGrade",
             "parseGlobalFlags",

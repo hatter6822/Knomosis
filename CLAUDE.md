@@ -3661,7 +3661,16 @@ log-touching subcommand (`process` / `replay` / `bootstrap` /
 command (a forgotten / changed rate fails with a clear `refund-rate
 error`, not a silently-dropped refund on replay; `export-terminate-bundle`
 is refund-rate-independent — `kernelOnlyReplay`, no gate — and so
-untouched).  Refunds DISABLED by default (rate 0, no sidecar).
+untouched).  Refunds DISABLED by default (rate 0, no sidecar).  The
+standalone `knomosis-replay` auditor binary (which has no config flags)
+RECONSTRUCTS the full deployment config from the three persisted sidecars
+— budget policy + epoch via `BudgetSidecar.load`, gas-pool policy via
+`GasPoolSidecar.load`, refund rate via `RefundRateSidecar.load` (each
+`load`: absent ⇒ default, present ⇒ decoded, corrupt ⇒ loud error) — so a
+config-bearing log audits to the SAME state hash the producer's `knomosis
+replay` yields, instead of being rejected (a refund whose rate-pin is
+unmet) or diverging (a budget / gas-pool genesis the deny-all default
+omits).
 Suites `bridge-budget-refund` (30 cases — incl. two END-TO-END
 bridge-path admission cases driving `apply_bridge_admissible_with_budget`
 at a nonzero rate + the kernel-path signed admission / disabled-rate
@@ -3671,9 +3680,9 @@ END-TO-END top-up admissions proving a cheap mint is rejected at an
 active rate, the same mint is admitted at the disabled default rate, and
 a fairly-priced mint is admitted) + `runtime-loop-happy-path` (+2, a refund
 admitted / rejected through the literal `processSignedActionWith`) +
-the new `runtime-refund-rate-sidecar` (9 — codec round-trip /
+the new `runtime-refund-rate-sidecar` (10 — codec round-trip /
 `toRefundRate` / `isDefault` / `checkConsistent` /
-`writeSidecarIfAbsent`) + `encoding-action` (+4); all axioms ⊆ the
+`writeSidecarIfAbsent` / the auditor `load`) + `encoding-action` (+4); all axioms ⊆ the
 canonical three; no `gasPoolDeniedTags` bump needed (tag 22 ∈
 `List.range 23`).  Two deployment sharp-edges are documented (not bugs):
 cross-resource rate consistency (a single shared budget refunds at the

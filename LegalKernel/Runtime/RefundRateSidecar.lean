@@ -178,6 +178,29 @@ def checkConsistent (logPath : System.FilePath) (current : RefundRateConfig) :
   else
     pure (.ok ())
 
+/-- IO: LOAD the persisted refund-rate config from the sidecar.  Unlike
+    `checkConsistent` (which compares a CLI-supplied config against disk),
+    this RECONSTRUCTS the config from disk — for the auditor path
+    (`knomosis-replay`), which has no refund-rate flags and must re-derive
+    the rate the producer used so an admitted `claimBudgetRefund` replays
+    deterministically.  Returns `ok none` when no sidecar exists (refunds
+    were disabled — the default), `ok (some cfg)` when it decodes, and
+    `error` when the sidecar is present but corrupt (the auditor must fail
+    loudly, never silently audit under the wrong rate). -/
+def load (logPath : System.FilePath) :
+    IO (Except String (Option RefundRateConfig)) := do
+  let path := sidecarPath logPath
+  if ← path.pathExists then
+    let contents ← IO.FS.readFile path
+    match decode contents with
+    | none =>
+      pure (.error
+        s!"refund-rate sidecar {path} is corrupt or unrecognised; \
+           expected `{magic} <ethRate> <boldRate>`")
+    | some cfg => pure (.ok (some cfg))
+  else
+    pure (.ok none)
+
 /-- IO: write the sidecar iff it does NOT already exist AND the rate is
     non-default (refunds enabled).  Called by the writer (`process`)
     after a successful bootstrap, so a refunds-disabled deployment never
