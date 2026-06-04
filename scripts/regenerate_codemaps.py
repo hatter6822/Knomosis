@@ -9,8 +9,11 @@ Usage::
 The generator walks the tracked source of each language (Lean / Solidity /
 Rust), extracts each named top-level declaration of the recognised kinds,
 and records a per-declaration lexical reference graph in the ``called``
-field.  Output is fully deterministic (sorted inputs, sorted reference
-lists, source-independent header metadata) so a regeneration on any
+field.  Declaration ``line`` values are zero-based source coordinates,
+matching the seLe4n codemap schema and editor/LSP APIs; they therefore point
+to the same physical line a human sees as ``line + 1``.  Output is fully
+deterministic (sorted inputs, sorted reference lists, source-independent
+header metadata) so a regeneration on any
 checkout -- CI or local, built or not -- is byte-identical, and the CI gate
 
     python3 scripts/regenerate_codemaps.py && git diff --exit-code -- codemaps/
@@ -36,8 +39,8 @@ Correctness notes
   declaration it lists the *other* in-repo declaration names (of the same
   language) that appear as whole identifier tokens within the
   declaration's body.  A declaration's body is its line-ordered span: from
-  its own line up to (but not including) the next declaration's line in the
-  same file.  Because every nested child (a method inside an ``impl``, a
+  its own declaration line up to (but not including) the next declaration's
+  line in the same file.  Because every nested child (a method inside an ``impl``, a
   function inside a ``contract``) is itself a declaration, containers get a
   tight span covering only their header line, so they do not absorb their
   children's references.
@@ -72,6 +75,18 @@ from pathlib import Path
 from typing import Callable
 
 ROOT = Path(__file__).resolve().parent.parent
+SOURCE_LINE_BASE = 1
+SCHEMA_LINE_BASE = 0
+
+
+def schema_line(source_line: int) -> int:
+    """Convert a human/source 1-based line number to the codemap schema base."""
+    return source_line - SOURCE_LINE_BASE + SCHEMA_LINE_BASE
+
+
+def source_line(schema_line_number: int) -> int:
+    """Convert a codemap schema line number back to a human/source 1-based line."""
+    return schema_line_number - SCHEMA_LINE_BASE + SOURCE_LINE_BASE
 
 
 def git(args: list[str]) -> str:
@@ -236,67 +251,55 @@ def _consume_raw_string(text: str, match: re.Match[str]) -> int:
 def mask_source(text: str, syntax: CommentSyntax) -> str:
     """Blank out comments and string literals, preserving length per line.
 
-    Code is copied verbatim; comment and string spans become runs of
-    spaces with their newlines intact.  Linear in the size of ``text``: the
-    scan advances monotonically and jumps between significant tokens via
-    ``str.find``.
+    Code is copied verbatim; comment, string, raw-string, and character-literal
+    spans become runs of spaces with their newlines intact.  The implementation
+    is a single forward scan.  It checks whether the current byte starts a
+    lexical token instead of repeatedly searching the remaining suffix for every
+    token class; this keeps regeneration linear even for large generated test
+    fixtures with many string literals.
     """
     out: list[str] = []
     i = 0
+    code_start = 0
     length = len(text)
-    while i < length:
-        # Earliest of: line comment, block comment, raw string, string.
-        best_pos = length
-        best_kind = ""
-        best_delim = ""
-        best_raw: re.Match[str] | None = None
-        best_char: re.Match[str] | None = None
-        if syntax.line is not None:
-            p = text.find(syntax.line, i)
-            if p != -1 and p < best_pos:
-                best_pos, best_kind = p, "line"
-        p = text.find(syntax.block_open, i)
-        if p != -1 and p < best_pos:
-            best_pos, best_kind = p, "block"
-        for delim in syntax.string_delims:
-            p = text.find(delim, i)
-            if p != -1 and p < best_pos:
-                best_pos, best_kind, best_delim = p, "string", delim
-        if syntax.raw_string_open is not None:
-            m = syntax.raw_string_open.search(text, i)
-            # A raw opener (r"/r#"/br##") starts at its r/b/c prefix, which
-            # precedes the opening quote the plain string scan finds, so the
-            # same literal always resolves to the raw form (earlier position).
-            if m is not None and m.start() < best_pos:
-                best_pos, best_kind, best_raw = m.start(), "raw_string", m
-        if syntax.char_literal is not None:
-            m = syntax.char_literal.search(text, i)
-            # A char literal containing a quote ('"') starts at its opening
-            # ' -- before the inner " -- so it wins over the plain string scan
-            # and that inner quote never opens a spurious string.
-            if m is not None and m.start() < best_pos:
-                best_pos, best_kind, best_char = m.start(), "char", m
 
-        if best_kind == "":
-            out.append(text[i:])
-            break
-
-        out.append(text[i:best_pos])  # verbatim code preceding the token
-        if best_kind == "line":
-            end = text.find("\n", best_pos)
-            end = length if end == -1 else end
-        elif best_kind == "block":
-            end = _consume_block(text, best_pos, syntax)
-        elif best_kind == "raw_string":
-            assert best_raw is not None  # set in lockstep with best_kind
-            end = _consume_raw_string(text, best_raw)
-        elif best_kind == "char":
-            assert best_char is not None  # set in lockstep with best_kind
-            end = best_char.end()
-        else:
-            end = _consume_string(text, best_pos, best_delim)
-        out.append(_blank(text[best_pos:end]))
+    def emit_masked(end: int) -> None:
+        nonlocal i, code_start
+        out.append(text[code_start:i])
+        out.append(_blank(text[i:end]))
         i = end
+        code_start = i
+
+    while i < length:
+        if syntax.line is not None and text.startswith(syntax.line, i):
+            end = text.find("\n", i)
+            emit_masked(length if end == -1 else end)
+            continue
+
+        if text.startswith(syntax.block_open, i):
+            emit_masked(_consume_block(text, i, syntax))
+            continue
+
+        if syntax.raw_string_open is not None:
+            raw = syntax.raw_string_open.match(text, i)
+            if raw is not None:
+                emit_masked(_consume_raw_string(text, raw))
+                continue
+
+        if syntax.char_literal is not None:
+            char = syntax.char_literal.match(text, i)
+            if char is not None:
+                emit_masked(char.end())
+                continue
+
+        ch = text[i]
+        if ch in syntax.string_delims:
+            emit_masked(_consume_string(text, i, ch))
+            continue
+
+        i += 1
+
+    out.append(text[code_start:])
     return "".join(out)
 
 
@@ -350,6 +353,11 @@ def extract_declarations(
     Each line is matched (after leading-whitespace stripping) against the
     ordered ``patterns``; the first match wins.  Operating on masked source
     means comment / string content cannot produce a spurious declaration.
+
+    The scan uses 1-based physical line numbers internally because Python's
+    ``enumerate(..., start=1)`` then mirrors compiler diagnostics and ``nl``
+    output.  The persisted codemap value is converted at the boundary to the
+    schema's zero-based coordinate system.
     """
     declarations: list[dict] = []
     for idx, line in enumerate(masked.splitlines(), start=1):
@@ -365,9 +373,61 @@ def extract_declarations(
                 name = _normalize_impl_name(name)
                 if name is None:
                     break
-            declarations.append({"kind": kind, "name": name, "line": idx, "called": []})
+            declarations.append(
+                {"kind": kind, "name": name, "line": schema_line(idx), "called": []}
+            )
             break
     return declarations
+
+
+def validate_declarations(
+    rel: str,
+    masked: str,
+    declarations: list[dict],
+    patterns: list[tuple[str, re.Pattern[str]]],
+) -> None:
+    """Sanity-check declaration coordinates before writing a codemap.
+
+    This intentionally replays the pattern table against each recorded line.
+    It is cheap relative to the full scan and catches line-base regressions (the
+    historical off-by-one class) immediately, before corrupted codemaps are
+    committed.
+    """
+    lines = masked.splitlines()
+    previous = -1
+    for decl in declarations:
+        line = decl["line"]
+        if not isinstance(line, int) or line < SCHEMA_LINE_BASE or line >= len(lines):
+            raise SystemExit(
+                f"regenerate_codemaps validation FAILED [{rel}] invalid line "
+                f"{line!r} for {decl['kind']} {decl['name']}"
+            )
+        if line <= previous:
+            raise SystemExit(
+                f"regenerate_codemaps validation FAILED [{rel}] declarations out of order "
+                f"near line {line}: {decl['kind']} {decl['name']}"
+            )
+        previous = line
+        src = lines[source_line(line) - 1].strip()
+        matched = False
+        for kind, regex in patterns:
+            m = regex.match(src)
+            if not m:
+                continue
+            name = m.group(1)
+            if kind == "impl":
+                normalized = _normalize_impl_name(name)
+                if normalized is None:
+                    break
+                name = normalized
+            matched = kind == decl["kind"] and name == decl["name"]
+            break
+        if not matched:
+            raise SystemExit(
+                f"regenerate_codemaps validation FAILED [{rel}] recorded "
+                f"{decl['kind']} {decl['name']} at schema line {line}, but the "
+                "masked source line no longer matches the declaration patterns"
+            )
 
 
 # --------------------------------------------------------------------------
@@ -394,8 +454,12 @@ def assign_called(
         masked_lines = masked_by_path[module["path"]].splitlines()
         decls = module["declarations"]
         for k, decl in enumerate(decls):
-            start = decl["line"]
-            end = decls[k + 1]["line"] if k + 1 < len(decls) else len(masked_lines) + 1
+            start = source_line(decl["line"])
+            end = (
+                source_line(decls[k + 1]["line"])
+                if k + 1 < len(decls)
+                else len(masked_lines) + 1
+            )
             body = "\n".join(masked_lines[start - 1 : end - 1])
             referenced = set(ident_re.findall(body)) & all_names
             referenced.discard(decl["name"])
@@ -441,6 +505,7 @@ def build_map(
         declarations = extract_declarations(masked, compiled)
         if not declarations:
             continue
+        validate_declarations(rel, masked, declarations, compiled)
         masked_by_path[rel] = masked
         modules.append(
             {
@@ -607,6 +672,43 @@ def run_self_tests() -> None:
         if got != expected:
             raise SystemExit(
                 f"regenerate_codemaps self-test FAILED [{desc}]\n  expected {expected}\n  got      {got}"
+            )
+
+    # Persisted codemap lines are zero-based schema coordinates while source
+    # diagnostics and humans are 1-based.  A leading blank line catches the
+    # historical off-by-one regression in all downstream line-span consumers.
+    line_cases = [
+        (
+            "lean",
+            "\ndef first : Nat := 0\ndef second : Nat := first\n",
+            LEAN_SYNTAX,
+            lean,
+            [("first", 1), ("second", 2)],
+        ),
+        (
+            "rust",
+            "\nfn first() {}\nfn second() { first(); }\n",
+            RUST_SYNTAX,
+            rust,
+            [("first", 1), ("second", 2)],
+        ),
+        (
+            "solidity",
+            "\ncontract First {}\nfunction second() {}\n",
+            SOLIDITY_SYNTAX,
+            sol,
+            [("First", 1), ("second", 2)],
+        ),
+    ]
+    for desc, src, syntax, patterns, expected in line_cases:
+        masked_line = mask_source(src, syntax)
+        line_decls = extract_declarations(masked_line, patterns)
+        line_pairs = [(d["name"], d["line"]) for d in line_decls]
+        if line_pairs != expected:
+            raise SystemExit(
+                f"regenerate_codemaps self-test FAILED [zero-based declaration lines: {desc}]\n"
+                f"  expected {expected}\n"
+                f"  got      {line_pairs}"
             )
 
     # Reference graph: an unqualified call is recorded; a call inside a comment
