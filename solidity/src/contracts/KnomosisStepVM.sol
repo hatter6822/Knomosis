@@ -110,7 +110,8 @@ contract KnomosisStepVM {
         // Workstream GP extension:
         DepositWithFee,       // 19
         TopUpActionBudget,    // 20
-        TopUpActionBudgetFor  // 21 (GP.3.4 delegated top-up; GP.5.3)
+        TopUpActionBudgetFor, // 21 (GP.3.4 delegated top-up; GP.5.3)
+        ClaimBudgetRefund     // 22 (GP.9.1 refund-on-exit)
     }
 
     /* ---------------------------------------------------------- */
@@ -208,6 +209,7 @@ contract KnomosisStepVM {
     bytes32 internal constant TAG_TOPUP_ACTION_BUDGET  = keccak256("topUpActionBudget");
     bytes32 internal constant TAG_TOPUP_ACTION_BUDGET_FOR =
         keccak256("topUpActionBudgetFor");
+    bytes32 internal constant TAG_CLAIM_BUDGET_REFUND  = keccak256("claimBudgetRefund");
 
     /* ---------------------------------------------------------- */
     /* External: executeStep                                      */
@@ -312,6 +314,10 @@ contract KnomosisStepVM {
             // Workstream GP (action-index 21; GP.3.4 delegated top-up).
             postStateCommit = _stepTopUpActionBudgetFor(
               preStateCommit, actionFields, signer, cellProofs);
+        } else if (kind == ActionKind.ClaimBudgetRefund) {
+            // Workstream GP (action-index 22; GP.9.1 refund-on-exit).
+            postStateCommit = _stepClaimBudgetRefund(
+              preStateCommit, actionFields, signer, cellProofs);
         } else {
             revert UnknownActionKind();
         }
@@ -322,13 +328,13 @@ contract KnomosisStepVM {
     /* ---------------------------------------------------------- */
 
     function _toActionKind(uint8 idx) internal pure returns (ActionKind) {
-        // Workstream GP extension: indices 19/20/21 are now valid
-        // (GP.5.3 added 21 = TopUpActionBudgetFor).  Updating this
-        // bound is mandatory when a new Action constructor is appended
-        // to the Lean-side inductive — the Lean cross-stack fixture
-        // corpus exercises every kind on both sides via the
-        // `crosscheck-step-vm` suite.
-        if (idx > 21) revert UnknownActionKind();
+        // Workstream GP extension: indices 19/20/21/22 are now valid
+        // (GP.5.3 added 21 = TopUpActionBudgetFor; GP.9.1 added 22 =
+        // ClaimBudgetRefund).  Updating this bound is mandatory when a
+        // new Action constructor is appended to the Lean-side inductive
+        // — the Lean cross-stack fixture corpus exercises every kind on
+        // both sides via the `crosscheck-step-vm` suite.
+        if (idx > 22) revert UnknownActionKind();
         return ActionKind(idx);
     }
 
@@ -1096,6 +1102,70 @@ contract KnomosisStepVM {
 
         return keccak256(abi.encodePacked(
             preStateCommit, TAG_TOPUP_ACTION_BUDGET_FOR,
+            gasResource, signer, newSignerBalance,
+            poolActor, newPoolBalance));
+    }
+
+    /// @notice Step function for `claimBudgetRefund` (action-index 22;
+    ///         GP.9.1 refund-on-exit).  Field layout (32 bytes,
+    ///         4 x uint64BE): `gasResource | budgetUnits |
+    ///         weiPerBudgetUnit | poolActor`.  The claimant (signer) is
+    ///         CREDITED `budgetUnits * weiPerBudgetUnit` OUT OF the pool
+    ///         — the MIRROR of `topUpActionBudget` with the debit/credit
+    ///         direction reversed.
+    ///
+    ///         OVERFLOW: `budgetUnits` and `weiPerBudgetUnit` each fit a
+    ///         uint64, but their PRODUCT (the payout) can reach ~2^128,
+    ///         so it MUST be computed in uint256 (never uint64).
+    ///
+    ///         `budgetUnits` / `weiPerBudgetUnit` drive the amount, but
+    ///         the claimant's epoch-budget consume is an admission-layer
+    ///         effect (not a cell write), so the step-VM hash binds only
+    ///         the two balance writes — as kinds 19/20/21 exclude their
+    ///         budget fields.
+    ///
+    ///         The admission gate (`claimBudgetRefund_gate`) upstream
+    ///         rejects `signer == poolActor` and an insolvent pool, so
+    ///         both the self-pool branch and the pool-solvency revert are
+    ///         unreachable on the canonical path; the explicit handling
+    ///         defends against a malformed bundle reaching this
+    ///         dispatcher.
+    function _stepClaimBudgetRefund(
+        bytes32 preStateCommit,
+        bytes calldata actionFields,
+        uint64 signer,
+        CellProof[] calldata cellProofs
+    ) internal pure returns (bytes32) {
+        require(actionFields.length >= 32, "ClaimBudgetRefundFieldsTooShort");
+        uint64 gasResource       = _decodeUint64BE(actionFields, 0);
+        uint256 budgetUnits      = uint256(_decodeUint64BE(actionFields, 8));
+        uint256 weiPerBudgetUnit = uint256(_decodeUint64BE(actionFields, 16));
+        uint64 poolActor         = _decodeUint64BE(actionFields, 24);
+        // uint256 product: ~2^128 max, never uint64.
+        uint256 refundAmount = budgetUnits * weiPerBudgetUnit;
+
+        uint256 signerProofIdx = _findBalanceCellProof(cellProofs, gasResource, signer);
+        uint256 signerBalance =
+          _decodeNat(cellProofs[signerProofIdx].cellValue);
+
+        uint256 newSignerBalance;
+        uint256 newPoolBalance;
+        if (signer == poolActor) {
+            // No-op: defended at admission; debit pool + credit claimant
+            // on the same actor is net-zero (the law reads the credit
+            // from the post-debit state).
+            newSignerBalance = signerBalance;
+            newPoolBalance   = signerBalance;
+        } else {
+            uint256 poolProofIdx = _findBalanceCellProof(cellProofs, gasResource, poolActor);
+            uint256 poolBalance  = _decodeNat(cellProofs[poolProofIdx].cellValue);
+            if (poolBalance < refundAmount) revert InsufficientBalance();
+            newSignerBalance = signerBalance + refundAmount; // claimant CREDITED
+            newPoolBalance   = poolBalance - refundAmount;   // pool DEBITED
+        }
+
+        return keccak256(abi.encodePacked(
+            preStateCommit, TAG_CLAIM_BUDGET_REFUND,
             gasResource, signer, newSignerBalance,
             poolActor, newPoolBalance));
     }

@@ -791,18 +791,177 @@ contract KnomosisStepVMTest is Test {
             FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
     }
 
-    function test_executeStep_kind_22_reverts() public {
+    /* -------- GP.9.1 claimBudgetRefund (kind 22) -------- */
+
+    /// @notice GP.9.1 — the refund step VM CREDITS the claimant
+    ///         (signer) and DEBITS the pool by `budgetUnits *
+    ///         weiPerBudgetUnit` (the MIRROR of topUpActionBudget).
+    ///         Keccak-binding-INDEPENDENT: recomputes the canonical
+    ///         recipe directly, so it runs in every build mode.
+    function test_claimBudgetRefund_matches_canonical_recipe() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // claimant gas = 100
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(60), FIXTURE_PRE_COMMIT);   // pool gas = 60
+
+        // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10 => refundAmount=50,
+        // poolActor=99.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(5), uint64(10), uint64(99));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
+
+        // newSignerBal = 100 + 50 = 150 (CREDITED); newPoolBal = 60 - 50 = 10 (DEBITED).
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("claimBudgetRefund"),
+            uint64(1),      // gasResource
+            uint64(10),     // signer (claimant)
+            uint256(150),   // newSignerBalance (credited)
+            uint64(99),     // poolActor
+            uint256(10)));  // newPoolBalance (debited)
+        assertEq(result, expected, "refund step-VM commit matches canonical recipe");
+    }
+
+    /// @notice GP.9.1 product-overflow regression — `budgetUnits *
+    ///         weiPerBudgetUnit` MUST be computed in uint256, never
+    ///         uint64.  With both factors = 2^33 the true (uint256)
+    ///         product is 2^66 — far beyond a small pool, so the
+    ///         solvency guard reverts.  A buggy uint64-truncating
+    ///         contract would compute `2^66 mod 2^64 = 0`, find the pool
+    ///         solvent, and NOT revert (silently crediting 0).  So this
+    ///         expect-revert pins that the product is the full uint256
+    ///         value.  (A pool funded ≥ 2^64 is unrepresentable in a
+    ///         uint64 cell, so the no-truncation property is observable
+    ///         only through this solvency-threshold behaviour.)
+    function test_claimBudgetRefund_uint256_product_no_overflow() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);      // claimant gas = 0
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(1000), FIXTURE_PRE_COMMIT);   // pool gas = 1000
+
+        // budgetUnits = 2^33, weiPerBudgetUnit = 2^33 (each < 2^64, fit
+        // uint64); true product = 2^66 >> pool 1000 => revert.
+        uint64 units = uint64(1) << 33;
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), units, units, uint64(99));
+        vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
+    }
+
+    /// @notice GP.9.1 tag-separation — the refund commit must differ
+    ///         from BOTH top-up commits on identical
+    ///         (gasResource, signer, newSigner, poolActor, newPool)
+    ///         inputs; the distinct `claimBudgetRefund` tag is what
+    ///         prevents a bisection-game opponent from substituting a
+    ///         top-up commit for a refund commit.
+    function test_claimBudgetRefund_distinct_from_topUp() public pure {
+        bytes32 pre = FIXTURE_PRE_COMMIT;
+        bytes32 hRefund = keccak256(abi.encodePacked(
+            pre, keccak256("claimBudgetRefund"),
+            uint64(1), uint64(10), uint256(150), uint64(99), uint256(10)));
+        bytes32 hTopUp = keccak256(abi.encodePacked(
+            pre, keccak256("topUpActionBudget"),
+            uint64(1), uint64(10), uint256(150), uint64(99), uint256(10)));
+        bytes32 hTopUpFor = keccak256(abi.encodePacked(
+            pre, keccak256("topUpActionBudgetFor"),
+            uint64(1), uint64(10), uint256(150), uint64(99), uint256(10)));
+        assertTrue(hRefund != hTopUp, "refund tag distinct from topUpActionBudget");
+        assertTrue(hRefund != hTopUpFor, "refund tag distinct from topUpActionBudgetFor");
+    }
+
+    /// @notice GP.9.1 defence-in-depth — `signer == poolActor` is
+    ///         rejected upstream at admission; the dispatcher's defended
+    ///         branch must produce a deterministic net-zero commit
+    ///         (debit pool + credit claimant on the same actor cancels),
+    ///         without reverting.
+    function test_claimBudgetRefund_self_pool_net_zero() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // claimant == pool gas = 100
+
+        // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10, poolActor=10 (== signer).
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(5), uint64(10), uint64(10));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
+
+        // Net-zero: newSignerBal = newPoolBal = 100 (pre-balance).
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("claimBudgetRefund"),
+            uint64(1), uint64(10), uint256(100), uint64(10), uint256(100)));
+        assertEq(result, expected, "self-pool => net-zero commit (no revert)");
+    }
+
+    /// @notice GP.9.1 boundary — `refundAmount == poolBalance` is the
+    ///         exact-drain edge of the pool-solvency guard
+    ///         (`poolBalance < refundAmount` reverts; `==` must NOT).
+    ///         Pins that the boundary admits, the pool is drained to
+    ///         exactly 0, and the claimant is credited the full amount.
+    function test_claimBudgetRefund_exact_pool_drain() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(20), FIXTURE_PRE_COMMIT);  // claimant gas = 20
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);  // pool gas = 50 (== refund)
+
+        // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10 => refundAmount=50
+        // (== pool balance), poolActor=99.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(5), uint64(10), uint64(99));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
+
+        // newSigner = 20 + 50 = 70; newPool = 50 - 50 = 0.
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("claimBudgetRefund"),
+            uint64(1), uint64(10), uint256(70), uint64(99), uint256(0)));
+        assertEq(result, expected, "exact-pool-drain => newPool=0, claimant credited");
+    }
+
+    function test_claimBudgetRefund_rejects_short_fields() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
+        // 31 bytes < 32 minimum.
+        bytes memory actionFields = new bytes(31);
+        vm.expectRevert(bytes("ClaimBudgetRefundFieldsTooShort"));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(0), proofs);
+    }
+
+    function test_claimBudgetRefund_rejects_insufficient_pool() public {
+        // Pool has 30 gas; refund of 50 must revert (pool solvency).
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 99, _encodeCbeNat(30), FIXTURE_PRE_COMMIT);  // pool gas = 30 < 50
+
+        // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10 => refundAmount=50,
+        // poolActor=99.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(5), uint64(10), uint64(99));
+        vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
+    }
+
+    function test_executeStep_kind_23_reverts() public {
         // Workstream GP closed kinds 19/20; GP.5.3 closed kind 21
-        // (TopUpActionBudgetFor).  The catch-all path now fires for
-        // kinds ≥ 22.  This regression test pins the upper bound: a
-        // future Action constructor addition MUST extend
-        // `_toActionKind` AND the dispatcher AND this test before
-        // merging.
+        // (TopUpActionBudgetFor); GP.9.1 closed kind 22
+        // (ClaimBudgetRefund).  The catch-all path now fires for kinds
+        // ≥ 23.  This regression test pins the upper bound: a future
+        // Action constructor addition MUST extend `_toActionKind` AND
+        // the dispatcher AND this test before merging.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
         vm.expectRevert(KnomosisStepVM.UnknownActionKind.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT,
-            uint8(22),
+            uint8(23),
             new bytes(0),
             uint64(0),
             proofs);
