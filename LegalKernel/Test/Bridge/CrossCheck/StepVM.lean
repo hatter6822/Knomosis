@@ -714,6 +714,50 @@ def buildTopUpActionBudgetForHappy
     signerNat := signer.toNat,
     cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
 
+/-- GP.9.1: build a `claimBudgetRefund` (index 22) happy fixture.  The
+    claimant (signer) is CREDITED `budgetUnits × weiPerBudgetUnit` OUT
+    OF `poolActor` at `gasResource` — the MIRROR of `topUpActionBudget`
+    (debit/credit reversed).  Pre-state funds the pool ≥ the refund
+    (the gate's pool-solvency conjunct) and `signer ≠ poolActor` (the
+    gate's self-pool defense). -/
+def buildClaimBudgetRefundHappy
+    (idx : Nat) (gasResource : ResourceId)
+    (signer poolActor : ActorId)
+    (claimantInitBal poolInitBal budgetUnits weiPerBudgetUnit : Nat)
+    (nonce : Nonce) (sig : ByteArray) :
+    StepVMFixture :=
+  let action : Action :=
+    .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor
+  let st : SignedAction := { action, signer, nonce, sig }
+  let es := stateWithBalances gasResource
+              [(signer, claimantInitBal), (poolActor, poolInitBal)]
+  let preCommit := commitExtendedState es
+  let postCommit := recomputeCommitment es st
+  -- Per Laws.claimBudgetRefund.apply_impl: poolActor -= refundAmount;
+  -- claimant (signer) += refundAmount.
+  let refundAmount : Nat := budgetUnits * weiPerBudgetUnit
+  let claimantPreBal := LegalKernel.getBalance es.base gasResource signer
+  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
+  let newSignerBal : Nat := claimantPreBal + refundAmount
+  let newPoolBal : Nat := poolPreBal - refundAmount
+  let stepVMCommit :=
+    stepCommitClaimBudgetRefund preCommit gasResource.toNat
+      signer.toNat poolActor.toNat newSignerBal newPoolBal
+  let bundle :=
+    LegalKernel.FaultProof.Observer.buildObserverCellProofs
+      es action signer
+  { fixtureId := s!"claimBudgetRefund-happy-{idx}",
+    actionVariant := "claimBudgetRefund",
+    preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
+    signedActionHex := encodeSignedAction st,
+    expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
+    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
+    expectedRevertReason := "null",
+    actionKindByte := actionKindByte action,
+    actionFieldsHex := encodeActionFields action,
+    signerNat := signer.toNat,
+    cellProofsForFixture := bundleToFixtureProofs bundle.proofs }
+
 /-! ## Opaque-variant happy fixture generators
 
 For opaque variants (Dispute, DisputeWithdraw, Verdict,
@@ -1174,6 +1218,30 @@ def topUpActionBudgetForFixtures : List StepVMFixture :=
   (List.range 4).map (fun i =>
     buildAdversarialBadPreCommit i "topUpActionBudgetFor")
 
+/-- GP.9.1 fixtures for `claimBudgetRefund` (10 entries: 6 happy + 4
+    adversarial).  The 6 happy entries sweep `gasResource ∈ {0,1}` (ETH
+    / BOLD legs), keep `signer ≠ poolActor` + a pool funded ≥ the
+    refund, and end with the exact-pool-drain boundary (`i = 5`:
+    `poolInitBal = refundAmount`, so the pool is drained to 0). -/
+def claimBudgetRefundFixtures : List StepVMFixture :=
+  (List.range 6).map (fun i =>
+    -- `signer = i + 10` (≠ bridgeActor 0, ≠ pool); `poolActor = i + 20`
+    -- (≠ signer); `gasResource` alternates 0 (ETH) / 1 (BOLD).
+    let gasResource : ResourceId := ((i % 2) : Nat).toUInt64
+    let signer : ActorId := ((i + 10) : Nat).toUInt64
+    let poolActor : ActorId := ((i + 20) : Nat).toUInt64
+    let budgetUnits : Nat := i + 1            -- > 0 always
+    let weiPerBudgetUnit : Nat := i + 2       -- > 0 always
+    let refundAmount : Nat := budgetUnits * weiPerBudgetUnit
+    let claimantInitBal : Nat := 50 + i
+    -- last entry: exact-pool-drain (pool holds exactly `refundAmount`).
+    let poolInitBal : Nat := if i == 5 then refundAmount else refundAmount + 100 + i
+    buildClaimBudgetRefundHappy i gasResource signer poolActor
+                                claimantInitBal poolInitBal budgetUnits weiPerBudgetUnit
+                                (i * 89) (ByteArray.mk #[i.toUInt8])) ++
+  (List.range 4).map (fun i =>
+    buildAdversarialBadPreCommit i "claimBudgetRefund")
+
 /-- SVC.5.e fixtures for `declareLocalPolicy` (10 entries). -/
 def declareLocalPolicyFixtures : List StepVMFixture :=
   (List.range 6).map (fun i =>
@@ -1223,7 +1291,8 @@ def allFixtures : List StepVMFixture :=
   withdrawFixtures ++ declareLocalPolicyFixtures ++
   revokeLocalPolicyFixtures ++ faultProofChallengeFixtures ++
   faultProofResolutionFixtures ++ depositWithFeeFixtures ++
-  topUpActionBudgetFixtures ++ topUpActionBudgetForFixtures
+  topUpActionBudgetFixtures ++ topUpActionBudgetForFixtures ++
+  claimBudgetRefundFixtures
 
 /-! ## Test suite (Lean-side fixture-stability tests) -/
 
@@ -1438,13 +1507,18 @@ def tests : List Test.TestCase :=
         Test.assertEq (expected := 10)
           (actual := topUpActionBudgetForFixtures.length) "6 happy + 4 adversarial"
     }
-  , { name := "GP.5.3: full corpus has 248 entries"
+  , { name := "GP.9.1: claimBudgetRefund fixture corpus has 10 entries"
     , body := do
-        -- 24 + 24 + 18 × 10 + 2 × 10 = 248 (GP.5.3 extension:
-        -- +topUpActionBudgetFor on top of the 238 entries that
-        -- already carried +depositWithFee + topUpActionBudget).
-        Test.assertEq (expected := 248) (actual := allFixtures.length)
-          "248 = 24 + 24 + 18 × 10 + 2 × 10"
+        Test.assertEq (expected := 10)
+          (actual := claimBudgetRefundFixtures.length) "6 happy + 4 adversarial"
+    }
+  , { name := "GP.9.1: full corpus has 258 entries"
+    , body := do
+        -- 24 + 24 + 18 × 10 + 3 × 10 = 258 (GP.9.1 extension:
+        -- +claimBudgetRefund on top of the 248 entries that already
+        -- carried +depositWithFee + topUpActionBudget + topUpActionBudgetFor).
+        Test.assertEq (expected := 258) (actual := allFixtures.length)
+          "258 = 24 + 24 + 18 × 10 + 3 × 10"
     }
   , { name := "F.1.8: every fixture has non-empty fixtureId"
     , body := do
@@ -1458,14 +1532,15 @@ def tests : List Test.TestCase :=
                       (fun f => f.actionVariant.length > 0))
           "all fixtures have valid action variants"
     }
-  , { name := "GP.5.3: every happy fixture's actionKindByte is in 0..21"
+  , { name := "GP.9.1: every happy fixture's actionKindByte is in 0..22"
     , body := do
         let happy := allFixtures.filter
                        (fun f => f.expectedRevertReason = "null")
         -- Post-Workstream-GP: dispatcher range widened from 0..18
         -- (SVC.5.e) to 0..20 (depositWithFee = 19, topUpActionBudget =
-        -- 20) and now to 0..21 (GP.5.3: topUpActionBudgetFor = 21).
-        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 21))
+        -- 20), to 0..21 (GP.5.3: topUpActionBudgetFor = 21), and now to
+        -- 0..22 (GP.9.1: claimBudgetRefund = 22).
+        Test.assert (happy.all (fun f => f.actionKindByte.toNat ≤ 22))
           "all happy fixture actionKindBytes are valid dispatchers"
     }
   , { name := "F.1.8: happy-path fixtures have non-null expectedPostStateCommit"
@@ -1665,6 +1740,9 @@ def tests : List Test.TestCase :=
           -- GP.5.3: delegated top-up at index 21.
           , ("countTopUpActionBudgetFor",
              .num topUpActionBudgetForFixtures.length)
+          -- GP.9.1: refund-on-exit at index 22.
+          , ("countClaimBudgetRefund",
+             .num claimBudgetRefundFixtures.length)
           -- GP.5.3 hash-independent layout goldens (data-flow): the
           -- Solidity consumer reads these and recomputes
           -- `abi.encodePacked`, proving the packed byte layout agrees
