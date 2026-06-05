@@ -6997,7 +6997,7 @@ sub-WU table above is the implementation roadmap.
         `ammSeedAmount` field.
 
     **Tests.**  New `test/AmmDepositSeeding.t.sol` (~18 cases — unit + 3
-    conservation fuzz + a 3-invariant stateful suite): per-leg seeding with
+    conservation fuzz + a 5-invariant stateful suite): per-leg seeding with
     the canonical event's `ammSeedAmount` field, the disabled / zero-fee /
     dust-floor `ammSeedAmount == 0` paths (decoded from the event),
     `test_receiptHash_bindsAmmSeedAmount` (the tamper-evidence test), leg
@@ -7009,8 +7009,12 @@ sub-WU table above is the implementation roadmap.
     conservation fuzz over both legs + the whole `[0, 8000]` ratio range,
     and the stateful `AmmDepositSeedingInvariantTest` (`ammReserveEth ==
     sum-of-admitted-ETH-seeds`, `ammReserveBold ==
-    sum-of-admitted-BOLD-seeds`, `reserves <= TVL`, over 128 000 random
-    ETH+BOLD deposits at a moderate cap so some deposits revert).
+    sum-of-admitted-BOLD-seeds`, the global `reserves <= TVL`, and the two
+    PER-CURRENCY bounds `ammReserveBold <= boldTotalLockedValue` +
+    `ammReserveEth + boldTotalLockedValue <= totalLockedValue` — which catch
+    a wrong-leg seed the global bound would mask when the other leg has
+    slack — over 128 000 random ETH+BOLD deposits at a moderate cap so some
+    deposits revert).
     `AmmStorage.t.sol`'s ratio-invariance test is
     `test_coreSplit_ratioInvariant_butAmmSeedScales` (the core
     user/pool/budget triple is ratio-invariant while the canonical event's

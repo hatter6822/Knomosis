@@ -729,4 +729,31 @@ contract AmmDepositSeedingInvariantTest is Test {
             "reserves <= total locked value"
         );
     }
+
+    /// @notice Per-currency: the BOLD reserve never exceeds the per-BOLD
+    ///         locked value.  Strictly stronger than the global bound — it
+    ///         catches a BOLD seed mis-routed to the ETH reserve (or a
+    ///         missed `boldTotalLockedValue` increment) that the global
+    ///         invariant would mask whenever the ETH leg has slack.
+    function invariant_boldReserveSubsetOfBoldTvl() public view {
+        assertLe(
+            bridge.ammReserveBold(),
+            bridge.boldTotalLockedValue(),
+            "ammReserveBold <= boldTotalLockedValue"
+        );
+    }
+
+    /// @notice Per-currency: the ETH reserve fits within the ETH portion of
+    ///         TVL (`totalLockedValue - boldTotalLockedValue`).  Stated as
+    ///         `ammReserveEth + boldTotalLockedValue <= totalLockedValue` to
+    ///         avoid an underflowing subtraction; catches an ETH seed
+    ///         mis-routed to the BOLD reserve.  Together with the BOLD bound
+    ///         this subsumes the global `reservesSubsetOfTvl` invariant.
+    function invariant_ethReserveWithinEthTvl() public view {
+        assertLe(
+            bridge.ammReserveEth() + bridge.boldTotalLockedValue(),
+            bridge.totalLockedValue(),
+            "ammReserveEth fits within the ETH portion of TVL"
+        );
+    }
 }

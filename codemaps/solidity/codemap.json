@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "319738fe82edd2c77137025861854af12bd8573a5bc71ace3f0b8bfccdb94f62"
+    "source_digest": "561f1923fa7b1ebca7e402380ca5c3addc29ac1aca04795bd693fa1b7516d6d5"
   },
   "summary": {
     "module_count": 64,
-    "declaration_count": 1486
+    "declaration_count": 1488
   },
   "modules": [
     {
@@ -3811,7 +3811,7 @@
     {
       "module": "AmmDepositSeeding.t",
       "path": "solidity/test/AmmDepositSeeding.t.sol",
-      "declaration_count": 35,
+      "declaration_count": 37,
       "declarations": [
         {
           "kind": "contract",
@@ -4158,6 +4158,18 @@
           "kind": "function",
           "name": "invariant_reservesSubsetOfTvl",
           "line": 724,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_boldReserveSubsetOfBoldTvl",
+          "line": 737,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_ethReserveWithinEthTvl",
+          "line": 751,
           "called": []
         }
       ]

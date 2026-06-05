@@ -3651,8 +3651,12 @@ contributions surviving in current code:
     leg independence, monotonic accumulation, reserve-subset-of-TVL,
     `test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
     (negative paths), `test_gas_seedingPath` (gas-regression pin), three
-    conservation fuzz tests, and a 3-invariant stateful suite over 128 000
-    random ETH+BOLD deposits at a moderate cap so some revert).
+    conservation fuzz tests, and a 5-invariant stateful suite (reserve ==
+    sum-of-admitted-seeds per leg, global reserves <= TVL, + the two
+    per-currency bounds `ammReserveBold <= boldTotalLockedValue` /
+    `ammReserveEth` within the ETH TVL portion, which catch a wrong-leg
+    seed) over 128 000 random ETH+BOLD deposits at a moderate cap so some
+    revert).
     `test/AmmStorage.t.sol`'s ratio-invariance test became
     `test_coreSplit_ratioInvariant_butAmmSeedScales` (the core
     user/pool/budget triple is ratio-invariant while the event's

@@ -335,8 +335,10 @@ cross-stack-verified with non-zero seeds).  Coverage:
 monotonic accumulation, the reserve-subset-of-TVL bound,
 `test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
 (negative paths), `test_gas_seedingPath` (gas-regression pin), three
-conservation fuzz tests, and a 3-invariant stateful suite over 128 000
-random ETH+BOLD deposits at a moderate cap) plus the `ammSeedSplit`
+conservation fuzz tests, and a 5-invariant stateful suite (reserve ==
+sum-of-admitted-seeds per leg, global reserves <= TVL, + two per-currency
+reserve <= per-currency TVL bounds) over 128 000 random ETH+BOLD deposits
+at a moderate cap) plus the `ammSeedSplit`
 reference in `test/utils/FeeSplitMath.sol`.
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
