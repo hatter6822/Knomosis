@@ -3636,27 +3636,37 @@ contributions surviving in current code:
     — pinned topic + signature + `decode_event` offsets + the
     `amm_seed_amount` variant field + `.cxsf` codec) and the
     `deposit_fee_split{,_bold}.json` receiptHash corpora (the Lean
-    generators add the `ammSeed` reference + proof-carrying `ammSeed_le`
-    bound + per-entry `ammSeedRatioBps` / `ammSeedAmount` + the 9-field
-    recipe; the 64 randomised entries draw a random `ammSeedRatioBps ∈ [0,
-    8000]` so 64 carry NON-ZERO seeds whose binding is cross-stack-verified;
-    the Solidity consumers deploy each entry's bridge at its ratio and
-    byte-match the emitted split + 256-byte preimage tail).  `bold_deposit.json`
-    (an L2 action + budget corpus) and the plain-deposit `DepositReceiptHash`
-    corpus are unchanged (their consumers absorb the new zero `ammSeedAmount`).
-    `test/utils/FeeSplitMath.sol` gains the `ammSeedSplit` reference + threads
-    `ammSeedAmount` through `receiptHash`.  New `test/AmmDepositSeeding.t.sol`
-    (~18 cases: per-leg seeding via the event's `ammSeedAmount`, the disabled
-    / zero-fee / dust `ammSeedAmount == 0` paths, the tamper-evidence test,
-    leg independence, monotonic accumulation, reserve-subset-of-TVL,
+    generators add the `ammSeed` reference + proof-carrying `ammSeed_le` /
+    `ammSeed_conserves` bounds + per-entry `ammSeedRatioBps` / `ammSeedAmount`
+    + the 9-field recipe; 6 AMM-enabled boundary corners (`ammcorner:*`) are
+    appended (corpus 80 → 86) and the 64 randomised entries draw a random
+    `ammSeedRatioBps ∈ [0, 8000]` so 69 of 86 carry NON-ZERO seeds whose
+    binding is cross-stack-verified — pinned by a `countNonZeroSeed` header
+    each consumer recounts + asserts `>= 50`; the Solidity consumers deploy
+    each entry's bridge at its ratio and byte-match the emitted split +
+    256-byte preimage tail).  `bold_deposit.json` (an L2 action + budget
+    corpus) and the plain-deposit `DepositReceiptHash` corpus are unchanged
+    (their consumers absorb the new zero `ammSeedAmount`).
+    `test/utils/FeeSplitMath.sol` gains the `ammSeedSplit` reference (with a
+    `ratio <= 10000` precondition guard) + threads `ammSeedAmount` through
+    `receiptHash`.  New `test/AmmDepositSeeding.t.sol` (~23 cases: per-leg
+    seeding via the event's `ammSeedAmount`, the disabled / zero-fee / dust
+    `ammSeedAmount == 0` paths, the ETH + BOLD tamper-evidence tests, leg
+    independence, monotonic accumulation, reserve-subset-of-TVL,
     `test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
-    (negative paths), `test_gas_seedingPath` (gas-regression pin), three
-    conservation fuzz tests, and a 5-invariant stateful suite (reserve ==
-    sum-of-admitted-seeds per leg, global reserves <= TVL, + the two
-    per-currency bounds `ammReserveBold <= boldTotalLockedValue` /
-    `ammReserveEth` within the ETH TVL portion, which catch a wrong-leg
-    seed) over 128 000 random ETH+BOLD deposits at a moderate cap so some
-    revert).
+    (negative paths), `test_seedAmmReserves_offLeg_seedsNothing` (the
+    off-gas-leg branch via a `SeedHarness` over the now-`internal` helper),
+    `test_ammSeedSplit_knownVectors` (non-circular reference anchor),
+    `test_gas_seedingOverhead` (a COMPARATIVE gas pin), three conservation
+    fuzz tests, and a 5-invariant stateful suite (reserve == sum-of-admitted-
+    seeds per leg, global reserves <= TVL, + the two per-currency bounds
+    `ammReserveBold <= boldTotalLockedValue` / `ammReserveEth` within the ETH
+    TVL portion, which catch a wrong-leg seed) over 128 000 random ETH+BOLD
+    deposits at a moderate cap so some revert) plus the AMM-enabled
+    `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`
+    end-to-end test (deposit seeds the reserve; a withdrawal drains all
+    non-seed value, proving `reserve <= TVL` survives with the seed as the
+    irreducible floor).
     `test/AmmStorage.t.sol`'s ratio-invariance test became
     `test_coreSplit_ratioInvariant_butAmmSeedScales` (the core
     user/pool/budget triple is ratio-invariant while the event's

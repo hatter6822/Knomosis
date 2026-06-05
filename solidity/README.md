@@ -328,18 +328,42 @@ lockstep to the Rust ingestor (`knomosis-l1-ingest`: pinned topic +
 `decode_event` offsets + `amm_seed_amount` variant field) and the
 `deposit_fee_split{,_bold}.json` receiptHash corpora (whose 64 randomised
 entries now draw a random `ammSeedRatioBps ∈ [0, 8000]`, so the binding is
-cross-stack-verified with non-zero seeds).  Coverage:
-`test/AmmDepositSeeding.t.sol` (~18 cases — per-leg seeding via the event's
+cross-stack-verified with non-zero seeds — and pinned against a generator
+regression by the `countNonZeroSeed` header, which each consumer
+independently recounts and asserts).  Coverage:
+`test/AmmDepositSeeding.t.sol` (~23 cases — per-leg seeding via the event's
 `ammSeedAmount`, the disabled / zero-fee / dust `ammSeedAmount == 0` paths,
-`test_receiptHash_bindsAmmSeedAmount` (tamper-evidence), leg independence,
-monotonic accumulation, the reserve-subset-of-TVL bound,
+`test_receiptHash_bindsAmmSeedAmount` + the BOLD-leg
+`test_boldReceiptHash_bindsAmmSeedAmount` (tamper-evidence), leg
+independence, monotonic accumulation, the reserve-subset-of-TVL bound,
 `test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
-(negative paths), `test_gas_seedingPath` (gas-regression pin), three
-conservation fuzz tests, and a 5-invariant stateful suite (reserve ==
-sum-of-admitted-seeds per leg, global reserves <= TVL, + two per-currency
-reserve <= per-currency TVL bounds) over 128 000 random ETH+BOLD deposits
-at a moderate cap) plus the `ammSeedSplit`
+(negative paths), `test_seedAmmReserves_offLeg_seedsNothing` (the off-gas-leg
+branch via a harness), `test_ammSeedSplit_knownVectors` (a non-circular
+hand-computed anchor for the reference), `test_gas_seedingOverhead` (a
+COMPARATIVE gas pin: enabled − disabled overhead, far tighter than an
+absolute envelope), three conservation fuzz tests, and a 5-invariant
+stateful suite (reserve == sum-of-admitted-seeds per leg, global reserves <=
+TVL, + two per-currency reserve <= per-currency TVL bounds) over 128 000
+random ETH+BOLD deposits at a moderate cap), plus the AMM-enabled
+`BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`
+end-to-end test (deposit seeds the reserve; a withdrawal drains all non-seed
+value, proving `ammReserveBold <= boldTotalLockedValue <= totalLockedValue`
+survives a withdrawal with the seed as the irreducible TVL floor) and the
+`ammSeedSplit`
 reference in `test/utils/FeeSplitMath.sol`.
+
+*Integrator / operator notes.*  (1) The canonical event carries the
+per-deposit seed (`ammSeedAmount`), not the resulting reserve balance; an
+indexer tracking the reserve CURVE accumulates `ammSeedAmount` across
+deposits, or reads the current reserve from the `ammReserveEth()` /
+`ammReserveBold()` getters (the design deliberately folds the split into the
+single canonical event rather than emitting a separate Uniswap-style
+`Sync`).  (2) GP.11.2 changed the `DepositWithFeeInitiated` topic-0 hash
+(`0xdffb2055…e4c8f5`) and its `receiptHash` preimage (the v1.3 wire
+addition).  Any off-chain consumer pinned to the pre-GP.11.2 topic must
+re-pin to the new one (the bundled Rust `knomosis-l1-ingest` already does);
+an AMM-disabled deployment emits the same new event with `ammSeedAmount ==
+0`, so there is no behavioural difference beyond the wire format.
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:

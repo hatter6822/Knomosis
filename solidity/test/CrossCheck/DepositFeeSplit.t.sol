@@ -49,12 +49,39 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
             revert("fixture missing; run `lake test` first");
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        assertEq(vm.parseJsonUint(raw, ".header.count"), 80, "count");
-        assertEq(vm.parseJsonUint(raw, ".header.countCorner"), 16, "corner");
+        assertEq(vm.parseJsonUint(raw, ".header.count"), 86, "count");
+        assertEq(vm.parseJsonUint(raw, ".header.countCorner"), 22, "corner");
         assertEq(vm.parseJsonUint(raw, ".header.countRandomised"), 64, "randomised");
         assertEq(vm.parseJsonUint(raw, ".header.maxFeeBpsCap"), 5000, "maxFeeBpsCap");
         assertEq(vm.parseJsonUint(raw, ".header.minWeiPerBudgetUnit"), 1, "minWeiPerBudgetUnit");
         assertEq(vm.parseJsonUint(raw, ".header.maxAmmSeedRatioBps"), 8000, "maxAmmSeedRatioBps");
+    }
+
+    /// @notice GP.11.2 — the receiptHash's `ammSeedAmount` binding is only
+    ///         meaningfully exercised by entries with a NON-ZERO seed.
+    ///         Independently recount the non-zero-seed entries, assert the
+    ///         recount equals the generator's `countNonZeroSeed` header
+    ///         (Lean <-> Solidity agreement) AND clears a floor — so a
+    ///         future generator regression that silently zeroed every seed
+    ///         (dropping the binding coverage) fails here rather than
+    ///         passing as a trivial all-zero cross-check.
+    function test_nonZeroSeed_coverage_pinned() public view {
+        if (!fixtureExists(FIXTURE_NAME)) return;
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".header.count");
+        uint256 recount;
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            if (uint256(vm.parseJsonBytes32(raw, string.concat(base, ".ammSeedAmount"))) > 0) {
+                recount++;
+            }
+        }
+        assertEq(
+            recount,
+            vm.parseJsonUint(raw, ".header.countNonZeroSeed"),
+            "recount != header countNonZeroSeed (Lean<->Solidity drift)"
+        );
+        assertGe(recount, 50, "non-zero-seed coverage floor (binding must be exercised)");
     }
 
     /// @notice The fixture's `maxBudgetPerDeposit` must agree with the

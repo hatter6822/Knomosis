@@ -41,15 +41,20 @@ receiptHash  = keccak256(abi.encode(
 
 The ABI preimage is 9 × 32 = 288 bytes.
 
-**Coverage breakdown** (16 corner @ ratio 0 + 64 randomised @ random
-`ammSeedRatioBps ∈ [0, 8000]` = 80):
+**Coverage breakdown** (22 corner + 64 randomised @ random
+`ammSeedRatioBps ∈ [0, 8000]` = 86):
 
-  * 16 hand-listed corners: zero fee, max fee, tiny-rounds-to-user,
+  * 16 fee-split corners @ ratio 0: zero fee, max fee, tiny-rounds-to-user,
     rate-one budget=pool, budget clamp, exact + above clamp boundary,
     residue-favours-user, rate-trillion, exact half, max nonce,
     realistic 10%-fee, min-fee, fee-just-below-max, single fee, misc.
+  * 6 AMM-enabled corners (`ammcorner:*`) intersecting fee boundaries with a
+    NON-ZERO seed ratio: max-fee × max-ratio, budget-clamp × max-ratio,
+    exact-half × max-ratio, dust-floors-to-zero @ ratio 8000, min-non-zero
+    ratio, realistic mid-ratio.
   * 64 randomised: `(msgValue ∈ [1, 2^96], chosenFeeBps ∈ [0, 5000],
-    weiPerBudgetUnit ∈ [1, 2^50], nonce ∈ [0, 2^32))`.
+    weiPerBudgetUnit ∈ [1, 2^50], ammSeedRatioBps ∈ [0, 8000],
+    nonce ∈ [0, 2^32))`.
 
 The `msgValue` bound keeps `msgValue * chosenFeeBps` far below
 `uint256.max` so the Solidity consumer's recompute cannot overflow.
@@ -159,6 +164,31 @@ theorem ammSeed_le (poolAmount ammSeedRatioBps : Nat) (h : ammSeedRatioBps ≤ 1
       ≤ (poolAmount * 10000) / 10000 :=
         Nat.div_le_div_right (Nat.mul_le_mul_left poolAmount h)
     _ = poolAmount := Nat.mul_div_cancel poolAmount (by decide)
+
+/-- The free-pool remainder of a pool fee after the AMM seed is carved
+    out: `poolAmount - ammSeedAmount`.  This is the value credited to the
+    gas-pool actor on L2 (the sequencer-claimable free pool); the L2
+    reconstructs it from the canonical event's `poolAmount` and
+    `ammSeedAmount`. -/
+def freePool (poolAmount ammSeedRatioBps : Nat) : Nat :=
+  poolAmount - ammSeed poolAmount ammSeedRatioBps
+
+/-- GP.11.2 split conservation (proof-carrying): the AMM seed plus the
+    free-pool remainder reconstitute the full pool fee exactly, for any
+    admissible ratio (`≤ 10000`; the contract enforces the stricter `≤
+    8000`).  The on-chain `_seedAmmReserves` carves `ammSeedAmount` from
+    `poolAmount` and leaves `poolAmount - ammSeedAmount` as free pool, so
+    `userAmount + ammSeedAmount + freePoolAmount == deposit` follows from
+    this together with `feeSplit_conserves`.  This is the analogue of
+    `feeSplit_conserves` for the SECOND split, so the cross-stack fixture
+    pins a machine-proved conservation invariant for the AMM seed rather
+    than a merely fuzz-observed one. -/
+theorem ammSeed_conserves (poolAmount ammSeedRatioBps : Nat)
+    (h : ammSeedRatioBps ≤ 10000) :
+    ammSeed poolAmount ammSeedRatioBps + freePool poolAmount ammSeedRatioBps = poolAmount := by
+  show ammSeed poolAmount ammSeedRatioBps
+        + (poolAmount - ammSeed poolAmount ammSeedRatioBps) = poolAmount
+  exact Nat.add_sub_cancel' (ammSeed_le poolAmount ammSeedRatioBps h)
 
 /-! ## ReceiptHash recipe -/
 
@@ -288,13 +318,19 @@ def mkEntry (chainid : Nat) (contractAddr knomosisVersionTag sender : ByteArray)
 
 /-! ## Corner entries -/
 
-/-- 16 hand-listed corner cases over a fixed `(contractAddr, knomosisTag,
-    sender)` base so the cases vary only in the fee-split inputs.  All
-    corners use `seedRatio = 0` (AMM-disabled): they focus on the
-    fee-split arithmetic + receiptHash layout (with the GP.11.2
-    `ammSeedAmount` field present and 0).  The non-zero AMM seed binding is
-    fuzzed by the randomised entries below (which draw a random
-    `ammSeedRatioBps ∈ [0, 8000]`). -/
+/-- 22 hand-listed corner cases over a fixed `(contractAddr, knomosisTag,
+    sender)` base.  The first 16 use `seedRatio = 0` (AMM-disabled): they
+    focus on the fee-split arithmetic + receiptHash layout (with the
+    GP.11.2 `ammSeedAmount` field present and 0).  The final 6 (`ammcorner:*`)
+    intersect the deliberate fee-split boundaries with a NON-ZERO AMM seed
+    ratio (max-fee × max-ratio, budget-clamp × max-ratio, exact-half ×
+    max-ratio, dust-floors-to-zero at a non-zero ratio, min-non-zero ratio,
+    realistic mid-ratio), so the receiptHash binding of a non-zero
+    `ammSeedAmount` is pinned at SPECIFIC boundary×boundary combinations —
+    not only the statistical coverage the randomised half gives.  The
+    `ammcorner:*` entries are APPENDED (indices 16..21), so the index-keyed
+    consumer checks (zero-fee at 0; budget-clamp corners at 4/5/6) are
+    unchanged. -/
 def cornerEntries : Gen (List Entry) := fun st0 =>
   let (contractAddr, s1) := DepositReceiptHash.genBytes 20 st0
   let (knomosisTag,   s2) := DepositReceiptHash.genBytes 32 s1
@@ -318,6 +354,13 @@ def cornerEntries : Gen (List Entry) := fun st0 =>
     , mkEntry c contractAddr knomosisTag sender 1000000              4999 1         0 0     "corner:fee-just-below-max"
     , mkEntry c contractAddr knomosisTag sender 1000000              250  1         0 0     "corner:single-fee"
     , mkEntry c contractAddr knomosisTag sender 999999999            4321 (10 ^ 6)  0 7     "corner:misc"
+    -- GP.11.2 AMM-enabled boundary corners (non-zero seed ratio):
+    , mkEntry c contractAddr knomosisTag sender (10 ^ 18)            5000 (10 ^ 9)  8000 0  "ammcorner:max-fee-max-ratio"
+    , mkEntry c contractAddr knomosisTag sender (10 ^ 19)            5000 1         8000 0  "ammcorner:budget-clamp-max-ratio"
+    , mkEntry c contractAddr knomosisTag sender 100                  5000 1         8000 0  "ammcorner:exact-half-max-ratio"
+    , mkEntry c contractAddr knomosisTag sender 3                    5000 1         8000 0  "ammcorner:dust-seed-floors-to-zero"
+    , mkEntry c contractAddr knomosisTag sender (10 ^ 18)            5000 (10 ^ 9)  1    0  "ammcorner:min-nonzero-ratio"
+    , mkEntry c contractAddr knomosisTag sender (5 * 10 ^ 18)        1000 (10 ^ 9)  3000 0  "ammcorner:realistic-mid-ratio"
     ]
   (entries, s3)
 
@@ -365,18 +408,25 @@ def genRandomEntry (idx : Nat) : Gen Entry := fun st0 =>
 
 /-! ## Top-level fixture -/
 
-/-- Build the full fixture: 16 corners + 64 randomised = 80 entries. -/
+/-- Build the full fixture: 22 corners (16 fee-split + 6 AMM-enabled) + 64
+    randomised = 86 entries.  `countNonZeroSeed` records how many entries
+    carry a NON-ZERO `ammSeedAmount`; the consumer recomputes + asserts it
+    is ≥ a floor, so the receiptHash's AMM-seed binding can never silently
+    regress to all-zero coverage (a generator bug zeroing the ratio would
+    drop the count and fail the consumer). -/
 def buildFixture (seed : UInt64) : (Json × Nat) :=
   let (corners,    s1) := cornerEntries ⟨seed⟩
   let (randomised, _ ) := DepositReceiptHash.genN genRandomEntry 64 s1
   let allEntries := corners ++ randomised
+  let countNonZeroSeed := (allEntries.filter (fun e => e.ammSeedAmount > 0)).length
   let header : Json := .obj
     [ ("seed",                .num seed.toNat)
     , ("isKeccak256Linked",   .bool isKeccak256Linked)
     , ("hashIdentifier",      .str (hashImplementationIdentifier ()))
     , ("count",               .num allEntries.length)
-    , ("countCorner",         .num 16)
+    , ("countCorner",         .num 22)
     , ("countRandomised",     .num 64)
+    , ("countNonZeroSeed",    .num countNonZeroSeed)
     , ("maxBudgetPerDeposit", .num maxBudgetPerDeposit)
     , ("maxFeeBpsCap",        .num 5000)
     , ("minWeiPerBudgetUnit", .num 1)
@@ -420,12 +470,12 @@ def fixtureName : String := "deposit_fee_split.json"
     corners, preimage size, file write, and the conditional
     cross-check skip. -/
 def tests : List TestCase :=
-  [ { name := "GP.5.1: deposit_fee_split fixture has 80 entries"
+  [ { name := "GP.5.1: deposit_fee_split fixture has 86 entries"
     , body := do
         let seed ← readSeed
         let (_, n) := buildFixture seed
-        if n ≠ 80 then
-          throw <| IO.userError s!"expected 80 entries, got {n}"
+        if n ≠ 86 then
+          throw <| IO.userError s!"expected 86 entries, got {n}"
     }
   , { name := "GP.5.1: fixture is byte-deterministic across runs"
     , body := do
@@ -545,12 +595,15 @@ def tests : List TestCase :=
     }
   , { name := "GP.11.2: every entry's ammSeedAmount conserves the pool fee"
     , body := do
-        -- Bind the AMM-seed bound theorem (forcing function on its
-        -- signature) and value-check the GP.11.2 split conservation on
-        -- every entry: `ammSeedAmount ≤ poolAmount` and `ammSeedAmount ==
-        -- floor(poolAmount * ammSeedRatioBps / 10000)`, so the free-pool
-        -- remainder `poolAmount - ammSeedAmount` is well-defined.
+        -- Bind the proof-carrying AMM-seed theorems at the term level
+        -- (forcing functions on their signatures): `ammSeed_le` (seed ≤
+        -- pool) and `ammSeed_conserves` (seed + freePool == pool).  Then
+        -- value-check the split on every entry: the recomputed seed
+        -- matches, never exceeds the pool fee, and seed + (pool - seed) ==
+        -- pool (the on-chain free-pool split conservation).
         let _seedLe : ∀ (p r : Nat), r ≤ 10000 → ammSeed p r ≤ p := ammSeed_le
+        let _seedConserves : ∀ (p r : Nat), r ≤ 10000 →
+            ammSeed p r + freePool p r = p := ammSeed_conserves
         let seed ← readSeed
         let (corners, s1) := cornerEntries ⟨seed⟩
         let (randomised, _) := DepositReceiptHash.genN genRandomEntry 64 s1
@@ -561,6 +614,26 @@ def tests : List TestCase :=
             throw <| IO.userError s!"ammSeedAmount recompute mismatch in {e.category}"
           if e.ammSeedAmount > e.poolAmount then
             throw <| IO.userError s!"ammSeedAmount {e.ammSeedAmount} exceeds pool fee in {e.category}"
+          -- Conservation value-check: seed + freePool == poolAmount.
+          if e.ammSeedAmount + freePool e.poolAmount e.ammSeedRatioBps ≠ e.poolAmount then
+            throw <| IO.userError s!"seed + freePool ≠ poolAmount in {e.category}"
+    }
+  , { name := "GP.11.2: corpus pins a non-zero-seed coverage floor"
+    , body := do
+        -- The receiptHash's ammSeedAmount binding is only meaningfully
+        -- exercised by entries with a NON-ZERO seed.  Pin that the corpus
+        -- carries a healthy number (the 64 randomised draw a random ratio,
+        -- plus 5 of the 6 AMM corners are non-zero), so a future change
+        -- that silently zeroed every seed cannot pass unnoticed.  The
+        -- generator publishes this count in the header `countNonZeroSeed`,
+        -- which the Solidity consumer independently recomputes + asserts ==
+        -- header AND >= the floor (the cross-stack mechanical pin).
+        let seed ← readSeed
+        let (corners, s1) := cornerEntries ⟨seed⟩
+        let (randomised, _) := DepositReceiptHash.genN genRandomEntry 64 s1
+        let recount := ((corners ++ randomised).filter (fun e => e.ammSeedAmount > 0)).length
+        if recount < 50 then
+          throw <| IO.userError s!"non-zero-seed coverage too low: {recount} < 50"
     }
   , { name := "GP.5.1: receiptHash recipe self-consistency (any binding)"
     , body := do

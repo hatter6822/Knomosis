@@ -338,6 +338,128 @@ contract AmmDepositSeedingTest is Test {
         assertTrue(rh != tampered, "receiptHash is sensitive to ammSeedAmount (split is bound)");
     }
 
+    /// @notice The BOLD-leg analogue of `test_receiptHash_bindsAmmSeedAmount`.
+    ///         The BOLD path shares `_registerDepositWithFee`, but pinning the
+    ///         tamper-evidence explicitly on the BOLD resourceId + token guards
+    ///         against a future per-resource divergence in the binding.
+    function test_boldReceiptHash_bindsAmmSeedAmount() public {
+        _etchBold();
+        KnomosisBridge bridge = _deployBoldEnabled(5000);
+
+        uint256 amount = 6 ether;
+        uint16 feeBps = 2500;
+        _mintApprove(bridge, alice, amount);
+
+        vm.recordLogs();
+        vm.prank(alice);
+        bridge.depositBoldWithFee(amount, feeBps);
+        (uint256 u, uint256 p, uint256 ammSeed, uint64 g, uint64 nonce, bytes32 rh) =
+            _decodeDepositWithFee(vm.getRecordedLogs());
+        assertGt(ammSeed, 0, "non-trivial BOLD seed so the tamper test is meaningful");
+
+        bytes32 honest =
+            FeeSplitMath.receiptHash(bridge.deploymentId(), alice, BOLD_RID, BOLD, u, p, ammSeed, g, nonce);
+        assertEq(rh, honest, "BOLD receiptHash == reference over the real split");
+
+        bytes32 tampered =
+            FeeSplitMath.receiptHash(bridge.deploymentId(), alice, BOLD_RID, BOLD, u, p, 0, g, nonce);
+        assertTrue(rh != tampered, "BOLD receiptHash is sensitive to ammSeedAmount");
+    }
+
+    /// @notice Non-circular anchor for the `FeeSplitMath.ammSeedSplit`
+    ///         reference: the behavioural + invariant tests check the live
+    ///         contract against this reference, so the reference itself is
+    ///         pinned here to HAND-COMPUTED ground truth (independent of any
+    ///         contract code) — closing the residual circularity where a
+    ///         shared bug between `_seedAmmReserves` and the reference could
+    ///         pass.  (The cross-stack corpus is the other anti-circularity
+    ///         layer: Lean recomputes the seed independently.)
+    function test_ammSeedSplit_knownVectors() public pure {
+        // floor(1000 * 8000 / 10000) = 800; free = 200.
+        (uint256 s1, uint256 f1) = FeeSplitMath.ammSeedSplit(1000, 8000);
+        assertEq(s1, 800, "seed 8000bps of 1000");
+        assertEq(f1, 200, "free 8000bps of 1000");
+        // floor(50 * 8000 / 10000) = 40; free = 10 (the exact-half corner).
+        (uint256 s2, uint256 f2) = FeeSplitMath.ammSeedSplit(50, 8000);
+        assertEq(s2, 40, "seed 8000bps of 50");
+        assertEq(f2, 10, "free 8000bps of 50");
+        // floor(1 * 8000 / 10000) = 0 (dust floors to zero); free = 1.
+        (uint256 s3, uint256 f3) = FeeSplitMath.ammSeedSplit(1, 8000);
+        assertEq(s3, 0, "dust seed floors to zero");
+        assertEq(f3, 1, "dust free == pool");
+        // ratio 0 (disabled) -> (0, pool).
+        (uint256 s4, uint256 f4) = FeeSplitMath.ammSeedSplit(777, 0);
+        assertEq(s4, 0, "disabled seed");
+        assertEq(f4, 777, "disabled free == pool");
+        // floor(1e18 * 30 / 10000) = 3e15 (the AMM_SWAP_FEE_BPS=30 shape);
+        // free = 1e18 - 3e15.
+        (uint256 s5, uint256 f5) = FeeSplitMath.ammSeedSplit(1e18, 30);
+        assertEq(s5, 3e15, "seed 30bps of 1e18");
+        assertEq(f5, 1e18 - 3e15, "free 30bps of 1e18");
+        // Conservation on every vector (mirrors the Lean `ammSeed_conserves`).
+        assertEq(s1 + f1, 1000);
+        assertEq(s5 + f5, 1e18);
+    }
+
+    /// @notice The off-gas-leg `else` branch of `_seedAmmReserves` (the
+    ///         only otherwise-uncoverable path): a resource that is neither
+    ///         ETH (0) nor BOLD (1) seeds NOTHING and returns 0, even with
+    ///         the AMM enabled.  Driven through a harness that exposes the
+    ///         `internal` helper directly, since no public entry point
+    ///         reaches a non-gas-leg resource.
+    function test_seedAmmReserves_offLeg_seedsNothing() public {
+        SeedHarness h = _deploySeedHarness(8000);
+
+        // ETH (0) and BOLD (1) seed their reserves; an off-leg resource (2,
+        // 7) seeds nothing and returns 0 — the named return is discarded.
+        assertEq(h.exposed_seedAmmReserves(2, 1 ether), 0, "off-leg resource 2 seeds 0");
+        assertEq(h.exposed_seedAmmReserves(7, 1 ether), 0, "off-leg resource 7 seeds 0");
+        assertEq(h.ammReserveEth(), 0, "ETH reserve untouched by off-leg seed");
+        assertEq(h.ammReserveBold(), 0, "BOLD reserve untouched by off-leg seed");
+
+        // Sanity: the same harness DOES seed on the real legs (so the test
+        // isn't passing because seeding is globally broken).
+        uint256 ethSeed = h.exposed_seedAmmReserves(0, 1 ether); // floor(1e18*0.8)
+        assertEq(ethSeed, (uint256(1 ether) * 8000) / 10_000, "ETH leg seeds");
+        assertEq(h.ammReserveEth(), ethSeed, "ETH reserve grew");
+        uint256 boldSeed = h.exposed_seedAmmReserves(1, 2 ether);
+        assertEq(boldSeed, (uint256(2 ether) * 8000) / 10_000, "BOLD leg seeds");
+        assertEq(h.ammReserveBold(), boldSeed, "BOLD reserve grew");
+    }
+
+    /// @notice Deploy a `SeedHarness` (AMM-enabled at `ratio`) exposing the
+    ///         internal `_seedAmmReserves` for branch coverage.
+    function _deploySeedHarness(uint16 ratio) internal returns (SeedHarness) {
+        uint64[] memory rids = new uint64[](0);
+        address[] memory toks = new address[](0);
+        return new SeedHarness(
+            KnomosisBridge.ConstructorArgs({
+                knomosisVersionTag: keccak256("knomosis-seed-harness"),
+                attestor: address(0xA11CE),
+                disputeVerifier: address(0xDEAD),
+                sequencerStake: address(0xBEEF),
+                migration: address(0),
+                disputeWindowBlocks: 100,
+                maxRedemptionWindowBlocks: 50,
+                maxAttestationStaleBlocks: 200,
+                cooldownBlocks: 50,
+                tvlCap: type(uint256).max,
+                minFeeBps: 0,
+                maxFeeBps: 5000,
+                weiPerBudgetUnitEth: 1_000_000_000,
+                weiPerBudgetUnitBold: 0,
+                boldTokenAddress: address(0),
+                boldTvlCap: 0,
+                boldCircuitBreaker: address(0),
+                boldAdmin: address(0),
+                enableLiquityAutoCircuitTrigger: false,
+                ammSeedRatioBps: ratio,
+                erc20ResourceIds: rids,
+                erc20TokenAddrs: toks
+            })
+        );
+    }
+
     // ------------------------------------------------------------------
     // BOLD-leg seeding (and ETH/BOLD leg independence)
     // ------------------------------------------------------------------
@@ -489,24 +611,35 @@ contract AmmDepositSeedingTest is Test {
     // Gas-regression smoke test (the seeding path)
     // ------------------------------------------------------------------
 
-    /// @notice The seeding (AMM-enabled) `depositETHWithFee` path stays
-    ///         within a generous gas envelope — a lightweight regression
-    ///         guard mirroring `BridgeFeeSplit.t.sol::test_gas_depositETHWithFee`
-    ///         (which covers the AMM-disabled path).  The first seeded
-    ///         deposit pays a cold reserve SSTORE; subsequent ones are warm.
-    function test_gas_seedingPath() public {
-        KnomosisBridge bridge = _deploy(5000);
+    /// @notice COMPARATIVE gas-regression guard: measure the warm
+    ///         `depositETHWithFee` gas on an AMM-DISABLED and an AMM-ENABLED
+    ///         bridge under identical inputs, and bound the seeding OVERHEAD
+    ///         (the warm reserve SSTORE + the seed arithmetic).  This
+    ///         isolates the GP.11.2 cost — far tighter than an absolute
+    ///         envelope, which an unrelated change could pass while seeding
+    ///         silently doubled in cost.  A real regression (a cold SSTORE
+    ///         every deposit, an accidental second store) trips the bound.
+    function test_gas_seedingOverhead() public {
+        uint256 disabledGas = _warmDepositGas(_deploy(0));
+        uint256 seededGas = _warmDepositGas(_deploy(5000));
 
-        // Warm the reserve slot with a first deposit (cold SSTORE excluded
-        // from the measured call below, so the bound reflects steady state).
+        assertGe(seededGas, disabledGas, "seeding cannot be cheaper than no-seed");
+        // Warm SSTORE ~5k + the seed multiply/divide + (no event delta, the
+        // ammSeedAmount field is present in both).  Generous headroom, but
+        // far below the ~150k absolute path cost.
+        assertLt(seededGas - disabledGas, 15_000, "seeding overhead regression");
+    }
+
+    /// @notice Warm-path gas for one `depositETHWithFee` (a first deposit
+    ///         pre-warms the reserve slot so the measured call is steady
+    ///         state, not the one-time cold SSTORE).
+    function _warmDepositGas(KnomosisBridge bridge) internal returns (uint256) {
         vm.prank(alice);
         bridge.depositETHWithFee{value: 1 ether}(1000);
-
         vm.prank(alice);
         uint256 gasBefore = gasleft();
         bridge.depositETHWithFee{value: 1 ether}(1000);
-        uint256 used = gasBefore - gasleft();
-        assertLt(used, 150_000, "seeding depositETHWithFee gas regression (warm)");
+        return gasBefore - gasleft();
     }
 
     // ------------------------------------------------------------------
@@ -755,5 +888,23 @@ contract AmmDepositSeedingInvariantTest is Test {
             bridge.totalLockedValue(),
             "ammReserveEth fits within the ETH portion of TVL"
         );
+    }
+}
+
+/// @title SeedHarness
+/// @notice Test-only subclass of `KnomosisBridge` exposing the `internal`
+///         `_seedAmmReserves` so its off-gas-leg branch — unreachable
+///         through the public entry points (ETH / BOLD only) — can be
+///         exercised directly for full branch coverage.  Exposes nothing
+///         the production ABI does; used only by `AmmDepositSeedingTest`.
+contract SeedHarness is KnomosisBridge {
+    constructor(KnomosisBridge.ConstructorArgs memory args) KnomosisBridge(args) {}
+
+    /// @notice External shim over the internal `_seedAmmReserves`.
+    function exposed_seedAmmReserves(uint64 resourceId, uint256 poolAmount)
+        external
+        returns (uint256)
+    {
+        return _seedAmmReserves(resourceId, poolAmount);
     }
 }

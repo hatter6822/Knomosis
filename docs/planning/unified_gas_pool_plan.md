@@ -6980,41 +6980,55 @@ sub-WU table above is the implementation roadmap.
       * **Cross-stack receiptHash corpora** (`deposit_fee_split.json` +
         `deposit_fee_split_bold.json`): the Lean generators
         (`DepositFeeSplit.lean` / `DepositFeeSplitBold.lean`) add the
-        `ammSeed` reference (+ the proof-carrying `ammSeed_le` bound), the
-        per-entry `ammSeedRatioBps` / `ammSeedAmount` fields, and the
-        9-field receiptHash recipe; the 16 corners stay AMM-disabled
-        (ratio 0) and the 64 randomised entries now draw a random
-        `ammSeedRatioBps ∈ [0, 8000]`, so 64 entries carry a NON-ZERO
-        `ammSeedAmount` whose receiptHash binding is verified cross-stack.
-        The Solidity consumers (`DepositFeeSplit.t.sol` /
-        `DepositFeeSplitBold.t.sol`) recompute the split via
-        `FeeSplitMath.ammSeedSplit`, byte-match the 256-byte preimage tail,
-        and deploy each entry's bridge at its `ammSeedRatioBps` so the
-        EMITTED `ammSeedAmount` (and the live reserve delta) match the Lean
-        value.  `bold_deposit.json` (GP.6.5, an L2 action + budget corpus)
-        and `DepositReceiptHash` (the plain-deposit corpus) are unchanged;
-        their Solidity consumers' event decoders absorb the new (zero)
-        `ammSeedAmount` field.
+        `ammSeed` reference (+ the proof-carrying `ammSeed_le` /
+        `ammSeed_conserves` bounds), the per-entry `ammSeedRatioBps` /
+        `ammSeedAmount` fields, and the 9-field receiptHash recipe; the 16
+        fee-split corners stay AMM-disabled (ratio 0), 6 AMM-enabled boundary
+        corners (`ammcorner:*` — max-fee × max-ratio, budget-clamp ×
+        max-ratio, exact-half × max-ratio, dust-floors-to-zero @ ratio 8000,
+        min-non-zero ratio, realistic mid-ratio) are appended (corpus 80 →
+        86), and the 64 randomised entries draw a random `ammSeedRatioBps ∈
+        [0, 8000]`, so 69 of 86 entries carry a NON-ZERO `ammSeedAmount`
+        whose receiptHash binding is verified cross-stack — and the
+        generator publishes a `countNonZeroSeed` header each Solidity
+        consumer independently recounts + asserts (`>= 50`), so the binding
+        coverage cannot silently regress to all-zero.  The Solidity consumers
+        (`DepositFeeSplit.t.sol` / `DepositFeeSplitBold.t.sol`) recompute the
+        split via `FeeSplitMath.ammSeedSplit`, byte-match the 256-byte
+        preimage tail, and deploy each entry's bridge at its `ammSeedRatioBps`
+        so the EMITTED `ammSeedAmount` (and the live reserve delta) match the
+        Lean value.  `bold_deposit.json` (GP.6.5, an L2 action + budget
+        corpus) and `DepositReceiptHash` (the plain-deposit corpus) are
+        unchanged; their Solidity consumers' event decoders absorb the new
+        (zero) `ammSeedAmount` field.
 
-    **Tests.**  New `test/AmmDepositSeeding.t.sol` (~18 cases — unit + 3
+    **Tests.**  New `test/AmmDepositSeeding.t.sol` (~23 cases — unit + 3
     conservation fuzz + a 5-invariant stateful suite): per-leg seeding with
     the canonical event's `ammSeedAmount` field, the disabled / zero-fee /
     dust-floor `ammSeedAmount == 0` paths (decoded from the event),
-    `test_receiptHash_bindsAmmSeedAmount` (the tamper-evidence test), leg
+    `test_receiptHash_bindsAmmSeedAmount` + the BOLD-leg
+    `test_boldReceiptHash_bindsAmmSeedAmount` (tamper-evidence), leg
     independence, monotonic accumulation, the reserve-subset-of-TVL bound,
     `test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
-    (the negative paths — a reverted or non-fee-split deposit seeds
-    nothing), `test_gas_seedingPath` (a gas-regression pin on the enabled
-    path, mirroring the disabled-path pin in `BridgeFeeSplit.t.sol`), the
-    conservation fuzz over both legs + the whole `[0, 8000]` ratio range,
-    and the stateful `AmmDepositSeedingInvariantTest` (`ammReserveEth ==
-    sum-of-admitted-ETH-seeds`, `ammReserveBold ==
+    (the negative paths — a reverted or non-fee-split deposit seeds nothing),
+    `test_seedAmmReserves_offLeg_seedsNothing` (the off-gas-leg `else` branch
+    via a `SeedHarness` exposing the now-`internal` helper),
+    `test_ammSeedSplit_knownVectors` (a non-circular hand-computed anchor for
+    the `FeeSplitMath` reference), `test_gas_seedingOverhead` (a COMPARATIVE
+    gas pin — enabled minus disabled overhead `< 15k`, far tighter than the
+    absolute envelope), the conservation fuzz over both legs + the whole `[0,
+    8000]` ratio range, and the stateful `AmmDepositSeedingInvariantTest`
+    (`ammReserveEth == sum-of-admitted-ETH-seeds`, `ammReserveBold ==
     sum-of-admitted-BOLD-seeds`, the global `reserves <= TVL`, and the two
     PER-CURRENCY bounds `ammReserveBold <= boldTotalLockedValue` +
     `ammReserveEth + boldTotalLockedValue <= totalLockedValue` — which catch
-    a wrong-leg seed the global bound would mask when the other leg has
-    slack — over 128 000 random ETH+BOLD deposits at a moderate cap so some
-    deposits revert).
+    a wrong-leg seed the global bound would mask when the other leg has slack
+    — over 128 000 random ETH+BOLD deposits at a moderate cap so some
+    deposits revert).  The deposit→withdraw interaction (the seeded reserve
+    surviving a withdrawal) is covered end-to-end by the AMM-enabled
+    `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`,
+    which drains TVL to exactly the seed floor and asserts `ammReserveBold <=
+    boldTotalLockedValue <= totalLockedValue` survives.
     `AmmStorage.t.sol`'s ratio-invariance test is
     `test_coreSplit_ratioInvariant_butAmmSeedScales` (the core
     user/pool/budget triple is ratio-invariant while the canonical event's

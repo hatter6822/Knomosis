@@ -84,6 +84,10 @@ library FeeSplitMath {
         pure
         returns (uint256 ammSeedAmount, uint256 freePoolAmount)
     {
+        // Enforce the documented precondition: an out-of-range ratio makes
+        // ammSeedAmount > poolAmount, underflowing `freePoolAmount`.  Fail
+        // with a clear message rather than a bare arithmetic panic.
+        require(ammSeedRatioBps <= 10_000, "FeeSplitMath: ammSeedRatioBps > 10000");
         ammSeedAmount = (poolAmount * ammSeedRatioBps) / 10_000;
         freePoolAmount = poolAmount - ammSeedAmount;
     }

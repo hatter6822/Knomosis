@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "95fa4bd7503b5ae870aa03d14596db57917601517d2889607f95098850dc969e"
+    "source_digest": "b6d021ca861da516920081b196aa5a35fb915a77f356c35ab96bfd8ede4b096d"
   },
   "summary": {
     "module_count": 292,
-    "declaration_count": 4861
+    "declaration_count": 4863
   },
   "modules": [
     {
@@ -32392,12 +32392,12 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit",
       "path": "LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean",
-      "declaration_count": 23,
+      "declaration_count": 25,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck",
-          "line": 74,
+          "line": 79,
           "called": [
             "LegalKernel",
             "LegalKernel.Bridge",
@@ -32408,19 +32408,19 @@
         {
           "kind": "namespace",
           "name": "DepositFeeSplit",
-          "line": 82,
+          "line": 87,
           "called": []
         },
         {
           "kind": "def",
           "name": "maxBudgetPerDeposit",
-          "line": 90,
+          "line": 95,
           "called": []
         },
         {
           "kind": "def",
           "name": "feeSplit",
-          "line": 98,
+          "line": 103,
           "called": [
             "maxBudgetPerDeposit"
           ]
@@ -32428,7 +32428,7 @@
         {
           "kind": "theorem",
           "name": "feeSplit_pool_le",
-          "line": 119,
+          "line": 124,
           "called": [
             "feeSplit"
           ]
@@ -32436,7 +32436,7 @@
         {
           "kind": "theorem",
           "name": "feeSplit_conserves",
-          "line": 130,
+          "line": 135,
           "called": [
             "feeSplit",
             "feeSplit_pool_le"
@@ -32445,7 +32445,7 @@
         {
           "kind": "theorem",
           "name": "feeSplit_budget_le_max",
-          "line": 137,
+          "line": 142,
           "called": [
             "feeSplit",
             "maxBudgetPerDeposit"
@@ -32454,21 +32454,39 @@
         {
           "kind": "def",
           "name": "ammSeed",
-          "line": 148,
+          "line": 153,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "ammSeed_le",
-          "line": 154,
+          "line": 159,
           "called": [
             "ammSeed"
           ]
         },
         {
           "kind": "def",
+          "name": "freePool",
+          "line": 172,
+          "called": [
+            "ammSeed"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSeed_conserves",
+          "line": 185,
+          "called": [
+            "ammSeed",
+            "ammSeed_le",
+            "freePool"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "feeSplitReceiptTail",
-          "line": 174,
+          "line": 204,
           "called": [
             "sender"
           ]
@@ -32476,7 +32494,7 @@
         {
           "kind": "def",
           "name": "feeSplitReceiptPreimage",
-          "line": 190,
+          "line": 220,
           "called": [
             "deploymentId",
             "feeSplitReceiptTail",
@@ -32486,7 +32504,7 @@
         {
           "kind": "def",
           "name": "computeFeeSplitReceiptHash",
-          "line": 196,
+          "line": 226,
           "called": [
             "deploymentId",
             "feeSplitReceiptPreimage",
@@ -32497,7 +32515,7 @@
         {
           "kind": "structure",
           "name": "Entry",
-          "line": 205,
+          "line": 235,
           "called": [
             "deploymentId",
             "sender"
@@ -32506,7 +32524,7 @@
         {
           "kind": "def",
           "name": "mkEntry",
-          "line": 255,
+          "line": 285,
           "called": [
             "Entry",
             "ammSeed",
@@ -32520,7 +32538,7 @@
         {
           "kind": "def",
           "name": "cornerEntries",
-          "line": 297,
+          "line": 333,
           "called": [
             "Entry",
             "Gen",
@@ -32532,7 +32550,7 @@
         {
           "kind": "def",
           "name": "genWei",
-          "line": 326,
+          "line": 369,
           "called": [
             "Gen",
             "genNat"
@@ -32541,7 +32559,7 @@
         {
           "kind": "def",
           "name": "genFeeBps",
-          "line": 334,
+          "line": 377,
           "called": [
             "Gen",
             "genNat"
@@ -32550,7 +32568,7 @@
         {
           "kind": "def",
           "name": "genSeedRatio",
-          "line": 340,
+          "line": 383,
           "called": [
             "Gen",
             "genNat"
@@ -32559,7 +32577,7 @@
         {
           "kind": "def",
           "name": "genRate",
-          "line": 344,
+          "line": 387,
           "called": [
             "Gen",
             "genNat"
@@ -32568,7 +32586,7 @@
         {
           "kind": "def",
           "name": "genRandomEntry",
-          "line": 351,
+          "line": 394,
           "called": [
             "Entry",
             "Gen",
@@ -32584,7 +32602,7 @@
         {
           "kind": "def",
           "name": "buildFixture",
-          "line": 368,
+          "line": 416,
           "called": [
             "Json",
             "allEntries",
@@ -32600,18 +32618,19 @@
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 413,
+          "line": 463,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 421,
+          "line": 471,
           "called": [
             "DepositFeeSplit",
             "LegalKernel.Test.Bridge.CrossCheck",
             "TestCase",
             "ammSeed",
+            "ammSeed_conserves",
             "ammSeed_le",
             "buildFixture",
             "computeFeeSplitReceiptHash",
@@ -32623,6 +32642,7 @@
             "feeSplit_conserves",
             "feeSplit_pool_le",
             "fixtureName",
+            "freePool",
             "genRandomEntry",
             "isKeccak256Linked",
             "maxBudgetPerDeposit",
@@ -32690,7 +32710,7 @@
         {
           "kind": "def",
           "name": "cornerEntries",
-          "line": 136,
+          "line": 137,
           "called": [
             "Gen",
             "entries",
@@ -32701,7 +32721,7 @@
         {
           "kind": "def",
           "name": "genRandomEntry",
-          "line": 166,
+          "line": 174,
           "called": [
             "Gen",
             "genNat",
@@ -32712,7 +32732,7 @@
         {
           "kind": "def",
           "name": "buildFixture",
-          "line": 183,
+          "line": 193,
           "called": [
             "Json",
             "allEntries",
@@ -32729,13 +32749,13 @@
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 230,
+          "line": 242,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 238,
+          "line": 250,
           "called": [
             "DepositFeeSplitBold",
             "LegalKernel.Test.Bridge.CrossCheck",

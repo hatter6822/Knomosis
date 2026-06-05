@@ -1376,8 +1376,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         reserves.  The split stays observable + bound because the
     ///         actual `ammSeedAmount` (0 once disabled) is emitted in the
     ///         canonical event regardless.
+    /// @dev    `internal` (not `private`) so a test harness can drive all
+    ///         branches directly — in particular the off-gas-leg `else`
+    ///         path, which is unreachable through the public entry points
+    ///         (ETH / BOLD only) and would otherwise be uncoverable.  It
+    ///         exposes nothing externally (no ABI selector) and the contract
+    ///         is not designed for production inheritance.
     function _seedAmmReserves(uint64 resourceId, uint256 poolAmount)
-        private
+        internal
         returns (uint256 ammSeedAmount)
     {
         uint16 ratio = ammSeedRatioBps;
