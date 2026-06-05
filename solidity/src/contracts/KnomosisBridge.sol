@@ -103,6 +103,16 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         the degenerate divide-by-zero shape.
     error WeiPerBudgetUnitTooSmall(uint64 weiPerBudgetUnit);
 
+    // ---- Workstream GP.11.1: embedded ETH<->BOLD AMM ----
+
+    /// @notice Constructor guard: the deployment passed an
+    ///         `ammSeedRatioBps` above the compile-time
+    ///         `MAX_AMM_SEED_RATIO_BPS` ceiling.  A higher ratio would
+    ///         commit too large a fraction of every pool-fee deposit to
+    ///         locked AMM liquidity, risking starvation of the
+    ///         sequencer's free-pool claims during peak L1-gas periods.
+    error AmmSeedRatioExceedsMax(uint16 ammSeedRatioBps);
+
     // ---- Workstream GP.5.4: BOLD-currency fee-split deposits ----
 
     /// @notice Constructor guard: a BOLD-enabled deployment passed a
@@ -278,6 +288,18 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         Workstream GP.5.4.
     bool public immutable boldEnabled;
 
+    /// @notice Compile-time fraction (in basis points) of every pool-fee
+    ///         deposit that flows to AMM liquidity rather than the free
+    ///         pool reserves the sequencer can claim.  Set once at
+    ///         deployment time and immutable thereafter; e.g. 5000 bps =
+    ///         50% of each fee deposit seeds AMM liquidity and 50% stays
+    ///         as free pool reserves.  Validated `<= MAX_AMM_SEED_RATIO_BPS`
+    ///         in the constructor.  A value of 0 disables the AMM at
+    ///         construction (no deposit ever seeds the reserves, and the
+    ///         `ammSwap` path reverts on an empty reserve), preserving the
+    ///         pre-v1.3 behaviour exactly.  Workstream GP.11.1.
+    uint16 public immutable ammSeedRatioBps;
+
     /// @notice EIP-712 domain components for state-root attestations.
     string public constant DOMAIN_NAME = "KnomosisBridge";
     string public constant DOMAIN_VERSION = "1";
@@ -342,6 +364,31 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `scripts/audit_compile_time_caps.sh` and at runtime by
     ///         `BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned`.
     uint64 public constant MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000;
+
+    // ---- Embedded-AMM compile-time caps (Workstream GP.11.1) ----
+
+    /// @notice Compile-time AMM swap fee in basis points.  30 bps =
+    ///         0.30%, matching Uniswap v2's standard fee.  Charged on
+    ///         every `ammSwap` (Workstream GP.11.3); accrues to the AMM
+    ///         reserves as LP yield for the gas pool (the sole LP).
+    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
+    ///         amendment, pinned in source by
+    ///         `scripts/audit_compile_time_caps.sh` and at runtime by
+    ///         `AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`.
+    uint16 public constant AMM_SWAP_FEE_BPS = 30;
+
+    /// @notice Compile-time hard cap on the AMM seed ratio (8000 bps =
+    ///         80%).  At the cap only 20% of pool fees stay claimable by
+    ///         the sequencer for immediate L1-gas reimbursement; the rest
+    ///         is committed to AMM liquidity.  Higher ratios risk starving
+    ///         sequencer claims during peak L1-gas periods, so this cap is
+    ///         the structural defence enforced on `ammSeedRatioBps` at
+    ///         construction (`AmmSeedRatioExceedsMax` otherwise).
+    /// @dev    Constitutional cap; a change is a Genesis-Plan §13.6
+    ///         amendment, pinned in source by
+    ///         `scripts/audit_compile_time_caps.sh` and at runtime by
+    ///         `AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`.
+    uint16 public constant MAX_AMM_SEED_RATIO_BPS = 8000;
 
     // ---- BOLD constitutional pins (Workstream GP.5.4) ----
 
@@ -506,6 +553,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         withdrawal when BOLD is enabled.
     uint256 public boldTotalLockedValue;
 
+    // ---- Embedded-AMM reserves (Workstream GP.11.1) ----
+
+    /// @notice ETH currently in the AMM's reserves.  Funded from the gas
+    ///         pool's L1 reserve fraction allocated to AMM liquidity (the
+    ///         immutable `ammSeedRatioBps`).  Seeded on deposit
+    ///         (Workstream GP.11.2) and mutated by every `ammSwap`
+    ///         (Workstream GP.11.3); there is no admin or direct setter.
+    ///         Starts at 0; stays 0 for the lifetime of an
+    ///         `ammSeedRatioBps == 0` (AMM-disabled) deployment.
+    uint256 public ammReserveEth;
+
+    /// @notice BOLD currently in the AMM's reserves.  Same funding and
+    ///         mutation constraints as `ammReserveEth`, on the BOLD leg.
+    ///         Only ever non-zero on a BOLD-enabled deployment with a
+    ///         non-zero `ammSeedRatioBps`.
+    uint256 public ammReserveBold;
+
     // ------------------------------------------------------------------
     // Resource map (immutable; resource id → ERC-20 token address)
     // ------------------------------------------------------------------
@@ -599,6 +663,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         address boldCircuitBreaker;
         address boldAdmin;
         bool enableLiquityAutoCircuitTrigger;
+        // Workstream GP.11.1 embedded-AMM parameter.  Fraction (bps) of
+        // each pool-fee deposit routed to AMM liquidity; validated
+        // `<= MAX_AMM_SEED_RATIO_BPS`.  0 disables the AMM (preserving the
+        // pre-v1.3 behaviour), so pre-GP.11.1 deployment shapes pass 0.
+        uint16 ammSeedRatioBps;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
     }
@@ -632,6 +701,16 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         }
         if (args.weiPerBudgetUnitEth < MIN_WEI_PER_BUDGET_UNIT) {
             revert WeiPerBudgetUnitTooSmall(args.weiPerBudgetUnitEth);
+        }
+
+        // ---- Embedded-AMM seed-ratio validation (Workstream GP.11.1) ----
+        // The seed ratio is bounded above by the constitutional
+        // MAX_AMM_SEED_RATIO_BPS so a deployment cannot commit so much of
+        // each fee deposit to locked AMM liquidity that sequencer claims
+        // starve.  0 is admissible and disables the AMM (no deposit seeds
+        // the reserves), preserving the pre-v1.3 behaviour exactly.
+        if (args.ammSeedRatioBps > MAX_AMM_SEED_RATIO_BPS) {
+            revert AmmSeedRatioExceedsMax(args.ammSeedRatioBps);
         }
 
         // ---- BOLD opt-in validation (Workstream GP.5.4) ----
@@ -757,6 +836,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // deployment this is whatever the deployer passed (typically 0).
         weiPerBudgetUnitBold = args.weiPerBudgetUnitBold;
         boldEnabled = boldEnabled_;
+        // Workstream GP.11.1 — validated `<= MAX_AMM_SEED_RATIO_BPS` above.
+        // `ammReserveEth` / `ammReserveBold` are mutable state and start at
+        // 0 (the implicit default); they are seeded only on deposit
+        // (GP.11.2) and never directly settable.
+        ammSeedRatioBps = args.ammSeedRatioBps;
 
         // ---- GP.5.5 safety-hardening roles + initial cap.
         // Roles and opt-in flag are immutable; `boldTvlCap` is the

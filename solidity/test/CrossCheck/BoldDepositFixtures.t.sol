@@ -489,6 +489,7 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
                 boldCircuitBreaker: BOLD_BREAKER,
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
+                ammSeedRatioBps: 0,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
