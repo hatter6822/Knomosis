@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
+import {MockBold} from "test/utils/MockBold.sol";
 
 /// @title AmmStorageTest
 /// @notice Workstream GP.11.1 — the embedded ETH<->BOLD AMM's L1 state
@@ -24,7 +25,16 @@ import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
 ///         preserved unchanged.  The acceptance criterion (GP.11.1.c —
 ///         "`ammSeedRatioBps = 0` preserves v1.2 behaviour") is pinned by
 ///         `test_deposit_doesNotSeedReserves_whenDisabled` and the
-///         cross-ratio `test_v1_2_depositSplit_unchanged_acrossRatios`.
+///         cross-ratio `test_v1_2_depositSplit_unchanged_acrossRatios`
+///         (which asserts the EMITTED split is identical across ratios,
+///         not merely the resulting TVL).  The plan's "cannot mutate
+///         post-deploy even via admin functions" criterion is pinned by
+///         `test_ammState_hasNoSetterSurface` (no AMM mutator selector is
+///         callable); the BOLD leg is covered by
+///         `test_boldDeposit_doesNotSeedReserve` (a real `depositBoldWithFee`
+///         on a BOLD-enabled bridge leaves both reserves at 0); and
+///         `test_constructor_guardOrdering_feeBeforeAmm` pins that the
+///         fee-cap guard fires before the AMM-cap guard.
 contract AmmStorageTest is Test {
     address private alice = address(0xA1);
 
@@ -32,6 +42,18 @@ contract AmmStorageTest is Test {
     ///      constant is not reachable via the type name from another
     ///      contract).
     uint64 private constant NATIVE_ETH = 0;
+
+    /// @dev Mirror of `KnomosisBridge.BOLD_TOKEN_ADDRESS`.  A conformant
+    ///      `MockBold` is etched here before a BOLD-enabled bridge is
+    ///      deployed so the constructor's address pin + `symbol()`
+    ///      cross-check pass (see `test/utils/MockBold.sol`).
+    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+
+    /// @dev GP.5.5 BOLD safety roles.  A BOLD-enabled deployment requires
+    ///      both non-zero and distinct; the AMM-storage tests do not
+    ///      exercise the circuit breaker, so any fixed addresses suffice.
+    address private constant BOLD_BREAKER = address(0xB12E6B6E);
+    address private constant BOLD_ADMIN = address(0xAD814);
 
     /// @dev Local copy of the contract event for `vm.expectEmit`.
     event DepositWithFeeInitiated(
@@ -60,6 +82,17 @@ contract AmmStorageTest is Test {
     ///         fresh deployment, and `migration == address(0)` keeps the
     ///         `circuitOpen` breaker open.
     function _deploy(uint16 ammSeedRatioBps) internal returns (KnomosisBridge) {
+        return _deployFull(5000, ammSeedRatioBps);
+    }
+
+    /// @notice As `_deploy`, but with a caller-chosen `maxFeeBps`, so the
+    ///         constructor-guard ordering test can violate the fee-cap and
+    ///         the AMM-cap guards in the same deployment and observe which
+    ///         one fires first.
+    function _deployFull(uint16 maxFeeBps, uint16 ammSeedRatioBps)
+        internal
+        returns (KnomosisBridge)
+    {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
         return new KnomosisBridge(
@@ -75,7 +108,7 @@ contract AmmStorageTest is Test {
                 cooldownBlocks: 50,
                 tvlCap: type(uint256).max,
                 minFeeBps: 0,
-                maxFeeBps: 5000,
+                maxFeeBps: maxFeeBps,
                 weiPerBudgetUnitEth: 1_000_000_000,
                 weiPerBudgetUnitBold: 0,
                 boldTokenAddress: address(0),
@@ -87,6 +120,87 @@ contract AmmStorageTest is Test {
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
+        );
+    }
+
+    /// @notice Place a fresh conformant `MockBold`'s runtime code at the
+    ///         pinned BOLD address (resets its storage).  `vm.etch` copies
+    ///         runtime code only, so the mock's `pure` `symbol()` survives
+    ///         while balances are seeded after the etch via `mint`.
+    function _etchBold() internal {
+        MockBold impl = new MockBold();
+        vm.etch(BOLD, address(impl).code);
+    }
+
+    /// @notice Deploy a BOLD-ENABLED bridge with a chosen `ammSeedRatioBps`.
+    ///         Requires a BOLD mock etched at the pinned address first
+    ///         (`_etchBold`).  Used to prove the BOLD deposit leg also
+    ///         leaves `ammReserveBold` untouched at GP.11.1.
+    function _deployBoldEnabled(uint16 ammSeedRatioBps) internal returns (KnomosisBridge) {
+        uint64[] memory rids = new uint64[](0);
+        address[] memory toks = new address[](0);
+        return new KnomosisBridge(
+            KnomosisBridge.ConstructorArgs({
+                knomosisVersionTag: keccak256("knomosis-amm-storage-bold-test"),
+                attestor: address(0xA11CE),
+                disputeVerifier: address(0xDEAD),
+                sequencerStake: address(0xBEEF),
+                migration: address(0),
+                disputeWindowBlocks: 100,
+                maxRedemptionWindowBlocks: 50,
+                maxAttestationStaleBlocks: 200,
+                cooldownBlocks: 50,
+                tvlCap: type(uint256).max,
+                minFeeBps: 0,
+                maxFeeBps: 5000,
+                weiPerBudgetUnitEth: 1_000_000_000,
+                weiPerBudgetUnitBold: 1_000_000_000,
+                boldTokenAddress: BOLD,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
+                enableLiquityAutoCircuitTrigger: false,
+                ammSeedRatioBps: ammSeedRatioBps,
+                erc20ResourceIds: rids,
+                erc20TokenAddrs: toks
+            })
+        );
+    }
+
+    /// @notice Mint `amount` BOLD to `user` and approve `bridge` for it.
+    function _mintApprove(KnomosisBridge bridge, address user, uint256 amount) internal {
+        MockBold(BOLD).mint(user, amount);
+        vm.prank(user);
+        MockBold(BOLD).approve(address(bridge), amount);
+    }
+
+    /// @notice `vm.expectEmit` setup asserting `bridge` emits a
+    ///         `DepositWithFeeInitiated` carrying exactly the given split.
+    ///         The per-bridge `receiptHash` is recomputed from the bridge's
+    ///         own `deploymentId` + current nonce (it legitimately differs
+    ///         between two deployments at different addresses; the split
+    ///         itself must not).
+    function _expectSplitEmit(
+        KnomosisBridge bridge,
+        address user,
+        uint256 userAmount,
+        uint256 poolAmount,
+        uint64 budgetGrant
+    ) internal {
+        uint64 nonce = bridge.depositNonce(user);
+        bytes32 expectedHash = FeeSplitMath.receiptHash(
+            bridge.deploymentId(),
+            user,
+            NATIVE_ETH,
+            address(0),
+            userAmount,
+            poolAmount,
+            budgetGrant,
+            nonce
+        );
+        vm.expectEmit(true, true, true, true, address(bridge));
+        emit DepositWithFeeInitiated(
+            user, NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant, nonce, expectedHash
         );
     }
 
@@ -242,8 +356,21 @@ contract AmmStorageTest is Test {
         uint256 value = 2 ether;
         uint16 feeBps = 1500;
 
+        // The split depends only on (value, feeBps, rate) — identical
+        // across the two deployments — so both MUST emit the same
+        // (userAmount, poolAmount, budgetGrant).  Asserting the emitted
+        // split on EACH deposit (not merely the resulting TVL) pins that
+        // the seed ratio changes nothing the depositor observes; only the
+        // per-deployment receiptHash differs (its deploymentId binds the
+        // contract address), which `_expectSplitEmit` recomputes per bridge.
+        (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant) =
+            FeeSplitMath.split(value, feeBps, disabled.weiPerBudgetUnitEth());
+
+        _expectSplitEmit(disabled, alice, userAmount, poolAmount, budgetGrant);
         vm.prank(alice);
         disabled.depositETHWithFee{value: value}(feeBps);
+
+        _expectSplitEmit(maxSeed, alice, userAmount, poolAmount, budgetGrant);
         vm.prank(alice);
         maxSeed.depositETHWithFee{value: value}(feeBps);
 
@@ -310,5 +437,91 @@ contract AmmStorageTest is Test {
             abi.encodeWithSelector(KnomosisBridge.AmmSeedRatioExceedsMax.selector, ratio)
         );
         _deploy(ratio);
+    }
+
+    // ------------------------------------------------------------------
+    // Immutability via the external surface — "cannot mutate post-deploy
+    // even via admin functions" (the plan's GP.11.1 test criterion).
+    // ------------------------------------------------------------------
+
+    /// @notice The bridge exposes NO callable mutator for the AMM state.
+    ///         `ammSeedRatioBps` is `immutable`, so a setter is impossible
+    ///         at compile time; the two reserves are mutable storage but
+    ///         have no write path at GP.11.1.  This probes a battery of
+    ///         plausible AMM setter selectors via low-level `call` and
+    ///         asserts every one is unroutable — the bridge has a
+    ///         `receive()` but no `fallback()`, so a 4-byte (non-empty)
+    ///         selector that matches no function reverts.  Mirrors
+    ///         `KnomosisBridge.t.sol::test_no_admin_surface` for the AMM
+    ///         surface specifically.
+    function test_ammState_hasNoSetterSurface() public {
+        KnomosisBridge bridge = _deploy(5000);
+
+        bytes4[] memory forbidden = new bytes4[](8);
+        forbidden[0] = bytes4(keccak256("setAmmReserveEth(uint256)"));
+        forbidden[1] = bytes4(keccak256("setAmmReserveBold(uint256)"));
+        forbidden[2] = bytes4(keccak256("setAmmSeedRatioBps(uint16)"));
+        forbidden[3] = bytes4(keccak256("setAmmReserves(uint256,uint256)"));
+        forbidden[4] = bytes4(keccak256("seedAmm(uint256,uint256)"));
+        forbidden[5] = bytes4(keccak256("setAmmReserve(uint64,uint256)"));
+        forbidden[6] = bytes4(keccak256("syncAmmReserves()"));
+        forbidden[7] = bytes4(keccak256("setReserves(uint256,uint256)"));
+
+        for (uint256 i = 0; i < forbidden.length; ++i) {
+            (bool ok,) = address(bridge).call(abi.encodePacked(forbidden[i]));
+            assertFalse(ok, "AMM mutator selector unexpectedly callable");
+        }
+
+        // The getters remain the only AMM surface and read unchanged.
+        assertEq(bridge.ammSeedRatioBps(), 5000, "seed ratio unchanged");
+        assertEq(bridge.ammReserveEth(), 0, "ETH reserve unchanged");
+        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve unchanged");
+    }
+
+    // ------------------------------------------------------------------
+    // BOLD leg: a real BOLD deposit on a BOLD-ENABLED bridge also leaves
+    // the reserves untouched (the ETH-leg tests run BOLD-disabled).
+    // ------------------------------------------------------------------
+
+    /// @notice GP.11.1 scope boundary on the BOLD leg: a `depositBoldWithFee`
+    ///         on a BOLD-enabled bridge — even at the max seed ratio — seeds
+    ///         NEITHER reserve (deposit-side seeding is GP.11.2), while the
+    ///         deposit itself credits the global and per-BOLD TVL exactly as
+    ///         in v1.2.  This exercises the BOLD path the ETH-leg tests
+    ///         cannot, closing the BOLD-reserve coverage gap.
+    function test_boldDeposit_doesNotSeedReserve() public {
+        _etchBold();
+        KnomosisBridge bridge = _deployBoldEnabled(8000);
+
+        uint256 amount = 5 ether; // 5e18 BOLD-wei
+        _mintApprove(bridge, alice, amount);
+
+        vm.prank(alice);
+        bridge.depositBoldWithFee(amount, 2500); // 25% fee
+
+        assertEq(bridge.totalLockedValue(), amount, "BOLD deposit credits the full global TVL");
+        assertEq(bridge.boldTotalLockedValue(), amount, "BOLD deposit credits the per-BOLD TVL");
+        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve NOT seeded at GP.11.1");
+        assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched by a BOLD deposit");
+    }
+
+    // ------------------------------------------------------------------
+    // Constructor-guard ordering pin.
+    // ------------------------------------------------------------------
+
+    /// @notice The fee-split validation runs BEFORE the AMM seed-ratio
+    ///         validation in the constructor, so a deployment that violates
+    ///         BOTH the fee cap and the AMM cap reverts with the FEE error
+    ///         (`MaxFeeBpsExceedsCap`), not `AmmSeedRatioExceedsMax`.  Pins
+    ///         the order so an accidental reordering that surfaces the wrong
+    ///         diagnostic is caught (mirrors the GP.5.5 revert-ordering pins).
+    function test_constructor_guardOrdering_feeBeforeAmm() public {
+        // maxFeeBps = 6000 (> MAX_FEE_BPS_CAP = 5000) AND ammSeedRatioBps =
+        // 9000 (> MAX_AMM_SEED_RATIO_BPS = 8000): both guards would trip; the
+        // fee guard fires first.
+        vm.expectRevert(
+            abi.encodeWithSelector(KnomosisBridge.MaxFeeBpsExceedsCap.selector, uint16(6000))
+        );
+        _deployFull(6000, 9000);
     }
 }

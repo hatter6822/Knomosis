@@ -544,17 +544,27 @@ file partitions).
     * `Event.actionBudgetTopUp` at index 17
     * `Event.gasPoolClaim` at index 18
   * **Solidity-side scope:** one amended contract (`KnomosisBridge.sol`)
-    with two parallel entry points (ETH + BOLD); five immutable
-    constructor parameters (`minFeeBps`, `maxFeeBps`,
-    `weiPerBudgetUnitEth`, `weiPerBudgetUnitBold`,
-    `boldTokenAddress`); four compile-time constants
-    (`MAX_FEE_BPS_CAP = 5000`, `MIN_WEI_PER_BUDGET_UNIT = 1`,
+    with two parallel entry points (ETH + BOLD).  Immutable
+    constructor parameters added by the workstream (current as of
+    GP.11.1): the GP.5.1 / GP.5.4 fee-split set (`minFeeBps`,
+    `maxFeeBps`, `weiPerBudgetUnitEth`, `weiPerBudgetUnitBold`,
+    `boldTokenAddress` → `boldEnabled`), the GP.5.5 BOLD-safety roles
+    (`boldCircuitBreaker`, `boldAdmin`, `enableLiquityAutoCircuitTrigger`),
+    and the GP.11.1 `ammSeedRatioBps`.  Constitutional compile-time
+    constants under the GP.5.2 audit gate (current): six `uintN` caps —
+    `MAX_FEE_BPS_CAP = 5000`, `MIN_WEI_PER_BUDGET_UNIT = 1`,
     `MAX_BUDGET_PER_DEPOSIT = 1_000_000_000_000`,
-    `EXPECTED_BOLD_SYMBOL = "BOLD"`); two new payable entry
-    points (`depositETHWithFee` taking `chosenFeeBps`,
-    `depositBoldWithFee` taking `chosenFeeBps` + `amount`); one
-    new event (`DepositWithFeeInitiated`) with `resourceId` field
-    distinguishing ETH (0) from BOLD (1).  No new contracts.
+    `LIQUITY_ORACLE_READ_GAS = 100_000` (GP.5.5),
+    `AMM_SWAP_FEE_BPS = 30` (GP.11.1), `MAX_AMM_SEED_RATIO_BPS = 8000`
+    (GP.11.1) — plus four address pins (`BOLD_TOKEN_ADDRESS` +
+    three `LIQUITY_V2_TROVE_MANAGER_*`) and the `EXPECTED_BOLD_SYMBOL =
+    "BOLD"` string pin.  Two new payable entry points
+    (`depositETHWithFee` taking `chosenFeeBps`, `depositBoldWithFee`
+    taking `chosenFeeBps` + `amount`); one new event
+    (`DepositWithFeeInitiated`) with a `resourceId` field distinguishing
+    ETH (0) from BOLD (1); and the GP.11.1 embedded-AMM state scaffold
+    (`ammReserveEth` / `ammReserveBold` mutable reserves).  No new
+    contracts.
   * **Rust-side scope:** four crates touched —
     `knomosis-l1-ingest` (decode new event, encode new Action variants),
     `knomosis-host` (admission policy with budget gate),
@@ -6785,14 +6795,21 @@ sub-WU table above is the implementation roadmap.
     purely additive: no deposit-seeding (GP.11.2) or swap (GP.11.3)
     logic ships yet, so the reserves stay 0 for the lifetime of a
     GP.11.1-era deployment regardless of the seed ratio — proven by
-    `AmmStorage.t.sol` (13 cases: caps pinned, seed-ratio
+    `AmmStorage.t.sol` (16 cases: caps pinned, seed-ratio
     store/validate incl. the `> MAX` + `uint16`-max reverts and a
     `[0, MAX]` accept / `(MAX, uint16Max]` reject fuzz pair, reserves
-    start-and-stay zero, and the v1.2-preservation acceptance criterion
+    start-and-stay zero, the v1.2-preservation acceptance criterion
     — a disabled deposit matches the `FeeSplitMath` reference and a
-    `0`-vs-`MAX` cross-ratio deposit is observationally identical).
-    `forge build` warning-free; full `forge test` green (658 passed,
-    +13).  Lean / Rust untouched (the L2 mirror is GP.11.4 / GP.11.5).
+    `0`-vs-`MAX` cross-ratio deposit emits a byte-identical split via
+    `vm.expectEmit` — the "no mutation surface even via admin functions"
+    criterion via a no-AMM-setter-selector probe, the BOLD leg via a
+    real `depositBoldWithFee` that leaves both reserves at 0, and a
+    constructor-guard ordering pin).
+    `forge build` warning-free; full `forge test` green (661 passed,
+    +16).  Lean / Rust untouched (the L2 mirror is GP.11.4 / GP.11.5);
+    the lockstep version bump's inertness is confirmed by re-running the
+    Lean (`lake build` + `lake test`) and Rust (`cargo` build / test /
+    clippy / fmt) gates green.
 
 #### WU GP.11.2: AMM seeding on deposit
 

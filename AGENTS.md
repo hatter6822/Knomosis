@@ -3586,13 +3586,18 @@ contributions surviving in current code:
     gate (`scripts/audit_compile_time_caps.sh`, now 6 caps + 4 address
     pins + 1 symbol pin; self-test 37 → 45 cases) AND a compiled-contract
     runtime pin (`AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`).
-    New `test/AmmStorage.t.sol` suite (13 cases: caps pinned, seed-ratio
+    New `test/AmmStorage.t.sol` suite (16 cases: caps pinned, seed-ratio
     store/validate incl. the `> MAX` + `uint16`-max reverts + a
     `[0, MAX]`-accept / `(MAX, uint16Max]`-reject fuzz pair, reserves
-    start-and-stay zero across deposits, and the v1.2-preservation
-    acceptance criterion).  `forge build` warning-free; full `forge test`
-    green (658 passed).  Solidity-only; the L2 mirror (`Action.ammSwap`)
-    is GP.11.4 / GP.11.5.
+    start-and-stay zero across deposits, the v1.2-preservation
+    acceptance criterion — incl. a `0`-vs-`MAX` cross-ratio deposit
+    emitting a byte-identical split via `vm.expectEmit` — the "no
+    mutation surface even via admin functions" criterion via a
+    no-AMM-setter-selector probe, the BOLD leg via a real
+    `depositBoldWithFee` that leaves both reserves at 0, and a
+    constructor-guard ordering pin).  `forge build` warning-free; full
+    `forge test` green (661 passed).  Solidity-only; the L2 mirror
+    (`Action.ammSwap`) is GP.11.4 / GP.11.5.
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the

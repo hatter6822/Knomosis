@@ -296,10 +296,13 @@ otherwise), and the two constitutional caps above.  GP.11.1 is purely
 additive: it ships no seeding or swap logic, so the reserves stay 0 and
 `ammSeedRatioBps = 0` disables the AMM and preserves the pre-v1.3
 behaviour byte-for-byte (every existing `ConstructorArgs` initializer
-passes `0`).  Coverage: `test/AmmStorage.t.sol` (13 cases — caps pinned,
+passes `0`).  Coverage: `test/AmmStorage.t.sol` (16 cases — caps pinned,
 seed-ratio store/validate incl. the `> MAX` reverts and an accept/reject
-fuzz pair, reserves start-and-stay zero, and the `ammSeedRatioBps = 0`
-v1.2-preservation acceptance criterion).
+fuzz pair, reserves start-and-stay zero, the `ammSeedRatioBps = 0`
+v1.2-preservation criterion (incl. an event-level cross-ratio split
+check), a no-AMM-setter-selector probe for the "no admin mutation
+surface" criterion, a BOLD-enabled `depositBoldWithFee` that leaves both
+reserves at 0, and a constructor-guard ordering pin).
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:
