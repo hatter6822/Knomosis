@@ -60,13 +60,16 @@ contract BridgeFeeSplitBoldTest is Test {
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
 
-    /// @dev Local copy of the contract event for log decoding.
+    /// @dev Local copy of the contract event for log decoding.  The
+    ///      GP.11.2 `ammSeedAmount` field is 0 throughout this suite (every
+    ///      bridge here is AMM-disabled, `ammSeedRatioBps = 0`).
     event DepositWithFeeInitiated(
         address indexed sender,
         uint64 indexed resourceId,
         address indexed token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint64 budgetGrant,
         uint64 depositorNonce,
         bytes32 receiptHash
@@ -209,8 +212,9 @@ contract BridgeFeeSplitBoldTest is Test {
             FeeSplitMath.split(amount, feeBps, bridge.weiPerBudgetUnitBold());
 
         uint64 nonce = bridge.depositNonce(user);
+        // AMM-disabled suite: ammSeedAmount is 0 (freePoolAmount == poolAmount).
         bytes32 expectedHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(), user, RESOURCE_BOLD, BOLD, userAmount, poolAmount, budgetGrant, nonce
+            bridge.deploymentId(), user, RESOURCE_BOLD, BOLD, userAmount, poolAmount, 0, budgetGrant, nonce
         );
 
         uint256 tvlBefore = bridge.totalLockedValue();
@@ -1187,7 +1191,7 @@ contract BridgeFeeSplitBoldTest is Test {
         assertEq(g, refBudget, "budgetGrant matches reference");
 
         bytes32 refHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(), alice, RESOURCE_BOLD, BOLD, refUser, refPool, refBudget, 0
+            bridge.deploymentId(), alice, RESOURCE_BOLD, BOLD, refUser, refPool, 0, refBudget, 0
         );
         assertEq(hash, refHash, "receiptHash matches reference");
     }
@@ -1227,15 +1231,17 @@ contract BridgeFeeSplitBoldTest is Test {
         )
     {
         bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
+            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
         );
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
                 sender = address(uint160(uint256(logs[i].topics[1])));
                 resourceId = uint64(uint256(logs[i].topics[2]));
                 token = address(uint160(uint256(logs[i].topics[3])));
-                (userAmount, poolAmount, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint64, uint64, bytes32));
+                // GP.11.2: data adds ammSeedAmount (0 in this AMM-disabled
+                // suite) between poolAmount and budgetGrant; skipped here.
+                (userAmount, poolAmount,, budgetGrant, nonce, receiptHash) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
                 return
                     (userAmount, poolAmount, budgetGrant, nonce, receiptHash, sender, resourceId, token);
             }

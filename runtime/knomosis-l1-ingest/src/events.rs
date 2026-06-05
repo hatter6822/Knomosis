@@ -91,7 +91,7 @@ pub const DEPOSIT_INITIATED_TOPIC: TopicHash = [
 
 /// Compile-time-pinned `keccak256` topic-0 hash for the
 /// Workstream-GP fee-split deposit event
-/// `DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)`.
+/// `DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)`.
 ///
 /// This is the WU GP.6.1 deliverable: the topic hash is baked into
 /// the source as a `pub const` for compile-time pinning (matching
@@ -101,9 +101,14 @@ pub const DEPOSIT_INITIATED_TOPIC: TopicHash = [
 /// so a signature-string drift or a keccak-binding regression is
 /// caught mechanically rather than silently producing logs that no
 /// node ever emits.
+///
+/// Workstream GP.11.2 inserted the `uint256 ammSeedAmount` field after
+/// `poolAmount` (the embedded-AMM seed is carried in the canonical event
+/// and bound in the receiptHash), so the signature — and therefore this
+/// topic hash — changed from the GP.6.1 form.
 pub const DEPOSIT_WITH_FEE_INITIATED_TOPIC: TopicHash = [
-    0x3c, 0x3b, 0x3a, 0x36, 0x3f, 0xa1, 0xfa, 0x4d, 0xc3, 0x18, 0xcc, 0xf4, 0x24, 0x96, 0x17, 0x0e,
-    0x3c, 0x4c, 0x60, 0x36, 0xff, 0x40, 0x9b, 0x1c, 0xbb, 0xd8, 0xb8, 0x3d, 0xec, 0xed, 0x55, 0x8e,
+    0xdf, 0xfb, 0x20, 0x55, 0xd2, 0x79, 0x87, 0x3f, 0xcf, 0x95, 0x36, 0x0d, 0x6f, 0x94, 0xb9, 0x25,
+    0x76, 0x4a, 0xc7, 0x8f, 0x9a, 0xe2, 0xa0, 0xef, 0xbb, 0x6f, 0x3c, 0xfa, 0xe0, 0xe4, 0xc8, 0xf5,
 ];
 
 /// Minimal Ethereum log record.  Carries the bare fields RH-B
@@ -173,8 +178,9 @@ impl EventTopic {
             }
             Self::DepositWithFeeInitiated => {
                 // Matches `KnomosisBridge.DepositWithFeeInitiated`
-                // (Workstream GP.5.1).
-                "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
+                // (Workstream GP.5.1; GP.11.2 inserted `ammSeedAmount` after
+                // `poolAmount`).
+                "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
             }
         }
     }
@@ -329,10 +335,16 @@ pub enum IngestedEvent {
         token: EthAddress,
         /// The amount credited to the recipient (raw `uint256` bytes).
         user_amount: [u8; 32],
-        /// The amount credited to the gas pool (raw `uint256` bytes).
+        /// The full pool fee (raw `uint256` bytes).  The free-pool portion
+        /// credited to the gas-pool actor is `pool_amount - amm_seed_amount`.
         pool_amount: [u8; 32],
+        /// The AMM-liquidity seed carved from the pool fee (Workstream
+        /// GP.11.2; raw `uint256` bytes).  `0` on an AMM-disabled
+        /// deployment (`ammSeedRatioBps == 0`).  Bound in `receipt_hash`.
+        amm_seed_amount: [u8; 32],
         /// The action-budget grant (`min(poolAmount / weiPerBudgetUnit,
-        /// MAX_BUDGET_PER_DEPOSIT)`; fits `u64`).
+        /// MAX_BUDGET_PER_DEPOSIT)`; reflects the FULL pool fee, independent
+        /// of the AMM split; fits `u64`).
         budget_grant: u64,
         /// The per-depositor nonce.
         depositor_nonce: u64,
@@ -685,9 +697,11 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
         EventTopic::DepositWithFeeInitiated => {
             // Topics: [signature_hash, sender, resourceId, token] —
             // THREE indexed params (token is indexed here, unlike
-            // DepositInitiated).  Data: uint256 userAmount + uint256
-            // poolAmount + uint64 budgetGrant + uint64 depositorNonce
-            // + bytes32 receiptHash (5 × 32 = 160 bytes).
+            // DepositInitiated).  Data (Workstream GP.11.2 inserted
+            // ammSeedAmount after poolAmount): uint256 userAmount + uint256
+            // poolAmount + uint256 ammSeedAmount + uint64 budgetGrant +
+            // uint64 depositorNonce + bytes32 receiptHash (6 × 32 = 192
+            // bytes).
             if log.topics.len() != 4 {
                 return Err(DecodeError::TopicCountMismatch {
                     event: "DepositWithFeeInitiated",
@@ -700,17 +714,19 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
             let token = decode_abi_address(&log.topics[3], "topic 3 (token)")?;
             let user_amount = read_slot(&log.data, 0)?;
             let pool_amount = read_slot(&log.data, 32)?;
-            let budget_grant_slot = read_slot(&log.data, 64)?;
-            let budget_grant = decode_abi_u64(&budget_grant_slot, 64)?;
-            let nonce_slot = read_slot(&log.data, 96)?;
-            let depositor_nonce = decode_abi_u64(&nonce_slot, 96)?;
-            let receipt_hash = read_slot(&log.data, 128)?;
+            let amm_seed_amount = read_slot(&log.data, 64)?;
+            let budget_grant_slot = read_slot(&log.data, 96)?;
+            let budget_grant = decode_abi_u64(&budget_grant_slot, 96)?;
+            let nonce_slot = read_slot(&log.data, 128)?;
+            let depositor_nonce = decode_abi_u64(&nonce_slot, 128)?;
+            let receipt_hash = read_slot(&log.data, 160)?;
             Ok(Some(IngestedEvent::DepositWithFeeInitiated {
                 sender,
                 resource_id,
                 token,
                 user_amount,
                 pool_amount,
+                amm_seed_amount,
                 budget_grant,
                 depositor_nonce,
                 receipt_hash,
@@ -1093,22 +1109,26 @@ mod tests {
         let token = [0x22u8; 20];
         let mut token_topic = [0u8; 32];
         token_topic[12..32].copy_from_slice(&token);
-        // Data: userAmount(0) + poolAmount(32) + budgetGrant(64) +
-        // depositorNonce(96) + receiptHash(128) = 160 bytes.
-        let mut data = vec![0u8; 160];
+        // Data (GP.11.2): userAmount(0) + poolAmount(32) + ammSeedAmount(64)
+        // + budgetGrant(96) + depositorNonce(128) + receiptHash(160) = 192
+        // bytes.
+        let mut data = vec![0u8; 192];
         // userAmount = 1000 (0x03e8) at 0..32.
         data[30] = 0x03;
         data[31] = 0xe8;
         // poolAmount = 500 (0x01f4) at 32..64.
         data[62] = 0x01;
         data[63] = 0xf4;
-        // budgetGrant = 500 (0x01f4) at 64..96 (low bytes 94..96).
+        // ammSeedAmount = 300 (0x012c) at 64..96.
         data[94] = 0x01;
-        data[95] = 0xf4;
-        // depositorNonce = 42 at 96..128.
-        data[127] = 42;
-        // receiptHash = 0xee... at 128..160.
-        for slot in data.iter_mut().skip(128).take(32) {
+        data[95] = 0x2c;
+        // budgetGrant = 500 (0x01f4) at 96..128 (low bytes 126..128).
+        data[126] = 0x01;
+        data[127] = 0xf4;
+        // depositorNonce = 42 at 128..160.
+        data[159] = 42;
+        // receiptHash = 0xee... at 160..192.
+        for slot in data.iter_mut().skip(160).take(32) {
             *slot = 0xee;
         }
         let log = RawLog {
@@ -1132,6 +1152,7 @@ mod tests {
                 token: t,
                 user_amount,
                 pool_amount,
+                amm_seed_amount,
                 budget_grant,
                 depositor_nonce,
                 receipt_hash,
@@ -1150,6 +1171,10 @@ mod tests {
                 expected_pool[30] = 0x01;
                 expected_pool[31] = 0xf4;
                 assert_eq!(pool_amount, expected_pool);
+                let mut expected_seed = [0u8; 32];
+                expected_seed[30] = 0x01;
+                expected_seed[31] = 0x2c;
+                assert_eq!(amm_seed_amount, expected_seed);
                 assert_eq!(budget_grant, 500);
                 assert_eq!(depositor_nonce, 42);
                 assert_eq!(receipt_hash, [0xee; 32]);
@@ -1210,15 +1235,17 @@ mod tests {
         ];
         let mut token_topic = [0u8; 32];
         token_topic[12..32].copy_from_slice(&bold);
-        // Data tail: userAmount(900) + poolAmount(100) + budgetGrant(33) +
-        // depositorNonce(7) + receiptHash, 160 bytes.
-        let mut data = vec![0u8; 160];
+        // Data tail (GP.11.2): userAmount(900) + poolAmount(100) +
+        // ammSeedAmount(40) + budgetGrant(33) + depositorNonce(7) +
+        // receiptHash, 192 bytes.
+        let mut data = vec![0u8; 192];
         data[30] = 0x03;
         data[31] = 0x84; // userAmount = 900
         data[63] = 0x64; // poolAmount = 100
-        data[95] = 0x21; // budgetGrant = 33
-        data[127] = 7; // depositorNonce = 7
-        for slot in data.iter_mut().skip(128).take(32) {
+        data[95] = 0x28; // ammSeedAmount = 40
+        data[127] = 0x21; // budgetGrant = 33
+        data[159] = 7; // depositorNonce = 7
+        for slot in data.iter_mut().skip(160).take(32) {
             *slot = 0xbd;
         }
         let log = RawLog {
@@ -1239,12 +1266,19 @@ mod tests {
             IngestedEvent::DepositWithFeeInitiated {
                 resource_id,
                 token: t,
+                amm_seed_amount,
                 budget_grant,
                 depositor_nonce,
                 ..
             } => {
                 assert_eq!(resource_id, 1, "BOLD resourceId decoded");
                 assert_eq!(t.as_bytes(), &bold, "BOLD token address decoded");
+                let mut expected_seed = [0u8; 32];
+                expected_seed[31] = 0x28;
+                assert_eq!(
+                    amm_seed_amount, expected_seed,
+                    "ammSeedAmount decoded (GP.11.2)"
+                );
                 assert_eq!(budget_grant, 33);
                 assert_eq!(depositor_nonce, 7);
             }

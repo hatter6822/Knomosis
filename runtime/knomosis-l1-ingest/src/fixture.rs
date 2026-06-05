@@ -210,6 +210,7 @@ pub fn encode_input(input: &FixtureInput) -> Result<Vec<u8>, FixtureError> {
             token,
             user_amount,
             pool_amount,
+            amm_seed_amount,
             budget_grant,
             depositor_nonce,
             receipt_hash,
@@ -226,6 +227,8 @@ pub fn encode_input(input: &FixtureInput) -> Result<Vec<u8>, FixtureError> {
             out.extend_from_slice(token.as_bytes());
             out.extend_from_slice(user_amount);
             out.extend_from_slice(pool_amount);
+            // GP.11.2: ammSeedAmount, after poolAmount.
+            out.extend_from_slice(amm_seed_amount);
             out.extend_from_slice(&budget_grant.to_be_bytes());
             out.extend_from_slice(&depositor_nonce.to_be_bytes());
             out.extend_from_slice(receipt_hash);
@@ -395,6 +398,9 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
             user_amount.copy_from_slice(read_bytes(bytes, cursor, 32)?);
             let mut pool_amount = [0u8; 32];
             pool_amount.copy_from_slice(read_bytes(bytes, cursor, 32)?);
+            // GP.11.2: ammSeedAmount, after poolAmount.
+            let mut amm_seed_amount = [0u8; 32];
+            amm_seed_amount.copy_from_slice(read_bytes(bytes, cursor, 32)?);
             let budget_grant = read_u64_be(bytes, cursor)?;
             let depositor_nonce = read_u64_be(bytes, cursor)?;
             let mut receipt_hash = [0u8; 32];
@@ -405,6 +411,7 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
                 token: EthAddress(token),
                 user_amount,
                 pool_amount,
+                amm_seed_amount,
                 budget_grant,
                 depositor_nonce,
                 receipt_hash,
@@ -936,6 +943,7 @@ mod tests {
                 token: EthAddress::from_bytes(&[0xdd; 20]).unwrap(),
                 user_amount: [0xee; 32],
                 pool_amount: [0x77; 32],
+                amm_seed_amount: [0x55; 32],
                 budget_grant: 123_456,
                 depositor_nonce: 13,
                 receipt_hash: [0xff; 32],

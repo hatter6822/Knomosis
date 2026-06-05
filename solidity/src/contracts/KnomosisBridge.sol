@@ -1072,63 +1072,38 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         (`depositETHWithFee` for ETH at `RESOURCE_ID_NATIVE_ETH`;
     ///         `depositBoldWithFee` for BOLD at `RESOURCE_ID_BOLD`).  The
     ///         L2 ingestor reconstructs a `Bridge.DepositRecord` from
-    ///         `(userAmount, poolAmount, budgetGrant)`: `userAmount` is
-    ///         credited to the recipient, `poolAmount` to the gas-pool
-    ///         actor, and `budgetGrant` action-budget units to the
-    ///         recipient at the admission layer.
+    ///         `(userAmount, poolAmount, ammSeedAmount, budgetGrant)`:
+    ///         `userAmount` is credited to the recipient; the pool fee
+    ///         `poolAmount` is split between the AMM reserve
+    ///         (`ammSeedAmount`, credited to the AMM reserve actor) and the
+    ///         sequencer-claimable free pool (`poolAmount - ammSeedAmount`,
+    ///         credited to the gas-pool actor); and `budgetGrant`
+    ///         action-budget units are granted to the recipient at the
+    ///         admission layer (`budgetGrant` reflects the FULL pool fee,
+    ///         independent of the AMM split).  Workstream GP.11.2 added the
+    ///         `ammSeedAmount` field: `ammSeedAmount == 0` on an AMM-disabled
+    ///         (`ammSeedRatioBps == 0`) deployment, so `freePoolAmount ==
+    ///         poolAmount` there.
     /// @dev    `receiptHash` binds the `deploymentId` plus every other
-    ///         emitted field, so an L2 ingestor that recomputes the
-    ///         hash cannot be tricked by a replayed event with
-    ///         modified fields (Genesis-Plan / unified-gas-pool plan
-    ///         §22.7b), and the same deposit replayed against a
-    ///         different deployment produces a different hash
-    ///         (deployment-replay resistance, mirroring
-    ///         `_registerDeposit`).
+    ///         emitted field — including the GP.11.2 `ammSeedAmount` — so an
+    ///         L2 ingestor that recomputes the hash cannot be tricked by a
+    ///         replayed event with modified fields (Genesis-Plan /
+    ///         unified-gas-pool plan §22.7b), and the same deposit replayed
+    ///         against a different deployment produces a different hash
+    ///         (deployment-replay resistance, mirroring `_registerDeposit`).
+    ///         Binding `poolAmount` and `ammSeedAmount` together fully
+    ///         determines the free-pool / AMM split, so a replay with a
+    ///         tampered split is rejected.
     event DepositWithFeeInitiated(
         address indexed sender,
         uint64 indexed resourceId,
         address indexed token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint64 budgetGrant,
         uint64 depositorNonce,
         bytes32 receiptHash
-    );
-
-    /// @notice Emitted by `_registerDepositWithFee` (Workstream GP.11.2)
-    ///         when a fee-split deposit seeds a non-zero amount into the
-    ///         embedded AMM's reserves.  Announces how the canonical
-    ///         `DepositWithFeeInitiated.poolAmount` was split between AMM
-    ///         liquidity (`ammSeedAmount`) and the sequencer-claimable
-    ///         free pool (`poolAmount - ammSeedAmount`), and reports the
-    ///         resulting reserve so off-chain indexers track the curve
-    ///         without replaying every deposit.
-    /// @dev    Emitted ONLY when `ammSeedAmount != 0`, so an AMM-disabled
-    ///         (`ammSeedRatioBps == 0`) or dust-floored deposit keeps the
-    ///         exact pre-GP.11.2 single-event log shape, and a consumer
-    ///         that sees a `DepositWithFeeInitiated` with no paired
-    ///         `AmmReserveSeeded` (same `sender` + `depositorNonce`) knows
-    ///         the entire `poolAmount` is free pool.  The split is fully
-    ///         determined by the bound `poolAmount` and the immutable
-    ///         `ammSeedRatioBps`, so this event carries no field that the
-    ///         L2 could not recompute — it is observability, not a new
-    ///         trust surface.  The `depositorNonce` is the pre-increment
-    ///         value, matching the paired `DepositWithFeeInitiated`.
-    /// @param  sender         The depositor (also the L2 recipient).
-    /// @param  resourceId     `RESOURCE_ID_NATIVE_ETH` or `RESOURCE_ID_BOLD`.
-    /// @param  poolAmount     The full pool fee (matches the paired
-    ///                        `DepositWithFeeInitiated.poolAmount`).
-    /// @param  ammSeedAmount  The portion of `poolAmount` moved into the
-    ///                        reserve (`<= poolAmount`).
-    /// @param  newReserve     The matching reserve balance AFTER this seed.
-    /// @param  depositorNonce The depositor's pre-increment nonce.
-    event AmmReserveSeeded(
-        address indexed sender,
-        uint64 indexed resourceId,
-        uint256 poolAmount,
-        uint256 ammSeedAmount,
-        uint256 newReserve,
-        uint64 depositorNonce
     );
 
     /// @notice Deposit native ETH with a user-chosen fee split.  The
@@ -1282,9 +1257,9 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         Enforces the TVL cap on the FULL deposit
     ///         (`userAmount + poolAmount`), seeds the embedded AMM from
     ///         the pool fee (Workstream GP.11.2), bumps the per-depositor
-    ///         nonce, computes the canonical `receiptHash`, and emits
-    ///         `DepositWithFeeInitiated` (plus `AmmReserveSeeded` when a
-    ///         non-zero amount was seeded).  Makes no external calls.
+    ///         nonce, computes the canonical `receiptHash` (which binds the
+    ///         GP.11.2 `ammSeedAmount`), and emits `DepositWithFeeInitiated`
+    ///         carrying the split.  Makes no external calls.
     /// @dev    Conservation across the whole fee-split deposit:
     ///         `userAmount + poolAmount == deposit` (the entry point's
     ///         floor split), and `poolAmount == ammSeedAmount +
@@ -1333,8 +1308,12 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // (the seed is a subset of `poolAmount`, which is a subset of the
         // already-counted `amount`), so no TVL re-accounting is needed.
         // Runs after the cap checks so a capped-out deposit reverts
-        // before any reserve is touched.
-        (uint256 ammSeedAmount, uint256 newReserve) = _seedAmmReserves(resourceId, poolAmount);
+        // before any reserve is touched.  `ammSeedAmount` is carried in the
+        // canonical `DepositWithFeeInitiated` event AND bound in the
+        // `receiptHash` below, so the free-pool / AMM split is observable
+        // and tamper-evident on L2 (`freePoolAmount == poolAmount -
+        // ammSeedAmount`).
+        uint256 ammSeedAmount = _seedAmmReserves(resourceId, poolAmount);
 
         uint64 nonce = depositNonce[msg.sender];
         bytes32 receiptHash = keccak256(
@@ -1345,6 +1324,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
                 token,
                 userAmount,
                 poolAmount,
+                ammSeedAmount,
                 budgetGrant,
                 nonce
             )
@@ -1353,24 +1333,23 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             depositNonce[msg.sender] = nonce + 1;
         }
         emit DepositWithFeeInitiated(
-            msg.sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce, receiptHash
+            msg.sender,
+            resourceId,
+            token,
+            userAmount,
+            poolAmount,
+            ammSeedAmount,
+            budgetGrant,
+            nonce,
+            receiptHash
         );
-
-        // Announce the split only when a non-zero seed actually moved into
-        // reserves, so AMM-disabled / dust-floored deposits keep the exact
-        // pre-GP.11.2 single-event log shape.
-        if (ammSeedAmount != 0) {
-            emit AmmReserveSeeded(
-                msg.sender, resourceId, poolAmount, ammSeedAmount, newReserve, nonce
-            );
-        }
     }
 
     /// @notice Workstream GP.11.2 — split a pool fee into an AMM-liquidity
     ///         seed and a sequencer-claimable free-pool remainder, growing
     ///         the matching reserve by the seed.  Pure internal accounting:
-    ///         no external calls, no event (the caller emits
-    ///         `AmmReserveSeeded` with the depositor nonce).
+    ///         no external calls, no event (the caller binds + emits
+    ///         `ammSeedAmount` in the canonical `DepositWithFeeInitiated`).
     /// @param  resourceId  The deposit's resource; only the ETH and BOLD
     ///                     gas legs are seeded.
     /// @param  poolAmount  The pool fee to split.
@@ -1379,8 +1358,6 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///                     off the gas legs, or the seed floors to zero).
     ///                     The free-pool remainder is
     ///                     `poolAmount - ammSeedAmount`.
-    /// @return newReserve  The matching reserve AFTER the seed (`0` when
-    ///                     nothing was seeded).
     /// @dev    `ammSeedRatioBps <= MAX_AMM_SEED_RATIO_BPS = 8000 < 10000`
     ///         (constructor-enforced), so `ammSeedAmount <= poolAmount` and
     ///         the free-pool remainder is non-negative.  The `poolAmount *
@@ -1393,33 +1370,37 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         out-of-gas-leg resource seeds NOTHING — defence-in-depth, as
     ///         `_registerDepositWithFee` is only ever reached with the ETH
     ///         or BOLD resource today.
+    /// @dev    GP.11.10 hook point: when AMM disaster-recovery lands, the
+    ///         `emergencyDisableAmm()` flag's early-out goes here (return 0
+    ///         before computing the seed), so a disabled AMM stops accruing
+    ///         reserves.  The split stays observable + bound because the
+    ///         actual `ammSeedAmount` (0 once disabled) is emitted in the
+    ///         canonical event regardless.
     function _seedAmmReserves(uint64 resourceId, uint256 poolAmount)
         private
-        returns (uint256 ammSeedAmount, uint256 newReserve)
+        returns (uint256 ammSeedAmount)
     {
         uint16 ratio = ammSeedRatioBps;
         // AMM disabled at construction: the entire poolAmount is free pool.
         if (ratio == 0) {
-            return (0, 0);
+            return 0;
         }
 
         ammSeedAmount = (poolAmount * uint256(ratio)) / 10_000;
         // Dust deposit floored to a zero seed: nothing to move.
         if (ammSeedAmount == 0) {
-            return (0, 0);
+            return 0;
         }
 
         if (resourceId == RESOURCE_ID_NATIVE_ETH) {
-            newReserve = ammReserveEth + ammSeedAmount;
-            ammReserveEth = newReserve;
+            ammReserveEth += ammSeedAmount;
         } else if (resourceId == RESOURCE_ID_BOLD) {
-            newReserve = ammReserveBold + ammSeedAmount;
-            ammReserveBold = newReserve;
+            ammReserveBold += ammSeedAmount;
         } else {
             // Out-of-scope resource: never seed an unrelated reserve.
             // Unreachable via the current entry points (ETH / BOLD only);
             // kept so a future fee-split resource cannot silently mis-seed.
-            return (0, 0);
+            return 0;
         }
     }
 

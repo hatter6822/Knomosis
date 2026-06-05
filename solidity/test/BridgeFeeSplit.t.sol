@@ -28,13 +28,16 @@ contract BridgeFeeSplitTest is Test {
     ///      another contract).
     uint64 private constant NATIVE_ETH = 0;
 
-    /// @dev Local copy of the contract event for `vm.expectEmit`.
+    /// @dev Local copy of the contract event for `vm.expectEmit`.  The
+    ///      GP.11.2 `ammSeedAmount` field is 0 throughout this suite (every
+    ///      bridge here is AMM-disabled, `ammSeedRatioBps = 0`).
     event DepositWithFeeInitiated(
         address indexed sender,
         uint64 indexed resourceId,
         address indexed token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint64 budgetGrant,
         uint64 depositorNonce,
         bytes32 receiptHash
@@ -111,6 +114,7 @@ contract BridgeFeeSplitTest is Test {
             FeeSplitMath.split(v, feeBps, bridge.weiPerBudgetUnitEth());
 
         uint64 nonce = bridge.depositNonce(user);
+        // AMM-disabled suite: ammSeedAmount is 0 (freePoolAmount == poolAmount).
         bytes32 expectedHash = FeeSplitMath.receiptHash(
             bridge.deploymentId(),
             user,
@@ -118,6 +122,7 @@ contract BridgeFeeSplitTest is Test {
             address(0),
             userAmount,
             poolAmount,
+            0,
             budgetGrant,
             nonce
         );
@@ -131,6 +136,7 @@ contract BridgeFeeSplitTest is Test {
             address(0),
             userAmount,
             poolAmount,
+            0,
             budgetGrant,
             nonce,
             expectedHash
@@ -698,6 +704,7 @@ contract BridgeFeeSplitTest is Test {
             address(0),
             refUser,
             refPool,
+            0, // ammSeedAmount (AMM-disabled suite)
             refBudget,
             0
         );
@@ -739,15 +746,18 @@ contract BridgeFeeSplitTest is Test {
         )
     {
         bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
+            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
         );
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
                 sender = address(uint160(uint256(logs[i].topics[1])));
                 resourceId = uint64(uint256(logs[i].topics[2]));
                 token = address(uint160(uint256(logs[i].topics[3])));
-                (userAmount, poolAmount, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint64, uint64, bytes32));
+                // GP.11.2: data is (userAmount, poolAmount, ammSeedAmount,
+                // budgetGrant, nonce, receiptHash); the AMM seed is 0 in this
+                // AMM-disabled suite and skipped here.
+                (userAmount, poolAmount,, budgetGrant, nonce, receiptHash) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
                 return
                     (userAmount, poolAmount, budgetGrant, nonce, receiptHash, sender, resourceId, token);
             }

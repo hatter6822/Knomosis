@@ -219,7 +219,7 @@ The L1 escrow for deposits and withdrawals.
 | GP.5.4 | `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)` — BOLD fee-split deposit |
 | GP.5.5 | `closeBoldCircuit()` / `openBoldCircuit()` / `closeBoldCircuitIfAnyLiquityBranchShutdown()` / `setBoldTvlCap(uint256)` — BOLD circuit breaker + per-BOLD TVL cap |
 | GP.11.1 | `ammReserveEth()` / `ammReserveBold()` / `ammSeedRatioBps()` — embedded-AMM L1 state scaffold (reserves + immutable seed ratio) |
-| GP.11.2 | deposit-side AMM seeding — `_registerDepositWithFee` routes `floor(poolAmount * ammSeedRatioBps / 10000)` of each fee-split deposit into the matching reserve and emits `AmmReserveSeeded` |
+| GP.11.2 | deposit-side AMM seeding — `_registerDepositWithFee` routes `floor(poolAmount * ammSeedRatioBps / 10000)` of each fee-split deposit into the matching reserve; the split is carried in `DepositWithFeeInitiated.ammSeedAmount` and bound in the `receiptHash` |
 
 **GP.5.1 fee-split deposit.**  `depositETHWithFee(chosenFeeBps)` lets
 the caller pick a fee in basis points within the deployment's
@@ -311,27 +311,33 @@ now seeds the AMM from each fee-split deposit's pool fee via the
 AMM is disabled, the seed floors to zero, or the resource is off the
 ETH/BOLD gas legs) is added to the matching reserve, leaving the implicit
 free-pool remainder `poolAmount - ammSeedAmount`.  Conservation is exact
-(`userAmount + poolAmount = deposit` and `poolAmount = ammSeedAmount +
-freePoolAmount`), and the seed is a reclassification of value already in
-`totalLockedValue`, so `ammReserveEth + ammReserveBold <= totalLockedValue`
-(a Foundry invariant).  Checked arithmetic throughout (`ammSeedRatioBps <=
-MAX_AMM_SEED_RATIO_BPS = 8000 < 10000` ⇒ the seed never exceeds the pool
-fee).  By design the seeding is **minimal-break**: the canonical
-`DepositWithFeeInitiated` event and its `receiptHash` are unchanged, so
-the cross-stack ingest decoders and every existing fee-split fixture stay
-byte-valid; the split is instead announced by a SEPARATE
-`AmmReserveSeeded(sender, resourceId, poolAmount, ammSeedAmount,
-newReserve, depositorNonce)` event, emitted only when a non-zero amount is
-seeded (so AMM-disabled / dust deposits keep the exact pre-GP.11.2
-single-event log shape).  Because the split is a pure function of the
-already-bound `poolAmount` and the immutable `ammSeedRatioBps`, the L2
-reconstructs it deterministically with no added trust surface.  Coverage:
-`test/AmmDepositSeeding.t.sol` (17 cases — per-leg seeding + the
-`AmmReserveSeeded` event, the disabled / zero-fee / dust-floor no-seed
-paths, leg independence, monotonic accumulation, the unchanged-canonical-
-event property, the reserve-subset-of-TVL bound, three conservation fuzz
-tests, and a 3-invariant stateful suite over 128 000 random ETH+BOLD
-deposits) plus the `ammSeedSplit` reference in `test/utils/FeeSplitMath.sol`.
+(`userAmount + ammSeedAmount + freePoolAmount = deposit`), and the seed is
+a reclassification of value already in `totalLockedValue`, so
+`ammReserveEth + ammReserveBold <= totalLockedValue` (a Foundry invariant).
+Checked arithmetic throughout (`ammSeedRatioBps <= MAX_AMM_SEED_RATIO_BPS =
+8000 < 10000` ⇒ the seed never exceeds the pool fee).  The split is carried
+in the canonical `DepositWithFeeInitiated` event — Workstream GP.11.2
+inserts a `uint256 ammSeedAmount` field after `poolAmount` — and BOUND in
+the `receiptHash` (`keccak256(abi.encode(deploymentId, sender, resourceId,
+token, userAmount, poolAmount, ammSeedAmount, budgetGrant, depositorNonce))`),
+so the L2 reconstructs `freePoolAmount = poolAmount - ammSeedAmount` from one
+event and a replay with a tampered split is rejected (the receiptHash is
+sensitive to `ammSeedAmount`).  This bumps the event's topic-0 hash and the
+receiptHash preimage (a v1.3 wire addition), propagated cross-stack in
+lockstep to the Rust ingestor (`knomosis-l1-ingest`: pinned topic +
+`decode_event` offsets + `amm_seed_amount` variant field) and the
+`deposit_fee_split{,_bold}.json` receiptHash corpora (whose 64 randomised
+entries now draw a random `ammSeedRatioBps ∈ [0, 8000]`, so the binding is
+cross-stack-verified with non-zero seeds).  Coverage:
+`test/AmmDepositSeeding.t.sol` (~18 cases — per-leg seeding via the event's
+`ammSeedAmount`, the disabled / zero-fee / dust `ammSeedAmount == 0` paths,
+`test_receiptHash_bindsAmmSeedAmount` (tamper-evidence), leg independence,
+monotonic accumulation, the reserve-subset-of-TVL bound,
+`test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
+(negative paths), `test_gas_seedingPath` (gas-regression pin), three
+conservation fuzz tests, and a 3-invariant stateful suite over 128 000
+random ETH+BOLD deposits at a moderate cap) plus the `ammSeedSplit`
+reference in `test/utils/FeeSplitMath.sol`.
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:

@@ -62,6 +62,7 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
         assertEq(vm.parseJsonUint(raw, ".header.countRandomised"), 64, "randomised");
         assertEq(vm.parseJsonUint(raw, ".header.maxFeeBpsCap"), 5000, "maxFeeBpsCap");
         assertEq(vm.parseJsonUint(raw, ".header.minWeiPerBudgetUnit"), 1, "minWeiPerBudgetUnit");
+        assertEq(vm.parseJsonUint(raw, ".header.maxAmmSeedRatioBps"), 8000, "maxAmmSeedRatioBps");
         assertEq(vm.parseJsonUint(raw, ".header.resourceIdBold"), uint256(RESOURCE_BOLD), "resourceIdBold");
         assertEq(vm.parseJsonAddress(raw, ".header.boldTokenAddress"), BOLD, "boldTokenAddress");
     }
@@ -86,7 +87,7 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
     function test_boldConstants_agree_with_contract() public {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
-        KnomosisBridge bridge = _deployBoldBridge(1);
+        KnomosisBridge bridge = _deployBoldBridge(1, 0);
         assertEq(
             vm.parseJsonAddress(raw, ".header.boldTokenAddress"),
             bridge.BOLD_TOKEN_ADDRESS(),
@@ -117,8 +118,10 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
             uint256 resourceId = vm.parseJsonUint(raw, string.concat(base, ".resourceId"));
             address token = vm.parseJsonAddress(raw, string.concat(base, ".token"));
 
+            uint256 seedRatio = vm.parseJsonUint(raw, string.concat(base, ".ammSeedRatioBps"));
             uint256 fixUser = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
             uint256 fixPool = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
+            uint256 fixSeed = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".ammSeedAmount")));
             uint256 fixBudget = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
 
             // BOLD-field invariants: every entry on this corpus is a BOLD
@@ -129,16 +132,21 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
 
             // Fixture-integrity bounds.
             assertLe(feeBps, 5000, "feeBps out of admissible range");
+            assertLe(seedRatio, 8000, "ammSeedRatioBps out of admissible range");
             assertLt(rate, 1 << 64, "rate out of uint64 range");
             assertLt(fixBudget, 1 << 64, "budgetGrant out of uint64 range");
 
             (uint256 u, uint256 p, uint64 g) = FeeSplitMath.split(msgValue, feeBps, rate);
+            (uint256 ammSeed, uint256 freePool) = FeeSplitMath.ammSeedSplit(p, seedRatio);
 
             assertEq(u, fixUser, "userAmount mismatch");
             assertEq(p, fixPool, "poolAmount mismatch");
+            assertEq(ammSeed, fixSeed, "ammSeedAmount mismatch (GP.11.2)");
             assertEq(uint256(g), fixBudget, "budgetGrant mismatch");
 
             assertEq(u + p, msgValue, "conservation: userAmount + poolAmount == msgValue");
+            assertEq(ammSeed + freePool, p, "conservation: ammSeed + freePool == poolAmount");
+            assertLe(ammSeed, p, "ammSeed never exceeds the pool fee");
             assertLe(uint256(g), uint256(FeeSplitMath.MAX_BUDGET_PER_DEPOSIT), "budget within cap");
         }
     }
@@ -188,6 +196,8 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
 
             uint256 userAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
             uint256 poolAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
+            uint256 ammSeedAmount =
+                uint256(vm.parseJsonBytes32(raw, string.concat(base, ".ammSeedAmount")));
             uint256 budgetGrant = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
 
             bytes32 expectedHash = vm.parseJsonBytes32(raw, string.concat(base, ".expectedHash"));
@@ -200,17 +210,18 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
             bytes32 did = keccak256(abi.encode(chainid, contractAddr, tag));
             assertEq(did, expectedDid, "deploymentId mismatch");
 
+            // GP.11.2: the receiptHash binds ammSeedAmount after poolAmount.
             bytes32 actual = FeeSplitMath.receiptHash(
-                did, sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce
+                did, sender, resourceId, token, userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce
             );
             assertEq(actual, expectedHash, "receiptHash mismatch");
         }
     }
 
     /// @notice Hash-independent receiptHash-layout pin.  Recompute the
-    ///         224-byte preimage tail via `abi.encode` (with the BOLD
-    ///         resourceId + token) and byte-match the Lean-emitted tail.
-    ///         Runs in EVERY binding mode.
+    ///         256-byte preimage tail via `abi.encode` (with the BOLD
+    ///         resourceId + token and the GP.11.2 ammSeedAmount) and
+    ///         byte-match the Lean-emitted tail.  Runs in EVERY binding mode.
     function test_perEntry_receiptTail_layout() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -222,12 +233,15 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
             address token = vm.parseJsonAddress(raw, string.concat(base, ".token"));
             uint256 userAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
             uint256 poolAmount = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
+            uint256 ammSeedAmount =
+                uint256(vm.parseJsonBytes32(raw, string.concat(base, ".ammSeedAmount")));
             uint256 budgetGrant = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
             uint256 nonce = vm.parseJsonUint(raw, string.concat(base, ".depositorNonce"));
 
             bytes memory leanTail = vm.parseJsonBytes(raw, string.concat(base, ".receiptTail"));
-            bytes memory solTail =
-                abi.encode(sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce);
+            bytes memory solTail = abi.encode(
+                sender, resourceId, token, userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce
+            );
             assertEq(solTail, leanTail, "BOLD receiptHash preimage-tail layout mismatch");
         }
     }
@@ -256,15 +270,18 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
             uint256 msgValue = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".msgValue")));
             uint256 feeBps = vm.parseJsonUint(raw, string.concat(base, ".chosenFeeBps"));
             uint256 rate = vm.parseJsonUint(raw, string.concat(base, ".weiPerBudgetUnit"));
+            uint256 seedRatio = vm.parseJsonUint(raw, string.concat(base, ".ammSeedRatioBps"));
             uint256 fixUser = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".userAmount")));
             uint256 fixPool = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".poolAmount")));
+            uint256 fixSeed = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".ammSeedAmount")));
             uint256 fixBudget = vm.parseJsonUint(raw, string.concat(base, ".budgetGrant"));
 
             assertLe(feeBps, 5000, "feeBps out of admissible range");
+            assertLe(seedRatio, 8000, "ammSeedRatioBps out of admissible range");
             assertLt(rate, 1 << 64, "rate out of uint64 range");
 
             // forge-lint: disable-next-line(unsafe-typecast)
-            KnomosisBridge bridge = _deployBoldBridge(uint64(rate));
+            KnomosisBridge bridge = _deployBoldBridge(uint64(rate), uint16(seedRatio));
 
             // Seed the depositor with BOLD and approve the fresh bridge.
             MockBold(BOLD).mint(depositor, msgValue);
@@ -276,18 +293,20 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
             // forge-lint: disable-next-line(unsafe-typecast)
             bridge.depositBoldWithFee(msgValue, uint16(feeBps));
 
-            (uint256 u, uint256 p, uint64 g, uint64 nonce, bytes32 rh) =
+            (uint256 u, uint256 p, uint256 ammSeed, uint64 g, uint64 nonce, bytes32 rh) =
                 _decodeDepositWithFee(vm.getRecordedLogs());
 
             assertEq(u, fixUser, "live userAmount != Lean fixture");
             assertEq(p, fixPool, "live poolAmount != Lean fixture");
+            assertEq(ammSeed, fixSeed, "live ammSeedAmount != Lean fixture (GP.11.2)");
             assertEq(uint256(g), fixBudget, "live budgetGrant != Lean fixture");
+            assertEq(bridge.ammReserveBold(), ammSeed, "live BOLD reserve != emitted ammSeedAmount");
 
             // Re-derive receiptHash with real keccak256 over the bridge's
             // own deploymentId + emitted fields (resourceId = BOLD, token =
-            // BOLD), and pin the recipe.
+            // BOLD, plus the GP.11.2 ammSeedAmount), and pin the recipe.
             bytes32 recomputed = FeeSplitMath.receiptHash(
-                bridge.deploymentId(), depositor, RESOURCE_BOLD, BOLD, u, p, g, nonce
+                bridge.deploymentId(), depositor, RESOURCE_BOLD, BOLD, u, p, ammSeed, g, nonce
             );
             assertEq(recomputed, rh, "live receiptHash recipe inconsistent");
         }
@@ -343,10 +362,13 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
     // ------------------------------------------------------------------
 
     /// @notice Deploy a standalone BOLD-enabled bridge with the given
-    ///         BOLD-leg rate; full `[0, 5000]` fee range, no TVL ceiling,
-    ///         migration unset.  Requires a BOLD mock etched at the pin
-    ///         (done in `setUp`).
-    function _deployBoldBridge(uint64 boldRate) internal returns (KnomosisBridge) {
+    ///         BOLD-leg rate and AMM seed ratio; full `[0, 5000]` fee range,
+    ///         no TVL ceiling, migration unset.  Requires a BOLD mock etched
+    ///         at the pin (done in `setUp`).
+    function _deployBoldBridge(uint64 boldRate, uint16 ammSeedRatioBps)
+        internal
+        returns (KnomosisBridge)
+    {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
         return new KnomosisBridge(
@@ -370,7 +392,7 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
                 boldCircuitBreaker: BOLD_BREAKER,
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
-                ammSeedRatioBps: 0,
+                ammSeedRatioBps: ammSeedRatioBps,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -382,16 +404,23 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
     function _decodeDepositWithFee(Vm.Log[] memory logs)
         internal
         pure
-        returns (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant, uint64 nonce, bytes32 receiptHash)
+        returns (
+            uint256 userAmount,
+            uint256 poolAmount,
+            uint256 ammSeedAmount,
+            uint64 budgetGrant,
+            uint64 nonce,
+            bytes32 receiptHash
+        )
     {
         bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
+            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
         );
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
-                (userAmount, poolAmount, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint64, uint64, bytes32));
-                return (userAmount, poolAmount, budgetGrant, nonce, receiptHash);
+                (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
+                return (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash);
             }
         }
         revert("DepositWithFeeInitiated not found");

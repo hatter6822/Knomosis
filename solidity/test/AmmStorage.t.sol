@@ -24,17 +24,20 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         criterion GP.11.1.c — "`ammSeedRatioBps = 0` preserves v1.2
 ///         behaviour" — is pinned by `test_deposit_doesNotSeedReserves_whenDisabled`
 ///         (a disabled deposit seeds nothing and matches the
-///         `FeeSplitMath` reference) and `test_depositSplit_unchanged_acrossRatios`
-///         (the EMITTED `DepositWithFeeInitiated` split is ratio-invariant —
-///         the seed ratio changes only the AMM reserve, never the canonical
-///         deposit event).
+///         `FeeSplitMath` reference) and `test_coreSplit_ratioInvariant_butAmmSeedScales`
+///         (the core `(userAmount, poolAmount, budgetGrant)` triple is
+///         ratio-invariant while the GP.11.2 `ammSeedAmount` field of the
+///         canonical `DepositWithFeeInitiated` event — and the receiptHash —
+///         scales with the ratio).
 ///
 ///         GP.11.2 has since landed deposit-side SEEDING: a non-zero seed
 ///         ratio now moves `floor(poolAmount * ratio / 10000)` of every
-///         fee-split deposit into the matching reserve.  The comprehensive
-///         seeding behaviour (conservation fuzz, both legs, the
-///         `AmmReserveSeeded` event, monotonic accumulation, the
-///         reserve-subset-of-TVL invariant) lives in `AmmDepositSeeding.t.sol`;
+///         fee-split deposit into the matching reserve, and the canonical
+///         `DepositWithFeeInitiated` event carries the `ammSeedAmount` (bound
+///         in the `receiptHash`).  The comprehensive seeding behaviour
+///         (conservation fuzz, both legs, the event's `ammSeedAmount` field,
+///         monotonic accumulation, the reserve-subset-of-TVL invariant) lives
+///         in `AmmDepositSeeding.t.sol`;
 ///         this file keeps only minimal positive seeding sanity checks
 ///         (`test_deposit_seedsReserves_whenRatioNonZero`,
 ///         `test_boldDeposit_seedsReserve`,
@@ -60,13 +63,16 @@ contract AmmStorageTest is Test {
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
 
-    /// @dev Local copy of the contract event for `vm.expectEmit`.
+    /// @dev Local copy of the contract event for `vm.expectEmit`.  GP.11.2
+    ///      added `ammSeedAmount` (0 on AMM-disabled deposits, the seeded
+    ///      portion when enabled).
     event DepositWithFeeInitiated(
         address indexed sender,
         uint64 indexed resourceId,
         address indexed token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint64 budgetGrant,
         uint64 depositorNonce,
         bytes32 receiptHash
@@ -190,6 +196,7 @@ contract AmmStorageTest is Test {
         address user,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint64 budgetGrant
     ) internal {
         uint64 nonce = bridge.depositNonce(user);
@@ -200,12 +207,21 @@ contract AmmStorageTest is Test {
             address(0),
             userAmount,
             poolAmount,
+            ammSeedAmount,
             budgetGrant,
             nonce
         );
         vm.expectEmit(true, true, true, true, address(bridge));
         emit DepositWithFeeInitiated(
-            user, NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant, nonce, expectedHash
+            user,
+            NATIVE_ETH,
+            address(0),
+            userAmount,
+            poolAmount,
+            ammSeedAmount,
+            budgetGrant,
+            nonce,
+            expectedHash
         );
     }
 
@@ -305,6 +321,7 @@ contract AmmStorageTest is Test {
             FeeSplitMath.split(value, feeBps, bridge.weiPerBudgetUnitEth());
 
         uint64 nonce = bridge.depositNonce(alice);
+        // AMM disabled: ammSeedAmount is 0, so freePoolAmount == poolAmount.
         bytes32 expectedHash = FeeSplitMath.receiptHash(
             bridge.deploymentId(),
             alice,
@@ -312,13 +329,14 @@ contract AmmStorageTest is Test {
             address(0),
             userAmount,
             poolAmount,
+            0,
             budgetGrant,
             nonce
         );
 
         vm.expectEmit(true, true, true, true, address(bridge));
         emit DepositWithFeeInitiated(
-            alice, NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant, nonce, expectedHash
+            alice, NATIVE_ETH, address(0), userAmount, poolAmount, 0, budgetGrant, nonce, expectedHash
         );
         vm.prank(alice);
         bridge.depositETHWithFee{value: value}(feeBps);
@@ -356,39 +374,41 @@ contract AmmStorageTest is Test {
         assertEq(bridge.ammReserveBold(), 0, "AMM BOLD reserve untouched by an ETH deposit");
     }
 
-    /// @notice The CANONICAL deposit event is ratio-invariant: two
-    ///         deployments differing ONLY in `ammSeedRatioBps` emit the
-    ///         IDENTICAL `DepositWithFeeInitiated` split
-    ///         (`userAmount` / `poolAmount` / `budgetGrant`) and credit the
-    ///         identical TVL.  The seed ratio changes only the AMM reserve
-    ///         (disabled stays 0; max-seed seeds `poolAmount * 80%`) — i.e.
-    ///         GP.11.2 seeding ADDS an `AmmReserveSeeded` log without ever
-    ///         altering the depositor-facing event.  This is the
-    ///         minimal-break property the cross-stack ingest decoders rely
-    ///         on (the `acceptance criterion` GP.11.1.c, sharpened for
-    ///         GP.11.2).
-    function test_depositSplit_unchanged_acrossRatios() public {
+    /// @notice The CORE fee split is ratio-invariant, but the GP.11.2
+    ///         `ammSeedAmount` scales with the ratio.  Two deployments
+    ///         differing ONLY in `ammSeedRatioBps` compute the IDENTICAL
+    ///         `(userAmount, poolAmount, budgetGrant)` triple and credit the
+    ///         IDENTICAL TVL — the AMM seed is carved OUT of the pool fee,
+    ///         never added to it.  The only emitted field that changes is
+    ///         `ammSeedAmount` (0 when disabled; `floor(poolAmount * ratio /
+    ///         10000)` when enabled), which is bound in the `receiptHash`.
+    ///         This pins that the seed ratio RECLASSIFIES value rather than
+    ///         minting it, and that the canonical event carries the actual
+    ///         split (the GP.11.2 plan-literal wire format).
+    function test_coreSplit_ratioInvariant_butAmmSeedScales() public {
         KnomosisBridge disabled = _deploy(0);
         KnomosisBridge maxSeed = _deploy(8000);
 
         uint256 value = 2 ether;
         uint16 feeBps = 1500;
 
-        // The split depends only on (value, feeBps, rate) — identical
-        // across the two deployments — so both MUST emit the same
-        // (userAmount, poolAmount, budgetGrant).  Asserting the emitted
-        // split on EACH deposit (not merely the resulting TVL) pins that
-        // the seed ratio changes nothing the depositor observes; only the
-        // per-deployment receiptHash differs (its deploymentId binds the
-        // contract address), which `_expectSplitEmit` recomputes per bridge.
+        // The core split depends only on (value, feeBps, rate) — identical
+        // across the two deployments.  `_expectSplitEmit` pins the full
+        // emitted event per bridge (the per-deployment receiptHash differs
+        // because its deploymentId binds the contract address, AND the
+        // ammSeedAmount differs by ratio).
         (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant) =
             FeeSplitMath.split(value, feeBps, disabled.weiPerBudgetUnitEth());
+        (uint256 maxSeedAmount,) = FeeSplitMath.ammSeedSplit(poolAmount, 8000);
+        assertGt(maxSeedAmount, 0, "non-trivial seed at the max ratio");
 
-        _expectSplitEmit(disabled, alice, userAmount, poolAmount, budgetGrant);
+        // Disabled bridge: ammSeedAmount == 0 in the emitted event.
+        _expectSplitEmit(disabled, alice, userAmount, poolAmount, 0, budgetGrant);
         vm.prank(alice);
         disabled.depositETHWithFee{value: value}(feeBps);
 
-        _expectSplitEmit(maxSeed, alice, userAmount, poolAmount, budgetGrant);
+        // Max-seed bridge: SAME core split, but ammSeedAmount == maxSeedAmount.
+        _expectSplitEmit(maxSeed, alice, userAmount, poolAmount, maxSeedAmount, budgetGrant);
         vm.prank(alice);
         maxSeed.depositETHWithFee{value: value}(feeBps);
 
@@ -396,13 +416,8 @@ contract AmmStorageTest is Test {
             disabled.totalLockedValue(), maxSeed.totalLockedValue(), "identical TVL across ratios"
         );
         assertEq(disabled.totalLockedValue(), value, "TVL == full deposit on both");
-        // The reserves now DIFFER: the seed ratio is the only observable
-        // that changes — disabled never seeds; max-seed seeds 80% of the
-        // pool fee.
-        (uint256 maxSeedAmount,) = FeeSplitMath.ammSeedSplit(poolAmount, 8000);
         assertEq(disabled.ammReserveEth(), 0, "disabled never seeds the reserve");
         assertEq(maxSeed.ammReserveEth(), maxSeedAmount, "max-seed seeds 80% of the pool fee");
-        assertGt(maxSeedAmount, 0, "the max-seed reserve genuinely diverged from disabled");
         assertEq(
             disabled.depositNonce(alice), maxSeed.depositNonce(alice), "identical nonce advance"
         );

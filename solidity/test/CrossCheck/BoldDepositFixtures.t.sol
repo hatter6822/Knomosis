@@ -510,12 +510,15 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
         returns (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant)
     {
         bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
+            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
         );
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
-                (userAmount, poolAmount, budgetGrant,,) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint64, uint64, bytes32));
+                // GP.11.2: data is (userAmount, poolAmount, ammSeedAmount,
+                // budgetGrant, nonce, receiptHash); this corpus is
+                // AMM-disabled (ammSeedAmount == 0), so the seed is skipped.
+                (userAmount, poolAmount,, budgetGrant,,) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
                 return (userAmount, poolAmount, budgetGrant);
             }
         }

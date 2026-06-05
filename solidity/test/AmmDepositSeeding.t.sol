@@ -16,18 +16,15 @@ import {MockBold} from "test/utils/MockBold.sol";
 ///         sequencer-claimable free-pool remainder, growing the matching
 ///         reserve by the seed.
 ///
-/// @dev    Design (vs the plan sketch): the seeding is MINIMAL-BREAK.  It
-///         does NOT change the canonical `DepositWithFeeInitiated` event
-///         or its `receiptHash` (so the cross-stack ingest decoders and
-///         all existing fee-split fixtures stay byte-valid); instead it
-///         adds a SEPARATE `AmmReserveSeeded` event for observability,
-///         emitted only when a non-zero amount is seeded.  The split is a
-///         pure function of the bound `poolAmount` and the immutable
-///         `ammSeedRatioBps`, so the L2 reconstructs it deterministically
-///         with no new trust surface (no replay-with-modified-split is
-///         possible — `poolAmount` is the only free variable and it is
-///         bound by `receiptHash`).  `test_split_doesNotAlterDepositEvent`
-///         pins the unchanged-canonical-event property.
+/// @dev    Wire format (plan-literal): the split is carried in the
+///         CANONICAL `DepositWithFeeInitiated` event via the GP.11.2
+///         `ammSeedAmount` field, and BOUND in the `receiptHash`
+///         (`keccak256(abi.encode(deploymentId, sender, resourceId, token,
+///         userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce))`).
+///         So the L2 reconstructs `freePoolAmount = poolAmount -
+///         ammSeedAmount` directly from one event, and a replay with a
+///         tampered split is rejected (the receiptHash is sensitive to
+///         `ammSeedAmount`, pinned by `test_receiptHash_bindsAmmSeedAmount`).
 ///
 ///         The conservation acceptance criterion (GP.11.2.c —
 ///         `ammSeedAmount + freePoolAmount == poolAmount` for 1000+ fuzz
@@ -50,29 +47,17 @@ contract AmmDepositSeedingTest is Test {
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
 
-    /// @dev topic0 of `AmmReserveSeeded(...)`, used to assert the seed
-    ///      event's presence / absence in recorded logs.
-    bytes32 private constant AMM_SEEDED_TOPIC =
-        keccak256("AmmReserveSeeded(address,uint64,uint256,uint256,uint256,uint64)");
-
-    // Local copies of the contract events for `vm.expectEmit`.
+    /// @dev Local copy of the canonical contract event for `vm.expectEmit`.
     event DepositWithFeeInitiated(
         address indexed sender,
         uint64 indexed resourceId,
         address indexed token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint64 budgetGrant,
         uint64 depositorNonce,
         bytes32 receiptHash
-    );
-    event AmmReserveSeeded(
-        address indexed sender,
-        uint64 indexed resourceId,
-        uint256 poolAmount,
-        uint256 ammSeedAmount,
-        uint256 newReserve,
-        uint64 depositorNonce
     );
 
     function setUp() public {
@@ -85,9 +70,18 @@ contract AmmDepositSeedingTest is Test {
     // ------------------------------------------------------------------
 
     /// @notice Deploy a standalone, BOLD-disabled bridge with a chosen
-    ///         `ammSeedRatioBps` and a permissive fee-split config so
-    ///         `depositETHWithFee` works on a fresh deployment.
+    ///         `ammSeedRatioBps` and a permissive fee-split config (no TVL
+    ///         ceiling) so `depositETHWithFee` works on a fresh deployment.
     function _deploy(uint16 ammSeedRatioBps) internal returns (KnomosisBridge) {
+        return _deployWithCap(ammSeedRatioBps, type(uint256).max);
+    }
+
+    /// @notice As `_deploy`, but with a caller-chosen global `tvlCap` so
+    ///         the cap-revert path can be exercised.
+    function _deployWithCap(uint16 ammSeedRatioBps, uint256 tvlCap)
+        internal
+        returns (KnomosisBridge)
+    {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
         return new KnomosisBridge(
@@ -101,7 +95,7 @@ contract AmmDepositSeedingTest is Test {
                 maxRedemptionWindowBlocks: 50,
                 maxAttestationStaleBlocks: 200,
                 cooldownBlocks: 50,
-                tvlCap: type(uint256).max,
+                tvlCap: tvlCap,
                 minFeeBps: 0,
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: 1_000_000_000,
@@ -163,26 +157,43 @@ contract AmmDepositSeedingTest is Test {
         MockBold(BOLD).approve(address(bridge), amount);
     }
 
-    /// @notice True iff any recorded log is an `AmmReserveSeeded`.
-    function _sawSeedEvent(Vm.Log[] memory logs) internal pure returns (bool) {
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == AMM_SEEDED_TOPIC) {
-                return true;
+    /// @notice Locate + decode the single canonical `DepositWithFeeInitiated`
+    ///         entry in a recorded-log array.  Reverts if absent.
+    function _decodeDepositWithFee(Vm.Log[] memory logs)
+        internal
+        pure
+        returns (
+            uint256 userAmount,
+            uint256 poolAmount,
+            uint256 ammSeedAmount,
+            uint64 budgetGrant,
+            uint64 nonce,
+            bytes32 receiptHash
+        )
+    {
+        bytes32 sig = keccak256(
+            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
+        );
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
+                (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
+                return (userAmount, poolAmount, ammSeedAmount, budgetGrant, nonce, receiptHash);
             }
         }
-        return false;
+        revert("DepositWithFeeInitiated not found");
     }
 
     // ------------------------------------------------------------------
-    // Core ETH-leg seeding + the AmmReserveSeeded event
+    // Core ETH-leg seeding + the canonical event's ammSeedAmount field
     // ------------------------------------------------------------------
 
     /// @notice A fee-split ETH deposit at a 50% seed ratio seeds exactly
-    ///         `floor(poolAmount / 2)` into `ammReserveEth`, emits BOTH the
-    ///         canonical `DepositWithFeeInitiated` and the supplementary
-    ///         `AmmReserveSeeded` (with the matching nonce + resulting
-    ///         reserve), and still credits the FULL deposit to TVL.
-    function test_ethDeposit_seedsReserve_andEmits() public {
+    ///         `floor(poolAmount / 2)` into `ammReserveEth` and emits the
+    ///         canonical `DepositWithFeeInitiated` carrying that
+    ///         `ammSeedAmount` (with the bound `receiptHash`); the FULL
+    ///         deposit is still credited to TVL.
+    function test_ethDeposit_seedsReserve_andEventCarriesSplit() public {
         KnomosisBridge bridge = _deploy(5000);
 
         uint256 value = 1 ether;
@@ -194,15 +205,21 @@ contract AmmDepositSeedingTest is Test {
 
         uint64 nonce = bridge.depositNonce(alice);
         bytes32 expectedHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(), alice, NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant, nonce
+            bridge.deploymentId(),
+            alice,
+            NATIVE_ETH,
+            address(0),
+            userAmount,
+            poolAmount,
+            ammSeed,
+            budgetGrant,
+            nonce
         );
 
         vm.expectEmit(true, true, true, true, address(bridge));
         emit DepositWithFeeInitiated(
-            alice, NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant, nonce, expectedHash
+            alice, NATIVE_ETH, address(0), userAmount, poolAmount, ammSeed, budgetGrant, nonce, expectedHash
         );
-        vm.expectEmit(true, true, true, true, address(bridge));
-        emit AmmReserveSeeded(alice, NATIVE_ETH, poolAmount, ammSeed, ammSeed, nonce);
 
         vm.prank(alice);
         bridge.depositETHWithFee{value: value}(feeBps);
@@ -215,7 +232,8 @@ contract AmmDepositSeedingTest is Test {
     }
 
     /// @notice At the maximum seed ratio (8000 bps = 80%) the seed is
-    ///         exactly `floor(poolAmount * 8000 / 10000)`.
+    ///         exactly `floor(poolAmount * 8000 / 10000)`, and the event +
+    ///         reserve agree.
     function test_ethDeposit_seedsReserve_atMaxRatio() public {
         KnomosisBridge bridge = _deploy(8000);
 
@@ -224,71 +242,109 @@ contract AmmDepositSeedingTest is Test {
         (, uint256 poolAmount,) = FeeSplitMath.split(value, feeBps, bridge.weiPerBudgetUnitEth());
         (uint256 ammSeed,) = FeeSplitMath.ammSeedSplit(poolAmount, 8000);
 
+        vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: value}(feeBps);
+        (, uint256 p, uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
         assertEq(bridge.ammReserveEth(), ammSeed, "seed == floor(poolAmount * 80%)");
         assertEq(bridge.ammReserveEth(), (poolAmount * 8000) / 10_000, "seed matches direct recompute");
-        assertLe(bridge.ammReserveEth(), poolAmount, "seed never exceeds the pool fee");
+        assertEq(eventSeed, ammSeed, "event ammSeedAmount == reserve delta");
+        assertLe(eventSeed, p, "seed never exceeds the pool fee");
     }
 
-    /// @notice An AMM-disabled deployment (ratio 0) seeds nothing and emits
-    ///         NO `AmmReserveSeeded` — the deposit log shape is exactly the
-    ///         pre-GP.11.2 single event.
-    function test_ethDeposit_noSeed_whenDisabled() public {
+    /// @notice An AMM-disabled deployment (ratio 0) seeds nothing and the
+    ///         canonical event carries `ammSeedAmount == 0`.
+    function test_ethDeposit_eventAmmSeedZero_whenDisabled() public {
         KnomosisBridge bridge = _deploy(0);
 
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: 2 ether}(1000);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (, , uint256 ammSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
-        assertFalse(_sawSeedEvent(logs), "no AmmReserveSeeded when AMM disabled");
+        assertEq(ammSeed, 0, "event ammSeedAmount == 0 when AMM disabled");
         assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched (disabled)");
         assertEq(bridge.totalLockedValue(), 2 ether, "full deposit credited to TVL");
     }
 
     /// @notice A zero-fee deposit (feeBps 0 -> poolAmount 0) seeds nothing
-    ///         even with the AMM enabled — there is no pool fee to split.
-    function test_ethDeposit_noSeed_whenPoolFeeZero() public {
+    ///         and emits `ammSeedAmount == 0`, even with the AMM enabled.
+    function test_ethDeposit_eventAmmSeedZero_whenPoolFeeZero() public {
         KnomosisBridge bridge = _deploy(8000);
 
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: 3 ether}(0); // 0% fee
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (uint256 u, uint256 p, uint256 ammSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
-        assertFalse(_sawSeedEvent(logs), "no seed event when poolAmount == 0");
-        assertEq(bridge.ammReserveEth(), 0, "no seed when there is no pool fee");
-        assertEq(bridge.totalLockedValue(), 3 ether, "whole deposit is the user's");
+        assertEq(p, 0, "no pool fee");
+        assertEq(ammSeed, 0, "no seed when there is no pool fee");
+        assertEq(u, 3 ether, "whole deposit is the user's");
+        assertEq(bridge.ammReserveEth(), 0, "reserve untouched");
     }
 
     /// @notice A dust pool fee whose seed floors to zero
-    ///         (`poolAmount * ratio < 10000`) seeds nothing and emits no
-    ///         seed event — the floor is the boundary, not a silent 1-wei
-    ///         seed.
-    function test_ethDeposit_dustSeedFloorsToZero() public {
+    ///         (`poolAmount * ratio < 10000`) seeds nothing and emits
+    ///         `ammSeedAmount == 0` — the floor is the boundary.
+    function test_ethDeposit_eventAmmSeedZero_whenDustFloors() public {
         KnomosisBridge bridge = _deploy(1000); // 10% seed ratio
 
-        // value 2 wei, feeBps 5000 -> poolAmount = floor(2 * 5000 / 10000) = 1.
-        // seed = floor(1 * 1000 / 10000) = 0.
+        // value 2 wei, feeBps 5000 -> poolAmount = 1; seed = floor(1 * 1000/10000) = 0.
         vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: 2}(5000);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (, uint256 p, uint256 ammSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
-        assertFalse(_sawSeedEvent(logs), "no seed event when the seed floors to zero");
-        assertEq(bridge.ammReserveEth(), 0, "dust seed floors to zero, reserve untouched");
-        assertEq(bridge.totalLockedValue(), 2, "deposit still credited");
+        assertEq(p, 1, "dust pool fee");
+        assertEq(ammSeed, 0, "dust seed floors to zero in the event");
+        assertEq(bridge.ammReserveEth(), 0, "reserve untouched on a floored seed");
+    }
+
+    // ------------------------------------------------------------------
+    // The receiptHash genuinely binds ammSeedAmount (tamper resistance)
+    // ------------------------------------------------------------------
+
+    /// @notice The emitted `receiptHash` equals the reference recompute
+    ///         INCLUDING `ammSeedAmount`, and a recompute with a DIFFERENT
+    ///         `ammSeedAmount` (here 0) produces a DIFFERENT hash — so an
+    ///         off-chain replay with a tampered free-pool / AMM split is
+    ///         rejected.  This is the plan-literal tamper-evidence property.
+    function test_receiptHash_bindsAmmSeedAmount() public {
+        KnomosisBridge bridge = _deploy(5000);
+
+        uint256 value = 4 ether;
+        uint16 feeBps = 2000;
+
+        vm.recordLogs();
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: value}(feeBps);
+        (uint256 u, uint256 p, uint256 ammSeed, uint64 g, uint64 nonce, bytes32 rh) =
+            _decodeDepositWithFee(vm.getRecordedLogs());
+        assertGt(ammSeed, 0, "non-trivial seed so the tamper test is meaningful");
+
+        // The contract's real-keccak256 receiptHash matches the reference
+        // recompute over the SAME ammSeedAmount.
+        bytes32 honest = FeeSplitMath.receiptHash(
+            bridge.deploymentId(), alice, NATIVE_ETH, address(0), u, p, ammSeed, g, nonce
+        );
+        assertEq(rh, honest, "receiptHash == reference over the real split");
+
+        // A recompute with a tampered ammSeedAmount (0) differs — proving
+        // the hash genuinely covers the split, not just (poolAmount,...).
+        bytes32 tampered = FeeSplitMath.receiptHash(
+            bridge.deploymentId(), alice, NATIVE_ETH, address(0), u, p, 0, g, nonce
+        );
+        assertTrue(rh != tampered, "receiptHash is sensitive to ammSeedAmount (split is bound)");
     }
 
     // ------------------------------------------------------------------
     // BOLD-leg seeding (and ETH/BOLD leg independence)
     // ------------------------------------------------------------------
 
-    /// @notice A BOLD fee-split deposit seeds the BOLD reserve only; the
-    ///         ETH reserve stays untouched.  The seed math is identical to
-    ///         the ETH leg.
+    /// @notice A BOLD fee-split deposit seeds the BOLD reserve only and the
+    ///         canonical event carries the BOLD `ammSeedAmount`; the ETH
+    ///         reserve stays untouched.
     function test_boldDeposit_seedsBoldReserveOnly() public {
         _etchBold();
         KnomosisBridge bridge = _deployBoldEnabled(5000);
@@ -301,34 +357,29 @@ contract AmmDepositSeedingTest is Test {
         (uint256 ammSeed,) = FeeSplitMath.ammSeedSplit(poolAmount, 5000);
         assertGt(ammSeed, 0, "non-trivial BOLD seed expected");
 
-        uint64 nonce = bridge.depositNonce(alice);
-        vm.expectEmit(true, true, true, true, address(bridge));
-        emit AmmReserveSeeded(alice, BOLD_RID, poolAmount, ammSeed, ammSeed, nonce);
-
+        vm.recordLogs();
         vm.prank(alice);
         bridge.depositBoldWithFee(amount, feeBps);
+        (, , uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
+        assertEq(eventSeed, ammSeed, "event ammSeedAmount == BOLD seed");
         assertEq(bridge.ammReserveBold(), ammSeed, "BOLD reserve seeded");
         assertEq(bridge.ammReserveEth(), 0, "ETH reserve untouched by a BOLD deposit");
         assertEq(bridge.totalLockedValue(), amount, "global TVL credits full deposit");
         assertEq(bridge.boldTotalLockedValue(), amount, "per-BOLD TVL credits full deposit");
     }
 
-    /// @notice The two legs accumulate independently: an ETH deposit then a
-    ///         BOLD deposit on the same bridge each seed only their own
-    ///         reserve.
+    /// @notice The two legs accumulate independently.
     function test_legs_seededIndependently() public {
         _etchBold();
         KnomosisBridge bridge = _deployBoldEnabled(4000);
 
-        // ETH leg.
         uint256 ethValue = 2 ether;
         (, uint256 ethPool,) = FeeSplitMath.split(ethValue, 1000, bridge.weiPerBudgetUnitEth());
         (uint256 ethSeed,) = FeeSplitMath.ammSeedSplit(ethPool, 4000);
         vm.prank(alice);
         bridge.depositETHWithFee{value: ethValue}(1000);
 
-        // BOLD leg.
         uint256 boldAmt = 6 ether;
         _mintApprove(bridge, alice, boldAmt);
         (, uint256 boldPool,) = FeeSplitMath.split(boldAmt, 2000, bridge.weiPerBudgetUnitBold());
@@ -345,9 +396,7 @@ contract AmmDepositSeedingTest is Test {
     // Monotonic accumulation across deposits
     // ------------------------------------------------------------------
 
-    /// @notice Reserves grow monotonically and additively across several
-    ///         deposits — each deposit's seed adds to the running reserve;
-    ///         deposit-side flow never shrinks a reserve.
+    /// @notice Reserves grow monotonically and additively across deposits.
     function test_reserve_accumulatesMonotonically() public {
         KnomosisBridge bridge = _deploy(6000);
 
@@ -369,103 +418,12 @@ contract AmmDepositSeedingTest is Test {
         assertGt(bridge.ammReserveEth(), 0, "reserve accumulated a positive balance");
     }
 
-    /// @notice The `newReserve` field of `AmmReserveSeeded` reports the
-    ///         POST-seed reserve, so the second deposit's event carries the
-    ///         accumulated total (not just its own increment).
-    function test_seedEvent_reportsAccumulatedReserve() public {
-        KnomosisBridge bridge = _deploy(5000);
-
-        // First deposit seeds s1.
-        (, uint256 pool1,) = FeeSplitMath.split(1 ether, 2000, bridge.weiPerBudgetUnitEth());
-        (uint256 seed1,) = FeeSplitMath.ammSeedSplit(pool1, 5000);
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 1 ether}(2000);
-        assertEq(bridge.ammReserveEth(), seed1, "first seed landed");
-
-        // Second deposit: AmmReserveSeeded.newReserve must be seed1 + seed2.
-        (, uint256 pool2,) = FeeSplitMath.split(4 ether, 2000, bridge.weiPerBudgetUnitEth());
-        (uint256 seed2,) = FeeSplitMath.ammSeedSplit(pool2, 5000);
-        uint64 nonce = bridge.depositNonce(alice);
-
-        vm.expectEmit(true, true, true, true, address(bridge));
-        emit AmmReserveSeeded(alice, NATIVE_ETH, pool2, seed2, seed1 + seed2, nonce);
-        vm.prank(alice);
-        bridge.depositETHWithFee{value: 4 ether}(2000);
-
-        assertEq(bridge.ammReserveEth(), seed1 + seed2, "reserve is the cumulative total");
-    }
-
-    // ------------------------------------------------------------------
-    // Minimal-break invariant: the canonical deposit event is unchanged
-    // ------------------------------------------------------------------
-
-    /// @notice The depositor-facing `DepositWithFeeInitiated` event and its
-    ///         `receiptHash` are BYTE-IDENTICAL whether the AMM is enabled
-    ///         or disabled (for the same deposit at the same address): the
-    ///         seeding only ADDS an `AmmReserveSeeded` log, never altering
-    ///         the canonical deposit event the cross-stack ingest decoders
-    ///         read.  This is the property that keeps the Rust ingestor and
-    ///         every existing fee-split fixture valid under GP.11.2.
-    function test_split_doesNotAlterDepositEvent() public {
-        // Two bridges that differ ONLY in the seed ratio.  Deploying both
-        // from THIS contract at the same nonce-relative point would give
-        // different addresses (and thus different deploymentIds); to isolate
-        // the event payload we recompute the expected receiptHash per bridge
-        // from its own deploymentId, exactly as a real consumer would.
-        KnomosisBridge disabled = _deploy(0);
-        KnomosisBridge enabled = _deploy(8000);
-
-        uint256 value = 2 ether;
-        uint16 feeBps = 1500;
-        (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant) =
-            FeeSplitMath.split(value, feeBps, disabled.weiPerBudgetUnitEth());
-
-        // Disabled bridge: exactly one DepositWithFeeInitiated, no seed.
-        _expectDepositEvent(disabled, alice, userAmount, poolAmount, budgetGrant);
-        vm.prank(alice);
-        disabled.depositETHWithFee{value: value}(feeBps);
-
-        // Enabled bridge: the SAME DepositWithFeeInitiated payload (the
-        // userAmount / poolAmount / budgetGrant are identical; only the
-        // deploymentId-bound receiptHash differs per address, which
-        // `_expectDepositEvent` recomputes).
-        _expectDepositEvent(enabled, bob, userAmount, poolAmount, budgetGrant);
-        vm.prank(bob);
-        enabled.depositETHWithFee{value: value}(feeBps);
-
-        // The canonical poolAmount is identical; the enabled bridge merely
-        // ALSO seeded its reserve, which the disabled one did not.
-        assertEq(enabled.ammReserveEth(), (poolAmount * 8000) / 10_000, "enabled seeded");
-        assertEq(disabled.ammReserveEth(), 0, "disabled did not seed");
-    }
-
-    /// @dev `vm.expectEmit` the canonical deposit event for `user` on
-    ///      `bridge`, recomputing the per-bridge receiptHash.
-    function _expectDepositEvent(
-        KnomosisBridge bridge,
-        address user,
-        uint256 userAmount,
-        uint256 poolAmount,
-        uint64 budgetGrant
-    ) internal {
-        uint64 nonce = bridge.depositNonce(user);
-        bytes32 expectedHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(), user, NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant, nonce
-        );
-        vm.expectEmit(true, true, true, true, address(bridge));
-        emit DepositWithFeeInitiated(
-            user, NATIVE_ETH, address(0), userAmount, poolAmount, budgetGrant, nonce, expectedHash
-        );
-    }
-
     // ------------------------------------------------------------------
     // Reserves are a subset of TVL (deposit-only surface)
     // ------------------------------------------------------------------
 
     /// @notice Across deposits on both legs, the seeded reserves sum to no
-    ///         more than the global TVL: each seed is a subset of a
-    ///         `poolAmount`, a subset of an `amount`, and the legs partition
-    ///         `totalLockedValue`.
+    ///         more than the global TVL.
     function test_reserves_areSubsetOfTvl() public {
         _etchBold();
         KnomosisBridge bridge = _deployBoldEnabled(8000);
@@ -486,13 +444,79 @@ contract AmmDepositSeedingTest is Test {
     }
 
     // ------------------------------------------------------------------
+    // Negative paths: a reverted deposit and the non-fee-split path seed
+    // nothing (the seed only happens on a successful fee-split deposit).
+    // ------------------------------------------------------------------
+
+    /// @notice A deposit that exceeds the TVL cap reverts, and the AMM
+    ///         reserve is unchanged (the seed is rolled back with the rest
+    ///         of the transaction — it never partially seeds).
+    function test_cappedDeposit_revertsAndDoesNotSeed() public {
+        KnomosisBridge bridge = _deployWithCap(8000, 1 ether);
+
+        // A deposit at the cap succeeds and seeds.
+        (, uint256 pool1,) = FeeSplitMath.split(1 ether, 5000, bridge.weiPerBudgetUnitEth());
+        (uint256 seed1,) = FeeSplitMath.ammSeedSplit(pool1, 8000);
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: 1 ether}(5000);
+        assertEq(bridge.ammReserveEth(), seed1, "first (at-cap) deposit seeded");
+
+        // The next deposit pushes TVL over the cap: it reverts, and the
+        // reserve does NOT grow.
+        uint256 reserveBefore = bridge.ammReserveEth();
+        vm.expectRevert(KnomosisBridge.TvlCapReached.selector);
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: 1 wei}(5000);
+        assertEq(bridge.ammReserveEth(), reserveBefore, "capped deposit seeds nothing");
+    }
+
+    /// @notice The non-fee-split entry point `depositETH()` never seeds the
+    ///         AMM (only `depositETHWithFee` / `depositBoldWithFee` route
+    ///         through `_registerDepositWithFee`).  Even on an AMM-enabled
+    ///         bridge, a plain `depositETH` leaves both reserves at 0.
+    function test_plainDepositETH_doesNotSeed() public {
+        KnomosisBridge bridge = _deploy(8000);
+
+        vm.prank(alice);
+        bridge.depositETH{value: 5 ether}();
+
+        assertEq(bridge.totalLockedValue(), 5 ether, "plain deposit credited to TVL");
+        assertEq(bridge.ammReserveEth(), 0, "plain depositETH never seeds the AMM");
+        assertEq(bridge.ammReserveBold(), 0, "plain depositETH never seeds the AMM");
+    }
+
+    // ------------------------------------------------------------------
+    // Gas-regression smoke test (the seeding path)
+    // ------------------------------------------------------------------
+
+    /// @notice The seeding (AMM-enabled) `depositETHWithFee` path stays
+    ///         within a generous gas envelope — a lightweight regression
+    ///         guard mirroring `BridgeFeeSplit.t.sol::test_gas_depositETHWithFee`
+    ///         (which covers the AMM-disabled path).  The first seeded
+    ///         deposit pays a cold reserve SSTORE; subsequent ones are warm.
+    function test_gas_seedingPath() public {
+        KnomosisBridge bridge = _deploy(5000);
+
+        // Warm the reserve slot with a first deposit (cold SSTORE excluded
+        // from the measured call below, so the bound reflects steady state).
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: 1 ether}(1000);
+
+        vm.prank(alice);
+        uint256 gasBefore = gasleft();
+        bridge.depositETHWithFee{value: 1 ether}(1000);
+        uint256 used = gasBefore - gasleft();
+        assertLt(used, 150_000, "seeding depositETHWithFee gas regression (warm)");
+    }
+
+    // ------------------------------------------------------------------
     // Fuzz — conservation (the GP.11.2.c acceptance criterion)
     // ------------------------------------------------------------------
 
     /// @notice For an arbitrary ETH deposit at a fixed enabled ratio, the
     ///         seed equals the reference recompute, never exceeds the pool
-    ///         fee, the free-pool remainder makes conservation hold, and the
-    ///         full deposit is escrowed.
+    ///         fee, the free-pool remainder makes conservation hold, the
+    ///         event carries the seed, and the full deposit is escrowed.
     function testFuzz_ethSeed_conservation(uint256 value, uint16 feeBps) public {
         KnomosisBridge bridge = _deploy(5000);
         value = bound(value, 1, uint256(type(uint128).max));
@@ -502,10 +526,13 @@ contract AmmDepositSeedingTest is Test {
         (, uint256 poolAmount,) = FeeSplitMath.split(value, feeBps, bridge.weiPerBudgetUnitEth());
         (uint256 ammSeed, uint256 freePool) = FeeSplitMath.ammSeedSplit(poolAmount, 5000);
 
+        vm.recordLogs();
         vm.prank(alice);
         bridge.depositETHWithFee{value: value}(feeBps);
+        (, , uint256 eventSeed,,,) = _decodeDepositWithFee(vm.getRecordedLogs());
 
         assertEq(bridge.ammReserveEth(), ammSeed, "reserve == reference seed");
+        assertEq(eventSeed, ammSeed, "event ammSeedAmount == reference seed");
         assertLe(ammSeed, poolAmount, "seed never exceeds pool fee");
         assertEq(ammSeed + freePool, poolAmount, "conservation: seed + freePool == poolAmount");
         assertEq(bridge.totalLockedValue(), value, "full deposit credited to TVL");
@@ -593,7 +620,7 @@ contract AmmSeedingHandler {
         try bridge.depositETHWithFee{value: value}(feeBps) {
             sumSeededEth += ammSeed;
         } catch {
-            // ZeroDeposit (value 0) and friends: nothing seeded.
+            // ZeroDeposit (value 0), TvlCapReached, etc.: nothing seeded.
         }
     }
 
@@ -621,8 +648,9 @@ contract AmmSeedingHandler {
 
 /// @title AmmDepositSeedingInvariantTest
 /// @notice Stateful Foundry-invariant runner: across ARBITRARY sequences
-///         of ETH and BOLD deposits, the live reserves equal the
-///         cumulative seeds, and the reserves are always a subset of TVL.
+///         of ETH and BOLD deposits (some of which revert at the TVL cap),
+///         the live reserves equal the cumulative seeds of the ADMITTED
+///         deposits, and the reserves are always a subset of TVL.
 contract AmmDepositSeedingInvariantTest is Test {
     address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
@@ -637,6 +665,10 @@ contract AmmDepositSeedingInvariantTest is Test {
 
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
+        // A moderate global cap so the handler's larger deposits sometimes
+        // REVERT at the cap (exercising the revert-rolls-back-the-seed
+        // path), while smaller ones keep succeeding.  The reserve ==
+        // sum-of-ADMITTED-seeds invariant must hold regardless.
         bridge = new KnomosisBridge(
             KnomosisBridge.ConstructorArgs({
                 knomosisVersionTag: keccak256("knomosis-amm-seeding-invariant"),
@@ -648,13 +680,13 @@ contract AmmDepositSeedingInvariantTest is Test {
                 maxRedemptionWindowBlocks: 50,
                 maxAttestationStaleBlocks: 200,
                 cooldownBlocks: 50,
-                tvlCap: type(uint256).max,
+                tvlCap: 5000 ether,
                 minFeeBps: 0,
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: 1_000_000_000,
                 weiPerBudgetUnitBold: 1_000_000_000,
                 boldTokenAddress: BOLD,
-                boldTvlCap: type(uint256).max,
+                boldTvlCap: 5000 ether,
                 boldCircuitBreaker: BOLD_BREAKER,
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
@@ -669,22 +701,23 @@ contract AmmDepositSeedingInvariantTest is Test {
     }
 
     /// @notice The live ETH reserve equals exactly the cumulative ETH seed
-    ///         the handler recomputed from every admitted deposit — catches
-    ///         a missed seed, double-seed, or wrong-leg seed.
+    ///         of the ADMITTED deposits — catches a missed seed, a
+    ///         double-seed, a wrong-leg seed, or a seed that leaked from a
+    ///         reverted deposit.
     function invariant_ethReserveEqualsSumSeeded() public view {
         assertEq(
             bridge.ammReserveEth(),
             handler.sumSeededEth(),
-            "ammReserveEth == cumulative ETH seeds"
+            "ammReserveEth == cumulative admitted ETH seeds"
         );
     }
 
-    /// @notice The live BOLD reserve equals the cumulative BOLD seed.
+    /// @notice The live BOLD reserve equals the cumulative admitted BOLD seed.
     function invariant_boldReserveEqualsSumSeeded() public view {
         assertEq(
             bridge.ammReserveBold(),
             handler.sumSeededBold(),
-            "ammReserveBold == cumulative BOLD seeds"
+            "ammReserveBold == cumulative admitted BOLD seeds"
         );
     }
 

@@ -93,17 +93,18 @@ Reuses `DepositFeeSplit.Entry` (which already carries `resourceId` /
 /-- Build a BOLD `Entry`: the `DepositFeeSplit` recipe with
     `resourceId = resourceIdBold` and `token = boldTokenAddr20`. -/
 def mkEntry (chainid : Nat) (contractAddr knomosisVersionTag sender : ByteArray)
-    (msgValue chosenFeeBps weiPerBudgetUnit nonce : Nat) (category : String) :
+    (msgValue chosenFeeBps weiPerBudgetUnit seedRatio nonce : Nat) (category : String) :
     DepositFeeSplit.Entry :=
   let did := DepositReceiptHash.computeDeploymentId chainid contractAddr knomosisVersionTag
   let split := DepositFeeSplit.feeSplit msgValue chosenFeeBps weiPerBudgetUnit
   let userAmount := split.1
   let poolAmount := split.2.1
   let budgetGrant := split.2.2
+  let ammSeedAmount := DepositFeeSplit.ammSeed poolAmount seedRatio
   let hash := DepositFeeSplit.computeFeeSplitReceiptHash did sender resourceIdBold
-                boldTokenAddr20 userAmount poolAmount budgetGrant nonce
+                boldTokenAddr20 userAmount poolAmount ammSeedAmount budgetGrant nonce
   let tail := DepositFeeSplit.feeSplitReceiptTail sender resourceIdBold
-                boldTokenAddr20 userAmount poolAmount budgetGrant nonce
+                boldTokenAddr20 userAmount poolAmount ammSeedAmount budgetGrant nonce
   { category := category
   , chainid := chainid
   , contractAddr := contractAddr
@@ -115,9 +116,11 @@ def mkEntry (chainid : Nat) (contractAddr knomosisVersionTag sender : ByteArray)
   , msgValue := msgValue
   , chosenFeeBps := chosenFeeBps
   , weiPerBudgetUnit := weiPerBudgetUnit
+  , ammSeedRatioBps := seedRatio
   , depositorNonce := nonce
   , userAmount := userAmount
   , poolAmount := poolAmount
+  , ammSeedAmount := ammSeedAmount
   , budgetGrant := budgetGrant
   , expectedHash := hash
   , receiptTail := tail
@@ -138,22 +141,22 @@ def cornerEntries : Gen (List DepositFeeSplit.Entry) := fun st0 =>
   let c := 1   -- mainnet-equivalent chainid
   let max64 : Nat := 2 ^ 64 - 1
   let entries : List DepositFeeSplit.Entry :=
-    [ mkEntry c contractAddr knomosisTag sender (10 ^ 18)            0    (10 ^ 9)  0     "corner:zero-fee"
-    , mkEntry c contractAddr knomosisTag sender (10 ^ 18)            5000 (10 ^ 9)  0     "corner:max-fee"
-    , mkEntry c contractAddr knomosisTag sender 1                    100  1         0     "corner:tiny-rounds-to-user"
-    , mkEntry c contractAddr knomosisTag sender 10000                100  1         0     "corner:rate-one-budget-eq-pool"
-    , mkEntry c contractAddr knomosisTag sender (10 ^ 19)            5000 1         0     "corner:budget-clamp"
-    , mkEntry c contractAddr knomosisTag sender (2 * 10 ^ 12)        5000 1         0     "corner:budget-boundary-exact"
-    , mkEntry c contractAddr knomosisTag sender (2 * 10 ^ 12 + 20000) 5000 1        0     "corner:budget-boundary-above"
-    , mkEntry c contractAddr knomosisTag sender 12345                333  1         0     "corner:residue-favours-user"
-    , mkEntry c contractAddr knomosisTag sender (6 * 10 ^ 12)        5000 (10 ^ 12) 0     "corner:rate-trillion"
-    , mkEntry c contractAddr knomosisTag sender 100                  5000 1         0     "corner:exact-half"
-    , mkEntry c contractAddr knomosisTag sender 1000                 100  1         max64 "corner:max-nonce"
-    , mkEntry c contractAddr knomosisTag sender (10 ^ 21)            1000 (3 * 10 ^ 15) 0 "corner:bold-realistic-calibration"
-    , mkEntry c contractAddr knomosisTag sender 1000000              50   1         0     "corner:min-fee-small"
-    , mkEntry c contractAddr knomosisTag sender 1000000              4999 1         0     "corner:fee-just-below-max"
-    , mkEntry c contractAddr knomosisTag sender 1000000              250  1         0     "corner:single-fee"
-    , mkEntry c contractAddr knomosisTag sender 999999999            4321 (10 ^ 6)  7     "corner:misc"
+    [ mkEntry c contractAddr knomosisTag sender (10 ^ 18)            0    (10 ^ 9)  0 0     "corner:zero-fee"
+    , mkEntry c contractAddr knomosisTag sender (10 ^ 18)            5000 (10 ^ 9)  0 0     "corner:max-fee"
+    , mkEntry c contractAddr knomosisTag sender 1                    100  1         0 0     "corner:tiny-rounds-to-user"
+    , mkEntry c contractAddr knomosisTag sender 10000                100  1         0 0     "corner:rate-one-budget-eq-pool"
+    , mkEntry c contractAddr knomosisTag sender (10 ^ 19)            5000 1         0 0     "corner:budget-clamp"
+    , mkEntry c contractAddr knomosisTag sender (2 * 10 ^ 12)        5000 1         0 0     "corner:budget-boundary-exact"
+    , mkEntry c contractAddr knomosisTag sender (2 * 10 ^ 12 + 20000) 5000 1        0 0     "corner:budget-boundary-above"
+    , mkEntry c contractAddr knomosisTag sender 12345                333  1         0 0     "corner:residue-favours-user"
+    , mkEntry c contractAddr knomosisTag sender (6 * 10 ^ 12)        5000 (10 ^ 12) 0 0     "corner:rate-trillion"
+    , mkEntry c contractAddr knomosisTag sender 100                  5000 1         0 0     "corner:exact-half"
+    , mkEntry c contractAddr knomosisTag sender 1000                 100  1         0 max64 "corner:max-nonce"
+    , mkEntry c contractAddr knomosisTag sender (10 ^ 21)            1000 (3 * 10 ^ 15) 0 0 "corner:bold-realistic-calibration"
+    , mkEntry c contractAddr knomosisTag sender 1000000              50   1         0 0     "corner:min-fee-small"
+    , mkEntry c contractAddr knomosisTag sender 1000000              4999 1         0 0     "corner:fee-just-below-max"
+    , mkEntry c contractAddr knomosisTag sender 1000000              250  1         0 0     "corner:single-fee"
+    , mkEntry c contractAddr knomosisTag sender 999999999            4321 (10 ^ 6)  0 7     "corner:misc"
     ]
   (entries, s3)
 
@@ -169,10 +172,11 @@ def genRandomEntry (idx : Nat) : Gen DepositFeeSplit.Entry := fun st0 =>
   let (msgValue,      s5) := DepositFeeSplit.genWei s4
   let (feeBps,        s6) := DepositFeeSplit.genFeeBps s5
   let (rate,          s7) := DepositFeeSplit.genRate s6
-  let (nonce,         s8) := genNat (2 ^ 32) s7
+  let (seedRatio,     s8) := DepositFeeSplit.genSeedRatio s7
+  let (nonce,         s9) := genNat (2 ^ 32) s8
   let e := mkEntry (chainid + 1) contractAddr knomosisTag sender
-              msgValue feeBps rate nonce s!"random:{idx}"
-  (e, s8)
+              msgValue feeBps rate seedRatio nonce s!"random:{idx}"
+  (e, s9)
 
 /-! ## Top-level fixture -/
 
@@ -191,10 +195,11 @@ def buildFixture (seed : UInt64) : (Json × Nat) :=
     , ("maxBudgetPerDeposit", .num DepositFeeSplit.maxBudgetPerDeposit)
     , ("maxFeeBpsCap",        .num 5000)
     , ("minWeiPerBudgetUnit", .num 1)
+    , ("maxAmmSeedRatioBps",  .num 8000)
     , ("resourceIdBold",      .num resourceIdBold)
     , ("boldTokenAddress",    .str boldTokenAddrHex)
     , ("projection",
-        .str "keccak256(abi.encode(deploymentId,sender,resourceId,token,userAmount,poolAmount,budgetGrant,depositorNonce))")
+        .str "keccak256(abi.encode(deploymentId,sender,resourceId,token,userAmount,poolAmount,ammSeedAmount,budgetGrant,depositorNonce))")
     ]
   let topLevel : Json := .obj
     [ ("header", header)
@@ -210,9 +215,11 @@ def buildFixture (seed : UInt64) : (Json × Nat) :=
         , ("msgValue",           .str (hexFromUint256BE e.msgValue))
         , ("chosenFeeBps",       .num e.chosenFeeBps)
         , ("weiPerBudgetUnit",   .num e.weiPerBudgetUnit)
+        , ("ammSeedRatioBps",    .num e.ammSeedRatioBps)
         , ("depositorNonce",     .num e.depositorNonce)
         , ("userAmount",         .str (hexFromUint256BE e.userAmount))
         , ("poolAmount",         .str (hexFromUint256BE e.poolAmount))
+        , ("ammSeedAmount",      .str (hexFromUint256BE e.ammSeedAmount))
         , ("budgetGrant",        .num e.budgetGrant)
         , ("expectedHash",       .str (hexFromBytes e.expectedHash))
         , ("receiptTail",        .str (hexFromBytes e.receiptTail))
@@ -316,18 +323,31 @@ def tests : List TestCase :=
           if (e.userAmount, e.poolAmount, e.budgetGrant) ≠ split then
             throw <| IO.userError s!"BOLD split ≠ shared feeSplit reference in {e.category}"
     }
-  , { name := "GP.5.4: every BOLD entry's receiptTail is exactly 224 bytes (suffix of preimage)"
+  , { name := "GP.5.4: every BOLD entry's receiptTail is exactly 256 bytes (suffix of preimage, GP.11.2)"
     , body := do
         let seed ← readSeed
         let (corners, s1) := cornerEntries ⟨seed⟩
         let (randomised, _) := DepositReceiptHash.genN genRandomEntry 64 s1
         for e in corners ++ randomised do
-          if e.receiptTail.size ≠ 224 then
-            throw <| IO.userError s!"receiptTail size {e.receiptTail.size} in {e.category}, expected 224"
+          if e.receiptTail.size ≠ 256 then
+            throw <| IO.userError s!"receiptTail size {e.receiptTail.size} in {e.category}, expected 256"
           if e.deploymentId.append e.receiptTail ≠
              DepositFeeSplit.feeSplitReceiptPreimage e.deploymentId e.sender e.resourceId e.token
-               e.userAmount e.poolAmount e.budgetGrant e.depositorNonce then
+               e.userAmount e.poolAmount e.ammSeedAmount e.budgetGrant e.depositorNonce then
             throw <| IO.userError s!"receiptTail not the preimage suffix in {e.category}"
+    }
+  , { name := "GP.11.2: every BOLD entry's ammSeedAmount conserves the pool fee"
+    , body := do
+        let seed ← readSeed
+        let (corners, s1) := cornerEntries ⟨seed⟩
+        let (randomised, _) := DepositReceiptHash.genN genRandomEntry 64 s1
+        for e in corners ++ randomised do
+          if e.ammSeedRatioBps > 8000 then
+            throw <| IO.userError s!"ammSeedRatioBps {e.ammSeedRatioBps} out of range in {e.category}"
+          if e.ammSeedAmount ≠ DepositFeeSplit.ammSeed e.poolAmount e.ammSeedRatioBps then
+            throw <| IO.userError s!"ammSeedAmount recompute mismatch in {e.category}"
+          if e.ammSeedAmount > e.poolAmount then
+            throw <| IO.userError s!"ammSeedAmount {e.ammSeedAmount} exceeds pool fee in {e.category}"
     }
   , { name := "GP.5.4: receiptHash recipe self-consistency (any binding)"
     , body := do
@@ -340,7 +360,7 @@ def tests : List TestCase :=
             throw <| IO.userError s!"deploymentId drift in {e.category}"
           let hashR :=
             DepositFeeSplit.computeFeeSplitReceiptHash e.deploymentId e.sender e.resourceId e.token
-              e.userAmount e.poolAmount e.budgetGrant e.depositorNonce
+              e.userAmount e.poolAmount e.ammSeedAmount e.budgetGrant e.depositorNonce
           if hashR ≠ e.expectedHash then
             throw <| IO.userError s!"receiptHash drift in {e.category}"
     }
@@ -356,7 +376,8 @@ def tests : List TestCase :=
         for e in corners do
           let ethHash :=
             DepositFeeSplit.computeFeeSplitReceiptHash e.deploymentId e.sender 0
-              DepositReceiptHash.zeroAddr20 e.userAmount e.poolAmount e.budgetGrant e.depositorNonce
+              DepositReceiptHash.zeroAddr20 e.userAmount e.poolAmount e.ammSeedAmount
+              e.budgetGrant e.depositorNonce
           if ethHash = e.expectedHash then
             throw <| IO.userError <|
               s!"BOLD receiptHash collides with the ETH receiptHash in {e.category}"

@@ -95,7 +95,11 @@ library FeeSplitMath {
     ///         integer `< 2^64` as `uint256` yields the identical
     ///         32-byte word the contract's `uint64` `abi.encode`
     ///         produces, so the hash is byte-equal; widening lets call
-    ///         sites avoid narrowing casts.
+    ///         sites avoid narrowing casts.  Workstream GP.11.2 bound the
+    ///         AMM seed split into the preimage by inserting `ammSeedAmount`
+    ///         after `poolAmount` (9 fields total); `ammSeedAmount == 0` on
+    ///         an AMM-disabled deployment recovers the pre-GP.11.2 value
+    ///         shape with the extra zero word.
     function receiptHash(
         bytes32 deploymentId,
         address sender,
@@ -103,12 +107,21 @@ library FeeSplitMath {
         address token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint256 budgetGrant,
         uint256 nonce
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
-                deploymentId, sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce
+                deploymentId,
+                sender,
+                resourceId,
+                token,
+                userAmount,
+                poolAmount,
+                ammSeedAmount,
+                budgetGrant,
+                nonce
             )
         );
     }
