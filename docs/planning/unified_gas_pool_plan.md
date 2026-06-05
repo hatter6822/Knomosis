@@ -6767,6 +6767,32 @@ sub-WU table above is the implementation roadmap.
     (default `ammSeedRatioBps = 0` preserves v1.2 behaviour).
   * **Dependencies.**  GP.5.1.
   * **Estimated effort.**  ~4 hours.
+  * **Status: COMPLETE (Solidity side).**  `KnomosisBridge.sol`
+    ships the two AMM reserve slots (`ammReserveEth` /
+    `ammReserveBold`, mutable, no direct setter), the immutable
+    `ammSeedRatioBps` (validated `<= MAX_AMM_SEED_RATIO_BPS` at
+    construction, `AmmSeedRatioExceedsMax` otherwise), and the two
+    constitutional caps `AMM_SWAP_FEE_BPS = 30` /
+    `MAX_AMM_SEED_RATIO_BPS = 8000`.  The seed ratio is threaded as a
+    new `ConstructorArgs.ammSeedRatioBps` field; every existing
+    initializer (the `Deployer` helper + 15 test sites) passes `0`, so
+    pre-v1.3 deployment shapes are byte-unchanged and `AMM-disabled`.
+    The two new caps join the GP.5.2 source-level audit gate
+    (`scripts/audit_compile_time_caps.sh`, now 6 caps + 4 address
+    pins + 1 symbol pin; self-test 37 → 45 cases) AND a runtime pin
+    (`AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`), matching the
+    dual-layer protection the fee-split caps already carry.  GP.11.1 is
+    purely additive: no deposit-seeding (GP.11.2) or swap (GP.11.3)
+    logic ships yet, so the reserves stay 0 for the lifetime of a
+    GP.11.1-era deployment regardless of the seed ratio — proven by
+    `AmmStorage.t.sol` (13 cases: caps pinned, seed-ratio
+    store/validate incl. the `> MAX` + `uint16`-max reverts and a
+    `[0, MAX]` accept / `(MAX, uint16Max]` reject fuzz pair, reserves
+    start-and-stay zero, and the v1.2-preservation acceptance criterion
+    — a disabled deposit matches the `FeeSplitMath` reference and a
+    `0`-vs-`MAX` cross-ratio deposit is observationally identical).
+    `forge build` warning-free; full `forge test` green (658 passed,
+    +13).  Lean / Rust untouched (the L2 mirror is GP.11.4 / GP.11.5).
 
 #### WU GP.11.2: AMM seeding on deposit
 

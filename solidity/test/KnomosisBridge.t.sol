@@ -630,6 +630,7 @@ contract KnomosisBridgeTest is Test {
             boldCircuitBreaker: address(0),
             boldAdmin: address(0),
             enableLiquityAutoCircuitTrigger: false,
+            ammSeedRatioBps: 0,
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });
@@ -708,6 +709,7 @@ contract KnomosisBridgeTest is Test {
             boldCircuitBreaker: address(0),
             boldAdmin: address(0),
             enableLiquityAutoCircuitTrigger: false,
+            ammSeedRatioBps: 0,
             erc20ResourceIds: rids,
             erc20TokenAddrs: toks
         });

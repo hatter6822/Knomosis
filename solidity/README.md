@@ -218,6 +218,7 @@ The L1 escrow for deposits and withdrawals.
 | GP.5.1 | `depositETHWithFee(uint16 chosenFeeBps)` — user-chosen fee-split deposit |
 | GP.5.4 | `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)` — BOLD fee-split deposit |
 | GP.5.5 | `closeBoldCircuit()` / `openBoldCircuit()` / `closeBoldCircuitIfAnyLiquityBranchShutdown()` / `setBoldTvlCap(uint256)` — BOLD circuit breaker + per-BOLD TVL cap |
+| GP.11.1 | `ammReserveEth()` / `ammReserveBold()` / `ammSeedRatioBps()` — embedded-AMM L1 state scaffold (reserves + immutable seed ratio) |
 
 **GP.5.1 fee-split deposit.**  `depositETHWithFee(chosenFeeBps)` lets
 the caller pick a fee in basis points within the deployment's
@@ -276,7 +277,29 @@ identical dual-layer protection (source gate + runtime pins
 `test_troveManagerConstants_pinned` / `test_liquityOracleReadGas_pinned`);
 the self-test grows to 37 cases (includes a multi-line-declaration
 tolerance check that confirms the gate handles forge-fmt-wrapped
-address pins correctly).
+address pins correctly).  GP.11.1 adds two more constitutional caps to
+the same gate — `AMM_SWAP_FEE_BPS = 30` (the 0.30% Uniswap-v2-standard
+embedded-AMM swap fee) and `MAX_AMM_SEED_RATIO_BPS = 8000` (the 80% cap
+on the deposit→AMM seed ratio) — bringing it to 6 caps + 4 address
+pins + 1 symbol pin, with the runtime pin
+`test/AmmStorage.t.sol::test_ammCompileTimeCaps_pinned` and the
+self-test at 45 cases.
+
+**GP.11.1 embedded-AMM state scaffold.**  `KnomosisBridge.sol` declares
+the embedded ETH↔BOLD AMM's L1 state: the two mutable reserve slots
+`ammReserveEth` / `ammReserveBold` (no direct setter — seeded on deposit
+in GP.11.2, mutated by `ammSwap` in GP.11.3), the immutable
+`ammSeedRatioBps` (the bps fraction of each pool-fee deposit routed to
+AMM liquidity, a new `ConstructorArgs` field validated
+`<= MAX_AMM_SEED_RATIO_BPS` at construction — `AmmSeedRatioExceedsMax`
+otherwise), and the two constitutional caps above.  GP.11.1 is purely
+additive: it ships no seeding or swap logic, so the reserves stay 0 and
+`ammSeedRatioBps = 0` disables the AMM and preserves the pre-v1.3
+behaviour byte-for-byte (every existing `ConstructorArgs` initializer
+passes `0`).  Coverage: `test/AmmStorage.t.sol` (13 cases — caps pinned,
+seed-ratio store/validate incl. the `> MAX` reverts and an accept/reject
+fuzz pair, reserves start-and-stay zero, and the `ammSeedRatioBps = 0`
+v1.2-preservation acceptance criterion).
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:

@@ -32,6 +32,12 @@
 #   LIQUITY_V2_TROVE_MANAGER_WSTETH = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22
 #   LIQUITY_V2_TROVE_MANAGER_RETH   = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e
 #
+# Workstream GP.11.1 adds two constitutional embedded-AMM caps (checked
+# by the CAPS loop's uintN / decimal-literal pattern):
+#
+#   AMM_SWAP_FEE_BPS       = 30   (uint16; 0.30% Uniswap-v2-standard fee)
+#   MAX_AMM_SEED_RATIO_BPS = 8000 (uint16; 80% max pool->AMM seed ratio)
+#
 # Changing any of these values is a Genesis-Plan §13.6 amendment and
 # triggers the two-reviewer rule.  This gate is the fast tripwire that
 # fails loudly if a value drifts in source WITHOUT that process — a
@@ -133,6 +139,8 @@ CAPS=(
     "MIN_WEI_PER_BUDGET_UNIT|uint64|1"
     "MAX_BUDGET_PER_DEPOSIT|uint64|1000000000000"
     "LIQUITY_ORACLE_READ_GAS|uint256|100000"
+    "AMM_SWAP_FEE_BPS|uint16|30"
+    "MAX_AMM_SEED_RATIO_BPS|uint16|8000"
 )
 
 failures=0
@@ -261,4 +269,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "audit_compile_time_caps: 4 compile-time caps + 4 address pins + 1 symbol pin verified."
+echo "audit_compile_time_caps: 6 compile-time caps + 4 address pins + 1 symbol pin verified."
