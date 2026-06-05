@@ -6925,6 +6925,100 @@ sub-WU table above is the implementation roadmap.
     invariant verified for every fuzz input.
   * **Dependencies.**  GP.11.1, GP.5.1.
   * **Estimated effort.**  ~6 hours.
+  * **Status: COMPLETE (Solidity side).**  `KnomosisBridge.sol`'s
+    shared `_registerDepositWithFee` now seeds the embedded AMM from the
+    pool fee via the new `private _seedAmmReserves(resourceId, poolAmount)`
+    helper: it computes `ammSeedAmount = floor(poolAmount *
+    ammSeedRatioBps / 10000)` (`0` when the AMM is disabled, the seed
+    floors to zero, or the resource is off the ETH/BOLD gas legs) and
+    grows the matching reserve (`ammReserveEth` / `ammReserveBold`) by
+    that amount, returning the seed + the post-seed reserve.  The
+    free-pool remainder is the implicit `poolAmount - ammSeedAmount`.
+    Conservation holds end-to-end — `userAmount + poolAmount == deposit`
+    (the entry point's floor split) and `poolAmount == ammSeedAmount +
+    freePoolAmount` (the GP.11.2 internal-accounting split), so `userAmount
+    + ammSeedAmount + freePoolAmount == deposit` — and the seed is a
+    reclassification of value already inside `totalLockedValue`, so no TVL
+    re-accounting is needed (`ammReserveEth + ammReserveBold <=
+    totalLockedValue` is a Foundry invariant).  The `poolAmount * ratio`
+    multiply and the `reserve + ammSeedAmount` add use checked arithmetic
+    (`ratio <= MAX_AMM_SEED_RATIO_BPS = 8000 < 10000` makes `ammSeedAmount
+    <= poolAmount`; both operations are physically unreachable to overflow
+    and revert rather than wrap on the impossible case).
+
+    **Design divergence from the sketch above (minimal-break, deliberate
+    — recorded here like the GP.11.1 status block's divergence notes).**
+    The sketch (a) splits the canonical `DepositWithFeeInitiated` event
+    field `poolAmount` into `freePoolAmount` + `ammSeedAmount` and rebinds
+    the `receiptHash` over the split, and (b) references an `ammDisabled`
+    flag from GP.11.10 (`emergencyDisableAmm()`).  Neither is implemented
+    as written, for two reasons:
+
+      1. *`ammDisabled` does not exist yet.*  GP.11.10 (AMM disaster
+         recovery) has not landed, so there is no `ammDisabled` storage
+         flag or `ammActive` modifier to branch on.  The seeding therefore
+         keys only on the immutable `ammSeedRatioBps` (and the dust
+         floor).  When GP.11.10 lands it adds the `ammDisabled` early-out
+         to `_seedAmmReserves` — a one-line addition with no wire impact
+         (see point 2).
+
+      2. *The canonical deposit event + `receiptHash` are LEFT UNCHANGED;
+         a SEPARATE `AmmReserveSeeded` event carries the split.*  Splitting
+         `DepositWithFeeInitiated` would change its topic-0 signature hash
+         and its `receiptHash` preimage for EVERY deployment (the
+         AMM-disabled majority included), breaking the Rust ingestor's
+         hard-pinned `DEPOSIT_WITH_FEE_INITIATED_TOPIC` and the three
+         cross-stack receiptHash corpora (`deposit_fee_split.json` /
+         `deposit_fee_split_bold.json` / `bold_deposit.json`).  That break
+         buys nothing: the split is a PURE FUNCTION of the already-bound
+         `poolAmount` and the immutable `ammSeedRatioBps`, so the L2
+         reconstructs it deterministically with zero added trust — there is
+         no tamperable free variable, hence no replay-with-modified-split
+         to defend against.  Instead GP.11.2 emits a dedicated
+         `AmmReserveSeeded(sender, resourceId, poolAmount, ammSeedAmount,
+         newReserve, depositorNonce)` event (2 indexed) ONLY when a
+         non-zero amount is seeded, so (i) AMM-disabled / dust deposits
+         keep the exact pre-GP.11.2 single-event log shape, (ii) the
+         depositor-facing `DepositWithFeeInitiated` + `receiptHash` are
+         byte-identical with the AMM on or off (pinned by
+         `AmmStorage.t.sol::test_depositSplit_unchanged_acrossRatios` and
+         `AmmDepositSeeding.t.sol::test_split_doesNotAlterDepositEvent`),
+         keeping the Rust ingestor + every fee-split fixture valid with NO
+         change, and (iii) when GP.11.10's path-dependent disable lands,
+         the L2 can read the ACTUAL seeded amount from `AmmReserveSeeded`
+         (which is emitted only by the bridge, in-tx with a nonce that
+         joins it 1:1 to the deposit) — so even that path needs no wire
+         break.  The split is also recomputable off-chain from the immutable
+         `ammSeedRatioBps`.  This is strictly more backward-compatible AND
+         no less secure than the sketch; it is the optimal realisation of
+         GP.11.2's "split poolAmount, make it observable + reconstructible"
+         intent.
+
+    **Tests.**  New `test/AmmDepositSeeding.t.sol` (17 cases — 14 unit /
+    fuzz + a 3-invariant stateful suite): per-leg seeding + the
+    `AmmReserveSeeded` event with the matching nonce / accumulated reserve,
+    the disabled (ratio 0) / zero-fee / dust-floor no-seed paths (asserted
+    via `vm.recordLogs` for event ABSENCE), ETH/BOLD leg independence,
+    monotonic accumulation, the unchanged-canonical-event property, the
+    reserve-subset-of-TVL bound, three conservation fuzz tests
+    (`ammSeedAmount + freePoolAmount == poolAmount` and `reserve ==
+    reference seed` over the ETH leg, the BOLD leg, and the whole `[0,
+    8000]` ratio range), and the stateful `AmmDepositSeedingInvariantTest`
+    (`ammReserveEth == sum-of-ETH-seeds`, `ammReserveBold ==
+    sum-of-BOLD-seeds`, `reserves <= TVL`, driven over 256×500 = 128 000
+    random ETH+BOLD deposit calls, 0 reverts).  `test/AmmStorage.t.sol`'s
+    four now-superseded "reserves stay 0 after a non-zero-ratio deposit"
+    GP.11.1-scope-boundary tests were updated to the GP.11.2 positive
+    seeding behaviour (storage-surface tests — caps, validation,
+    reserves-start-at-zero, no-setter, guard-ordering, the disabled
+    no-seed path — kept).  `test/utils/FeeSplitMath.sol` gains the
+    `ammSeedSplit(poolAmount, ratio)` reference (single source of truth).
+    `forge build` warning-free; full `forge test` green (678 passed, 12
+    keccak-gated skips, +17).  The GP.5.2 cap-audit gate + self-test (45
+    cases) stay green (no cap changed).  Solidity-only; no Lean / Rust /
+    cross-stack code change (the L2 `Action.ammSwap` mirror +
+    `ammReserveActor` are GP.11.4 / GP.11.5; the version bump is the only
+    Lean/Rust touch, kept in lockstep per the patch-bump discipline).
 
 #### WU GP.11.3: AMM swap function
 

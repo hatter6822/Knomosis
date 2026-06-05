@@ -67,6 +67,27 @@ library FeeSplitMath {
         budgetGrant = raw > uint256(MAX_BUDGET_PER_DEPOSIT) ? MAX_BUDGET_PER_DEPOSIT : uint64(raw);
     }
 
+    /// @notice Reference for the Workstream GP.11.2 AMM-seed split of a
+    ///         pool fee.  Mirrors `KnomosisBridge._seedAmmReserves`:
+    ///           ammSeedAmount   = floor(poolAmount * ammSeedRatioBps / 10000)
+    ///           freePoolAmount  = poolAmount - ammSeedAmount
+    /// @dev    `ammSeedRatioBps` is taken as `uint256` so JSON-parsing call
+    ///         sites avoid a narrowing cast; the arithmetic is
+    ///         value-identical to the contract's `uint16` path.  Caller
+    ///         must ensure `ammSeedRatioBps <= 10000` (so `ammSeedAmount <=
+    ///         poolAmount` and the subtraction does not underflow); the
+    ///         contract enforces the stronger `ammSeedRatioBps <=
+    ///         MAX_AMM_SEED_RATIO_BPS = 8000` at construction.  A ratio of
+    ///         0 yields `(0, poolAmount)` — the AMM-disabled split.
+    function ammSeedSplit(uint256 poolAmount, uint256 ammSeedRatioBps)
+        internal
+        pure
+        returns (uint256 ammSeedAmount, uint256 freePoolAmount)
+    {
+        ammSeedAmount = (poolAmount * ammSeedRatioBps) / 10_000;
+        freePoolAmount = poolAmount - ammSeedAmount;
+    }
+
     /// @notice Recompute the canonical fee-split `receiptHash`.
     ///         Mirrors `KnomosisBridge._registerDepositWithFee`.
     /// @dev    `resourceId`, `budgetGrant`, and `nonce` are taken as
