@@ -6457,53 +6457,91 @@ provider; documented in GENESIS_PLAN §15D.
   * **Goal.**  Generalise the deposit-side budget grant from the
     GP.5.1 *flat* per-leg exchange rate `weiPerBudgetUnit` into an
     **opt-in, deploy-time-fixed, marginal (progressive) tiered
-    schedule** — a deposit's pool credit converts to budget through a
-    piecewise function `scheduledBudget(poolAmount)` instead of a
-    single division.  Higher-fee deposits earn budget at a cheaper
-    *marginal* rate (e.g. 1 budget per 10¹² wei for the first 0.1 ETH
-    of fee, then 1 budget per 10¹¹ wei above that), so a super-user who
-    pre-funds a large pool contribution is rewarded without
-    complicating the user-side UX (`chosenFeeBps` stays a single
-    `uint16`).  The mechanism is **default-OFF**: a deployment that
-    sets one tier is byte-for-byte the GP.5.1 flat path, so every
-    existing deployment, its committed-state goldens, and the existing
-    fee-split corpora are unchanged.
+    schedule**: a deposit's pool credit converts to budget through a
+    **piecewise-LINEAR** function `scheduledBudget(poolAmount)` instead
+    of a single division.  Higher-fee deposits earn budget at a cheaper
+    *marginal* rate (e.g. 1 budget per 10¹² wei for the first 0.1 ETH of
+    fee, then 1 budget per 10¹¹ wei above that), rewarding a super-user
+    who pre-funds a large pool contribution without complicating the
+    user-side UX (`chosenFeeBps` stays a single `uint16`).  Each gas leg
+    (ETH / BOLD) carries its own independent schedule.  The mechanism is
+    **default-OFF**: a deployment that declares no extra tiers is
+    *structurally* the GP.5.1 flat path — `weiPerBudgetUnit{Eth,Bold}`
+    remains tier 0's rate — so every existing deployment, its
+    committed-state goldens, and the existing fee-split corpora are
+    untouched.
 
-  * **Scope — what this does and does NOT touch.**  The original v1.1
-    sketch called this "trivially layerable … no kernel changes."  The
-    *no-kernel-changes* half is correct and load-bearing: per the §4
-    data-flow contract, the L2 admission layer credits the
-    **bridge-signed** `budgetGrant` field verbatim
-    (`ebs.topUp recipient now freeTier budgetGrant`) and NEVER
-    recomputes it from `poolAmount`.  The schedule is therefore a
-    purely L1-side reshaping of `poolAmount → budgetGrant`; the kernel,
-    the TCB, the `Action.depositWithFee` constructor, the CBE codec,
-    the admission gate, and the step-VM are all untouched.  But
-    "trivially layerable" undersells the real surface: the
-    `budgetGrant = f(poolAmount)` formula is mirrored **byte-for-byte
-    in four places** that the cross-stack corpora hold equal, and all
-    four plus their corpora and the audit gate must move together:
+  * **Why piecewise-LINEAR (not a smooth curve).**  A smooth super-user
+    curve (`budget ∝ poolAmount^α`, a logarithmic discount, …) would
+    need fixed-point / non-integer arithmetic, which is gas-heavy on L1,
+    fragile to reproduce byte-for-byte across the Lean / Solidity / Rust
+    stacks, and awkward to prove sound.  Marginal brackets are **exact
+    integer arithmetic** (floor division only), cheap, trivially
+    deterministic across stacks, and admit short inductive soundness
+    proofs.  The expressiveness lost (a finite bracket table vs a
+    continuous curve) is irrelevant for the intended "cheaper budget for
+    bigger pool contributions" incentive.
 
-    1. the L1 contract (`depositETHWithFee` / `depositBoldWithFee` in
-       `solidity/src/contracts/KnomosisBridge.sol`);
-    2. the Lean reference `feeSplit`
-       (`LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean`,
-       shared by the ETH, BOLD, and GP.6.5 `BoldDeposit` generators);
-    3. the Solidity reference `FeeSplitMath.split`
-       (`solidity/test/utils/FeeSplitMath.sol`);
-    4. the Rust mirror `FeeSplitInput::split`
-       (`runtime/knomosis-l1-ingest/src/fixture.rs`).
+  * **Scope — what this does and, crucially, does NOT touch.**  The
+    original v1.1 sketch called this "trivially layerable … no kernel
+    changes."  The *no-kernel-changes* half is correct and load-bearing,
+    and the verification below makes it precise; "trivially layerable"
+    is corrected to a real but mechanically-bounded cross-stack ripple.
+
+    * **No L2 / kernel / TCB change.**  Per the §4 data-flow contract
+      the L2 admission layer credits the **bridge-signed** `budgetGrant`
+      field verbatim (`ebs.topUp recipient now freeTier budgetGrant`)
+      and NEVER recomputes it from `poolAmount`; the persisted
+      `Bridge.DepositRecord.budgetGrant` is the only budget figure L2
+      ever sees (its docstring already states it is "computed by the L1
+      contract … without re-deriving from the L1 exchange rate, which is
+      L1 contract state, not L2 state").  So the kernel, the TCB, the
+      `Action.depositWithFee` constructor, the CBE codec, the admission
+      gate, and every L2 theorem are untouched.  The lone L2-side edit
+      is a one-line **docstring** generalisation of
+      `DepositRecord.budgetGrant` (flat formula → "the L1 schedule"),
+      with no semantic / TCB delta.
+    * **No fault-proof / step-VM / cross-stack-coherence change.**
+      `budgetGrant` is already **excluded from the step-VM hash** by
+      design (`FaultProof/StepVMCoherence.lean`: "fields 40..48 =
+      budgetGrant (admission-layer; not hashed)"), exactly as the nonce
+      and the other admission-layer fields are.  A schedule reshapes
+      ONLY `budgetGrant`, so it cannot change any `stepVMHash`,
+      `executeStep`, the 258-entry `step_vm.json` corpus, or any
+      coherence theorem.  This is the single most important correctness
+      property of the WU: the schedule is invisible everywhere below the
+      L1 deposit entry point.
+    * **The real surface — four byte-identical `budgetGrant =
+      f(poolAmount)` computations** that the cross-stack corpora hold
+      equal, all of which move together with their corpora and the
+      GP.5.2 cap gate:
+      1. the L1 contract — `depositETHWithFee` (`KnomosisBridge.sol:1052`)
+         + `depositBoldWithFee` (`:1143`);
+      2. the Lean reference `feeSplit`
+         (`LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean:98`,
+         shared by the ETH, BOLD, and GP.6.5 `BoldDeposit` generators);
+      3. the Solidity reference `FeeSplitMath.split`
+         (`solidity/test/utils/FeeSplitMath.sol`);
+      4. the Rust mirror `FeeSplitInput::split`
+         (`runtime/knomosis-l1-ingest/src/fixture.rs:683`) — **corpus /
+         fixture use only**; the production ingest still translates a
+         deposit to `Translated::NoAction`, so there is no production
+         Rust behaviour change.
 
     **Security framing.**  Because the kernel faithfully credits
     whatever the bridge signs, an L1 schedule *bug* that over-grants
     budget would be silently honoured on L2.  The tri-stack
     byte-equivalence corpus is exactly the safety net that closes this
     today for the flat rate (a discrepancy fails the corpus); GP.9.3
-    extends that net to the schedule rather than introducing a new
-    trusted computation.  The schedule itself cannot be inflated by a
-    malicious depositor: it is a deploy-time immutable, `budgetGrant`
-    is bound into the `receiptHash`, and `chosenFeeBps` only chooses
-    *where on the fixed curve* a deposit lands.
+    *extends that net* to the schedule rather than introducing any new
+    trusted computation.  A malicious depositor cannot inflate the
+    grant: the schedule is a deploy-time immutable, the resulting
+    `budgetGrant` is bound into the `receiptHash`, `chosenFeeBps` only
+    chooses *where on the fixed curve* a deposit lands, and the existing
+    `MAX_BUDGET_PER_DEPOSIT` clamp is applied AFTER the schedule — so
+    even an adversarially-cheap top tier cannot grant more than the
+    `10¹²`-unit per-deposit ceiling, and the state-bloat invariant is
+    unchanged.
 
   * **The design decision — marginal (progressive) brackets, not
     cliffs.**  "Piecewise schedule" admits two semantics; only one is
@@ -6525,8 +6563,9 @@ provider; documented in GENESIS_PLAN §15D.
 
     * **Chosen — marginal brackets (each slice converts at its own
       rate), exactly like progressive income-tax brackets.**  With
-      absolute upper breakpoints `0 = b₋₁ < b₀ < b₁ < … < bₙ₋₁ = ∞`
-      and per-tier rates `r₀, …, rₙ₋₁ ≥ 1`:
+      internal breakpoints `0 < b₀ < b₁ < … < bₙ₋₂` (the upper edges of
+      tiers `0 … n−2`; tier `n−1` is unbounded) and per-tier rates
+      `r₀, …, rₙ₋₁ ≥ 1`, writing `b₋₁ = 0` and `bₙ₋₁ = ∞`:
 
       ```
       sliceᵢ          = min(poolAmount, bᵢ) − min(poolAmount, bᵢ₋₁)   (≥ 0; the slices partition poolAmount)
@@ -6534,179 +6573,231 @@ provider; documented in GENESIS_PLAN §15D.
       scheduledBudget = min(scheduledRaw, MAX_BUDGET_PER_DEPOSIT)
       ```
 
-      Tier 0's rate `r₀` is the existing `weiPerBudgetUnit{Eth,Bold}`
-      immutable, and the top tier's breakpoint is `+∞`, so **one tier
-      reproduces the GP.5.1 flat formula exactly** and additional tiers
-      only extend the curve upward.  Each leg (ETH / BOLD) carries its
-      own independent schedule, mirroring the existing per-leg rates.
+      **Single source of truth for tier 0.**  `r₀` IS the existing
+      `weiPerBudgetUnit{Eth,Bold}` immutable — not a new redundant field,
+      and so no "tier 0 rate must equal `weiPerBudgetUnit`" cross-check
+      is needed — and the schedule only *adds* higher tiers
+      `(b₀,r₁),(b₁,r₂),…`.  Hence a schedule with no extra tiers (`n =
+      1`) is `min(⌊poolAmount / r₀⌋, MAX_BUDGET_PER_DEPOSIT)` —
+      **definitionally the GP.5.1 flat formula** — and a deployment opts
+      in purely by supplying `(breakpoint, rate)` pairs for tiers ≥ 1.
 
-  * **Mathematical soundness (the theorems GP.9.3.a proves in Lean;
-    axioms ⊆ the canonical three, no TCB delta).**  A clean recursive
-    reference over a non-empty tier list `((width, rate) :: …)` (the
-    last tier unbounded) makes every proof a structural induction:
+  * **Mathematical soundness (the theorems GP.9.3.a1 / .a2 prove in
+    Lean; `#print axioms ⊆ {propext, Classical.choice, Quot.sound}`, no
+    TCB delta).**  The Lean reference mirrors the contract's representation:
+    a `tier0Rate : Nat` plus `extraTiers : List (width × rate)` (tier
+    *widths* `wᵢ = bᵢ − bᵢ₋₁`, not absolute breakpoints, so the
+    recursion is structural), with `WellFormed` = `tier0Rate ≥ 1 ∧
+    ∀ t ∈ extraTiers, t.width ≥ 1 ∧ t.rate ≥ 1`.  `singleTier r = ⟨r,
+    []⟩`.  The raw evaluator:
 
     ```
-    scheduledRaw pool [r]                = pool / r
-    scheduledRaw pool ((w, r) :: rest)   = if pool ≤ w then pool / r
-                                           else w / r + scheduledRaw (pool − w) rest
+    scheduledRaw pool ⟨r, []⟩               = pool / r
+    scheduledRaw pool ⟨r, (w, r') :: rest⟩  = if pool ≤ w then pool / r
+                                              else w / r + scheduledRaw (pool − w) ⟨r', rest⟩
     ```
 
     1. *Conservation is rate-orthogonal (free).*  The schedule reshapes
        only `budgetGrant`; the `(userAmount, poolAmount)` split of
        `msg.value` is untouched.  `feeSplit_conserves` /
        `feeSplit_pool_le` mention only `userAmount + poolAmount` (their
-       conclusions do not reference the rate at all), so they hold
-       **verbatim** for any schedule — conservation of `msg.value` is
-       independent of the budget curve.
-    2. *Budget ≤ pool (overflow-safety inherited).*
-       `scheduledRaw pool tiers ≤ poolAmount` — by induction, since
-       every `rᵢ ≥ 1` gives `⌊sliceᵢ/rᵢ⌋ ≤ sliceᵢ` and the slices sum
-       to `poolAmount`.  Hence `scheduledRaw ≤ poolAmount ≤ msg.value`,
-       so the GP.5.1 `uint256`-overflow / `uint64`-cast argument
-       (Mathematical-soundness double-check item 3) carries over
-       **word-for-word**, with the per-tier sum bounded by the same
-       `poolAmount`.  (`scheduledBudget_le_pool`.)
-    3. *Budget ≤ cap.*  `scheduledBudget ≤ MAX_BUDGET_PER_DEPOSIT` by
-       the `min` clamp, independent of the schedule — the state-bloat
-       ceiling is preserved.  (`scheduledBudget_le_max`.)
-    4. *Monotone in pool (no perverse incentive).*
-       `pool₁ ≤ pool₂ → scheduledBudget pool₁ ≤ scheduledBudget pool₂`:
-       each `sliceᵢ` is non-decreasing in `poolAmount`, so each term
-       and the clamped sum are too.  More fee never buys less budget.
-       Composing with `poolAmount = ⌊v·K/10000⌋` (monotone in
+       conclusions never reference the rate), so they hold **verbatim**
+       for any schedule — conservation of `msg.value` is independent of
+       the budget curve.
+    2. *Budget ≤ pool (overflow-safety inherited).*  `scheduledRaw pool
+       sched ≤ poolAmount` — by structural induction: `⌊pool/r⌋ ≤ pool`
+       (`r ≥ 1`), and `w/r + scheduledRaw (pool−w) rest ≤ w + (pool−w) =
+       pool`.  Hence `scheduledRaw ≤ poolAmount ≤ msg.value`, so GP.5.1's
+       `uint256`-overflow / `uint64`-cast argument (WU GP.5.1
+       Mathematical-soundness item 3) carries over **word-for-word**.
+       (`scheduledBudget_le_pool`.)
+    3. *Budget ≤ cap.*  `scheduledBudget ≤ MAX_BUDGET_PER_DEPOSIT` by the
+       `min` clamp, independent of the schedule — the state-bloat ceiling
+       holds even for an adversarially-cheap top tier.
+       (`scheduledBudget_le_max`.)
+    4. *Monotone in pool (no perverse incentive).*  `pool₁ ≤ pool₂ →
+       scheduledBudget pool₁ ≤ scheduledBudget pool₂`: each `sliceᵢ` is
+       non-decreasing in `poolAmount`, so each term and the clamped sum
+       are too.  Composing with `poolAmount = ⌊v·K/10000⌋` (monotone in
        `chosenFeeBps K`) gives the corollary that budget is monotone in
-       the user's chosen fee.  (`scheduledBudget_mono`.)
+       the user's chosen fee — more fee never buys less budget.
+       (`scheduledBudget_mono`.)
     5. *1-Lipschitz — the rigorous "no cliff" guarantee.*
        `scheduledBudget pool ≤ scheduledBudget (pool+1) ≤
        scheduledBudget pool + 1`.  Adding one wei of pool credit grows
        exactly one slice by 1, so `scheduledRaw` rises by
-       `⌊(s+1)/r⌋ − ⌊s/r⌋ ∈ {0,1}` (including across a breakpoint,
-       where the next tier's first wei contributes `⌊1/r⌋ ∈ {0,1}`);
-       the `min` clamp preserves the bound.  This is the integer-exact
-       statement that the marginal curve has **no jumps** — the precise
-       property the cliff scheme fails.  (`scheduledBudget_lipschitz`.)
+       `⌊(s+1)/r⌋ − ⌊s/r⌋ ∈ {0,1}` — and at a tier boundary the next
+       tier's first wei contributes `⌊1/r'⌋ ∈ {0,1}` (using `width ≥
+       1`); the `min` clamp preserves the bound.  This is the
+       integer-exact statement that the marginal curve has **no jumps** —
+       the precise property the cliff scheme fails.
+       (`scheduledBudget_lipschitz`.)
     6. *Single tier = flat (strict generalisation / backward-compat).*
-       `scheduledRaw pool [r] = ⌊pool / r⌋`, so a one-tier schedule with
-       `r = weiPerBudgetUnit` is **definitionally** the GP.5.1
-       `feeSplit` budget arm — proven by
-       `scheduledBudget_single_tier_eq_flat`, and surfaced as
-       `feeSplit v feeBps wpu = feeSplitWithSchedule v feeBps
-       (BudgetGrantSchedule.singleTier wpu)`, so the existing 80-entry
+       `scheduledRaw pool ⟨r, []⟩ = ⌊pool / r⌋`, so
+       `scheduledBudget_single_tier_eq_flat` makes `feeSplit v feeBps wpu
+       = feeSplitWithSchedule v feeBps (singleTier wpu)` hold by
+       definitional unfolding — the existing 80-entry
        `deposit_fee_split.json` corpus and all GP.5.1 theorems remain
-       valid as the `tierCount = 1` instance.  *Caveat (documented, not
-       a bug):* an all-equal-rate **multi**-tier schedule is **not**
+       valid as the `singleTier` instance.  *Caveat (documented, not a
+       bug):* an all-equal-rate **multi**-tier schedule is **not**
        bit-identical to the flat formula — per-tier flooring loses the
        boundary residue (`⌊3/2⌋+⌊3/2⌋ = 2 < 3 = ⌊6/2⌋`).  The loss
-       favours the pool, never the user, and the canonical "legacy /
-       disabled" instance is precisely the *single*-tier schedule, so
-       this is a curiosity rather than a compatibility hazard.
+       favours the pool, never the user, and the canonical "disabled"
+       instance is precisely the *empty-extra-tiers* schedule, so this is
+       a curiosity rather than a compatibility hazard.
 
-    The existing `BudgetGrantSchedule.WellFormed` hypotheses
-    (`tierCount ∈ [1, MAX_FEE_TIERS]`, strictly-increasing breakpoints,
-    every `rate ≥ MIN_WEI_PER_BUDGET_UNIT = 1`) are exactly what items
-    2 / 4 / 5 require; the constructor (GP.9.3.b), the Rust decoder
-    (GP.9.3.e), and the Lean structure all enforce them.
+    The `WellFormed` hypotheses (rates ≥ `MIN_WEI_PER_BUDGET_UNIT = 1`,
+    widths ≥ 1 — equivalently strictly-increasing breakpoints) are
+    exactly what items 2 / 4 / 5 require; the constructor (GP.9.3.b1),
+    the Rust decoder (GP.9.3.e1), and the Lean structure all enforce them.
 
-  * **Solidity representation.**  Solidity immutables cannot be arrays
-    and cannot be indexed by a runtime value, so the schedule is a
-    **fixed, compile-time-bounded set of immutable slots**, one set per
-    leg:
+  * **Solidity representation (GP.9.3.b1 / .b2).**  Solidity immutables
+    cannot be arrays and cannot be indexed by a runtime value, so a
+    schedule is a **fixed, compile-time-bounded set of named immutable
+    slots** per leg, evaluated without dynamic immutable indexing:
 
-    * a new constitutional compile-time cap `MAX_FEE_TIERS` (proposed
-      **4**) bounding the loop / the number of slots — added to the
-      GP.5.2 audit gate;
-    * per leg, `MAX_FEE_TIERS` immutable `(uint128 upperBreakpointWei,
-      uint64 rate)` slots (packed into `uint256` words, or hand-unrolled
-      named immutables), plus an immutable `uint8 feeTierCount{Eth,Bold}`
-      in `[1, MAX_FEE_TIERS]`.  `uint128` covers any realistic fee
-      breakpoint (ETH supply ≈ 2⁸⁷ wei); `rate` reuses the `uint64`
-      width and the `MIN_WEI_PER_BUDGET_UNIT` floor.  Tier 0's rate IS
-      `weiPerBudgetUnit{Eth,Bold}` (no new meaning); the top active
-      tier's breakpoint is treated as `+∞`.
-    * `_scheduledBudgetGrant(uint256 poolAmount, bool boldLeg)` copies
-      the ≤ `MAX_FEE_TIERS` immutables into a `memory` array once and
-      runs the marginal-bracket loop above (bounded gas), then clamps
-      at `MAX_BUDGET_PER_DEPOSIT`.  `depositETHWithFee` /
+    * **Constitutional cap.**  `uint8 public constant MAX_FEE_TIERS`
+      (recommended **4** — three internal breakpoints span a realistic
+      "retail / power / pro / whale" curve; each extra tier costs one
+      immutable slot in bytecode and one loop iteration on the hot
+      deposit path, so the count is a bytecode/gas trade-off, not a
+      per-deployment knob).  Added to the GP.5.2 audit gate (GP.9.3.d).
+    * **Per-leg immutable slots.**  `MAX_FEE_TIERS` named immutable
+      `uint256` words per leg, each packing one *extra* tier (tiers
+      `1 … feeTierCount−1`) as `(uint128 upperBreakpointWei << 64) |
+      uint64 rate` — `uint128` covers any realistic fee breakpoint (ETH
+      supply ≈ 2⁸⁷ wei) and the slot is `0` for an unused tier — plus
+      `uint8 feeTierCount{Eth,Bold} ∈ [1, MAX_FEE_TIERS]`.  Tier 0's rate
+      is the *existing* `weiPerBudgetUnit{Eth,Bold}` immutable (no new
+      field); the top active tier is unbounded (its packed breakpoint is
+      ignored).
+    * **Evaluator** `_scheduledBudgetGrant(uint256 poolAmount, bool
+      boldLeg) internal view returns (uint64)`.  A **fast path** returns
+      `min(poolAmount / r₀, MAX_BUDGET_PER_DEPOSIT)` when `feeTierCount
+      == 1` — both the result *and* the gas are essentially identical to
+      GP.5.1 (one extra immutable read + one comparison, no `SLOAD`), so
+      existing deployments pay nothing observable.  Otherwise it reads
+      the named immutables into a fixed-size `memory` array (this read is
+      hand-unrolled by name — the one place the no-dynamic-indexing rule
+      bites) and runs a single bounded `for` loop ≤ `MAX_FEE_TIERS` of
+      marginal-bracket accumulation (shared by both legs for DRY), then
+      clamps at `MAX_BUDGET_PER_DEPOSIT`.  `depositETHWithFee` /
       `depositBoldWithFee` call it in place of the inline
-      `poolAmount / weiPerBudgetUnit{Eth,Bold}` division; the
-      `feeTierCount = 1` path is byte-identical to today.
-    * constructor validation in `ConstructorArgs` (new fields
-      `uint256[] feeTierBreakpoints{Eth,Bold}` /
-      `uint64[] feeTierRates{Eth,Bold}`, validated in memory then frozen
-      into the immutables): new errors `FeeTierCountOutOfRange`,
-      `FeeTierBreakpointsNotStrictlyIncreasing`, `FeeTierRateTooSmall`
-      (each `rate < MIN_WEI_PER_BUDGET_UNIT`), `FeeTierBreakpointTooLarge`
-      (`> uint128` headroom).  Changing a deployed schedule is a new set
-      of immutables and therefore a `KnomosisMigration` handoff —
-      exactly the existing discipline for bumping `weiPerBudgetUnit`
-      (no new migration machinery).
+      `poolAmount / weiPerBudgetUnit{Eth,Bold}` division.
+    * **Constructor validation (GP.9.3.b1).**  New `ConstructorArgs`
+      fields per leg — `uint128[] feeTierBreakpoints{Eth,Bold}` and
+      `uint64[] feeTierRates{Eth,Bold}` (the tiers ≥ 1; tier 0 stays
+      `weiPerBudgetUnit{Eth,Bold}`) — validated in `memory` then frozen
+      into the immutables, with new errors: `FeeTierCountOutOfRange`
+      (`rates.length + 1 > MAX_FEE_TIERS`), `FeeTierArrayLengthMismatch`
+      (`breakpoints.length != rates.length`),
+      `FeeTierBreakpointsNotStrictlyIncreasing` (the breakpoints, with
+      `b₀ > 0`, are not strictly ascending), `FeeTierRateTooSmall`
+      (`rate < MIN_WEI_PER_BUDGET_UNIT`), and `FeeTierBreakpointTooLarge`
+      (`breakpoint ≥ 2¹²⁸`).  Empty arrays = the default flat
+      (`feeTierCount = 1`) deployment, so every pre-GP.9.3 constructor
+      call stays valid unchanged.  Changing a deployed schedule is a
+      fresh set of immutables and therefore a `KnomosisMigration`
+      handoff — the *existing* discipline for bumping `weiPerBudgetUnit`,
+      no new migration machinery.
+    * A `feeTierSchedule(bool boldLeg)` view getter exposes the active
+      `(count, breakpoints, rates)` for off-chain tooling and the
+      cross-stack consumers; `Deployer.deployAll`'s default
+      `ConstructorArgs` gains empty-schedule fields (existing tests
+      unaffected), and the tiered suites construct the bridge directly
+      with a multi-tier schedule (as the GP.5.1 fee-split suites already
+      construct it directly).
 
-  * **Sub-WU breakdown.**
+  * **Sub-WU breakdown.**  Every leaf is small, independently
+    reviewable, and additive (the `singleTier` / empty-schedule path
+    stays byte-identical throughout, so all existing corpora stay green
+    at every step).
 
-    | Sub-WU      | Deliverable                                                                                              | Stack    | Reviewers |
-    |-------------|----------------------------------------------------------------------------------------------------------|----------|-----------|
-    | GP.9.3.a    | Lean `BudgetGrantSchedule` + `scheduledBudget` + `feeSplitWithSchedule` + the six soundness theorems     | Lean     | 1         |
-    | GP.9.3.b    | `KnomosisBridge` immutable schedule + `MAX_FEE_TIERS` + `_scheduledBudgetGrant` + constructor validation  | Solidity | 2 (L1)    |
-    | GP.9.3.c    | `FeeSplitMath.splitWithSchedule` reference + `BridgeFeeSplit{,Bold}.t.sol` behavioural suite              | Solidity | 1         |
-    | GP.9.3.d    | `audit_compile_time_caps.sh` + self-test extended for `MAX_FEE_TIERS`                                    | Solidity | 1         |
-    | GP.9.3.e    | Rust `FeeSplitInput` schedule fields + `split` generalisation + decoder validation + `.cxsf` extension    | Rust     | 1         |
-    | GP.9.3.f    | Multi-tier entries in `deposit_fee_split.json` / `deposit_fee_split_bold.json` (+ GP.6.5 `bold_deposit`)  | X-stack  | 1         |
-    | GP.9.3.g    | Docs (GENESIS_PLAN §15D note, runbook calibration guidance) + version bump + landing                     | Docs     | 1         |
+    | Sub-WU    | Deliverable                                                                                       | Stack    | Reviewers | ~h |
+    |-----------|---------------------------------------------------------------------------------------------------|----------|-----------|----|
+    | GP.9.3.a1 | Lean `BudgetGrantSchedule` + `scheduledBudget` + `feeSplitWithSchedule` + `WellFormed` + `singleTier`=flat | Lean | 1 | 2 |
+    | GP.9.3.a2 | The four inductive soundness theorems (≤pool, ≤max, mono, 1-Lipschitz) + conservation-orthogonality note | Lean | 1 | 4 |
+    | GP.9.3.b1 | `MAX_FEE_TIERS` + immutable schedule slots + `ConstructorArgs` fields + constructor validation + errors + getter | Solidity | 2 (L1) | 4 |
+    | GP.9.3.b2 | `_scheduledBudgetGrant` evaluator (fast-path + bounded loop) + wiring into `depositETHWithFee` / `depositBoldWithFee` | Solidity | 2 (L1) | 3 |
+    | GP.9.3.c1 | `FeeSplitMath.splitWithSchedule` reference                                                         | Solidity | 1 | 1 |
+    | GP.9.3.c2 | `BridgeFeeSplit{,Bold}.t.sol` behavioural suite (+ `Deployer` default fields)                      | Solidity | 1 | 3 |
+    | GP.9.3.d  | `audit_compile_time_caps.sh` + self-test extended for `MAX_FEE_TIERS`                              | Solidity | 1 | 1 |
+    | GP.9.3.e1 | Rust `FeeSplitInput` schedule fields + `split` generalisation + decoder validation (corpus-only)    | Rust     | 1 | 3 |
+    | GP.9.3.e2 | New `l1_ingest_fee_split_tiered.cxsf` generator + consumer                                          | Rust     | 1 | 2 |
+    | GP.9.3.f1 | New ETH+BOLD tiered fee-split corpora (Lean generators + Solidity live-contract consumers)          | X-stack  | 1 | 3 |
+    | GP.9.3.f2 | New GP.6.5-style tiered budget-tail corpus (recipient `ActorBudget` under a schedule)               | X-stack  | 1 | 2 |
+    | GP.9.3.g  | `DepositRecord` docstring + GENESIS_PLAN §15D note + runbook calibration guidance + version bump    | Docs     | 1 | 1 |
 
-    *Ordering / dependencies.*  GP.9.3.a (the mathematical core) lands
-    first and is self-contained.  GP.9.3.b depends on .a (the contract
-    mirrors the proven recipe) and is the only two-reviewer sub-WU
-    (it touches the L1 bridge).  GP.9.3.c/.d depend on .b; GP.9.3.e is
-    parallel to .b/.c after .a; GP.9.3.f depends on .a + .b + .e (it
-    needs all three references); GP.9.3.g lands last.  All sub-WUs are
-    additive: each keeps the `tierCount = 1` path byte-identical, so
-    the existing corpora stay green throughout.
+    *Ordering / dependencies.*  `a1` is the self-contained root.  After
+    `a1`, the three stacks proceed in parallel — `{a2, b1, e1}`.  Then
+    `b1 → b2 → {c1 → c2, d}` and `e1 → e2`.  The cross-stack corpora
+    `f1`/`f2` need all three references, so they depend on `a1 + b2 +
+    e1`; `g` lands last.  Only the two L1-contract leaves (`b1`, `b2`)
+    are two-reviewer; everything else is one.
 
   * **Tests.**
-    * *Lean (GP.9.3.a).*  `scheduledBudget` reference anchored to
-      hand-computed marginal examples (incl. the 10¹⁷/10¹¹/10¹² example
-      above), the six theorems bound at the term level + value-checked,
-      a no-cliff regression contrasting marginal vs the rejected
-      per-bracket-cliff value at a breakpoint ±1, and
-      `feeSplit … = feeSplitWithSchedule … (singleTier …)` on the
-      existing corner inputs.
-    * *Solidity (GP.9.3.b/.c).*  Behavioural cases: single-tier =
-      legacy `depositETHWithFee` (differential vs the existing flat
-      path); multi-tier marginal split matches `FeeSplitMath`;
-      breakpoint-±1 continuity (the 1-Lipschitz property end-to-end);
-      clamp interaction at the top tier; constructor-guard reverts
-      (count out of range, non-increasing breakpoints, sub-minimum
-      rate, oversize breakpoint); a fuzz property `budgetGrant ≤
-      poolAmount` and a monotonicity fuzz (`pool₁ ≤ pool₂ ⇒
-      grant₁ ≤ grant₂`); gas-regression smoke test of the bounded loop.
-    * *Audit gate (GP.9.3.d).*  `MAX_FEE_TIERS` added to the `CAPS`
-      table; self-test gains accept + drift-rejection cases for it.
-    * *Rust (GP.9.3.e).*  `split` matches the Lean reference on the
-      shared multi-tier vectors; decoder rejects malformed schedules
-      (non-increasing breakpoints, zero rate — degrading gracefully and
-      identically to Lean, mirroring the existing `wei_per_budget_unit
-      == 0 ⇒ 0` discipline rather than panicking).
-    * *Cross-stack (GP.9.3.f).*  The ETH and BOLD fee-split corpora gain
-      a multi-tier section (the existing entries reinterpreted as
-      `tierCount = 1`), each entry byte-matched three ways
-      (`split`-reference recompute, the hash-independent receiptTail,
-      and the live-contract per-entry `vm.expectEmit` of
-      `(userAmount, poolAmount, budgetGrant)`), and the GP.6.5
-      `bold_deposit.json` recipient-budget tail (`{0, budgetGrant}`)
-      recomputed under a multi-tier schedule.
+    * *Lean (a1/a2).*  `scheduledBudget` anchored to hand-computed
+      marginal examples (incl. the 10¹⁷/10¹²/10¹¹ example and a
+      three-tier case); all six soundness items (the five new theorems
+      plus the rate-orthogonal `feeSplit_conserves`) bound at the term
+      level AND value-checked on a generated tier grid; a **no-cliff
+      regression**
+      contrasting the marginal value against the rejected
+      per-bracket-cliff value at a breakpoint ±1 (asserting the marginal
+      step is ≤ 1 while the cliff step is ≫ 1); a **monotonicity sweep**
+      over an ascending `poolAmount` ladder; and
+      `feeSplit … = feeSplitWithSchedule … (singleTier …)` on every
+      existing corner input (the proof-carrying backward-compat tie).
+    * *Solidity (b1/b2/c1/c2).*  Constructor-guard reverts (count over
+      `MAX_FEE_TIERS`, array-length mismatch, non-increasing breakpoints,
+      sub-minimum rate, oversize breakpoint); the **fast-path
+      differential** (a `feeTierCount == 1` deposit emits the *same*
+      `(userAmount, poolAmount, budgetGrant)` + `receiptHash` as the
+      legacy `depositETHWithFee`); a multi-tier deposit matches
+      `FeeSplitMath.splitWithSchedule`; **breakpoint-±1 continuity** (the
+      1-Lipschitz property end-to-end on the live contract); clamp
+      interaction at the top tier; a fuzz property `budgetGrant ≤
+      poolAmount`; a monotonicity fuzz (`pool₁ ≤ pool₂ ⇒ grant₁ ≤
+      grant₂`); and a gas-regression smoke test bounding the loop's added
+      cost (and pinning the 1-tier fast-path at ≈ legacy gas).
+    * *Audit gate (d).*  `MAX_FEE_TIERS` added to the `CAPS` table; the
+      self-test gains an accept case + a drift-rejection case (value /
+      type / missing / duplicated / comment-masked) for it.
+    * *Rust (e1/e2).*  `split` matches the Lean reference on the shared
+      multi-tier vectors; the decoder **rejects malformed schedules**
+      (non-increasing breakpoints, zero rate, over-`MAX_FEE_TIERS` count)
+      gracefully — degrading identically to Lean (mirroring the existing
+      `wei_per_budget_unit == 0 ⇒ 0` no-panic discipline), never
+      panicking on a corrupt fixture; the new
+      `l1_ingest_fee_split_tiered.cxsf` round-trips.
+    * *Cross-stack (f1/f2).*  New `deposit_fee_split_tiered.json` /
+      `deposit_fee_split_bold_tiered.json` corpora, each entry
+      byte-matched three ways — `splitWithSchedule`-reference recompute,
+      the hash-independent `receiptTail`, and a **live-contract per-entry
+      `vm.expectEmit`** of `(userAmount, poolAmount, budgetGrant)` on a
+      directly-constructed multi-tier bridge — plus a GP.6.5-style tiered
+      budget-tail corpus recomputing the recipient `ActorBudget`
+      (`{0, budgetGrant}`) through the real `EpochBudgetState.topUp`
+      under a schedule.  The pre-GP.9.3 corpora are **left untouched**
+      (see acceptance).
 
-  * **Acceptance criteria.**  GP.9.3.b is two-reviewer (L1 bridge).
-    `lake build` warning-free; `lake test`, `forge test`, and `cargo
-    test --workspace --locked` green; the soundness theorems mechanised
-    with `#print axioms ⊆ {propext, Classical.choice, Quot.sound}`; the
-    GP.5.2 cap gate + self-test green with `MAX_FEE_TIERS` covered; all
-    audit gates (`count_sorries` / `tcb_audit` / `naming_audit` / …)
-    pass; **and the explicit backward-compat gate — the pre-GP.9.3
-    fee-split corpora (`deposit_fee_split.json`,
-    `deposit_fee_split_bold.json`, `l1_ingest_fee_split.cxsf`,
-    `bold_deposit.json`) are byte-unchanged** when re-emitted, proving
-    the one-tier instance is exactly the GP.5.1 path.  Patch-version
-    bump per the standard discipline.
+  * **Acceptance criteria.**  `b1` / `b2` are two-reviewer (the L1
+    bridge).  `lake build` warning-free; `lake test`, `forge test`, and
+    `cargo test --workspace --locked` green; the soundness theorems
+    mechanised with `#print axioms ⊆ {propext, Classical.choice,
+    Quot.sound}`; the GP.5.2 cap gate + self-test green with
+    `MAX_FEE_TIERS` covered; every audit gate (`count_sorries` /
+    `tcb_audit` / `naming_audit` / `stub_audit` / `deferral_audit`)
+    green.  **Backward-compat is enforced at two levels:** (1)
+    *semantic* — the proof-carrying `feeSplit = feeSplitWithSchedule ∘
+    singleTier` theorem; and (2) *file-level* — the pre-GP.9.3 corpora
+    (`deposit_fee_split.json`, `deposit_fee_split_bold.json`,
+    `l1_ingest_fee_split.cxsf`, `bold_deposit.json`,
+    `l1_ingest_bold.cxsf`) and their generators are **left untouched**;
+    the new tiered coverage lands in *separate* `*_tiered` files, so the
+    existing corpora are byte-for-byte unchanged (verified by re-running
+    their generators and `git diff`-ing to empty).  Patch-version bump
+    per the standard discipline (`g`).
 
   * **Deployment-calibration sharp-edges (documented, not bugs).**
     * *Regressive schedule (S1).*  Per-tier rates need not be
@@ -6733,14 +6824,17 @@ provider; documented in GENESIS_PLAN §15D.
     `weiPerBudgetUnitBold`), GP.6.1 (the Rust `FeeSplitInput::split`
     mirror + `l1_ingest_fee_split.cxsf`), and GP.6.5 (the
     `bold_deposit.json` recipient-budget tail).  Independent of the
-    kernel, the admission gate, and Phase GP.7+.
+    kernel, the admission gate, the step-VM / fault-proof layer, and
+    Phase GP.7+.
 
-  * **Estimated effort.**  ~20 hours: ~5 for GP.9.3.a (the Lean
-    reference + six inductive proofs), ~6 for GP.9.3.b (the immutable
-    packing + bounded-loop evaluator + constructor validation on the L1
-    surface), ~3 for GP.9.3.c, ~1 for GP.9.3.d, ~3 for GP.9.3.e, ~2 for
-    GP.9.3.f (corpus extension reuses the existing generators), and ~1
-    for GP.9.3.g.
+  * **Estimated effort.**  ~29 hours across the twelve leaves (a1 2 +
+    a2 4 + b1 4 + b2 3 + c1 1 + c2 3 + d 1 + e1 3 + e2 2 + f1 3 + f2 2 +
+    g 1), up from the ~20 h single-block estimate now that the L1
+    contract and the cross-stack corpora are split into
+    independently-reviewable units and the separate-file backward-compat
+    discipline is explicit.  The critical path (`a1 → b1 → b2 → f1 → g`,
+    ≈ 13 h) is shorter than the total because `a2`, the Rust leaves, and
+    the audit gate run in parallel.
 
 #### WU GP.9.4: Dual pool (user rewards)
 
