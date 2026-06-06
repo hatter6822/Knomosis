@@ -121,6 +121,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         check.  `address(0)` (opt out) passes.
     error AmmRoleIsBridge();
 
+    /// @notice Constructor guard (GP.11.3): a FUNCTIONAL AMM (BOLD-enabled
+    ///         with `ammSeedRatioBps > 0`) was deployed with no
+    ///         `ammDisasterRecovery` kill-switch role (`address(0)`).  Mirrors
+    ///         the GP.5.5 rule that a BOLD-enabled deployment must ship operable
+    ///         safety roles — an active AMM must have an emergency pause.
+    error AmmDisasterRecoveryRequired();
+
     // ---- Workstream GP.5.4: BOLD-currency fee-split deposits ----
 
     /// @notice Constructor guard: a BOLD-enabled deployment passed a
@@ -470,12 +477,15 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     /// @notice Workstream GP.11.3 — the embedded-AMM disaster-recovery role
     ///         (the GP.11.10 kill switch, pulled forward).  The SOLE address
     ///         allowed to call `emergencyDisableAmm()`.  Set in the
-    ///         constructor; immutable.  OPTIONAL: `address(0)` opts out (no
-    ///         manual kill switch — the GP.5.5 BOLD breaker still gates
-    ///         `ammSwap`); an AMM-enabled deployment SHOULD set it (intended
-    ///         to be a multisig, distinct from the bridge — `AmmRoleIsBridge`
-    ///         otherwise).  This role can ONLY one-way-pause the AMM — it
-    ///         cannot move funds, alter state roots, or change any immutable.
+    ///         constructor; immutable.  REQUIRED non-zero on a FUNCTIONAL AMM
+    ///         (BOLD-enabled with `ammSeedRatioBps > 0`) —
+    ///         `AmmDisasterRecoveryRequired` otherwise — mirroring the GP.5.5
+    ///         rule that an enabled feature ships its safety roles; intended to
+    ///         be a multisig, distinct from the bridge (`AmmRoleIsBridge`
+    ///         otherwise).  May be `address(0)` only on an AMM-disabled (ratio
+    ///         0) or BOLD-disabled deployment, where the AMM cannot function.
+    ///         This role can ONLY one-way-pause the AMM — it cannot move funds,
+    ///         alter state roots, or change any immutable.
     address public immutable ammDisasterRecovery;
     /// @notice Whether the permissionless Liquity-V2 depeg auto-trigger is
     ///         enabled for this deployment.  Set in the constructor;
@@ -697,11 +707,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint16 ammSeedRatioBps;
         // Workstream GP.11.3 embedded-AMM disaster-recovery role (the
         // GP.11.10 kill switch, pulled forward).  The sole address allowed
-        // to call `emergencyDisableAmm()` (a one-way AMM pause).  OPTIONAL:
-        // `address(0)` opts out (no manual kill switch — the GP.5.5 BOLD
-        // breaker still gates `ammSwap` automatically); an AMM-enabled
-        // deployment SHOULD set it (intended to be a multisig).  Validated
-        // `!= address(this)` when non-zero.
+        // to call `emergencyDisableAmm()` (a one-way AMM pause).  REQUIRED
+        // non-zero on a FUNCTIONAL AMM (BOLD-enabled with `ammSeedRatioBps >
+        // 0`) — `AmmDisasterRecoveryRequired` otherwise; may be `address(0)`
+        // only when the AMM cannot function (ratio 0 or BOLD-disabled).
+        // Intended to be a multisig; validated `!= address(this)`.
         address ammDisasterRecovery;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
@@ -819,6 +829,17 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             }
             if (args.boldTvlCap > args.tvlCap) {
                 revert BoldTvlCapExceedsGlobal(args.boldTvlCap, args.tvlCap);
+            }
+            // GP.11.3 — a FUNCTIONAL AMM (BOLD-enabled with a non-zero seed
+            // ratio) MUST ship a disaster-recovery kill-switch role, mirroring
+            // the GP.5.5 requirement that a BOLD-enabled deployment ships
+            // operable safety roles.  The role pauses the AMM (one-way) for an
+            // emergency the automatic BOLD circuit breaker does NOT cover (e.g.
+            // an operational fault or a swap-math defect).  `address(0)` (opt
+            // out) is rejected here; only an AMM-disabled (ratio 0) or
+            // BOLD-disabled deployment may leave the role unset.
+            if (args.ammSeedRatioBps > 0 && args.ammDisasterRecovery == address(0)) {
+                revert AmmDisasterRecoveryRequired();
             }
         }
         // The Liquity-V2 auto-trigger is opt-in.  Validating the

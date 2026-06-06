@@ -49,18 +49,31 @@ contract AmmKillSwitchTest is AmmTestBase {
         assertTrue(bridge.ammDisabled(), "AMM disabled by the disaster-recovery role");
     }
 
-    /// @notice On a deployment that opted OUT of the kill switch
-    ///         (`ammDisasterRecovery == address(0)`), `emergencyDisableAmm` is
-    ///         unreachable: no caller can be `address(0)`, so every call
-    ///         reverts `NotAmmDisasterRecovery`.  The BOLD breaker remains the
-    ///         automatic protection.
-    function test_emergencyDisableAmm_unreachableWhenRoleZero() public {
+    /// @notice A FUNCTIONAL AMM (BOLD-enabled with `ammSeedRatioBps > 0`)
+    ///         CANNOT opt out of the kill switch: deploying one with
+    ///         `ammDisasterRecovery == address(0)` reverts
+    ///         `AmmDisasterRecoveryRequired` at construction — mirroring the
+    ///         GP.5.5 rule that an enabled feature must ship its safety roles.
+    function test_constructor_functionalAmmRequiresRole() public {
+        _etchBold();
+        KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs(); // ratio 8000
+        args.ammDisasterRecovery = address(0); // attempt to opt out
+        vm.expectRevert(KnomosisBridge.AmmDisasterRecoveryRequired.selector);
+        new KnomosisBridge(args);
+    }
+
+    /// @notice The role may be `address(0)` (opt out) ONLY when the AMM is
+    ///         disabled (`ammSeedRatioBps == 0`) — the AMM cannot function, so
+    ///         a kill switch is moot.  Such a deployment is valid, and
+    ///         `emergencyDisableAmm` is unreachable (no caller is `address(0)`).
+    function test_constructor_disabledAmmMayOptOutOfRole() public {
         _etchBold();
         KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
-        args.ammDisasterRecovery = address(0); // opt out
+        args.ammSeedRatioBps = 0; // AMM disabled -> role optional
+        args.ammDisasterRecovery = address(0);
         KnomosisBridge bridge = new KnomosisBridge(args);
 
-        assertEq(bridge.ammDisasterRecovery(), address(0), "kill switch opted out");
+        assertEq(bridge.ammDisasterRecovery(), address(0), "kill switch opted out (AMM disabled)");
         vm.expectRevert(KnomosisBridge.NotAmmDisasterRecovery.selector);
         vm.prank(AMM_DR);
         bridge.emergencyDisableAmm();

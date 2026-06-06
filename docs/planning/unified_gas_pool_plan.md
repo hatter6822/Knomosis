@@ -7356,15 +7356,22 @@ sub-WU table above is the implementation roadmap.
        swap brick deposits at the cap or behave wildly with the ETH/BOLD
        exchange rate.  Pinned by `test_swap_doesNotTouchTvl` +
        `invariant_tvlUntouchedBySwaps` + the real-backing invariants.
-    2. **`ammActive` deferred to GP.11.10.**  The sketch's `ammActive`
-       modifier (revert `AmmDisabled` once `emergencyDisableAmm()` is
-       triggered) depends on the `ammDisabled` flag + the
-       `onlyDisasterRecovery` role + the disable function — all GP.11.10
-       deliverables not yet landed.  A `GP.11.10 hook point` comment marks
-       where it attaches (the same pattern GP.11.2 used for the seeding
-       early-out).  Swaps are gated ONLY by `nonReentrant` (NOT
-       `circuitOpen` — the AMM's availability is governed by its own kill
-       switch, not the L2 circuit breakers, per the sketch's signature).
+    2. **Kill switch + depeg breaker (IMPLEMENTED in the v1.24 completion;
+       the original v1.23 swap deferred these to GP.11.10).**  The GP.11.10
+       `ammActive` kill switch is pulled forward: a one-way
+       `emergencyDisableAmm()` gated by a new immutable `ammDisasterRecovery`
+       role sets `ammDisabled`, after which the `ammActive` modifier reverts
+       `AmmIsDisabled` on `ammSwap` and `_seedAmmReserves` stops accruing
+       reserves (the reserves are PRESERVED — a graceful shutdown).  The role
+       is REQUIRED non-zero for a FUNCTIONAL AMM (BOLD-enabled, ratio > 0) —
+       `AmmDisasterRecoveryRequired` otherwise, mirroring the GP.5.5 rule that
+       an enabled feature ships its safety roles — and validated `!=
+       address(this)` (`AmmRoleIsBridge`).  ADDITIONALLY, `ammSwap` reverts
+       `AmmPausedByBoldCircuit` while the GP.5.5 BOLD circuit breaker is closed
+       (a depeg freeze, both directions), so the AMM does not offer a stale
+       price during a depeg while L2 withdrawals stay open.  (The GP.11.10
+       `onlyDisasterRecovery` MULTISIG hardening + the operator runbook remain
+       GP.11.10; the mechanism itself is now live.)
     3. **`ZeroSwapOutput` guard added.**  A dust input whose output floors
        to zero is rejected (Uniswap v2's positive-output rule), so a swap
        can never donate its input for nothing.  Does not break the
@@ -7417,6 +7424,42 @@ sub-WU table above is the implementation roadmap.
     swap reuses `AMM_SWAP_FEE_BPS`; `AmmMath`'s `BPS_DENOMINATOR` lives
     outside the audited `KnomosisBridge.sol`).  Solidity-only; the L2
     `Action.ammSwap` mirror + cross-stack corpus are GP.11.4 / GP.11.7.
+  * **Completion round (v1.24 — kill switch + breaker + machine-checked
+    k-monotonicity + audit-gap closures).**  A code-first deep audit drove
+    GP.11.3 to its optimal form:
+    * **Machine-checked k-monotonicity.**  `LegalKernel/Bridge/AmmMath.lean`
+      (Lean-core only) mirrors the Solidity `getAmountOut` over `Nat` and
+      proves `getAmountOut_lt_reserveOut` (no-drain) + `k_nondecreasing`
+      (the constant product never decreases).  Both `#print axioms`-clean
+      (`{propext, Classical.choice, Quot.sound}` only), zero sorries; the
+      `bridge-amm-math` suite (6 cases) pins the SAME hand-vectors as
+      `AmmMath.t.sol`, so Lean-spec == Solidity-formula == ground truth.
+      The swap's headline safety property is now a theorem, not just an
+      assertion + tests (matching GP.5.1 / GP.11.2's proof-carrying pattern).
+    * **Kill switch + depeg breaker** (design decision 2, above): the
+      `emergencyDisableAmm` one-way pause + the required `ammDisasterRecovery`
+      role + the `boldCircuitClosed` swap freeze.  Pinned by the new
+      `AmmKillSwitch.t.sol` suite (the GP.11.10 theorems
+      `emergencyDisableAmm_preserves_reserves` / `ammDisabled_implies_swap_reverts`
+      / `ammDisabled_is_monotonic` as tests, the role access control, the
+      `AmmRoleIsBridge` + `AmmDisasterRecoveryRequired` constructor guards, the
+      breaker gating, and the brake independence/precedence).
+    * **Reachable-branch closures.**  `EthTransferFailed` (a contract
+      recipient that rejects the ETH output → fail-safe rollback), calibration
+      parity, EXACT fee-accrual `k` delta, a deposit↔swap composition test, a
+      warm-swap gas pin, and +4 slippage/deadline boundary cases (the
+      dedicated suite is now 13 ≥ the plan's 12+).
+    * **Coverage made runnable.**  `forge coverage` was infeasible (the
+      via_ir contracts defeat its instrumentation); the test `Deployer` is
+      stack-fit (params threaded through one `DeployParams` memory struct,
+      external signature unchanged), so `forge coverage --ir-minimum` now runs
+      end-to-end and reports `src/lib/AmmMath.sol` at 100% line/statement/
+      branch/function — and `make coverage` documents the `--ir-minimum`
+      requirement.  The two provably-unreachable defensive branches
+      (`ReserveExhausted`, `AmmKInvariantViolated`) are by design uncovered.
+    * `forge test` 744 → 765 passed / 0 failed / 12 keccak-gated skips;
+      `lake build` (warning-free) + `lake test` + `count_sorries` (0) +
+      `naming_audit` green.
 
 #### WU GP.11.4: L2-side AMM mirroring
 

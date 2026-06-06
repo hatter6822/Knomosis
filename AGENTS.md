@@ -2243,9 +2243,11 @@ permissionless constant-product swap `ammSwap` (Uniswap v2-style ETH↔BOLD
 exchange with the 0.30% `AMM_SWAP_FEE_BPS` retained in the reserves so the
 product `k = ammReserveEth × ammReserveBold` is monotonically
 non-decreasing, `minAmountOut` slippage + `deadline` MEV protection, a pure
-`AmmMath` swap-math library, and Checks-Effects-Interactions + `nonReentrant`
-safety) — is complete on the Solidity side (the L2 `Action.ammSwap` mirror
-is GP.11.4).  See
+`AmmMath` swap-math library, Checks-Effects-Interactions + `nonReentrant`
+safety, a one-way `emergencyDisableAmm` kill switch + the GP.5.5 BOLD-breaker
+depeg freeze on swaps, and a machine-checked Lean k-monotonicity proof in
+`LegalKernel/Bridge/AmmMath.lean`) — is complete (the L2 `Action.ammSwap`
+mirror is GP.11.4).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3716,29 +3718,48 @@ contributions surviving in current code:
     REAL-TOKEN-BACKING invariants `ammReserveEth ≤ address(this).balance` /
     `ammReserveBold ≤ BOLD.balanceOf(this)` (each reserve moves in exact
     lockstep with the matching real balance, so a swap touches only AMM
-    reserves, never any L2 user's backing).  Event `AmmSwapExecuted` +
-    eleven swap errors.  A `GP.11.10 hook point` comment marks where the
-    `ammActive` modifier (revert once `emergencyDisableAmm()` is triggered)
-    will attach.  Coverage (54 new cases over a shared `AmmTestBase`, all
-    green): `AmmMath.t.sol` (20 — exact vectors + the headline k-monotonicity
-    fuzz + the `getAmountIn` round-trip + the revert surface),
-    `AmmSwap.t.sol` (13 — both directions, reserve / real-balance accounting,
-    the TVL-untouched design pin, fee-accumulation, the full revert surface),
+    reserves, never any L2 user's backing).  Event `AmmSwapExecuted` + swap
+    errors.  **Two emergency brakes (v1.24 completion):** the GP.11.10 kill
+    switch pulled forward — a one-way `emergencyDisableAmm()` gated by the new
+    immutable `ammDisasterRecovery` role (REQUIRED non-zero for a FUNCTIONAL
+    AMM — BOLD-enabled, ratio > 0 — `AmmDisasterRecoveryRequired` otherwise,
+    mirroring GP.5.5; validated `!= address(this)`), the `ammActive` modifier
+    (reverts `AmmIsDisabled`), and the `_seedAmmReserves` disable early-out
+    (reserves PRESERVED) — plus the automatic depeg freeze (`ammSwap` reverts
+    `AmmPausedByBoldCircuit` while the GP.5.5 BOLD circuit is closed, both
+    directions).  **Machine-checked k-monotonicity:** `LegalKernel/Bridge/
+    AmmMath.lean` (Lean-core) proves `getAmountOut_lt_reserveOut` (no-drain) +
+    `k_nondecreasing` over `Nat` (axiom-clean; the `bridge-amm-math` suite
+    pins the same hand-vectors as the Solidity), so the headline safety
+    property is now a theorem, not only a runtime assertion + tests.  Coverage
+    (~78 cases over a shared `AmmTestBase`, all green): `AmmMath.t.sol` (20 —
+    exact vectors + the headline k-monotonicity fuzz + the `getAmountIn`
+    round-trip + the revert surface), `AmmSwap.t.sol` (18 — both directions,
+    reserve / real-balance accounting, the TVL-untouched pin, the
+    `EthTransferFailed` rollback, calibration parity, the EXACT fee-accrual k
+    delta, deposit↔swap composition, a gas pin, the full revert surface),
     `AmmReentrancy.t.sol` (3 — a malicious ETH recipient re-entering a
     would-succeed swap is blocked with NO double-spend, and a malicious BOLD
     token in the output path fails safe via `ReentrancyGuardReentrantCall`),
     `AmmInvariants.t.sol` (5 — the stateful k-never-decreases + reserves-stay-
     positive + real-token-backing + TVL-untouched harness over 128 000 random
-    ETH↔BOLD swaps, 0 reverts), `AmmSlippage.t.sol` (9 — `minAmountOut` and
-    `deadline` exact boundaries + protection), `AmmSandwich.t.sol` (4 — a
+    ETH↔BOLD swaps, 0 reverts), `AmmSlippage.t.sol` (13 — `minAmountOut` and
+    `deadline` exact boundaries, both directions), `AmmSandwich.t.sol` (4 — a
     front-run degrades execution, a full sandwich profits without protection,
-    and `minAmountOut` deterministically stops it).  `MockBold.transfer` was
-    made `virtual` so the swap-reentrancy mock can override it.  Solidity-only
-    (the L2 `Action.ammSwap` mirror is GP.11.4); `forge build` warning-free,
-    full `forge test` green, the GP.5.2 cap-audit gate + self-test (45 cases)
-    unchanged (no constitutional cap added — the swap reuses
-    `AMM_SWAP_FEE_BPS`; `AmmMath`'s `BPS_DENOMINATOR` lives outside the
-    audited `KnomosisBridge.sol`).
+    and `minAmountOut` deterministically stops it), `AmmKillSwitch.t.sol` (12 —
+    the GP.11.10 kill-switch theorems as tests, role access control, the
+    `AmmRoleIsBridge` + `AmmDisasterRecoveryRequired` constructor guards, the
+    breaker gating + brake independence/precedence).  `MockBold.transfer` was
+    made `virtual` so the swap-reentrancy mock can override it.  `forge
+    coverage --ir-minimum` runs (the test `Deployer` was stack-fit) and reports
+    `AmmMath.sol` at 100%; `make coverage` documents it.  Solidity + a Lean
+    k-monotonicity proof (the L2 `Action.ammSwap` mirror is GP.11.4); `forge
+    build` warning-free,
+    full `forge test` 765 passed / 0 failed / 12 keccak-gated skips,
+    `lake build`/`lake test`/`count_sorries`/`naming_audit` green, the GP.5.2
+    cap-audit gate + self-test (45 cases) unchanged (no constitutional cap
+    added — the swap reuses `AMM_SWAP_FEE_BPS`; `AmmMath`'s `BPS_DENOMINATOR`
+    lives outside the audited `KnomosisBridge.sol`).
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the

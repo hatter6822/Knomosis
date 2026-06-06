@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "91d9be22c28a3b23e80e99367a8497bca6c7a765b2c021bd217dca39ab518981"
+    "source_digest": "af26941582aa67e4ebbc688b9d515c350a0366ff45a3323c12440c1fe8688f66"
   },
   "summary": {
     "module_count": 73,
-    "declaration_count": 1646
+    "declaration_count": 1648
   },
   "modules": [
     {
@@ -97,7 +97,7 @@
     {
       "module": "KnomosisBridge",
       "path": "solidity/src/contracts/KnomosisBridge.sol",
-      "declaration_count": 116,
+      "declaration_count": 117,
       "declarations": [
         {
           "kind": "contract",
@@ -285,134 +285,140 @@
         },
         {
           "kind": "error",
+          "name": "AmmDisasterRecoveryRequired",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "BoldTokenAddressMismatch",
-          "line": 130,
+          "line": 137,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTokenSymbolMismatch",
-          "line": 134,
+          "line": 141,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTokenSymbolUnavailable",
-          "line": 138,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "BoldTransferAmountMismatch",
           "line": 145,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BoldNotEnabled",
-          "line": 149,
+          "name": "BoldTransferAmountMismatch",
+          "line": 152,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BoldResourceReserved",
+          "name": "BoldNotEnabled",
           "line": 156,
           "called": []
         },
         {
           "kind": "error",
+          "name": "BoldResourceReserved",
+          "line": 163,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "BoldDepositViaFeeSplitOnly",
-          "line": 164,
+          "line": 171,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldDepositPaused",
-          "line": 173,
+          "line": 180,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTvlCapReached",
-          "line": 177,
+          "line": 184,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTvlCapExceedsGlobal",
-          "line": 182,
+          "line": 189,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotBoldCircuitBreaker",
-          "line": 185,
+          "line": 192,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotBoldAdmin",
-          "line": 188,
+          "line": 195,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroBoldCircuitBreaker",
-          "line": 193,
+          "line": 200,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroBoldAdmin",
-          "line": 196,
+          "line": 203,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldRolesNotDistinct",
-          "line": 202,
+          "line": 209,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldRoleIsBridge",
-          "line": 207,
+          "line": 214,
           "called": []
         },
         {
           "kind": "error",
           "name": "AutoCircuitTriggerDisabled",
-          "line": 211,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "LiquityV2ReadFailed",
           "line": 218,
           "called": []
         },
         {
           "kind": "error",
+          "name": "LiquityV2ReadFailed",
+          "line": 225,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "NoLiquityBranchShutdown",
-          "line": 222,
+          "line": 229,
           "called": []
         },
         {
           "kind": "error",
           "name": "AutoTriggerRequiresBold",
-          "line": 226,
+          "line": 233,
           "called": []
         },
         {
           "kind": "error",
           "name": "LiquityOracleHasNoCode",
-          "line": 236,
+          "line": 243,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTroveManagersNotDistinct",
-          "line": 245,
+          "line": 252,
           "called": [
             "attestor",
             "deploymentId",
@@ -425,7 +431,7 @@
         {
           "kind": "struct",
           "name": "StateRootRecord",
-          "line": 503,
+          "line": 513,
           "called": [
             "lastUpheldDisputeBlock",
             "latestStateRootSubmittedAtBlock",
@@ -435,13 +441,13 @@
         {
           "kind": "function",
           "name": "resourceToken",
-          "line": 621,
+          "line": 631,
           "called": []
         },
         {
           "kind": "function",
           "name": "hasOpenDisputeOlderThan",
-          "line": 637,
+          "line": 647,
           "called": [
             "disputeWindowBlocks",
             "latestStateRootSubmittedAtBlock"
@@ -450,7 +456,7 @@
         {
           "kind": "struct",
           "name": "ConstructorArgs",
-          "line": 653,
+          "line": 663,
           "called": [
             "attestor",
             "disputeVerifier",
@@ -462,14 +468,15 @@
         {
           "kind": "error",
           "name": "ZeroSequencerStake",
-          "line": 715,
+          "line": 725,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 717,
+          "line": 727,
           "called": [
+            "AmmDisasterRecoveryRequired",
             "AmmRoleIsBridge",
             "AmmSeedRatioExceedsMax",
             "AutoTriggerRequiresBold",
@@ -506,7 +513,7 @@
         {
           "kind": "modifier",
           "name": "circuitOpen",
-          "line": 960,
+          "line": 981,
           "called": [
             "AttestationStale",
             "DisputeCooldown",
@@ -523,13 +530,13 @@
         {
           "kind": "modifier",
           "name": "withdrawalOpen",
-          "line": 988,
+          "line": 1009,
           "called": []
         },
         {
           "kind": "modifier",
           "name": "boldCircuitOpen",
-          "line": 998,
+          "line": 1019,
           "called": [
             "BoldDepositPaused"
           ]
@@ -537,7 +544,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldCircuitBreaker",
-          "line": 1007,
+          "line": 1028,
           "called": [
             "NotBoldCircuitBreaker"
           ]
@@ -545,7 +552,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldAdmin",
-          "line": 1015,
+          "line": 1036,
           "called": [
             "NotBoldAdmin"
           ]
@@ -553,7 +560,7 @@
         {
           "kind": "modifier",
           "name": "onlyAmmDisasterRecovery",
-          "line": 1026,
+          "line": 1047,
           "called": [
             "NotAmmDisasterRecovery"
           ]
@@ -561,7 +568,7 @@
         {
           "kind": "modifier",
           "name": "ammActive",
-          "line": 1035,
+          "line": 1056,
           "called": [
             "AmmIsDisabled"
           ]
@@ -569,7 +576,7 @@
         {
           "kind": "event",
           "name": "DepositInitiated",
-          "line": 1044,
+          "line": 1065,
           "called": [
             "receiptHash"
           ]
@@ -577,7 +584,7 @@
         {
           "kind": "function",
           "name": "depositETH",
-          "line": 1055,
+          "line": 1076,
           "called": [
             "_registerDeposit",
             "circuitOpen"
@@ -586,7 +593,7 @@
         {
           "kind": "function",
           "name": "depositERC20",
-          "line": 1066,
+          "line": 1087,
           "called": [
             "BoldDepositViaFeeSplitOnly",
             "TransferAmountMismatch",
@@ -598,7 +605,7 @@
         {
           "kind": "function",
           "name": "_registerDeposit",
-          "line": 1113,
+          "line": 1134,
           "called": [
             "DepositInitiated",
             "TvlCapReached",
@@ -610,7 +617,7 @@
         {
           "kind": "event",
           "name": "DepositWithFeeInitiated",
-          "line": 1159,
+          "line": 1180,
           "called": [
             "receiptHash"
           ]
@@ -618,7 +625,7 @@
         {
           "kind": "function",
           "name": "depositETHWithFee",
-          "line": 1181,
+          "line": 1202,
           "called": [
             "FeeBpsAboveMax",
             "FeeBpsBelowMin",
@@ -630,7 +637,7 @@
         {
           "kind": "function",
           "name": "depositBoldWithFee",
-          "line": 1248,
+          "line": 1269,
           "called": [
             "BoldNotEnabled",
             "BoldTransferAmountMismatch",
@@ -645,7 +652,7 @@
         {
           "kind": "function",
           "name": "_registerDepositWithFee",
-          "line": 1337,
+          "line": 1358,
           "called": [
             "BoldTvlCapReached",
             "DepositWithFeeInitiated",
@@ -659,115 +666,115 @@
         {
           "kind": "function",
           "name": "_seedAmmReserves",
-          "line": 1447,
+          "line": 1468,
           "called": []
         },
         {
           "kind": "event",
           "name": "AmmSwapExecuted",
-          "line": 1489,
+          "line": 1510,
           "called": []
         },
         {
           "kind": "error",
           "name": "SwapDeadlineExpired",
-          "line": 1501,
+          "line": 1522,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroSwapInput",
-          "line": 1503,
+          "line": 1524,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroSwapOutput",
-          "line": 1507,
+          "line": 1528,
           "called": []
         },
         {
           "kind": "error",
           "name": "EthAmountMismatch",
-          "line": 1509,
+          "line": 1530,
           "called": []
         },
         {
           "kind": "error",
           "name": "UnexpectedEth",
-          "line": 1511,
+          "line": 1532,
           "called": []
         },
         {
           "kind": "error",
           "name": "UnsupportedSwapResource",
-          "line": 1514,
+          "line": 1535,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmEmpty",
-          "line": 1518,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "SlippageExceeded",
-          "line": 1521,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ReserveExhausted",
-          "line": 1526,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "EthTransferFailed",
-          "line": 1529,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmmKInvariantViolated",
-          "line": 1536,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmmIsDisabled",
           "line": 1539,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AmmPausedByBoldCircuit",
+          "name": "SlippageExceeded",
           "line": 1542,
           "called": []
         },
         {
           "kind": "error",
+          "name": "ReserveExhausted",
+          "line": 1547,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthTransferFailed",
+          "line": 1550,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmKInvariantViolated",
+          "line": 1557,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmIsDisabled",
+          "line": 1560,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmPausedByBoldCircuit",
+          "line": 1563,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "NotAmmDisasterRecovery",
-          "line": 1545,
+          "line": 1566,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmAlreadyDisabled",
-          "line": 1548,
+          "line": 1569,
           "called": []
         },
         {
           "kind": "event",
           "name": "AmmDisabled",
-          "line": 1553,
+          "line": 1574,
           "called": []
         },
         {
           "kind": "function",
           "name": "emergencyDisableAmm",
-          "line": 1568,
+          "line": 1589,
           "called": [
             "AmmAlreadyDisabled",
             "AmmDisabled",
@@ -777,7 +784,7 @@
         {
           "kind": "function",
           "name": "ammSwap",
-          "line": 1625,
+          "line": 1646,
           "called": [
             "AmmEmpty",
             "AmmKInvariantViolated",
@@ -799,13 +806,13 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 1754,
+          "line": 1775,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 1761,
+          "line": 1782,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -822,13 +829,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 1800,
+          "line": 1821,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 1807,
+          "line": 1828,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -837,7 +844,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 1813,
+          "line": 1834,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -847,25 +854,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 1824,
+          "line": 1845,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 1840,
+          "line": 1861,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 1853,
+          "line": 1874,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 1859,
+          "line": 1880,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -889,7 +896,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 1947,
+          "line": 1968,
           "called": [
             "PendingWithdrawal"
           ]
@@ -897,7 +904,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 1962,
+          "line": 1983,
           "called": [
             "InvalidProof"
           ]
@@ -905,13 +912,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 2000,
+          "line": 2021,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 2004,
+          "line": 2025,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -922,31 +929,31 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 2047,
+          "line": 2068,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 2050,
+          "line": 2071,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 2056,
+          "line": 2077,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 2061,
+          "line": 2082,
           "called": []
         },
         {
           "kind": "function",
           "name": "closeBoldCircuit",
-          "line": 2068,
+          "line": 2089,
           "called": [
             "BoldCircuitClosed",
             "onlyBoldCircuitBreaker"
@@ -955,7 +962,7 @@
         {
           "kind": "function",
           "name": "openBoldCircuit",
-          "line": 2077,
+          "line": 2098,
           "called": [
             "BoldCircuitOpened",
             "onlyBoldCircuitBreaker"
@@ -964,7 +971,7 @@
         {
           "kind": "function",
           "name": "closeBoldCircuitIfAnyLiquityBranchShutdown",
-          "line": 2106,
+          "line": 2127,
           "called": [
             "AutoCircuitTriggerDisabled",
             "BoldCircuitClosedByAutoTrigger",
@@ -975,7 +982,7 @@
         {
           "kind": "function",
           "name": "_readLiquityShutdownTime",
-          "line": 2156,
+          "line": 2177,
           "called": [
             "LiquityV2ReadFailed"
           ]
@@ -983,7 +990,7 @@
         {
           "kind": "function",
           "name": "setBoldTvlCap",
-          "line": 2179,
+          "line": 2200,
           "called": [
             "BoldTvlCapExceedsGlobal",
             "BoldTvlCapUpdated",
@@ -993,7 +1000,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 2191,
+          "line": 2212,
           "called": []
         }
       ]
@@ -4583,7 +4590,7 @@
     {
       "module": "AmmKillSwitch.t",
       "path": "solidity/test/AmmKillSwitch.t.sol",
-      "declaration_count": 13,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "contract",
@@ -4611,8 +4618,18 @@
         },
         {
           "kind": "function",
-          "name": "test_emergencyDisableAmm_unreachableWhenRoleZero",
+          "name": "test_constructor_functionalAmmRequiresRole",
           "line": 56,
+          "called": [
+            "KnomosisBridge",
+            "_boldEnabledArgs",
+            "_etchBold"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_constructor_disabledAmmMayOptOutOfRole",
+          "line": 68,
           "called": [
             "KnomosisBridge",
             "_boldEnabledArgs",
@@ -4623,7 +4640,7 @@
         {
           "kind": "function",
           "name": "test_constructor_ammRoleIsBridge_reverts",
-          "line": 71,
+          "line": 84,
           "called": [
             "KnomosisBridge",
             "_boldEnabledArgs",
@@ -4633,7 +4650,7 @@
         {
           "kind": "function",
           "name": "test_emergencyDisableAmm_preservesReserves_andEmits",
-          "line": 89,
+          "line": 102,
           "called": [
             "AmmDisabled",
             "KnomosisBridge",
@@ -4645,7 +4662,7 @@
         {
           "kind": "function",
           "name": "test_ammDisabled_swapReverts_bothDirections",
-          "line": 105,
+          "line": 118,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4658,7 +4675,7 @@
         {
           "kind": "function",
           "name": "test_ammDisabled_isMonotonic",
-          "line": 124,
+          "line": 137,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4668,7 +4685,7 @@
         {
           "kind": "function",
           "name": "test_ammDisabled_stopsSeeding_depositStillWorks",
-          "line": 140,
+          "line": 153,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4679,7 +4696,7 @@
         {
           "kind": "function",
           "name": "test_breaker_closedHaltsSwaps_bothDirections",
-          "line": 161,
+          "line": 174,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4692,7 +4709,7 @@
         {
           "kind": "function",
           "name": "test_breaker_reopenedResumesSwaps",
-          "line": 180,
+          "line": 193,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4704,7 +4721,7 @@
         {
           "kind": "function",
           "name": "test_brakes_areIndependent",
-          "line": 201,
+          "line": 214,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4715,7 +4732,7 @@
         {
           "kind": "function",
           "name": "test_brakes_killSwitchPrecedesBreaker",
-          "line": 219,
+          "line": 232,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",

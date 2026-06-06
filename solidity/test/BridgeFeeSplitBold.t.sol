@@ -132,7 +132,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
-                ammDisasterRecovery: address(0),
+                ammDisasterRecovery: address(0xA33D6),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -183,7 +183,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
-                ammDisasterRecovery: address(0),
+                ammDisasterRecovery: address(0xA33D6),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -665,7 +665,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
-                ammDisasterRecovery: address(0),
+                ammDisasterRecovery: address(0xA33D6),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1044,7 +1044,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
-                ammDisasterRecovery: address(0),
+                ammDisasterRecovery: address(0xA33D6),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
