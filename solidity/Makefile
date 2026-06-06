@@ -16,6 +16,26 @@ test:
 test-cross-stack:
 	forge test --match-path 'test/CrossCheck/*'
 
+# Line/statement/branch/function coverage.
+#
+# `--ir-minimum` is REQUIRED: the production contracts (e.g.
+# KnomosisStepVM, KnomosisBridge) need `via_ir` to compile (stack-too-deep
+# otherwise), but forge's coverage instrumentation cannot rewrite fully
+# optimized via_ir output — so `forge coverage` without a flag falls back
+# to legacy codegen and dies stack-too-deep.  `--ir-minimum` enables
+# via_ir at minimum optimization, which forge CAN instrument.  The test
+# harness was made stack-fit for that reduced-optimization path (see
+# `test/utils/Deployer.sol`'s `DeployParams` struct + `_deployAll`), so
+# this target compiles + runs end-to-end.  `coverage-lcov` emits
+# `lcov.info` for CI / IDE consumption.
+.PHONY: coverage
+coverage:
+	forge coverage --ir-minimum --report summary
+
+.PHONY: coverage-lcov
+coverage-lcov:
+	forge coverage --ir-minimum --report lcov
+
 # Workstream GP.5.2 — constitutional fee-split-cap audit gate.
 # Pure grep/sed/awk; no solc/forge dependency.  Fails if MAX_FEE_BPS_CAP,
 # MIN_WEI_PER_BUDGET_UNIT, or MAX_BUDGET_PER_DEPOSIT drift from their
