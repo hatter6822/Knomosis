@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0022bc259f40a14d33a293f7bea884134e94b421bea272358f48d3390d21d730"
+    "source_digest": "85bbe128763b00d85853e06447750b3f2a873a8eda27af21cf417c21bac88e25"
   },
   "summary": {
     "module_count": 136,
@@ -38821,7 +38821,7 @@
         {
           "kind": "const",
           "name": "DEPOSIT_WITH_FEE_INITIATED_TOPIC",
-          "line": 103,
+          "line": 108,
           "called": [
             "TopicHash"
           ]
@@ -38829,7 +38829,7 @@
         {
           "kind": "struct",
           "name": "RawLog",
-          "line": 114,
+          "line": 119,
           "called": [
             "EthAddress",
             "TopicHash",
@@ -38839,25 +38839,25 @@
         {
           "kind": "enum",
           "name": "EventTopic",
-          "line": 137,
+          "line": 142,
           "called": []
         },
         {
           "kind": "impl",
           "name": "EventTopic",
-          "line": 157,
+          "line": 162,
           "called": []
         },
         {
           "kind": "fn",
           "name": "signature",
-          "line": 163,
+          "line": 168,
           "called": []
         },
         {
           "kind": "fn",
           "name": "hash",
-          "line": 196,
+          "line": 202,
           "called": [
             "DEPOSIT_INITIATED_TOPIC",
             "DEPOSIT_WITH_FEE_INITIATED_TOPIC",
@@ -38870,7 +38870,7 @@
         {
           "kind": "fn",
           "name": "from_hash",
-          "line": 209,
+          "line": 215,
           "called": [
             "TopicHash",
             "hash"
@@ -38879,7 +38879,7 @@
         {
           "kind": "enum",
           "name": "IngestedEvent",
-          "line": 234,
+          "line": 240,
           "called": [
             "EthAddress",
             "TopicHash",
@@ -38890,13 +38890,13 @@
         {
           "kind": "impl",
           "name": "IngestedEvent",
-          "line": 349,
+          "line": 361,
           "called": []
         },
         {
           "kind": "fn",
           "name": "origin_key",
-          "line": 353,
+          "line": 365,
           "called": [
             "TopicHash",
             "block_number"
@@ -38905,13 +38905,13 @@
         {
           "kind": "fn",
           "name": "variant_name",
-          "line": 390,
+          "line": 402,
           "called": []
         },
         {
           "kind": "enum",
           "name": "DecodeError",
-          "line": 403,
+          "line": 415,
           "called": [
             "error",
             "event",
@@ -38922,7 +38922,7 @@
         {
           "kind": "fn",
           "name": "decode_abi_u64",
-          "line": 465,
+          "line": 477,
           "called": [
             "DecodeError",
             "Err",
@@ -38934,7 +38934,7 @@
         {
           "kind": "fn",
           "name": "decode_abi_address",
-          "line": 481,
+          "line": 493,
           "called": [
             "DecodeError",
             "Err",
@@ -38946,7 +38946,7 @@
         {
           "kind": "fn",
           "name": "read_slot",
-          "line": 497,
+          "line": 509,
           "called": [
             "DecodeError",
             "Err",
@@ -38958,7 +38958,7 @@
         {
           "kind": "fn",
           "name": "slot_to_u64",
-          "line": 514,
+          "line": 526,
           "called": [
             "DecodeError",
             "decode_abi_u64",
@@ -38968,7 +38968,7 @@
         {
           "kind": "fn",
           "name": "decode_abi_bytes",
-          "line": 526,
+          "line": 538,
           "called": [
             "DecodeError",
             "Err",
@@ -38984,7 +38984,7 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 589,
+          "line": 601,
           "called": [
             "DecodeError",
             "Err",
@@ -39004,7 +39004,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 725,
+          "line": 741,
           "called": [
             "DEPOSIT_WITH_FEE_INITIATED_TOPIC",
             "DecodeError",
@@ -39021,7 +39021,7 @@
         {
           "kind": "fn",
           "name": "keccak_of_signature",
-          "line": 736,
+          "line": 752,
           "called": [
             "EventTopic",
             "TopicHash",
@@ -39032,7 +39032,7 @@
         {
           "kind": "const",
           "name": "ALL_TOPICS",
-          "line": 748,
+          "line": 764,
           "called": [
             "EventTopic"
           ]
@@ -39040,7 +39040,7 @@
         {
           "kind": "fn",
           "name": "topic_constants_match_keccak_of_signature",
-          "line": 763,
+          "line": 779,
           "called": [
             "ALL_TOPICS",
             "hash",
@@ -39050,7 +39050,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_topic_constant_is_exported_and_canonical",
-          "line": 779,
+          "line": 795,
           "called": [
             "DEPOSIT_WITH_FEE_INITIATED_TOPIC",
             "hash",
@@ -39060,7 +39060,7 @@
         {
           "kind": "fn",
           "name": "topic_round_trip",
-          "line": 793,
+          "line": 809,
           "called": [
             "ALL_TOPICS",
             "hash"
@@ -39069,7 +39069,7 @@
         {
           "kind": "fn",
           "name": "topic_unknown_returns_none",
-          "line": 802,
+          "line": 818,
           "called": [
             "TopicHash"
           ]
@@ -39077,7 +39077,7 @@
         {
           "kind": "fn",
           "name": "topics_pairwise_distinct",
-          "line": 809,
+          "line": 825,
           "called": [
             "ALL_TOPICS",
             "len"
@@ -39086,7 +39086,7 @@
         {
           "kind": "fn",
           "name": "decode_address_low_20",
-          "line": 820,
+          "line": 836,
           "called": [
             "addr",
             "decode_abi_address"
@@ -39095,7 +39095,7 @@
         {
           "kind": "fn",
           "name": "decode_address_rejects_high_bits",
-          "line": 836,
+          "line": 852,
           "called": [
             "Err",
             "decode_abi_address"
@@ -39104,7 +39104,7 @@
         {
           "kind": "fn",
           "name": "decode_u64_low_8",
-          "line": 849,
+          "line": 865,
           "called": [
             "decode_abi_u64"
           ]
@@ -39112,7 +39112,7 @@
         {
           "kind": "fn",
           "name": "decode_u64_rejects_overflow",
-          "line": 865,
+          "line": 881,
           "called": [
             "Err",
             "decode_abi_u64",
@@ -39122,7 +39122,7 @@
         {
           "kind": "fn",
           "name": "decode_dynamic_bytes_empty",
-          "line": 876,
+          "line": 892,
           "called": [
             "bytes",
             "decode_abi_bytes",
@@ -39132,7 +39132,7 @@
         {
           "kind": "fn",
           "name": "decode_dynamic_bytes_short",
-          "line": 890,
+          "line": 906,
           "called": [
             "bytes",
             "decode_abi_bytes"
@@ -39141,7 +39141,7 @@
         {
           "kind": "fn",
           "name": "decode_event_no_topics",
-          "line": 906,
+          "line": 922,
           "called": [
             "Err",
             "RawLog",
@@ -39152,7 +39152,7 @@
         {
           "kind": "fn",
           "name": "decode_event_unknown_topic",
-          "line": 920,
+          "line": 936,
           "called": [
             "RawLog",
             "block_number",
@@ -39162,7 +39162,7 @@
         {
           "kind": "fn",
           "name": "decode_event_registered_ecdsa",
-          "line": 935,
+          "line": 951,
           "called": [
             "RawLog",
             "_",
@@ -39176,7 +39176,7 @@
         {
           "kind": "fn",
           "name": "decode_event_registered_ecdsa_topic_count",
-          "line": 977,
+          "line": 993,
           "called": [
             "Err",
             "RawLog",
@@ -39189,7 +39189,7 @@
         {
           "kind": "fn",
           "name": "decode_event_revoked",
-          "line": 1000,
+          "line": 1016,
           "called": [
             "RawLog",
             "_",
@@ -39203,7 +39203,7 @@
         {
           "kind": "fn",
           "name": "decode_event_deposit_initiated",
-          "line": 1023,
+          "line": 1039,
           "called": [
             "RawLog",
             "_",
@@ -39216,7 +39216,7 @@
         {
           "kind": "fn",
           "name": "decode_event_deposit_with_fee_initiated",
-          "line": 1086,
+          "line": 1102,
           "called": [
             "RawLog",
             "_",
@@ -39229,7 +39229,7 @@
         {
           "kind": "fn",
           "name": "decode_event_deposit_with_fee_wrong_topic_count",
-          "line": 1167,
+          "line": 1192,
           "called": [
             "Err",
             "RawLog",
@@ -39242,7 +39242,7 @@
         {
           "kind": "fn",
           "name": "decode_event_deposit_with_fee_bold_resource_id_1",
-          "line": 1198,
+          "line": 1223,
           "called": [
             "RawLog",
             "_",
@@ -39255,7 +39255,7 @@
         {
           "kind": "fn",
           "name": "deposit_event_topics_are_distinct",
-          "line": 1258,
+          "line": 1292,
           "called": [
             "hash",
             "signature"
@@ -39264,7 +39264,7 @@
         {
           "kind": "fn",
           "name": "origin_key_extracts_triple",
-          "line": 1276,
+          "line": 1310,
           "called": [
             "actor",
             "block_number",
@@ -39275,7 +39275,7 @@
         {
           "kind": "fn",
           "name": "variant_name",
-          "line": 1292,
+          "line": 1326,
           "called": [
             "actor",
             "block_number"
@@ -39373,7 +39373,7 @@
         {
           "kind": "fn",
           "name": "decode_input",
-          "line": 256,
+          "line": 259,
           "called": [
             "Err",
             "EthAddress",
@@ -39400,7 +39400,7 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 301,
+          "line": 304,
           "called": [
             "EVENT_TAG_DEPOSIT_INITIATED",
             "EVENT_TAG_DEPOSIT_WITH_FEE",
@@ -39428,17 +39428,6 @@
         {
           "kind": "fn",
           "name": "read_u32_be",
-          "line": 421,
-          "called": [
-            "FixtureError",
-            "bytes",
-            "cursor",
-            "read_bytes"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "read_u64_be",
           "line": 428,
           "called": [
             "FixtureError",
@@ -39449,7 +39438,7 @@
         },
         {
           "kind": "fn",
-          "name": "read_u128_be",
+          "name": "read_u64_be",
           "line": 435,
           "called": [
             "FixtureError",
@@ -39460,8 +39449,19 @@
         },
         {
           "kind": "fn",
-          "name": "read_bytes",
+          "name": "read_u128_be",
           "line": 442,
+          "called": [
+            "FixtureError",
+            "bytes",
+            "cursor",
+            "read_bytes"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_bytes",
+          "line": 449,
           "called": [
             "Err",
             "FixtureError",
@@ -39475,7 +39475,7 @@
         {
           "kind": "enum",
           "name": "FixtureExpected",
-          "line": 461,
+          "line": 468,
           "called": [
             "nonce",
             "signer"
@@ -39484,7 +39484,7 @@
         {
           "kind": "fn",
           "name": "encode_expected",
-          "line": 485,
+          "line": 492,
           "called": [
             "UnsignedAction",
             "_",
@@ -39497,25 +39497,25 @@
         {
           "kind": "struct",
           "name": "FeeSplitInput",
-          "line": 564,
+          "line": 571,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_BUDGET_PER_DEPOSIT",
-          "line": 589,
+          "line": 596,
           "called": []
         },
         {
           "kind": "const",
           "name": "FEE_SPLIT_INPUT_BYTES",
-          "line": 593,
+          "line": 600,
           "called": []
         },
         {
           "kind": "const",
           "name": "_",
-          "line": 601,
+          "line": 608,
           "called": [
             "FEE_SPLIT_INPUT_BYTES"
           ]
@@ -39523,13 +39523,13 @@
         {
           "kind": "impl",
           "name": "FeeSplitInput",
-          "line": 606,
+          "line": 613,
           "called": []
         },
         {
           "kind": "fn",
           "name": "split",
-          "line": 644,
+          "line": 651,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "min"
@@ -39538,13 +39538,13 @@
         {
           "kind": "const",
           "name": "MAX_ADMISSIBLE_FEE_BPS",
-          "line": 698,
+          "line": 705,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_action",
-          "line": 723,
+          "line": 730,
           "called": [
             "split"
           ]
@@ -39552,7 +39552,7 @@
         {
           "kind": "fn",
           "name": "encode_fee_split_input",
-          "line": 749,
+          "line": 756,
           "called": [
             "FEE_SPLIT_INPUT_BYTES",
             "FeeSplitInput",
@@ -39562,7 +39562,7 @@
         {
           "kind": "fn",
           "name": "decode_fee_split_input",
-          "line": 778,
+          "line": 785,
           "called": [
             "Err",
             "FEE_SPLIT_INPUT_BYTES",
@@ -39577,7 +39577,7 @@
         {
           "kind": "fn",
           "name": "decode_expected",
-          "line": 825,
+          "line": 832,
           "called": [
             "Err",
             "FixtureError",
@@ -39599,7 +39599,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 852,
+          "line": 859,
           "called": [
             "Action",
             "EthAddress",
@@ -39616,7 +39616,7 @@
         {
           "kind": "fn",
           "name": "sample_registered_ecdsa",
-          "line": 861,
+          "line": 868,
           "called": [
             "IngestedEvent",
             "actor",
@@ -39626,7 +39626,7 @@
         {
           "kind": "fn",
           "name": "registered_ecdsa_round_trip",
-          "line": 873,
+          "line": 880,
           "called": [
             "FixtureInput",
             "address_book",
@@ -39639,7 +39639,7 @@
         {
           "kind": "fn",
           "name": "revoked_round_trip",
-          "line": 886,
+          "line": 893,
           "called": [
             "FixtureInput",
             "actor",
@@ -39653,7 +39653,7 @@
         {
           "kind": "fn",
           "name": "deposit_initiated_round_trip",
-          "line": 907,
+          "line": 914,
           "called": [
             "FixtureInput",
             "address_book",
@@ -39666,7 +39666,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_round_trip",
-          "line": 930,
+          "line": 937,
           "called": [
             "FixtureInput",
             "address_book",
@@ -39679,7 +39679,7 @@
         {
           "kind": "fn",
           "name": "registered_eip1271_round_trip",
-          "line": 955,
+          "line": 963,
           "called": [
             "FixtureInput",
             "actor",
@@ -39693,7 +39693,7 @@
         {
           "kind": "fn",
           "name": "truncated_input_returns_unexpected_end",
-          "line": 974,
+          "line": 982,
           "called": [
             "Err",
             "FixtureInput",
@@ -39708,7 +39708,7 @@
         {
           "kind": "fn",
           "name": "unknown_event_tag_returns_error",
-          "line": 990,
+          "line": 998,
           "called": [
             "Err",
             "bytes",
@@ -39719,7 +39719,7 @@
         {
           "kind": "fn",
           "name": "expected_none_round_trip",
-          "line": 1000,
+          "line": 1008,
           "called": [
             "decode_expected",
             "encode_expected"
@@ -39728,7 +39728,7 @@
         {
           "kind": "fn",
           "name": "expected_some_round_trip",
-          "line": 1009,
+          "line": 1017,
           "called": [
             "UnsignedAction",
             "_",
@@ -39744,7 +39744,7 @@
         {
           "kind": "fn",
           "name": "encoding_deterministic",
-          "line": 1041,
+          "line": 1049,
           "called": [
             "FixtureInput",
             "address_book",
@@ -39756,7 +39756,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_huge_address_book_length",
-          "line": 1058,
+          "line": 1066,
           "called": [
             "Err",
             "bytes",
@@ -39767,7 +39767,7 @@
         {
           "kind": "fn",
           "name": "decode_input_rejects_at_threshold",
-          "line": 1085,
+          "line": 1093,
           "called": [
             "Err",
             "_",
@@ -39779,7 +39779,7 @@
         {
           "kind": "fn",
           "name": "decode_input_accepts_at_threshold_but_fails_on_truncation",
-          "line": 1106,
+          "line": 1114,
           "called": [
             "Err",
             "bytes",
@@ -39790,13 +39790,13 @@
         {
           "kind": "fn",
           "name": "sample_fee_split",
-          "line": 1127,
+          "line": 1135,
           "called": []
         },
         {
           "kind": "fn",
           "name": "encode_fee_split_input_length",
-          "line": 1142,
+          "line": 1150,
           "called": [
             "len",
             "sample_fee_split"
@@ -39805,7 +39805,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_round_trip",
-          "line": 1151,
+          "line": 1159,
           "called": [
             "sample_fee_split"
           ]
@@ -39813,7 +39813,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_truncated_returns_unexpected_end",
-          "line": 1160,
+          "line": 1168,
           "called": [
             "Err",
             "len",
@@ -39823,7 +39823,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_oversized_returns_trailing_bytes",
-          "line": 1175,
+          "line": 1183,
           "called": [
             "Err",
             "push",
@@ -39834,7 +39834,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_exact_length_decodes_cleanly",
-          "line": 1193,
+          "line": 1201,
           "called": [
             "len",
             "sample_fee_split"
@@ -39843,7 +39843,7 @@
         {
           "kind": "fn",
           "name": "fee_split_canonical_sample",
-          "line": 1207,
+          "line": 1215,
           "called": [
             "budget",
             "sample_fee_split",
@@ -39853,7 +39853,7 @@
         {
           "kind": "fn",
           "name": "fee_split_zero_fee",
-          "line": 1221,
+          "line": 1229,
           "called": [
             "budget",
             "sample_fee_split",
@@ -39863,7 +39863,7 @@
         {
           "kind": "fn",
           "name": "fee_split_max_fee_50_percent",
-          "line": 1235,
+          "line": 1243,
           "called": [
             "_",
             "sample_fee_split",
@@ -39873,7 +39873,7 @@
         {
           "kind": "fn",
           "name": "fee_split_residue_favours_user",
-          "line": 1250,
+          "line": 1258,
           "called": [
             "_",
             "sample_fee_split",
@@ -39883,7 +39883,7 @@
         {
           "kind": "fn",
           "name": "fee_split_budget_clamp",
-          "line": 1267,
+          "line": 1275,
           "called": [
             "_",
             "budget",
@@ -39894,7 +39894,7 @@
         {
           "kind": "fn",
           "name": "fee_split_conservation_boundary",
-          "line": 1282,
+          "line": 1290,
           "called": [
             "_",
             "sample_fee_split",
@@ -39904,7 +39904,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_produces_correct_constructor",
-          "line": 1297,
+          "line": 1305,
           "called": [
             "_",
             "action",
@@ -39916,7 +39916,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_rejects_oversized",
-          "line": 1325,
+          "line": 1333,
           "called": [
             "sample_fee_split",
             "to_action"
@@ -39925,7 +39925,7 @@
         {
           "kind": "fn",
           "name": "fee_split_to_action_rejects_over_max_bps",
-          "line": 1345,
+          "line": 1353,
           "called": [
             "_",
             "split",
@@ -39935,7 +39935,7 @@
         {
           "kind": "fn",
           "name": "fee_split_overflow_path_rejects_without_panic",
-          "line": 1396,
+          "line": 1404,
           "called": [
             "_",
             "budget",
@@ -39946,7 +39946,7 @@
         {
           "kind": "fn",
           "name": "fee_split_encodable_boundary_is_exact_and_conserves",
-          "line": 1431,
+          "line": 1439,
           "called": [
             "budget",
             "split",
@@ -39956,7 +39956,7 @@
         {
           "kind": "fn",
           "name": "fee_split_resource_id_does_not_affect_arithmetic",
-          "line": 1460,
+          "line": 1468,
           "called": [
             "sample_fee_split",
             "split"
@@ -39965,13 +39965,13 @@
         {
           "kind": "fn",
           "name": "max_budget_per_deposit_constitutional_pin",
-          "line": 1476,
+          "line": 1484,
           "called": []
         },
         {
           "kind": "fn",
           "name": "fee_split_input_decode_explicit_bytes",
-          "line": 1485,
+          "line": 1493,
           "called": [
             "bytes",
             "len"
@@ -39980,7 +39980,7 @@
         {
           "kind": "fn",
           "name": "fee_split_input_encoding_deterministic",
-          "line": 1518,
+          "line": 1526,
           "called": [
             "sample_fee_split"
           ]
@@ -39988,7 +39988,7 @@
         {
           "kind": "fn",
           "name": "fee_split_division_by_zero_yields_zero_like_lean",
-          "line": 1535,
+          "line": 1543,
           "called": [
             "_",
             "budget",
@@ -43459,7 +43459,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_bold_emits_no_action",
-          "line": 486,
+          "line": 487,
           "called": [
             "block_number",
             "event",
@@ -43470,7 +43470,7 @@
         {
           "kind": "fn",
           "name": "eip1271_translates_via_contract_signer",
-          "line": 515,
+          "line": 517,
           "called": [
             "_",
             "action",
@@ -43484,7 +43484,7 @@
         {
           "kind": "fn",
           "name": "signer_is_always_bridge_actor",
-          "line": 539,
+          "line": 541,
           "called": [
             "BRIDGE_ACTOR_ID",
             "actor",
@@ -43499,7 +43499,7 @@
         {
           "kind": "fn",
           "name": "other_address_lookup_preserved",
-          "line": 576,
+          "line": 578,
           "called": [
             "_",
             "actor",
@@ -43511,7 +43511,7 @@
         {
           "kind": "fn",
           "name": "distinct_registrations_distinct_ids",
-          "line": 604,
+          "line": 606,
           "called": [
             "_",
             "actor",
@@ -43523,7 +43523,7 @@
         {
           "kind": "fn",
           "name": "nonce_passes_through",
-          "line": 638,
+          "line": 640,
           "called": [
             "actor",
             "addr",
@@ -43537,7 +43537,7 @@
         {
           "kind": "fn",
           "name": "preview_ingest_does_not_mutate_book",
-          "line": 657,
+          "line": 659,
           "called": [
             "Translated",
             "_",
@@ -43554,7 +43554,7 @@
         {
           "kind": "fn",
           "name": "preview_then_commit_materialises_assignment",
-          "line": 692,
+          "line": 694,
           "called": [
             "Translated",
             "actor",
@@ -43568,7 +43568,7 @@
         {
           "kind": "fn",
           "name": "preview_without_commit_allows_register_retry",
-          "line": 722,
+          "line": 724,
           "called": [
             "Translated",
             "action",
@@ -43582,7 +43582,7 @@
         {
           "kind": "fn",
           "name": "preview_rotation_does_not_emit_assignment",
-          "line": 780,
+          "line": 782,
           "called": [
             "Translated",
             "action",
@@ -43595,7 +43595,7 @@
         {
           "kind": "fn",
           "name": "preview_revoked_returns_no_action",
-          "line": 819,
+          "line": 821,
           "called": [
             "Translated",
             "actor",

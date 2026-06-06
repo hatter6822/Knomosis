@@ -6925,6 +6925,129 @@ sub-WU table above is the implementation roadmap.
     invariant verified for every fuzz input.
   * **Dependencies.**  GP.11.1, GP.5.1.
   * **Estimated effort.**  ~6 hours.
+  * **Status: COMPLETE (plan-literal, cross-stack).**  `KnomosisBridge.sol`'s
+    shared `_registerDepositWithFee` now seeds the embedded AMM from the
+    pool fee via the new `private _seedAmmReserves(resourceId, poolAmount)`
+    helper: it computes `ammSeedAmount = floor(poolAmount *
+    ammSeedRatioBps / 10000)` (`0` when the AMM is disabled, the seed
+    floors to zero, or the resource is off the ETH/BOLD gas legs) and
+    grows the matching reserve (`ammReserveEth` / `ammReserveBold`).  The
+    free-pool remainder is the implicit `poolAmount - ammSeedAmount`.
+    Conservation holds end-to-end — `userAmount + poolAmount == deposit`
+    (the entry point's floor split) and `poolAmount == ammSeedAmount +
+    freePoolAmount` (the GP.11.2 internal-accounting split), so `userAmount
+    + ammSeedAmount + freePoolAmount == deposit` — and the seed is a
+    reclassification of value already inside `totalLockedValue`, so no TVL
+    re-accounting is needed (`ammReserveEth + ammReserveBold <=
+    totalLockedValue` is a Foundry invariant).  The `poolAmount * ratio`
+    multiply and the `reserve + ammSeedAmount` add use checked arithmetic
+    (`ratio <= MAX_AMM_SEED_RATIO_BPS = 8000 < 10000` makes `ammSeedAmount
+    <= poolAmount`; both are physically unreachable to overflow and revert
+    rather than wrap on the impossible case).  `_seedAmmReserves` carries
+    a `GP.11.10 hook point` comment marking the exact line the future
+    `emergencyDisableAmm()` early-out will occupy.
+
+    **Wire format — plan-literal (the split lives in the canonical event +
+    receiptHash).**  The split is carried in the canonical
+    `DepositWithFeeInitiated` event by inserting a `uint256 ammSeedAmount`
+    field after `poolAmount`, and BOUND in the `receiptHash`
+    (`keccak256(abi.encode(deploymentId, sender, resourceId, token,
+    userAmount, poolAmount, ammSeedAmount, budgetGrant, depositorNonce))`).
+    The L2 reconstructs `freePoolAmount = poolAmount - ammSeedAmount` from
+    ONE event, and a replay with a tampered split is rejected (the
+    receiptHash is sensitive to `ammSeedAmount`, pinned by
+    `AmmDepositSeeding.t.sol::test_receiptHash_bindsAmmSeedAmount`).  This
+    is the additive form (keep `poolAmount`, insert `ammSeedAmount`) rather
+    than the sketch's rename `poolAmount → freePoolAmount`: it preserves
+    the informative total fee, minimises corpus churn, and is equally
+    tamper-evident (`poolAmount` and `ammSeedAmount` together fully
+    determine the split).  `ammSeedAmount == 0` on an AMM-disabled
+    deployment, so the field is present but zero there.
+
+    The change bumps the event's topic-0 hash (to
+    `0xdffb2055…e4c8f5`) and the receiptHash preimage (9 fields / 288
+    bytes; tail 8 fields / 256 bytes), which the plan explicitly accepts as
+    a v1.3 wire-format addition.  It is propagated cross-stack in lockstep:
+
+      * **Rust ingestor** (`knomosis-l1-ingest::events`):
+        `DEPOSIT_WITH_FEE_INITIATED_TOPIC` + the signature string + the
+        `decode_event` field offsets (`ammSeedAmount` at data offset 64;
+        `budgetGrant`/`nonce`/`receiptHash` shifted to 96/128/160) + the
+        `IngestedEvent::DepositWithFeeInitiated.amm_seed_amount` variant
+        field + the `.cxsf` serializer/deserializer + the affected tests.
+        Translation stays `NoAction` (deposit materialisation remains the
+        sequencer's responsibility).
+      * **Cross-stack receiptHash corpora** (`deposit_fee_split.json` +
+        `deposit_fee_split_bold.json`): the Lean generators
+        (`DepositFeeSplit.lean` / `DepositFeeSplitBold.lean`) add the
+        `ammSeed` reference (+ the proof-carrying `ammSeed_le` /
+        `ammSeed_conserves` bounds), the per-entry `ammSeedRatioBps` /
+        `ammSeedAmount` fields, and the 9-field receiptHash recipe; the 16
+        fee-split corners stay AMM-disabled (ratio 0), 6 AMM-enabled boundary
+        corners (`ammcorner:*` — max-fee × max-ratio, budget-clamp ×
+        max-ratio, exact-half × max-ratio, dust-floors-to-zero @ ratio 8000,
+        min-non-zero ratio, realistic mid-ratio) are appended (corpus 80 →
+        86), and the 64 randomised entries draw a random `ammSeedRatioBps ∈
+        [0, 8000]`, so 69 of 86 entries carry a NON-ZERO `ammSeedAmount`
+        whose receiptHash binding is verified cross-stack — and the
+        generator publishes a `countNonZeroSeed` header each Solidity
+        consumer independently recounts + asserts (`>= 50`), so the binding
+        coverage cannot silently regress to all-zero.  The Solidity consumers
+        (`DepositFeeSplit.t.sol` / `DepositFeeSplitBold.t.sol`) recompute the
+        split via `FeeSplitMath.ammSeedSplit`, byte-match the 256-byte
+        preimage tail, and deploy each entry's bridge at its `ammSeedRatioBps`
+        so the EMITTED `ammSeedAmount` (and the live reserve delta) match the
+        Lean value.  `bold_deposit.json` (GP.6.5, an L2 action + budget
+        corpus) and `DepositReceiptHash` (the plain-deposit corpus) are
+        unchanged; their Solidity consumers' event decoders absorb the new
+        (zero) `ammSeedAmount` field.
+
+    **Tests.**  New `test/AmmDepositSeeding.t.sol` (~26 cases — 19 unit /
+    fuzz + a 7-invariant stateful suite): per-leg seeding with
+    the canonical event's `ammSeedAmount` field, the disabled / zero-fee /
+    dust-floor `ammSeedAmount == 0` paths (decoded from the event),
+    `test_receiptHash_bindsAmmSeedAmount` + the BOLD-leg
+    `test_boldReceiptHash_bindsAmmSeedAmount` (tamper-evidence), leg
+    independence, monotonic accumulation, the reserve-subset-of-TVL bound,
+    `test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
+    (the negative paths — a reverted or non-fee-split deposit seeds nothing),
+    `test_seedAmmReserves_offLeg_seedsNothing` (the off-gas-leg `else` branch
+    via a `SeedHarness` exposing the now-`internal` helper),
+    `test_ammSeedSplit_knownVectors` (a non-circular hand-computed anchor for
+    the `FeeSplitMath` reference), `test_gas_seedingOverhead` (a COMPARATIVE
+    gas pin — enabled minus disabled overhead `< 15k`, far tighter than the
+    absolute envelope), the conservation fuzz over both legs + the whole `[0,
+    8000]` ratio range, and the stateful `AmmDepositSeedingInvariantTest`
+    (a 7-invariant suite: `ammReserveEth == sum-of-admitted-ETH-seeds`,
+    `ammReserveBold == sum-of-admitted-BOLD-seeds`, the global `reserves <=
+    TVL`, the two PER-CURRENCY bounds `ammReserveBold <=
+    boldTotalLockedValue` + `ammReserveEth + boldTotalLockedValue <=
+    totalLockedValue` — which catch a wrong-leg seed the global bound would
+    mask when the other leg has slack — AND the two REAL-TOKEN backing
+    bounds `ammReserveEth <= address(bridge).balance` / `ammReserveBold <=
+    BOLD.balanceOf(bridge)`, the ultimate solvency statement that the
+    reserve is backed by actual tokens the bridge holds, not merely the TVL
+    accounting variable (catches a TVL-vs-balance divergence the
+    accounting-only bounds would miss) — over 128 000 random ETH+BOLD
+    deposits at a moderate cap so some deposits revert).  The deposit→withdraw
+    interaction (the seeded reserve
+    surviving a withdrawal) is covered end-to-end by the AMM-enabled
+    `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`,
+    which drains TVL to exactly the seed floor and asserts `ammReserveBold <=
+    boldTotalLockedValue <= totalLockedValue` survives.
+    `AmmStorage.t.sol`'s ratio-invariance test is
+    `test_coreSplit_ratioInvariant_butAmmSeedScales` (the core
+    user/pool/budget triple is ratio-invariant while the canonical event's
+    `ammSeedAmount` + receiptHash scale with the ratio).  The behavioural
+    fee-split suites (`BridgeFeeSplit.t.sol` / `BridgeFeeSplitBold.t.sol`)
+    + `FeeSplitMath.receiptHash` thread the new `ammSeedAmount` field.
+    `forge build` warning-free; full `forge test` green; the GP.5.2
+    cap-audit gate + self-test (45 cases) stay green (no cap changed); the
+    full Lean (`lake build` + `lake test`) and Rust (build / test / clippy
+    / fmt) gates green.  The L2 `Action.ammSwap` mirror + `ammReserveActor`
+    remain GP.11.4 / GP.11.5; the deposit-side L2 reconstruction that
+    consumes the `ammSeedAmount` field lands with the sequencer-side
+    deposit-materialisation work.
 
 #### WU GP.11.3: AMM swap function
 

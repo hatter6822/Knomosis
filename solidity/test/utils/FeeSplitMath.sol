@@ -67,6 +67,31 @@ library FeeSplitMath {
         budgetGrant = raw > uint256(MAX_BUDGET_PER_DEPOSIT) ? MAX_BUDGET_PER_DEPOSIT : uint64(raw);
     }
 
+    /// @notice Reference for the Workstream GP.11.2 AMM-seed split of a
+    ///         pool fee.  Mirrors `KnomosisBridge._seedAmmReserves`:
+    ///           ammSeedAmount   = floor(poolAmount * ammSeedRatioBps / 10000)
+    ///           freePoolAmount  = poolAmount - ammSeedAmount
+    /// @dev    `ammSeedRatioBps` is taken as `uint256` so JSON-parsing call
+    ///         sites avoid a narrowing cast; the arithmetic is
+    ///         value-identical to the contract's `uint16` path.  Caller
+    ///         must ensure `ammSeedRatioBps <= 10000` (so `ammSeedAmount <=
+    ///         poolAmount` and the subtraction does not underflow); the
+    ///         contract enforces the stronger `ammSeedRatioBps <=
+    ///         MAX_AMM_SEED_RATIO_BPS = 8000` at construction.  A ratio of
+    ///         0 yields `(0, poolAmount)` — the AMM-disabled split.
+    function ammSeedSplit(uint256 poolAmount, uint256 ammSeedRatioBps)
+        internal
+        pure
+        returns (uint256 ammSeedAmount, uint256 freePoolAmount)
+    {
+        // Enforce the documented precondition: an out-of-range ratio makes
+        // ammSeedAmount > poolAmount, underflowing `freePoolAmount`.  Fail
+        // with a clear message rather than a bare arithmetic panic.
+        require(ammSeedRatioBps <= 10_000, "FeeSplitMath: ammSeedRatioBps > 10000");
+        ammSeedAmount = (poolAmount * ammSeedRatioBps) / 10_000;
+        freePoolAmount = poolAmount - ammSeedAmount;
+    }
+
     /// @notice Recompute the canonical fee-split `receiptHash`.
     ///         Mirrors `KnomosisBridge._registerDepositWithFee`.
     /// @dev    `resourceId`, `budgetGrant`, and `nonce` are taken as
@@ -74,7 +99,11 @@ library FeeSplitMath {
     ///         integer `< 2^64` as `uint256` yields the identical
     ///         32-byte word the contract's `uint64` `abi.encode`
     ///         produces, so the hash is byte-equal; widening lets call
-    ///         sites avoid narrowing casts.
+    ///         sites avoid narrowing casts.  Workstream GP.11.2 bound the
+    ///         AMM seed split into the preimage by inserting `ammSeedAmount`
+    ///         after `poolAmount` (9 fields total); `ammSeedAmount == 0` on
+    ///         an AMM-disabled deployment recovers the pre-GP.11.2 value
+    ///         shape with the extra zero word.
     function receiptHash(
         bytes32 deploymentId,
         address sender,
@@ -82,12 +111,21 @@ library FeeSplitMath {
         address token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint256 budgetGrant,
         uint256 nonce
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
-                deploymentId, sender, resourceId, token, userAmount, poolAmount, budgetGrant, nonce
+                deploymentId,
+                sender,
+                resourceId,
+                token,
+                userAmount,
+                poolAmount,
+                ammSeedAmount,
+                budgetGrant,
+                nonce
             )
         );
     }

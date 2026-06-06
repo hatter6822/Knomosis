@@ -2229,7 +2229,15 @@ the immutable `ammSeedRatioBps` validated `<= MAX_AMM_SEED_RATIO_BPS`,
 and the two constitutional caps `AMM_SWAP_FEE_BPS = 30` /
 `MAX_AMM_SEED_RATIO_BPS = 8000`) — is complete on the Solidity side
 (purely additive; `ammSeedRatioBps = 0` preserves the pre-v1.3
-behaviour).  See
+behaviour), and GP.11.2 — deposit-side seeding (`_registerDepositWithFee`
+now routes `floor(poolAmount * ammSeedRatioBps / 10000)` of every
+fee-split deposit into the matching reserve via `_seedAmmReserves`, with
+the AMM split carried in the canonical `DepositWithFeeInitiated` event
+(a new `ammSeedAmount` field inserted after `poolAmount`) and BOUND in the
+`receiptHash` — the plan-literal wire format, propagated cross-stack in
+lockstep to the Rust ingestor's pinned topic + decoder and the
+`deposit_fee_split{,_bold}.json` receiptHash corpora) — is also complete
+end-to-end (Solidity + Lean cross-check + Rust).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3577,27 +3585,101 @@ contributions surviving in current code:
     otherwise), and the two constitutional compile-time caps
     `AMM_SWAP_FEE_BPS = 30` (0.30%, the Uniswap-v2-standard swap fee) /
     `MAX_AMM_SEED_RATIO_BPS = 8000` (80%, the structural defence against
-    starving sequencer free-pool claims).  GP.11.1 ships no
-    deposit-seeding or swap logic yet, so the reserves stay 0 for the
-    lifetime of a GP.11.1-era deployment regardless of the seed ratio,
-    and `ammSeedRatioBps = 0` disables the AMM and preserves the pre-v1.3
-    behaviour byte-for-byte (every existing `ConstructorArgs` initializer
-    passes `0`).  The two new caps join the GP.5.2 source-level cap-audit
-    gate (`scripts/audit_compile_time_caps.sh`, now 6 caps + 4 address
-    pins + 1 symbol pin; self-test 37 → 45 cases) AND a compiled-contract
-    runtime pin (`AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`).
-    New `test/AmmStorage.t.sol` suite (16 cases: caps pinned, seed-ratio
-    store/validate incl. the `> MAX` + `uint16`-max reverts + a
-    `[0, MAX]`-accept / `(MAX, uint16Max]`-reject fuzz pair, reserves
-    start-and-stay zero across deposits, the v1.2-preservation
-    acceptance criterion — incl. a `0`-vs-`MAX` cross-ratio deposit
-    emitting a byte-identical split via `vm.expectEmit` — the "no
-    mutation surface even via admin functions" criterion via a
-    no-AMM-setter-selector probe, the BOLD leg via a real
-    `depositBoldWithFee` that leaves both reserves at 0, and a
-    constructor-guard ordering pin).  `forge build` warning-free; full
-    `forge test` green (661 passed).  Solidity-only; the L2 mirror
+    starving sequencer free-pool claims).  GP.11.1 added only the storage
+    scaffold (no seeding / swap logic — deposit-side seeding lands in
+    GP.11.2, below); `ammSeedRatioBps = 0` disables the AMM and preserves
+    the pre-v1.3 behaviour byte-for-byte (every existing `ConstructorArgs`
+    initializer passes `0`).  The two new caps join the GP.5.2 source-level
+    cap-audit gate (`scripts/audit_compile_time_caps.sh`, now 6 caps + 4
+    address pins + 1 symbol pin; self-test 37 → 45 cases) AND a
+    compiled-contract runtime pin
+    (`AmmStorage.t.sol::test_ammCompileTimeCaps_pinned`).  The
+    `test/AmmStorage.t.sol` suite (16 cases) pins the GP.11.1 storage
+    surface: caps pinned, seed-ratio store/validate incl. the `> MAX` +
+    `uint16`-max reverts + a `[0, MAX]`-accept / `(MAX, uint16Max]`-reject
+    fuzz pair, reserves start at zero with the seed as their sole write
+    path, the AMM has no admin setter (a no-AMM-setter-selector probe), the
+    ratio-invariance of the canonical deposit event
+    (`test_depositSplit_unchanged_acrossRatios`), and the constructor-guard
+    ordering — plus minimal positive seeding sanity checks that GP.11.2
+    updated in place (see below).  Solidity-only; the L2 mirror
     (`Action.ammSwap`) is GP.11.4 / GP.11.5.
+  * **GP.11.2** Embedded ETH↔BOLD AMM — seeding on deposit (cross-stack:
+    Solidity + Lean cross-check corpora + Rust ingestor).  The shared
+    `_registerDepositWithFee` (`KnomosisBridge.sol`) now seeds the AMM from
+    each fee-split deposit's pool fee via the new `private
+    _seedAmmReserves(resourceId, poolAmount)` helper: `ammSeedAmount =
+    floor(poolAmount * ammSeedRatioBps / 10000)` (0 when disabled, floored,
+    or off the ETH/BOLD gas legs) grows the matching reserve (`ammReserveEth`
+    / `ammReserveBold`); the free-pool remainder is the implicit `poolAmount
+    - ammSeedAmount`.  Conservation holds end-to-end (`userAmount +
+    ammSeedAmount + freePoolAmount == deposit`); the seed reclassifies value
+    already counted in `totalLockedValue`, so `ammReserveEth + ammReserveBold
+    <= totalLockedValue` (a Foundry invariant).  Checked arithmetic
+    throughout (`ratio <= MAX_AMM_SEED_RATIO_BPS = 8000 < 10000` ⇒
+    `ammSeedAmount <= poolAmount`; overflow reverts rather than wraps).  A
+    `GP.11.10 hook point` comment marks where `emergencyDisableAmm()`'s
+    early-out will go.  **Wire format (plan-literal):** the split is carried
+    in the canonical `DepositWithFeeInitiated` event by inserting a `uint256
+    ammSeedAmount` field after `poolAmount` and BOUND in the `receiptHash`
+    (`keccak256(abi.encode(deploymentId, sender, resourceId, token,
+    userAmount, poolAmount, ammSeedAmount, budgetGrant, depositorNonce))`),
+    so the L2 reconstructs `freePoolAmount = poolAmount - ammSeedAmount` from
+    one event and a replay with a tampered split is rejected (the receiptHash
+    is sensitive to `ammSeedAmount`, pinned by
+    `AmmDepositSeeding.t.sol::test_receiptHash_bindsAmmSeedAmount`).  This is
+    the additive form (keep `poolAmount`, insert `ammSeedAmount`) — equally
+    tamper-evident, preserving the total fee.  The change bumps the event
+    topic-0 hash (`0xdffb2055…e4c8f5`) + the receiptHash preimage (9 fields
+    / 288 bytes), accepted as the v1.3 wire addition and propagated
+    cross-stack in lockstep: the Rust ingestor (`knomosis-l1-ingest::events`
+    — pinned topic + signature + `decode_event` offsets + the
+    `amm_seed_amount` variant field + `.cxsf` codec) and the
+    `deposit_fee_split{,_bold}.json` receiptHash corpora (the Lean
+    generators add the `ammSeed` reference + proof-carrying `ammSeed_le` /
+    `ammSeed_conserves` bounds + per-entry `ammSeedRatioBps` / `ammSeedAmount`
+    + the 9-field recipe; 6 AMM-enabled boundary corners (`ammcorner:*`) are
+    appended (corpus 80 → 86) and the 64 randomised entries draw a random
+    `ammSeedRatioBps ∈ [0, 8000]` so 69 of 86 carry NON-ZERO seeds whose
+    binding is cross-stack-verified — pinned by a `countNonZeroSeed` header
+    each consumer recounts + asserts `>= 50`; the Solidity consumers deploy
+    each entry's bridge at its ratio and byte-match the emitted split +
+    256-byte preimage tail).  `bold_deposit.json` (an L2 action + budget
+    corpus) and the plain-deposit `DepositReceiptHash` corpus are unchanged
+    (their consumers absorb the new zero `ammSeedAmount`).
+    `test/utils/FeeSplitMath.sol` gains the `ammSeedSplit` reference (with a
+    `ratio <= 10000` precondition guard) + threads `ammSeedAmount` through
+    `receiptHash`.  New `test/AmmDepositSeeding.t.sol` (~26 cases: per-leg
+    seeding via the event's `ammSeedAmount`, the disabled / zero-fee / dust
+    `ammSeedAmount == 0` paths, the ETH + BOLD tamper-evidence tests, leg
+    independence, monotonic accumulation, reserve-subset-of-TVL,
+    `test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
+    (negative paths), `test_seedAmmReserves_offLeg_seedsNothing` (the
+    off-gas-leg branch via a `SeedHarness` over the now-`internal` helper),
+    `test_ammSeedSplit_knownVectors` (non-circular reference anchor),
+    `test_gas_seedingOverhead` (a COMPARATIVE gas pin), three conservation
+    fuzz tests, and a 7-invariant stateful suite (reserve == sum-of-admitted-
+    seeds per leg, global reserves <= TVL, the two per-currency bounds
+    `ammReserveBold <= boldTotalLockedValue` / `ammReserveEth` within the ETH
+    TVL portion (catch a wrong-leg seed), + the two REAL-TOKEN backing bounds
+    `ammReserveEth <= address(bridge).balance` / `ammReserveBold <=
+    BOLD.balanceOf(bridge)` (the reserve is backed by actual tokens, not just
+    the TVL accounting — catches a TVL-vs-balance divergence)) over 128 000
+    random ETH+BOLD deposits at a moderate cap so some revert) plus the
+    AMM-enabled
+    `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`
+    end-to-end test (deposit seeds the reserve; a withdrawal drains all
+    non-seed value, proving `reserve <= TVL` survives with the seed as the
+    irreducible floor).
+    `test/AmmStorage.t.sol`'s ratio-invariance test became
+    `test_coreSplit_ratioInvariant_butAmmSeedScales` (the core
+    user/pool/budget triple is ratio-invariant while the event's
+    `ammSeedAmount` + receiptHash scale).  `forge build` warning-free; full
+    `forge test` green; the GP.5.2 cap-audit gate + self-test (45 cases)
+    stay green (no cap changed); full Lean + Rust gates green.  The L2
+    `Action.ammSwap` mirror + `ammReserveActor` are GP.11.4 / GP.11.5; the
+    deposit-side L2 reconstruction that consumes `ammSeedAmount` lands with
+    the sequencer deposit-materialisation work.
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the
@@ -3612,8 +3694,9 @@ strong-conservation extension (needs `Action.ammSwap` +
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
 abstract in `bridge_accounting_equation_balanced_iff`); and GP.7.6 –
-GP.10 plus GP.11.2 – GP.11.10 (sequencer integration, the embedded-AMM
-seeding / swap path, etc.; GP.11.1's L1 state scaffold has landed).
+GP.10 plus GP.11.3 – GP.11.10 (sequencer integration, the embedded-AMM
+swap path, etc.; GP.11.1's L1 state scaffold + GP.11.2's deposit-side
+seeding have landed).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
 step-VM execution arm for `topUpActionBudgetFor` (variant 21),

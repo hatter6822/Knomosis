@@ -219,6 +219,7 @@ The L1 escrow for deposits and withdrawals.
 | GP.5.4 | `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)` — BOLD fee-split deposit |
 | GP.5.5 | `closeBoldCircuit()` / `openBoldCircuit()` / `closeBoldCircuitIfAnyLiquityBranchShutdown()` / `setBoldTvlCap(uint256)` — BOLD circuit breaker + per-BOLD TVL cap |
 | GP.11.1 | `ammReserveEth()` / `ammReserveBold()` / `ammSeedRatioBps()` — embedded-AMM L1 state scaffold (reserves + immutable seed ratio) |
+| GP.11.2 | deposit-side AMM seeding — `_registerDepositWithFee` routes `floor(poolAmount * ammSeedRatioBps / 10000)` of each fee-split deposit into the matching reserve; the split is carried in `DepositWithFeeInitiated.ammSeedAmount` and bound in the `receiptHash` |
 
 **GP.5.1 fee-split deposit.**  `depositETHWithFee(chosenFeeBps)` lets
 the caller pick a fee in basis points within the deployment's
@@ -292,17 +293,80 @@ in GP.11.2, mutated by `ammSwap` in GP.11.3), the immutable
 `ammSeedRatioBps` (the bps fraction of each pool-fee deposit routed to
 AMM liquidity, a new `ConstructorArgs` field validated
 `<= MAX_AMM_SEED_RATIO_BPS` at construction — `AmmSeedRatioExceedsMax`
-otherwise), and the two constitutional caps above.  GP.11.1 is purely
-additive: it ships no seeding or swap logic, so the reserves stay 0 and
+otherwise), and the two constitutional caps above.  GP.11.1 added only
+the storage scaffold (the seeding lands in GP.11.2, below); a value of
 `ammSeedRatioBps = 0` disables the AMM and preserves the pre-v1.3
 behaviour byte-for-byte (every existing `ConstructorArgs` initializer
 passes `0`).  Coverage: `test/AmmStorage.t.sol` (16 cases — caps pinned,
 seed-ratio store/validate incl. the `> MAX` reverts and an accept/reject
-fuzz pair, reserves start-and-stay zero, the `ammSeedRatioBps = 0`
-v1.2-preservation criterion (incl. an event-level cross-ratio split
-check), a no-AMM-setter-selector probe for the "no admin mutation
-surface" criterion, a BOLD-enabled `depositBoldWithFee` that leaves both
-reserves at 0, and a constructor-guard ordering pin).
+fuzz pair, reserves start at zero with the seed as their sole write path,
+a no-AMM-setter-selector probe for the "no admin mutation surface"
+criterion, the ratio-invariance of the canonical deposit event, and a
+constructor-guard ordering pin).
+
+**GP.11.2 deposit-side AMM seeding.**  The shared `_registerDepositWithFee`
+now seeds the AMM from each fee-split deposit's pool fee via the
+`private _seedAmmReserves(resourceId, poolAmount)` helper:
+`ammSeedAmount = floor(poolAmount * ammSeedRatioBps / 10000)` (0 when the
+AMM is disabled, the seed floors to zero, or the resource is off the
+ETH/BOLD gas legs) is added to the matching reserve, leaving the implicit
+free-pool remainder `poolAmount - ammSeedAmount`.  Conservation is exact
+(`userAmount + ammSeedAmount + freePoolAmount = deposit`), and the seed is
+a reclassification of value already in `totalLockedValue`, so
+`ammReserveEth + ammReserveBold <= totalLockedValue` (a Foundry invariant).
+Checked arithmetic throughout (`ammSeedRatioBps <= MAX_AMM_SEED_RATIO_BPS =
+8000 < 10000` ⇒ the seed never exceeds the pool fee).  The split is carried
+in the canonical `DepositWithFeeInitiated` event — Workstream GP.11.2
+inserts a `uint256 ammSeedAmount` field after `poolAmount` — and BOUND in
+the `receiptHash` (`keccak256(abi.encode(deploymentId, sender, resourceId,
+token, userAmount, poolAmount, ammSeedAmount, budgetGrant, depositorNonce))`),
+so the L2 reconstructs `freePoolAmount = poolAmount - ammSeedAmount` from one
+event and a replay with a tampered split is rejected (the receiptHash is
+sensitive to `ammSeedAmount`).  This bumps the event's topic-0 hash and the
+receiptHash preimage (a v1.3 wire addition), propagated cross-stack in
+lockstep to the Rust ingestor (`knomosis-l1-ingest`: pinned topic +
+`decode_event` offsets + `amm_seed_amount` variant field) and the
+`deposit_fee_split{,_bold}.json` receiptHash corpora (whose 64 randomised
+entries now draw a random `ammSeedRatioBps ∈ [0, 8000]`, so the binding is
+cross-stack-verified with non-zero seeds — and pinned against a generator
+regression by the `countNonZeroSeed` header, which each consumer
+independently recounts and asserts).  Coverage:
+`test/AmmDepositSeeding.t.sol` (~26 cases — per-leg seeding via the event's
+`ammSeedAmount`, the disabled / zero-fee / dust `ammSeedAmount == 0` paths,
+`test_receiptHash_bindsAmmSeedAmount` + the BOLD-leg
+`test_boldReceiptHash_bindsAmmSeedAmount` (tamper-evidence), leg
+independence, monotonic accumulation, the reserve-subset-of-TVL bound,
+`test_cappedDeposit_revertsAndDoesNotSeed` + `test_plainDepositETH_doesNotSeed`
+(negative paths), `test_seedAmmReserves_offLeg_seedsNothing` (the off-gas-leg
+branch via a harness), `test_ammSeedSplit_knownVectors` (a non-circular
+hand-computed anchor for the reference), `test_gas_seedingOverhead` (a
+COMPARATIVE gas pin: enabled − disabled overhead, far tighter than an
+absolute envelope), three conservation fuzz tests, and a 7-invariant
+stateful suite (reserve == sum-of-admitted-seeds per leg, global reserves <=
+TVL, two per-currency reserve <= per-currency TVL bounds, + two REAL-TOKEN
+backing bounds — `ammReserveEth <= bridge ETH balance` / `ammReserveBold <=
+bridge BOLD balance`, proving the reserve is backed by actual tokens, not
+just the TVL accounting) over 128 000 random ETH+BOLD deposits at a moderate
+cap), plus the AMM-enabled
+`BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`
+end-to-end test (deposit seeds the reserve; a withdrawal drains all non-seed
+value, proving `ammReserveBold <= boldTotalLockedValue <= totalLockedValue`
+survives a withdrawal with the seed as the irreducible TVL floor) and the
+`ammSeedSplit`
+reference in `test/utils/FeeSplitMath.sol`.
+
+*Integrator / operator notes.*  (1) The canonical event carries the
+per-deposit seed (`ammSeedAmount`), not the resulting reserve balance; an
+indexer tracking the reserve CURVE accumulates `ammSeedAmount` across
+deposits, or reads the current reserve from the `ammReserveEth()` /
+`ammReserveBold()` getters (the design deliberately folds the split into the
+single canonical event rather than emitting a separate Uniswap-style
+`Sync`).  (2) GP.11.2 changed the `DepositWithFeeInitiated` topic-0 hash
+(`0xdffb2055…e4c8f5`) and its `receiptHash` preimage (the v1.3 wire
+addition).  Any off-chain consumer pinned to the pre-GP.11.2 topic must
+re-pin to the new one (the bundled Rust `knomosis-l1-ingest` already does);
+an AMM-disabled deployment emits the same new event with `ammSeedAmount ==
+0`, so there is no behavioural difference beyond the wire format.
 
 **GP.5.4 BOLD fee-split deposit.**  `depositBoldWithFee(amount,
 chosenFeeBps)` is the BOLD-currency mirror of `depositETHWithFee`:

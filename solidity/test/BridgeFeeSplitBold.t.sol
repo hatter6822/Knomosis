@@ -60,13 +60,16 @@ contract BridgeFeeSplitBoldTest is Test {
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
 
-    /// @dev Local copy of the contract event for log decoding.
+    /// @dev Local copy of the contract event for log decoding.  The
+    ///      GP.11.2 `ammSeedAmount` field is 0 throughout this suite (every
+    ///      bridge here is AMM-disabled, `ammSeedRatioBps = 0`).
     event DepositWithFeeInitiated(
         address indexed sender,
         uint64 indexed resourceId,
         address indexed token,
         uint256 userAmount,
         uint256 poolAmount,
+        uint256 ammSeedAmount,
         uint64 budgetGrant,
         uint64 depositorNonce,
         bytes32 receiptHash
@@ -209,8 +212,9 @@ contract BridgeFeeSplitBoldTest is Test {
             FeeSplitMath.split(amount, feeBps, bridge.weiPerBudgetUnitBold());
 
         uint64 nonce = bridge.depositNonce(user);
+        // AMM-disabled suite: ammSeedAmount is 0 (freePoolAmount == poolAmount).
         bytes32 expectedHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(), user, RESOURCE_BOLD, BOLD, userAmount, poolAmount, budgetGrant, nonce
+            bridge.deploymentId(), user, RESOURCE_BOLD, BOLD, userAmount, poolAmount, 0, budgetGrant, nonce
         );
 
         uint256 tvlBefore = bridge.totalLockedValue();
@@ -962,7 +966,7 @@ contract BridgeFeeSplitBoldTest is Test {
     ///         the deposit/withdraw symmetry) and that a redeemed leaf
     ///         cannot be replayed.
     function test_e2e_boldDepositThenWithdraw() public {
-        KnomosisBridge bridge = _deployKeyedAttestorBold();
+        KnomosisBridge bridge = _deployKeyedAttestorBold(0);
         // The auto-bound resource map is what makes BOLD withdrawals work.
         assertEq(bridge.resourceToken(RESOURCE_BOLD), BOLD, "BOLD auto-bound at id 1");
 
@@ -1008,9 +1012,11 @@ contract BridgeFeeSplitBoldTest is Test {
     }
 
     /// @notice Deploy a BOLD-enabled bridge with a KEYED attestor (so the
-    ///         e2e test can sign state-root attestations) and an empty
-    ///         resource map (BOLD auto-binds at id 1).
-    function _deployKeyedAttestorBold() internal returns (KnomosisBridge) {
+    ///         e2e tests can sign state-root attestations), an empty resource
+    ///         map (BOLD auto-binds at id 1), and a caller-chosen AMM seed
+    ///         ratio (`0` for the AMM-disabled lifecycle test; non-zero for
+    ///         the GP.11.2 reserve-survives-withdrawal test).
+    function _deployKeyedAttestorBold(uint16 ammSeedRatioBps) internal returns (KnomosisBridge) {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
         return new KnomosisBridge(
@@ -1034,10 +1040,70 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldCircuitBreaker: BOLD_BREAKER,
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
-                ammSeedRatioBps: 0,
+                ammSeedRatioBps: ammSeedRatioBps,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
+        );
+    }
+
+    /// @notice GP.11.2 — the AMM reserve survives a withdrawal.  An
+    ///         AMM-enabled (80% ratio) BOLD fee-split deposit seeds
+    ///         `ammReserveBold`; a recipient then withdraws ALL non-seed
+    ///         value (`amount - seed`), draining TVL down to exactly the
+    ///         seed's backing.  `ammReserveBold <= boldTotalLockedValue <=
+    ///         totalLockedValue` holds throughout, with the seed as the
+    ///         irreducible TVL floor.  This exercises the deposit/withdraw
+    ///         interaction the deposit-only invariant suite in
+    ///         `AmmDepositSeeding.t.sol` could not reach (it needs the
+    ///         state-root + SMT-proof machinery that lives here).  Withdrawing
+    ///         exactly `amount - seed` models the realistic ceiling: a
+    ///         correct L2 never credits the seed's backing to a withdrawing
+    ///         actor until the AMM swap/redeem path lands (GP.11.3+).
+    function test_e2e_ammReserveSurvivesBoldWithdrawal() public {
+        KnomosisBridge bridge = _deployKeyedAttestorBold(8000);
+
+        // Deposit 1 BOLD at 50% fee -> pool 0.5, user 0.5, seed = floor(0.5 * 0.8) = 0.4.
+        uint256 amount = 1 ether;
+        uint16 feeBps = 5000;
+        _mintApprove(bridge, alice, amount);
+        vm.prank(alice);
+        bridge.depositBoldWithFee(amount, feeBps);
+
+        (, uint256 poolAmount,) = FeeSplitMath.split(amount, feeBps, bridge.weiPerBudgetUnitBold());
+        (uint256 seed,) = FeeSplitMath.ammSeedSplit(poolAmount, 8000);
+        assertGt(seed, 0, "non-trivial seed");
+        assertEq(bridge.ammReserveBold(), seed, "BOLD reserve seeded on deposit");
+        assertEq(bridge.totalLockedValue(), amount, "TVL == full deposit");
+        assertEq(bridge.boldTotalLockedValue(), amount, "BOLD TVL == full deposit");
+        assertLe(bridge.ammReserveBold(), bridge.boldTotalLockedValue(), "reserve <= bold TVL (pre)");
+
+        // Withdraw EVERYTHING except the seed's backing: amount - seed.
+        address recipient = address(0xBEEFCAFE);
+        // amount (1e18) and seed (< amount) both fit uint64.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint64 wAmount = uint64(amount - seed);
+        uint64 idx = 0;
+        bytes memory leaf = _encodeWithdrawalLeaf(RESOURCE_BOLD, recipient, wAmount, idx);
+        bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
+        bytes32 root = SmtVerifier.recomputeRoot(uint256(idx), leaf, siblings);
+
+        uint64 atLogIndexHigh = 1;
+        bridge.submitStateRoot(root, atLogIndexHigh, _signStateRoot(bridge, root, atLogIndexHigh));
+        vm.roll(block.number + 100); // == disputeWindowBlocks
+        bytes memory proofBlob = _encodeWithdrawalProof(leaf, idx, siblings);
+        bridge.withdrawWithProof(atLogIndexHigh, proofBlob, leaf);
+
+        // TVL drained to exactly the seed; the reserve is the irreducible
+        // floor and is UNCHANGED by the withdrawal (GP.11.2 never decrements
+        // it — that is the GP.11.3 swap/redeem path).
+        assertEq(uint256(wAmount), amount - seed, "withdrew all non-seed value");
+        assertEq(bridge.totalLockedValue(), seed, "TVL drained to the seed floor");
+        assertEq(bridge.boldTotalLockedValue(), seed, "BOLD TVL drained to the seed floor");
+        assertEq(bridge.ammReserveBold(), seed, "reserve unchanged by withdrawal");
+        assertLe(bridge.ammReserveBold(), bridge.totalLockedValue(), "reserve <= TVL (post-withdraw)");
+        assertLe(
+            bridge.ammReserveBold(), bridge.boldTotalLockedValue(), "reserve <= bold TVL (post)"
         );
     }
 
@@ -1187,7 +1253,7 @@ contract BridgeFeeSplitBoldTest is Test {
         assertEq(g, refBudget, "budgetGrant matches reference");
 
         bytes32 refHash = FeeSplitMath.receiptHash(
-            bridge.deploymentId(), alice, RESOURCE_BOLD, BOLD, refUser, refPool, refBudget, 0
+            bridge.deploymentId(), alice, RESOURCE_BOLD, BOLD, refUser, refPool, 0, refBudget, 0
         );
         assertEq(hash, refHash, "receiptHash matches reference");
     }
@@ -1227,15 +1293,17 @@ contract BridgeFeeSplitBoldTest is Test {
         )
     {
         bytes32 sig = keccak256(
-            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint64,uint64,bytes32)"
+            "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
         );
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 4 && logs[i].topics[0] == sig) {
                 sender = address(uint160(uint256(logs[i].topics[1])));
                 resourceId = uint64(uint256(logs[i].topics[2]));
                 token = address(uint160(uint256(logs[i].topics[3])));
-                (userAmount, poolAmount, budgetGrant, nonce, receiptHash) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint64, uint64, bytes32));
+                // GP.11.2: data adds ammSeedAmount (0 in this AMM-disabled
+                // suite) between poolAmount and budgetGrant; skipped here.
+                (userAmount, poolAmount,, budgetGrant, nonce, receiptHash) =
+                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint64, uint64, bytes32));
                 return
                     (userAmount, poolAmount, budgetGrant, nonce, receiptHash, sender, resourceId, token);
             }
