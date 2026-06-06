@@ -125,6 +125,7 @@ import LegalKernel.Test.Bridge.HashAdaptor
 import LegalKernel.Test.Bridge.Eip712
 import LegalKernel.Test.Bridge.AddressBook
 import LegalKernel.Test.Bridge.BridgeActor
+import LegalKernel.Test.Bridge.AmmMath
 import LegalKernel.Test.Bridge.GasPoolPolicy
 import LegalKernel.Test.Bridge.PoolDrainBound
 import LegalKernel.Test.Bridge.BudgetRefund
@@ -326,6 +327,8 @@ def main : IO UInt32 := do
                                     Bridge.AddressBookTests.tests)
   failed := failed + (← runAll "bridge-actor"
                                     Bridge.BridgeActorTests.tests)
+  failed := failed + (← runAll "bridge-amm-math"
+                                    Bridge.AmmMathTests.tests)
   failed := failed + (← runAll "bridge-gas-pool-policy"
                                     Bridge.GasPoolPolicyTests.tests)
   failed := failed + (← runAll "bridge-pool-drain-bound"

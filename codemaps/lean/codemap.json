@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3c14dda4dd38daf36d2719acdb10ab1df185302d070573b8adea9cb2391e78af"
+    "source_digest": "2c503ad4602877f3a79724d42673b7a737e98643fca17d3975731887b3efebbc"
   },
   "summary": {
-    "module_count": 292,
-    "declaration_count": 4863
+    "module_count": 294,
+    "declaration_count": 4871
   },
   "modules": [
     {
@@ -510,13 +510,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 302,
+          "line": 303,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 315,
+          "line": 316,
           "called": [
             "LegalKernel"
           ]
@@ -6285,6 +6285,53 @@
             "gasResource",
             "poolActor",
             "refundRate"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Bridge.AmmMath",
+      "path": "LegalKernel/Bridge/AmmMath.lean",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Bridge.AmmMath",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "bpsDenominator",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "getAmountOut",
+          "line": 53,
+          "called": [
+            "bpsDenominator"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getAmountOut_lt_reserveOut",
+          "line": 60,
+          "called": [
+            "bpsDenominator",
+            "getAmountOut"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "k_nondecreasing",
+          "line": 86,
+          "called": [
+            "LegalKernel.Bridge.AmmMath",
+            "bpsDenominator",
+            "getAmountOut",
+            "getAmountOut_lt_reserveOut"
           ]
         }
       ]
@@ -31560,6 +31607,43 @@
             "transfer",
             "withdraw",
             "withdraw_bumps_nextWdId"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.AmmMath",
+      "path": "LegalKernel/Test/Bridge/AmmMath.lean",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "AmmMathTests",
+          "line": 34,
+          "called": [
+            "LegalKernel.Bridge.AmmMath",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 40,
+          "called": [
+            "AmmMathTests",
+            "LegalKernel.Test.Bridge",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "getAmountOut",
+            "getAmountOut_lt_reserveOut",
+            "k_nondecreasing"
           ]
         }
       ]
@@ -57931,7 +58015,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 204,
+          "line": 205,
           "called": [
             "runAll"
           ]
