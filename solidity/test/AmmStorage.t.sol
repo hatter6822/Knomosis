@@ -351,6 +351,43 @@ contract AmmStorageTest is Test {
         assertEq(bridge.ammReserveBold(), 0, "AMM BOLD reserve untouched (disabled)");
     }
 
+    /// @notice GP.11.3 review fix (comment 1): a BOLD-DISABLED deployment
+    ///         seeds NOTHING even with a positive `ammSeedRatioBps`, because the
+    ///         ETH<->BOLD AMM can never swap without a BOLD leg, so any seeded
+    ///         ETH would be permanently unswappable.  Every ETH fee therefore
+    ///         stays sequencer-claimable free pool: `ammReserveEth` stays 0 and
+    ///         the emitted `ammSeedAmount` is 0, while the FULL deposit still
+    ///         credits TVL.  Pins the `_seedAmmReserves` `!boldEnabled` guard.
+    function test_boldDisabled_seedsNothing_despitePositiveRatio() public {
+        // BOLD disabled (boldTokenAddress == 0) BUT a max seed ratio: the
+        // constructor allows this combination, and the fix makes seeding inert.
+        KnomosisBridge bridge = _deploy(8000);
+        assertEq(bridge.ammSeedRatioBps(), 8000, "ratio stored despite BOLD off");
+        assertFalse(bridge.boldEnabled(), "BOLD disabled");
+
+        uint256 value = 4 ether;
+        uint16 feeBps = 2500;
+        (uint256 userAmount, uint256 poolAmount, uint64 budgetGrant) =
+            FeeSplitMath.split(value, feeBps, bridge.weiPerBudgetUnitEth());
+
+        // The emitted event carries ammSeedAmount == 0 (nothing seeded), so the
+        // free pool is the whole poolAmount.
+        uint64 nonce = bridge.depositNonce(alice);
+        bytes32 expectedHash = FeeSplitMath.receiptHash(
+            bridge.deploymentId(), alice, NATIVE_ETH, address(0), userAmount, poolAmount, 0, budgetGrant, nonce
+        );
+        vm.expectEmit(true, true, true, true, address(bridge));
+        emit DepositWithFeeInitiated(
+            alice, NATIVE_ETH, address(0), userAmount, poolAmount, 0, budgetGrant, nonce, expectedHash
+        );
+        vm.prank(alice);
+        bridge.depositETHWithFee{value: value}(feeBps);
+
+        assertEq(bridge.ammReserveEth(), 0, "BOLD-disabled: no ETH seeded despite ratio > 0");
+        assertEq(bridge.ammReserveBold(), 0, "BOLD reserve always 0 when BOLD disabled");
+        assertEq(bridge.totalLockedValue(), value, "full deposit still credited to TVL");
+    }
+
     /// @notice GP.11.2: a non-zero seed ratio now seeds the matching
     ///         reserve while the FULL deposit is still credited to TVL (the
     ///         seed is a reclassification of pool fee already inside the
@@ -358,7 +395,11 @@ contract AmmStorageTest is Test {
     ///         the exhaustive seeding behaviour lives in
     ///         `AmmDepositSeeding.t.sol`.
     function test_deposit_seedsReserves_whenRatioNonZero() public {
-        KnomosisBridge bridge = _deploy(8000);
+        // ETH seeding accrues only on a FUNCTIONAL AMM (BOLD-enabled): a
+        // BOLD-disabled deployment seeds nothing regardless of ratio (see
+        // `test_boldDisabled_seedsNothing_despitePositiveRatio`).
+        _etchBold();
+        KnomosisBridge bridge = _deployBoldEnabled(8000);
 
         uint256 value = 3 ether;
         uint16 feeBps = 2500;
@@ -390,8 +431,13 @@ contract AmmStorageTest is Test {
     ///         minting it, and that the canonical event carries the actual
     ///         split (the GP.11.2 plan-literal wire format).
     function test_coreSplit_ratioInvariant_butAmmSeedScales() public {
-        KnomosisBridge disabled = _deploy(0);
-        KnomosisBridge maxSeed = _deploy(8000);
+        // Both BOLD-enabled so the only difference is the seed RATIO (0 vs
+        // 8000): the core split is ratio-invariant while the AMM seed scales.
+        // (On a BOLD-disabled bridge the max-seed leg would seed nothing,
+        // which would conflate "ratio 0" with "BOLD off".)
+        _etchBold();
+        KnomosisBridge disabled = _deployBoldEnabled(0);
+        KnomosisBridge maxSeed = _deployBoldEnabled(8000);
 
         uint256 value = 2 ether;
         uint16 feeBps = 1500;
@@ -439,7 +485,10 @@ contract AmmStorageTest is Test {
     ///         is the SOLE AMM write path, and it is deterministic in the
     ///         (fixed) ratio.
     function test_ammSeedRatio_immutable_reservesGrowAcrossDeposits() public {
-        KnomosisBridge bridge = _deploy(5000);
+        // BOLD-enabled so ETH seeding actually accrues (a BOLD-disabled
+        // deployment seeds nothing).
+        _etchBold();
+        KnomosisBridge bridge = _deployBoldEnabled(5000);
         assertEq(bridge.ammSeedRatioBps(), 5000, "seed ratio set");
 
         // Three identical deposits: each seeds the same amount.

@@ -3751,11 +3751,23 @@ contributions surviving in current code:
     ETH↔BOLD swaps, 0 reverts), `AmmSlippage.t.sol` (13 — `minAmountOut` and
     `deadline` exact boundaries, both directions), `AmmSandwich.t.sol` (4 — a
     front-run degrades execution, a full sandwich profits without protection,
-    and `minAmountOut` deterministically stops it), `AmmKillSwitch.t.sol` (12 —
+    and `minAmountOut` deterministically stops it), `AmmKillSwitch.t.sol` (13 —
     the GP.11.10 kill-switch theorems as tests, role access control, the
     `AmmRoleIsBridge` + `AmmDisasterRecoveryRequired` constructor guards, the
-    breaker gating + brake independence/precedence).  The shared GP.11.3 AMM
-    disaster-recovery test role is a NAMED `AMM_DR` constant in each suite
+    breaker gating + brake independence/precedence, and the PR-#116 migration
+    freeze `test_swap_freezesAfterMigration`).  **PR #116 review hardening
+    (two verified fixes):** (a) `_seedAmmReserves` now returns 0 when
+    `!boldEnabled`, so a BOLD-disabled deployment (the constructor permits
+    `ratio > 0 && !boldEnabled`) seeds NOTHING rather than diverting ETH fees
+    into a permanently unswappable `ammReserveEth` — pinned by
+    `AmmStorage.t.sol::test_boldDisabled_seedsNothing_despitePositiveRatio`, and
+    the ETH-seeding suites now deploy BOLD-enabled bridges since seeding only
+    accrues on a functional AMM; (b) `ammSwap` now reverts `MigrationActivated`
+    once the bridge has migrated (the migration arm of `circuitOpen` applied to
+    the AMM; the transient attestation-stale / dispute-cooldown arms are
+    deliberately NOT, keeping the AMM up during recoverable states).  The shared
+    GP.11.3 AMM disaster-recovery test role is a NAMED `AMM_DR` constant in each
+    suite
     (matching the `BOLD_BREAKER` / `BOLD_ADMIN` convention) rather than a
     repeated magic literal.  `MockBold.transfer` was
     made `virtual` so the swap-reentrancy mock can override it.  **Lean→Solidity
@@ -3777,7 +3789,7 @@ contributions surviving in current code:
     coverage` documents it.  Solidity + a Lean
     k-monotonicity proof (the L2 `Action.ammSwap` mirror is GP.11.4); `forge
     build` warning-free,
-    full `forge test` 772 passed / 0 failed / 12 keccak-gated skips,
+    full `forge test` 774 passed / 0 failed / 12 keccak-gated skips,
     `lake build`/`lake test`/`count_sorries`/`naming_audit`/`tcb_audit`/`stub_audit`
     green, the GP.5.2
     cap-audit gate + self-test (45 cases) unchanged (no constitutional cap

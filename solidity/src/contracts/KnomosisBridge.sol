@@ -1475,6 +1475,17 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (ratio == 0) {
             return 0;
         }
+        // The AMM is an ETH<->BOLD pair: with BOLD disabled it can NEVER swap
+        // (ammSwap reverts AmmEmpty), so seeding would only divert ETH fees
+        // into a permanently unswappable reserve.  A BOLD-disabled deployment
+        // therefore seeds NOTHING regardless of the configured ratio — the
+        // whole poolAmount stays sequencer-claimable free pool.  This is
+        // load-bearing, not mere defence in depth: the constructor's
+        // `AmmDisasterRecoveryRequired` guard is nested under `boldEnabled`, so
+        // a `ratio > 0 && !boldEnabled` deployment is reachable.
+        if (!boldEnabled) {
+            return 0;
+        }
         // GP.11.3 kill switch: once the AMM is emergency-disabled it stops
         // accruing reserves; the whole poolAmount stays as free pool.
         if (ammDisabled) {
@@ -1638,12 +1649,17 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         function is `nonReentrant`, so a malicious BOLD token or a
     ///         malicious ETH recipient cannot re-enter to double-spend
     ///         (`AmmReentrancy.t.sol`).
-    /// @dev    Availability.  Two independent brakes gate the swap (GP.11.3):
+    /// @dev    Availability.  Three independent brakes gate the swap (GP.11.3):
     ///         the `ammActive` modifier reverts `AmmIsDisabled` once an
     ///         operator triggers the one-way `emergencyDisableAmm()` kill
-    ///         switch, and the body reverts `AmmPausedByBoldCircuit` while the
+    ///         switch; the body reverts `AmmPausedByBoldCircuit` while the
     ///         GP.5.5 BOLD circuit breaker is closed (an automatic depeg
-    ///         freeze).  Neither moves any reserve.
+    ///         freeze); and the body reverts `MigrationActivated` once the
+    ///         bridge has migrated to a successor (the migration arm of the
+    ///         `circuitOpen` breaker — a retired bridge's AMM freezes; the
+    ///         transient attestation-stale / dispute-cooldown arms are
+    ///         deliberately NOT applied, keeping the AMM up during those
+    ///         recoverable states).  None moves any reserve.
     function ammSwap(uint64 fromResource, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
         external
         payable
@@ -1670,6 +1686,19 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // exit path stays open keeps the "deposits halted, withdrawals
         // continue" posture (the AMM is an optional liquidity service).
         if (boldCircuitClosed) revert AmmPausedByBoldCircuit();
+        // GP.11.3 review fix — freeze the AMM once the bridge has MIGRATED to a
+        // successor.  A migrated bridge is permanently retired; leaving swaps
+        // live would let callers keep mutating the old bridge's reserves and
+        // move real assets after the hand-off, contradicting the migration
+        // freeze the rest of the bridge enforces via `circuitOpen`.  Only the
+        // MIGRATION arm of `circuitOpen` is applied here; the transient arms
+        // (attestation-stale / dispute-cooldown) are deliberately NOT, so the
+        // AMM stays available as an optional liquidity service during those
+        // recoverable states (its own one-way kill switch + the BOLD-breaker
+        // depeg freeze remain the AMM-specific brakes).
+        if (migration != address(0) && IKnomosisMigration(migration).activated()) {
+            revert MigrationActivated();
+        }
 
         uint256 reserveIn;
         uint256 reserveOut;

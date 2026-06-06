@@ -7486,6 +7486,38 @@ sub-WU table above is the implementation roadmap.
       `lake build` (warning-free) + `lake test` + `count_sorries` (0) +
       `naming_audit` + `tcb_audit` + `stub_audit` green; codemaps regenerated
       (CI-idempotent).
+  * **PR #116 review hardening.**  Two fixes a code review surfaced, both
+    verified against the contract before acting:
+    * **BOLD-disabled deployments seed nothing.**  The constructor permits a
+      `ammSeedRatioBps > 0` deployment with BOLD disabled (the
+      `AmmDisasterRecoveryRequired` guard is nested under `boldEnabled`), and
+      `_seedAmmReserves` previously diverted part of every ETH fee into
+      `ammReserveEth` — a reserve `ammSwap` can never drain (it reverts
+      `AmmEmpty` with no BOLD leg), permanently locking that ETH.
+      `_seedAmmReserves` now returns 0 when `!boldEnabled`, so every ETH fee
+      stays sequencer-claimable free pool.  Pinned by the new
+      `AmmStorage.t.sol::test_boldDisabled_seedsNothing_despitePositiveRatio`;
+      the ETH-seeding suites (`AmmStorage` / `AmmDepositSeeding` / the
+      `DepositFeeSplit` ETH cross-check) now deploy BOLD-enabled bridges, since
+      seeding only accrues on a functional AMM.
+    * **`ammSwap` freezes on migration.**  The swap ran under only
+      `nonReentrant + ammActive` + the BOLD-breaker freeze, NOT `circuitOpen`,
+      so a migrated (retired) bridge's AMM stayed live.  `ammSwap` now reverts
+      `MigrationActivated` once `migration.activated()` — the migration arm of
+      `circuitOpen` applied to the AMM; the transient attestation-stale /
+      dispute-cooldown arms are deliberately NOT applied (the AMM stays up as an
+      optional liquidity service during recoverable states).  Pinned by
+      `AmmKillSwitch.t.sol::test_swap_freezesAfterMigration`.
+    * A third comment (gate the AMM until the GP.11.4 L2 mirror lands) was
+      investigated and found to overstate user-fund risk: a swap preserves
+      combined real-token solvency (`balance ≥ user-escrow + ammReserve` is
+      invariant) and never touches `totalLockedValue` / user escrow, so pending
+      withdrawals stay fully backed; the residual is gas-pool accounting
+      completeness (GP.11.4) and every shipped deployment defaults to
+      `ammSeedRatioBps = 0` (AMM inert), so no code change was made.
+    * `forge test` 772 → 774 passed / 0 failed / 12 keccak-gated skips;
+      `forge build` warning-free; cap-audit unchanged (Solidity-only; no Lean /
+      Rust source touched).
 
 #### WU GP.11.4: L2-side AMM mirroring
 

@@ -65,21 +65,29 @@ contract AmmDepositSeedingTest is Test {
     function setUp() public {
         vm.deal(alice, type(uint128).max);
         vm.deal(bob, type(uint128).max);
+        // ETH seeding only accrues on a FUNCTIONAL AMM (BOLD-enabled), so the
+        // deploy helpers below are BOLD-enabled; etch a conformant BOLD mock
+        // at the pinned address so their constructors' symbol() check passes.
+        _etchBold();
     }
 
     // ------------------------------------------------------------------
     // Deployment helpers
     // ------------------------------------------------------------------
 
-    /// @notice Deploy a standalone, BOLD-disabled bridge with a chosen
+    /// @notice Deploy a standalone, BOLD-ENABLED bridge with a chosen
     ///         `ammSeedRatioBps` and a permissive fee-split config (no TVL
     ///         ceiling) so `depositETHWithFee` works on a fresh deployment.
+    ///         BOLD-enabled because ETH seeding only accrues on a functional
+    ///         AMM (a BOLD-disabled deployment seeds nothing — see
+    ///         `AmmStorage.t.sol::test_boldDisabled_seedsNothing_despitePositiveRatio`).
     function _deploy(uint16 ammSeedRatioBps) internal returns (KnomosisBridge) {
         return _deployWithCap(ammSeedRatioBps, type(uint256).max);
     }
 
     /// @notice As `_deploy`, but with a caller-chosen global `tvlCap` so
-    ///         the cap-revert path can be exercised.
+    ///         the cap-revert path can be exercised.  Requires a BOLD mock
+    ///         etched first (done in `setUp`).
     function _deployWithCap(uint16 ammSeedRatioBps, uint256 tvlCap)
         internal
         returns (KnomosisBridge)
@@ -101,11 +109,11 @@ contract AmmDepositSeedingTest is Test {
                 minFeeBps: 0,
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: 1_000_000_000,
-                weiPerBudgetUnitBold: 0,
-                boldTokenAddress: address(0),
-                boldTvlCap: 0,
-                boldCircuitBreaker: address(0),
-                boldAdmin: address(0),
+                weiPerBudgetUnitBold: 1_000_000_000,
+                boldTokenAddress: BOLD,
+                boldTvlCap: tvlCap,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
                 ammDisasterRecovery: AMM_DR,
@@ -451,11 +459,11 @@ contract AmmDepositSeedingTest is Test {
                 minFeeBps: 0,
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: 1_000_000_000,
-                weiPerBudgetUnitBold: 0,
-                boldTokenAddress: address(0),
-                boldTvlCap: 0,
-                boldCircuitBreaker: address(0),
-                boldAdmin: address(0),
+                weiPerBudgetUnitBold: 1_000_000_000,
+                boldTokenAddress: BOLD,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ratio,
                 ammDisasterRecovery: AMM_DR,
@@ -525,7 +533,12 @@ contract AmmDepositSeedingTest is Test {
 
     /// @notice Reserves grow monotonically and additively across deposits.
     function test_reserve_accumulatesMonotonically() public {
-        KnomosisBridge bridge = _deploy(6000);
+        // A FUNCTIONAL AMM (BOLD-enabled) is required for ETH seeding to
+        // accumulate: a BOLD-disabled deployment seeds nothing (the ETH<->BOLD
+        // pair can never swap), so the "reserves grow" intent is exercised on a
+        // BOLD-enabled bridge.
+        _etchBold();
+        KnomosisBridge bridge = _deployBoldEnabled(6000);
 
         uint256 running;
         uint256 prev;

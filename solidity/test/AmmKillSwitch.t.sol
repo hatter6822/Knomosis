@@ -243,4 +243,61 @@ contract AmmKillSwitchTest is AmmTestBase {
         vm.prank(swapper);
         bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
     }
+
+    // ------------------------------------------------------------------
+    // Migration freeze (GP.11.3 review fix — the migration arm of circuitOpen)
+    // ------------------------------------------------------------------
+
+    /// @notice Once the bridge MIGRATES to a successor, `ammSwap` freezes
+    ///         (reverts `MigrationActivated`) in BOTH directions — a retired
+    ///         bridge must not keep mutating its reserves or moving real assets
+    ///         after hand-off.  The pre-migration swap succeeds under the SAME
+    ///         (non-transient) state, isolating migration as the added gate; the
+    ///         transient `circuitOpen` arms (attestation-stale / dispute-cooldown)
+    ///         are deliberately not applied to the AMM.
+    function test_swap_freezesAfterMigration() public {
+        MockToggleMigration mig = new MockToggleMigration();
+        _etchBold();
+        KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
+        args.migration = address(mig);
+        KnomosisBridge bridge = new KnomosisBridge(args);
+        _seedBothLegs(bridge);
+
+        // Pre-migration: swaps work (the migration mock is inactive).
+        vm.prank(swapper);
+        uint256 out = bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
+        assertGt(out, 0, "swap works before migration");
+
+        // Activate migration: the AMM freezes in BOTH directions.
+        mig.activate();
+
+        vm.expectRevert(KnomosisBridge.MigrationActivated.selector);
+        vm.prank(swapper);
+        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
+
+        _mintApprove(bridge, swapper, 1000 ether);
+        vm.expectRevert(KnomosisBridge.MigrationActivated.selector);
+        vm.prank(swapper);
+        bridge.ammSwap(BOLD_RID, 1000 ether, 0, _farDeadline());
+
+        // The freeze is a gate, not a state change: reserves + kill switch
+        // are untouched.
+        assertFalse(bridge.ammDisabled(), "migration freeze does not flip the kill switch");
+    }
+}
+
+/// @notice A migration mock whose `activated()` is operator-toggleable, so a
+///         test can seed the AMM while migration is inactive and then activate
+///         it to prove the swap freezes.  Matches the single `activated()`
+///         method `KnomosisBridge` reads via `IKnomosisMigration`.
+contract MockToggleMigration {
+    bool public isActivated;
+
+    function activate() external {
+        isActivated = true;
+    }
+
+    function activated() external view returns (bool) {
+        return isActivated;
+    }
 }

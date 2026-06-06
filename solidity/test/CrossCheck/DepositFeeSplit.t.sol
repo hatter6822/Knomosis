@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {FeeSplitMath} from "test/utils/FeeSplitMath.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
+import {MockBold} from "test/utils/MockBold.sol";
 
 /// @title DepositFeeSplitCrossCheck
 /// @notice Workstream GP.5.1.i — Solidity-side consumer of the
@@ -41,6 +42,22 @@ import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 ///         receiptHash recipe.
 contract DepositFeeSplitCrossCheck is CrossCheckFramework {
     string internal constant FIXTURE_NAME = "deposit_fee_split.json";
+
+    /// @dev BOLD scaffolding for the live-contract check.  AMM seeding only
+    ///      accrues on a FUNCTIONAL (BOLD-enabled) AMM; the corpus models the
+    ///      seed ARITHMETIC, so the per-entry live deploy must be BOLD-enabled
+    ///      for its emitted `ammSeedAmount` to match the Lean fixture.  (The
+    ///      hash-independent recompute / layout checks need none of this.)
+    address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+    address internal constant BOLD_BREAKER = address(0xB12E6B6E);
+    address internal constant BOLD_ADMIN = address(0xAD814);
+    address internal constant AMM_DR = address(0xA33D6);
+
+    /// @notice Etch a conformant BOLD mock at the pinned address so the
+    ///         BOLD-enabled `_deployBridge` constructor's symbol() check passes.
+    function setUp() public {
+        vm.etch(BOLD, address(new MockBold()).code);
+    }
 
     /// @notice Header shape: 80 entries (16 corner + 64 randomised)
     ///         plus the constitutional caps.
@@ -372,14 +389,14 @@ contract DepositFeeSplitCrossCheck is CrossCheckFramework {
                 minFeeBps: 0,
                 maxFeeBps: 5000,
                 weiPerBudgetUnitEth: rate,
-                weiPerBudgetUnitBold: 0,
-                boldTokenAddress: address(0),
-                boldTvlCap: 0,
-                boldCircuitBreaker: address(0),
-                boldAdmin: address(0),
+                weiPerBudgetUnitBold: 1_000_000_000,
+                boldTokenAddress: BOLD,
+                boldTvlCap: type(uint256).max,
+                boldCircuitBreaker: BOLD_BREAKER,
+                boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
-                ammDisasterRecovery: address(0),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
