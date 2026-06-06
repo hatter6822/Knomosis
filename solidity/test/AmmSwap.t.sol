@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.20;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 import {AmmTestBase} from "test/utils/AmmTestBase.sol";
@@ -253,5 +255,152 @@ contract AmmSwapTest is AmmTestBase {
         vm.expectRevert(KnomosisBridge.ZeroSwapOutput.selector);
         vm.prank(swapper);
         bridge.ammSwap(BOLD_RID, 1, 0, _farDeadline());
+    }
+
+    /// @notice A BOLD->ETH swap whose ETH recipient REJECTS the value (a
+    ///         contract with no payable receive) reverts `EthTransferFailed`,
+    ///         and the whole swap rolls back (reserves + the BOLD pull) — a
+    ///         fail-safe (no fund loss, no partial state).
+    function test_swap_revertsEthTransferFailed_whenRecipientRejectsEth() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+
+        RejectsEth rejecter = new RejectsEth();
+        uint256 amountIn = 1000 ether;
+        MockBold(BOLD).mint(address(rejecter), amountIn);
+
+        vm.expectRevert(KnomosisBridge.EthTransferFailed.selector);
+        rejecter.doBoldToEthSwap(bridge, amountIn, _farDeadline());
+
+        // Fail-safe: nothing moved.
+        assertEq(bridge.ammReserveEth(), rEth, "ETH reserve unchanged (swap rolled back)");
+        assertEq(bridge.ammReserveBold(), rBold, "BOLD reserve unchanged (BOLD pull rolled back)");
+        assertEq(MockBold(BOLD).balanceOf(address(rejecter)), amountIn, "rejecter keeps its BOLD");
+    }
+
+    /// @notice Calibration parity (modulo fee): after a swap the constant
+    ///         product is PRESERVED-OR-GROWN and the reserve ratio shifts
+    ///         toward the input asset, while the retained fee is exactly the
+    ///         gap between the with-fee output and the (larger) zero-fee
+    ///         output — the value the swapper forgoes stays in the pool.
+    function test_swap_calibrationParity_moduloFee() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+
+        uint256 amountIn = 4 ether;
+        uint256 outWithFee = _refOut(amountIn, rEth, rBold);
+        // Zero-fee reference output for the same trade (more out, since no fee).
+        uint256 inNoFee = amountIn * 10_000;
+        uint256 outNoFee = (inNoFee * rBold) / (rEth * 10_000 + inNoFee);
+        assertGt(outNoFee, outWithFee, "the fee reduces the output (surplus stays in pool)");
+
+        vm.prank(swapper);
+        bridge.ammSwap{value: amountIn}(NATIVE_ETH, amountIn, 0, _farDeadline());
+
+        // Constant product never decreases (calibration holds modulo the fee).
+        uint256 kBefore = rEth * rBold;
+        uint256 kAfter = bridge.ammReserveEth() * bridge.ammReserveBold();
+        assertGe(kAfter, kBefore, "constant product preserved-or-grown");
+        // The ratio shifted toward ETH (more ETH per BOLD): cross-multiply to
+        // avoid integer-division loss: newEth/newBold > oldEth/oldBold.
+        assertGt(
+            bridge.ammReserveEth() * rBold, rEth * bridge.ammReserveBold(), "ratio shifted toward ETH"
+        );
+    }
+
+    /// @notice Exact fee accrual: a swap grows k to EXACTLY the predicted
+    ///         `(rEth+amountIn)*(rBold-out)`, not merely "more than before" —
+    ///         pinning the precise fee-driven k delta.
+    function test_swap_feeAccrual_exactKGrowth() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+
+        uint256 amountIn = 5 ether;
+        uint256 out = _refOut(amountIn, rEth, rBold);
+        uint256 kBefore = rEth * rBold;
+        uint256 kPredicted = (rEth + amountIn) * (rBold - out);
+
+        vm.prank(swapper);
+        bridge.ammSwap{value: amountIn}(NATIVE_ETH, amountIn, 0, _farDeadline());
+
+        uint256 kAfter = bridge.ammReserveEth() * bridge.ammReserveBold();
+        assertEq(kAfter, kPredicted, "k grows to EXACTLY the predicted value");
+        assertGt(kAfter, kBefore, "and strictly more than before (fee accrued)");
+    }
+
+    /// @notice Composition: deposits (seeding) and swaps interleave correctly —
+    ///         a deposit after a swap adds its seed ON TOP of the post-swap
+    ///         reserve, and the real-token backing holds throughout.
+    function test_composition_seedSwapSeedSwap() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        _seedBothLegs(bridge);
+
+        // Swap ETH -> BOLD.
+        vm.prank(swapper);
+        bridge.ammSwap{value: 3 ether}(NATIVE_ETH, 3 ether, 0, _farDeadline());
+        uint256 ethAfterSwap = bridge.ammReserveEth();
+
+        // Deposit more ETH: seeds floor(poolAmount * 80%) ON TOP of the
+        // post-swap reserve.
+        (, uint256 poolAmount,) = FeeSplitMath_split(20 ether, 5000);
+        uint256 newSeed = (poolAmount * 8000) / 10_000;
+        vm.prank(lp);
+        bridge.depositETHWithFee{value: 20 ether}(5000);
+        assertEq(bridge.ammReserveEth(), ethAfterSwap + newSeed, "deposit seeds on top of post-swap reserve");
+
+        // Swap again (BOLD -> ETH) and confirm real-token backing throughout.
+        _mintApprove(bridge, swapper, 5000 ether);
+        vm.prank(swapper);
+        bridge.ammSwap(BOLD_RID, 5000 ether, 0, _farDeadline());
+        assertLe(bridge.ammReserveEth(), address(bridge).balance, "ETH reserve backed by real ETH");
+        assertLe(
+            bridge.ammReserveBold(), MockBold(BOLD).balanceOf(address(bridge)), "BOLD reserve backed"
+        );
+    }
+
+    /// @dev Inline mirror of `depositETHWithFee`'s pool split (avoids a
+    ///      FeeSplitMath import for this one composition assertion):
+    ///      poolAmount = floor(v * feeBps / 10000).
+    function FeeSplitMath_split(uint256 v, uint16 feeBps)
+        internal
+        pure
+        returns (uint256, uint256, uint64)
+    {
+        uint256 poolAmount = (v * feeBps) / 10_000;
+        return (v - poolAmount, poolAmount, 0);
+    }
+
+    /// @notice Gas-regression smoke test: a warm ETH->BOLD swap stays within a
+    ///         generous envelope (a real swap is ~90-130k; the bound trips on
+    ///         a gross regression — e.g. an accidental extra cold SSTORE).
+    function test_gas_swapWarm() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        _seedBothLegs(bridge);
+        // Warm the path with one swap so the measured call is steady-state.
+        vm.prank(swapper);
+        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
+
+        vm.prank(swapper);
+        uint256 gasBefore = gasleft();
+        bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
+        uint256 used = gasBefore - gasleft();
+        assertLt(used, 200_000, "warm ETH->BOLD swap gas within envelope");
+    }
+}
+
+/// @title RejectsEth
+/// @notice A contract that performs a BOLD->ETH swap but CANNOT receive the
+///         ETH output (no payable `receive`/`fallback`), forcing the bridge's
+///         low-level ETH `call` to fail and revert `EthTransferFailed`.
+contract RejectsEth {
+    address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
+    uint64 private constant BOLD_RID = 1;
+
+    function doBoldToEthSwap(KnomosisBridge bridge, uint256 amountIn, uint256 deadline)
+        external
+        returns (uint256)
+    {
+        IERC20(BOLD).approve(address(bridge), amountIn);
+        return bridge.ammSwap(BOLD_RID, amountIn, 0, deadline);
     }
 }

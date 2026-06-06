@@ -106,6 +106,7 @@ contract AmmDepositSeedingTest is Test {
                 boldAdmin: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -144,6 +145,7 @@ contract AmmDepositSeedingTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -454,6 +456,7 @@ contract AmmDepositSeedingTest is Test {
                 boldAdmin: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ratio,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -824,6 +827,7 @@ contract AmmDepositSeedingInvariantTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 6000,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

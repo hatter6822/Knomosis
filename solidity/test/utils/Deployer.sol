@@ -106,6 +106,7 @@ contract Deployer {
                     // deployer preserves the pre-v1.3 deposit behaviour;
                     // AMM-specific suites construct the bridge directly.
                     ammSeedRatioBps: 0,
+                    ammDisasterRecovery: address(0),
                     erc20ResourceIds: erc20ResourceIds,
                     erc20TokenAddrs: erc20TokenAddrs
                 })

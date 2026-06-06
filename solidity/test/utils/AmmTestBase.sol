@@ -20,6 +20,9 @@ abstract contract AmmTestBase is Test {
     address internal constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     address internal constant BOLD_BREAKER = address(0xB12E6B6E);
     address internal constant BOLD_ADMIN = address(0xAD814);
+    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.  Wired into
+    ///      `_deployBoldEnabled` so the kill switch + breaker are testable.
+    address internal constant AMM_DR = address(0xA33D6);
 
     uint64 internal constant NATIVE_ETH = 0;
     uint64 internal constant BOLD_RID = 1;
@@ -59,37 +62,43 @@ abstract contract AmmTestBase is Test {
         vm.etch(BOLD, address(impl).code);
     }
 
+    /// @notice The canonical BOLD-enabled + AMM-enabled (80% seed) +
+    ///         kill-switch-enabled (`AMM_DR`) `ConstructorArgs`.  Exposed so
+    ///         the constructor-guard test can override a single field.
+    function _boldEnabledArgs() internal pure returns (KnomosisBridge.ConstructorArgs memory) {
+        uint64[] memory rids = new uint64[](0);
+        address[] memory toks = new address[](0);
+        return KnomosisBridge.ConstructorArgs({
+            knomosisVersionTag: keccak256("knomosis-amm-swap-base"),
+            attestor: address(0xA11CE),
+            disputeVerifier: address(0xDEAD),
+            sequencerStake: address(0xBEEF),
+            migration: address(0),
+            disputeWindowBlocks: 100,
+            maxRedemptionWindowBlocks: 50,
+            maxAttestationStaleBlocks: 200,
+            cooldownBlocks: 50,
+            tvlCap: type(uint256).max,
+            minFeeBps: 0,
+            maxFeeBps: 5000,
+            weiPerBudgetUnitEth: 1_000_000_000,
+            weiPerBudgetUnitBold: 1_000_000_000,
+            boldTokenAddress: BOLD,
+            boldTvlCap: type(uint256).max,
+            boldCircuitBreaker: BOLD_BREAKER,
+            boldAdmin: BOLD_ADMIN,
+            enableLiquityAutoCircuitTrigger: false,
+            ammSeedRatioBps: 8000,
+            ammDisasterRecovery: AMM_DR,
+            erc20ResourceIds: rids,
+            erc20TokenAddrs: toks
+        });
+    }
+
     /// @notice A BOLD-enabled bridge at the max seed ratio (80%), so deposits
     ///         seed the reserves generously.  Requires `_etchBold()` first.
     function _deployBoldEnabled() internal returns (KnomosisBridge) {
-        uint64[] memory rids = new uint64[](0);
-        address[] memory toks = new address[](0);
-        return new KnomosisBridge(
-            KnomosisBridge.ConstructorArgs({
-                knomosisVersionTag: keccak256("knomosis-amm-swap-base"),
-                attestor: address(0xA11CE),
-                disputeVerifier: address(0xDEAD),
-                sequencerStake: address(0xBEEF),
-                migration: address(0),
-                disputeWindowBlocks: 100,
-                maxRedemptionWindowBlocks: 50,
-                maxAttestationStaleBlocks: 200,
-                cooldownBlocks: 50,
-                tvlCap: type(uint256).max,
-                minFeeBps: 0,
-                maxFeeBps: 5000,
-                weiPerBudgetUnitEth: 1_000_000_000,
-                weiPerBudgetUnitBold: 1_000_000_000,
-                boldTokenAddress: BOLD,
-                boldTvlCap: type(uint256).max,
-                boldCircuitBreaker: BOLD_BREAKER,
-                boldAdmin: BOLD_ADMIN,
-                enableLiquityAutoCircuitTrigger: false,
-                ammSeedRatioBps: 8000,
-                erc20ResourceIds: rids,
-                erc20TokenAddrs: toks
-            })
-        );
+        return new KnomosisBridge(_boldEnabledArgs());
     }
 
     /// @notice Etch BOLD then deploy a BOLD-enabled bridge in the right order.
@@ -124,6 +133,7 @@ abstract contract AmmTestBase is Test {
                 boldAdmin: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 8000,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

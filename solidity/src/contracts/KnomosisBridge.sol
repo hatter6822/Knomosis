@@ -114,6 +114,13 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         sequencer's free-pool claims during peak L1-gas periods.
     error AmmSeedRatioExceedsMax(uint16 ammSeedRatioBps);
 
+    /// @notice Constructor guard (GP.11.3): the `ammDisasterRecovery` kill-
+    ///         switch role must not be the bridge itself.  Mirrors the GP.5.5
+    ///         `BoldRoleIsBridge` guard — closes the footgun where a future
+    ///         `address(this).call(...)` would inadvertently satisfy the role
+    ///         check.  `address(0)` (opt out) passes.
+    error AmmRoleIsBridge();
+
     // ---- Workstream GP.5.4: BOLD-currency fee-split deposits ----
 
     /// @notice Constructor guard: a BOLD-enabled deployment passed a
@@ -460,6 +467,16 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         strictly tightening (never loosening past the global cap)
     ///         the deployment's overall reserve commitment.
     address public immutable boldAdmin;
+    /// @notice Workstream GP.11.3 — the embedded-AMM disaster-recovery role
+    ///         (the GP.11.10 kill switch, pulled forward).  The SOLE address
+    ///         allowed to call `emergencyDisableAmm()`.  Set in the
+    ///         constructor; immutable.  OPTIONAL: `address(0)` opts out (no
+    ///         manual kill switch — the GP.5.5 BOLD breaker still gates
+    ///         `ammSwap`); an AMM-enabled deployment SHOULD set it (intended
+    ///         to be a multisig, distinct from the bridge — `AmmRoleIsBridge`
+    ///         otherwise).  This role can ONLY one-way-pause the AMM — it
+    ///         cannot move funds, alter state roots, or change any immutable.
+    address public immutable ammDisasterRecovery;
     /// @notice Whether the permissionless Liquity-V2 depeg auto-trigger is
     ///         enabled for this deployment.  Set in the constructor;
     ///         immutable.  When `true`, the three `LIQUITY_V2_TROVE_MANAGER_*`
@@ -571,6 +588,15 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         non-zero `ammSeedRatioBps`.
     uint256 public ammReserveBold;
 
+    /// @notice Workstream GP.11.3 — the embedded-AMM kill switch (GP.11.10,
+    ///         pulled forward).  Once `true`, `ammSwap` reverts `AmmIsDisabled`
+    ///         and `_seedAmmReserves` stops accruing reserves; the reserves
+    ///         themselves are preserved (re-tagged as free gas-pool funds the
+    ///         sequencer can claim).  ONE-WAY: there is no path to reset it
+    ///         (`ammDisabled_is_monotonic`); reactivating the AMM requires a
+    ///         fresh bridge deployment.  Default `false`.
+    bool public ammDisabled;
+
     // ------------------------------------------------------------------
     // Resource map (immutable; resource id → ERC-20 token address)
     // ------------------------------------------------------------------
@@ -669,6 +695,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // `<= MAX_AMM_SEED_RATIO_BPS`.  0 disables the AMM (preserving the
         // pre-v1.3 behaviour), so pre-GP.11.1 deployment shapes pass 0.
         uint16 ammSeedRatioBps;
+        // Workstream GP.11.3 embedded-AMM disaster-recovery role (the
+        // GP.11.10 kill switch, pulled forward).  The sole address allowed
+        // to call `emergencyDisableAmm()` (a one-way AMM pause).  OPTIONAL:
+        // `address(0)` opts out (no manual kill switch — the GP.5.5 BOLD
+        // breaker still gates `ammSwap` automatically); an AMM-enabled
+        // deployment SHOULD set it (intended to be a multisig).  Validated
+        // `!= address(this)` when non-zero.
+        address ammDisasterRecovery;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
     }
@@ -713,6 +747,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (args.ammSeedRatioBps > MAX_AMM_SEED_RATIO_BPS) {
             revert AmmSeedRatioExceedsMax(args.ammSeedRatioBps);
         }
+        // GP.11.3 — the optional AMM kill-switch role MUST NOT be the bridge
+        // itself (defence-in-depth, mirroring the GP.5.5 BOLD-role guard).
+        // `address(0)` (opt out) passes since the bridge is never address(0).
+        if (args.ammDisasterRecovery == address(this)) revert AmmRoleIsBridge();
 
         // ---- BOLD opt-in validation (Workstream GP.5.4) ----
         // A deployment opts into the BOLD entry point by passing the
@@ -842,6 +880,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // 0 (the implicit default); they are seeded only on deposit
         // (GP.11.2) and never directly settable.
         ammSeedRatioBps = args.ammSeedRatioBps;
+        // Workstream GP.11.3 — the AMM kill-switch role (validated `!=
+        // address(this)` above).  Stored verbatim; `address(0)` leaves the
+        // manual disable unreachable (the GP.5.5 breaker still gates swaps).
+        ammDisasterRecovery = args.ammDisasterRecovery;
 
         // ---- GP.5.5 safety-hardening roles + initial cap.
         // Roles and opt-in flag are immutable; `boldTvlCap` is the
@@ -973,6 +1015,26 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `address(0)`, so the guarded function is unreachable.
     modifier onlyBoldAdmin() {
         if (msg.sender != boldAdmin) revert NotBoldAdmin();
+        _;
+    }
+
+    // ---- AMM disaster-recovery modifiers (Workstream GP.11.3 / GP.11.10) ----
+
+    /// @notice Restricts `emergencyDisableAmm` to the immutable
+    ///         `ammDisasterRecovery` role.  When that role is `address(0)`
+    ///         (opt out) the guarded function is unreachable (`msg.sender`
+    ///         can never be `address(0)`).
+    modifier onlyAmmDisasterRecovery() {
+        if (msg.sender != ammDisasterRecovery) revert NotAmmDisasterRecovery();
+        _;
+    }
+
+    /// @notice Gates the embedded AMM on the one-way `ammDisabled` kill
+    ///         switch.  Reverts `AmmIsDisabled` once `emergencyDisableAmm`
+    ///         has been triggered.  Applied to `ammSwap` (and any future
+    ///         AMM-modifying entry point).
+    modifier ammActive() {
+        if (ammDisabled) revert AmmIsDisabled();
         _;
     }
 
@@ -1371,12 +1433,12 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         out-of-gas-leg resource seeds NOTHING — defence-in-depth, as
     ///         `_registerDepositWithFee` is only ever reached with the ETH
     ///         or BOLD resource today.
-    /// @dev    GP.11.10 hook point: when AMM disaster-recovery lands, the
-    ///         `emergencyDisableAmm()` flag's early-out goes here (return 0
-    ///         before computing the seed), so a disabled AMM stops accruing
-    ///         reserves.  The split stays observable + bound because the
-    ///         actual `ammSeedAmount` (0 once disabled) is emitted in the
-    ///         canonical event regardless.
+    /// @dev    GP.11.3 — once the AMM kill switch is triggered
+    ///         (`emergencyDisableAmm` ⇒ `ammDisabled`), this returns 0 before
+    ///         computing the seed, so a disabled AMM stops accruing reserves.
+    ///         The split stays observable + bound because the actual
+    ///         `ammSeedAmount` (0 once disabled) is emitted in the canonical
+    ///         `DepositWithFeeInitiated` event regardless.
     /// @dev    `internal` (not `private`) so a test harness can drive all
     ///         branches directly — in particular the off-gas-leg `else`
     ///         path, which is unreachable through the public entry points
@@ -1390,6 +1452,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint16 ratio = ammSeedRatioBps;
         // AMM disabled at construction: the entire poolAmount is free pool.
         if (ratio == 0) {
+            return 0;
+        }
+        // GP.11.3 kill switch: once the AMM is emergency-disabled it stops
+        // accruing reserves; the whole poolAmount stays as free pool.
+        if (ammDisabled) {
             return 0;
         }
 
@@ -1468,6 +1535,42 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         only fires if `AmmMath.getAmountOut` regressed, failing the
     ///         swap closed instead of leaking value out of the pool.
     error AmmKInvariantViolated();
+    /// @notice The AMM has been disabled via `emergencyDisableAmm` (GP.11.3 /
+    ///         GP.11.10 kill switch); every `ammSwap` now reverts.
+    error AmmIsDisabled();
+    /// @notice The GP.5.5 BOLD circuit breaker is closed (a depeg signal), so
+    ///         the AMM is frozen — `ammSwap` reverts until the circuit reopens.
+    error AmmPausedByBoldCircuit();
+    /// @notice `emergencyDisableAmm` was called by an address other than the
+    ///         immutable `ammDisasterRecovery` role.
+    error NotAmmDisasterRecovery();
+    /// @notice `emergencyDisableAmm` was called when the AMM is already
+    ///         disabled (the kill switch is one-way and idempotent-by-revert).
+    error AmmAlreadyDisabled();
+
+    /// @notice Emitted on `emergencyDisableAmm`, carrying the block timestamp
+    ///         and the reserves at the moment of the one-way pause (which are
+    ///         left untouched — re-tagged as free gas-pool funds, not moved).
+    event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
+
+    /// @notice Operator-triggered emergency pause of the embedded AMM (the
+    ///         GP.11.10 disaster-recovery kill switch, pulled forward into
+    ///         GP.11.3).  After this call `ammSwap` reverts `AmmIsDisabled`
+    ///         and `_seedAmmReserves` stops accruing reserves; the reserves
+    ///         themselves are PRESERVED (not zeroed or moved — they remain
+    ///         claimable by the sequencer through the existing gas-pool
+    ///         mechanism).  A graceful shutdown of the AMM, not a value drain.
+    /// @dev    ONE-WAY: `ammDisabled` cannot be reset (`ammDisabled_is_monotonic`);
+    ///         re-enabling the AMM requires a fresh bridge deployment.
+    ///         Deliberately stricter than the BOLD circuit breaker (which
+    ///         toggles) — a disaster is rare and rolling one back is itself a
+    ///         complex operation.  Gated by the immutable `ammDisasterRecovery`
+    ///         role; unreachable when that role is `address(0)` (opt out).
+    function emergencyDisableAmm() external onlyAmmDisasterRecovery {
+        if (ammDisabled) revert AmmAlreadyDisabled();
+        ammDisabled = true;
+        emit AmmDisabled(block.timestamp, ammReserveEth, ammReserveBold);
+    }
 
     /// @notice Permissionless ETH<->BOLD swap via the bridge's internal
     ///         constant-product AMM.  The fee is the immutable
@@ -1514,14 +1617,17 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         function is `nonReentrant`, so a malicious BOLD token or a
     ///         malicious ETH recipient cannot re-enter to double-spend
     ///         (`AmmReentrancy.t.sol`).
-    /// @dev    GP.11.10 hook point: when AMM disaster-recovery lands, the
-    ///         `ammActive` modifier — `revert AmmDisabled()` once an operator
-    ///         has triggered `emergencyDisableAmm()` — attaches to this
-    ///         signature, gating swaps off without moving any reserves.
+    /// @dev    Availability.  Two independent brakes gate the swap (GP.11.3):
+    ///         the `ammActive` modifier reverts `AmmIsDisabled` once an
+    ///         operator triggers the one-way `emergencyDisableAmm()` kill
+    ///         switch, and the body reverts `AmmPausedByBoldCircuit` while the
+    ///         GP.5.5 BOLD circuit breaker is closed (an automatic depeg
+    ///         freeze).  Neither moves any reserve.
     function ammSwap(uint64 fromResource, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
         external
         payable
         nonReentrant
+        ammActive
         returns (uint256 amountOut)
     {
         // ---- Checks ----
@@ -1535,6 +1641,14 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // Fail early + clearly here rather than at a `transferFrom` to the
         // empty BOLD address (BOLD-disabled) or the reserve check below.
         if (!boldEnabled) revert AmmEmpty();
+        // GP.11.3 — the GP.5.5 BOLD circuit breaker also freezes the AMM: a
+        // closed circuit (manual close OR the permissionless Liquity-shutdown
+        // auto-trigger) signals a BOLD depeg, during which the AMM's price is
+        // stale and BOLD->ETH swaps would drain the gas pool's ETH reserve at
+        // a bad rate.  Halting both directions while the L2 `withdrawWithProof`
+        // exit path stays open keeps the "deposits halted, withdrawals
+        // continue" posture (the AMM is an optional liquidity service).
+        if (boldCircuitClosed) revert AmmPausedByBoldCircuit();
 
         uint256 reserveIn;
         uint256 reserveOut;

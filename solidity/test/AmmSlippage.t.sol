@@ -126,4 +126,54 @@ contract AmmSlippageTest is AmmTestBase {
         // Past deadline AND an impossible minAmountOut: deadline error wins.
         bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, type(uint256).max, 1_000_000);
     }
+
+    /// @notice `minAmountOut == amountOut` is acceptable on the BOLD->ETH leg
+    ///         too (direction symmetry of the strict `<` slippage check).
+    function test_slippage_boldToEth_exactMet_succeeds() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+        uint256 amountIn = 3000 ether;
+        uint256 expectedOut = _refOut(amountIn, rBold, rEth);
+        _mintApprove(bridge, swapper, amountIn);
+
+        vm.prank(swapper);
+        uint256 out = bridge.ammSwap(BOLD_RID, amountIn, expectedOut, _farDeadline());
+        assertEq(out, expectedOut, "BOLD->ETH exact-min swap returns the expected output");
+    }
+
+    /// @notice `minAmountOut == amountOut - 1` succeeds (strictly below the
+    ///         output is acceptable; only `> amountOut` reverts).
+    function test_slippage_oneBelowOutput_succeeds() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+        uint256 amountIn = 1 ether;
+        uint256 expectedOut = _refOut(amountIn, rEth, rBold);
+
+        vm.prank(swapper);
+        uint256 out = bridge.ammSwap{value: amountIn}(NATIVE_ETH, amountIn, expectedOut - 1, _farDeadline());
+        assertEq(out, expectedOut, "min one below the output succeeds");
+    }
+
+    /// @notice `deadline == type(uint256).max` never expires (the swap
+    ///         succeeds at an arbitrarily large block timestamp).
+    function test_deadline_typeMax_neverExpires() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        _seedBothLegs(bridge);
+        vm.warp(type(uint64).max);
+        vm.prank(swapper);
+        uint256 out = bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, type(uint256).max);
+        assertGt(out, 0, "max deadline never expires");
+    }
+
+    /// @notice Zero-min disables slippage on the BOLD->ETH leg too (the
+    ///         arbitrage escape hatch is direction-symmetric).
+    function test_slippage_boldToEth_zeroMin_disables() public {
+        KnomosisBridge bridge = _deploySeededReady();
+        _seedBothLegs(bridge);
+        uint256 amountIn = 2000 ether;
+        _mintApprove(bridge, swapper, amountIn);
+        vm.prank(swapper);
+        uint256 out = bridge.ammSwap(BOLD_RID, amountIn, 0, _farDeadline());
+        assertGt(out, 0, "BOLD->ETH zero-min accepts any positive output");
+    }
 }

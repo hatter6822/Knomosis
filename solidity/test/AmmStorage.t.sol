@@ -128,6 +128,7 @@ contract AmmStorageTest is Test {
                 boldAdmin: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -172,6 +173,7 @@ contract AmmStorageTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -485,14 +487,17 @@ contract AmmStorageTest is Test {
     // even via admin functions" (the plan's GP.11.1 test criterion).
     // ------------------------------------------------------------------
 
-    /// @notice The bridge exposes NO callable mutator for the AMM state.
-    ///         `ammSeedRatioBps` is `immutable`, so a setter is impossible
-    ///         at compile time; the two reserves are mutable storage but
-    ///         have no write path at GP.11.1.  This probes a battery of
+    /// @notice The bridge exposes NO arbitrary mutator for the AMM RESERVES
+    ///         (`ammReserveEth` / `ammReserveBold`) or the seed ratio:
+    ///         `ammSeedRatioBps` is `immutable`, the reserves' only write
+    ///         paths are deposit seeding (GP.11.2) and `ammSwap` (GP.11.3),
+    ///         and there is no direct setter.  This probes a battery of
     ///         plausible AMM setter selectors via low-level `call` and
     ///         asserts every one is unroutable — the bridge has a
     ///         `receive()` but no `fallback()`, so a 4-byte (non-empty)
-    ///         selector that matches no function reverts.  Mirrors
+    ///         selector that matches no function reverts.  The ONE intentional
+    ///         AMM-state mutator, the GP.11.3 `emergencyDisableAmm` kill
+    ///         switch, is verified ROLE-GATED (not open) below.  Mirrors
     ///         `KnomosisBridge.t.sol::test_no_admin_surface` for the AMM
     ///         surface specifically.
     function test_ammState_hasNoSetterSurface() public {
@@ -513,7 +518,14 @@ contract AmmStorageTest is Test {
             assertFalse(ok, "AMM mutator selector unexpectedly callable");
         }
 
-        // The getters remain the only AMM surface and read unchanged.
+        // The GP.11.3 `emergencyDisableAmm` kill switch IS a real AMM-state
+        // mutator, but it is role-gated: an arbitrary caller (here the test
+        // contract, not the `ammDisasterRecovery` role) cannot trigger it.
+        (bool killOk,) = address(bridge).call(abi.encodeWithSignature("emergencyDisableAmm()"));
+        assertFalse(killOk, "emergencyDisableAmm is role-gated, not open");
+        assertFalse(bridge.ammDisabled(), "AMM not disabled by the rejected call");
+
+        // The getters remain the only read surface and read unchanged.
         assertEq(bridge.ammSeedRatioBps(), 5000, "seed ratio unchanged");
         assertEq(bridge.ammReserveEth(), 0, "ETH reserve unchanged");
         assertEq(bridge.ammReserveBold(), 0, "BOLD reserve unchanged");

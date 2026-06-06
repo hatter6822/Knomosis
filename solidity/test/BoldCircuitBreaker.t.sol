@@ -128,6 +128,7 @@ contract BoldCircuitBreakerTest is Test {
                 boldAdmin: admin,
                 enableLiquityAutoCircuitTrigger: enableAuto,
                 ammSeedRatioBps: 0,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1400,6 +1401,7 @@ contract BridgeSelfRoleProbe is Test {
                 boldAdmin: admin,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1532,6 +1534,7 @@ contract BoldCircuitBreakerInvariantTest is Test {
                 boldAdmin: ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
+                ammDisasterRecovery: address(0),
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
