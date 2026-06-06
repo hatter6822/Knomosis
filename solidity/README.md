@@ -331,7 +331,7 @@ entries now draw a random `ammSeedRatioBps ∈ [0, 8000]`, so the binding is
 cross-stack-verified with non-zero seeds — and pinned against a generator
 regression by the `countNonZeroSeed` header, which each consumer
 independently recounts and asserts).  Coverage:
-`test/AmmDepositSeeding.t.sol` (~23 cases — per-leg seeding via the event's
+`test/AmmDepositSeeding.t.sol` (~26 cases — per-leg seeding via the event's
 `ammSeedAmount`, the disabled / zero-fee / dust `ammSeedAmount == 0` paths,
 `test_receiptHash_bindsAmmSeedAmount` + the BOLD-leg
 `test_boldReceiptHash_bindsAmmSeedAmount` (tamper-evidence), leg
@@ -341,10 +341,13 @@ independence, monotonic accumulation, the reserve-subset-of-TVL bound,
 branch via a harness), `test_ammSeedSplit_knownVectors` (a non-circular
 hand-computed anchor for the reference), `test_gas_seedingOverhead` (a
 COMPARATIVE gas pin: enabled − disabled overhead, far tighter than an
-absolute envelope), three conservation fuzz tests, and a 5-invariant
+absolute envelope), three conservation fuzz tests, and a 7-invariant
 stateful suite (reserve == sum-of-admitted-seeds per leg, global reserves <=
-TVL, + two per-currency reserve <= per-currency TVL bounds) over 128 000
-random ETH+BOLD deposits at a moderate cap), plus the AMM-enabled
+TVL, two per-currency reserve <= per-currency TVL bounds, + two REAL-TOKEN
+backing bounds — `ammReserveEth <= bridge ETH balance` / `ammReserveBold <=
+bridge BOLD balance`, proving the reserve is backed by actual tokens, not
+just the TVL accounting) over 128 000 random ETH+BOLD deposits at a moderate
+cap), plus the AMM-enabled
 `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`
 end-to-end test (deposit seeds the reserve; a withdrawal drains all non-seed
 value, proving `ammReserveBold <= boldTotalLockedValue <= totalLockedValue`

@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "8aac58db8e03264e984426881a776201db30ed6c201d8e6b462cd6101bbe28e1"
+    "source_digest": "4bb06e8297c48631e2366b7d09bf5a910e19afb43c245c4bfa1f6f9c41bafb10"
   },
   "summary": {
     "module_count": 64,
-    "declaration_count": 1499
+    "declaration_count": 1501
   },
   "modules": [
     {
@@ -3811,7 +3811,7 @@
     {
       "module": "AmmDepositSeeding.t",
       "path": "solidity/test/AmmDepositSeeding.t.sol",
-      "declaration_count": 45,
+      "declaration_count": 47,
       "declarations": [
         {
           "kind": "contract",
@@ -4222,9 +4222,27 @@
           "called": []
         },
         {
+          "kind": "function",
+          "name": "invariant_ethReserveBackedByRealEth",
+          "line": 900,
+          "called": [
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "invariant_boldReserveBackedByRealBold",
+          "line": 910,
+          "called": [
+            "MockBold",
+            "balanceOf",
+            "bridge"
+          ]
+        },
+        {
           "kind": "contract",
           "name": "SeedHarness",
-          "line": 899,
+          "line": 925,
           "called": [
             "KnomosisBridge"
           ]
@@ -4232,7 +4250,7 @@
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 900,
+          "line": 926,
           "called": [
             "KnomosisBridge"
           ]
@@ -4240,7 +4258,7 @@
         {
           "kind": "function",
           "name": "exposed_seedAmmReserves",
-          "line": 903,
+          "line": 929,
           "called": [
             "_seedAmmReserves"
           ]

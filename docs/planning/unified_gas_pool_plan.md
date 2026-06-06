@@ -7002,8 +7002,8 @@ sub-WU table above is the implementation roadmap.
         unchanged; their Solidity consumers' event decoders absorb the new
         (zero) `ammSeedAmount` field.
 
-    **Tests.**  New `test/AmmDepositSeeding.t.sol` (~23 cases — unit + 3
-    conservation fuzz + a 5-invariant stateful suite): per-leg seeding with
+    **Tests.**  New `test/AmmDepositSeeding.t.sol` (~26 cases — 19 unit /
+    fuzz + a 7-invariant stateful suite): per-leg seeding with
     the canonical event's `ammSeedAmount` field, the disabled / zero-fee /
     dust-floor `ammSeedAmount == 0` paths (decoded from the event),
     `test_receiptHash_bindsAmmSeedAmount` + the BOLD-leg
@@ -7018,13 +7018,19 @@ sub-WU table above is the implementation roadmap.
     gas pin — enabled minus disabled overhead `< 15k`, far tighter than the
     absolute envelope), the conservation fuzz over both legs + the whole `[0,
     8000]` ratio range, and the stateful `AmmDepositSeedingInvariantTest`
-    (`ammReserveEth == sum-of-admitted-ETH-seeds`, `ammReserveBold ==
-    sum-of-admitted-BOLD-seeds`, the global `reserves <= TVL`, and the two
-    PER-CURRENCY bounds `ammReserveBold <= boldTotalLockedValue` +
-    `ammReserveEth + boldTotalLockedValue <= totalLockedValue` — which catch
-    a wrong-leg seed the global bound would mask when the other leg has slack
-    — over 128 000 random ETH+BOLD deposits at a moderate cap so some
-    deposits revert).  The deposit→withdraw interaction (the seeded reserve
+    (a 7-invariant suite: `ammReserveEth == sum-of-admitted-ETH-seeds`,
+    `ammReserveBold == sum-of-admitted-BOLD-seeds`, the global `reserves <=
+    TVL`, the two PER-CURRENCY bounds `ammReserveBold <=
+    boldTotalLockedValue` + `ammReserveEth + boldTotalLockedValue <=
+    totalLockedValue` — which catch a wrong-leg seed the global bound would
+    mask when the other leg has slack — AND the two REAL-TOKEN backing
+    bounds `ammReserveEth <= address(bridge).balance` / `ammReserveBold <=
+    BOLD.balanceOf(bridge)`, the ultimate solvency statement that the
+    reserve is backed by actual tokens the bridge holds, not merely the TVL
+    accounting variable (catches a TVL-vs-balance divergence the
+    accounting-only bounds would miss) — over 128 000 random ETH+BOLD
+    deposits at a moderate cap so some deposits revert).  The deposit→withdraw
+    interaction (the seeded reserve
     surviving a withdrawal) is covered end-to-end by the AMM-enabled
     `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`,
     which drains TVL to exactly the seed floor and asserts `ammReserveBold <=

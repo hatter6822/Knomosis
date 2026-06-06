@@ -889,6 +889,32 @@ contract AmmDepositSeedingInvariantTest is Test {
             "ammReserveEth fits within the ETH portion of TVL"
         );
     }
+
+    /// @notice REAL-TOKEN backing (the ultimate solvency statement): the ETH
+    ///         reserve is backed by actual ETH the bridge holds, not merely
+    ///         by the TVL accounting variable.  Independent of the TVL
+    ///         invariants — it catches a TVL-vs-actual-balance divergence
+    ///         (e.g. a reserve credited without the matching ETH escrowed)
+    ///         that the accounting-only bounds would miss.  Holds because
+    ///         every ETH seed is carved from an ETH deposit's pool fee, which
+    ///         is a subset of the `msg.value` added to `address(this).balance`.
+    function invariant_ethReserveBackedByRealEth() public view {
+        assertLe(
+            bridge.ammReserveEth(),
+            address(bridge).balance,
+            "ammReserveEth <= bridge's actual ETH balance"
+        );
+    }
+
+    /// @notice REAL-TOKEN backing for the BOLD leg: the BOLD reserve is
+    ///         backed by actual BOLD the bridge holds.
+    function invariant_boldReserveBackedByRealBold() public view {
+        assertLe(
+            bridge.ammReserveBold(),
+            MockBold(BOLD).balanceOf(address(bridge)),
+            "ammReserveBold <= bridge's actual BOLD balance"
+        );
+    }
 }
 
 /// @title SeedHarness

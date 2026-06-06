@@ -3649,7 +3649,7 @@ contributions surviving in current code:
     (their consumers absorb the new zero `ammSeedAmount`).
     `test/utils/FeeSplitMath.sol` gains the `ammSeedSplit` reference (with a
     `ratio <= 10000` precondition guard) + threads `ammSeedAmount` through
-    `receiptHash`.  New `test/AmmDepositSeeding.t.sol` (~23 cases: per-leg
+    `receiptHash`.  New `test/AmmDepositSeeding.t.sol` (~26 cases: per-leg
     seeding via the event's `ammSeedAmount`, the disabled / zero-fee / dust
     `ammSeedAmount == 0` paths, the ETH + BOLD tamper-evidence tests, leg
     independence, monotonic accumulation, reserve-subset-of-TVL,
@@ -3658,11 +3658,15 @@ contributions surviving in current code:
     off-gas-leg branch via a `SeedHarness` over the now-`internal` helper),
     `test_ammSeedSplit_knownVectors` (non-circular reference anchor),
     `test_gas_seedingOverhead` (a COMPARATIVE gas pin), three conservation
-    fuzz tests, and a 5-invariant stateful suite (reserve == sum-of-admitted-
-    seeds per leg, global reserves <= TVL, + the two per-currency bounds
+    fuzz tests, and a 7-invariant stateful suite (reserve == sum-of-admitted-
+    seeds per leg, global reserves <= TVL, the two per-currency bounds
     `ammReserveBold <= boldTotalLockedValue` / `ammReserveEth` within the ETH
-    TVL portion, which catch a wrong-leg seed) over 128 000 random ETH+BOLD
-    deposits at a moderate cap so some revert) plus the AMM-enabled
+    TVL portion (catch a wrong-leg seed), + the two REAL-TOKEN backing bounds
+    `ammReserveEth <= address(bridge).balance` / `ammReserveBold <=
+    BOLD.balanceOf(bridge)` (the reserve is backed by actual tokens, not just
+    the TVL accounting — catches a TVL-vs-balance divergence)) over 128 000
+    random ETH+BOLD deposits at a moderate cap so some revert) plus the
+    AMM-enabled
     `BridgeFeeSplitBold.t.sol::test_e2e_ammReserveSurvivesBoldWithdrawal`
     end-to-end test (deposit seeds the reserve; a withdrawal drains all
     non-seed value, proving `reserve <= TVL` survives with the seed as the
