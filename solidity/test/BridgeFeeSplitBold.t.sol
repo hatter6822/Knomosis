@@ -59,6 +59,8 @@ contract BridgeFeeSplitBoldTest is Test {
     ///      non-zero addresses suffice to satisfy the constructor.
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
+    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.
+    address private constant AMM_DR = address(0xA33D6);
 
     /// @dev Local copy of the contract event for log decoding.  The
     ///      GP.11.2 `ammSeedAmount` field is 0 throughout this suite (every
@@ -132,6 +134,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -182,6 +185,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -663,6 +667,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 0,
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -1041,6 +1046,7 @@ contract BridgeFeeSplitBoldTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

@@ -7321,6 +7321,203 @@ sub-WU table above is the implementation roadmap.
   * **Dependencies.**  GP.11.1, GP.11.2.
   * **Estimated effort.**  ~24 hours including the
     invariant-test harness.
+  * **Status: COMPLETE (Solidity side).**  `KnomosisBridge.sol` ships the
+    permissionless `ammSwap(fromResource, amountIn, minAmountOut, deadline)
+    payable nonReentrant returns (uint256 amountOut)` entry point, backed by
+    a new pure swap-math library `solidity/src/lib/AmmMath.sol`
+    (`getAmountOut` / `getAmountIn`, fee-parameterised, self-validating,
+    `internal` ⇒ inlined, checked arithmetic).  Both directions work
+    symmetrically: ETH→BOLD takes `msg.value` and sends BOLD via
+    `safeTransfer`; BOLD→ETH pulls via `safeTransferFrom` with a
+    `balanceOf`-delta check (fee-on-transfer defence, reusing
+    `BoldTransferAmountMismatch`) and sends ETH via a low-level `call`.  The
+    0.30% `AMM_SWAP_FEE_BPS` is retained in the reserves, so
+    `k = ammReserveEth × ammReserveBold` is monotonically non-decreasing
+    (strictly increasing per non-trivial swap).  Event `AmmSwapExecuted` +
+    eleven swap errors (`SwapDeadlineExpired`, `ZeroSwapInput`,
+    `ZeroSwapOutput`, `EthAmountMismatch`, `UnexpectedEth`,
+    `UnsupportedSwapResource`, `AmmEmpty`, `SlippageExceeded`,
+    `ReserveExhausted`, `EthTransferFailed`, `AmmKInvariantViolated`).
+  * **Design decisions vs. the v1.5 sketch above** (recorded so a reviewer
+    can diff intent against implementation):
+    1. **Accounting (Option C).**  `ammSwap` deliberately does NOT touch
+       `totalLockedValue` / `boldTotalLockedValue` (the sketch is silent;
+       this makes it explicit).  The AMM is a self-contained,
+       value-conserving sub-pool whose total value is preserved (and grows
+       by the fee) on every swap, while a raw-unit `reserves ≤ TVL` bound
+       mixes incommensurable ETH-wei and BOLD-wei and is NOT a swap
+       invariant.  Solvency rides instead on the REAL-TOKEN-BACKING
+       invariants `ammReserveEth ≤ address(this).balance` and
+       `ammReserveBold ≤ BOLD.balanceOf(this)`: each reserve moves in EXACT
+       lockstep with the matching real balance (input reserve and balance
+       both `+= amountIn`; output reserve and balance both `-= amountOut`),
+       so a swap touches only AMM reserves, never any L2 user's backing, and
+       updating TVL (the rejected alternative) would let a cross-currency
+       swap brick deposits at the cap or behave wildly with the ETH/BOLD
+       exchange rate.  Pinned by `test_swap_doesNotTouchTvl` +
+       `invariant_tvlUntouchedBySwaps` + the real-backing invariants.
+    2. **Kill switch + depeg breaker (IMPLEMENTED in the v1.24 completion;
+       the original v1.23 swap deferred these to GP.11.10).**  The GP.11.10
+       `ammActive` kill switch is pulled forward: a one-way
+       `emergencyDisableAmm()` gated by a new immutable `ammDisasterRecovery`
+       role sets `ammDisabled`, after which the `ammActive` modifier reverts
+       `AmmIsDisabled` on `ammSwap` and `_seedAmmReserves` stops accruing
+       reserves (the reserves are PRESERVED — a graceful shutdown).  The role
+       is REQUIRED non-zero for a FUNCTIONAL AMM (BOLD-enabled, ratio > 0) —
+       `AmmDisasterRecoveryRequired` otherwise, mirroring the GP.5.5 rule that
+       an enabled feature ships its safety roles — and validated `!=
+       address(this)` (`AmmRoleIsBridge`).  ADDITIONALLY, `ammSwap` reverts
+       `AmmPausedByBoldCircuit` while the GP.5.5 BOLD circuit breaker is closed
+       (a depeg freeze, both directions), so the AMM does not offer a stale
+       price during a depeg while L2 withdrawals stay open.  (The GP.11.10
+       `onlyDisasterRecovery` MULTISIG hardening + the operator runbook remain
+       GP.11.10; the mechanism itself is now live.)
+    3. **`ZeroSwapOutput` guard added.**  A dust input whose output floors
+       to zero is rejected (Uniswap v2's positive-output rule), so a swap
+       can never donate its input for nothing.  Does not break the
+       `minAmountOut == 0` arbitrage escape hatch (non-dust swaps still pass).
+    4. **Checked add + on-chain k-check.**  `newReserveIn = reserveIn +
+       amountIn` is CHECKED (the sketch's `unchecked` is a premature
+       optimisation; reserves are TVL-bounded so overflow is unreachable
+       but a hypothetical one reverts).  A belt-and-braces
+       `newReserveIn * newReserveOut < reserveIn * reserveOut` assertion
+       (`AmmKInvariantViolated`) + the proven `amountOut < reserveOut`
+       bound (`ReserveExhausted`) make a swap-math regression fail closed
+       rather than drain the pool.  `safeTransfer`/`safeTransferFrom`
+       replace the sketch's raw `transfer`/`transferFrom`+bool;
+       `EthAmountMismatch` carries `(expected, actual)` for diagnostics; a
+       `!boldEnabled ⇒ AmmEmpty` early-out gives a clean revert on a
+       BOLD-disabled deployment (whose BOLD reserve is permanently zero)
+       before any token call.
+  * **Tests (54 new cases over a shared `test/utils/AmmTestBase.sol`, all
+    green; `MockBold.transfer` made `virtual` for the reentrancy mock):**
+    * `AmmMath.t.sol` (20) — exact hand-computed vectors, the fee-reduces-
+      output / monotone-in-input / strictly-below-`reserveOut` structural
+      guarantees, the full revert surface, the `getAmountIn` round-trip,
+      and the headline k-monotonicity fuzz (`(reserveIn+amountIn) ×
+      (reserveOut-amountOut) ≥ reserveIn × reserveOut`).
+    * `AmmSwap.t.sol` (20) — both directions with full reserve / real-balance
+      accounting + the canonical event + return value, the TVL-untouched
+      design pin, real-token-backing, fee-accumulation (k grows), the
+      full revert surface (`AmmEmpty` before / one-leg / BOLD-disabled,
+      `ZeroSwapInput`, `UnsupportedSwapResource`, `EthAmountMismatch`,
+      `UnexpectedEth`, `ZeroSwapOutput`), a tightened warm-swap gas pin, and
+      two stateless single-swap fuzz tests (added in the v1.24 completion
+      round; see below).
+    * `AmmReentrancy.t.sol` (3) — a malicious ETH recipient re-entering a
+      WOULD-SUCCEED swap is rejected by `nonReentrant` with NO double-spend
+      (exactly one swap's accounting applied), a malicious BOLD token in the
+      output path fails safe (`ReentrancyGuardReentrantCall` bubbles via
+      `safeTransfer`, reserves unchanged), and an honest contract caller
+      still settles.
+    * `AmmInvariants.t.sol` (5) — the stateful k-never-decreases +
+      reserves-stay-positive + real-token-backing + TVL-untouched harness
+      over 128 000 random ETH↔BOLD swaps (0 reverts).
+    * `AmmSlippage.t.sol` (9) — `minAmountOut` and `deadline` exact
+      boundaries (the strict `<` / `>`), the zero-min disable, unrealistic
+      bounds, and the deadline-before-slippage ordering.
+    * `AmmSandwich.t.sol` (4) — a front-run degrades the user's execution, a
+      full front-run+back-run sandwich profits without protection, and
+      `minAmountOut` deterministically STOPS the attack (user reverts).
+  * **Gates.**  `forge build` warning-free (the deadline `block.timestamp`
+    comparison carries an explicit `forge-lint: disable-next-line` with a
+    rationale); full `forge test` green; the GP.5.2 cap-audit gate +
+    self-test (45 cases) unchanged — no constitutional cap is added (the
+    swap reuses `AMM_SWAP_FEE_BPS`; `AmmMath`'s `BPS_DENOMINATOR` lives
+    outside the audited `KnomosisBridge.sol`).  Solidity-only; the L2
+    `Action.ammSwap` mirror + cross-stack corpus are GP.11.4 / GP.11.7.
+  * **Completion round (v1.24 — kill switch + breaker + machine-checked
+    k-monotonicity + audit-gap closures).**  A code-first deep audit drove
+    GP.11.3 to its optimal form:
+    * **Machine-checked k-monotonicity.**  `LegalKernel/Bridge/AmmMath.lean`
+      (Lean-core only) mirrors the Solidity `getAmountOut` over `Nat` and
+      proves `getAmountOut_lt_reserveOut` (no-drain) + `k_nondecreasing`
+      (the constant product never decreases).  Both `#print axioms`-clean
+      (`{propext, Classical.choice, Quot.sound}` only), zero sorries; the
+      `bridge-amm-math` suite (6 cases) pins the SAME hand-vectors as
+      `AmmMath.t.sol`, so Lean-spec == Solidity-formula == ground truth.
+      The swap's headline safety property is now a theorem, not just an
+      assertion + tests (matching GP.5.1 / GP.11.2's proof-carrying pattern).
+    * **Kill switch + depeg breaker** (design decision 2, above): the
+      `emergencyDisableAmm` one-way pause + the required `ammDisasterRecovery`
+      role + the `boldCircuitClosed` swap freeze.  Pinned by the new
+      `AmmKillSwitch.t.sol` suite (the GP.11.10 theorems
+      `emergencyDisableAmm_preserves_reserves` / `ammDisabled_implies_swap_reverts`
+      / `ammDisabled_is_monotonic` as tests, the role access control, the
+      `AmmRoleIsBridge` + `AmmDisasterRecoveryRequired` constructor guards, the
+      breaker gating, and the brake independence/precedence).
+    * **Reachable-branch closures.**  `EthTransferFailed` (a contract
+      recipient that rejects the ETH output → fail-safe rollback), calibration
+      parity, EXACT fee-accrual `k` delta, a deposit↔swap composition test, a
+      warm-swap gas pin, and +4 slippage/deadline boundary cases (the
+      dedicated suite is now 13 ≥ the plan's 12+).
+    * **Lean→Solidity pricing cross-stack corpus** (distinct from the
+      GP.11.4 / GP.11.7 L2-mutation corpus — this one closes the
+      "the two implementations of the same `getAmountOut` formula agree"
+      gap).  The Lean generator `LegalKernel/Test/Bridge/CrossCheck/AmmMath.lean`
+      (`crosscheck-amm-getamountout`, 4 cases) computes
+      `LegalKernel.Bridge.AmmMath.getAmountOut` over a 204-entry corpus
+      (a 192-entry amount×reserve×reserve×fee grid + 12 boundary corners),
+      PROOF-CARRIES every entry against `getAmountOut_lt_reserveOut` +
+      `k_nondecreasing`, and emits `amm_getamountout.json`; the Solidity
+      consumer `solidity/test/CrossCheck/AmmMath.t.sol` (5 cases) recomputes
+      `src/lib/AmmMath.sol::getAmountOut` over the SAME inputs and byte-matches
+      every entry (plus no-drain / k-monotonicity re-checks + a hand-vector
+      anchor).  Hash-independent, so it runs in every binding mode.
+    * **Stateless swap fuzz.**  `AmmSwap.t.sol` gains two single-swap fuzz
+      tests (both directions, 256 runs each, dust→whale input range) pinning
+      output==reference + reserve accounting + k-monotonicity + real-token
+      backing per random input — complementing the stateful `AmmInvariants`
+      sequences (suite now 20).  The warm-swap gas pin was tightened from a
+      placeholder 200k to 30k (~16.5k actual; trips on an accidental cold
+      SSTORE), and the shared AMM disaster-recovery test role is a named
+      `AMM_DR` constant per suite rather than a repeated `0xA33D6` literal.
+    * **Coverage made runnable + confirmed full-suite.**  `forge coverage`
+      was infeasible (the via_ir contracts defeat its instrumentation); the
+      test `Deployer` is stack-fit (params threaded through one `DeployParams`
+      memory struct, external signature unchanged), so `forge coverage
+      --ir-minimum` now runs end-to-end.  A full-suite run reports
+      `src/lib/AmmMath.sol` at 100% line/statement/branch/function and
+      `KnomosisBridge.sol`'s AMM functions at 100% function coverage — and
+      `make coverage` documents the `--ir-minimum` requirement.  The two
+      provably-unreachable defensive branches (`ReserveExhausted`,
+      `AmmKInvariantViolated`) are by design uncovered.
+    * `forge test` 744 → 772 passed / 0 failed / 12 keccak-gated skips;
+      `lake build` (warning-free) + `lake test` + `count_sorries` (0) +
+      `naming_audit` + `tcb_audit` + `stub_audit` green; codemaps regenerated
+      (CI-idempotent).
+  * **PR #116 review hardening.**  Two fixes a code review surfaced, both
+    verified against the contract before acting:
+    * **BOLD-disabled deployments seed nothing.**  The constructor permits a
+      `ammSeedRatioBps > 0` deployment with BOLD disabled (the
+      `AmmDisasterRecoveryRequired` guard is nested under `boldEnabled`), and
+      `_seedAmmReserves` previously diverted part of every ETH fee into
+      `ammReserveEth` — a reserve `ammSwap` can never drain (it reverts
+      `AmmEmpty` with no BOLD leg), permanently locking that ETH.
+      `_seedAmmReserves` now returns 0 when `!boldEnabled`, so every ETH fee
+      stays sequencer-claimable free pool.  Pinned by the new
+      `AmmStorage.t.sol::test_boldDisabled_seedsNothing_despitePositiveRatio`;
+      the ETH-seeding suites (`AmmStorage` / `AmmDepositSeeding` / the
+      `DepositFeeSplit` ETH cross-check) now deploy BOLD-enabled bridges, since
+      seeding only accrues on a functional AMM.
+    * **`ammSwap` freezes on migration.**  The swap ran under only
+      `nonReentrant + ammActive` + the BOLD-breaker freeze, NOT `circuitOpen`,
+      so a migrated (retired) bridge's AMM stayed live.  `ammSwap` now reverts
+      `MigrationActivated` once `migration.activated()` — the migration arm of
+      `circuitOpen` applied to the AMM; the transient attestation-stale /
+      dispute-cooldown arms are deliberately NOT applied (the AMM stays up as an
+      optional liquidity service during recoverable states).  Pinned by
+      `AmmKillSwitch.t.sol::test_swap_freezesAfterMigration`.
+    * A third comment (gate the AMM until the GP.11.4 L2 mirror lands) was
+      investigated and found to overstate user-fund risk: a swap preserves
+      combined real-token solvency (`balance ≥ user-escrow + ammReserve` is
+      invariant) and never touches `totalLockedValue` / user escrow, so pending
+      withdrawals stay fully backed; the residual is gas-pool accounting
+      completeness (GP.11.4) and every shipped deployment defaults to
+      `ammSeedRatioBps = 0` (AMM inert), so no code change was made.
+    * `forge test` 772 → 774 passed / 0 failed / 12 keccak-gated skips;
+      `forge build` warning-free; cap-audit unchanged (Solidity-only; no Lean /
+      Rust source touched).
 
 #### WU GP.11.4: L2-side AMM mirroring
 

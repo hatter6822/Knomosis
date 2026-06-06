@@ -239,6 +239,7 @@ import LegalKernel.Bridge.HashAdaptor
 import LegalKernel.Bridge.Eip712
 import LegalKernel.Bridge.AddressBook
 import LegalKernel.Bridge.BridgeActor
+import LegalKernel.Bridge.AmmMath
 import LegalKernel.Bridge.Ingest
 import LegalKernel.Bridge.State
 import LegalKernel.Bridge.Admissible

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b6d021ca861da516920081b196aa5a35fb915a77f356c35ab96bfd8ede4b096d"
+    "source_digest": "39cab291e6dd5b2215d867e0dabbf7222694c681f95e1de2d0ee5e6eafdaccb9"
   },
   "summary": {
-    "module_count": 292,
-    "declaration_count": 4863
+    "module_count": 295,
+    "declaration_count": 4889
   },
   "modules": [
     {
@@ -510,13 +510,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 302,
+          "line": 303,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 315,
+          "line": 316,
           "called": [
             "LegalKernel"
           ]
@@ -6285,6 +6285,53 @@
             "gasResource",
             "poolActor",
             "refundRate"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Bridge.AmmMath",
+      "path": "LegalKernel/Bridge/AmmMath.lean",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Bridge.AmmMath",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "bpsDenominator",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "getAmountOut",
+          "line": 53,
+          "called": [
+            "bpsDenominator"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getAmountOut_lt_reserveOut",
+          "line": 60,
+          "called": [
+            "bpsDenominator",
+            "getAmountOut"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "k_nondecreasing",
+          "line": 86,
+          "called": [
+            "LegalKernel.Bridge.AmmMath",
+            "bpsDenominator",
+            "getAmountOut",
+            "getAmountOut_lt_reserveOut"
           ]
         }
       ]
@@ -31565,6 +31612,43 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.AmmMath",
+      "path": "LegalKernel/Test/Bridge/AmmMath.lean",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "AmmMathTests",
+          "line": 34,
+          "called": [
+            "LegalKernel.Bridge.AmmMath",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 40,
+          "called": [
+            "AmmMathTests",
+            "LegalKernel.Test.Bridge",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "getAmountOut",
+            "getAmountOut_lt_reserveOut",
+            "k_nondecreasing"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.BridgeActor",
       "path": "LegalKernel/Test/Bridge/BridgeActor.lean",
       "declaration_count": 6,
@@ -31942,6 +32026,166 @@
             "topUpActionBudget_roundtrip_not_profitable_bridge",
             "transfer",
             "trustedRate"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.AmmMath",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/AmmMath.lean",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "AmmMathCrossCheck",
+          "line": 35,
+          "called": [
+            "LegalKernel.Bridge.AmmMath",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Entry",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 57,
+          "called": [
+            "Entry",
+            "getAmountOut"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "e18",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e9",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e30",
+          "line": 66,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e27",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "amounts",
+          "line": 72,
+          "called": [
+            "e18",
+            "e9"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "reservesA",
+          "line": 75,
+          "called": [
+            "e18"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fees",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gridEntries",
+          "line": 81,
+          "called": [
+            "Entry",
+            "mkEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cornerEntries",
+          "line": 89,
+          "called": [
+            "Entry",
+            "e18",
+            "e27",
+            "e30",
+            "e9",
+            "mkEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entries",
+          "line": 104,
+          "called": [
+            "Entry",
+            "cornerEntries",
+            "gridEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entryJson",
+          "line": 108,
+          "called": [
+            "Entry",
+            "Json",
+            "hexFromUint256BE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildJson",
+          "line": 119,
+          "called": [
+            "Json",
+            "bpsDenominator",
+            "entryJson"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 129,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 133,
+          "called": [
+            "AmmMathCrossCheck",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "assertEq",
+            "bpsDenominator",
+            "entries",
+            "fixtureName",
+            "getAmountOut",
+            "getAmountOut_lt_reserveOut",
+            "k_nondecreasing",
+            "writeFixture"
           ]
         }
       ]
@@ -57931,7 +58175,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 204,
+          "line": 206,
           "called": [
             "runAll"
           ]

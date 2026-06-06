@@ -52,7 +52,7 @@ contract MockBold is IERC20Metadata {
         return true;
     }
 
-    function transfer(address to, uint256 value) external returns (bool) {
+    function transfer(address to, uint256 value) external virtual returns (bool) {
         _move(msg.sender, to, value);
         return true;
     }

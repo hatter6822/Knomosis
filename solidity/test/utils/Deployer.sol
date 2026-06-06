@@ -38,6 +38,31 @@ contract Deployer {
         KnomosisIdentityRegistry registry;
     }
 
+    /// @notice The `deployAll` parameters grouped into one struct.  Threading
+    ///         them through a single MEMORY pointer keeps them out of the EVM
+    ///         stack across `_deployAll`'s heavy init-code assembly — the
+    ///         twelve loose parameters, held live across the whole body, were
+    ///         what overflowed the stack under `forge coverage --ir-minimum`
+    ///         (the reduced-optimization via_ir path coverage requires).
+    struct DeployParams {
+        address attestor;
+        address sequencer;
+        address[] adjudicators;
+        uint8 quorumThreshold;
+        uint64 disputeWindowBlocks;
+        uint64 maxRedemptionWindowBlocks;
+        uint64 maxAttestationStaleBlocks;
+        uint64 cooldownBlocks;
+        uint256 tvlCap;
+        uint256 slashRatioBps;
+        uint64[] erc20ResourceIds;
+        address[] erc20TokenAddrs;
+    }
+
+    /// @notice Backwards-compatible positional entry point.  Copies the twelve
+    ///         parameters into one `DeployParams` memory struct and delegates
+    ///         to `_deployAll`, so existing call sites are unchanged while the
+    ///         body runs with a shallow stack (see `DeployParams`).
     function deployAll(
         address attestor,
         address sequencer,
@@ -51,7 +76,27 @@ contract Deployer {
         uint256 slashRatioBps,
         uint64[] memory erc20ResourceIds,
         address[] memory erc20TokenAddrs
-    ) external returns (Deployment memory d) {
+    ) external returns (Deployment memory) {
+        DeployParams memory p;
+        p.attestor = attestor;
+        p.sequencer = sequencer;
+        p.adjudicators = adjudicators;
+        p.quorumThreshold = quorumThreshold;
+        p.disputeWindowBlocks = disputeWindowBlocks;
+        p.maxRedemptionWindowBlocks = maxRedemptionWindowBlocks;
+        p.maxAttestationStaleBlocks = maxAttestationStaleBlocks;
+        p.cooldownBlocks = cooldownBlocks;
+        p.tvlCap = tvlCap;
+        p.slashRatioBps = slashRatioBps;
+        p.erc20ResourceIds = erc20ResourceIds;
+        p.erc20TokenAddrs = erc20TokenAddrs;
+        return _deployAll(p);
+    }
+
+    /// @notice Deploys the four core contracts.  Every parameter is read from
+    ///         the `p` memory struct (transient loads), so no loose parameter
+    ///         is held live on the stack across the init-code assembly.
+    function _deployAll(DeployParams memory p) internal returns (Deployment memory d) {
         // Step 0: deploy the registry — no cross-references.
         d.registry = new KnomosisIdentityRegistry(VERSION_TAG);
 
@@ -60,57 +105,47 @@ contract Deployer {
         address verifierAddr = CREATE3.addressOf(address(this), SALT_VERIFIER);
         address stakeAddr = CREATE3.addressOf(address(this), SALT_STAKE);
 
-        // Step 2: assemble each contract's init-code with the
-        // predicted addresses baked in.  Because CREATE3 is
-        // init-code-independent, each contract's init-code can
-        // freely reference the other contracts' predicted
-        // addresses without affecting its own deployed address.
-        bytes memory bridgeInit = abi.encodePacked(
-            type(KnomosisBridge).creationCode,
-            abi.encode(
-                KnomosisBridge.ConstructorArgs({
-                    knomosisVersionTag: VERSION_TAG,
-                    attestor: attestor,
-                    disputeVerifier: verifierAddr,
-                    sequencerStake: stakeAddr,
-                    migration: address(0),
-                    disputeWindowBlocks: disputeWindowBlocks,
-                    maxRedemptionWindowBlocks: maxRedemptionWindowBlocks,
-                    maxAttestationStaleBlocks: maxAttestationStaleBlocks,
-                    cooldownBlocks: cooldownBlocks,
-                    tvlCap: tvlCap,
-                    // Permissive fee-split defaults (GP.5.1): the wide
-                    // [0, MAX_FEE_BPS_CAP] range and the minimal
-                    // exchange rate let suites that exercise the
-                    // fee-split path do so without bespoke deployments,
-                    // while leaving depositETH / depositERC20
-                    // behaviour untouched.  Suites needing specific
-                    // bounds (e.g. BridgeFeeSplit.t.sol) construct the
-                    // bridge directly.
-                    minFeeBps: 0,
-                    maxFeeBps: 5000, // == KnomosisBridge.MAX_FEE_BPS_CAP
-                    weiPerBudgetUnitEth: 1, // == KnomosisBridge.MIN_WEI_PER_BUDGET_UNIT
-                    // BOLD disabled (address(0)); BOLD-enabled deployments
-                    // (and the GP.5.4 / GP.5.5 BOLD suites) construct the
-                    // bridge directly with the canonical pin.
-                    weiPerBudgetUnitBold: 0,
-                    boldTokenAddress: address(0),
-                    // GP.5.5 BOLD safety-hardening fields — inert here
-                    // (BOLD disabled: roles unreachable, cap unused, no
-                    // auto-trigger).
-                    boldTvlCap: 0,
-                    boldCircuitBreaker: address(0),
-                    boldAdmin: address(0),
-                    enableLiquityAutoCircuitTrigger: false,
-                    // GP.11.1: AMM disabled (0) by default — the generic
-                    // deployer preserves the pre-v1.3 deposit behaviour;
-                    // AMM-specific suites construct the bridge directly.
-                    ammSeedRatioBps: 0,
-                    erc20ResourceIds: erc20ResourceIds,
-                    erc20TokenAddrs: erc20TokenAddrs
-                })
-            )
-        );
+        // Step 2: assemble each contract's init-code with the predicted
+        // addresses baked in.  Because CREATE3 is init-code-independent, each
+        // contract's init-code can freely reference the others' predicted
+        // addresses without affecting its own deployed address.  The bridge
+        // `ConstructorArgs` is built FIELD-BY-FIELD into a memory local (not a
+        // deep inline literal) to keep at most one field value live at a time.
+        // Field semantics:
+        //   * Permissive fee-split defaults (GP.5.1): the wide
+        //     [0, MAX_FEE_BPS_CAP] range + minimal exchange rate let
+        //     fee-split suites deploy generically; suites needing specific
+        //     bounds construct the bridge directly.
+        //   * BOLD disabled (address(0)); the GP.5.4/GP.5.5 BOLD safety
+        //     fields are inert (roles unreachable, cap unused, no trigger).
+        //   * AMM disabled (ratio 0); the GP.11.3 `ammDisasterRecovery`
+        //     kill-switch role is `address(0)` (opt out).
+        KnomosisBridge.ConstructorArgs memory bargs;
+        bargs.knomosisVersionTag = VERSION_TAG;
+        bargs.attestor = p.attestor;
+        bargs.disputeVerifier = verifierAddr;
+        bargs.sequencerStake = stakeAddr;
+        bargs.migration = address(0);
+        bargs.disputeWindowBlocks = p.disputeWindowBlocks;
+        bargs.maxRedemptionWindowBlocks = p.maxRedemptionWindowBlocks;
+        bargs.maxAttestationStaleBlocks = p.maxAttestationStaleBlocks;
+        bargs.cooldownBlocks = p.cooldownBlocks;
+        bargs.tvlCap = p.tvlCap;
+        bargs.minFeeBps = 0;
+        bargs.maxFeeBps = 5000; // == KnomosisBridge.MAX_FEE_BPS_CAP
+        bargs.weiPerBudgetUnitEth = 1; // == KnomosisBridge.MIN_WEI_PER_BUDGET_UNIT
+        bargs.weiPerBudgetUnitBold = 0;
+        bargs.boldTokenAddress = address(0);
+        bargs.boldTvlCap = 0;
+        bargs.boldCircuitBreaker = address(0);
+        bargs.boldAdmin = address(0);
+        bargs.enableLiquityAutoCircuitTrigger = false;
+        bargs.ammSeedRatioBps = 0;
+        bargs.ammDisasterRecovery = address(0);
+        bargs.erc20ResourceIds = p.erc20ResourceIds;
+        bargs.erc20TokenAddrs = p.erc20TokenAddrs;
+        bytes memory bridgeInit =
+            abi.encodePacked(type(KnomosisBridge).creationCode, abi.encode(bargs));
         bytes memory verifierInit = abi.encodePacked(
             type(KnomosisDisputeVerifier).creationCode,
             abi.encode(
@@ -120,8 +155,8 @@ contract Deployer {
                     sequencerStake: stakeAddr,
                     identityRegistry: address(d.registry),
                     migration: address(0),
-                    quorumThreshold: quorumThreshold,
-                    approvedAdjudicators: adjudicators
+                    quorumThreshold: p.quorumThreshold,
+                    approvedAdjudicators: p.adjudicators
                 })
             )
         );
@@ -129,19 +164,18 @@ contract Deployer {
             type(KnomosisSequencerStake).creationCode,
             abi.encode(
                 VERSION_TAG,
-                sequencer,
+                p.sequencer,
                 verifierAddr,
                 bridgeAddr,
-                slashRatioBps,
-                disputeWindowBlocks,
+                p.slashRatioBps,
+                p.disputeWindowBlocks,
                 BURN_ADDRESS
             )
         );
 
-        // Step 3: deploy via CREATE3.  Order is irrelevant to
-        // address derivation, but we deploy the bridge first so
-        // its `disputeVerifier` and `sequencerStake` immutables
-        // are fully wired before V/S start reading from it.
+        // Step 3: deploy via CREATE3.  Order is irrelevant to address
+        // derivation, but we deploy the bridge first so its `disputeVerifier`
+        // and `sequencerStake` immutables are fully wired before V/S read it.
         address deployedBridge = CREATE3.deploy(SALT_BRIDGE, bridgeInit);
         require(deployedBridge == bridgeAddr, "bridge predict mismatch");
         d.bridge = KnomosisBridge(payable(deployedBridge));
