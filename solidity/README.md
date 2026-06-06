@@ -48,7 +48,7 @@ solidity/
 │       └── StepVMMerkle.sol     — per-cell proof helpers (H + SC.2)
 └── test/
     ├── *.t.sol                  — 14 unit suites (per-contract + SmtCellVerifier)
-    ├── CrossCheck/*.t.sol       — 12 cross-stack suites (Lean ↔ Solidity)
+    ├── CrossCheck/*.t.sol       — 13 cross-stack suites (Lean ↔ Solidity)
     └── utils/                   — Deployer.sol (CREATE3 harness),
                                     MockERC20.sol
 ```

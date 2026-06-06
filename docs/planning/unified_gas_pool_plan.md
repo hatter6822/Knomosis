@@ -7396,12 +7396,14 @@ sub-WU table above is the implementation roadmap.
       guarantees, the full revert surface, the `getAmountIn` round-trip,
       and the headline k-monotonicity fuzz (`(reserveIn+amountIn) ×
       (reserveOut-amountOut) ≥ reserveIn × reserveOut`).
-    * `AmmSwap.t.sol` (13) — both directions with full reserve / real-balance
+    * `AmmSwap.t.sol` (20) — both directions with full reserve / real-balance
       accounting + the canonical event + return value, the TVL-untouched
-      design pin, real-token-backing, fee-accumulation (k grows), and the
+      design pin, real-token-backing, fee-accumulation (k grows), the
       full revert surface (`AmmEmpty` before / one-leg / BOLD-disabled,
       `ZeroSwapInput`, `UnsupportedSwapResource`, `EthAmountMismatch`,
-      `UnexpectedEth`, `ZeroSwapOutput`).
+      `UnexpectedEth`, `ZeroSwapOutput`), a tightened warm-swap gas pin, and
+      two stateless single-swap fuzz tests (added in the v1.24 completion
+      round; see below).
     * `AmmReentrancy.t.sol` (3) — a malicious ETH recipient re-entering a
       WOULD-SUCCEED swap is rejected by `nonReentrant` with NO double-spend
       (exactly one swap's accounting applied), a malicious BOLD token in the
@@ -7449,17 +7451,41 @@ sub-WU table above is the implementation roadmap.
       parity, EXACT fee-accrual `k` delta, a deposit↔swap composition test, a
       warm-swap gas pin, and +4 slippage/deadline boundary cases (the
       dedicated suite is now 13 ≥ the plan's 12+).
-    * **Coverage made runnable.**  `forge coverage` was infeasible (the
-      via_ir contracts defeat its instrumentation); the test `Deployer` is
-      stack-fit (params threaded through one `DeployParams` memory struct,
-      external signature unchanged), so `forge coverage --ir-minimum` now runs
-      end-to-end and reports `src/lib/AmmMath.sol` at 100% line/statement/
-      branch/function — and `make coverage` documents the `--ir-minimum`
-      requirement.  The two provably-unreachable defensive branches
-      (`ReserveExhausted`, `AmmKInvariantViolated`) are by design uncovered.
-    * `forge test` 744 → 765 passed / 0 failed / 12 keccak-gated skips;
+    * **Lean→Solidity pricing cross-stack corpus** (distinct from the
+      GP.11.4 / GP.11.7 L2-mutation corpus — this one closes the
+      "the two implementations of the same `getAmountOut` formula agree"
+      gap).  The Lean generator `LegalKernel/Test/Bridge/CrossCheck/AmmMath.lean`
+      (`crosscheck-amm-getamountout`, 4 cases) computes
+      `LegalKernel.Bridge.AmmMath.getAmountOut` over a 204-entry corpus
+      (a 192-entry amount×reserve×reserve×fee grid + 12 boundary corners),
+      PROOF-CARRIES every entry against `getAmountOut_lt_reserveOut` +
+      `k_nondecreasing`, and emits `amm_getamountout.json`; the Solidity
+      consumer `solidity/test/CrossCheck/AmmMath.t.sol` (5 cases) recomputes
+      `src/lib/AmmMath.sol::getAmountOut` over the SAME inputs and byte-matches
+      every entry (plus no-drain / k-monotonicity re-checks + a hand-vector
+      anchor).  Hash-independent, so it runs in every binding mode.
+    * **Stateless swap fuzz.**  `AmmSwap.t.sol` gains two single-swap fuzz
+      tests (both directions, 256 runs each, dust→whale input range) pinning
+      output==reference + reserve accounting + k-monotonicity + real-token
+      backing per random input — complementing the stateful `AmmInvariants`
+      sequences (suite now 20).  The warm-swap gas pin was tightened from a
+      placeholder 200k to 30k (~16.5k actual; trips on an accidental cold
+      SSTORE), and the shared AMM disaster-recovery test role is a named
+      `AMM_DR` constant per suite rather than a repeated `0xA33D6` literal.
+    * **Coverage made runnable + confirmed full-suite.**  `forge coverage`
+      was infeasible (the via_ir contracts defeat its instrumentation); the
+      test `Deployer` is stack-fit (params threaded through one `DeployParams`
+      memory struct, external signature unchanged), so `forge coverage
+      --ir-minimum` now runs end-to-end.  A full-suite run reports
+      `src/lib/AmmMath.sol` at 100% line/statement/branch/function and
+      `KnomosisBridge.sol`'s AMM functions at 100% function coverage — and
+      `make coverage` documents the `--ir-minimum` requirement.  The two
+      provably-unreachable defensive branches (`ReserveExhausted`,
+      `AmmKInvariantViolated`) are by design uncovered.
+    * `forge test` 744 → 772 passed / 0 failed / 12 keccak-gated skips;
       `lake build` (warning-free) + `lake test` + `count_sorries` (0) +
-      `naming_audit` green.
+      `naming_audit` + `tcb_audit` + `stub_audit` green; codemaps regenerated
+      (CI-idempotent).
 
 #### WU GP.11.4: L2-side AMM mirroring
 

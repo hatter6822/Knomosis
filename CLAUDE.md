@@ -2245,9 +2245,10 @@ product `k = ammReserveEth × ammReserveBold` is monotonically
 non-decreasing, `minAmountOut` slippage + `deadline` MEV protection, a pure
 `AmmMath` swap-math library, Checks-Effects-Interactions + `nonReentrant`
 safety, a one-way `emergencyDisableAmm` kill switch + the GP.5.5 BOLD-breaker
-depeg freeze on swaps, and a machine-checked Lean k-monotonicity proof in
-`LegalKernel/Bridge/AmmMath.lean`) — is complete (the L2 `Action.ammSwap`
-mirror is GP.11.4).  See
+depeg freeze on swaps, a machine-checked Lean k-monotonicity proof in
+`LegalKernel/Bridge/AmmMath.lean`, and a 204-entry Lean→Solidity
+`getAmountOut` cross-stack equivalence corpus) — is complete (the L2
+`Action.ammSwap` mirror is GP.11.4).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3734,10 +3735,14 @@ contributions surviving in current code:
     property is now a theorem, not only a runtime assertion + tests.  Coverage
     (~78 cases over a shared `AmmTestBase`, all green): `AmmMath.t.sol` (20 —
     exact vectors + the headline k-monotonicity fuzz + the `getAmountIn`
-    round-trip + the revert surface), `AmmSwap.t.sol` (18 — both directions,
+    round-trip + the revert surface), `AmmSwap.t.sol` (20 — both directions,
     reserve / real-balance accounting, the TVL-untouched pin, the
     `EthTransferFailed` rollback, calibration parity, the EXACT fee-accrual k
-    delta, deposit↔swap composition, a gas pin, the full revert surface),
+    delta, deposit↔swap composition, a TIGHT warm-swap gas pin (~16.5k actual,
+    30k bound, trips on an accidental cold SSTORE), the full revert surface,
+    and TWO stateless single-swap fuzz tests — both directions, 256 runs each
+    over a dust→whale input range — pinning output==reference + reserve
+    accounting + k-monotonicity + real-token backing per random input),
     `AmmReentrancy.t.sol` (3 — a malicious ETH recipient re-entering a
     would-succeed swap is blocked with NO double-spend, and a malicious BOLD
     token in the output path fails safe via `ReentrancyGuardReentrantCall`),
@@ -3749,14 +3754,32 @@ contributions surviving in current code:
     and `minAmountOut` deterministically stops it), `AmmKillSwitch.t.sol` (12 —
     the GP.11.10 kill-switch theorems as tests, role access control, the
     `AmmRoleIsBridge` + `AmmDisasterRecoveryRequired` constructor guards, the
-    breaker gating + brake independence/precedence).  `MockBold.transfer` was
-    made `virtual` so the swap-reentrancy mock can override it.  `forge
+    breaker gating + brake independence/precedence).  The shared GP.11.3 AMM
+    disaster-recovery test role is a NAMED `AMM_DR` constant in each suite
+    (matching the `BOLD_BREAKER` / `BOLD_ADMIN` convention) rather than a
+    repeated magic literal.  `MockBold.transfer` was
+    made `virtual` so the swap-reentrancy mock can override it.  **Lean→Solidity
+    cross-stack equivalence corpus** for the pricing function: the Lean
+    generator `LegalKernel/Test/Bridge/CrossCheck/AmmMath.lean`
+    (`crosscheck-amm-getamountout`, 4 cases) computes
+    `LegalKernel.Bridge.AmmMath.getAmountOut` over a 204-entry corpus (a
+    192-entry amount×reserve×reserve×fee grid + 12 boundary corners),
+    PROOF-CARRIES each entry against `getAmountOut_lt_reserveOut` +
+    `k_nondecreasing`, and emits `amm_getamountout.json`; the Solidity consumer
+    `solidity/test/CrossCheck/AmmMath.t.sol` (5 cases) recomputes
+    `src/lib/AmmMath.sol::getAmountOut` over the SAME inputs and byte-matches
+    every entry (plus the no-drain / k-monotonicity re-checks + a hand-vector
+    anchor) — mechanically proving `Lean-spec == Solidity-formula` over the
+    whole corpus, hash-independent so it runs in every binding mode.  `forge
     coverage --ir-minimum` runs (the test `Deployer` was stack-fit) and reports
-    `AmmMath.sol` at 100%; `make coverage` documents it.  Solidity + a Lean
+    `AmmMath.sol` at 100% lines/statements/branches/functions (full-suite run;
+    `KnomosisBridge.sol`'s AMM functions at 100% function coverage); `make
+    coverage` documents it.  Solidity + a Lean
     k-monotonicity proof (the L2 `Action.ammSwap` mirror is GP.11.4); `forge
     build` warning-free,
-    full `forge test` 765 passed / 0 failed / 12 keccak-gated skips,
-    `lake build`/`lake test`/`count_sorries`/`naming_audit` green, the GP.5.2
+    full `forge test` 772 passed / 0 failed / 12 keccak-gated skips,
+    `lake build`/`lake test`/`count_sorries`/`naming_audit`/`tcb_audit`/`stub_audit`
+    green, the GP.5.2
     cap-audit gate + self-test (45 cases) unchanged (no constitutional cap
     added — the swap reuses `AMM_SWAP_FEE_BPS`; `AmmMath`'s `BPS_DENOMINATOR`
     lives outside the audited `KnomosisBridge.sol`).

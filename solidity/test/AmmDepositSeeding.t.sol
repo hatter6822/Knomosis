@@ -46,6 +46,8 @@ contract AmmDepositSeedingTest is Test {
     address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
+    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.
+    address private constant AMM_DR = address(0xA33D6);
 
     /// @dev Local copy of the canonical contract event for `vm.expectEmit`.
     event DepositWithFeeInitiated(
@@ -106,7 +108,7 @@ contract AmmDepositSeedingTest is Test {
                 boldAdmin: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
-                ammDisasterRecovery: address(0xA33D6),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -145,7 +147,7 @@ contract AmmDepositSeedingTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
-                ammDisasterRecovery: address(0xA33D6),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -456,7 +458,7 @@ contract AmmDepositSeedingTest is Test {
                 boldAdmin: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ratio,
-                ammDisasterRecovery: address(0xA33D6),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -791,6 +793,8 @@ contract AmmDepositSeedingInvariantTest is Test {
     address private constant BOLD = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
+    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.
+    address private constant AMM_DR = address(0xA33D6);
     address private constant ACTOR = address(0xACC0);
 
     KnomosisBridge private bridge;
@@ -827,7 +831,7 @@ contract AmmDepositSeedingInvariantTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: 6000,
-                ammDisasterRecovery: address(0xA33D6),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

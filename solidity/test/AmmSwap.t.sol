@@ -370,9 +370,79 @@ contract AmmSwapTest is AmmTestBase {
         return (v - poolAmount, poolAmount, 0);
     }
 
-    /// @notice Gas-regression smoke test: a warm ETH->BOLD swap stays within a
-    ///         generous envelope (a real swap is ~90-130k; the bound trips on
-    ///         a gross regression — e.g. an accidental extra cold SSTORE).
+    // ------------------------------------------------------------------
+    // Stateless fuzz (single swap; complements the stateful AmmInvariants)
+    // ------------------------------------------------------------------
+
+    /// @notice Stateless ETH->BOLD fuzz: for an arbitrary input amount against
+    ///         the seeded pool, the live swap (1) returns EXACTLY the
+    ///         independent constant-product reference, (2) moves the reserves
+    ///         consistently (`reserveEth += amountIn`, `reserveBold -= out`),
+    ///         (3) never decreases k, and (4) keeps both reserves backed by the
+    ///         bridge's real token balances.  The input spans dust (1 wei) to a
+    ///         pool-dwarfing whale trade (1e6 ETH vs a 40-ETH reserve).
+    function testFuzz_swapEthToBold_invariants(uint256 rawAmountIn) public {
+        KnomosisBridge bridge = _deploySeededReady();
+        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+
+        uint256 amountIn = bound(rawAmountIn, 1, 1_000_000 ether);
+        uint256 expectedOut = _refOut(amountIn, rEth, rBold);
+        // The seeded ETH->BOLD direction never floors to zero (even 1 wei ETH
+        // is worth ~3000 wei BOLD), so the swap always succeeds.
+        assertGt(expectedOut, 0, "seeded ETH->BOLD output is non-zero for any amountIn >= 1");
+
+        vm.prank(swapper);
+        uint256 out = bridge.ammSwap{value: amountIn}(NATIVE_ETH, amountIn, 0, _farDeadline());
+
+        // (1) contract == independent formula.
+        assertEq(out, expectedOut, "live output == reference");
+        // (2) reserve accounting.
+        assertEq(bridge.ammReserveEth(), rEth + amountIn, "ETH reserve += full input");
+        assertEq(bridge.ammReserveBold(), rBold - out, "BOLD reserve -= output");
+        // (3) k never decreases.
+        assertLe(rEth * rBold, bridge.ammReserveEth() * bridge.ammReserveBold(), "k non-decreasing");
+        // (4) real-token backing.
+        assertLe(bridge.ammReserveEth(), address(bridge).balance, "ETH reserve backed by real ETH");
+        assertLe(
+            bridge.ammReserveBold(),
+            MockBold(BOLD).balanceOf(address(bridge)),
+            "BOLD reserve backed by real BOLD"
+        );
+    }
+
+    /// @notice Stateless BOLD->ETH fuzz: the mirror of the above.  The input is
+    ///         bounded BELOW 1 gwei so the output never floors to zero (1 wei
+    ///         BOLD is worth ~0.0003 wei ETH on this pool, which would revert
+    ///         `ZeroSwapOutput` — covered separately by the dust-revert test).
+    function testFuzz_swapBoldToEth_invariants(uint256 rawAmountIn) public {
+        KnomosisBridge bridge = _deploySeededReady();
+        (uint256 rEth, uint256 rBold) = _seedBothLegs(bridge);
+
+        uint256 amountIn = bound(rawAmountIn, 1 gwei, 1_000_000 ether);
+        uint256 expectedOut = _refOut(amountIn, rBold, rEth);
+        assertGt(expectedOut, 0, "BOLD->ETH output non-zero above the dust floor");
+
+        _mintApprove(bridge, swapper, amountIn);
+        vm.prank(swapper);
+        uint256 out = bridge.ammSwap(BOLD_RID, amountIn, 0, _farDeadline());
+
+        assertEq(out, expectedOut, "live output == reference");
+        assertEq(bridge.ammReserveBold(), rBold + amountIn, "BOLD reserve += full input");
+        assertEq(bridge.ammReserveEth(), rEth - out, "ETH reserve -= output");
+        assertLe(rEth * rBold, bridge.ammReserveEth() * bridge.ammReserveBold(), "k non-decreasing");
+        assertLe(bridge.ammReserveEth(), address(bridge).balance, "ETH reserve backed by real ETH");
+        assertLe(
+            bridge.ammReserveBold(),
+            MockBold(BOLD).balanceOf(address(bridge)),
+            "BOLD reserve backed by real BOLD"
+        );
+    }
+
+    /// @notice Gas-regression smoke test: a warm ETH->BOLD swap (all storage
+    ///         slots + the recipient's BOLD balance already warm) costs ~16.5k
+    ///         gas in steady state.  The 30k bound keeps ~1.8x headroom for
+    ///         codegen drift yet trips on a gross regression — e.g. an
+    ///         accidental extra COLD SSTORE (+20k -> ~36k) breaches it.
     function test_gas_swapWarm() public {
         KnomosisBridge bridge = _deploySeededReady();
         _seedBothLegs(bridge);
@@ -384,7 +454,7 @@ contract AmmSwapTest is AmmTestBase {
         uint256 gasBefore = gasleft();
         bridge.ammSwap{value: 1 ether}(NATIVE_ETH, 1 ether, 0, _farDeadline());
         uint256 used = gasBefore - gasleft();
-        assertLt(used, 200_000, "warm ETH->BOLD swap gas within envelope");
+        assertLt(used, 30_000, "warm ETH->BOLD swap gas within envelope");
     }
 }
 

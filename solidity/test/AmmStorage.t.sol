@@ -62,6 +62,8 @@ contract AmmStorageTest is Test {
     ///      exercise the circuit breaker, so any fixed addresses suffice.
     address private constant BOLD_BREAKER = address(0xB12E6B6E);
     address private constant BOLD_ADMIN = address(0xAD814);
+    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.
+    address private constant AMM_DR = address(0xA33D6);
 
     /// @dev Local copy of the contract event for `vm.expectEmit`.  GP.11.2
     ///      added `ammSeedAmount` (0 on AMM-disabled deposits, the seeded
@@ -128,7 +130,7 @@ contract AmmStorageTest is Test {
                 boldAdmin: address(0),
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
-                ammDisasterRecovery: address(0xA33D6),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -173,7 +175,7 @@ contract AmmStorageTest is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
-                ammDisasterRecovery: address(0xA33D6),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

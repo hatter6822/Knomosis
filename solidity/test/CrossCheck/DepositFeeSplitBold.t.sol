@@ -41,6 +41,8 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
     ///      bridge constructs; the cross-check does not exercise them).
     address internal constant BOLD_BREAKER = address(0xB12E6B6E);
     address internal constant BOLD_ADMIN = address(0xAD814);
+    /// @dev The GP.11.3 AMM disaster-recovery (kill-switch) role.
+    address internal constant AMM_DR = address(0xA33D6);
 
     /// @notice Place a conformant BOLD mock at the pinned address so
     ///         BOLD-enabled bridges can be deployed in the live-contract
@@ -416,7 +418,7 @@ contract DepositFeeSplitBoldCrossCheck is CrossCheckFramework {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: false,
                 ammSeedRatioBps: ammSeedRatioBps,
-                ammDisasterRecovery: address(0xA33D6),
+                ammDisasterRecovery: AMM_DR,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })

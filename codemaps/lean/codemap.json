@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2c503ad4602877f3a79724d42673b7a737e98643fca17d3975731887b3efebbc"
+    "source_digest": "39cab291e6dd5b2215d867e0dabbf7222694c681f95e1de2d0ee5e6eafdaccb9"
   },
   "summary": {
-    "module_count": 294,
-    "declaration_count": 4871
+    "module_count": 295,
+    "declaration_count": 4889
   },
   "modules": [
     {
@@ -32031,6 +32031,166 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.AmmMath",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/AmmMath.lean",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "AmmMathCrossCheck",
+          "line": 35,
+          "called": [
+            "LegalKernel.Bridge.AmmMath",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Entry",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 57,
+          "called": [
+            "Entry",
+            "getAmountOut"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "e18",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e9",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e30",
+          "line": 66,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e27",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "amounts",
+          "line": 72,
+          "called": [
+            "e18",
+            "e9"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "reservesA",
+          "line": 75,
+          "called": [
+            "e18"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fees",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gridEntries",
+          "line": 81,
+          "called": [
+            "Entry",
+            "mkEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cornerEntries",
+          "line": 89,
+          "called": [
+            "Entry",
+            "e18",
+            "e27",
+            "e30",
+            "e9",
+            "mkEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entries",
+          "line": 104,
+          "called": [
+            "Entry",
+            "cornerEntries",
+            "gridEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entryJson",
+          "line": 108,
+          "called": [
+            "Entry",
+            "Json",
+            "hexFromUint256BE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildJson",
+          "line": 119,
+          "called": [
+            "Json",
+            "bpsDenominator",
+            "entryJson"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 129,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 133,
+          "called": [
+            "AmmMathCrossCheck",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "assertEq",
+            "bpsDenominator",
+            "entries",
+            "fixtureName",
+            "getAmountOut",
+            "getAmountOut_lt_reserveOut",
+            "k_nondecreasing",
+            "writeFixture"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.BisectionGame",
       "path": "LegalKernel/Test/Bridge/CrossCheck/BisectionGame.lean",
       "declaration_count": 9,
@@ -58015,7 +58175,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 205,
+          "line": 206,
           "called": [
             "runAll"
           ]
