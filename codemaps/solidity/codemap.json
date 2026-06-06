@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "4bb06e8297c48631e2366b7d09bf5a910e19afb43c245c4bfa1f6f9c41bafb10"
+    "source_digest": "8926e42dfb1fe347802ecd9edc3c804bc0cbc9a4fb8cec5f25444252a09248e7"
   },
   "summary": {
-    "module_count": 64,
-    "declaration_count": 1501
+    "module_count": 72,
+    "declaration_count": 1609
   },
   "modules": [
     {
@@ -97,12 +97,12 @@
     {
       "module": "KnomosisBridge",
       "path": "solidity/src/contracts/KnomosisBridge.sol",
-      "declaration_count": 94,
+      "declaration_count": 107,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisBridge",
-          "line": 29,
+          "line": 30,
           "called": [
             "IKnomosisBridge"
           ]
@@ -110,109 +110,109 @@
         {
           "kind": "error",
           "name": "NotAttestor",
-          "line": 36,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "NotDisputeVerifier",
           "line": 37,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AttestationStale",
+          "name": "NotDisputeVerifier",
           "line": 38,
           "called": []
         },
         {
           "kind": "error",
-          "name": "DisputeCooldown",
+          "name": "AttestationStale",
           "line": 39,
           "called": []
         },
         {
           "kind": "error",
-          "name": "TvlCapReached",
+          "name": "DisputeCooldown",
           "line": 40,
           "called": []
         },
         {
           "kind": "error",
-          "name": "MigrationActivated",
+          "name": "TvlCapReached",
           "line": 41,
           "called": []
         },
         {
           "kind": "error",
-          "name": "NonMonotonic",
+          "name": "MigrationActivated",
           "line": 42,
           "called": []
         },
         {
           "kind": "error",
-          "name": "UnknownStateRoot",
+          "name": "NonMonotonic",
           "line": 43,
           "called": []
         },
         {
           "kind": "error",
-          "name": "StateRootReverted",
+          "name": "UnknownStateRoot",
           "line": 44,
           "called": []
         },
         {
           "kind": "error",
-          "name": "PreFinalisation",
+          "name": "StateRootReverted",
           "line": 45,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AlreadyRedeemed",
+          "name": "PreFinalisation",
           "line": 46,
           "called": []
         },
         {
           "kind": "error",
-          "name": "InvalidProof",
+          "name": "AlreadyRedeemed",
           "line": 47,
           "called": []
         },
         {
           "kind": "error",
-          "name": "InvalidLeafSizeForResource",
+          "name": "InvalidProof",
           "line": 48,
           "called": []
         },
         {
           "kind": "error",
-          "name": "UnsupportedResource",
+          "name": "InvalidLeafSizeForResource",
           "line": 49,
           "called": []
         },
         {
           "kind": "error",
-          "name": "EthValueMismatch",
+          "name": "UnsupportedResource",
           "line": 50,
           "called": []
         },
         {
           "kind": "error",
-          "name": "InvariantViolation_DisputeWindowVsRedemption",
+          "name": "EthValueMismatch",
           "line": 51,
           "called": []
         },
         {
           "kind": "error",
+          "name": "InvariantViolation_DisputeWindowVsRedemption",
+          "line": 52,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "InvalidRecipient",
-          "line": 58,
+          "line": 59,
           "called": []
         },
         {
           "kind": "error",
           "name": "BridgeAccountingMismatch",
-          "line": 64,
+          "line": 65,
           "called": [
             "totalLockedValue"
           ]
@@ -220,193 +220,193 @@
         {
           "kind": "error",
           "name": "InvalidSignatureLength",
-          "line": 65,
+          "line": 66,
           "called": []
         },
         {
           "kind": "error",
           "name": "DuplicateResourceToken",
-          "line": 70,
+          "line": 71,
           "called": []
         },
         {
           "kind": "error",
           "name": "TransferAmountMismatch",
-          "line": 76,
+          "line": 77,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroDeposit",
-          "line": 84,
+          "line": 85,
           "called": []
         },
         {
           "kind": "error",
           "name": "FeeBpsBelowMin",
-          "line": 87,
+          "line": 88,
           "called": []
         },
         {
           "kind": "error",
           "name": "FeeBpsAboveMax",
-          "line": 93,
+          "line": 94,
           "called": []
         },
         {
           "kind": "error",
           "name": "MinFeeBpsExceedsMax",
-          "line": 96,
+          "line": 97,
           "called": []
         },
         {
           "kind": "error",
           "name": "MaxFeeBpsExceedsCap",
-          "line": 99,
+          "line": 100,
           "called": []
         },
         {
           "kind": "error",
           "name": "WeiPerBudgetUnitTooSmall",
-          "line": 103,
+          "line": 104,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmSeedRatioExceedsMax",
-          "line": 113,
+          "line": 114,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTokenAddressMismatch",
-          "line": 122,
+          "line": 123,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTokenSymbolMismatch",
-          "line": 126,
+          "line": 127,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTokenSymbolUnavailable",
-          "line": 130,
+          "line": 131,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTransferAmountMismatch",
-          "line": 137,
+          "line": 138,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldNotEnabled",
-          "line": 141,
+          "line": 142,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldResourceReserved",
-          "line": 148,
+          "line": 149,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldDepositViaFeeSplitOnly",
-          "line": 156,
+          "line": 157,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldDepositPaused",
-          "line": 165,
+          "line": 166,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTvlCapReached",
-          "line": 169,
+          "line": 170,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTvlCapExceedsGlobal",
-          "line": 174,
+          "line": 175,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotBoldCircuitBreaker",
-          "line": 177,
+          "line": 178,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotBoldAdmin",
-          "line": 180,
+          "line": 181,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroBoldCircuitBreaker",
-          "line": 185,
+          "line": 186,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroBoldAdmin",
-          "line": 188,
+          "line": 189,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldRolesNotDistinct",
-          "line": 194,
+          "line": 195,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldRoleIsBridge",
-          "line": 199,
+          "line": 200,
           "called": []
         },
         {
           "kind": "error",
           "name": "AutoCircuitTriggerDisabled",
-          "line": 203,
+          "line": 204,
           "called": []
         },
         {
           "kind": "error",
           "name": "LiquityV2ReadFailed",
-          "line": 210,
+          "line": 211,
           "called": []
         },
         {
           "kind": "error",
           "name": "NoLiquityBranchShutdown",
-          "line": 214,
+          "line": 215,
           "called": []
         },
         {
           "kind": "error",
           "name": "AutoTriggerRequiresBold",
-          "line": 218,
+          "line": 219,
           "called": []
         },
         {
           "kind": "error",
           "name": "LiquityOracleHasNoCode",
-          "line": 228,
+          "line": 229,
           "called": []
         },
         {
           "kind": "error",
           "name": "BoldTroveManagersNotDistinct",
-          "line": 237,
+          "line": 238,
           "called": [
             "attestor",
             "deploymentId",
@@ -419,7 +419,7 @@
         {
           "kind": "struct",
           "name": "StateRootRecord",
-          "line": 485,
+          "line": 486,
           "called": [
             "lastUpheldDisputeBlock",
             "latestStateRootSubmittedAtBlock",
@@ -429,13 +429,13 @@
         {
           "kind": "function",
           "name": "resourceToken",
-          "line": 594,
+          "line": 595,
           "called": []
         },
         {
           "kind": "function",
           "name": "hasOpenDisputeOlderThan",
-          "line": 610,
+          "line": 611,
           "called": [
             "disputeWindowBlocks",
             "latestStateRootSubmittedAtBlock"
@@ -444,7 +444,7 @@
         {
           "kind": "struct",
           "name": "ConstructorArgs",
-          "line": 626,
+          "line": 627,
           "called": [
             "attestor",
             "disputeVerifier",
@@ -456,13 +456,13 @@
         {
           "kind": "error",
           "name": "ZeroSequencerStake",
-          "line": 680,
+          "line": 681,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 682,
+          "line": 683,
           "called": [
             "AmmSeedRatioExceedsMax",
             "AutoTriggerRequiresBold",
@@ -499,7 +499,7 @@
         {
           "kind": "modifier",
           "name": "circuitOpen",
-          "line": 917,
+          "line": 918,
           "called": [
             "AttestationStale",
             "DisputeCooldown",
@@ -516,13 +516,13 @@
         {
           "kind": "modifier",
           "name": "withdrawalOpen",
-          "line": 945,
+          "line": 946,
           "called": []
         },
         {
           "kind": "modifier",
           "name": "boldCircuitOpen",
-          "line": 955,
+          "line": 956,
           "called": [
             "BoldDepositPaused"
           ]
@@ -530,7 +530,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldCircuitBreaker",
-          "line": 964,
+          "line": 965,
           "called": [
             "NotBoldCircuitBreaker"
           ]
@@ -538,7 +538,7 @@
         {
           "kind": "modifier",
           "name": "onlyBoldAdmin",
-          "line": 972,
+          "line": 973,
           "called": [
             "NotBoldAdmin"
           ]
@@ -546,7 +546,7 @@
         {
           "kind": "event",
           "name": "DepositInitiated",
-          "line": 981,
+          "line": 982,
           "called": [
             "receiptHash"
           ]
@@ -554,7 +554,7 @@
         {
           "kind": "function",
           "name": "depositETH",
-          "line": 992,
+          "line": 993,
           "called": [
             "_registerDeposit",
             "circuitOpen"
@@ -563,7 +563,7 @@
         {
           "kind": "function",
           "name": "depositERC20",
-          "line": 1003,
+          "line": 1004,
           "called": [
             "BoldDepositViaFeeSplitOnly",
             "TransferAmountMismatch",
@@ -575,7 +575,7 @@
         {
           "kind": "function",
           "name": "_registerDeposit",
-          "line": 1050,
+          "line": 1051,
           "called": [
             "DepositInitiated",
             "TvlCapReached",
@@ -587,7 +587,7 @@
         {
           "kind": "event",
           "name": "DepositWithFeeInitiated",
-          "line": 1096,
+          "line": 1097,
           "called": [
             "receiptHash"
           ]
@@ -595,7 +595,7 @@
         {
           "kind": "function",
           "name": "depositETHWithFee",
-          "line": 1118,
+          "line": 1119,
           "called": [
             "FeeBpsAboveMax",
             "FeeBpsBelowMin",
@@ -607,7 +607,7 @@
         {
           "kind": "function",
           "name": "depositBoldWithFee",
-          "line": 1185,
+          "line": 1186,
           "called": [
             "BoldNotEnabled",
             "BoldTransferAmountMismatch",
@@ -622,7 +622,7 @@
         {
           "kind": "function",
           "name": "_registerDepositWithFee",
-          "line": 1274,
+          "line": 1275,
           "called": [
             "BoldTvlCapReached",
             "DepositWithFeeInitiated",
@@ -636,19 +636,111 @@
         {
           "kind": "function",
           "name": "_seedAmmReserves",
-          "line": 1384,
+          "line": 1385,
           "called": []
         },
         {
           "kind": "event",
+          "name": "AmmSwapExecuted",
+          "line": 1422,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SwapDeadlineExpired",
+          "line": 1434,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroSwapInput",
+          "line": 1436,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroSwapOutput",
+          "line": 1440,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthAmountMismatch",
+          "line": 1442,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnexpectedEth",
+          "line": 1444,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnsupportedSwapResource",
+          "line": 1447,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmEmpty",
+          "line": 1451,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SlippageExceeded",
+          "line": 1454,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ReserveExhausted",
+          "line": 1459,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthTransferFailed",
+          "line": 1462,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmKInvariantViolated",
+          "line": 1469,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "ammSwap",
+          "line": 1520,
+          "called": [
+            "AmmEmpty",
+            "AmmKInvariantViolated",
+            "AmmSwapExecuted",
+            "BoldTransferAmountMismatch",
+            "EthAmountMismatch",
+            "EthTransferFailed",
+            "ReserveExhausted",
+            "SlippageExceeded",
+            "SwapDeadlineExpired",
+            "UnexpectedEth",
+            "UnsupportedSwapResource",
+            "ZeroSwapInput",
+            "ZeroSwapOutput"
+          ]
+        },
+        {
+          "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 1416,
+          "line": 1640,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 1423,
+          "line": 1647,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -665,13 +757,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 1462,
+          "line": 1686,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 1469,
+          "line": 1693,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -680,7 +772,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 1475,
+          "line": 1699,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -690,25 +782,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 1486,
+          "line": 1710,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 1502,
+          "line": 1726,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 1515,
+          "line": 1739,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 1521,
+          "line": 1745,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -732,7 +824,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 1609,
+          "line": 1833,
           "called": [
             "PendingWithdrawal"
           ]
@@ -740,7 +832,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 1624,
+          "line": 1848,
           "called": [
             "InvalidProof"
           ]
@@ -748,13 +840,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 1662,
+          "line": 1886,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 1666,
+          "line": 1890,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -765,31 +857,31 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 1709,
+          "line": 1933,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 1712,
+          "line": 1936,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 1718,
+          "line": 1942,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 1723,
+          "line": 1947,
           "called": []
         },
         {
           "kind": "function",
           "name": "closeBoldCircuit",
-          "line": 1730,
+          "line": 1954,
           "called": [
             "BoldCircuitClosed",
             "onlyBoldCircuitBreaker"
@@ -798,7 +890,7 @@
         {
           "kind": "function",
           "name": "openBoldCircuit",
-          "line": 1739,
+          "line": 1963,
           "called": [
             "BoldCircuitOpened",
             "onlyBoldCircuitBreaker"
@@ -807,7 +899,7 @@
         {
           "kind": "function",
           "name": "closeBoldCircuitIfAnyLiquityBranchShutdown",
-          "line": 1768,
+          "line": 1992,
           "called": [
             "AutoCircuitTriggerDisabled",
             "BoldCircuitClosedByAutoTrigger",
@@ -818,7 +910,7 @@
         {
           "kind": "function",
           "name": "_readLiquityShutdownTime",
-          "line": 1818,
+          "line": 2042,
           "called": [
             "LiquityV2ReadFailed"
           ]
@@ -826,7 +918,7 @@
         {
           "kind": "function",
           "name": "setBoldTvlCap",
-          "line": 1841,
+          "line": 2065,
           "called": [
             "BoldTvlCapExceedsGlobal",
             "BoldTvlCapUpdated",
@@ -836,7 +928,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 1853,
+          "line": 2077,
           "called": []
         }
       ]
@@ -3387,6 +3479,57 @@
       ]
     },
     {
+      "module": "AmmMath",
+      "path": "solidity/src/lib/AmmMath.sol",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "AmmMath",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmMathInsufficientInput",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmMathInsufficientLiquidity",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmmMathFeeTooHigh",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "getAmountOut",
+          "line": 68,
+          "called": [
+            "AmmMathFeeTooHigh",
+            "AmmMathInsufficientInput",
+            "AmmMathInsufficientLiquidity"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "getAmountIn",
+          "line": 102,
+          "called": [
+            "AmmMathFeeTooHigh",
+            "AmmMathInsufficientInput",
+            "AmmMathInsufficientLiquidity"
+          ]
+        }
+      ]
+    },
+    {
       "module": "CBEDecode",
       "path": "solidity/src/lib/CBEDecode.sol",
       "declaration_count": 16,
@@ -4266,6 +4409,589 @@
       ]
     },
     {
+      "module": "AmmInvariants.t",
+      "path": "solidity/test/AmmInvariants.t.sol",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "AmmSwapHandler",
+          "line": 16,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 27,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "swapEthToBold",
+          "line": 36,
+          "called": [
+            "_bound"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "swapBoldToEth",
+          "line": 50,
+          "called": [
+            "MockBold",
+            "_bound",
+            "approve",
+            "bridge",
+            "mint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_bound",
+          "line": 65,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "AmmInvariantsTest",
+          "line": 78,
+          "called": [
+            "AmmSwapHandler",
+            "AmmTestBase",
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 83,
+          "called": [
+            "AmmSwapHandler",
+            "_deploySeededReady",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "invariant_kNeverDecreases",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_reservesStayPositive",
+          "line": 100,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_reservesBackedByRealBalances",
+          "line": 109,
+          "called": [
+            "MockBold",
+            "balanceOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "invariant_tvlUntouchedBySwaps",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_someSwapsExecuted",
+          "line": 132,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "AmmMath.t",
+      "path": "solidity/test/AmmMath.t.sol",
+      "declaration_count": 25,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "AmmMathHarness",
+          "line": 12,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "getAmountOut",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "getAmountIn",
+          "line": 21,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "AmmMathTest",
+          "line": 40,
+          "called": [
+            "AmmMathHarness"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 48,
+          "called": [
+            "AmmMathHarness"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_exact_noFee",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_exact_withFee",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_exact_asymmetric",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_strictlyBelowReserveOut",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_feeReducesOutput",
+          "line": 110,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_monotonicInAmountIn",
+          "line": 118,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_revertsZeroInput",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_revertsZeroReserveIn",
+          "line": 133,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_revertsZeroReserveOut",
+          "line": 138,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_revertsFeeAtDenominator",
+          "line": 143,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountOut_revertsFeeAboveDenominator",
+          "line": 148,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountIn_exact_noFee",
+          "line": 159,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountIn_roundTrip",
+          "line": 165,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountIn_revertsZeroOutput",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountIn_revertsZeroReserve",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountIn_revertsOutputExceedsReserve",
+          "line": 184,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_getAmountIn_revertsFeeTooHigh",
+          "line": 190,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_kMonotonicity",
+          "line": 204,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_kStrictlyGrowsWithFee",
+          "line": 224,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "testFuzz_getAmountIn_roundTrip",
+          "line": 248,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "AmmReentrancy.t",
+      "path": "solidity/test/AmmReentrancy.t.sol",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "EthReentryAttacker",
+          "line": 19,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 25,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "attackBoldToEth",
+          "line": 31,
+          "called": [
+            "approve",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "receive",
+          "name": "receive",
+          "line": 37,
+          "called": [
+            "bridge"
+          ]
+        },
+        {
+          "kind": "contract",
+          "name": "ReentrantSwapBold",
+          "line": 62,
+          "called": [
+            "MockBold"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "arm",
+          "line": 68,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "transfer",
+          "line": 72,
+          "called": [
+            "KnomosisBridge",
+            "_move",
+            "ammSwap"
+          ]
+        },
+        {
+          "kind": "contract",
+          "name": "AmmReentrancyTest",
+          "line": 89,
+          "called": [
+            "AmmTestBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_reentrancy_ethRecipient_blocked_noDoubleSpend",
+          "line": 95,
+          "called": [
+            "EthReentryAttacker",
+            "KnomosisBridge",
+            "MockBold",
+            "_deploySeededReady",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge",
+            "mint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_reentrancy_boldToken_failsSafe_reservesUnchanged",
+          "line": 120,
+          "called": [
+            "KnomosisBridge",
+            "ReentrantSwapBold",
+            "_deployBoldEnabled",
+            "_farDeadline",
+            "_seedBothLegs",
+            "arm",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_reentrancy_honestContractCaller_succeeds",
+          "line": 139,
+          "called": [
+            "EthReentryAttacker",
+            "KnomosisBridge",
+            "MockBold",
+            "_deploySeededReady",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge",
+            "mint"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "AmmSandwich.t",
+      "path": "solidity/test/AmmSandwich.t.sol",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "AmmSandwichTest",
+          "line": 15,
+          "called": [
+            "AmmTestBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 19,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_sandwich_frontRunWorsensUserExecution",
+          "line": 27,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_sandwich_profitableWithoutProtection",
+          "line": 50,
+          "called": [
+            "KnomosisBridge",
+            "MockBold",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_seedBothLegs",
+            "approve",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_sandwich_slippageProtectionStopsAttack",
+          "line": 83,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_sandwich_minAmountOutBoundsLoss",
+          "line": 111,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "AmmSlippage.t",
+      "path": "solidity/test/AmmSlippage.t.sol",
+      "declaration_count": 10,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "AmmSlippageTest",
+          "line": 11,
+          "called": [
+            "AmmTestBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_slippage_exactMinMet_succeeds",
+          "line": 18,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_slippage_oneWeiAboveOutput_reverts",
+          "line": 31,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_slippage_zeroMin_disablesProtection",
+          "line": 46,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_slippage_unrealisticMin_reverts",
+          "line": 56,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_slippage_boldToEth_reverts",
+          "line": 66,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_mintApprove",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_deadline_exactBoundary_succeeds",
+          "line": 86,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_deadline_oneSecondPast_reverts",
+          "line": 96,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_deadline_staleTransaction_reverts",
+          "line": 107,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_deadline_checkedBeforeSlippage",
+          "line": 119,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    {
       "module": "AmmStorage.t",
       "path": "solidity/test/AmmStorage.t.sol",
       "declaration_count": 25,
@@ -4507,6 +5233,190 @@
           "line": 564,
           "called": [
             "_deployFull"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "AmmSwap.t",
+      "path": "solidity/test/AmmSwap.t.sol",
+      "declaration_count": 14,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "AmmSwapTest",
+          "line": 17,
+          "called": [
+            "AmmTestBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swapEthToBold_happyPath",
+          "line": 26,
+          "called": [
+            "AmmSwapExecuted",
+            "KnomosisBridge",
+            "MockBold",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_refOut",
+            "_seedBothLegs",
+            "balanceOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swapBoldToEth_happyPath",
+          "line": 61,
+          "called": [
+            "AmmSwapExecuted",
+            "KnomosisBridge",
+            "MockBold",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_mintApprove",
+            "_refOut",
+            "_seedBothLegs",
+            "balanceOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_doesNotTouchTvl",
+          "line": 100,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_realTokenBacking_preserved",
+          "line": 117,
+          "called": [
+            "KnomosisBridge",
+            "MockBold",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_mintApprove",
+            "_seedBothLegs",
+            "balanceOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_feeAccumulates_kGrows",
+          "line": 138,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_mintApprove",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsAmmEmpty_beforeSeeding",
+          "line": 165,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsAmmEmpty_oneLegSeeded",
+          "line": 173,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsAmmEmpty_whenBoldDisabled",
+          "line": 187,
+          "called": [
+            "KnomosisBridge",
+            "_deployBoldDisabled",
+            "_farDeadline",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsZeroInput",
+          "line": 198,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsUnsupportedResource",
+          "line": 207,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsEthAmountMismatch",
+          "line": 217,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsUnexpectedEth",
+          "line": 230,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_mintApprove",
+            "_seedBothLegs",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_swap_revertsZeroSwapOutput_onDustInput",
+          "line": 245,
+          "called": [
+            "KnomosisBridge",
+            "_deploySeededReady",
+            "_farDeadline",
+            "_mintApprove",
+            "_refOut",
+            "_seedBothLegs",
+            "bridge"
           ]
         }
       ]
@@ -12455,6 +13365,110 @@
           "kind": "function",
           "name": "_populatedSiblings",
           "line": 281,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "AmmTestBase",
+      "path": "solidity/test/utils/AmmTestBase.sol",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "abstract_contract",
+          "name": "AmmTestBase",
+          "line": 17,
+          "called": []
+        },
+        {
+          "kind": "event",
+          "name": "AmmSwapExecuted",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_etchBold",
+          "line": 56,
+          "called": [
+            "MockBold"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deployBoldEnabled",
+          "line": 63,
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deploySeededReady",
+          "line": 95,
+          "called": [
+            "KnomosisBridge",
+            "_deployBoldEnabled",
+            "_etchBold",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deployBoldDisabled",
+          "line": 101,
+          "called": [
+            "KnomosisBridge",
+            "attestor",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "sequencerStake"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_mintApprove",
+          "line": 133,
+          "called": [
+            "KnomosisBridge",
+            "MockBold",
+            "approve",
+            "bridge",
+            "mint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_seedBothLegs",
+          "line": 142,
+          "called": [
+            "KnomosisBridge",
+            "_mintApprove",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_refOut",
+          "line": 163,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_farDeadline",
+          "line": 173,
           "called": []
         }
       ]

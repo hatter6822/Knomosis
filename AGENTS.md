@@ -259,7 +259,8 @@ knomosis/
 │                                  binaries live under `Lex/Tools/` and
 │                                  `Lex/Bin/`.)
 ├── solidity/                  -- Workstreams E + H: L1 mirror (10 contracts,
-│                                  5 libraries, 20+ forge test suites).
+│                                  6 libraries incl. the GP.11.3 `AmmMath`
+│                                  swap-math lib, 20+ forge test suites).
 │                                  See solidity/README.md.
 ├── runtime/                   -- Workstream RH (Rust host runtime).
 │   ├── Cargo.toml             --   workspace manifest
@@ -2237,7 +2238,14 @@ the AMM split carried in the canonical `DepositWithFeeInitiated` event
 `receiptHash` — the plan-literal wire format, propagated cross-stack in
 lockstep to the Rust ingestor's pinned topic + decoder and the
 `deposit_fee_split{,_bold}.json` receiptHash corpora) — is also complete
-end-to-end (Solidity + Lean cross-check + Rust).  See
+end-to-end (Solidity + Lean cross-check + Rust), and GP.11.3 — the
+permissionless constant-product swap `ammSwap` (Uniswap v2-style ETH↔BOLD
+exchange with the 0.30% `AMM_SWAP_FEE_BPS` retained in the reserves so the
+product `k = ammReserveEth × ammReserveBold` is monotonically
+non-decreasing, `minAmountOut` slippage + `deadline` MEV protection, a pure
+`AmmMath` swap-math library, and Checks-Effects-Interactions + `nonReentrant`
+safety) — is complete on the Solidity side (the L2 `Action.ammSwap` mirror
+is GP.11.4).  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3680,6 +3688,57 @@ contributions surviving in current code:
     `Action.ammSwap` mirror + `ammReserveActor` are GP.11.4 / GP.11.5; the
     deposit-side L2 reconstruction that consumes `ammSeedAmount` lands with
     the sequencer deposit-materialisation work.
+  * **GP.11.3** Embedded ETH↔BOLD AMM — the constant-product swap function
+    (`solidity/src/contracts/KnomosisBridge.sol` + the new pure
+    `solidity/src/lib/AmmMath.sol`).  Adds the permissionless `ammSwap(
+    fromResource, amountIn, minAmountOut, deadline) payable nonReentrant`
+    entry point: a Uniswap v2-style ETH↔BOLD exchange against the GP.11.1/2
+    reserves at the immutable `AMM_SWAP_FEE_BPS = 30` (0.30%) fee, RETAINED
+    in the reserves so the product `k = ammReserveEth × ammReserveBold` is
+    monotonically non-decreasing (strictly increasing per non-trivial swap —
+    the fee accrues as LP yield for the gas pool).  Both directions: ETH→BOLD
+    takes `msg.value` and sends BOLD via `safeTransfer`; BOLD→ETH pulls via
+    `safeTransferFrom` with a `balanceOf`-delta check (fee-on-transfer
+    defence, mirroring `depositBoldWithFee`) and sends ETH via a low-level
+    `call`.  `minAmountOut` slippage + `deadline` MEV protection; a
+    `ZeroSwapOutput` guard rejects a dust input that floors to a zero output
+    (no donation-for-nothing); an `AmmEmpty` early-out covers the unseeded /
+    BOLD-disabled pool.  Strict Checks-Effects-Interactions ordering under
+    `nonReentrant`, plus a belt-and-braces on-chain k-monotonicity assertion
+    (`AmmKInvariantViolated`) and the proven `amountOut < reserveOut` curve
+    bound (`ReserveExhausted`) so a math regression fails closed rather than
+    draining the pool.  The pure `AmmMath` library (`getAmountOut` /
+    `getAmountIn`, fee-parameterised, self-validating, `internal` ⇒ inlined,
+    checked arithmetic) is the reusable swap-math core, independently pinned
+    against hand-computed vectors.  **Accounting (Option C):** a swap NEVER
+    touches `totalLockedValue` / `boldTotalLockedValue` — the AMM is a
+    self-contained, value-conserving sub-pool; solvency rides on the
+    REAL-TOKEN-BACKING invariants `ammReserveEth ≤ address(this).balance` /
+    `ammReserveBold ≤ BOLD.balanceOf(this)` (each reserve moves in exact
+    lockstep with the matching real balance, so a swap touches only AMM
+    reserves, never any L2 user's backing).  Event `AmmSwapExecuted` +
+    eleven swap errors.  A `GP.11.10 hook point` comment marks where the
+    `ammActive` modifier (revert once `emergencyDisableAmm()` is triggered)
+    will attach.  Coverage (54 new cases over a shared `AmmTestBase`, all
+    green): `AmmMath.t.sol` (20 — exact vectors + the headline k-monotonicity
+    fuzz + the `getAmountIn` round-trip + the revert surface),
+    `AmmSwap.t.sol` (13 — both directions, reserve / real-balance accounting,
+    the TVL-untouched design pin, fee-accumulation, the full revert surface),
+    `AmmReentrancy.t.sol` (3 — a malicious ETH recipient re-entering a
+    would-succeed swap is blocked with NO double-spend, and a malicious BOLD
+    token in the output path fails safe via `ReentrancyGuardReentrantCall`),
+    `AmmInvariants.t.sol` (5 — the stateful k-never-decreases + reserves-stay-
+    positive + real-token-backing + TVL-untouched harness over 128 000 random
+    ETH↔BOLD swaps, 0 reverts), `AmmSlippage.t.sol` (9 — `minAmountOut` and
+    `deadline` exact boundaries + protection), `AmmSandwich.t.sol` (4 — a
+    front-run degrades execution, a full sandwich profits without protection,
+    and `minAmountOut` deterministically stops it).  `MockBold.transfer` was
+    made `virtual` so the swap-reentrancy mock can override it.  Solidity-only
+    (the L2 `Action.ammSwap` mirror is GP.11.4); `forge build` warning-free,
+    full `forge test` green, the GP.5.2 cap-audit gate + self-test (45 cases)
+    unchanged (no constitutional cap added — the swap reuses
+    `AMM_SWAP_FEE_BPS`; `AmmMath`'s `BPS_DENOMINATOR` lives outside the
+    audited `KnomosisBridge.sol`).
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the
@@ -3694,9 +3753,9 @@ strong-conservation extension (needs `Action.ammSwap` +
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
 abstract in `bridge_accounting_equation_balanced_iff`); and GP.7.6 –
-GP.10 plus GP.11.3 – GP.11.10 (sequencer integration, the embedded-AMM
-swap path, etc.; GP.11.1's L1 state scaffold + GP.11.2's deposit-side
-seeding have landed).
+GP.10 plus GP.11.4 – GP.11.10 (sequencer integration, the L2
+`Action.ammSwap` mirror, etc.; GP.11.1's L1 state scaffold + GP.11.2's
+deposit-side seeding + GP.11.3's L1 constant-product swap have landed).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
 step-VM execution arm for `topUpActionBudgetFor` (variant 21),

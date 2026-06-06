@@ -15,6 +15,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
 import {CBEDecode} from "src/lib/CBEDecode.sol";
+import {AmmMath} from "src/lib/AmmMath.sol";
 
 /// @title KnomosisBridge
 /// @notice The L1 bridge contract.  Hosts deposits, withdrawals,
@@ -1408,6 +1409,229 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             // kept so a future fee-split resource cannot silently mis-seed.
             return 0;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Workstream GP.11.3 — embedded ETH<->BOLD AMM swap
+    // ------------------------------------------------------------------
+
+    /// @notice Emitted on every successful `ammSwap`.  `newReserveIn` /
+    ///         `newReserveOut` are the post-swap reserves of the INPUT /
+    ///         OUTPUT assets respectively (mapped to ETH / BOLD by
+    ///         `fromResource` / `toResource`), so an off-chain consumer can
+    ///         reconstruct the full reserve state without re-reading storage.
+    event AmmSwapExecuted(
+        address indexed swapper,
+        uint64 indexed fromResource,
+        uint64 indexed toResource,
+        uint256 amountIn,
+        uint256 amountOut,
+        uint256 newReserveIn,
+        uint256 newReserveOut
+    );
+
+    /// @notice The swap's `deadline` (a unix timestamp) has passed.  MEV
+    ///         protection against a transaction sitting in the mempool.
+    error SwapDeadlineExpired();
+    /// @notice `amountIn == 0` — a swap must supply a positive input.
+    error ZeroSwapInput();
+    /// @notice The computed output floored to zero (a dust input relative to
+    ///         the reserves).  Rejected so a swap can never donate its input
+    ///         to the pool for nothing (Uniswap v2's positive-output rule).
+    error ZeroSwapOutput();
+    /// @notice For an ETH-input swap, `msg.value` did not equal `amountIn`.
+    error EthAmountMismatch(uint256 expected, uint256 actual);
+    /// @notice For a BOLD-input swap, ETH was sent alongside (must be zero).
+    error UnexpectedEth();
+    /// @notice `fromResource` is neither ETH (0) nor BOLD (1) — the AMM is
+    ///         an ETH<->BOLD market only.
+    error UnsupportedSwapResource(uint64 resource);
+    /// @notice A reserve is zero: the pool is unseeded (or BOLD is disabled,
+    ///         in which case the BOLD reserve is permanently zero), so no
+    ///         constant-product swap is possible.
+    error AmmEmpty();
+    /// @notice The computed output is below the caller's `minAmountOut`
+    ///         (slippage protection).
+    error SlippageExceeded(uint256 actualOut, uint256 minOut);
+    /// @notice Defence-in-depth: the constant-product math proves
+    ///         `amountOut < reserveOut` strictly, so this never fires; it
+    ///         guards against a hypothetical swap-math regression that would
+    ///         otherwise drain a reserve to (or past) zero.
+    error ReserveExhausted();
+    /// @notice The ETH output transfer to the swapper failed (recipient
+    ///         reverted or rejected the value).
+    error EthTransferFailed();
+    /// @notice Defence-in-depth: the post-swap product
+    ///         `newReserveIn * newReserveOut` is less than the pre-swap
+    ///         product (k decreased).  Mathematically unreachable — the
+    ///         retained fee makes k monotonically non-decreasing — so this
+    ///         only fires if `AmmMath.getAmountOut` regressed, failing the
+    ///         swap closed instead of leaking value out of the pool.
+    error AmmKInvariantViolated();
+
+    /// @notice Permissionless ETH<->BOLD swap via the bridge's internal
+    ///         constant-product AMM.  The fee is the immutable
+    ///         `AMM_SWAP_FEE_BPS` (0.30%); fee revenue STAYS in the
+    ///         reserves (Uniswap v2-style), growing the pool over time as LP
+    ///         yield for the gas pool.
+    ///
+    /// @param  fromResource  Resource the caller supplies
+    ///                       (`RESOURCE_ID_NATIVE_ETH` = 0 or
+    ///                       `RESOURCE_ID_BOLD` = 1).
+    /// @param  amountIn      Amount of the input resource supplied.  For an
+    ///                       ETH swap this MUST equal `msg.value`; for a BOLD
+    ///                       swap it is pulled via `safeTransferFrom` and
+    ///                       `msg.value` must be zero.
+    /// @param  minAmountOut  Minimum acceptable output; the call reverts
+    ///                       `SlippageExceeded` if the computed output is
+    ///                       less.  Set to 0 only when the exact output has
+    ///                       been pre-computed (e.g. an arbitrage bot); a
+    ///                       wallet should always pass a positive bound.
+    /// @param  deadline      Unix timestamp after which the swap reverts
+    ///                       (`SwapDeadlineExpired`).  Standard Uniswap
+    ///                       MEV-protection; set ~5 minutes ahead.
+    /// @return amountOut     The output amount sent to the caller.
+    ///
+    /// @dev    Solvency.  A swap NEVER touches `totalLockedValue` /
+    ///         `boldTotalLockedValue`: the AMM is a self-contained,
+    ///         value-conserving sub-pool whose total economic value is
+    ///         preserved (and grows by the fee) on every swap.  Solvency is
+    ///         guaranteed instead by the REAL-TOKEN-BACKING invariants
+    ///         `ammReserveEth <= address(this).balance` and
+    ///         `ammReserveBold <= BOLD.balanceOf(this)`: each reserve moves
+    ///         in EXACT lockstep with the matching real balance (input
+    ///         reserve += amountIn and balance += amountIn; output reserve
+    ///         -= amountOut and balance -= amountOut), so both invariants are
+    ///         preserved by construction (`AmmInvariants.t.sol`).  Because a
+    ///         swap only ever touches the AMM reserves — never any L2 user's
+    ///         backing — every pending L2 withdrawal stays fully backed.
+    ///         (The GP.11.2 deposit-only `reserves <= TVL` bound mixes
+    ///         incommensurable ETH-wei and BOLD-wei units and is NOT a swap
+    ///         invariant; the real-token-backing bounds above are the
+    ///         meaningful cross-currency solvency statement.)
+    /// @dev    Checks-Effects-Interactions.  Reserves are updated (effects)
+    ///         BEFORE the output transfer (interaction), and the whole
+    ///         function is `nonReentrant`, so a malicious BOLD token or a
+    ///         malicious ETH recipient cannot re-enter to double-spend
+    ///         (`AmmReentrancy.t.sol`).
+    /// @dev    GP.11.10 hook point: when AMM disaster-recovery lands, the
+    ///         `ammActive` modifier — `revert AmmDisabled()` once an operator
+    ///         has triggered `emergencyDisableAmm()` — attaches to this
+    ///         signature, gating swaps off without moving any reserves.
+    function ammSwap(uint64 fromResource, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
+        external
+        payable
+        nonReentrant
+        returns (uint256 amountOut)
+    {
+        // ---- Checks ----
+        // A ~12s validator timestamp nudge is irrelevant to a deadline set
+        // minutes ahead; this is the standard Uniswap MEV-staleness guard.
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp > deadline) revert SwapDeadlineExpired();
+        if (amountIn == 0) revert ZeroSwapInput();
+        // The AMM is an ETH<->BOLD market; on a BOLD-disabled deployment the
+        // BOLD reserve is permanently zero, so no swap can ever be valid.
+        // Fail early + clearly here rather than at a `transferFrom` to the
+        // empty BOLD address (BOLD-disabled) or the reserve check below.
+        if (!boldEnabled) revert AmmEmpty();
+
+        uint256 reserveIn;
+        uint256 reserveOut;
+        uint64 toResource;
+        bool ethIn;
+
+        if (fromResource == RESOURCE_ID_NATIVE_ETH) {
+            // ETH in: `msg.value` carries the input; no token pull.
+            if (msg.value != amountIn) revert EthAmountMismatch(amountIn, msg.value);
+            reserveIn = ammReserveEth;
+            reserveOut = ammReserveBold;
+            toResource = RESOURCE_ID_BOLD;
+            ethIn = true;
+        } else if (fromResource == RESOURCE_ID_BOLD) {
+            // BOLD in: no ETH may accompany the call.
+            if (msg.value != 0) revert UnexpectedEth();
+            // Pull `amountIn` BOLD-wei and verify the received balance delta
+            // (defence-in-depth against a fee-on-transfer / rebasing BOLD),
+            // mirroring `depositBoldWithFee`.  This `safeTransferFrom` is the
+            // only call before the reserve update and is `nonReentrant`-
+            // guarded; the post-pull reserve read is therefore stable.
+            IERC20 bold = IERC20(BOLD_TOKEN_ADDRESS);
+            uint256 balBefore = bold.balanceOf(address(this));
+            bold.safeTransferFrom(msg.sender, address(this), amountIn);
+            uint256 balAfter = bold.balanceOf(address(this));
+            // Underflow-safe: a successful `safeTransferFrom` credits this
+            // contract, so `balAfter >= balBefore`.
+            uint256 received;
+            unchecked {
+                received = balAfter - balBefore;
+            }
+            if (received != amountIn) revert BoldTransferAmountMismatch(amountIn, received);
+            reserveIn = ammReserveBold;
+            reserveOut = ammReserveEth;
+            toResource = RESOURCE_ID_NATIVE_ETH;
+            ethIn = false;
+        } else {
+            revert UnsupportedSwapResource(fromResource);
+        }
+
+        // Both reserves must be seeded for the constant-product curve.
+        if (reserveIn == 0 || reserveOut == 0) revert AmmEmpty();
+
+        // Constant-product output net of the retained 0.30% fee.  `AmmMath`
+        // guarantees `amountOut < reserveOut` strictly.
+        amountOut = AmmMath.getAmountOut(amountIn, reserveIn, reserveOut, uint256(AMM_SWAP_FEE_BPS));
+
+        // Reject a dust input whose output floors to zero (no value out).
+        if (amountOut == 0) revert ZeroSwapOutput();
+        if (amountOut < minAmountOut) revert SlippageExceeded(amountOut, minAmountOut);
+        // Defence-in-depth; provably unreachable (see `ReserveExhausted`).
+        if (amountOut >= reserveOut) revert ReserveExhausted();
+
+        // ---- Effects ----
+        // `newReserveIn` is a CHECKED add (reverts on the physically-
+        // unreachable overflow — reserves are bounded by the TVL cap);
+        // `newReserveOut` is a proven-safe subtraction (`amountOut <
+        // reserveOut` checked just above).
+        uint256 newReserveIn = reserveIn + amountIn;
+        uint256 newReserveOut;
+        unchecked {
+            newReserveOut = reserveOut - amountOut;
+        }
+
+        // Belt-and-braces k-monotonicity: the retained fee makes
+        // `newReserveIn * newReserveOut >= reserveIn * reserveOut` by
+        // construction (and the output flooring only adds to it).  Assert it
+        // on-chain so a swap-math regression fails closed rather than leaking
+        // value out of the pool.  The products are bounded by TVL^2, far
+        // below `uint256.max` for any realistic reserves.
+        if (newReserveIn * newReserveOut < reserveIn * reserveOut) {
+            revert AmmKInvariantViolated();
+        }
+
+        if (ethIn) {
+            ammReserveEth = newReserveIn;
+            ammReserveBold = newReserveOut;
+        } else {
+            ammReserveBold = newReserveIn;
+            ammReserveEth = newReserveOut;
+        }
+
+        // ---- Interactions ----
+        if (ethIn) {
+            // Send the BOLD output to the caller.
+            IERC20(BOLD_TOKEN_ADDRESS).safeTransfer(msg.sender, amountOut);
+        } else {
+            // Send the ETH output to the caller.  Reserves are already
+            // updated and `nonReentrant` is held, so a re-entrant recipient
+            // cannot double-spend.
+            (bool sent,) = msg.sender.call{value: amountOut}("");
+            if (!sent) revert EthTransferFailed();
+        }
+
+        emit AmmSwapExecuted(
+            msg.sender, fromResource, toResource, amountIn, amountOut, newReserveIn, newReserveOut
+        );
     }
 
     // ------------------------------------------------------------------
