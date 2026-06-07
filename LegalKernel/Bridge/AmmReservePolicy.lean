@@ -198,19 +198,37 @@ this structural limitation — and motivates the complementary
 `ammReserveAuthorityPolicy` which closes the hole at the authority
 layer. -/
 
-/-- **The LP.7 meta-action exemption applies to `ammReservePolicy`.**
-    `ammReserveActor` can — at the `localPolicyPermits` level — sign
-    `declareLocalPolicy` / `revokeLocalPolicy` regardless of its
-    declared policy, because the admission layer's
-    `localPolicyPermits` is structurally the disjunction
-    "meta-action OR policy.permits".  This hole is closed by
+/-- **The LP.7 meta-action exemption operates through `localPolicyPermits`.**
+    `ammReserveActor` can — at the real admission layer — sign
+    `declareLocalPolicy` / `revokeLocalPolicy` regardless of its declared
+    policy, because `localPolicyPermits` is structurally the disjunction
+    `isMetaPolicyAction action = true ∨ policy.permits signer action`.
+    This is proven through the ACTUAL `Authority.localPolicyPermits`
+    definition, not just tag arithmetic.  The hole is closed by
     `ammReserveAuthorityPolicy` (the `AuthorityPolicy` conjunct of
     `AdmissibleWith` has NO meta-action exemption). -/
-theorem ammReservePolicy_admission_permits_meta_actions :
-    Action.tag Action.revokeLocalPolicy = 16 ∧
-    (∀ p, Action.tag (Action.declareLocalPolicy p) = 15) ∧
-    (16 ≠ 23) ∧ (15 ≠ 23) :=
-  ⟨rfl, fun _ => rfl, by decide, by decide⟩
+theorem ammReservePolicy_admission_permits_meta_actions
+    (es : ExtendedState)
+    (_hpol : es.localPolicies.lookup ammReserveActor = ammReservePolicy) :
+    Authority.localPolicyPermits es ammReserveActor .revokeLocalPolicy ∧
+    (∀ p, Authority.localPolicyPermits es ammReserveActor
+            (.declareLocalPolicy p)) := by
+  refine ⟨Or.inl rfl, fun p => Or.inl rfl⟩
+
+/-- **Full admission-layer characterisation.**  Under a declared
+    `ammReservePolicy`, `localPolicyPermits` admits `ammReserveActor`
+    to sign action `a` iff EITHER the action is a meta-action OR
+    `ammReservePolicy.permits` it — i.e. `a` is an `ammSwap` or a
+    meta-action.  This is the single source of truth for the
+    admission layer's behaviour with respect to the AMM reserve. -/
+theorem ammReservePolicy_admission_permits_iff
+    (es : ExtendedState) (action : Action)
+    (hpol : es.localPolicies.lookup ammReserveActor = ammReservePolicy) :
+    Authority.localPolicyPermits es ammReserveActor action ↔
+      (Authority.isMetaPolicyAction action = true ∨
+        ammReservePolicy.permits ammReserveActor action) := by
+  unfold Authority.localPolicyPermits
+  rw [hpol]
 
 /-! ## The complementary `AuthorityPolicy`
 
@@ -231,15 +249,26 @@ deployment's base policy:
     the intersection is a no-op on every other actor. -/
 
 /-- The authority predicate restricting `ammReserveActor`: it may sign
-    EXACTLY an `ammSwap` action; every other action — including the
+    EXACTLY an `ammSwap` action whose reserve-actor field (`ra`) is
+    `ammReserveActor` itself — so the signed swap can only ever mutate
+    the reserve's OWN balances; every other action — including the
     meta-actions the LP.7 exemption would otherwise admit — is
     unauthorised.  Other signers are authorised unconditionally (the
-    deployment's base policy governs them after intersection). -/
+    deployment's base policy governs them after intersection).
+
+    The `ra = ammReserveActor` binding is defence-in-depth (mirrors
+    GP.7.2's sender-binding in `gasPoolActorAuthorized`): in production
+    the `ammSwap` is always signed by `bridgeActor` (not
+    `ammReserveActor`), and `bridgePolicy` is the binding gate.  But
+    if `bridgePolicy` were ever relaxed or if the reserve actor key
+    were hypothetically compromised, this binding prevents the key
+    from signing an `ammSwap` targeting a DIFFERENT actor's balances
+    (e.g. `.ammSwap 0 1 100 95 victimActor`). -/
 def ammReserveActorAuthorized : ActorId → Action → Prop :=
   fun signer action =>
     if signer = ammReserveActor then
       match action with
-      | .ammSwap _ _ _ _ _ => True
+      | .ammSwap _ _ _ _ ra => ra = ammReserveActor
       | _ => False
     else True
 
@@ -249,7 +278,7 @@ instance ammReserveActorAuthorized_decidable
     Decidable (ammReserveActorAuthorized signer action) := by
   unfold ammReserveActorAuthorized
   by_cases h : signer = ammReserveActor
-  · rw [if_pos h]; cases action <;> infer_instance
+  · rw [if_pos h]; cases action <;> simp <;> infer_instance
   · rw [if_neg h]; infer_instance
 
 /-- **The complementary `AuthorityPolicy` (closes the meta-action
@@ -280,13 +309,42 @@ theorem ammReserveAuthorityPolicy_rejects_non_ammSwap
   intro hauth
   cases action <;> first | exact absurd rfl h | exact hauth
 
-/-- **The authority policy authorises `ammSwap`.**  `ammReserveActor`
-    may sign an `ammSwap` action — the sole permitted path. -/
+/-- **The authority policy authorises `ammSwap` targeting the reserve.**
+    `ammReserveActor` may sign an `ammSwap` action whose reserve-actor
+    field is `ammReserveActor` itself — the sole permitted path.  The
+    `ra = ammReserveActor` hypothesis is defence-in-depth (gap #1 fix):
+    only swaps that name the correct reserve are authorised. -/
 theorem ammReserveAuthorityPolicy_authorizes_ammSwap
-    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
+    (fr tr : ResourceId) (ai ao : Amount) :
     ammReserveAuthorityPolicy.authorized ammReserveActor
-      (.ammSwap fr tr ai ao ra) :=
-  trivial
+      (.ammSwap fr tr ai ao ammReserveActor) :=
+  rfl
+
+/-- **The authority policy bars an `ammSwap` targeting a different actor.**
+    Defence-in-depth (mirrors GP.7.2's
+    `gasPoolAuthorityPolicy_rejects_non_pool_sender`): an `ammSwap` whose
+    reserve-actor field (`ra`) is NOT `ammReserveActor` is rejected, so a
+    hypothetically compromised reserve key cannot sign a swap that would
+    mutate some OTHER actor's balances. -/
+theorem ammReserveAuthorityPolicy_rejects_non_reserve_target
+    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId)
+    (h : ra ≠ ammReserveActor) :
+    ¬ ammReserveAuthorityPolicy.authorized ammReserveActor
+        (.ammSwap fr tr ai ao ra) := by
+  intro hauth
+  exact h hauth
+
+/-- **Positive extraction: an authorised `ammSwap` targets the reserve.**
+    If `ammReserveAuthorityPolicy` authorises an `ammReserveActor`-signed
+    `ammSwap`, then the swap's reserve-actor field must be
+    `ammReserveActor`.  The positive form suited to downstream consumption
+    (e.g. a future per-trace accounting argument). -/
+theorem ammReserveAuthorityPolicy_authorized_ammSwap_target
+    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId)
+    (hp : ammReserveAuthorityPolicy.authorized ammReserveActor
+            (.ammSwap fr tr ai ao ra)) :
+    ra = ammReserveActor :=
+  hp
 
 /-- **The intersection is a no-op on non-reserve actors.**  For any
     `signer ≠ ammReserveActor`, intersecting `ammReserveAuthorityPolicy`
@@ -427,16 +485,31 @@ theorem ammReserveGenesisPolicy_rejects_non_ammSwap
   intro hauth
   exact ammReserveAuthorityPolicy_rejects_non_ammSwap action h hauth.2
 
-/-- **The legitimate `ammSwap` is still admitted under the genesis
-    policy** (given the base policy permits it). -/
+/-- **The legitimate `ammSwap` targeting the reserve is still admitted
+    under the genesis policy** (given the base policy permits it). -/
 theorem ammReserveGenesisPolicy_authorizes_ammSwap
     (P : AuthorityPolicy)
-    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId)
-    (hP : P.authorized ammReserveActor (.ammSwap fr tr ai ao ra)) :
+    (fr tr : ResourceId) (ai ao : Amount)
+    (hP : P.authorized ammReserveActor (.ammSwap fr tr ai ao ammReserveActor)) :
     (ammReserveGenesisPolicy P).authorized ammReserveActor
-      (.ammSwap fr tr ai ao ra) := by
+      (.ammSwap fr tr ai ao ammReserveActor) := by
   unfold ammReserveGenesisPolicy
-  exact ⟨hP, ammReserveAuthorityPolicy_authorizes_ammSwap fr tr ai ao ra⟩
+  exact ⟨hP, ammReserveAuthorityPolicy_authorizes_ammSwap fr tr ai ao⟩
+
+/-- **Fund safety: the genesis policy bars an `ammSwap` targeting a
+    different actor.**  A held `ammReserveActor` key may only sign swaps
+    that mutate the RESERVE's own balances — a swap whose reserve-actor
+    field `ra ≠ ammReserveActor` is unauthorised. -/
+theorem ammReserveGenesisPolicy_rejects_non_reserve_target
+    (P : AuthorityPolicy)
+    (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId)
+    (h : ra ≠ ammReserveActor) :
+    ¬ (ammReserveGenesisPolicy P).authorized ammReserveActor
+        (.ammSwap fr tr ai ao ra) := by
+  unfold ammReserveGenesisPolicy
+  intro hauth
+  exact ammReserveAuthorityPolicy_rejects_non_reserve_target
+    fr tr ai ao ra h hauth.2
 
 /-! ### Bundle wiring -/
 
@@ -484,20 +557,29 @@ theorem ammReserveGenesisState_preserves_gasPool_localPolicy
     (ammReserveGenesisState es).localPolicies.lookup gasPoolActor =
       es.localPolicies.lookup gasPoolActor := by
   exact ammReserveGenesisState_preserves_other_localPolicies es gasPoolActor
-    (Ne.symm (Ne.symm ammReserveActor_ne_gasPoolActor))
+    ammReserveActor_ne_gasPoolActor
 
 /-! ### CBE encoding prerequisites (GP.7.4 genesis-persistence pattern) -/
 
 /-- **`ammReservePolicy` satisfies the CBE encoding bounds.**  The
     single-clause policy uses only `denyTags` with 23 entries (all
-    values < 24 << 2^64), well within the §3.0 field limits.  This
+    values < 24 < 2^64), well within the §3.0 field limits.  This
     is the prerequisite for the round-trip theorem below. -/
 theorem ammReservePolicy_fieldsBounded :
     Encoding.LocalPolicy.fieldsBounded ammReservePolicy := by
   unfold Encoding.LocalPolicy.fieldsBounded ammReservePolicy
   simp only [List.length_cons, List.length_nil, Nat.zero_add]
   refine ⟨by decide, ?_⟩
-  native_decide
+  simp only [List.all_cons, List.all_nil, Bool.and_true,
+    decide_eq_true_eq,
+    Encoding.LocalPolicyClause.fieldsBounded]
+  refine ⟨by decide, ?_⟩
+  apply List.all_eq_true.mpr
+  intro n hn
+  have hlt : n < 24 := by
+    have := List.mem_filter.mp hn |>.1
+    simpa using List.mem_range.mp this
+  exact decide_eq_true (by omega)
 
 /-- **CBE round-trip for `ammReservePolicy`.**  Encoding then
     decoding yields exactly the original policy with no remainder
@@ -506,6 +588,100 @@ theorem ammReservePolicy_roundtrip :
     Encodable.decode (T := LocalPolicy) (Encodable.encode ammReservePolicy) =
       .ok (ammReservePolicy, []) :=
   Encoding.localPolicy_roundtrip_empty ammReservePolicy ammReservePolicy_fieldsBounded
+
+/-! ### Reverse composition: gasPoolGenesis preserves the AMM-reserve discipline
+
+A deployment wiring BOTH disciplines sequentially (first AMM reserve, then gas
+pool — or vice versa) does not interfere.  The gas-pool genesis restricts only
+`gasPoolActor`, so `ammReserveActor`'s `LocalPolicy` and authority survive. -/
+
+/-- **The gas-pool genesis state preserves `ammReserveActor`'s declared
+    `LocalPolicy`.**  `gasPoolGenesisState` writes only `gasPoolActor`'s
+    entry; `ammReserveActor`'s is untouched. -/
+theorem gasPoolGenesisState_preserves_ammReserve_localPolicy
+    (es : ExtendedState) (mEth mBold : Amount) :
+    (gasPoolGenesisState es mEth mBold).localPolicies.lookup ammReserveActor =
+      es.localPolicies.lookup ammReserveActor :=
+  gasPoolGenesisState_preserves_other_localPolicies es mEth mBold ammReserveActor
+    (Ne.symm ammReserveActor_ne_gasPoolActor)
+
+/-- **The gas-pool genesis policy preserves `ammReserveActor`'s authority.**
+    `gasPoolGenesisPolicy P` restricts only `gasPoolActor`; an
+    `ammReserveActor`-signed action is authorised iff `P` authorises it. -/
+theorem gasPoolGenesisPolicy_preserves_ammReserve_authority
+    (P : AuthorityPolicy) (mEth mBold : Amount) (action : Action) :
+    (gasPoolGenesisPolicy P mEth mBold).authorized ammReserveActor action ↔
+      P.authorized ammReserveActor action :=
+  gasPoolAuthorityPolicy_other_actors_unrestricted mEth mBold P ammReserveActor action
+    ammReserveActor_ne_gasPoolActor
+
+/-! ### Option-gated configuration (mirrors GP.7.4's `GasPoolConfig` pattern)
+
+The AMM-reserve discipline has no per-deployment parameters (unlike the
+gas-pool policy which carries two per-leg caps), but the genesis wiring
+still benefits from an `Option`-gated builder so that the runtime can
+branch on "this deployment enables the AMM" vs "no AMM".  The config
+structure is intentionally empty (ready for future parameters such as
+an AMM-specific outflow cap); the opt-in signal is `some ()` vs `none`. -/
+
+/-- A deployment's opt-in AMM-reserve configuration.  Empty today because
+    the policy is parameterless; the `Option` wrapper communicates the
+    binary "enable / disable" decision to the genesis hooks. -/
+structure AmmReserveConfig where
+  deriving Repr, DecidableEq
+
+/-- The state half, gated on an `Option AmmReserveConfig`: declare
+    `ammReservePolicy` for `ammReserveActor` when the deployment opts in
+    (`some _`), else leave `es` untouched (`none`). -/
+def ammReserveGenesisStateOfConfig (es : ExtendedState) :
+    Option AmmReserveConfig → ExtendedState
+  | none   => es
+  | some _ => ammReserveGenesisState es
+
+/-- The policy half, gated on an `Option AmmReserveConfig`: intersect
+    `ammReserveAuthorityPolicy` into `P` when the deployment opts in, else
+    return `P` unchanged. -/
+def ammReserveGenesisPolicyOfConfig (P : AuthorityPolicy) :
+    Option AmmReserveConfig → AuthorityPolicy
+  | none   => P
+  | some _ => ammReserveGenesisPolicy P
+
+/-- The bundled genesis, gated on an `Option AmmReserveConfig`.  `none`
+    yields `⟨base, P⟩`; `some _` yields the fully-wired
+    `ammReserveGenesis`. -/
+def ammReserveGenesisOfConfig (base : ExtendedState) (P : AuthorityPolicy)
+    (cfg : Option AmmReserveConfig) : AmmReserveGenesis :=
+  { state  := ammReserveGenesisStateOfConfig base cfg
+  , policy := ammReserveGenesisPolicyOfConfig P cfg }
+
+/-- **Opt-out is a no-op on the state.**  A deployment that supplies no
+    AMM-reserve config gets its base genesis verbatim. -/
+@[simp] theorem ammReserveGenesisStateOfConfig_none (es : ExtendedState) :
+    ammReserveGenesisStateOfConfig es none = es := rfl
+
+/-- **Opt-out is a no-op on the policy.** -/
+@[simp] theorem ammReserveGenesisPolicyOfConfig_none (P : AuthorityPolicy) :
+    ammReserveGenesisPolicyOfConfig P none = P := rfl
+
+/-- **Opt-in declares the reserve policy.**  Given a config, the genesis
+    state declares `ammReservePolicy` for `ammReserveActor`. -/
+theorem ammReserveGenesisStateOfConfig_some_declares_policy
+    (es : ExtendedState) (cfg : AmmReserveConfig) :
+    (ammReserveGenesisStateOfConfig es (some cfg)).localPolicies.lookup
+        ammReserveActor =
+      ammReservePolicy :=
+  ammReserveGenesisState_declares_policy es
+
+/-- **Opt-in bars reserve meta-actions.**  Given a config, the genesis
+    policy bars `ammReserveActor` from `revokeLocalPolicy` /
+    `declareLocalPolicy` (the LP.7 hole stays closed end-to-end). -/
+theorem ammReserveGenesisPolicyOfConfig_some_rejects_meta
+    (P : AuthorityPolicy) (cfg : AmmReserveConfig) :
+    ¬ (ammReserveGenesisPolicyOfConfig P (some cfg)).authorized ammReserveActor
+        .revokeLocalPolicy ∧
+    (∀ p, ¬ (ammReserveGenesisPolicyOfConfig P (some cfg)).authorized ammReserveActor
+              (.declareLocalPolicy p)) :=
+  ammReserveGenesisPolicy_rejects_meta P
 
 end Bridge
 end LegalKernel

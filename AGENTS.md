@@ -764,6 +764,7 @@ Selected headline theorems by tier:
 | GP.7.0 | Bridge actor signs EXACTLY the four L1-attested actions (exhaustive characterisation; forcing function for future constructors) | `bridgeAuthorizedAction_eq_true_iff`, `bridgePolicy_authorizes_all_bridge_actions`, `bridgePolicy_rejects_non_bridgeable` | `Bridge/BridgeActor.lean` |
 | GP.7.1 | Reserved gas-pool actors are pairwise distinct; genesis `nextActorId` advances (to 4, post-GP.11.5) so `assign` never issues a reserved slot (Rust adaptor mirrors the genesis) | `gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`, `AddressBook.addressBook_empty_nextActorId`, `empty_assign_id_avoids_reserved` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
 | GP.11.5 | The AMM-reserve actor (`ActorId 3`, L2 reflection of the L1 AMM reserves) is reserved and pairwise-distinct from the three GP.7.1 actors; the genesis `nextActorId` advances 3 → 4 so `assign` never issues it (Rust adaptor mirrors the genesis); chain-level: every fresh registration in any `empty`+`assign` chain avoids all four reserved slots (genesis base + per-step preservation + fresh-assign safety) | `ammReserveActor_ne_bridgeActor`, `ammReserveActor_ne_gasPoolActor`, `ammReserveActor_ne_sequencerActor`, `AddressBook.addressBook_empty_nextActorId` (= 4), `empty_nextActorId_ge_reserved`, `assign_preserves_reserved_invariant`, `fresh_assign_avoids_reserved`, `AddressBook.assign_nextActorId_mono` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
+| GP.11.6 | The AMM-reserve actor's outflow is restricted to `ammSwap` ONLY via a single-clause `denyTags` `LocalPolicy` (`ammReservePolicy`); the LP.7 meta-action escape hatch is closed by a complementary `AuthorityPolicy` (`ammReserveAuthorityPolicy`); genesis wiring bundles BOTH halves so neither can be wired alone; the genesis intersection narrows ONLY `ammReserveActor` (other actors unrestricted); the `ra = ammReserveActor` sender-binding on the authority predicate ensures authorised swaps can only mutate the reserve's OWN balances | `ammReservePolicy_denies_all_non_ammSwap`, `ammReservePolicy_permits_ammSwap`, `ammReservePolicy_permits_iff`, `ammReservePolicy_admission_permits_meta_actions`, `ammReservePolicy_admission_permits_iff`, `ammReserveAuthorityPolicy_rejects_meta`, `ammReserveAuthorityPolicy_rejects_non_ammSwap`, `ammReserveAuthorityPolicy_rejects_non_reserve_target`, `ammReserveAuthorityPolicy_authorized_ammSwap_target`, `ammReserveAuthorityPolicy_other_actors_unrestricted`, `ammReserveGenesisPolicy_rejects_meta`, `ammReserveGenesisPolicy_rejects_non_reserve_target`, `ammReserveGenesis_wires_both_halves` | `Bridge/AmmReservePolicy.lean` |
 | GP.7.2 | Gas-pool outflow is a capped sequencer-only `transfer` of the pool's OWN funds (`sender = gasPoolActor`); the policy permits EXACTLY that set, is silent off the two gas legs, and the LP.7 meta-action exemption + the sender-debit drain vector are closed by a complementary `AuthorityPolicy` | `gasPoolPolicy_denies_all_non_transfer`, `gasPoolPolicy_permits_transfer_iff`, `gasPoolPolicy_admission_permits_meta_actions`, `gasPoolAuthorityPolicy_rejects_meta`, `gasPoolAuthorityPolicy_rejects_non_pool_sender`, `gasPoolAuthorityPolicy_intersect_rejects_meta` | `Bridge/GasPoolPolicy.lean` |
 | GP.7.3 | Per-epoch pool drain is bounded **per-resource**: across any contiguous trace of `n` admitted SignedActions respecting the gas-pool discipline, `gasPoolActor`'s leg-`rLeg` balance cannot have decreased by more than `n × legCap mEth mBold rLeg` (inductive promotion of the GP.7.2 per-action cap; rests on `gasPoolAuthorityPolicy`, the sender-blind `LocalPolicy` being insufficient; the non-pool obligation is discharged exhaustively over every `Action`; the literal executable fold ships as `applyTrace`; the per-step bound lifts onto the budget-gated runtime entry) | `pool_drain_bounded_by_action_count_per_resource`, `pool_drain_bounded_by_action_count{,_bold}`, `pool_balance_lower_bound_via_trace`, `pool_nondecreasing_of_does_not_debit`, `per_resource_pool_independence`, `applyTrace_drain_bounded_per_resource`, `pool_signed_step_drain_le_budget` | `Bridge/PoolDrainBound.lean` |
 | E-C   | Deposit / withdraw replay impossible  | `deposit_replay_blocked_by_consumed`, `withdraw_bumps_nextWdId` | `Bridge/Admissible.lean` |
@@ -964,7 +965,21 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 880 tests across 146 suites (the GP.11.5
+**Test count.**  ~2 945 tests across 147 suites (the GP.11.6
+`ammReservePolicy` adds the `bridge-amm-reserve-policy` suite, 65 cases —
+the deny-list shape + count, only-`ammSwap` outflow across every non-ammSwap
+Action tag (0..22, none skipped), the `permits_iff` source-of-truth
+characterisation, the admission-layer (`localPolicyPermits`) meta-action escape
+hatch (through the real `Authority.localPolicyPermits` definition) + the full
+`ammReservePolicy_admission_permits_iff` iff, the `ammReserveAuthorityPolicy`
+fix including the `ra = ammReserveActor` sender-binding defence-in-depth
+(`_rejects_non_reserve_target` / `_authorized_ammSwap_target`),
+non-reserve-actor unrestriction, genesis wiring contract theorems incl.
+`ammReserveGenesisPolicy_rejects_non_reserve_target`, reverse composition
+(gasPoolGenesis preserves AMM reserve authority + localPolicy), the
+`AmmReserveConfig` option-gated builders (`_none` / `_some` contract theorems),
+`fieldsBounded` + CBE round-trip (structural proof, no `native_decide`), and
+term-level API stability for every headline theorem; the GP.11.5
 `ammReserveActor` reservation grows the `bridge-actor` suite 71 → 82 —
 the `ammReserveActor = 3` value, the three disjointness theorems'
 value-level + term-level API, the four-slot reservation-guarantee
@@ -2302,7 +2317,12 @@ disjointness theorems `ammReserveActor_ne_bridgeActor` / `_ne_gasPoolActor` /
 guarantee) — is complete end-to-end (Lean + the Rust `knomosis-l1-ingest`
 runtime adaptor, which mirrors the genesis-4 allocation via
 `INITIAL_NEXT_ACTOR_ID = 4` / `AMM_RESERVE_ACTOR_ID = 3` so the reservation is
-honoured in production).  See
+honoured in production), and GP.11.6 — the `ammReserveActor` local policy
+(`LegalKernel/Bridge/AmmReservePolicy.lean`; a single-clause `denyTags`
+`LocalPolicy` permitting ONLY `ammSwap` + a complementary
+`ammReserveAuthorityPolicy` closing the LP.7 meta-action hole + a genesis
+bundle wiring both halves atomically; 46-case `bridge-amm-reserve-policy`
+suite) — is complete on the Lean side.  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3968,6 +3988,75 @@ contributions surviving in current code:
       axioms (the disjointness theorems are axiom-free; the genesis +
       reservation theorems depend only on `{propext, Classical.choice,
       Quot.sound}` via `Std.TreeMap`).
+  * **GP.11.6** `ammReserveActor` local policy
+    (`LegalKernel/Bridge/AmmReservePolicy.lean`).  The per-actor
+    `LocalPolicy` (Workstream LP) the admission layer consults whenever
+    `ammReserveActor` (`ActorId 3`) signs an action.  Restricts the
+    reserve's outflow to a single capability: `ammSwap` (frozen Action
+    index 23).  Single-clause `denyTags ammReserveDeniedTags` where
+    `ammReserveDeniedTags = List.range 24 |>.filter (· ≠ 23)` = `[0..22]`;
+    the deny-list's coverage is mechanically enforced by the existing
+    `Action.tag_lt_denyListBound` forcing function (exhaustive `cases` —
+    a 25th constructor without bumping the range breaks the proof).
+    Headline theorems: `ammReservePolicy_denies_all_non_ammSwap` (the
+    reserve can never transfer / mint / burn / deposit / top up budgets /
+    sign any non-ammSwap action), `ammReservePolicy_permits_ammSwap`
+    (the reserve CAN sign an `ammSwap`),
+    `ammReservePolicy_permits_iff` (single source-of-truth
+    characterisation: permitted iff `Action.tag = 23`).
+    **Admission-layer reach + LP.7 meta-action escape hatch:**
+    `ammReservePolicy_admission_permits_meta_actions` PROVES the
+    structural limitation, motivating the complementary
+    `ammReserveAuthorityPolicy` (an `AuthorityPolicy`, intersected into
+    the deployment policy at genesis).  The `AuthorityPolicy` conjunct
+    has NO meta-action exemption, so
+    `ammReserveAuthorityPolicy_rejects_meta` bars the escape hatch,
+    while `ammReserveAuthorityPolicy_rejects_non_ammSwap` /
+    `ammReserveAuthorityPolicy_authorizes_ammSwap` additionally
+    enforce the action-restriction at the authority layer (the reserve
+    can ONLY sign `ammSwap` — its sole legitimate mutation path).
+    `ammReserveAuthorityPolicy_other_actors_unrestricted` /
+    `ammReserveAuthorityPolicy_intersect_rejects_meta` prove the genesis
+    intersection narrows ONLY `ammReserveActor` and bars its
+    meta-actions under ANY base policy.
+    **Genesis wiring:** `AmmReserveGenesis` structure +
+    `ammReserveGenesis` constructor bundle BOTH halves
+    (`ammReserveGenesisState` declares the policy,
+    `ammReserveGenesisPolicy` intersects the authority policy) so
+    neither can be wired without the other
+    (`ammReserveGenesis_wires_both_halves`).  Contract theorems:
+    `ammReserveGenesisState_declares_policy` /
+    `_preserves_other_localPolicies` / `_preserves_kernel_substates`,
+    `ammReserveGenesisPolicy_rejects_meta` /
+    `_other_actors_unrestricted` / `_rejects_non_ammSwap` /
+    `_authorizes_ammSwap` / `_rejects_non_reserve_target` /
+    `_bars_self_declaration`,
+    `ammReservePolicy_fieldsBounded` + `ammReservePolicy_roundtrip`
+    (structural proof, no `native_decide`).  The `ra = ammReserveActor`
+    sender-binding defence-in-depth on `ammReserveActorAuthorized`
+    (mirroring GP.7.2's sender-binding in `gasPoolActorAuthorized`)
+    ensures an authorised `ammSwap` can only mutate the reserve's OWN
+    balances — extraction theorem
+    `ammReserveAuthorityPolicy_authorized_ammSwap_target`, rejection
+    theorem `ammReserveAuthorityPolicy_rejects_non_reserve_target`.
+    The admission-layer theorems
+    (`ammReservePolicy_admission_permits_meta_actions`,
+    `ammReservePolicy_admission_permits_iff`) are proven through the
+    REAL `Authority.localPolicyPermits` definition (not tag
+    arithmetic).  Reverse composition with `gasPoolGenesis` is
+    non-interfering: `gasPoolGenesisState_preserves_ammReserve_localPolicy`
+    + `gasPoolGenesisPolicy_preserves_ammReserve_authority` (via the
+    `ammReserveActor ≠ gasPoolActor` disjointness).  The
+    `AmmReserveConfig` option-gated builders
+    (`ammReserveGenesisStateOfConfig` / `ammReserveGenesisPolicyOfConfig`
+    / `ammReserveGenesisOfConfig`) mirror GP.7.4's `GasPoolConfig`
+    pattern so the runtime can branch on "AMM enabled" vs "no AMM".
+    All axiom-free beyond the canonical `{propext, Classical.choice,
+    Quot.sound}` subset (bare-policy + authority theorems use only
+    `propext` / `Quot.sound`; genesis-state theorems pull in
+    `Classical.choice` via `ExtendedState`).  No kernel TCB delta.
+    `bridge-amm-reserve-policy` suite (65 cases).  Lean-only; no Rust
+    or Solidity change.
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the

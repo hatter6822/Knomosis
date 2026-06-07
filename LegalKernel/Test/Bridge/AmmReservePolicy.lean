@@ -237,9 +237,9 @@ def tests : List TestCase :=
     }
   , { name := "GP.11.6: ammReserveAuthorityPolicy_authorizes_ammSwap term-level API"
     , body := do
-        let _f : (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
+        let _f : (fr tr : ResourceId) → (ai ao : Amount) →
                  ammReserveAuthorityPolicy.authorized ammReserveActor
-                   (.ammSwap fr tr ai ao ra) :=
+                   (.ammSwap fr tr ai ao ammReserveActor) :=
           ammReserveAuthorityPolicy_authorizes_ammSwap
         pure ()
     }
@@ -346,10 +346,10 @@ def tests : List TestCase :=
   , { name := "GP.11.6: ammReserveGenesisPolicy_authorizes_ammSwap term-level API"
     , body := do
         let _f : (P : AuthorityPolicy) →
-                 (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
-                 P.authorized ammReserveActor (.ammSwap fr tr ai ao ra) →
+                 (fr tr : ResourceId) → (ai ao : Amount) →
+                 P.authorized ammReserveActor (.ammSwap fr tr ai ao ammReserveActor) →
                  (ammReserveGenesisPolicy P).authorized ammReserveActor
-                   (.ammSwap fr tr ai ao ra) :=
+                   (.ammSwap fr tr ai ao ammReserveActor) :=
           ammReserveGenesisPolicy_authorizes_ammSwap
         pure ()
     }
@@ -451,6 +451,171 @@ def tests : List TestCase :=
                    (Encoding.Encodable.encode ammReservePolicy) =
                    .ok (ammReservePolicy, []) :=
           ammReservePolicy_roundtrip
+        pure ()
+    }
+  , -- ## Sender-binding (ra = ammReserveActor defence-in-depth)
+    { name := "GP.11.6: authority policy rejects ammSwap targeting different actor"
+    , body := do
+        let act : Action := .ammSwap 0 1 100 95 someUser
+        if decide (ammReserveAuthorityPolicy.authorized ammReserveActor act) then
+          throw <| IO.userError "authority policy should reject ammSwap targeting non-reserve"
+    }
+  , { name := "GP.11.6: ammReserveAuthorityPolicy_rejects_non_reserve_target term-level API"
+    , body := do
+        let _f : (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
+                 ra ≠ ammReserveActor →
+                 ¬ ammReserveAuthorityPolicy.authorized ammReserveActor
+                     (.ammSwap fr tr ai ao ra) :=
+          ammReserveAuthorityPolicy_rejects_non_reserve_target
+        pure ()
+    }
+  , { name := "GP.11.6: ammReserveAuthorityPolicy_authorized_ammSwap_target term-level API"
+    , body := do
+        let _f : (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
+                 ammReserveAuthorityPolicy.authorized ammReserveActor
+                   (.ammSwap fr tr ai ao ra) →
+                 ra = ammReserveActor :=
+          ammReserveAuthorityPolicy_authorized_ammSwap_target
+        pure ()
+    }
+  , -- ## Genesis policy rejects non-reserve target
+    { name := "GP.11.6: genesis policy rejects ammSwap targeting different actor"
+    , body := do
+        let base : AuthorityPolicy := .unrestricted
+        let gp := ammReserveGenesisPolicy base
+        let act : Action := .ammSwap 0 1 100 95 someUser
+        if decide (gp.authorized ammReserveActor act) then
+          throw <| IO.userError "genesis policy should reject ammSwap targeting non-reserve"
+    }
+  , { name := "GP.11.6: ammReserveGenesisPolicy_rejects_non_reserve_target term-level API"
+    , body := do
+        let _f : (P : AuthorityPolicy) →
+                 (fr tr : ResourceId) → (ai ao : Amount) → (ra : ActorId) →
+                 ra ≠ ammReserveActor →
+                 ¬ (ammReserveGenesisPolicy P).authorized ammReserveActor
+                     (.ammSwap fr tr ai ao ra) :=
+          ammReserveGenesisPolicy_rejects_non_reserve_target
+        pure ()
+    }
+  , -- ## Admission-layer theorems
+    { name := "GP.11.6: ammReservePolicy_admission_permits_meta_actions term-level API"
+    , body := do
+        let _f : (es : ExtendedState) →
+                 es.localPolicies.lookup ammReserveActor = ammReservePolicy →
+                 Authority.localPolicyPermits es ammReserveActor .revokeLocalPolicy ∧
+                 (∀ p, Authority.localPolicyPermits es ammReserveActor
+                         (.declareLocalPolicy p)) :=
+          ammReservePolicy_admission_permits_meta_actions
+        pure ()
+    }
+  , { name := "GP.11.6: ammReservePolicy_admission_permits_iff term-level API"
+    , body := do
+        let _f : (es : ExtendedState) → (action : Action) →
+                 es.localPolicies.lookup ammReserveActor = ammReservePolicy →
+                 (Authority.localPolicyPermits es ammReserveActor action ↔
+                   (Authority.isMetaPolicyAction action = true ∨
+                     ammReservePolicy.permits ammReserveActor action)) :=
+          ammReservePolicy_admission_permits_iff
+        pure ()
+    }
+  , -- ## Reverse composition (gasPoolGenesis preserves AMM reserve)
+    { name := "GP.11.6: gasPoolGenesisState preserves ammReserveActor localPolicy"
+    , body := do
+        let es := ExtendedState.empty
+        let gps := gasPoolGenesisState es 1000 500
+        assertEq (expected := es.localPolicies.lookup ammReserveActor)
+          (actual := gps.localPolicies.lookup ammReserveActor)
+          "ammReserveActor local policy unchanged after gasPoolGenesisState"
+    }
+  , { name := "GP.11.6: gasPoolGenesisState_preserves_ammReserve_localPolicy term-level API"
+    , body := do
+        let _f : (es : ExtendedState) → (mEth mBold : Amount) →
+                 (gasPoolGenesisState es mEth mBold).localPolicies.lookup ammReserveActor =
+                   es.localPolicies.lookup ammReserveActor :=
+          gasPoolGenesisState_preserves_ammReserve_localPolicy
+        pure ()
+    }
+  , { name := "GP.11.6: gasPoolGenesisPolicy preserves ammReserveActor authority"
+    , body := do
+        let base : AuthorityPolicy := .unrestricted
+        let gpp := gasPoolGenesisPolicy base 1000 500
+        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
+        assert (decide (gpp.authorized ammReserveActor act))
+          "ammReserveActor ammSwap should still be admitted under gasPoolGenesisPolicy"
+    }
+  , { name := "GP.11.6: gasPoolGenesisPolicy_preserves_ammReserve_authority term-level API"
+    , body := do
+        let _f : (P : AuthorityPolicy) → (mEth mBold : Amount) → (action : Action) →
+                 ((gasPoolGenesisPolicy P mEth mBold).authorized ammReserveActor action ↔
+                   P.authorized ammReserveActor action) :=
+          gasPoolGenesisPolicy_preserves_ammReserve_authority
+        pure ()
+    }
+  , -- ## Option-gated configuration
+    { name := "GP.11.6: ammReserveGenesisStateOfConfig none leaves localPolicies unchanged"
+    , body := do
+        let es := ExtendedState.empty
+        let gs := ammReserveGenesisStateOfConfig es none
+        assertEq (expected := es.localPolicies.lookup ammReserveActor)
+          (actual := gs.localPolicies.lookup ammReserveActor)
+          "none config should leave ammReserveActor policy unchanged"
+    }
+  , { name := "GP.11.6: ammReserveGenesisPolicyOfConfig none admits ammSwap for reserve"
+    , body := do
+        let base : AuthorityPolicy := .unrestricted
+        let gp := ammReserveGenesisPolicyOfConfig base none
+        let act : Action := .ammSwap 0 1 100 95 ammReserveActor
+        assert (decide (gp.authorized ammReserveActor act))
+          "none config policy should still admit ammSwap (it is just the base)"
+    }
+  , { name := "GP.11.6: ammReserveGenesisStateOfConfig some declares policy"
+    , body := do
+        let es := ExtendedState.empty
+        let cfg : AmmReserveConfig := {}
+        let gs := ammReserveGenesisStateOfConfig es (some cfg)
+        let looked := gs.localPolicies.lookup ammReserveActor
+        assertEq (expected := ammReservePolicy) (actual := looked)
+          "some config should declare ammReservePolicy"
+    }
+  , { name := "GP.11.6: ammReserveGenesisPolicyOfConfig some rejects meta"
+    , body := do
+        let base : AuthorityPolicy := .unrestricted
+        let cfg : AmmReserveConfig := {}
+        let gp := ammReserveGenesisPolicyOfConfig base (some cfg)
+        if decide (gp.authorized ammReserveActor .revokeLocalPolicy) then
+          throw <| IO.userError "some config genesis policy should reject revokeLocalPolicy"
+    }
+  , { name := "GP.11.6: ammReserveGenesisStateOfConfig_none term-level API"
+    , body := do
+        let _f : (es : ExtendedState) →
+                 ammReserveGenesisStateOfConfig es none = es :=
+          ammReserveGenesisStateOfConfig_none
+        pure ()
+    }
+  , { name := "GP.11.6: ammReserveGenesisPolicyOfConfig_none term-level API"
+    , body := do
+        let _f : (P : AuthorityPolicy) →
+                 ammReserveGenesisPolicyOfConfig P none = P :=
+          ammReserveGenesisPolicyOfConfig_none
+        pure ()
+    }
+  , { name := "GP.11.6: ammReserveGenesisStateOfConfig_some_declares_policy term-level API"
+    , body := do
+        let _f : (es : ExtendedState) → (cfg : AmmReserveConfig) →
+                 (ammReserveGenesisStateOfConfig es (some cfg)).localPolicies.lookup
+                     ammReserveActor =
+                   ammReservePolicy :=
+          ammReserveGenesisStateOfConfig_some_declares_policy
+        pure ()
+    }
+  , { name := "GP.11.6: ammReserveGenesisPolicyOfConfig_some_rejects_meta term-level API"
+    , body := do
+        let _f : (P : AuthorityPolicy) → (cfg : AmmReserveConfig) →
+                 ¬ (ammReserveGenesisPolicyOfConfig P (some cfg)).authorized ammReserveActor
+                     .revokeLocalPolicy ∧
+                 (∀ p, ¬ (ammReserveGenesisPolicyOfConfig P (some cfg)).authorized
+                           ammReserveActor (.declareLocalPolicy p)) :=
+          ammReserveGenesisPolicyOfConfig_some_rejects_meta
         pure ()
     }
   ]

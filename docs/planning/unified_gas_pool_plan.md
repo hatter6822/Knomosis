@@ -7836,16 +7836,25 @@ sub-WU table above is the implementation roadmap.
       Keep it for symmetry with `gasPoolPolicy`; the real
       gating happens in `bridgePolicy`.
 
-  * **Tests.**  46 cases (`bridge-amm-reserve-policy` suite).
+  * **Tests.**  65 cases (`bridge-amm-reserve-policy` suite).
   * **Acceptance criteria.**  One reviewer.
   * **Dependencies.**  GP.11.5.
   * **Estimated effort.**  ~3 hours.
   * **Status.**  **Complete** (Lean side).  Ships as
     `LegalKernel/Bridge/AmmReservePolicy.lean`: the
     `ammReservePolicy` (`denyTags [0..22]`) + the LP.7
-    escape-hatch-closing `ammReserveAuthorityPolicy` + the
-    `AmmReserveGenesis` bundled wiring + 16 headline theorems +
-    `fieldsBounded` / `roundtrip` + the 42-case test suite.  Uses
+    escape-hatch-closing `ammReserveAuthorityPolicy` (with
+    `ra = ammReserveActor` sender-binding defence-in-depth) + the
+    `AmmReserveGenesis` bundled wiring + the `AmmReserveConfig`
+    option-gated builders (mirrors GP.7.4's `GasPoolConfig`) + 22
+    headline theorems (incl. `ammReservePolicy_admission_permits_iff`
+    through the real `localPolicyPermits`, the sender-binding
+    extraction `ammReserveAuthorityPolicy_authorized_ammSwap_target`
+    / rejection `_rejects_non_reserve_target`, genesis-level
+    `_rejects_non_reserve_target`, reverse composition with
+    `gasPoolGenesis`, and the opt-in/opt-out contract theorems) +
+    `fieldsBounded` / `roundtrip` (structural proof, no
+    `native_decide`) + the 65-case test suite.  Uses
     `List.range 24 |>.filter (· ≠ 23)` per the index note above
     (the sketch's stale `22` is corrected to `23`).
 
