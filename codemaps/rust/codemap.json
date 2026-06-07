@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "896cfaba3cccbd8646c2df15fbce3503b647f16754bd42de99cc8f246674762d"
+    "source_digest": "027477c080ebbef6aa3273814f7252078c1ba121efb7777c96b929b2bfa865f6"
   },
   "summary": {
     "module_count": 136,
@@ -34901,7 +34901,7 @@
         {
           "kind": "fn",
           "name": "resource",
-          "line": 452,
+          "line": 454,
           "called": [
             "ResourceId",
             "_"
@@ -34910,25 +34910,25 @@
         {
           "kind": "fn",
           "name": "is_balance_change",
-          "line": 469,
+          "line": 471,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_gas_pool_family",
-          "line": 478,
+          "line": 480,
           "called": []
         },
         {
           "kind": "const",
           "name": "EVENT_TAG_COUNT",
-          "line": 493,
+          "line": 495,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 496,
+          "line": 498,
           "called": [
             "EVENT_TAG_COUNT",
             "Event",
@@ -34939,7 +34939,7 @@
         {
           "kind": "fn",
           "name": "tags_are_frozen",
-          "line": 502,
+          "line": 504,
           "called": [
             "actor",
             "commit",
@@ -34954,7 +34954,7 @@
         {
           "kind": "fn",
           "name": "tag_count_constant",
-          "line": 682,
+          "line": 684,
           "called": [
             "EVENT_TAG_COUNT"
           ]
@@ -34962,7 +34962,7 @@
         {
           "kind": "fn",
           "name": "resource_id_constants",
-          "line": 688,
+          "line": 690,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH"
@@ -34971,7 +34971,7 @@
         {
           "kind": "fn",
           "name": "actor_projection",
-          "line": 695,
+          "line": 697,
           "called": [
             "actor",
             "resource"
@@ -34980,7 +34980,7 @@
         {
           "kind": "fn",
           "name": "resource_projection",
-          "line": 719,
+          "line": 721,
           "called": [
             "actor",
             "resource"
@@ -34989,7 +34989,7 @@
         {
           "kind": "fn",
           "name": "is_balance_change_exhaustive",
-          "line": 743,
+          "line": 745,
           "called": [
             "actor",
             "is_balance_change",
@@ -34999,7 +34999,7 @@
         {
           "kind": "fn",
           "name": "gp_family_actor_projection",
-          "line": 757,
+          "line": 759,
           "called": [
             "actor",
             "resource",
@@ -35009,7 +35009,7 @@
         {
           "kind": "fn",
           "name": "gp_family_resource_projection",
-          "line": 820,
+          "line": 822,
           "called": [
             "resource",
             "signer"
@@ -35018,7 +35018,7 @@
         {
           "kind": "fn",
           "name": "is_gas_pool_family_selects_gp_tags",
-          "line": 872,
+          "line": 874,
           "called": [
             "actor",
             "is_gas_pool_family",
@@ -36225,7 +36225,7 @@
         {
           "kind": "fn",
           "name": "gp_family_field_projections_consistent",
-          "line": 197,
+          "line": 203,
           "called": [
             "actor",
             "bytes",
