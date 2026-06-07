@@ -965,8 +965,8 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 945 tests across 147 suites (the GP.11.6
-`ammReservePolicy` adds the `bridge-amm-reserve-policy` suite, 65 cases —
+**Test count.**  ~2 948 tests across 147 suites (the GP.11.6
+`ammReservePolicy` adds the `bridge-amm-reserve-policy` suite, 68 cases —
 the deny-list shape + count, only-`ammSwap` outflow across every non-ammSwap
 Action tag (0..22, none skipped), the `permits_iff` source-of-truth
 characterisation, the admission-layer (`localPolicyPermits`) meta-action escape
@@ -2321,7 +2321,7 @@ honoured in production), and GP.11.6 — the `ammReserveActor` local policy
 (`LegalKernel/Bridge/AmmReservePolicy.lean`; a single-clause `denyTags`
 `LocalPolicy` permitting ONLY `ammSwap` + a complementary
 `ammReserveAuthorityPolicy` closing the LP.7 meta-action hole + a genesis
-bundle wiring both halves atomically; 46-case `bridge-amm-reserve-policy`
+bundle wiring both halves atomically; 68-case `bridge-amm-reserve-policy`
 suite) — is complete on the Lean side.  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
@@ -4055,7 +4055,7 @@ contributions surviving in current code:
     Quot.sound}` subset (bare-policy + authority theorems use only
     `propext` / `Quot.sound`; genesis-state theorems pull in
     `Classical.choice` via `ExtendedState`).  No kernel TCB delta.
-    `bridge-amm-reserve-policy` suite (65 cases).  Lean-only; no Rust
+    `bridge-amm-reserve-policy` suite (68 cases).  Lean-only; no Rust
     or Solidity change.
 
 Out of scope for this in-flight closure: the

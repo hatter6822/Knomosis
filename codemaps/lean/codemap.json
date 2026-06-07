@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "9cad86648e2bbebe7db424149ae02961e108b2152a470987e8d7c49c741075d1"
+    "source_digest": "b3fe74e747c4552f04eab82d19851ea64db81bfd541d20ba7f1b47b5eacfa758"
   },
   "summary": {
     "module_count": 299,
@@ -32760,6 +32760,7 @@
             "ammReserveAuthorityPolicy",
             "ammReserveAuthorityPolicy_authorized_ammSwap_target",
             "ammReserveAuthorityPolicy_authorizes_ammSwap",
+            "ammReserveAuthorityPolicy_intersect_rejects_meta",
             "ammReserveAuthorityPolicy_other_actors_unrestricted",
             "ammReserveAuthorityPolicy_rejects_meta",
             "ammReserveAuthorityPolicy_rejects_non_ammSwap",
@@ -32799,6 +32800,8 @@
             "assert",
             "assertEq",
             "bridgeActor",
+            "bridgePolicy",
+            "deposit",
             "es",
             "gasPoolActor",
             "gasPoolGenesisPolicy",

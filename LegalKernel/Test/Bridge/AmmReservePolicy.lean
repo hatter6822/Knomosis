@@ -618,6 +618,46 @@ def tests : List TestCase :=
           ammReserveGenesisPolicyOfConfig_some_rejects_meta
         pure ()
     }
+  , -- ## Direct intersect-level theorem (consistency with gasPoolPolicy pattern)
+    { name := "GP.11.6: ammReserveAuthorityPolicy_intersect_rejects_meta term-level API"
+    , body := do
+        let _f : (P : AuthorityPolicy) →
+                 ¬ (P.intersect ammReserveAuthorityPolicy).authorized
+                     ammReserveActor .revokeLocalPolicy ∧
+                 (∀ p, ¬ (P.intersect ammReserveAuthorityPolicy).authorized
+                           ammReserveActor (.declareLocalPolicy p)) :=
+          ammReserveAuthorityPolicy_intersect_rejects_meta
+        pure ()
+    }
+  , -- ## Admission-layer value-level: meta-actions BYPASS the declared policy
+    { name := "GP.11.6: meta-actions bypass ammReservePolicy at the admission layer (value-level)"
+    , body := do
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+            localPolicies :=
+              ExtendedState.empty.localPolicies.declare
+                ammReserveActor ammReservePolicy }
+        assert (decide (Authority.localPolicyPermits es ammReserveActor .revokeLocalPolicy))
+          "revokeLocalPolicy should pass localPolicyPermits (meta-action exemption)"
+        assert (decide (Authority.localPolicyPermits es ammReserveActor
+            (.declareLocalPolicy LocalPolicy.empty)))
+          "declareLocalPolicy should pass localPolicyPermits (meta-action exemption)"
+    }
+  , -- ## Composition with a genuinely restrictive base policy (bridgePolicy)
+    { name := "GP.11.6: ammReserveGenesis composes correctly with a restrictive base (bridgePolicy)"
+    , body := do
+        let base : AuthorityPolicy := bridgePolicy
+        let gp := ammReserveGenesisPolicy base
+        let swapAct : Action := .ammSwap 0 1 100 95 ammReserveActor
+        if decide (gp.authorized ammReserveActor swapAct) then
+          throw <| IO.userError
+            "ammSwap should NOT be admitted under bridgePolicy (bridge doesn't authorise reserve)"
+        if decide (gp.authorized ammReserveActor .revokeLocalPolicy) then
+          throw <| IO.userError "meta-actions should still be barred under bridgePolicy intersect"
+        let depositAct : Action := .deposit 0 bridgeActor 100 0
+        assert (decide (gp.authorized bridgeActor depositAct))
+          "bridgeActor deposit should still be admitted (no-op on other actors)"
+    }
   ]
 
 end AmmReservePolicyTests
