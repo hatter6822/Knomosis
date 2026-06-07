@@ -417,6 +417,23 @@ theorem coherence_claimBudgetRefund
         signer := signer, nonce := nonce, sig := sig })) :=
   recomputeCommitment_eq_signedActionToLogEntry es _
 
+/-- #250.ammSwap (GP.11.4) — `recomputeCommitment` agrees with
+    `commitExtendedState ∘ kernelOnlyApply` for `Action.ammSwap`.
+    Proves the fault-proof re-execution step is commit-coherent with
+    the kernel-only replay path for the AMM swap variant. -/
+theorem coherence_ammSwap
+    (es : ExtendedState)
+    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    recomputeCommitment es
+      { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+      { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
+        signer := signer, nonce := nonce, sig := sig })) :=
+  recomputeCommitment_eq_signedActionToLogEntry es _
+
 /-! ## #251.* — Per-variant cell-write semantic agreement.
 
 `applyCellWrites_to_state` agrees with `kernelOnlyApply` on the
@@ -759,6 +776,25 @@ theorem cellwrites_claimBudgetRefund
         signer := signer, nonce := nonce, sig := sig } =
     kernelOnlyApply es (signedActionToLogEntry
       { action := .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor,
+        signer := signer, nonce := nonce, sig := sig }) :=
+  applyCellWrites_eq_signedActionToLogEntry es _
+
+/-- #251.ammSwap (GP.11.4) — semantic agreement for
+    `Action.ammSwap`: its static cell-write set
+    (`Action.writeCells` = `[.balance fr ra, .balance tr ra,
+    .nonce signer]`) applied via `applyCellWrites_to_state` matches
+    `kernelOnlyApply`, so the static cell declaration is semantically
+    correct for the AMM swap variant. -/
+theorem cellwrites_ammSwap
+    (es : ExtendedState)
+    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    applyCellWrites_to_state es
+      { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    kernelOnlyApply es (signedActionToLogEntry
+      { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
         signer := signer, nonce := nonce, sig := sig }) :=
   applyCellWrites_eq_signedActionToLogEntry es _
 

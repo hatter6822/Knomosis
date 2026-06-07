@@ -15,10 +15,10 @@
 version: 1.0.0
 intent: Move `amount` units of resource `r` from `sender` to `receiver`.  The post-debit re-read of the receiver's balance is what makes self-transfers conserve total supply (Genesis Plan §4.11).
 params:
-  - r : `ResourceId (explicit)
-  - sender : `ActorId (explicit)
-  - receiver : `ActorId (explicit)
-  - amount : `Amount (explicit)
+  - r : ResourceId (explicit)
+  - sender : ActorId (explicit)
+  - receiver : ActorId (explicit)
+  - amount : Amount (explicit)
 signed_by: sender
 registry_effect: none
 satisfies:
@@ -34,9 +34,9 @@ source: LegalKernel/Laws/Transfer.lean
 version: 1.0.0
 intent: Mint `amount` units of resource `r` into actor `to`'s balance.  Non-conservative by design (Genesis Plan §5.6); classified as `IsMonotonic`.
 params:
-  - r : `ResourceId (explicit)
-  - to : `ActorId (explicit)
-  - amount : `Amount (explicit)
+  - r : ResourceId (explicit)
+  - to : ActorId (explicit)
+  - amount : Amount (explicit)
 signed_by: to
 registry_effect: none
 satisfies:
@@ -51,9 +51,9 @@ source: LegalKernel/Laws/Mint.lean
 version: 1.0.0
 intent: Burn `amount` units of resource `r` from actor `fromActor`'s balance.  Non-conservative AND non-monotonic by design (Genesis Plan §5.6 + Phase-4 prelude `burn_not_monotonic`).
 params:
-  - r : `ResourceId (explicit)
-  - fromActor : `ActorId (explicit)
-  - amount : `Amount (explicit)
+  - r : ResourceId (explicit)
+  - fromActor : ActorId (explicit)
+  - amount : Amount (explicit)
 signed_by: fromActor
 registry_effect: none
 satisfies:
@@ -67,7 +67,7 @@ source: LegalKernel/Laws/Burn.lean
 version: 1.0.0
 intent: Mark resource `_r` as frozen.  No-op at the kernel level (Genesis Plan §4.10); deployment commitment to never mutate `_r` after this transition.
 params:
-  - _r : `ResourceId (explicit)
+  - _r : ResourceId (explicit)
 signed_by: deployer
 registry_effect: none
 satisfies:
@@ -83,8 +83,8 @@ source: LegalKernel/Laws/Freeze.lean
 version: 1.0.0
 intent: Re-point `actor`'s identity to `newKey` in the `KeyRegistry`, signed by the *old* key.  Kernel-level effect is identity on `State`; the authority-level effect (registry update) happens in `apply_admissible` via `applyActionToRegistry` (Phase 3 / WU 3.10).
 params:
-  - _actor : `ActorId (explicit)
-  - _newKey : `Authority.PublicKey (explicit)
+  - _actor : ActorId (explicit)
+  - _newKey : Authority.PublicKey (explicit)
 signed_by: actor
 registry_effect: replaceKey
 satisfies:
@@ -99,9 +99,9 @@ source: LegalKernel/Laws/ReplaceKey.lean
 version: 1.0.0
 intent: Reward `to` with `amount` units of resource `r`.  Definitionally identical to `mint` at the kernel level; the semantic distinction lives in the `Action.reward` constructor and downstream authorisation policies.
 params:
-  - r : `ResourceId (explicit)
-  - to : `ActorId (explicit)
-  - amount : `Amount (explicit)
+  - r : ResourceId (explicit)
+  - to : ActorId (explicit)
+  - amount : Amount (explicit)
 signed_by: to
 registry_effect: none
 satisfies:
@@ -116,9 +116,9 @@ source: LegalKernel/Laws/Reward.lean
 version: 1.0.0
 intent: Distribute `amount` to every actor in `r`'s `BalanceMap` except `excluded`.  Substitute for 'fining excluded by amount * k' without removing tokens.  Classified `IsMonotonic` (positive-incentive tier).
 params:
-  - r : `ResourceId (explicit)
-  - excluded : `ActorId (explicit)
-  - amount : `Amount (explicit)
+  - r : ResourceId (explicit)
+  - excluded : ActorId (explicit)
+  - amount : Amount (explicit)
 signed_by: deployer
 registry_effect: none
 satisfies:
@@ -133,9 +133,9 @@ source: LegalKernel/Laws/DistributeOthers.lean
 version: 1.0.0
 intent: Proportionally dilute `excluded` by minting `totalReward * v_k / sumOthers` (Nat floor; dust discarded) to each non-excluded actor `k`.  The strongest analogue of 'burning excluded's balance share' available without removing tokens.  Classified `IsMonotonic`.
 params:
-  - r : `ResourceId (explicit)
-  - excluded : `ActorId (explicit)
-  - totalReward : `Amount (explicit)
+  - r : ResourceId (explicit)
+  - excluded : ActorId (explicit)
+  - totalReward : Amount (explicit)
 signed_by: deployer
 registry_effect: none
 satisfies:
@@ -150,7 +150,7 @@ source: LegalKernel/Laws/ProportionalDilute.lean
 version: 1.0.0
 intent: File a dispute against a prior log entry (Phase 6 §8.4).  The dispute carries the challenger's claim plus the standard nonce + signature replay-protection envelope.  Kernel-level effect is the identity on `State`; the dispute pipeline (`fileDispute`, `checkEvidence`) reads the dispute's data from the log without mutating state.
 params:
-  - _d : `LegalKernel.Disputes.Dispute (explicit)
+  - _d : LegalKernel.Disputes.Dispute (explicit)
 signed_by: challenger
 registry_effect: none
 satisfies:
@@ -166,7 +166,7 @@ source: LegalKernel/Laws/Dispute.lean
 version: 1.0.0
 intent: Withdraw a previously-filed dispute by referencing its log index (Phase 6 §8.4 / WU 6.11).  Idempotent: filing `disputeWithdraw idx` against an already-decided or already-withdrawn dispute is a no-op at the kernel level.
 params:
-  - _idx : `LegalKernel.Disputes.LogIndex (explicit)
+  - _idx : LegalKernel.Disputes.LogIndex (explicit)
 signed_by: challenger
 registry_effect: none
 satisfies:
@@ -182,7 +182,7 @@ source: LegalKernel/Laws/Dispute.lean
 version: 1.0.0
 intent: Apply a quorum-signed verdict (Phase 6 §8.4 / WU 6.9).  The verdict references the dispute log entry's index; if upheld, the runtime layer's `applyVerdict` performs the rollback computation by replaying `log[0..idx-1]`.  Kernel-level effect is identity on `State`; the rollback semantics live in the runtime layer.
 params:
-  - _v : `LegalKernel.Disputes.Verdict (explicit)
+  - _v : LegalKernel.Disputes.Verdict (explicit)
 signed_by: adjudicator
 registry_effect: none
 satisfies:
@@ -198,7 +198,7 @@ source: LegalKernel/Laws/Dispute.lean
 version: 1.0.0
 intent: A rollback marker recording that the runtime restored state to the replay-target of `log[0..targetIdx-1]` after an upheld verdict (Phase 6 §8.4 / WU 6.10).  Kernel-level effect on `State` is identity; the runtime layer maintains a separate `rolledBackTo : Option LogIndex` field for replay.  The action exists primarily for audit-trail readability.
 params:
-  - _targetIdx : `LegalKernel.Disputes.LogIndex (explicit)
+  - _targetIdx : LegalKernel.Disputes.LogIndex (explicit)
 signed_by: adjudicator
 registry_effect: none
 satisfies:
@@ -214,8 +214,8 @@ source: LegalKernel/Laws/Dispute.lean
 version: 1.0.0
 intent: Insert a fresh `(actor, pk)` pair into the `KeyRegistry`, signed by the bridge actor.  Used for first-time identity registrations where `replaceKey` cannot apply (the old key doesn't exist yet).  Kernel-level effect is identity on `State`; the authority-level effect (registry insertion) happens in `apply_admissible` via `applyActionToRegistry`.
 params:
-  - _actor : `ActorId (explicit)
-  - _pk : `Authority.PublicKey (explicit)
+  - _actor : ActorId (explicit)
+  - _pk : Authority.PublicKey (explicit)
 signed_by: bridge
 registry_effect: registerIdentity
 satisfies:
@@ -230,10 +230,10 @@ source: LegalKernel/Laws/RegisterIdentity.lean
 version: 1.0.0
 intent: Bridge L1 → L2 deposit (Workstream C / Genesis Plan §7.4): credit `amount` units of resource `r` to `recipient` on L2, marking `_depositId` as consumed (the bridge-level effect happens in `applyActionToBridgeState`).  Kernel-level effect is `mint`-shaped balance increment.
 params:
-  - r : `ResourceId (explicit)
-  - recipient : `ActorId (explicit)
-  - amount : `Amount (explicit)
-  - _depositId : `Bridge.DepositId (explicit)
+  - r : ResourceId (explicit)
+  - recipient : ActorId (explicit)
+  - amount : Amount (explicit)
+  - _depositId : Bridge.DepositId (explicit)
 signed_by: bridge
 registry_effect: none
 satisfies:
@@ -248,10 +248,10 @@ source: LegalKernel/Laws/Deposit.lean
 version: 1.0.0
 intent: Bridge L2 → L1 withdrawal (Workstream C / Genesis Plan §7.4): debit `amount` units of resource `r` from `sender`'s balance and schedule an L1 redemption to `_recipientL1`.  Kernel-level effect is `burn`-shaped balance decrement (gated by sufficient-balance precondition).
 params:
-  - r : `ResourceId (explicit)
-  - sender : `ActorId (explicit)
-  - amount : `Amount (explicit)
-  - _recipientL1 : `Bridge.EthAddress (explicit)
+  - r : ResourceId (explicit)
+  - sender : ActorId (explicit)
+  - amount : Amount (explicit)
+  - _recipientL1 : Bridge.EthAddress (explicit)
 signed_by: sender
 registry_effect: none
 satisfies:
@@ -265,7 +265,7 @@ source: LegalKernel/Laws/Withdraw.lean
 version: 1.0.0
 intent: Declare (or replace) the signer's local policy (Workstream LP §5.2).  Mutates the `ExtendedState.localPolicies` table to map the signer's `ActorId` to `_policy`.  Idempotent on equal `policy`; replaces on differing `policy`.  Kernel-level effect: `Laws.freezeResource 0`.  Authority-level effect: `localPolicies` insertion via `applyActionToLocalPolicies`.
 params:
-  - _policy : `LegalKernel.Authority.LocalPolicy (explicit)
+  - _policy : LegalKernel.Authority.LocalPolicy (explicit)
 signed_by: signer
 registry_effect: localPolicy
 satisfies:
@@ -303,4 +303,22 @@ registry_effect: none
 satisfies:
   (none)
 source: Lex/Examples/ExampleLex.lean
+
+## reserved.gp.ammSwap (action_index = 20)
+version: 1.0.0
+intent: Mirror an L1 constant-product AMM swap onto L2 by adjusting the AMM-reserve actor's balances.  The bridge actor signs this action in response to an L1 `AmmSwapExecuted` event.  `ammReserveActor` receives `amountIn` of `fromResource` and sends `amountOut` of `toResource`.
+params:
+  - fromResource : ResourceId (explicit)
+  - toResource : ResourceId (explicit)
+  - amountIn : Amount (explicit)
+  - amountOut : Amount (explicit)
+  - ammReserveActor : ActorId (explicit)
+signed_by: bridge
+registry_effect: none
+satisfies:
+  - local
+  - freeze_preserving
+  - nonce_advances
+  - registry_preserving
+source: LegalKernel/Laws/AmmSwap.lean
 

@@ -88,12 +88,12 @@ pub const EVENT_TAG_HEAD_LEN: usize = 9;
 
 /// The number of frozen `Event` constructor tags currently defined
 /// on the Lean side (`LegalKernel/Events/Types.lean::Event.tag`,
-/// indices `0..=20`).  Bumped by amendment when the Lean inductive
-/// grows; GP.6.4 widened it from 20 → 21 (adding `BudgetConsumed` at
-/// tag 20).  The streaming path treats any tag
+/// indices `0..=21`).  Bumped by amendment when the Lean inductive
+/// grows; GP.11.4 widened it from 21 → 22 (adding `AmmSwapExecuted`
+/// at tag 21).  The streaming path treats any tag
 /// `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and forwards
 /// it verbatim (additive-extension policy, `docs/abi.md` §11).
-pub const KNOWN_EVENT_TAG_COUNT: u64 = 21;
+pub const KNOWN_EVENT_TAG_COUNT: u64 = 22;
 
 /// A canonical `Events.Event` constructor, identified by its frozen
 /// wire tag.
@@ -162,13 +162,16 @@ pub enum EventType {
     /// Indexers consume this event to compute current-epoch
     /// budget remaining.  Tag 20.
     BudgetConsumed,
+    /// An AMM swap was executed (ETH↔BOLD exchange against the
+    /// gas-pool reserves; Workstream GP / GP.11.4).  Tag 21.
+    AmmSwapExecuted,
 }
 
 /// Every [`EventType`] in frozen tag order.  `ALL[i].tag() == i`
 /// for every index, so iterating this array enumerates the tag
 /// space `0..KNOWN_EVENT_TAG_COUNT`.  Used by exhaustive coverage
 /// tests and by tooling that needs to walk the registry.
-pub const ALL_EVENT_TYPES: [EventType; 21] = [
+pub const ALL_EVENT_TYPES: [EventType; 22] = [
     EventType::BalanceChanged,
     EventType::NonceAdvanced,
     EventType::IdentityRegistered,
@@ -190,6 +193,7 @@ pub const ALL_EVENT_TYPES: [EventType; 21] = [
     EventType::GasPoolClaim,
     EventType::DelegatedActionBudgetTopUp,
     EventType::BudgetConsumed,
+    EventType::AmmSwapExecuted,
 ];
 
 impl EventType {
@@ -219,6 +223,7 @@ impl EventType {
             Self::GasPoolClaim => 18,
             Self::DelegatedActionBudgetTopUp => 19,
             Self::BudgetConsumed => 20,
+            Self::AmmSwapExecuted => 21,
         }
     }
 
@@ -250,6 +255,7 @@ impl EventType {
             Self::GasPoolClaim => "gasPoolClaim",
             Self::DelegatedActionBudgetTopUp => "delegatedActionBudgetTopUp",
             Self::BudgetConsumed => "budgetConsumed",
+            Self::AmmSwapExecuted => "ammSwapExecuted",
         }
     }
 
@@ -568,8 +574,8 @@ mod tests {
     fn constants_pinned() {
         assert_eq!(CBE_TAG_UINT, 0x00);
         assert_eq!(EVENT_TAG_HEAD_LEN, 9);
-        // GP.6.4 widened 20 → 21 by adding `BudgetConsumed`.
-        assert_eq!(KNOWN_EVENT_TAG_COUNT, 21);
+        // GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`.
+        assert_eq!(KNOWN_EVENT_TAG_COUNT, 22);
     }
 
     /// `ALL_EVENT_TYPES[i].tag() == i` — the array is in frozen tag
@@ -593,10 +599,10 @@ mod tests {
 
     /// `from_tag` returns `None` for tags beyond the known set
     /// (forward-compatibility: future tags are not errors here).
-    /// GP.6.4 widened known tags 0..=19 → 0..=20.
+    /// GP.11.4 widened known tags 0..=20 → 0..=21.
     #[test]
     fn from_tag_unknown_returns_none() {
-        for tag in [21u64, 22, 99, 1_000, u64::MAX] {
+        for tag in [22u64, 23, 99, 1_000, u64::MAX] {
             assert_eq!(
                 EventType::from_tag(tag),
                 None,

@@ -9,6 +9,7 @@
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import Lex.DSL.Law
 
 /-!
 LegalKernel.Laws.AmmSwap — Workstream GP.11.4 (L2-side AMM mirroring).
@@ -405,6 +406,42 @@ theorem ammSwap_not_monotonic_at_to
       ammReserveActor)) toResource + amountOut := Nat.lt_add_of_pos_right hpos
   rw [heq] at hlt
   exact hlt
+
+/-! ## LX (GP.11.4.d) Lex re-expression of `ammSwap` -/
+
+set_option linter.missingDocs false in
+lexlaw reserved_gp_ammSwap where
+  lex_id              reserved.gp.ammSwap
+  lex_version         "1.0.0"
+  lex_action_index    20
+  lex_intent          "Mirror an L1 constant-product AMM swap onto L2 by adjusting the AMM-reserve actor's balances.  The bridge actor signs this action in response to an L1 `AmmSwapExecuted` event.  `ammReserveActor` receives `amountIn` of `fromResource` and sends `amountOut` of `toResource`."
+  lex_signed_by       bridge
+  lex_authorized_by   (fun _ _ => True)
+  lex_params          (fromResource toResource : ResourceId)
+                      (amountIn amountOut : Amount)
+                      (ammReserveActor : ActorId)
+  lex_pre             :=
+    fun s => getBalance s toResource ammReserveActor ≥ amountOut ∧
+             fromResource ≠ toResource ∧
+             amountIn > 0
+  lex_impl            :=
+    fun s =>
+      let s1 := setBalance s fromResource ammReserveActor
+                  (getBalance s fromResource ammReserveActor + amountIn)
+      let s2 := setBalance s1 toResource ammReserveActor
+                  (getBalance s1 toResource ammReserveActor - amountOut)
+      s2
+  lex_satisfies       := [«local», freeze_preserving, nonce_advances,
+                          registry_preserving]
+  lex_events          := []
+
+/-- GP.11.4.d byte-equivalence regression: the Lex-generated transition
+    is definitionally equal to the hand-written `ammSwap`. -/
+example (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId) :
+    reserved_gp_ammSwap_transition fromResource toResource amountIn amountOut
+      ammReserveActor =
+    ammSwap fromResource toResource amountIn amountOut ammReserveActor := rfl
 
 end Laws
 end LegalKernel

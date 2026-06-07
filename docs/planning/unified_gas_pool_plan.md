@@ -6669,7 +6669,7 @@ make each sub-WU's audit obligation tractable in isolation.
 | GP.11.3.g    | Slippage + deadline tests (12+ cases)                                              | 2          | 1         | `test/AmmSlippage.t.sol`               |
 | GP.11.3.h    | Sandwich-attack simulator (4 cases: front-run, back-run, slippage stops it)        | 2          | 1         | `test/AmmSandwich.t.sol`               |
 | **GP.11.3 total** |                                                                              | **25**     |           |                                        |
-| GP.11.4.a    | New `Action.ammSwap` constructor at frozen index 22 (action layer)                 | 2          | 1         | `Authority/Action.lean`                |
+| GP.11.4.a    | New `Action.ammSwap` constructor at frozen index 23 (action layer)                 | 2          | 1         | `Authority/Action.lean`                |
 | GP.11.4.b    | `Laws/AmmSwap.lean` definition (kernel law)                                        | 3          | 2         | `Laws/AmmSwap.lean`                    |
 | GP.11.4.c    | Theorem ladder (8 theorems: increase_from, decrease_to, locality, ...)             | 5          | 2         | `Laws/AmmSwap.lean`                    |
 | GP.11.4.d    | Lex re-expression of `ammSwap` for the Lex registry                                | 2          | 1         | `Laws/AmmSwap.lean`                    |

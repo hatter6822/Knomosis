@@ -1,0 +1,29 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 413, "column": 0},
+  "file": "LegalKernel/Laws/AmmSwap.lean"},
+ "signed_by": {"name": "bridge", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "fun s => getBalance s toResource ammReserveActor ≥ amountOut ∧\n             fromResource ≠ toResource ∧\n             amountIn > 0\n  ",
+ "params":
+ [{"type": "ResourceId", "name": "fromResource", "kind": "explicit"},
+  {"type": "ResourceId", "name": "toResource", "kind": "explicit"},
+  {"type": "Amount", "name": "amountIn", "kind": "explicit"},
+  {"type": "Amount", "name": "amountOut", "kind": "explicit"},
+  {"type": "ActorId", "name": "ammReserveActor", "kind": "explicit"}],
+ "intent":
+ "Mirror an L1 constant-product AMM swap onto L2 by adjusting the AMM-reserve actor's balances.  The bridge actor signs this action in response to an L1 `AmmSwapExecuted` event.  `ammReserveActor` receives `amountIn` of `fromResource` and sends `amountOut` of `toResource`.",
+ "impl_block":
+ "fun s =>\n      let s1 := setBalance s fromResource ammReserveActor\n                  (getBalance s fromResource ammReserveActor + amountIn)\n      let s2 := setBalance s1 toResource ammReserveActor\n                  (getBalance s1 toResource ammReserveActor - amountOut)\n      s2\n  ",
+ "identifier": "reserved.gp.ammSwap",
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
+ "action_index": 20}

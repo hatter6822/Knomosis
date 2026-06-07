@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "bd4e56e7656d0db554081b2298894f3801c8fd2292870eb26aaf54e9a1207b20"
+    "source_digest": "026fa36e0cd68c4e5d517b70e173eaa11fcd458325ee0b0494047caf7c663cd8"
   },
   "summary": {
-    "module_count": 295,
-    "declaration_count": 4892
+    "module_count": 297,
+    "declaration_count": 4914
   },
   "modules": [
     {
@@ -552,6 +552,7 @@
             "PublicKey",
             "ResourceId",
             "Verdict",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -579,6 +580,7 @@
           "called": [
             "Action",
             "Transition",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -640,6 +642,7 @@
             "Action.compileTransition",
             "Action.toTransition",
             "ActorId",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -1741,6 +1744,7 @@
           "line": 64,
           "called": [
             "Action",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -2712,6 +2716,7 @@
             "AuthorityPolicy",
             "ExtendedState",
             "SignedAction",
+            "ammSwap",
             "apply_admissible",
             "burn",
             "claimBudgetRefund",
@@ -2876,6 +2881,7 @@
             "Signature",
             "SignedAction",
             "actionCost",
+            "ammSwap",
             "apply_admissible_with_budget",
             "burn",
             "claimBudgetRefund",
@@ -2942,6 +2948,7 @@
             "Signature",
             "SignedAction",
             "actionCost",
+            "ammSwap",
             "apply_admissible_with_budget",
             "burn",
             "claimBudgetRefund",
@@ -3123,6 +3130,7 @@
             "Signature",
             "SignedAction",
             "actionCost",
+            "ammSwap",
             "apply_admissible_with_budget",
             "burn",
             "claimBudgetRefund",
@@ -3614,6 +3622,7 @@
             "AuthorityPolicy",
             "ExtendedState",
             "SignedAction",
+            "ammSwap",
             "applyActionToRegistry",
             "apply_admissible",
             "apply_admissible_with",
@@ -3781,6 +3790,7 @@
             "AuthorityPolicy",
             "ExtendedState",
             "SignedAction",
+            "ammSwap",
             "applyActionToLocalPolicies",
             "apply_admissible",
             "apply_admissible_with",
@@ -3810,6 +3820,7 @@
             "AuthorityPolicy",
             "ExtendedState",
             "SignedAction",
+            "ammSwap",
             "applyActionToLocalPolicies",
             "apply_admissible",
             "apply_admissible_with",
@@ -5437,6 +5448,7 @@
           "line": 108,
           "called": [
             "Action",
+            "ammSwap",
             "deposit",
             "depositWithFee"
           ]
@@ -5470,6 +5482,7 @@
           "called": [
             "Action",
             "BridgeState",
+            "ammSwap",
             "applyActionToBridgeState",
             "burn",
             "claimBudgetRefund",
@@ -6421,6 +6434,7 @@
           "line": 270,
           "called": [
             "Action",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -6742,6 +6756,7 @@
           "line": 675,
           "called": [
             "Action",
+            "ammSwap",
             "bridgeAuthorizedAction",
             "deposit",
             "depositWithFee",
@@ -6753,6 +6768,7 @@
           "name": "bridgePolicy_authorizes_all_bridge_actions",
           "line": 694,
           "called": [
+            "ammSwap",
             "bridgeActor",
             "bridgePolicy_authorizes_deposit",
             "bridgePolicy_authorizes_depositWithFee",
@@ -6773,6 +6789,7 @@
             "Bridge",
             "LegalKernel",
             "PublicKey",
+            "ammSwap",
             "bridgeActor",
             "bridgeAuthorizedAction",
             "bridgeAuthorizedAction_eq_true_iff",
@@ -9051,6 +9068,7 @@
             "Action",
             "ActorId",
             "ResourceId",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "gasPoolActor",
@@ -9085,6 +9103,7 @@
             "ResourceId",
             "Signature",
             "SignedAction",
+            "ammSwap",
             "apply_admissible_with",
             "apply_admissible_with_base",
             "burn",
@@ -10985,6 +11004,7 @@
             "ExtendedState",
             "LogEntry",
             "advanceNonce",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -11237,6 +11257,7 @@
             "LogEntry",
             "PublicKey",
             "Signature",
+            "ammSwap",
             "applyActionToRegistry",
             "apply_admissible_with",
             "burn",
@@ -13469,6 +13490,7 @@
             "LocalPolicy.fieldsBounded",
             "Verdict.canonical",
             "Verdict.fieldsBounded",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -13506,6 +13528,7 @@
             "LocalPolicy",
             "Stream",
             "Verdict",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -13555,6 +13578,7 @@
             "LocalPolicy",
             "Stream",
             "Verdict",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -13621,6 +13645,7 @@
             "LocalPolicy",
             "Stream",
             "Verdict",
+            "ammSwap",
             "burn",
             "byteArray_roundtrip",
             "claimBudgetRefund",
@@ -13680,6 +13705,7 @@
             "LegalKernel",
             "Stream",
             "action_roundtrip_empty",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -17076,6 +17102,7 @@
             "Action",
             "Event",
             "affectedActors",
+            "ammSwap",
             "balanceChangeEvents",
             "burn",
             "claimBudgetRefund",
@@ -17105,6 +17132,7 @@
             "SignedAction",
             "actionCost",
             "actionEvents",
+            "ammSwap",
             "claimBudgetRefund",
             "deposit",
             "depositWithFee",
@@ -19314,7 +19342,7 @@
     {
       "module": "LegalKernel.FaultProof.PerVariantCoherence",
       "path": "LegalKernel/FaultProof/PerVariantCoherence.lean",
-      "declaration_count": 51,
+      "declaration_count": 53,
       "declarations": [
         {
           "kind": "namespace",
@@ -19778,8 +19806,27 @@
         },
         {
           "kind": "theorem",
+          "name": "coherence_ammSwap",
+          "line": 423,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "Nonce",
+            "ResourceId",
+            "ammSwap",
+            "commitExtendedState",
+            "es",
+            "kernelOnlyApply",
+            "recomputeCommitment",
+            "recomputeCommitment_eq_signedActionToLogEntry",
+            "signedActionToLogEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "applyCellWrites_eq_signedActionToLogEntry",
-          "line": 429,
+          "line": 446,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -19792,7 +19839,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_transfer",
-          "line": 436,
+          "line": 453,
           "called": [
             "ActorId",
             "Amount",
@@ -19812,7 +19859,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_mint",
-          "line": 449,
+          "line": 466,
           "called": [
             "ActorId",
             "Amount",
@@ -19830,7 +19877,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_burn",
-          "line": 462,
+          "line": 479,
           "called": [
             "ActorId",
             "Amount",
@@ -19848,7 +19895,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_freezeResource",
-          "line": 475,
+          "line": 492,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -19865,7 +19912,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_replaceKey",
-          "line": 488,
+          "line": 505,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -19880,7 +19927,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_reward",
-          "line": 501,
+          "line": 518,
           "called": [
             "ActorId",
             "Amount",
@@ -19898,7 +19945,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_distributeOthers",
-          "line": 514,
+          "line": 531,
           "called": [
             "ActorId",
             "Amount",
@@ -19916,7 +19963,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_proportionalDilute",
-          "line": 527,
+          "line": 544,
           "called": [
             "ActorId",
             "Amount",
@@ -19934,7 +19981,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_dispute",
-          "line": 540,
+          "line": 557,
           "called": [
             "ActorId",
             "Dispute",
@@ -19950,7 +19997,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_disputeWithdraw",
-          "line": 553,
+          "line": 570,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -19966,7 +20013,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_verdict",
-          "line": 566,
+          "line": 583,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -19982,7 +20029,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_rollback",
-          "line": 579,
+          "line": 596,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -19998,7 +20045,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_registerIdentity",
-          "line": 592,
+          "line": 609,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20013,7 +20060,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_deposit",
-          "line": 605,
+          "line": 622,
           "called": [
             "ActorId",
             "Amount",
@@ -20031,7 +20078,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_withdraw",
-          "line": 619,
+          "line": 636,
           "called": [
             "ActorId",
             "Amount",
@@ -20050,7 +20097,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_declareLocalPolicy",
-          "line": 633,
+          "line": 650,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20066,7 +20113,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_revokeLocalPolicy",
-          "line": 646,
+          "line": 663,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20081,22 +20128,6 @@
         {
           "kind": "theorem",
           "name": "cellwrites_faultProofChallenge",
-          "line": 658,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "LogIndex",
-            "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
-            "applyCellWrites_to_state",
-            "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "cellwrites_faultProofResolution",
           "line": 675,
           "called": [
             "ActorId",
@@ -20112,8 +20143,24 @@
         },
         {
           "kind": "theorem",
+          "name": "cellwrites_faultProofResolution",
+          "line": 692,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "LogIndex",
+            "Nonce",
+            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_to_state",
+            "es",
+            "kernelOnlyApply",
+            "signedActionToLogEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "cellwrites_depositWithFee",
-          "line": 691,
+          "line": 708,
           "called": [
             "ActorId",
             "Amount",
@@ -20132,7 +20179,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_topUpActionBudget",
-          "line": 709,
+          "line": 726,
           "called": [
             "ActorId",
             "Amount",
@@ -20152,7 +20199,7 @@
         {
           "kind": "theorem",
           "name": "cellwrites_topUpActionBudgetFor",
-          "line": 730,
+          "line": 747,
           "called": [
             "ActorId",
             "Amount",
@@ -20172,12 +20219,10 @@
         {
           "kind": "theorem",
           "name": "cellwrites_claimBudgetRefund",
-          "line": 751,
+          "line": 768,
           "called": [
             "ActorId",
             "ExtendedState",
-            "FaultProof",
-            "LegalKernel",
             "Nonce",
             "ResourceId",
             "applyCellWrites_eq_signedActionToLogEntry",
@@ -20187,6 +20232,26 @@
             "gasResource",
             "kernelOnlyApply",
             "poolActor",
+            "signedActionToLogEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cellwrites_ammSwap",
+          "line": 787,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "Nonce",
+            "ResourceId",
+            "ammSwap",
+            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_to_state",
+            "es",
+            "kernelOnlyApply",
             "signedActionToLogEntry"
           ]
         }
@@ -21557,6 +21622,7 @@
           "line": 167,
           "called": [
             "Action",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -21587,6 +21653,7 @@
             "Dispute",
             "LocalPolicy",
             "Verdict",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -22242,6 +22309,7 @@
             "Action",
             "ActorId",
             "CellTag",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -22265,6 +22333,7 @@
             "Action",
             "ActorId",
             "CellTag",
+            "ammSwap",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -23881,6 +23950,252 @@
             "State",
             "Transition",
             "step",
+            "step_impl"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Laws.AmmSwap",
+      "path": "LegalKernel/Laws/AmmSwap.lean",
+      "declaration_count": 18,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 53,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Laws",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ammSwap",
+          "line": 72,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "Transition",
+            "getBalance",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_other_resource_untouched",
+          "line": 93,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "ammSwap",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_does_not_touch_other_resources",
+          "line": 114,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "ammSwap",
+            "ammSwap_other_resource_untouched",
+            "getBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_conserves_other_resource",
+          "line": 128,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "ammSwap",
+            "ammSwap_other_resource_untouched",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_increases_from_balance",
+          "line": 147,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "ammSwap",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_decreases_to_balance",
+          "line": 167,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "ammSwap",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_other_actor_untouched",
+          "line": 187,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "ammSwap",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "other",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "swap_from_arithmetic",
+          "line": 227,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_fromResource_supply_increase",
+          "line": 237,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "ammSwap",
+            "getBalance",
+            "setBalance",
+            "step_impl",
+            "swap_from_arithmetic",
+            "totalSupply_setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "swap_to_arithmetic",
+          "line": 267,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_toResource_supply_decrease",
+          "line": 277,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "ammSwap",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "setBalance",
+            "step_impl",
+            "swap_to_arithmetic",
+            "totalSupply_setBalance"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "ammSwap_localTo",
+          "line": 330,
+          "called": [
+            "ActorId",
+            "Amount",
+            "LocalTo",
+            "ResourceId",
+            "ammSwap",
+            "ammSwap_does_not_touch_other_resources"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_freezePreserving",
+          "line": 348,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "ResourceId",
+            "ammSwap",
+            "ammSwap_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "ammSwap_freezePreserving_empty",
+          "line": 363,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "ResourceId",
+            "ammSwap",
+            "ammSwap_freezePreserving"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_not_conservative_at_from",
+          "line": 375,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "ammSwap",
+            "ammSwap_fromResource_supply_increase",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_not_monotonic_at_to",
+          "line": 391,
+          "called": [
+            "ActorId",
+            "Amount",
+            "Laws",
+            "LegalKernel",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "ammSwap",
+            "ammSwap_toResource_supply_decrease",
+            "getBalance",
+            "setBalance",
             "step_impl"
           ]
         }
@@ -31750,6 +32065,7 @@
             "PublicKey",
             "ResourceId",
             "TestCase",
+            "ammSwap",
             "apply_bridge_admissible_with",
             "assert",
             "assertEq",
@@ -46193,6 +46509,7 @@
             "actionFieldsForL1",
             "actionKindByte",
             "actionKindByteCases",
+            "ammSwap",
             "assert",
             "assertEq",
             "burn",
@@ -46206,8 +46523,10 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "readCellValue",
             "readUint64BE",
             "reward",
+            "stepCommitAmmSwap",
             "stepCommitClaimBudgetRefund",
             "stepCommitDepositWithFee",
             "stepCommitDispute",
@@ -46228,6 +46547,7 @@
             "stepVMHashFromAction_freezeResource",
             "stepVMHashFromAction_revokeLocalPolicy",
             "stepVMHashFromAction_verdict",
+            "stepVMHash_ammSwap_kind",
             "stepVMHash_burn_kind",
             "stepVMHash_claimBudgetRefund_kind",
             "stepVMHash_declareLocalPolicy_kind",
@@ -47491,6 +47811,53 @@
             "invariant_preservation_via_laws",
             "neverLegal",
             "reachable_of_reachable_via_laws",
+            "setBalance",
+            "step_impl"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Laws.AmmSwap",
+      "path": "LegalKernel/Test/Laws/AmmSwap.lean",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Laws.AmmSwapTests",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 29,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "LegalKernel.Test.Laws.AmmSwapTests",
+            "LocalTo",
+            "ResourceId",
+            "State",
+            "TestCase",
+            "TotalSupply",
+            "ammSwap",
+            "ammSwap_conserves_other_resource",
+            "ammSwap_decreases_to_balance",
+            "ammSwap_does_not_touch_other_resources",
+            "ammSwap_fromResource_supply_increase",
+            "ammSwap_increases_from_balance",
+            "ammSwap_not_conservative_at_from",
+            "ammSwap_not_monotonic_at_to",
+            "ammSwap_other_actor_untouched",
+            "ammSwap_other_resource_untouched",
+            "ammSwap_toResource_supply_decrease",
+            "assert",
+            "assertEq",
+            "emptyState",
+            "getBalance",
+            "other",
             "setBalance",
             "step_impl"
           ]
@@ -53389,7 +53756,7 @@
         {
           "kind": "def",
           "name": "legalkernel_transferConservativeProperty",
-          "line": 115,
+          "line": 116,
           "called": [
             "ActorId",
             "ResourceId",
@@ -53409,7 +53776,7 @@
         {
           "kind": "def",
           "name": "legalkernel_transferMonotonicProperty",
-          "line": 139,
+          "line": 140,
           "called": [
             "ActorId",
             "ResourceId",
@@ -53429,7 +53796,7 @@
         {
           "kind": "def",
           "name": "legalkernel_transferLocalProperty",
-          "line": 163,
+          "line": 164,
           "called": [
             "ActorId",
             "ResourceId",
@@ -53448,7 +53815,7 @@
         {
           "kind": "def",
           "name": "legalkernel_mintMonotonicProperty",
-          "line": 189,
+          "line": 190,
           "called": [
             "ActorId",
             "Amount",
@@ -53466,7 +53833,7 @@
         {
           "kind": "def",
           "name": "legalkernel_mintLocalProperty",
-          "line": 211,
+          "line": 212,
           "called": [
             "ActorId",
             "Amount",
@@ -53484,7 +53851,7 @@
         {
           "kind": "def",
           "name": "legalkernel_freezeResourceConservativeProperty",
-          "line": 234,
+          "line": 235,
           "called": [
             "ResourceId",
             "State",
@@ -53500,7 +53867,7 @@
         {
           "kind": "def",
           "name": "legalkernel_freezeResourceMonotonicProperty",
-          "line": 252,
+          "line": 253,
           "called": [
             "ResourceId",
             "State",
@@ -53516,7 +53883,7 @@
         {
           "kind": "def",
           "name": "legalkernel_freezeResourceFreezePreservingProperty",
-          "line": 270,
+          "line": 271,
           "called": [
             "ResourceId",
             "State",
@@ -53532,7 +53899,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 291,
+          "line": 292,
           "called": [
             "Lex.Test.AutoGenProperties",
             "TestCase",

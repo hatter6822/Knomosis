@@ -35,7 +35,7 @@ use serde::Deserialize;
 
 /// The highest event tag the indexer's `Event` mirror models.
 /// GP.6.4 widened this from 15 to 19.
-const INDEXER_MAX_KNOWN_TAG: u64 = 20;
+const INDEXER_MAX_KNOWN_TAG: u64 = 21;
 
 /// Pinned generator identifier (a Lean-side version bump forces an
 /// explicit update here).
