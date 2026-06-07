@@ -53,7 +53,7 @@ Design notes:
     bound, which is fragile under structural induction).  The
     runtime adaptor's `assign` loop maintains freshness by
     monotonically increasing `nextActorId` from its genesis value
-    (`3` post-GP.7.1; see `addressBook_empty_nextActorId`) and never
+    (`4` post-GP.11.5; see `addressBook_empty_nextActorId`) and never
     overflowing under any practical workload (max 2^64 unique
     addresses).
 
@@ -334,7 +334,7 @@ structure AddressBook where
   /-- The next `ActorId` to assign on first-time registration.
       The runtime adaptor maintains the (external) freshness
       invariant `reverse[nextActorId]? = none` by monotonic
-      assignment from the initial value `1`. -/
+      assignment from the initial value `4` (post-GP.11.5). -/
   nextActorId : ActorId
 
 namespace AddressBook
@@ -354,38 +354,43 @@ def Consistent (b : AddressBook) : Prop :=
 /-! ## Constructors and accessors -/
 
 /-- The empty address book.  Both maps are empty; `nextActorId` is
-    `3` so that any assigned id is strictly greater than `2`, leaving
-    `ActorId`s `0` / `1` / `2` reserved for `Bridge.bridgeActor` /
-    `Bridge.gasPoolActor` / `Bridge.sequencerActor` respectively
-    (§6.3 + Workstream GP.7.1).  The first user-registered identity a
-    fresh deployment assigns is therefore `ActorId 3`.  None of the
-    reserved actors is registered here; deployments register the
-    bridge's identity in `KeyRegistry` directly at bootstrap time, and —
-    when a deployment needs them — the gas-pool / sequencer slots are
+    `4` so that any assigned id is strictly greater than `3`, leaving
+    `ActorId`s `0` / `1` / `2` / `3` reserved for `Bridge.bridgeActor` /
+    `Bridge.gasPoolActor` / `Bridge.sequencerActor` /
+    `Bridge.ammReserveActor` respectively (§6.3 + Workstream GP.7.1 +
+    GP.11.5).  The first user-registered identity a fresh deployment
+    assigns is therefore `ActorId 4`.  None of the reserved actors is
+    registered here; deployments register the bridge's identity in
+    `KeyRegistry` directly at bootstrap time, and — when a deployment
+    needs them — the gas-pool / sequencer / AMM-reserve slots are
     populated by its genesis configuration (Workstream GP.7.4), not by
     `assign`. -/
 def empty : AddressBook where
   forward     := ∅
   reverse     := ∅
-  nextActorId := 3  -- reserve 0/1/2 for bridge / gasPool / sequencer
-                    -- actors (§6.3 + GP.7.1)
+  nextActorId := 4  -- reserve 0/1/2/3 for bridge / gasPool / sequencer /
+                    -- ammReserve actors (§6.3 + GP.7.1 + GP.11.5)
 
-/-- GP.7.1 — the genesis `AddressBook.empty.nextActorId` is `3`,
-    reserving `ActorId`s `0` / `1` / `2` for `Bridge.bridgeActor` /
-    `Bridge.gasPoolActor` / `Bridge.sequencerActor` respectively.
+/-- GP.7.1 + GP.11.5 — the genesis `AddressBook.empty.nextActorId` is `4`,
+    reserving `ActorId`s `0` / `1` / `2` / `3` for `Bridge.bridgeActor` /
+    `Bridge.gasPoolActor` / `Bridge.sequencerActor` /
+    `Bridge.ammReserveActor` respectively.
     Because a fresh `assign` returns exactly the current `nextActorId`
     (`assign_eq_of_lookup_none`) and only ever bumps the counter upward
     by one (`assign_fresh_actorId`), no user-registered identity built
     up via an `empty` + `assign` chain can ever collide with a reserved
     slot; the first user actor a fresh deployment registers is
-    `ActorId 3`.
+    `ActorId 4`.
 
-    This is the genesis half of the GP.7.1 reservation; the
-    pairwise-distinctness of the three reserved actors is pinned by
+    This is the genesis half of the GP.7.1 + GP.11.5 reservation; the
+    pairwise-distinctness of the four reserved actors is pinned by
     `Bridge.gasPoolActor_ne_bridgeActor`,
-    `Bridge.sequencerActor_ne_bridgeActor`, and
-    `Bridge.sequencerActor_ne_gasPoolActor`. -/
-theorem addressBook_empty_nextActorId : empty.nextActorId = 3 := rfl
+    `Bridge.sequencerActor_ne_bridgeActor`,
+    `Bridge.sequencerActor_ne_gasPoolActor`,
+    `Bridge.ammReserveActor_ne_bridgeActor`,
+    `Bridge.ammReserveActor_ne_gasPoolActor`, and
+    `Bridge.ammReserveActor_ne_sequencerActor`. -/
+theorem addressBook_empty_nextActorId : empty.nextActorId = 4 := rfl
 
 /-- Look up the `ActorId` assigned to an Ethereum address. -/
 @[inline] def lookup (b : AddressBook) (addr : EthAddress) : Option ActorId :=
@@ -659,7 +664,7 @@ example : (empty.lookupRev 0) = none := by
   show (∅ : TreeMap ActorId EthAddress compare)[(0 : ActorId)]? = none
   exact TreeMap.getElem?_emptyc
 
-example : empty.nextActorId = 3 := rfl
+example : empty.nextActorId = 4 := rfl
 
 end AddressBook
 end Bridge

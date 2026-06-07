@@ -21,9 +21,9 @@
 //! The fixtures cover every translatable event variant + several
 //! edge cases:
 //!
-//!   1. First-time `RegisteredECDSA` → `RegisterIdentity` (id 3,
-//!      the genesis `next_actor_id` post-GP.7.1).
-//!   2. Two distinct first-time registrations (ids 3 + 4).
+//!   1. First-time `RegisteredECDSA` → `RegisterIdentity` (id 4,
+//!      the genesis `next_actor_id` post-GP.11.5).
+//!   2. Two distinct first-time registrations (ids 4 + 5).
 //!   3. First-time + rotation (`RegisterIdentity` then
 //!      `ReplaceKey` for the same address).
 //!   4. `RegisteredEIP1271` first-time → `RegisterIdentity`
@@ -34,7 +34,7 @@
 //!   8. Edge: max-realistic pubkey (33-byte SEC1-compressed).
 //!   9. Edge: large nonce (near `u64::MAX`).
 //!   10. Edge: large address book (16 entries) prior to a fresh
-//!       registration that bumps to id 19 (ids 3..18 pre-assigned).
+//!       registration that bumps to id 20 (ids 4..19 pre-assigned).
 
 use std::env;
 use std::path::PathBuf;

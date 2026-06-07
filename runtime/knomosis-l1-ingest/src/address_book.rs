@@ -60,10 +60,10 @@ pub struct AddressBook {
     forward: BTreeMap<EthAddress, ActorId>,
     /// Reverse map (id → address).
     reverse: BTreeMap<ActorId, EthAddress>,
-    /// Monotone counter for fresh-id allocation.  Starts at 3
+    /// Monotone counter for fresh-id allocation.  Starts at 4
     /// (mirroring Lean's `Bridge.AddressBook` genesis after Workstream
-    /// GP.7.1; actor ids 0 / 1 / 2 are reserved for the bridge /
-    /// gas-pool / sequencer actors respectively).
+    /// GP.11.5; actor ids 0 / 1 / 2 / 3 are reserved for the bridge /
+    /// gas-pool / sequencer / AMM-reserve actors respectively).
     next_actor_id: ActorId,
 }
 
@@ -93,14 +93,23 @@ pub const GAS_POOL_ACTOR_ID: ActorId = 1;
 /// recipient of `gasPoolActor` outflow.
 pub const SEQUENCER_ACTOR_ID: ActorId = 2;
 
-/// The initial `next_actor_id` value in a fresh AddressBook.  `3` is
-/// the first non-reserved id; `0` / `1` / `2` are reserved for the
-/// bridge / gas-pool / sequencer actors respectively (Workstream
-/// GP.7.1).  Mirrors Lean's `Bridge.AddressBook.empty.nextActorId = 3`
+/// The reserved AMM-reserve-actor `ActorId` (Workstream GP.11.5).
+/// Matches Lean's `Bridge.ammReserveActor` constant — the L2 reflection
+/// of the L1 bridge's AMM liquidity (`ammReserveEth` / `ammReserveBold`)
+/// at both `ResourceId 0` (ETH) and `ResourceId 1` (BOLD).  Its balances
+/// are mutated only by bridge-attested `ammSwap` actions (action index
+/// 23); the runtime adaptor never issues this slot to a user identity.
+pub const AMM_RESERVE_ACTOR_ID: ActorId = 3;
+
+/// The initial `next_actor_id` value in a fresh AddressBook.  `4` is
+/// the first non-reserved id; `0` / `1` / `2` / `3` are reserved for the
+/// bridge / gas-pool / sequencer / AMM-reserve actors respectively
+/// (Workstream GP.7.1 + GP.11.5).  Mirrors Lean's
+/// `Bridge.AddressBook.empty.nextActorId = 4`
 /// (`addressBook_empty_nextActorId`), so the Rust runtime adaptor
 /// honours the reservation: a fresh registration is never issued a
 /// reserved slot.
-pub const INITIAL_NEXT_ACTOR_ID: ActorId = 3;
+pub const INITIAL_NEXT_ACTOR_ID: ActorId = 4;
 
 /// Errors surfaced by [`AddressBook::try_assign`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -114,8 +123,8 @@ pub enum AssignError {
 }
 
 impl AddressBook {
-    /// Construct an empty AddressBook with `next_actor_id = 3`.
-    /// Mirrors Lean's `Bridge.AddressBook.empty` (post-GP.7.1).
+    /// Construct an empty AddressBook with `next_actor_id = 4`.
+    /// Mirrors Lean's `Bridge.AddressBook.empty` (post-GP.11.5).
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -206,11 +215,13 @@ impl AddressBook {
 #[cfg(test)]
 mod tests {
     use super::{
-        AddressBook, BRIDGE_ACTOR_ID, GAS_POOL_ACTOR_ID, INITIAL_NEXT_ACTOR_ID, SEQUENCER_ACTOR_ID,
+        AddressBook, AMM_RESERVE_ACTOR_ID, BRIDGE_ACTOR_ID, GAS_POOL_ACTOR_ID,
+        INITIAL_NEXT_ACTOR_ID, SEQUENCER_ACTOR_ID,
     };
     use crate::action::{ActorId, EthAddress};
 
-    /// Fresh AddressBook is empty and starts at `next = 1`.
+    /// Fresh AddressBook is empty and starts at `next = 4`
+    /// (`INITIAL_NEXT_ACTOR_ID`, post-GP.11.5).
     #[test]
     fn new_book_is_empty() {
         let book = AddressBook::new();
@@ -227,18 +238,18 @@ mod tests {
         assert!(book.lookup(&addr).is_none());
     }
 
-    /// First `assign` returns `(3, true)`.  Mirrors Lean's
+    /// First `assign` returns `(4, true)`.  Mirrors Lean's
     /// `assign_fresh_actorId` (the actor id is `nextActorId` at
-    /// call time; the genesis `nextActorId` is `3` post-GP.7.1).
+    /// call time; the genesis `nextActorId` is `4` post-GP.11.5).
     #[test]
     fn first_assign_is_fresh() {
         let mut book = AddressBook::new();
         let addr = EthAddress::from_bytes(&[1u8; 20]).unwrap();
         let (id, is_new) = book.assign(&addr);
-        assert_eq!(id, 3);
+        assert_eq!(id, 4);
         assert!(is_new);
         assert_eq!(book.len(), 1);
-        assert_eq!(book.next_actor_id(), 4);
+        assert_eq!(book.next_actor_id(), 5);
     }
 
     /// `assign` on a known address is idempotent: returns the same
@@ -253,7 +264,7 @@ mod tests {
         assert_eq!(id1, id2);
         assert!(!is_new);
         assert_eq!(book.len(), 1);
-        assert_eq!(book.next_actor_id(), 4);
+        assert_eq!(book.next_actor_id(), 5);
     }
 
     /// Distinct addresses get distinct ids in arrival order.
@@ -266,10 +277,10 @@ mod tests {
         let (id_a, _) = book.assign(&a);
         let (id_b, _) = book.assign(&b);
         let (id_c, _) = book.assign(&c);
-        assert_eq!(id_a, 3);
-        assert_eq!(id_b, 4);
-        assert_eq!(id_c, 5);
-        assert_eq!(book.next_actor_id(), 6);
+        assert_eq!(id_a, 4);
+        assert_eq!(id_b, 5);
+        assert_eq!(id_c, 6);
+        assert_eq!(book.next_actor_id(), 7);
     }
 
     /// `lookup` returns the assigned id after `assign`.
@@ -292,7 +303,7 @@ mod tests {
 
     /// `BRIDGE_ACTOR_ID` is reserved and never assigned by
     /// `assign`.  Mirrors Lean: `bridgeActor` is `ActorId 0`,
-    /// and `assign` starts allocating at `3` (post-GP.7.1).
+    /// and `assign` starts allocating at `4` (post-GP.11.5).
     #[test]
     fn bridge_actor_id_is_reserved() {
         assert_eq!(BRIDGE_ACTOR_ID, 0);
@@ -305,24 +316,29 @@ mod tests {
         );
     }
 
-    /// GP.7.1 — `GAS_POOL_ACTOR_ID` (1) and `SEQUENCER_ACTOR_ID` (2)
-    /// are reserved alongside the bridge actor (0) and are never
-    /// issued by `assign`.  Mirrors Lean's `gasPoolActor` /
-    /// `sequencerActor` reservation and the
-    /// `empty_assign_id_avoids_reserved` theorem: a fresh registration
-    /// is issued `INITIAL_NEXT_ACTOR_ID` (3), distinct from every
-    /// reserved slot, and no reserved slot appears in the reverse map.
+    /// GP.7.1 + GP.11.5 — `GAS_POOL_ACTOR_ID` (1), `SEQUENCER_ACTOR_ID`
+    /// (2), and `AMM_RESERVE_ACTOR_ID` (3) are reserved alongside the
+    /// bridge actor (0) and are never issued by `assign`.  Mirrors
+    /// Lean's `gasPoolActor` / `sequencerActor` / `ammReserveActor`
+    /// reservation and the `empty_assign_id_avoids_reserved` theorem:
+    /// a fresh registration is issued `INITIAL_NEXT_ACTOR_ID` (4),
+    /// distinct from every reserved slot, and no reserved slot appears
+    /// in the reverse map.
     #[test]
-    fn gas_pool_and_sequencer_ids_are_reserved() {
-        // The three reserved constants match the Lean ActorIds and are
+    fn reserved_actor_ids_are_never_issued() {
+        // The four reserved constants match the Lean ActorIds and are
         // pairwise distinct.
         assert_eq!(BRIDGE_ACTOR_ID, 0);
         assert_eq!(GAS_POOL_ACTOR_ID, 1);
         assert_eq!(SEQUENCER_ACTOR_ID, 2);
+        assert_eq!(AMM_RESERVE_ACTOR_ID, 3);
         assert_ne!(GAS_POOL_ACTOR_ID, BRIDGE_ACTOR_ID);
         assert_ne!(SEQUENCER_ACTOR_ID, BRIDGE_ACTOR_ID);
         assert_ne!(SEQUENCER_ACTOR_ID, GAS_POOL_ACTOR_ID);
-        // A fresh registration is issued id 3, distinct from all three
+        assert_ne!(AMM_RESERVE_ACTOR_ID, BRIDGE_ACTOR_ID);
+        assert_ne!(AMM_RESERVE_ACTOR_ID, GAS_POOL_ACTOR_ID);
+        assert_ne!(AMM_RESERVE_ACTOR_ID, SEQUENCER_ACTOR_ID);
+        // A fresh registration is issued id 4, distinct from all four
         // reserved slots, and never populates a reserved slot.
         let mut book = AddressBook::new();
         // Every reserved slot is strictly below the first issuable id.
@@ -332,15 +348,43 @@ mod tests {
         assert!(BRIDGE_ACTOR_ID < genesis);
         assert!(GAS_POOL_ACTOR_ID < genesis);
         assert!(SEQUENCER_ACTOR_ID < genesis);
+        assert!(AMM_RESERVE_ACTOR_ID < genesis);
         let addr = EthAddress::from_bytes(&[0xau8; 20]).unwrap();
         let (id, _) = book.assign(&addr);
         assert_eq!(id, INITIAL_NEXT_ACTOR_ID);
         assert_ne!(id, BRIDGE_ACTOR_ID);
         assert_ne!(id, GAS_POOL_ACTOR_ID);
         assert_ne!(id, SEQUENCER_ACTOR_ID);
+        assert_ne!(id, AMM_RESERVE_ACTOR_ID);
         assert!(book.lookup_reverse(BRIDGE_ACTOR_ID).is_none());
         assert!(book.lookup_reverse(GAS_POOL_ACTOR_ID).is_none());
         assert!(book.lookup_reverse(SEQUENCER_ACTOR_ID).is_none());
+        assert!(book.lookup_reverse(AMM_RESERVE_ACTOR_ID).is_none());
+    }
+
+    /// GP.11.5 — `AMM_RESERVE_ACTOR_ID` (3) is reserved for the L2
+    /// reflection of the L1 AMM reserves and is the slot the genesis
+    /// `next_actor_id` advance (3 → 4) re-homes away from user
+    /// allocation.  Mirrors Lean's `ammReserveActor` constant + the
+    /// three disjointness theorems (`ammReserveActor_ne_bridgeActor`
+    /// / `_ne_gasPoolActor` / `_ne_sequencerActor`): the slot is
+    /// pairwise-distinct from every other reserved actor and is never
+    /// issued by `assign`.
+    #[test]
+    fn amm_reserve_id_is_reserved() {
+        assert_eq!(AMM_RESERVE_ACTOR_ID, 3);
+        // Distinct from the three GP.7.1 reserved slots.
+        assert_ne!(AMM_RESERVE_ACTOR_ID, BRIDGE_ACTOR_ID);
+        assert_ne!(AMM_RESERVE_ACTOR_ID, GAS_POOL_ACTOR_ID);
+        assert_ne!(AMM_RESERVE_ACTOR_ID, SEQUENCER_ACTOR_ID);
+        // The genesis advance to 4 reserves slot 3: a fresh `assign`
+        // issues 4, never the AMM-reserve slot, and never populates it.
+        let mut book = AddressBook::new();
+        assert!(AMM_RESERVE_ACTOR_ID < book.next_actor_id());
+        let addr = EthAddress::from_bytes(&[0xab; 20]).unwrap();
+        let (id, _) = book.assign(&addr);
+        assert_ne!(id, AMM_RESERVE_ACTOR_ID);
+        assert!(book.lookup_reverse(AMM_RESERVE_ACTOR_ID).is_none());
     }
 
     /// Inserts at non-overlapping addresses preserve previously-
@@ -412,16 +456,16 @@ mod tests {
         let b = EthAddress::from_bytes(&[2u8; 20]).unwrap();
         let (id_a, _) = book.assign(&a);
         let (id_b, _) = book.assign(&b);
-        assert_eq!(id_a, 3);
-        assert_eq!(id_b, 4);
+        assert_eq!(id_a, 4);
+        assert_eq!(id_b, 5);
         // Now corrupt the counter.
         unsafe_inject_counter(&mut book, ActorId::MAX);
         let c = EthAddress::from_bytes(&[3u8; 20]).unwrap();
         let result = book.try_assign(&c);
         assert!(result.is_err());
         // Prior assignments still hold.
-        assert_eq!(book.lookup(&a), Some(3));
-        assert_eq!(book.lookup(&b), Some(4));
+        assert_eq!(book.lookup(&a), Some(4));
+        assert_eq!(book.lookup(&b), Some(5));
         assert!(book.lookup(&c).is_none());
         assert_eq!(book.next_actor_id(), ActorId::MAX);
     }

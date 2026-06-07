@@ -28,15 +28,21 @@ Exercises the bridge-actor reservation infrastructure
   * **Decidability sanity.**  The `decAuth` field is properly
     decidable and `decide` works at concrete inputs.
   * **Reserved gas-pool actors (GP.7.1).**  `gasPoolActor = 1`,
-    `sequencerActor = 2`, the three reserved actors are pairwise
-    distinct, the genesis `AddressBook.empty.nextActorId = 3`, and an
+    `sequencerActor = 2`, the reserved actors are pairwise
+    distinct, the genesis `AddressBook.empty.nextActorId = 4`, and an
     `empty` + `assign` chain never issues a reserved slot — pinned both
     by the arithmetic bound and by the stronger
     `empty_assign_id_avoids_reserved` (the issued id avoids every
     reserved slot) plus a value-level check that no reserved actor
     appears in the post-`assign` reverse map.
+  * **Reserved AMM-reserve actor (GP.11.5).**  `ammReserveActor = 3`,
+    distinct from the three GP.7.1 reserved slots
+    (`ammReserveActor_ne_bridgeActor` / `_ne_gasPoolActor` /
+    `_ne_sequencerActor`), and the genesis `nextActorId` advance to `4`
+    re-homes the former first-user slot (`ActorId 3`) to the AMM-reserve
+    actor.
   * **Term-level API stability** for every §12.9 theorem and the
-    GP.7.1 reservation theorems.
+    GP.7.1 + GP.11.5 reservation theorems.
 -/
 
 import LegalKernel
@@ -733,31 +739,32 @@ def tests : List TestCase :=
         let _f : sequencerActor ≠ gasPoolActor := sequencerActor_ne_gasPoolActor
         pure ()
     }
-  , { name := "GP.7.1: AddressBook.empty.nextActorId = 3"
+  , { name := "GP.7.1+GP.11.5: AddressBook.empty.nextActorId = 4"
     , body := do
-        assertEq (expected := (3 : ActorId)) (actual := AddressBook.empty.nextActorId)
+        assertEq (expected := (4 : ActorId)) (actual := AddressBook.empty.nextActorId)
           "genesis nextActorId"
     }
-  , { name := "GP.7.1: addressBook_empty_nextActorId term-level API"
+  , { name := "GP.7.1+GP.11.5: addressBook_empty_nextActorId term-level API"
     , body := do
-        let _f : AddressBook.empty.nextActorId = 3 :=
+        let _f : AddressBook.empty.nextActorId = 4 :=
           AddressBook.addressBook_empty_nextActorId
         pure ()
     }
-  , { name := "GP.7.1: empty + assign never issues a reserved slot"
+  , { name := "GP.7.1+GP.11.5: empty + assign never issues a reserved slot"
     , body := do
-        -- `assign` allocates strictly from `nextActorId` (= 3) upward, so
-        -- the first user actor a fresh deployment registers is id 3 —
-        -- distinct from all three reserved slots (0 / 1 / 2) — and the
-        -- counter bumps to 4.
+        -- `assign` allocates strictly from `nextActorId` (= 4) upward, so
+        -- the first user actor a fresh deployment registers is id 4 —
+        -- distinct from all four reserved slots (0 / 1 / 2 / 3) — and the
+        -- counter bumps to 5.
         let (b', id) := AddressBook.empty.assign EthAddress.zero
-        assertEq (expected := (3 : ActorId)) (actual := id) "first assigned id"
+        assertEq (expected := (4 : ActorId)) (actual := id) "first assigned id"
         assert (decide (id ≠ bridgeActor)) "first id ≠ bridgeActor"
         assert (decide (id ≠ gasPoolActor)) "first id ≠ gasPoolActor"
         assert (decide (id ≠ sequencerActor)) "first id ≠ sequencerActor"
-        assertEq (expected := (4 : ActorId)) (actual := b'.nextActorId) "nextActorId bumped"
+        assert (decide (id ≠ ammReserveActor)) "first id ≠ ammReserveActor"
+        assertEq (expected := (5 : ActorId)) (actual := b'.nextActorId) "nextActorId bumped"
     }
-  , { name := "GP.7.1: every reserved id is below the genesis nextActorId"
+  , { name := "GP.7.1+GP.11.5: every reserved id is below the genesis nextActorId"
     , body := do
         -- Each reserved slot is strictly less than the first issuable
         -- id, so no `assign` chain can ever re-issue one.
@@ -767,31 +774,35 @@ def tests : List TestCase :=
           "gasPoolActor < nextActorId"
         assert (decide (sequencerActor < AddressBook.empty.nextActorId))
           "sequencerActor < nextActorId"
+        assert (decide (ammReserveActor < AddressBook.empty.nextActorId))
+          "ammReserveActor < nextActorId"
     }
-  , { name := "GP.7.1: empty_assign_id_avoids_reserved (value-level)"
+  , { name := "GP.7.1+GP.11.5: empty_assign_id_avoids_reserved (value-level)"
     , body := do
         -- The id `assign` issues for a fresh address is none of the
-        -- three reserved slots — the direct reservation guarantee.
+        -- four reserved slots — the direct reservation guarantee.
         let id := (AddressBook.empty.assign EthAddress.zero).snd
         assert (decide (id ≠ bridgeActor)) "assigned id ≠ bridgeActor"
         assert (decide (id ≠ gasPoolActor)) "assigned id ≠ gasPoolActor"
         assert (decide (id ≠ sequencerActor)) "assigned id ≠ sequencerActor"
+        assert (decide (id ≠ ammReserveActor)) "assigned id ≠ ammReserveActor"
     }
-  , { name := "GP.7.1: empty_assign_id_avoids_reserved term-level API"
+  , { name := "GP.7.1+GP.11.5: empty_assign_id_avoids_reserved term-level API"
     , body := do
         let _f : (addr : EthAddress) →
                  (AddressBook.empty.assign addr).snd ≠ bridgeActor ∧
                  (AddressBook.empty.assign addr).snd ≠ gasPoolActor ∧
-                 (AddressBook.empty.assign addr).snd ≠ sequencerActor :=
+                 (AddressBook.empty.assign addr).snd ≠ sequencerActor ∧
+                 (AddressBook.empty.assign addr).snd ≠ ammReserveActor :=
           empty_assign_id_avoids_reserved
         pure ()
     }
-  , { name := "GP.7.1: assign into empty never populates a reserved slot"
+  , { name := "GP.7.1+GP.11.5: assign into empty never populates a reserved slot"
     , body := do
         -- Stronger than the arithmetic bound above: after assigning a
         -- fresh address, NONE of the reserved actors appears in the
-        -- reverse map — `assign` writes only at the issued id (3),
-        -- never at a reserved slot (0 / 1 / 2).
+        -- reverse map — `assign` writes only at the issued id (4),
+        -- never at a reserved slot (0 / 1 / 2 / 3).
         let b' := (AddressBook.empty.assign EthAddress.zero).fst
         assertEq (expected := (none : Option EthAddress))
           (actual := b'.lookupRev bridgeActor) "bridgeActor unassigned"
@@ -799,6 +810,38 @@ def tests : List TestCase :=
           (actual := b'.lookupRev gasPoolActor) "gasPoolActor unassigned"
         assertEq (expected := (none : Option EthAddress))
           (actual := b'.lookupRev sequencerActor) "sequencerActor unassigned"
+        assertEq (expected := (none : Option EthAddress))
+          (actual := b'.lookupRev ammReserveActor) "ammReserveActor unassigned"
+    }
+    -- ## GP.11.5 — reserved AMM-reserve actor.
+    -- `ammReserveActor` (id 3) is the L2 reflection of the L1 AMM
+    -- reserves; these cases pin its value, its pairwise distinctness
+    -- from the three GP.7.1 reserved slots, and the term-level API of
+    -- the three disjointness theorems.
+  , { name := "GP.11.5: ammReserveActor = 3"
+    , body := do
+        assertEq (expected := (3 : ActorId)) (actual := ammReserveActor) "ammReserveActor"
+    }
+  , { name := "GP.11.5: ammReserveActor distinct from the GP.7.1 reserved actors"
+    , body := do
+        assert (decide (ammReserveActor ≠ bridgeActor)) "ammReserveActor ≠ bridgeActor"
+        assert (decide (ammReserveActor ≠ gasPoolActor)) "ammReserveActor ≠ gasPoolActor"
+        assert (decide (ammReserveActor ≠ sequencerActor)) "ammReserveActor ≠ sequencerActor"
+    }
+  , { name := "GP.11.5: ammReserveActor_ne_bridgeActor term-level API"
+    , body := do
+        let _f : ammReserveActor ≠ bridgeActor := ammReserveActor_ne_bridgeActor
+        pure ()
+    }
+  , { name := "GP.11.5: ammReserveActor_ne_gasPoolActor term-level API"
+    , body := do
+        let _f : ammReserveActor ≠ gasPoolActor := ammReserveActor_ne_gasPoolActor
+        pure ()
+    }
+  , { name := "GP.11.5: ammReserveActor_ne_sequencerActor term-level API"
+    , body := do
+        let _f : ammReserveActor ≠ sequencerActor := ammReserveActor_ne_sequencerActor
+        pure ()
     }
   ]
 

@@ -537,24 +537,29 @@ impl StateStore {
         // on any realistic workload but the typed-error path
         // is the operator-friendly failure mode.
         for (&id, addr) in &pending_assignments {
-            // GP.7.1: any persisted id below the genesis `next_actor_id`
-            // sits in the reserved range (0/1/2 — bridge / gas-pool /
-            // sequencer).  A fresh adaptor never issues such an id, so
-            // this can only be a state file written before the GP.7.1
-            // reservation (or a tampered record claiming a reserved
-            // slot).  Surface an actionable migration diagnostic rather
-            // than the generic "gap or duplicate" message below, which
-            // would mislead an operator upgrading an existing node.
+            // GP.7.1 + GP.11.5: any persisted id below the genesis
+            // `next_actor_id` sits in the reserved range (0/1/2/3 —
+            // bridge / gas-pool / sequencer / AMM-reserve).  A fresh
+            // adaptor never issues such an id, so this can only be a
+            // state file written before a reserved-actor-id reservation
+            // landed (or a tampered record claiming a reserved slot).
+            // Surface an actionable migration diagnostic rather than the
+            // generic "gap or duplicate" message below, which would
+            // mislead an operator upgrading an existing node.  Note that
+            // the GP.11.5 genesis advance (3 → 4) newly reserves id 3:
+            // a state file from a GP.7.1-era deployment that legitimately
+            // allocated id 3 to a user must be remapped on upgrade.
             if id < INITIAL_NEXT_ACTOR_ID {
                 return Err(StateError::Malformed {
                     line_number: 0,
                     message: format!(
                         "address_book replay: persisted actor_id {id} is in the \
-                         GP.7.1-reserved range (ids 0/1/2 are reserved for the \
-                         bridge / gas-pool / sequencer actors). This state file \
-                         predates the GP.7.1 actor-id reservation; remap the \
-                         affected actor(s) to ids >= {INITIAL_NEXT_ACTOR_ID} via \
-                         the GP.10.4 migration before upgrading this node."
+                         reserved range (ids 0/1/2/3 are reserved for the bridge \
+                         / gas-pool / sequencer / AMM-reserve actors; GP.7.1 + \
+                         GP.11.5). This state file predates a reserved-actor-id \
+                         reservation; remap the affected actor(s) to ids >= \
+                         {INITIAL_NEXT_ACTOR_ID} via the GP.10.4 migration before \
+                         upgrading this node."
                     ),
                 });
             }
@@ -701,8 +706,8 @@ mod tests {
         assert!(path.exists());
         assert!(state.last_confirmed_block.is_none());
         assert!(state.forwarded.is_empty());
-        // Genesis `next_actor_id` is 3 post-GP.7.1 (ids 0/1/2 reserved).
-        assert_eq!(state.address_book.next_actor_id(), 3);
+        // Genesis `next_actor_id` is 4 post-GP.11.5 (ids 0/1/2/3 reserved).
+        assert_eq!(state.address_book.next_actor_id(), 4);
     }
 
     /// Append + replay round-trips state.
@@ -725,11 +730,11 @@ mod tests {
             store
                 .append(&StateRecord::AddressAssigned {
                     address: HexBytes(vec![0xab; 20]),
-                    // `3` is the first id a fresh adaptor issues
-                    // (genesis `next_actor_id`, post-GP.7.1); the
+                    // `4` is the first id a fresh adaptor issues
+                    // (genesis `next_actor_id`, post-GP.11.5); the
                     // replay re-assigns from an empty book and verifies
                     // the issued id matches this persisted value.
-                    actor_id: 3,
+                    actor_id: 4,
                 })
                 .unwrap();
         }
@@ -744,22 +749,22 @@ mod tests {
         assert!(state.forwarded.contains(&key));
         // Address book has the assigned mapping.
         let addr = EthAddress::from_bytes(&[0xab; 20]).unwrap();
-        assert_eq!(state.address_book.lookup(&addr), Some(3));
+        assert_eq!(state.address_book.lookup(&addr), Some(4));
         // Address book's next_actor_id reflects the replayed
-        // single assignment (3 issued → next is 4).
-        assert_eq!(state.address_book.next_actor_id(), 4);
+        // single assignment (4 issued → next is 5).
+        assert_eq!(state.address_book.next_actor_id(), 5);
     }
 
     /// GP.7.1 — a persisted `AddressAssigned` record that claims a user
     /// was issued a *reserved* `ActorId` (here `1`, `gasPoolActor`'s
     /// slot) is rejected on replay with an actionable migration
     /// diagnostic.  A fresh adaptor never issues an id below
-    /// `INITIAL_NEXT_ACTOR_ID` (3), so any persisted reserved-range id
-    /// can only come from a pre-GP.7.1 state file (or a tampered
-    /// record); replay fails loudly — rather than silently
-    /// reconstructing a book that violates the reservation — and points
-    /// the operator at the Phase GP.10.4 remapping migration instead of
-    /// the generic "gap or duplicate" message.
+    /// `INITIAL_NEXT_ACTOR_ID` (4, post-GP.11.5), so any persisted
+    /// reserved-range id can only come from a pre-reservation state file
+    /// (or a tampered record); replay fails loudly — rather than
+    /// silently reconstructing a book that violates the reservation —
+    /// and points the operator at the Phase GP.10.4 remapping migration
+    /// instead of the generic "gap or duplicate" message.
     #[test]
     fn replay_rejects_reserved_actor_id() {
         let temp = tempfile::tempdir().unwrap();
@@ -779,7 +784,7 @@ mod tests {
                 // the GP.10.4 migration — NOT the misleading generic
                 // "gap or duplicate" message.
                 assert!(
-                    message.contains("GP.7.1-reserved range")
+                    message.contains("reserved range")
                         && message.contains("GP.10.4 migration")
                         && message.contains("actor_id 1"),
                     "unexpected rejection message: {message}"
@@ -791,6 +796,46 @@ mod tests {
             }
             Err(e) => panic!("expected Malformed rejection, got different error: {e:?}"),
             Ok(_) => panic!("replay must reject a persisted reserved actor_id, but it succeeded"),
+        }
+    }
+
+    /// GP.11.5 — the genesis advance (3 → 4) NEWLY reserves `ActorId 3`
+    /// (`ammReserveActor`).  A state file from a GP.7.1-era deployment
+    /// that legitimately allocated id `3` to a user (it was the first
+    /// non-reserved slot then) is now rejected on replay with the same
+    /// actionable migration diagnostic — the load-bearing upgrade-safety
+    /// check that forces a GP.10.4 remap rather than silently
+    /// reconstructing a book where a user shares the AMM-reserve slot.
+    #[test]
+    fn replay_rejects_newly_reserved_amm_actor_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state.jsonl");
+        {
+            let (mut store, _) = StateStore::open(&path).unwrap();
+            store
+                .append(&StateRecord::AddressAssigned {
+                    address: HexBytes(vec![0xcd; 20]),
+                    actor_id: 3, // newly reserved for ammReserveActor (GP.11.5)
+                })
+                .unwrap();
+        }
+        match StateStore::open(&path) {
+            Err(StateError::Malformed { message, .. }) => {
+                assert!(
+                    message.contains("reserved range")
+                        && message.contains("GP.10.4 migration")
+                        && message.contains("actor_id 3"),
+                    "unexpected rejection message: {message}"
+                );
+                assert!(
+                    !message.contains("gap or duplicate"),
+                    "newly-reserved id must not be reported as a gap/duplicate: {message}"
+                );
+            }
+            Err(e) => panic!("expected Malformed rejection, got different error: {e:?}"),
+            Ok(_) => {
+                panic!("replay must reject a persisted actor_id 3 post-GP.11.5, but it succeeded")
+            }
         }
     }
 
@@ -822,7 +867,7 @@ mod tests {
         match StateStore::open(&path) {
             Err(StateError::Malformed { message, .. }) => {
                 assert!(
-                    message.contains("GP.7.1-reserved range")
+                    message.contains("reserved range")
                         && message.contains("GP.10.4 migration")
                         && message.contains("actor_id 2"),
                     "unexpected rejection message: {message}"
@@ -861,25 +906,25 @@ mod tests {
         let path = temp.path().join("state.jsonl");
         {
             let (mut store, _) = StateStore::open(&path).unwrap();
-            // Ids are consecutive from the genesis `next_actor_id` (3,
-            // post-GP.7.1); the replay re-assigns in id order and
+            // Ids are consecutive from the genesis `next_actor_id` (4,
+            // post-GP.11.5); the replay re-assigns in id order and
             // verifies each issued id matches the persisted value.
             store
                 .append(&StateRecord::AddressAssigned {
                     address: HexBytes(vec![0x01; 20]),
-                    actor_id: 3,
-                })
-                .unwrap();
-            store
-                .append(&StateRecord::AddressAssigned {
-                    address: HexBytes(vec![0x02; 20]),
                     actor_id: 4,
                 })
                 .unwrap();
             store
                 .append(&StateRecord::AddressAssigned {
-                    address: HexBytes(vec![0x03; 20]),
+                    address: HexBytes(vec![0x02; 20]),
                     actor_id: 5,
+                })
+                .unwrap();
+            store
+                .append(&StateRecord::AddressAssigned {
+                    address: HexBytes(vec![0x03; 20]),
+                    actor_id: 6,
                 })
                 .unwrap();
         }
@@ -889,19 +934,19 @@ mod tests {
             state
                 .address_book
                 .lookup(&EthAddress::from_bytes(&[0x01; 20]).unwrap()),
-            Some(3)
-        );
-        assert_eq!(
-            state
-                .address_book
-                .lookup(&EthAddress::from_bytes(&[0x02; 20]).unwrap()),
             Some(4)
         );
         assert_eq!(
             state
                 .address_book
-                .lookup(&EthAddress::from_bytes(&[0x03; 20]).unwrap()),
+                .lookup(&EthAddress::from_bytes(&[0x02; 20]).unwrap()),
             Some(5)
+        );
+        assert_eq!(
+            state
+                .address_book
+                .lookup(&EthAddress::from_bytes(&[0x03; 20]).unwrap()),
+            Some(6)
         );
     }
 
@@ -1126,8 +1171,8 @@ mod tests {
                     next_nonce: 1,
                     assigned: Some(AddressAssignment {
                         address: HexBytes(vec![0xab; 20]),
-                        // First fresh id post-GP.7.1 is 3 (0/1/2 reserved).
-                        actor_id: 3,
+                        // First fresh id post-GP.11.5 is 4 (0/1/2/3 reserved).
+                        actor_id: 4,
                     }),
                 })
                 .unwrap();
@@ -1139,7 +1184,7 @@ mod tests {
         assert_eq!(state.next_nonce, 1);
         // Address book has the assignment.
         let addr = EthAddress::from_bytes(&[0xab; 20]).unwrap();
-        assert_eq!(state.address_book.lookup(&addr), Some(3));
+        assert_eq!(state.address_book.lookup(&addr), Some(4));
     }
 
     /// Replay tolerates a mix of legacy three-record format and
@@ -1151,11 +1196,11 @@ mod tests {
         {
             let (mut store, _) = StateStore::open(&path).unwrap();
             // Legacy three-record format for event 1.  Ids start at
-            // the genesis `next_actor_id` (3, post-GP.7.1).
+            // the genesis `next_actor_id` (4, post-GP.11.5).
             store
                 .append(&StateRecord::AddressAssigned {
                     address: HexBytes(vec![0x01; 20]),
-                    actor_id: 3,
+                    actor_id: 4,
                 })
                 .unwrap();
             store
@@ -1177,7 +1222,7 @@ mod tests {
                     next_nonce: 2,
                     assigned: Some(AddressAssignment {
                         address: HexBytes(vec![0x02; 20]),
-                        actor_id: 4,
+                        actor_id: 5,
                     }),
                 })
                 .unwrap();
@@ -1194,17 +1239,17 @@ mod tests {
     fn replay_rejects_gapped_address_assignments() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("state.jsonl");
-        // Manually write a state file with a gap: assign actor id 3
-        // (genesis start, post-GP.7.1) then 5 (skipping 4).  The replay
-        // re-assigns 3 ✓ then 4 ✗≠5 → gap detected.
+        // Manually write a state file with a gap: assign actor id 4
+        // (genesis start, post-GP.11.5) then 6 (skipping 5).  The replay
+        // re-assigns 4 ✓ then 5 ✗≠6 → gap detected.
         let line1 = serde_json::to_string(&StateRecord::AddressAssigned {
             address: HexBytes(vec![0x01; 20]),
-            actor_id: 3,
+            actor_id: 4,
         })
         .unwrap();
         let line2 = serde_json::to_string(&StateRecord::AddressAssigned {
             address: HexBytes(vec![0x02; 20]),
-            actor_id: 5,
+            actor_id: 6,
         })
         .unwrap();
         std::fs::write(&path, format!("{line1}\n{line2}\n")).unwrap();
@@ -1230,12 +1275,12 @@ mod tests {
         let path = temp.path().join("state.jsonl");
         let line1 = serde_json::to_string(&StateRecord::AddressAssigned {
             address: HexBytes(vec![0x01; 20]),
-            actor_id: 3,
+            actor_id: 4,
         })
         .unwrap();
         let line2 = serde_json::to_string(&StateRecord::AddressAssigned {
             address: HexBytes(vec![0x02; 20]), // different address
-            actor_id: 3,                       // same id
+            actor_id: 4,                       // same id
         })
         .unwrap();
         std::fs::write(&path, format!("{line1}\n{line2}\n")).unwrap();
@@ -1260,7 +1305,7 @@ mod tests {
         let path = temp.path().join("state.jsonl");
         let line1 = serde_json::to_string(&StateRecord::AddressAssigned {
             address: HexBytes(vec![0x01; 20]),
-            actor_id: 3,
+            actor_id: 4,
         })
         .unwrap();
         // Same address + id as line1.  This is benign repetition.
@@ -1286,7 +1331,7 @@ mod tests {
                     next_nonce: 1,
                     assigned: Some(AddressAssignment {
                         address: HexBytes(vec![0xaa; 20]),
-                        actor_id: 3,
+                        actor_id: 4,
                     }),
                 })
                 .unwrap();
@@ -1298,7 +1343,7 @@ mod tests {
                     next_nonce: 2,
                     assigned: Some(AddressAssignment {
                         address: HexBytes(vec![0xbb; 20]), // DIFFERENT address
-                        actor_id: 3,                       // SAME id
+                        actor_id: 4,                       // SAME id
                     }),
                 })
                 .unwrap();

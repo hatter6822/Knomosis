@@ -19,20 +19,24 @@ via a dedicated governance event (out of MVP scope).
 Design notes:
 
   * The bridge actor's `ActorId` is fixed at `0`, the lowest
-    `UInt64`.  `AddressBook.empty.nextActorId = 3` (post-GP.7.1), so
-    any address assigned via `assign` gets `id ≥ 3` — neither the
-    bridge actor's slot (`0`) nor the GP.7.1-reserved `gasPoolActor`
-    (`1`) / `sequencerActor` (`2`) slots are ever overwritten by a
-    user-registered identity.
+    `UInt64`.  `AddressBook.empty.nextActorId = 4` (post-GP.11.5), so
+    any address assigned via `assign` gets `id ≥ 4` — none of the
+    bridge actor's slot (`0`) nor the reserved `gasPoolActor`
+    (`1`) / `sequencerActor` (`2`) / `ammReserveActor` (`3`) slots are
+    ever overwritten by a user-registered identity.
 
-  * Workstream GP.7.1 reserves two further deployment slots alongside
-    the bridge actor: `gasPoolActor` (`ActorId 1`) holds the gas-pool
+  * Workstream GP.7.1 reserves two deployment slots alongside the
+    bridge actor: `gasPoolActor` (`ActorId 1`) holds the gas-pool
     reserves and `sequencerActor` (`ActorId 2`) is the sole authorised
     recipient of pool drains under the canonical `gasPoolPolicy`
-    (GP.7.2).  The three reserved actors occupy provably-distinct
+    (GP.7.2).  Workstream GP.11.5 reserves a third: `ammReserveActor`
+    (`ActorId 3`) holds the L2 reflection of the L1 bridge's AMM
+    liquidity.  The four reserved actors occupy provably-distinct
     slots — `gasPoolActor_ne_bridgeActor`,
-    `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`
-    — and the genesis `nextActorId` advance to `3` is pinned by
+    `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`,
+    `ammReserveActor_ne_bridgeActor`, `ammReserveActor_ne_gasPoolActor`,
+    `ammReserveActor_ne_sequencerActor` — and the genesis `nextActorId`
+    advance to `4` is pinned by
     `AddressBook.addressBook_empty_nextActorId`.
 
   * `bridgePolicy` is the deployment's `AuthorityPolicy` for the
@@ -118,14 +122,14 @@ open LegalKernel.Authority
 `ActorId 0` is reserved for the bridge actor — the deployment
 authority that signs every L1-derived Knomosis action.
 
-The reservation is operational: `AddressBook.empty.nextActorId = 3`
-(post-GP.7.1), so addresses assigned via `assign` get `id ≥ 3`,
-leaving ids `0` / `1` / `2` exclusively for the bridge / gas-pool /
-sequencer actors.  No structural enforcement is needed; the
+The reservation is operational: `AddressBook.empty.nextActorId = 4`
+(post-GP.11.5), so addresses assigned via `assign` get `id ≥ 4`,
+leaving ids `0` / `1` / `2` / `3` exclusively for the bridge / gas-pool /
+sequencer / AMM-reserve actors.  No structural enforcement is needed; the
 convention plus the runtime adaptor's discipline suffice. -/
 
 /-- The bridge actor's `ActorId`.  Fixed at `0` so that the
-    `AddressBook`'s assigned ids (starting from `3` post-GP.7.1)
+    `AddressBook`'s assigned ids (starting from `4` post-GP.11.5)
     never collide with the bridge actor's slot. -/
 def bridgeActor : ActorId := 0
 
@@ -146,10 +150,10 @@ bridge actor:
     actor that submits L2 state roots to L1.
 
 Like the bridge actor, the reservation is operational — the genesis
-`AddressBook.empty.nextActorId` advances to `3`
-(`AddressBook.addressBook_empty_nextActorId`), so an `empty` + `assign`
+`AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
+`AddressBook.addressBook_empty_nextActorId`), so an `empty` + `assign`
 chain never issues a reserved slot to a user-registered identity.  The
-three reserved actors are pairwise distinct (the disjointness theorems
+reserved actors are pairwise distinct (the disjointness theorems
 below), which the GP.7.2 `gasPoolPolicy` relies on: the pool's
 recipient restriction is only meaningful when `sequencerActor` is a
 *different* actor than `gasPoolActor`. -/
@@ -161,8 +165,8 @@ recipient restriction is only meaningful when `sequencerActor` is a
     `sequencerActor`.
 
     Fixed at `1`, the first slot after the bridge actor.  The genesis
-    `AddressBook.empty.nextActorId` advances to `3`
-    (`AddressBook.addressBook_empty_nextActorId`) so this slot is never
+    `AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
+    `AddressBook.addressBook_empty_nextActorId`) so this slot is never
     issued to a user-registered identity. -/
 def gasPoolActor : ActorId := 1
 
@@ -175,15 +179,52 @@ def gasPoolActor : ActorId := 1
     Fixed at `2`, the second reserved slot after the bridge actor. -/
 def sequencerActor : ActorId := 2
 
-/-! ### Reserved-actor disjointness (GP.7.1)
+/-! ## Reserved AMM-reserve actor (GP.11.5)
 
-The three reserved actors occupy distinct `ActorId` slots: `0`
-(`bridgeActor`), `1` (`gasPoolActor`), `2` (`sequencerActor`).  The
-pairwise-distinctness theorems are the foundation the GP.7.2
-`gasPoolPolicy` and the GP.7.3 drain bound rest on — a pool whose only
-permitted recipient coincided with itself could not be drained, and a
-bridge actor whose L1-attestation authority overlapped the pool slot
-would conflate two distinct trust domains. -/
+Workstream GP.11.5 reserves a third deployment slot after the bridge
+actor — the L2-side counterpart of the L1 `KnomosisBridge`'s
+`ammReserveEth` / `ammReserveBold` storage slots (GP.11.1 / GP.11.2 /
+GP.11.3):
+
+  * `ammReserveActor` (`ActorId 3`) holds the L2 reflection of the L1
+    bridge's embedded ETH↔BOLD AMM liquidity at both `ResourceId 0`
+    (ETH) and `ResourceId 1` (BOLD).  Its balances are mutated only by
+    bridge-attested `ammSwap` actions (frozen `Action` index 23): an
+    `ammSwap` credits this actor at the swap's `fromResource` and debits
+    it at the `toResource`, mirroring the on-chain reserve update.
+
+Like the GP.7.1 slots, the reservation is operational: the genesis
+`AddressBook.empty.nextActorId` advances a further step (`3 → 4`;
+`AddressBook.addressBook_empty_nextActorId`), so an `empty` + `assign`
+chain never issues `ActorId 3` to a user-registered identity.  The slot
+is provably distinct from the three GP.7.1 reserved actors (the
+disjointness theorems below). -/
+
+/-- The reserved `ActorId` of the AMM-reserve actor (Workstream GP.11.5).
+    Holds the L2 reflection of the L1 bridge's embedded ETH↔BOLD AMM
+    liquidity (`ammReserveEth` / `ammReserveBold`) at both `ResourceId 0`
+    (ETH) and `ResourceId 1` (BOLD).  Its balances are mutated only by
+    bridge-attested `ammSwap` actions (frozen `Action` index 23); no
+    other action targets this actor.
+
+    Fixed at `3`, the third reserved slot after the bridge actor.  The
+    genesis `AddressBook.empty.nextActorId` advances to `4` (post-GP.11.5;
+    `AddressBook.addressBook_empty_nextActorId`) so this slot is never
+    issued to a user-registered identity. -/
+def ammReserveActor : ActorId := 3
+
+/-! ### Reserved-actor disjointness (GP.7.1 + GP.11.5)
+
+The four reserved actors occupy distinct `ActorId` slots: `0`
+(`bridgeActor`), `1` (`gasPoolActor`), `2` (`sequencerActor`), `3`
+(`ammReserveActor`).  The pairwise-distinctness theorems are the
+foundation the GP.7.2 `gasPoolPolicy` and the GP.7.3 drain bound rest on
+— a pool whose only permitted recipient coincided with itself could not
+be drained, and a bridge actor whose L1-attestation authority overlapped
+the pool slot would conflate two distinct trust domains.  The
+`ammReserveActor` disjointness additionally guarantees the AMM-reserve
+ledger is a distinct accounting domain: an `ammSwap` reshuffles only the
+`ammReserveActor` slot, never the gas-pool or sequencer balances. -/
 
 /-- GP.7.1 — the gas-pool actor and the bridge actor occupy distinct
     `ActorId` slots (`1 ≠ 0`). -/
@@ -199,45 +240,61 @@ theorem sequencerActor_ne_bridgeActor : sequencerActor ≠ bridgeActor := by dec
     distinct from itself. -/
 theorem sequencerActor_ne_gasPoolActor : sequencerActor ≠ gasPoolActor := by decide
 
-/-! ### Reservation guarantee — `assign` never issues a reserved id (GP.7.1)
+/-- GP.11.5 — the AMM-reserve actor and the bridge actor occupy distinct
+    `ActorId` slots (`3 ≠ 0`). -/
+theorem ammReserveActor_ne_bridgeActor : ammReserveActor ≠ bridgeActor := by decide
 
-The disjointness theorems above establish that the three reserved
+/-- GP.11.5 — the AMM-reserve actor and the gas-pool actor occupy distinct
+    `ActorId` slots (`3 ≠ 1`).  Guarantees an `ammSwap` mutates a ledger
+    domain disjoint from the gas pool: the AMM reshuffle never touches
+    `gasPoolActor`'s balances. -/
+theorem ammReserveActor_ne_gasPoolActor : ammReserveActor ≠ gasPoolActor := by decide
+
+/-- GP.11.5 — the AMM-reserve actor and the sequencer actor occupy distinct
+    `ActorId` slots (`3 ≠ 2`). -/
+theorem ammReserveActor_ne_sequencerActor : ammReserveActor ≠ sequencerActor := by decide
+
+/-! ### Reservation guarantee — `assign` never issues a reserved id (GP.7.1 + GP.11.5)
+
+The disjointness theorems above establish that the four reserved
 `ActorId`s are *distinct*; the theorem below establishes the
 *operational* consequence the genesis advance buys.  Assigning a fresh
 Ethereum address into the genesis `AddressBook` issues
-`AddressBook.empty.nextActorId = 3`
+`AddressBook.empty.nextActorId = 4`
 (`AddressBook.addressBook_empty_nextActorId`), which is none of the
-three reserved actors — so no user-registered identity built by an
+four reserved actors — so no user-registered identity built by an
 `empty` + `assign` chain can ever collide with `bridgeActor`,
-`gasPoolActor`, or `sequencerActor`.  The single-step form below is the
-load-bearing fact; the chain-level promotion is a straightforward
-induction over `assign`'s monotone `nextActorId`
+`gasPoolActor`, `sequencerActor`, or `ammReserveActor`.  The single-step
+form below is the load-bearing fact; the chain-level promotion is a
+straightforward induction over `assign`'s monotone `nextActorId`
 (`AddressBook.assign_fresh_actorId_le`), deferred to the GP.7.x
 drain-bound track. -/
 
-/-- GP.7.1 — assigning a fresh Ethereum address into the genesis
+/-- GP.7.1 + GP.11.5 — assigning a fresh Ethereum address into the genesis
     `AddressBook` issues an `ActorId` distinct from every reserved slot
-    (`bridgeActor` = 0, `gasPoolActor` = 1, `sequencerActor` = 2).  This
-    is the operational reservation guarantee the genesis `nextActorId`
-    advance to `3` buys: the first user a fresh deployment registers is
-    `ActorId 3` (`AddressBook.addressBook_empty_nextActorId`), never a
-    reserved actor.  Proven by reducing `empty.assign` through its
-    fresh-address branch (`AddressBook.assign_eq_of_lookup_none`, since
-    the empty book maps no address) to `empty.nextActorId = 3` and
-    deciding the three inequalities `3 ≠ 0 / 1 / 2`. -/
+    (`bridgeActor` = 0, `gasPoolActor` = 1, `sequencerActor` = 2,
+    `ammReserveActor` = 3).  This is the operational reservation guarantee
+    the genesis `nextActorId` advance to `4` buys: the first user a fresh
+    deployment registers is `ActorId 4`
+    (`AddressBook.addressBook_empty_nextActorId`), never a reserved actor.
+    Proven by reducing `empty.assign` through its fresh-address branch
+    (`AddressBook.assign_eq_of_lookup_none`, since the empty book maps no
+    address) to `empty.nextActorId = 4` and deciding the four inequalities
+    `4 ≠ 0 / 1 / 2 / 3`. -/
 theorem empty_assign_id_avoids_reserved (addr : EthAddress) :
     (AddressBook.empty.assign addr).snd ≠ bridgeActor ∧
     (AddressBook.empty.assign addr).snd ≠ gasPoolActor ∧
-    (AddressBook.empty.assign addr).snd ≠ sequencerActor := by
+    (AddressBook.empty.assign addr).snd ≠ sequencerActor ∧
+    (AddressBook.empty.assign addr).snd ≠ ammReserveActor := by
   have hnone : AddressBook.empty.forward[addr]? = none :=
     Std.TreeMap.getElem?_emptyc
   -- The empty book maps no address, so `assign` takes its fresh-address
-  -- branch and returns `empty.nextActorId = 3` (independent of `addr`).
-  have hsnd : (AddressBook.empty.assign addr).snd = 3 := by
+  -- branch and returns `empty.nextActorId = 4` (independent of `addr`).
+  have hsnd : (AddressBook.empty.assign addr).snd = 4 := by
     rw [AddressBook.assign_eq_of_lookup_none AddressBook.empty addr hnone]
     rfl
   rw [hsnd]
-  refine ⟨?_, ?_, ?_⟩ <;> decide
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> decide
 
 /-! ## Bridge `AuthorityPolicy`
 
@@ -751,6 +808,8 @@ example : bridgeActor = (0 : ActorId) := rfl
 example : gasPoolActor = (1 : ActorId) := rfl
 
 example : sequencerActor = (2 : ActorId) := rfl
+
+example : ammReserveActor = (3 : ActorId) := rfl
 
 example : bridgePolicy.authorized 0 (.replaceKey 1 (⟨#[]⟩ : PublicKey)) := by
   unfold bridgePolicy bridgeAuthorizedAction

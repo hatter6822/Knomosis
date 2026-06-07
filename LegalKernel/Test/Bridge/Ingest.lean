@@ -91,15 +91,15 @@ def tests : List TestCase :=
             throw <| IO.userError "ingest unexpectedly returned none"
         | some ub =>
             assertEq (expected := bridgeActor) (actual := ub.signer) "signer"
-            assertEq (expected := (.registerIdentity 3 pk1 : Action))
+            assertEq (expected := (.registerIdentity 4 pk1 : Action))
               (actual := ub.action) "action"
             assertEq (expected := (0 : Nonce)) (actual := ub.nonce) "nonce"
-            assertEq (expected := (some (3 : ActorId)))
+            assertEq (expected := (some (4 : ActorId)))
               (actual := b'.lookup addr1) "book updated"
     }
   , { name := "ingest rotation: emits replaceKey"
     , body := do
-        -- Pre-register addr1 as actor 3 (the first non-reserved slot).
+        -- Pre-register addr1 as actor 4 (the first non-reserved slot).
         let (b1, _) := empty.assign addr1
         -- Now ingest a rotation event with a new pk.
         let (b2, maybeUb) := ingest b1 5 (.identityRegistered addr1 pk2 0 0)
@@ -108,7 +108,7 @@ def tests : List TestCase :=
             throw <| IO.userError "ingest unexpectedly returned none on rotation"
         | some ub =>
             assertEq (expected := bridgeActor) (actual := ub.signer) "signer"
-            assertEq (expected := (.replaceKey 3 pk2 : Action))
+            assertEq (expected := (.replaceKey 4 pk2 : Action))
               (actual := ub.action) "action"
             -- Book should be unchanged on rotation.
             assertEq (expected := b1.nextActorId) (actual := b2.nextActorId)
@@ -138,17 +138,17 @@ def tests : List TestCase :=
     { name := "ingest fresh registration: nextActorId increments"
     , body := do
         let (b1, _) := ingest empty 0 (.identityRegistered addr1 pk1 0 0)
-        assertEq (expected := (4 : ActorId)) (actual := b1.nextActorId)
+        assertEq (expected := (5 : ActorId)) (actual := b1.nextActorId)
           "nextActorId after one registration"
     }
   , { name := "ingest two fresh registrations: distinct ids"
     , body := do
         let (b1, _) := ingest empty 0 (.identityRegistered addr1 pk1 0 0)
         let (b2, _) := ingest b1 1 (.identityRegistered addr2 pk2 1 0)
-        assertEq (expected := (some (3 : ActorId))) (actual := b2.lookup addr1)
-          "addr1 → 3"
-        assertEq (expected := (some (4 : ActorId))) (actual := b2.lookup addr2)
-          "addr2 → 4"
+        assertEq (expected := (some (4 : ActorId))) (actual := b2.lookup addr1)
+          "addr1 → 4"
+        assertEq (expected := (some (5 : ActorId))) (actual := b2.lookup addr2)
+          "addr2 → 5"
     }
   , -- ## Locality
     { name := "ingest_preserves_lookup_for_other_addresses: addr2 unchanged after addr1 register"
@@ -271,12 +271,12 @@ def tests : List TestCase :=
         -- Both b₂ and b₂' have addr1 mapped (to some id, but possibly different ones).
         assert (b₂.lookup addr1 |>.isSome) "order1: addr1 mapped"
         assert (b₂'.lookup addr1 |>.isSome) "order2: addr1 mapped"
-        -- The ids might differ: order1 assigns addr1 first (id=3), order2 assigns
-        -- addr2 first (id=3) then addr1 second (id=4).
-        -- So order1: addr1 → 3, order2: addr1 → 4.
-        assertEq (expected := (some (3 : ActorId))) (actual := b₂.lookup addr1)
+        -- The ids might differ: order1 assigns addr1 first (id=4), order2 assigns
+        -- addr2 first (id=4) then addr1 second (id=5).
+        -- So order1: addr1 → 4, order2: addr1 → 5.
+        assertEq (expected := (some (4 : ActorId))) (actual := b₂.lookup addr1)
           "order1 id"
-        assertEq (expected := (some (4 : ActorId))) (actual := b₂'.lookup addr1)
+        assertEq (expected := (some (5 : ActorId))) (actual := b₂'.lookup addr1)
           "order2 id"
         -- Both have isSome = true, demonstrating the theorem.
     }
@@ -292,7 +292,7 @@ def tests : List TestCase :=
   , { name := "Value-level: ingest of identityRegistered preserves Consistent"
     , body := do
         let hFresh : empty.reverse[empty.nextActorId]? = none := by
-          show (∅ : Std.TreeMap ActorId EthAddress compare)[(3 : ActorId)]? = none
+          show (∅ : Std.TreeMap ActorId EthAddress compare)[(4 : ActorId)]? = none
           exact Std.TreeMap.getElem?_emptyc
         let e := L1Event.identityRegistered addr1 pk1 0 0
         let b' := (ingest empty 0 e).fst
@@ -300,10 +300,10 @@ def tests : List TestCase :=
           ingest_preserves_consistent empty 0 e empty_consistent hFresh
         let _ := h  -- API stability
         -- Verify the consistency at the value level:
-        -- After registering addr1, addr1 ↔ id 3 (first non-reserved slot).
-        assertEq (expected := (some (3 : ActorId))) (actual := b'.lookup addr1)
+        -- After registering addr1, addr1 ↔ id 4 (first non-reserved slot).
+        assertEq (expected := (some (4 : ActorId))) (actual := b'.lookup addr1)
           "lookup forward"
-        assertEq (expected := (some addr1)) (actual := b'.lookupRev 3)
+        assertEq (expected := (some addr1)) (actual := b'.lookupRev 4)
           "lookup reverse"
     }
   , -- ## L1Event DecidableEq (per plan)
@@ -351,8 +351,8 @@ def tests : List TestCase :=
             --    will insert into the registry).
             match ub.action with
             | .registerIdentity actor pk =>
-                assertEq (expected := (3 : ActorId)) (actual := actor)
-                  "fresh actor id is 3"
+                assertEq (expected := (4 : ActorId)) (actual := actor)
+                  "fresh actor id is 4"
                 assertEq (expected := pk1.size) (actual := pk.size)
                   "pk size matches"
             | _ =>

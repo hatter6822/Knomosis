@@ -860,8 +860,8 @@ mod tests {
         assert_eq!(recorded.len(), 1);
         match &recorded[0].unsigned.action {
             crate::action::Action::RegisterIdentity { actor, pk } => {
-                // Fresh registration is issued id 3 post-GP.7.1.
-                assert_eq!(*actor, 3);
+                // Fresh registration is issued id 4 post-GP.11.5.
+                assert_eq!(*actor, 4);
                 assert_eq!(pk.as_bytes(), &[0x02, 0xab, 0xcd]);
             }
             _ => panic!("expected RegisterIdentity"),
@@ -930,10 +930,10 @@ mod tests {
         assert_eq!(submitter_inner.len(), 1, "no duplicate submission");
         assert_eq!(watcher2.last_confirmed_block(), Some(0));
         // Address-book state survived the restart.  The
-        // `Submitted` record persisted the (addr, id=3)
-        // assignment (genesis start, post-GP.7.1); replay rebuilt it.
+        // `Submitted` record persisted the (addr, id=4)
+        // assignment (genesis start, post-GP.11.5); replay rebuilt it.
         let addr = EthAddress::from_bytes(&[0xaa; 20]).unwrap();
-        assert_eq!(watcher2.address_book().lookup(&addr), Some(3));
+        assert_eq!(watcher2.address_book().lookup(&addr), Some(4));
         // Nonce was bumped (the `RegisterIdentity` submission
         // bumped nonce from 0 to 1).
         assert_eq!(watcher2.next_nonce(), 1);
@@ -1205,9 +1205,9 @@ mod tests {
             assert_eq!(recorded.len(), 1);
             match &recorded[0].unsigned.action {
                 crate::action::Action::RegisterIdentity { actor, .. } => {
-                    // Fresh registration is issued id 3 post-GP.7.1.
+                    // Fresh registration is issued id 4 post-GP.11.5.
                     assert_eq!(
-                        *actor, 3,
+                        *actor, 4,
                         "retry must emit fresh RegisterIdentity, NOT ReplaceKey"
                     );
                 }
