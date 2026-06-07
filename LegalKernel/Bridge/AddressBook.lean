@@ -618,6 +618,35 @@ theorem assign_fresh_actorId_le
     exact hmod
   omega
 
+/-- `assign` never *decreases* `nextActorId` (Nat-projected, under
+    no-overflow), regardless of whether the address is fresh or already
+    known.  Generalises `assign_fresh_actorId_le` (which is the fresh-only
+    case): a *known* address leaves the book — and hence the counter —
+    unchanged, so the bound holds with equality; a *fresh* address bumps
+    the counter by one.  This is the monotonicity step the chain-level
+    reservation invariant (`Bridge.assign_preserves_reserved_invariant`)
+    rests on: a counter that never decreases and starts at the genesis
+    value `4` stays `≥ 4` across any `assign` sequence (within the
+    no-overflow regime). -/
+theorem assign_nextActorId_mono
+    (b : AddressBook) (addr : EthAddress)
+    (hNoOverflow : b.nextActorId.toNat + 1 < 2 ^ 64) :
+    b.nextActorId.toNat ≤ (b.assign addr).fst.nextActorId.toNat := by
+  cases hv : b.forward[addr]? with
+  | some id =>
+    -- Known address: `assign` returns `(b, id)`, so the counter is unchanged.
+    rw [assign_eq_of_lookup_some b addr id hv]
+    exact Nat.le_refl _
+  | none =>
+    -- Fresh address: the counter is bumped by one (no-overflow ⇒ no wrap).
+    rw [assign_eq_of_lookup_none b addr hv]
+    show b.nextActorId.toNat ≤ (b.nextActorId + 1).toNat
+    have hbump : (b.nextActorId + 1).toNat = b.nextActorId.toNat + 1 := by
+      rw [UInt64.toNat_add]
+      have h1 : (1 : UInt64).toNat = 1 := by decide
+      rw [h1, Nat.mod_eq_of_lt hNoOverflow]
+    omega
+
 /-- §12.7 #29 — assigning a known address is the identity: the
     book is returned unchanged and the existing id is returned. -/
 theorem assign_idempotent_for_known

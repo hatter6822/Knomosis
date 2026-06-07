@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "23ec048621e3478e899e55b0ec6337eaec062a105d0c0f8eefc3232aafbf5eac"
+    "source_digest": "8c3cc92fc96882cf55f9a5833bd0d67ad0ab9dba549f4ccb5b3ba5e9066f0371"
   },
   "summary": {
     "module_count": 297,
-    "declaration_count": 4918
+    "declaration_count": 4922
   },
   "modules": [
     {
@@ -5150,7 +5150,7 @@
     {
       "module": "LegalKernel.Bridge.AddressBook",
       "path": "LegalKernel/Bridge/AddressBook.lean",
-      "declaration_count": 31,
+      "declaration_count": 32,
       "declarations": [
         {
           "kind": "namespace",
@@ -5391,8 +5391,19 @@
         },
         {
           "kind": "theorem",
+          "name": "assign_nextActorId_mono",
+          "line": 630,
+          "called": [
+            "AddressBook",
+            "EthAddress",
+            "assign_eq_of_lookup_none",
+            "assign_eq_of_lookup_some"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "assign_idempotent_for_known",
-          "line": 622,
+          "line": 651,
           "called": [
             "ActorId",
             "AddressBook",
@@ -5403,7 +5414,7 @@
         {
           "kind": "theorem",
           "name": "assign_other_address_untouched",
-          "line": 638,
+          "line": 667,
           "called": [
             "AddressBook",
             "EthAddress",
@@ -5413,7 +5424,7 @@
         {
           "kind": "theorem",
           "name": "assign_other_id_untouched",
-          "line": 648,
+          "line": 677,
           "called": [
             "ActorId",
             "AddressBook",
@@ -6353,7 +6364,7 @@
     {
       "module": "LegalKernel.Bridge.BridgeActor",
       "path": "LegalKernel/Bridge/BridgeActor.lean",
-      "declaration_count": 41,
+      "declaration_count": 44,
       "declarations": [
         {
           "kind": "namespace",
@@ -6456,8 +6467,36 @@
         {
           "kind": "theorem",
           "name": "empty_assign_id_avoids_reserved",
-          "line": 283,
+          "line": 291,
           "called": [
+            "EthAddress",
+            "ammReserveActor",
+            "bridgeActor",
+            "gasPoolActor",
+            "sequencerActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "empty_nextActorId_ge_reserved",
+          "line": 333,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "assign_preserves_reserved_invariant",
+          "line": 347,
+          "called": [
+            "AddressBook",
+            "EthAddress"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "fresh_assign_avoids_reserved",
+          "line": 368,
+          "called": [
+            "AddressBook",
             "EthAddress",
             "ammReserveActor",
             "bridgeActor",
@@ -6468,7 +6507,7 @@
         {
           "kind": "def",
           "name": "bridgeAuthorizedAction",
-          "line": 327,
+          "line": 415,
           "called": [
             "Action",
             "ammSwap",
@@ -6490,7 +6529,7 @@
         {
           "kind": "def",
           "name": "bridgePolicy",
-          "line": 401,
+          "line": 489,
           "called": [
             "AuthorityPolicy",
             "bridgeActor",
@@ -6500,7 +6539,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_transfer",
-          "line": 413,
+          "line": 501,
           "called": [
             "ActorId",
             "Amount",
@@ -6516,7 +6555,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_mint",
-          "line": 422,
+          "line": 510,
           "called": [
             "ActorId",
             "Amount",
@@ -6530,7 +6569,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_burn",
-          "line": 431,
+          "line": 519,
           "called": [
             "ActorId",
             "Amount",
@@ -6544,7 +6583,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_freezeResource",
-          "line": 439,
+          "line": 527,
           "called": [
             "ResourceId",
             "bridgeActor",
@@ -6556,7 +6595,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_reward",
-          "line": 446,
+          "line": 534,
           "called": [
             "ActorId",
             "Amount",
@@ -6570,7 +6609,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_distributeOthers",
-          "line": 454,
+          "line": 542,
           "called": [
             "ActorId",
             "Amount",
@@ -6584,7 +6623,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_proportionalDilute",
-          "line": 462,
+          "line": 550,
           "called": [
             "ActorId",
             "Amount",
@@ -6598,7 +6637,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_dispute",
-          "line": 472,
+          "line": 560,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -6608,7 +6647,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_disputeWithdraw",
-          "line": 479,
+          "line": 567,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -6618,7 +6657,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_verdict",
-          "line": 488,
+          "line": 576,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -6628,7 +6667,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_rollback",
-          "line": 495,
+          "line": 583,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -6638,7 +6677,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_replaceKey",
-          "line": 506,
+          "line": 594,
           "called": [
             "ActorId",
             "PublicKey",
@@ -6650,7 +6689,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_registerIdentity",
-          "line": 515,
+          "line": 603,
           "called": [
             "ActorId",
             "PublicKey",
@@ -6662,7 +6701,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_deposit",
-          "line": 524,
+          "line": 612,
           "called": [
             "ActorId",
             "Amount",
@@ -6676,7 +6715,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_depositWithFee",
-          "line": 540,
+          "line": 628,
           "called": [
             "ActorId",
             "Amount",
@@ -6691,7 +6730,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_withdraw",
-          "line": 566,
+          "line": 654,
           "called": [
             "ActorId",
             "Amount",
@@ -6706,7 +6745,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_declareLocalPolicy",
-          "line": 581,
+          "line": 669,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -6716,7 +6755,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_revokeLocalPolicy",
-          "line": 590,
+          "line": 678,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -6726,7 +6765,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_faultProofChallenge",
-          "line": 600,
+          "line": 688,
           "called": [
             "bridgeActor",
             "bridgeAuthorizedAction",
@@ -6736,7 +6775,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_faultProofResolution",
-          "line": 612,
+          "line": 700,
           "called": [
             "ActorId",
             "bridgeActor",
@@ -6747,7 +6786,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_topUpActionBudget",
-          "line": 626,
+          "line": 714,
           "called": [
             "ActorId",
             "Amount",
@@ -6763,7 +6802,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_topUpActionBudgetFor",
-          "line": 642,
+          "line": 730,
           "called": [
             "ActorId",
             "Amount",
@@ -6779,7 +6818,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_non_bridge_signer",
-          "line": 662,
+          "line": 750,
           "called": [
             "Action",
             "ActorId",
@@ -6790,7 +6829,7 @@
         {
           "kind": "theorem",
           "name": "bridgeAuthorizedAction_eq_true_iff",
-          "line": 732,
+          "line": 820,
           "called": [
             "Action",
             "ammSwap",
@@ -6803,7 +6842,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_authorizes_all_bridge_actions",
-          "line": 751,
+          "line": 839,
           "called": [
             "ammSwap",
             "bridgeActor",
@@ -6819,7 +6858,7 @@
         {
           "kind": "theorem",
           "name": "bridgePolicy_rejects_non_bridgeable",
-          "line": 782,
+          "line": 870,
           "called": [
             "Action",
             "ActorId",
@@ -32123,6 +32162,7 @@
           "called": [
             "Action",
             "ActorId",
+            "AddressBook",
             "Amount",
             "BridgeActorTests",
             "BridgeAdmissibleWith",
@@ -32142,6 +32182,7 @@
             "apply_bridge_admissible_with",
             "assert",
             "assertEq",
+            "assign_preserves_reserved_invariant",
             "bridgeActor",
             "bridgeAuthorizedAction",
             "bridgeAuthorizedAction_eq_true_iff",
@@ -32171,8 +32212,11 @@
             "depositWithFee",
             "distributeOthers",
             "empty_assign_id_avoids_reserved",
+            "empty_nextActorId_ge_reserved",
             "es",
+            "ethAddressBound",
             "freezeResource",
+            "fresh_assign_avoids_reserved",
             "gasPoolActor",
             "gasPoolActor_ne_bridgeActor",
             "genesisState",

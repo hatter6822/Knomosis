@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "654e5d4fd34912a9afd341aaa889f0d45e021944a7b7bb0c4999a3d29daa5aea"
+    "source_digest": "c9abc2c1870ce8e04db5feaef58e8140616e6791ee4786dbad87d3a9e76510f4"
   },
   "summary": {
     "module_count": 136,
-    "declaration_count": 4577
+    "declaration_count": 4578
   },
   "modules": [
     {
@@ -37833,7 +37833,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::address_book",
       "path": "runtime/knomosis-l1-ingest/src/address_book.rs",
-      "declaration_count": 34,
+      "declaration_count": 35,
       "declarations": [
         {
           "kind": "struct",
@@ -38098,10 +38098,9 @@
         },
         {
           "kind": "fn",
-          "name": "reserved_actor_ids_are_never_issued",
-          "line": 327,
+          "name": "gas_pool_and_sequencer_ids_are_reserved",
+          "line": 329,
           "called": [
-            "AMM_RESERVE_ACTOR_ID",
             "BRIDGE_ACTOR_ID",
             "GAS_POOL_ACTOR_ID",
             "INITIAL_NEXT_ACTOR_ID",
@@ -38117,7 +38116,7 @@
         {
           "kind": "fn",
           "name": "amm_reserve_id_is_reserved",
-          "line": 373,
+          "line": 368,
           "called": [
             "AMM_RESERVE_ACTOR_ID",
             "BRIDGE_ACTOR_ID",
@@ -38133,8 +38132,25 @@
         },
         {
           "kind": "fn",
-          "name": "assign_preserves_other_addresses",
+          "name": "assign_chain_never_issues_reserved_id",
           "line": 393,
+          "called": [
+            "AMM_RESERVE_ACTOR_ID",
+            "BRIDGE_ACTOR_ID",
+            "GAS_POOL_ACTOR_ID",
+            "INITIAL_NEXT_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "addr",
+            "assign",
+            "id",
+            "lookup_reverse",
+            "next_actor_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "assign_preserves_other_addresses",
+          "line": 432,
           "called": [
             "_",
             "assign",
@@ -38145,7 +38161,7 @@
         {
           "kind": "fn",
           "name": "try_assign_rejects_overflow",
-          "line": 413,
+          "line": 452,
           "called": [
             "Err",
             "addr",
@@ -38158,7 +38174,7 @@
         {
           "kind": "fn",
           "name": "assign_panics_on_overflow",
-          "line": 440,
+          "line": 479,
           "called": [
             "_",
             "addr",
@@ -38169,7 +38185,7 @@
         {
           "kind": "fn",
           "name": "try_assign_failure_does_not_corrupt_book",
-          "line": 451,
+          "line": 490,
           "called": [
             "_",
             "assign",
@@ -38183,7 +38199,7 @@
         {
           "kind": "fn",
           "name": "unsafe_inject_counter",
-          "line": 482,
+          "line": 521,
           "called": [
             "ActorId",
             "AddressBook",

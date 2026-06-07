@@ -429,9 +429,14 @@ Reasonable.
   convention: `AddressBook.empty.nextActorId = 1` (at audit time), so
   assigned ids never collide.  *(Update — Workstream GP.7.1 advanced
   the genesis `nextActorId` to `3`, additionally reserving `ActorId 1`
-  / `2` for `gasPoolActor` / `sequencerActor`; the same collision-free
-  property holds, now pinned by `addressBook_empty_nextActorId` and
-  `empty_assign_id_avoids_reserved`.  Line numbers in this audit are
+  / `2` for `gasPoolActor` / `sequencerActor`; Workstream GP.11.5
+  advanced it a further step to `4`, additionally reserving `ActorId 3`
+  for `ammReserveActor`.  The same collision-free property holds, now
+  pinned by `addressBook_empty_nextActorId` (= 4) and
+  `empty_assign_id_avoids_reserved`, and promoted to the whole
+  `empty`+`assign` chain by the invariant decomposition
+  `empty_nextActorId_ge_reserved` / `assign_preserves_reserved_invariant`
+  / `fresh_assign_avoids_reserved`.  Line numbers in this audit are
   pre-GP and have since drifted.)*
 * `bridgeAuthorizedAction` (line 119) — explicit allowlist:
     * `replaceKey` → `true`

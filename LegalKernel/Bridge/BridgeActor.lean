@@ -264,11 +264,19 @@ Ethereum address into the genesis `AddressBook` issues
 (`AddressBook.addressBook_empty_nextActorId`), which is none of the
 four reserved actors — so no user-registered identity built by an
 `empty` + `assign` chain can ever collide with `bridgeActor`,
-`gasPoolActor`, `sequencerActor`, or `ammReserveActor`.  The single-step
-form below is the load-bearing fact; the chain-level promotion is a
-straightforward induction over `assign`'s monotone `nextActorId`
-(`AddressBook.assign_fresh_actorId_le`), deferred to the GP.7.x
-drain-bound track. -/
+`gasPoolActor`, `sequencerActor`, or `ammReserveActor`.
+
+The single-step `empty_assign_id_avoids_reserved` below is the headline
+fact for a fresh deployment; the **chain-level promotion** to an arbitrary
+`empty` + `assign` + … chain is provided by the invariant decomposition
+that follows it (`empty_nextActorId_ge_reserved` +
+`assign_preserves_reserved_invariant` + `fresh_assign_avoids_reserved`).
+That decomposition is the idiomatic Knomosis form — established at genesis,
+preserved by each step, and implying the safety property — exactly mirroring
+the kernel's own `invariant_preservation`: the reservation lower bound
+`4 ≤ nextActorId.toNat` holds at `empty` and is preserved by every `assign`
+(within the no-overflow regime), so every fresh registration in any reachable
+book issues an id `≥ 4`, distinct from all four reserved slots. -/
 
 /-- GP.7.1 + GP.11.5 — assigning a fresh Ethereum address into the genesis
     `AddressBook` issues an `ActorId` distinct from every reserved slot
@@ -295,6 +303,86 @@ theorem empty_assign_id_avoids_reserved (addr : EthAddress) :
     rfl
   rw [hsnd]
   refine ⟨?_, ?_, ?_, ?_⟩ <;> decide
+
+/-! ### Chain-level reservation guarantee (GP.7.1 + GP.11.5)
+
+`empty_assign_id_avoids_reserved` covers only the *first* assignment into a
+fresh book.  The three theorems below promote it to an arbitrary
+`empty` + `assign` chain via the standard invariant decomposition — the
+reservation lower bound `4 ≤ nextActorId.toNat`:
+
+  1. `empty_nextActorId_ge_reserved` — the invariant holds at genesis.
+  2. `assign_preserves_reserved_invariant` — every `assign` preserves it
+     (within the no-overflow regime, exactly as `assign_fresh_actorId_le`
+     requires; at the UInt64 wraparound boundary the counter would wrap to
+     `0`, a reserved slot, which the Rust adaptor's `try_assign` overflow
+     guard rejects).
+  3. `fresh_assign_avoids_reserved` — under the invariant, any fresh
+     registration issues an id distinct from all four reserved slots.
+
+Composed by induction over a chain, (1) + (2) give `4 ≤ nextActorId.toNat`
+in every reachable book, and (3) then gives that no fresh registration in
+that chain can collide with a reserved actor — the complete reservation
+guarantee, not just the single-step one. -/
+
+/-- GP.7.1 + GP.11.5 — the genesis book satisfies the reservation lower
+    bound: `4 ≤ AddressBook.empty.nextActorId.toNat`.  Every reserved slot
+    (`bridgeActor` 0 / `gasPoolActor` 1 / `sequencerActor` 2 /
+    `ammReserveActor` 3) has `toNat < 4`, so the bound says the genesis
+    counter sits strictly above all of them.  The base case of the
+    chain-level reservation induction. -/
+theorem empty_nextActorId_ge_reserved :
+    4 ≤ AddressBook.empty.nextActorId.toNat := by
+  rw [AddressBook.addressBook_empty_nextActorId]
+  decide
+
+/-- GP.7.1 + GP.11.5 — the reservation lower bound `4 ≤ nextActorId.toNat`
+    is preserved by `assign` (within the no-overflow regime).  The inductive
+    step of the chain-level reservation guarantee: composed with the genesis
+    base case (`empty_nextActorId_ge_reserved`), it gives `4 ≤
+    nextActorId.toNat` in every book reachable from `empty` via `assign`.
+
+    Rests on `AddressBook.assign_nextActorId_mono` (the counter never
+    decreases): the post-`assign` counter is `≥` the pre-`assign` counter,
+    which is `≥ 4` by hypothesis. -/
+theorem assign_preserves_reserved_invariant
+    (b : AddressBook) (addr : EthAddress)
+    (hInv : 4 ≤ b.nextActorId.toNat)
+    (hNoOverflow : b.nextActorId.toNat + 1 < 2 ^ 64) :
+    4 ≤ (b.assign addr).fst.nextActorId.toNat :=
+  Nat.le_trans hInv (AddressBook.assign_nextActorId_mono b addr hNoOverflow)
+
+/-- GP.7.1 + GP.11.5 — the chain-level reservation safety property: under the
+    reservation invariant `4 ≤ b.nextActorId.toNat`, assigning a **fresh**
+    address into *any* book `b` (not only `empty`) issues an `ActorId`
+    distinct from every reserved slot (`bridgeActor` 0 / `gasPoolActor` 1 /
+    `sequencerActor` 2 / `ammReserveActor` 3).
+
+    This generalises `empty_assign_id_avoids_reserved` from the genesis book
+    to any reachable book: a fresh `assign` issues exactly `b.nextActorId`
+    (`AddressBook.assign_eq_of_lookup_none`), and the invariant forces that
+    `≥ 4`, hence above the `toNat < 4` of every reserved actor.  Combined with
+    `empty_nextActorId_ge_reserved` + `assign_preserves_reserved_invariant`
+    (which maintain the invariant across the whole chain), this closes the
+    chain-level reservation guarantee: no user-registered identity in any
+    `empty` + `assign` chain can ever be issued a reserved slot. -/
+theorem fresh_assign_avoids_reserved
+    (b : AddressBook) (addr : EthAddress)
+    (hInv : 4 ≤ b.nextActorId.toNat) (hFresh : b.lookup addr = none) :
+    (b.assign addr).snd ≠ bridgeActor ∧
+    (b.assign addr).snd ≠ gasPoolActor ∧
+    (b.assign addr).snd ≠ sequencerActor ∧
+    (b.assign addr).snd ≠ ammReserveActor := by
+  -- A fresh `assign` issues exactly `b.nextActorId`.
+  have hsnd : (b.assign addr).snd = b.nextActorId :=
+    congrArg Prod.snd (AddressBook.assign_eq_of_lookup_none b addr hFresh)
+  -- The issued id therefore inherits the `≥ 4` lower bound.
+  have hge : 4 ≤ (b.assign addr).snd.toNat := by rw [hsnd]; exact hInv
+  -- Each reserved actor has `toNat < 4`, so the issued id differs from it.
+  refine ⟨?_, ?_, ?_, ?_⟩ <;>
+    · intro h
+      rw [h] at hge
+      exact absurd hge (by decide)
 
 /-! ## Bridge `AuthorityPolicy`
 

@@ -7663,10 +7663,22 @@ sub-WU table above is the implementation roadmap.
       `addressBook_empty_nextActorId_v1_3` name carries a version marker
       forbidden by the naming discipline / `naming_audit`).  The worked
       `Deployments/Examples/GasPoolExample.lean`'s demo `userActor`
-      advances 3 → 4 (the former first-user slot is now reserved).  All
-      five touched theorems' axioms ⊆ the canonical `{propext,
-      Classical.choice, Quot.sound}`; the three disjointness theorems
-      depend on no axioms.
+      advances 3 → 4 (the former first-user slot is now reserved).
+    * **Chain-level reservation guarantee** (closing the single-step
+      limitation `empty_assign_id_avoids_reserved` left as "deferred"):
+      the idiomatic invariant decomposition `empty_nextActorId_ge_reserved`
+      (genesis base case `4 ≤ nextActorId.toNat`) +
+      `assign_preserves_reserved_invariant` (per-step preservation under
+      no-overflow, on the new general `AddressBook.assign_nextActorId_mono`
+      monotonicity lemma) + `fresh_assign_avoids_reserved` (the safety
+      payoff for a fresh `assign` into *any* invariant-respecting book,
+      not only `empty`).  Composed by induction these prove no
+      user-registered identity in any `empty` + `assign` chain is ever
+      issued a reserved slot — the complete guarantee, mirroring the
+      kernel's established-at-genesis / preserved-by-step / implies-safety
+      `invariant_preservation` form.  All touched theorems' axioms ⊆ the
+      canonical `{propext, Classical.choice, Quot.sound}`; the three
+      disjointness theorems depend on no axioms.
     * **Rust lockstep** (`runtime/knomosis-l1-ingest`, pulled forward
       from GP.10 exactly as the GP.7.1 reservation was): the production
       adaptor's `AddressBook::INITIAL_NEXT_ACTOR_ID` becomes `4` with a
@@ -7684,13 +7696,18 @@ sub-WU table above is the implementation roadmap.
       and the `l1_ingest.cxsf` cross-stack corpus + the `address_book` /
       `state` / `translation` / `watcher` / integration tests are rebased
       onto the genesis-4 allocation.
-    * **Tests.**  `bridge-actor` suite 71 → 76 (the `ammReserveActor = 3`
+    * **Tests.**  `bridge-actor` suite 71 → 82 (the `ammReserveActor = 3`
       value, the three disjointness theorems' value-level + term-level
-      API, and the four-slot reservation-guarantee cases); the
-      `bridge-address-book` / `bridge-ingest` Lean value fixtures and
-      every Rust test are rebased onto genesis-4.  Full `lake build` +
-      `lake test` + the five audit gates green; full `cargo test
-      --workspace` + `clippy -D warnings` + `fmt` green.  This is the
+      API, the four-slot reservation-guarantee cases, and the chain-level
+      guarantee cases — genesis base, per-step, fresh-assign-on-a-non-empty-book,
+      a 3-assign-chain value witness, and term-level API for every new
+      theorem); the Rust `assign_chain_never_issues_reserved_id` adds the
+      value-level mirror of the chain guarantee; the `bridge-address-book`
+      / `bridge-ingest` Lean value fixtures and every Rust test are rebased
+      onto genesis-4.  Released as the **minor** bump `0.4.x → 0.5.0` (new
+      public API + the slot-3 migration is backward-incompatible).  Full
+      `lake build` + `lake test` + the five audit gates green; full `cargo
+      test --workspace` + `clippy -D warnings` + `fmt` green.  This is the
       *fresh-genesis* half; the orthogonal migration of *existing*
       deployments that already allocated a user in slot 3 remains Phase
       GP.10.4.
@@ -7730,6 +7747,16 @@ sub-WU table above is the implementation roadmap.
   * **Estimated effort.**  ~2 hours.
 
 #### WU GP.11.6: `ammReserveActor` local policy
+
+  > **Index note (stale sketch — correct before implementing).**  This
+  > sketch predates GP.9.1, which inserted `claimBudgetRefund` at frozen
+  > `Action` index 22, pushing `ammSwap` to index **23**.  The deny-list
+  > below (`List.range 23 |>.filter (· ≠ 22)`) and the "`ammSwap` (= 22)"
+  > prose are therefore off by one against the shipped inductive.  The
+  > implemented policy must use `List.range 24 |>.filter (· ≠ 23)` (deny
+  > tags `[0..22]`, permit `ammSwap` = 23), matching `gasPoolDeniedTags`'s
+  > current `List.range 24` bound and `Action.tag_lt_denyListBound`.  Do
+  > NOT copy the literal `22` below.
 
   * **Goal.**  Constrain `ammReserveActor`'s outflow via a
     `LocalPolicy` declaration: it can only be mutated by

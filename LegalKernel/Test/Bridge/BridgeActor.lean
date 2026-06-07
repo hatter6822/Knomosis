@@ -843,6 +843,86 @@ def tests : List TestCase :=
         let _f : ammReserveActor ≠ sequencerActor := ammReserveActor_ne_sequencerActor
         pure ()
     }
+    -- ## GP.7.1+GP.11.5 — chain-level reservation guarantee.
+    -- `empty_assign_id_avoids_reserved` covers only the first assignment;
+    -- these cases exercise the invariant decomposition that promotes it to
+    -- an arbitrary `empty` + `assign` chain: genesis base case, per-step
+    -- preservation, and the fresh-assign safety property on a non-empty book.
+  , { name := "GP.11.5 chain: empty_nextActorId_ge_reserved (genesis base case)"
+    , body := do
+        -- The genesis book satisfies the reservation lower bound 4 ≤ nextActorId.
+        assert (decide (4 ≤ AddressBook.empty.nextActorId.toNat))
+          "genesis nextActorId.toNat ≥ 4"
+        let _f : 4 ≤ AddressBook.empty.nextActorId.toNat :=
+          empty_nextActorId_ge_reserved
+        pure ()
+    }
+  , { name := "GP.11.5 chain: fresh_assign_avoids_reserved on a NON-empty book"
+    , body := do
+        -- Build a non-empty book (one user assigned id 4), then assign a
+        -- second fresh address.  The fresh-assign safety theorem (applied
+        -- to a book that is NOT `empty`) guarantees the issued id avoids
+        -- every reserved slot — the generalisation `empty_assign_id_avoids_reserved`
+        -- alone does not give.
+        let addrA : EthAddress := ⟨10, by unfold ethAddressBound; decide⟩
+        let addrB : EthAddress := ⟨11, by unfold ethAddressBound; decide⟩
+        let b1 := (AddressBook.empty.assign addrA).fst
+        -- b1.nextActorId = 5 ≥ 4, and addrB is fresh in b1.
+        let id := (b1.assign addrB).snd
+        assertEq (expected := (5 : ActorId)) (actual := id) "second fresh id is 5"
+        assert (decide (id ≠ bridgeActor)) "id ≠ bridgeActor"
+        assert (decide (id ≠ gasPoolActor)) "id ≠ gasPoolActor"
+        assert (decide (id ≠ sequencerActor)) "id ≠ sequencerActor"
+        assert (decide (id ≠ ammReserveActor)) "id ≠ ammReserveActor"
+    }
+  , { name := "GP.11.5 chain: 3-assign chain never issues a reserved slot"
+    , body := do
+        -- Drive a concrete chain and check every issued id avoids the four
+        -- reserved slots — the value-level witness of the inductive guarantee.
+        let addrs : List EthAddress :=
+          [ ⟨20, by unfold ethAddressBound; decide⟩
+          , ⟨21, by unfold ethAddressBound; decide⟩
+          , ⟨22, by unfold ethAddressBound; decide⟩ ]
+        let mut book := AddressBook.empty
+        for a in addrs do
+          let (book', id) := book.assign a
+          assert (decide (4 ≤ id.toNat)) "issued id.toNat ≥ 4"
+          assert (decide (id ≠ bridgeActor ∧ id ≠ gasPoolActor ∧
+                          id ≠ sequencerActor ∧ id ≠ ammReserveActor))
+            "issued id avoids every reserved slot"
+          book := book'
+        -- After three fresh assigns the counter has advanced 4 → 7.
+        assertEq (expected := (7 : ActorId)) (actual := book.nextActorId)
+          "nextActorId after three assigns"
+    }
+  , { name := "GP.11.5 chain: assign_nextActorId_mono term-level API"
+    , body := do
+        let _f : (b : AddressBook) → (addr : EthAddress) →
+                 b.nextActorId.toNat + 1 < 2 ^ 64 →
+                 b.nextActorId.toNat ≤ (b.assign addr).fst.nextActorId.toNat :=
+          AddressBook.assign_nextActorId_mono
+        pure ()
+    }
+  , { name := "GP.11.5 chain: assign_preserves_reserved_invariant term-level API"
+    , body := do
+        let _f : (b : AddressBook) → (addr : EthAddress) →
+                 4 ≤ b.nextActorId.toNat →
+                 b.nextActorId.toNat + 1 < 2 ^ 64 →
+                 4 ≤ (b.assign addr).fst.nextActorId.toNat :=
+          assign_preserves_reserved_invariant
+        pure ()
+    }
+  , { name := "GP.11.5 chain: fresh_assign_avoids_reserved term-level API"
+    , body := do
+        let _f : (b : AddressBook) → (addr : EthAddress) →
+                 4 ≤ b.nextActorId.toNat → b.lookup addr = none →
+                 (b.assign addr).snd ≠ bridgeActor ∧
+                 (b.assign addr).snd ≠ gasPoolActor ∧
+                 (b.assign addr).snd ≠ sequencerActor ∧
+                 (b.assign addr).snd ≠ ammReserveActor :=
+          fresh_assign_avoids_reserved
+        pure ()
+    }
   ]
 
 end BridgeActorTests

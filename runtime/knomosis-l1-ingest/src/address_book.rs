@@ -316,30 +316,28 @@ mod tests {
         );
     }
 
-    /// GP.7.1 + GP.11.5 — `GAS_POOL_ACTOR_ID` (1), `SEQUENCER_ACTOR_ID`
-    /// (2), and `AMM_RESERVE_ACTOR_ID` (3) are reserved alongside the
-    /// bridge actor (0) and are never issued by `assign`.  Mirrors
-    /// Lean's `gasPoolActor` / `sequencerActor` / `ammReserveActor`
-    /// reservation and the `empty_assign_id_avoids_reserved` theorem:
-    /// a fresh registration is issued `INITIAL_NEXT_ACTOR_ID` (4),
-    /// distinct from every reserved slot, and no reserved slot appears
-    /// in the reverse map.
+    /// GP.7.1 — `GAS_POOL_ACTOR_ID` (1) and `SEQUENCER_ACTOR_ID` (2)
+    /// are reserved alongside the bridge actor (0) and are never
+    /// issued by `assign`.  Mirrors Lean's `gasPoolActor` /
+    /// `sequencerActor` reservation and the
+    /// `empty_assign_id_avoids_reserved` theorem: a fresh registration
+    /// is issued `INITIAL_NEXT_ACTOR_ID` (4 post-GP.11.5), distinct from
+    /// every reserved slot, and no reserved slot appears in the reverse
+    /// map.  The GP.11.5 `AMM_RESERVE_ACTOR_ID` (3) slot has its own
+    /// dedicated coverage in `amm_reserve_id_is_reserved` + the
+    /// chain-level `assign_chain_never_issues_reserved_id`.
     #[test]
-    fn reserved_actor_ids_are_never_issued() {
-        // The four reserved constants match the Lean ActorIds and are
+    fn gas_pool_and_sequencer_ids_are_reserved() {
+        // The three reserved constants match the Lean ActorIds and are
         // pairwise distinct.
         assert_eq!(BRIDGE_ACTOR_ID, 0);
         assert_eq!(GAS_POOL_ACTOR_ID, 1);
         assert_eq!(SEQUENCER_ACTOR_ID, 2);
-        assert_eq!(AMM_RESERVE_ACTOR_ID, 3);
         assert_ne!(GAS_POOL_ACTOR_ID, BRIDGE_ACTOR_ID);
         assert_ne!(SEQUENCER_ACTOR_ID, BRIDGE_ACTOR_ID);
         assert_ne!(SEQUENCER_ACTOR_ID, GAS_POOL_ACTOR_ID);
-        assert_ne!(AMM_RESERVE_ACTOR_ID, BRIDGE_ACTOR_ID);
-        assert_ne!(AMM_RESERVE_ACTOR_ID, GAS_POOL_ACTOR_ID);
-        assert_ne!(AMM_RESERVE_ACTOR_ID, SEQUENCER_ACTOR_ID);
-        // A fresh registration is issued id 4, distinct from all four
-        // reserved slots, and never populates a reserved slot.
+        // A fresh registration is issued id 4 (post-GP.11.5), distinct
+        // from these reserved slots, and never populates a reserved slot.
         let mut book = AddressBook::new();
         // Every reserved slot is strictly below the first issuable id.
         // (Compare against the runtime `next_actor_id()` so the bound is
@@ -348,18 +346,15 @@ mod tests {
         assert!(BRIDGE_ACTOR_ID < genesis);
         assert!(GAS_POOL_ACTOR_ID < genesis);
         assert!(SEQUENCER_ACTOR_ID < genesis);
-        assert!(AMM_RESERVE_ACTOR_ID < genesis);
         let addr = EthAddress::from_bytes(&[0xau8; 20]).unwrap();
         let (id, _) = book.assign(&addr);
         assert_eq!(id, INITIAL_NEXT_ACTOR_ID);
         assert_ne!(id, BRIDGE_ACTOR_ID);
         assert_ne!(id, GAS_POOL_ACTOR_ID);
         assert_ne!(id, SEQUENCER_ACTOR_ID);
-        assert_ne!(id, AMM_RESERVE_ACTOR_ID);
         assert!(book.lookup_reverse(BRIDGE_ACTOR_ID).is_none());
         assert!(book.lookup_reverse(GAS_POOL_ACTOR_ID).is_none());
         assert!(book.lookup_reverse(SEQUENCER_ACTOR_ID).is_none());
-        assert!(book.lookup_reverse(AMM_RESERVE_ACTOR_ID).is_none());
     }
 
     /// GP.11.5 — `AMM_RESERVE_ACTOR_ID` (3) is reserved for the L2
@@ -385,6 +380,50 @@ mod tests {
         let (id, _) = book.assign(&addr);
         assert_ne!(id, AMM_RESERVE_ACTOR_ID);
         assert!(book.lookup_reverse(AMM_RESERVE_ACTOR_ID).is_none());
+    }
+
+    /// GP.7.1 + GP.11.5 chain-level guarantee — a whole *sequence* of
+    /// fresh `assign`s never issues a reserved id (0/1/2/3).  This is the
+    /// value-level mirror of Lean's invariant decomposition (the
+    /// `empty_nextActorId_ge_reserved`, `assign_preserves_reserved_invariant`,
+    /// and `fresh_assign_avoids_reserved` theorems): the genesis counter
+    /// starts at 4 and `assign` only ever advances it, so every id issued
+    /// across the chain is at or above `INITIAL_NEXT_ACTOR_ID` and therefore
+    /// distinct from every reserved slot.
+    #[test]
+    fn assign_chain_never_issues_reserved_id() {
+        let reserved = [
+            BRIDGE_ACTOR_ID,
+            GAS_POOL_ACTOR_ID,
+            SEQUENCER_ACTOR_ID,
+            AMM_RESERVE_ACTOR_ID,
+        ];
+        let mut book = AddressBook::new();
+        let mut prev_next = book.next_actor_id();
+        // Drive 64 distinct fresh registrations.
+        for i in 0..64u8 {
+            let addr = EthAddress::from_bytes(&[i.wrapping_add(1); 20]).unwrap();
+            let (id, is_new) = book.assign(&addr);
+            assert!(is_new, "each distinct address is a fresh assignment");
+            // The issued id is at or above the genesis floor ...
+            assert!(
+                id >= INITIAL_NEXT_ACTOR_ID,
+                "issued id {id} is below the genesis floor {INITIAL_NEXT_ACTOR_ID}"
+            );
+            // ... hence distinct from every reserved slot.
+            assert!(!reserved.contains(&id), "chain issued a reserved id {id}");
+            // The counter is monotone non-decreasing (the invariant-preservation
+            // step) and a fresh assign advances it by exactly one.
+            assert_eq!(book.next_actor_id(), prev_next + 1);
+            prev_next = book.next_actor_id();
+        }
+        // No reserved slot was ever populated in the reverse map.
+        for r in reserved {
+            assert!(
+                book.lookup_reverse(r).is_none(),
+                "reserved slot {r} must never appear in the reverse map"
+            );
+        }
     }
 
     /// Inserts at non-overlapping addresses preserve previously-

@@ -763,7 +763,7 @@ Selected headline theorems by tier:
 | E-B   | Bridge actor policy authorises only registry actions | `bridgePolicy_*` family | `Bridge/BridgeActor.lean`             |
 | GP.7.0 | Bridge actor signs EXACTLY the four L1-attested actions (exhaustive characterisation; forcing function for future constructors) | `bridgeAuthorizedAction_eq_true_iff`, `bridgePolicy_authorizes_all_bridge_actions`, `bridgePolicy_rejects_non_bridgeable` | `Bridge/BridgeActor.lean` |
 | GP.7.1 | Reserved gas-pool actors are pairwise distinct; genesis `nextActorId` advances (to 4, post-GP.11.5) so `assign` never issues a reserved slot (Rust adaptor mirrors the genesis) | `gasPoolActor_ne_bridgeActor`, `sequencerActor_ne_bridgeActor`, `sequencerActor_ne_gasPoolActor`, `AddressBook.addressBook_empty_nextActorId`, `empty_assign_id_avoids_reserved` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
-| GP.11.5 | The AMM-reserve actor (`ActorId 3`, L2 reflection of the L1 AMM reserves) is reserved and pairwise-distinct from the three GP.7.1 actors; the genesis `nextActorId` advances 3 → 4 so `assign` never issues it (Rust adaptor mirrors the genesis) | `ammReserveActor_ne_bridgeActor`, `ammReserveActor_ne_gasPoolActor`, `ammReserveActor_ne_sequencerActor`, `AddressBook.addressBook_empty_nextActorId` (= 4) | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
+| GP.11.5 | The AMM-reserve actor (`ActorId 3`, L2 reflection of the L1 AMM reserves) is reserved and pairwise-distinct from the three GP.7.1 actors; the genesis `nextActorId` advances 3 → 4 so `assign` never issues it (Rust adaptor mirrors the genesis); chain-level: every fresh registration in any `empty`+`assign` chain avoids all four reserved slots (genesis base + per-step preservation + fresh-assign safety) | `ammReserveActor_ne_bridgeActor`, `ammReserveActor_ne_gasPoolActor`, `ammReserveActor_ne_sequencerActor`, `AddressBook.addressBook_empty_nextActorId` (= 4), `empty_nextActorId_ge_reserved`, `assign_preserves_reserved_invariant`, `fresh_assign_avoids_reserved`, `AddressBook.assign_nextActorId_mono` | `Bridge/BridgeActor.lean`, `Bridge/AddressBook.lean` |
 | GP.7.2 | Gas-pool outflow is a capped sequencer-only `transfer` of the pool's OWN funds (`sender = gasPoolActor`); the policy permits EXACTLY that set, is silent off the two gas legs, and the LP.7 meta-action exemption + the sender-debit drain vector are closed by a complementary `AuthorityPolicy` | `gasPoolPolicy_denies_all_non_transfer`, `gasPoolPolicy_permits_transfer_iff`, `gasPoolPolicy_admission_permits_meta_actions`, `gasPoolAuthorityPolicy_rejects_meta`, `gasPoolAuthorityPolicy_rejects_non_pool_sender`, `gasPoolAuthorityPolicy_intersect_rejects_meta` | `Bridge/GasPoolPolicy.lean` |
 | GP.7.3 | Per-epoch pool drain is bounded **per-resource**: across any contiguous trace of `n` admitted SignedActions respecting the gas-pool discipline, `gasPoolActor`'s leg-`rLeg` balance cannot have decreased by more than `n × legCap mEth mBold rLeg` (inductive promotion of the GP.7.2 per-action cap; rests on `gasPoolAuthorityPolicy`, the sender-blind `LocalPolicy` being insufficient; the non-pool obligation is discharged exhaustively over every `Action`; the literal executable fold ships as `applyTrace`; the per-step bound lifts onto the budget-gated runtime entry) | `pool_drain_bounded_by_action_count_per_resource`, `pool_drain_bounded_by_action_count{,_bold}`, `pool_balance_lower_bound_via_trace`, `pool_nondecreasing_of_does_not_debit`, `per_resource_pool_independence`, `applyTrace_drain_bounded_per_resource`, `pool_signed_step_drain_le_budget` | `Bridge/PoolDrainBound.lean` |
 | E-C   | Deposit / withdraw replay impossible  | `deposit_replay_blocked_by_consumed`, `withdraw_bumps_nextWdId` | `Bridge/Admissible.lean` |
@@ -964,11 +964,15 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 874 tests across 146 suites (the GP.11.5
-`ammReserveActor` reservation grows the `bridge-actor` suite 71 → 76 —
+**Test count.**  ~2 880 tests across 146 suites (the GP.11.5
+`ammReserveActor` reservation grows the `bridge-actor` suite 71 → 82 —
 the `ammReserveActor = 3` value, the three disjointness theorems'
-value-level + term-level API, and the four-slot reservation-guarantee
-cases; the `bridge-address-book` / `bridge-ingest` value fixtures are
+value-level + term-level API, the four-slot reservation-guarantee
+cases, and the chain-level reservation guarantee (the genesis base case
+`empty_nextActorId_ge_reserved`, the per-step
+`assign_preserves_reserved_invariant`, and the non-empty-book / 3-assign-chain
+`fresh_assign_avoids_reserved` value + term-level cases); the
+`bridge-address-book` / `bridge-ingest` value fixtures are
 rebased onto the genesis-4 allocation; the GP.11.4 L2 AMM swap
 mirror adds the `amm-swap` suite, 40 cases — precondition semantics,
 apply semantics, theorem-backed delta / locality / cross-resource /
@@ -1230,17 +1234,18 @@ Notable Lean suites at the current build tag:
     smoke checks on the `State.Equiv` corollaries.
 
 **Rust-side test count.**  ~1 933 tests across the 11 workspace
-crates (the GP.11.5 `ammReserveActor` reservation adds 2
+crates (the GP.11.5 `ammReserveActor` reservation adds 3
 `knomosis-l1-ingest` tests — `address_book::amm_reserve_id_is_reserved`
 (the `AMM_RESERVE_ACTOR_ID = 3` slot is reserved + distinct + never
-issued) and `state::replay_rejects_newly_reserved_amm_actor_id` (a
-state file that allocated id 3 to a user pre-GP.11.5 is rejected on
-upgrade) — alongside renaming the GP.7.1 `gas_pool_and_sequencer_ids_are_reserved`
-test to `reserved_actor_ids_are_never_issued` (now covering all four
-reserved slots) and rebasing the `l1_ingest.cxsf` corpus + every
-`address_book` / `state` / `translation` / `watcher` / integration test
-onto the genesis-4 allocation; the persistent + pipelined connection
-mode adds ~17 tests — the
+issued), `address_book::assign_chain_never_issues_reserved_id` (the
+value-level mirror of Lean's chain-level invariant: a 64-assign sequence
+never issues a reserved id, the counter is monotone, and no reserved slot
+is ever in the reverse map), and
+`state::replay_rejects_newly_reserved_amm_actor_id` (a state file that
+allocated id 3 to a user pre-GP.11.5 is rejected on upgrade) — and
+rebases the `l1_ingest.cxsf` corpus + every `address_book` / `state` /
+`translation` / `watcher` / integration test onto the genesis-4
+allocation; the persistent + pipelined connection mode adds ~17 tests — the
 opt-in `--persistent-connections` host flag + `run_persistent`
 reader/writer pipelined handler wiring `ConnReader`'s persistent path,
 with a BOUNDED reader→writer `sync_channel` (sized to
@@ -1371,7 +1376,7 @@ landing:
 | `knomosis-cross-stack`              |  ~33  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind)      |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~323  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 / GP.11.5 genesis-4 reservation lockstep (`INITIAL_NEXT_ACTOR_ID = 4`, `AMM_RESERVE_ACTOR_ID = 3`) + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
+| `knomosis-l1-ingest`                | ~324  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 / GP.11.5 genesis-4 reservation lockstep (`INITIAL_NEXT_ACTOR_ID = 4`, `AMM_RESERVE_ACTOR_ID = 3`) + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
 | `knomosis-host`                     | ~426  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + `--max-conn-backlog` aggregate cap + `--persistent-connections` pipelined mode (DRR exercised over the wire) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events + GP.11.4 `AmmSwapExecuted` |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
@@ -3926,7 +3931,22 @@ contributions surviving in current code:
       widened to a fourth conjunct (the issued id is none of the four
       reserved slots).  The worked `Deployments/Examples/GasPoolExample.lean`'s
       demo `userActor` advances 3 → 4 (its former slot is now reserved).
-      `bridge-actor` suite 71 → 76.
+      `bridge-actor` suite 71 → 82.
+    - **Chain-level reservation guarantee** (closing the single-step
+      limitation the prior `empty_assign_id_avoids_reserved` left): the
+      invariant decomposition `empty_nextActorId_ge_reserved` (genesis
+      base case `4 ≤ nextActorId.toNat`) + `assign_preserves_reserved_invariant`
+      (per-step preservation, under no-overflow, on the new general
+      `AddressBook.assign_nextActorId_mono` monotonicity lemma) +
+      `fresh_assign_avoids_reserved` (the safety payoff: a fresh `assign`
+      into *any* book respecting the invariant — not only `empty` — issues
+      a non-reserved id).  Composed by induction, these give that no
+      user-registered identity in any `empty` + `assign` chain can ever be
+      issued a reserved slot — the complete guarantee, mirroring the
+      kernel's own established-at-genesis / preserved-by-step /
+      implies-safety `invariant_preservation` form.  The Rust adaptor's
+      `assign_chain_never_issues_reserved_id` test is the value-level
+      mirror.  All axiom-clean (`{propext, Classical.choice, Quot.sound}`).
     - **Rust lockstep** (`runtime/knomosis-l1-ingest`, pulled forward
       from GP.10 exactly as GP.7.1's reservation was): the production
       adaptor's `AddressBook::INITIAL_NEXT_ACTOR_ID` becomes `4` with a
