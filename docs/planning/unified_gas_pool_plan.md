@@ -7633,6 +7633,13 @@ sub-WU table above is the implementation roadmap.
   * **Dependencies.**  GP.2.3 (Action layer integration —
     extended to handle index 22).
   * **Estimated effort.**  ~16 hours.
+  * **Status.**  **Complete** (Lean side).  The action index landed
+    at 23 (not 22 as originally planned — index 22 was taken by
+    `claimBudgetRefund` from GP.9.1).  `Laws/AmmSwap.lean` ships the
+    full law + 10-theorem ladder + 2 classification instances.
+    `Bridge/AmmReserves.lean` deferred to GP.11.5 (the reserve-actor
+    reservation is a separate WU).  40-case `amm-swap` test suite
+    passes.  All audit gates green.
 
 #### WU GP.11.5: `ammReserveActor` reservation
 

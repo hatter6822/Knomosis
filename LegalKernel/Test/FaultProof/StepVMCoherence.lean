@@ -579,14 +579,15 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=18 ⇒ stepCommitFaultProofResolution dispatch"
     }
-  , { name := "stepVMHash: unknown kind 23 returns empty"
+  , { name := "stepVMHash: unknown kind 24 returns empty"
     , body := do
         -- Kinds 19 (`.depositWithFee`), 20 (`.topUpActionBudget`),
-        -- 21 (`.topUpActionBudgetFor`, GP.5.3), and 22
-        -- (`.claimBudgetRefund`, GP.9.1) are now wired through the
-        -- dispatcher.  The catch-all path fires only for kinds ≥ 23.
+        -- 21 (`.topUpActionBudgetFor`, GP.5.3), 22
+        -- (`.claimBudgetRefund`, GP.9.1), and 23 (`.ammSwap`,
+        -- GP.11.4) are now wired through the dispatcher.  The
+        -- catch-all path fires only for kinds ≥ 24.
         let pc := ByteArray.mk #[(0xAA : UInt8)]
-        let h := stepVMHash pc 23 ByteArray.empty 7 { proofs := [] }
+        let h := stepVMHash pc 24 ByteArray.empty 7 { proofs := [] }
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
     }

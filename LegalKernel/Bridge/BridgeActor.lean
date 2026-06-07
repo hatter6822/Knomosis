@@ -328,6 +328,11 @@ def bridgeAuthorizedAction : Action → Bool
   -- consume-exempt, so a refund signed by it would have no budget to
   -- retire).
   | .claimBudgetRefund _ _ _ _    => false
+  -- GP.11.4: `ammSwap` (index 23) is bridge-attested — the L1 AMM
+  -- swap executes on-chain and the bridge actor signs the L2 mirror
+  -- action recording the resulting `amountOut`.  Like `depositWithFee`,
+  -- the bridge is the sole authority on the swap result.
+  | .ammSwap _ _ _ _ _            => true
 
 /-- The bridge actor's authorisation policy.  Authorises an action
     iff:
@@ -675,17 +680,18 @@ theorem bridgeAuthorizedAction_eq_true_iff (action : Action) :
       (∃ r recipient amount d, action = .deposit r recipient amount d) ∨
       (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
         action = .depositWithFee r recipient poolActor userAmount
-                                  poolAmount budgetGrant d) := by
+                                  poolAmount budgetGrant d) ∨
+      (∃ fr tr ai ao ra, action = .ammSwap fr tr ai ao ra) := by
   cases action <;> simp [bridgeAuthorizedAction]
 
 /-- **No-regression / positive half (GP.7.0).**  Every action variant
     the bridge actor is permitted to sign passes `bridgePolicy`: the
     three pre-GP variants (`replaceKey`, `registerIdentity`,
-    `deposit`) plus the Workstream-GP `depositWithFee`.  Bundles the
-    individual `bridgePolicy_authorizes_*` theorems so a single term
-    witnesses that the bridge-signable set is preserved across the
-    GP-era extension — the bridge can still do everything it could
-    before, and now also the user-chosen-fee deposit. -/
+    `deposit`) plus the Workstream-GP `depositWithFee` and `ammSwap`.
+    Bundles the individual `bridgePolicy_authorizes_*` theorems so a
+    single term witnesses that the bridge-signable set is preserved
+    across extensions — the bridge can still do everything it could
+    before, and now also the AMM swap mirror. -/
 theorem bridgePolicy_authorizes_all_bridge_actions :
     (∀ actor newKey,
         bridgePolicy.authorized bridgeActor (.replaceKey actor newKey)) ∧
@@ -696,11 +702,14 @@ theorem bridgePolicy_authorizes_all_bridge_actions :
     (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
         bridgePolicy.authorized bridgeActor
           (.depositWithFee r recipient poolActor userAmount poolAmount
-                            budgetGrant d)) :=
+                            budgetGrant d)) ∧
+    (∀ fr tr ai ao ra,
+        bridgePolicy.authorized bridgeActor (.ammSwap fr tr ai ao ra)) :=
   ⟨bridgePolicy_authorizes_replaceKey,
    bridgePolicy_authorizes_registerIdentity,
    bridgePolicy_authorizes_deposit,
-   bridgePolicy_authorizes_depositWithFee⟩
+   bridgePolicy_authorizes_depositWithFee,
+   fun _ _ _ _ _ => ⟨rfl, rfl⟩⟩
 
 /-- **Exhaustive rejection / negative half (GP.7.0).**  If an action is
     none of the four bridge-signable shapes, then `bridgePolicy`
@@ -721,17 +730,19 @@ theorem bridgePolicy_rejects_non_bridgeable
     (h_dep : ∀ r recipient amount d, action ≠ .deposit r recipient amount d)
     (h_dwf : ∀ r recipient poolActor userAmount poolAmount budgetGrant d,
                action ≠ .depositWithFee r recipient poolActor userAmount
-                                        poolAmount budgetGrant d) :
+                                        poolAmount budgetGrant d)
+    (h_amm : ∀ fr tr ai ao ra, action ≠ .ammSwap fr tr ai ao ra) :
     ¬ bridgePolicy.authorized bridgeActor action := by
   unfold bridgePolicy
   intro ⟨_, hauth⟩
   rcases (bridgeAuthorizedAction_eq_true_iff action).mp hauth with
     ⟨a, nk, rfl⟩ | ⟨a, pk, rfl⟩ | ⟨r, rcp, amt, d, rfl⟩
-    | ⟨r, rcp, pa, ua, pamt, bg, d, rfl⟩
+    | ⟨r, rcp, pa, ua, pamt, bg, d, rfl⟩ | ⟨fr, tr, ai, ao, ra, rfl⟩
   · exact h_rk a nk rfl
   · exact h_ri a pk rfl
   · exact h_dep r rcp amt d rfl
   · exact h_dwf r rcp pa ua pamt bg d rfl
+  · exact h_amm fr tr ai ao ra rfl
 
 /-! ## Sanity smoke checks -/
 

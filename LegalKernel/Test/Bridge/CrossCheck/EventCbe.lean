@@ -11,8 +11,8 @@
 LegalKernel.Test.Bridge.CrossCheck.EventCbe — WU GP.6.3 / RH-D.
 
 Generates the `event_subscribe_cbe.json` cross-stack fixture: one
-reference vector per `Events.Event` constructor (frozen tags 0..20,
-including the GP.6.4 `budgetConsumed` at tag 20), each carrying the
+reference vector per `Events.Event` constructor (frozen tags 0..21,
+including the GP.11.4 `ammSwapExecuted` at tag 21), each carrying the
 constructor's canonical CBE bytes computed by LEAN's
 `Encoding.Event.encode`.
 
@@ -29,7 +29,7 @@ field of every entry is the hex of Lean's `Event.encode`, and the
 Rust consumer
 (`runtime/knomosis-event-subscribe/tests/cross_stack_lean_event.rs`)
 asserts `peek_event_tag` reads exactly `tag` and `classify` resolves
-to the named `EventType` for all 20 constructors.
+to the named `EventType` for all 22 constructors.
 
 **What it catches.**  A Lean encoder change (frozen-index bump,
 field-order edit) drifts the committed JSON — `lake test`'s
@@ -59,9 +59,9 @@ open LegalKernel.Test
 namespace EventCbe
 
 /-- The number of frozen `Event` constructors (mirrors the Rust
-    `event_type::KNOWN_EVENT_TAG_COUNT`).  Bumped 20 → 21 by
-    GP.6.4 (the `budgetConsumed` event at tag 20). -/
-def knownTagCount : Nat := 21
+    `event_type::KNOWN_EVENT_TAG_COUNT`).  Bumped 21 → 22 by
+    GP.11.4 (the `ammSwapExecuted` event at tag 21). -/
+def knownTagCount : Nat := 22
 
 /-- Encode an `Event` with Lean's canonical `Event.encode` and return
     the `0x`-prefixed lowercase hex of the byte stream — the
@@ -94,6 +94,7 @@ def eventKind : Event → String
   | .gasPoolClaim ..               => "gasPoolClaim"
   | .delegatedActionBudgetTopUp .. => "delegatedActionBudgetTopUp"
   | .budgetConsumed ..             => "budgetConsumed"
+  | .ammSwapExecuted ..            => "ammSwapExecuted"
 
 /-- A non-zero 20-byte `EthAddress` for the `withdrawalRequested`
     entry. -/
@@ -136,7 +137,8 @@ def canonicalEvents : List Event :=
   , .actionBudgetTopUp 7 0 500 10 1
   , .gasPoolClaim 0 2 250
   , .delegatedActionBudgetTopUp 9 7 0 500 10 1
-  , .budgetConsumed 42 1 ]
+  , .budgetConsumed 42 1
+  , .ammSwapExecuted 0 1 500 480 3 ]
 
 /-- The six gas-pool-family edge-value events (tags 16..20),
     exercising the Rust head peek across field magnitudes.
@@ -176,21 +178,21 @@ def fixtureName : String := "event_subscribe_cbe.json"
 
 /-! ## Test cases -/
 
-/-- The fixture has 27 entries (21 canonical 0..=20 + 6 gas-pool
+/-- The fixture has 28 entries (22 canonical 0..=21 + 6 gas-pool
     edge cases including the `budgetConsumed` edge added in GP.6.4). -/
 def entryCount : TestCase := {
-  name := "GP.6.4: event_subscribe_cbe fixture has 27 entries"
+  name := "GP.11.4: event_subscribe_cbe fixture has 28 entries"
   body := do
-    assertEq (27 : Nat) entries.length "entry count"
+    assertEq (28 : Nat) entries.length "entry count"
 }
 
-/-- The 21 canonical entries cover tags 0..20 in order
-    (GP.6.4 widened from 20 → 21 by adding `budgetConsumed`). -/
+/-- The 22 canonical entries cover tags 0..21 in order
+    (GP.11.4 widened from 21 → 22 by adding `ammSwapExecuted`). -/
 def canonicalCoversAllTags : TestCase := {
-  name := "GP.6.4: canonical entries cover tags 0..20"
+  name := "GP.11.4: canonical entries cover tags 0..21"
   body := do
-    assertEq (21 : Nat) canonicalEvents.length "canonical count"
-    assertEq (List.range 21) (canonicalEvents.map Event.tag) "canonical tags 0..20 in order"
+    assertEq (22 : Nat) canonicalEvents.length "canonical count"
+    assertEq (List.range 22) (canonicalEvents.map Event.tag) "canonical tags 0..21 in order"
 }
 
 /-- The serialised JSON contains one entry-record per built entry

@@ -963,7 +963,12 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 753 tests across 141 suites (the GP.7.4 genesis
+**Test count.**  ~2 862 tests across 146 suites (the GP.11.4 L2 AMM swap
+mirror adds the `amm-swap` suite, 40 cases — precondition semantics,
+apply semantics, theorem-backed delta / locality / cross-resource /
+supply-change witnesses, classification instances, reversed direction /
+edge cases, and term-level API stability for all 10 headline theorems;
+the GP.7.4 genesis
 ratification adds the `deployments-gas-pool-example` suite, 17 cases —
 the end-to-end ETH+BOLD `depositWithFee` → user+pool credit → L2
 budget-grant → dual capped sequencer-claim worked sequence run through
@@ -2247,8 +2252,21 @@ non-decreasing, `minAmountOut` slippage + `deadline` MEV protection, a pure
 safety, a one-way `emergencyDisableAmm` kill switch + the GP.5.5 BOLD-breaker
 depeg freeze on swaps, a machine-checked Lean k-monotonicity proof in
 `LegalKernel/Bridge/AmmMath.lean`, and a 204-entry Lean→Solidity
-`getAmountOut` cross-stack equivalence corpus) — is complete (the L2
-`Action.ammSwap` mirror is GP.11.4).  See
+`getAmountOut` cross-stack equivalence corpus) — is complete, and GP.11.4 —
+the L2 `Action.ammSwap` mirror law (`Laws/AmmSwap.lean`, frozen action index
+23, with the full §4.11 theorem ladder: `ammSwap_increases_from_balance`,
+`ammSwap_decreases_to_balance`, `ammSwap_other_actor_untouched`,
+`ammSwap_other_resource_untouched`, `ammSwap_fromResource_supply_increase`,
+`ammSwap_toResource_supply_decrease`, `ammSwap_not_conservative_at_from`,
+`ammSwap_not_monotonic_at_to`; `LocalTo [fromResource, toResource]` +
+`FreezePreserving []` instances; the `Action.ammSwap` constructor at frozen
+index 23 with exhaustive `bridgeAuthorizedAction` classification +
+`gasPoolDeniedTags` inclusion + `doesNotDebitPoolAt` pool-drain-bound arm +
+CBE codec + `Event.ammSwapExecuted` emission + step-VM `actionKindByte` /
+`actionFieldsForL1` / `readOnlyCells` / `writeCells` extension; 40-case
+`amm-swap` test suite covering precondition semantics, apply semantics,
+theorem-backed deltas, classification instances, edge cases, and term-level
+API stability for every headline theorem) — is complete on the Lean side.  See
 `docs/planning/unified_gas_pool_plan.md` for the full plan.  Headline
 contributions surviving in current code:
 
@@ -3795,6 +3813,43 @@ contributions surviving in current code:
     cap-audit gate + self-test (45 cases) unchanged (no constitutional cap
     added — the swap reuses `AMM_SWAP_FEE_BPS`; `AmmMath`'s `BPS_DENOMINATOR`
     lives outside the audited `KnomosisBridge.sol`).
+  * **GP.11.4** L2-side AMM mirroring — the `Action.ammSwap` constructor
+    (frozen index 23) + `Laws/AmmSwap.lean` kernel law + full theorem
+    ladder + classification instances + 40-case test suite.  Lean-only
+    (the Solidity step-VM execution arm + Rust ingestor + cross-stack
+    corpus are future work under GP.11.7 / GP.11.8).  Shipped:
+    - `Action.ammSwap` at frozen index 23 (`Authority/Action.lean`).
+      Exhaustive `bridgeAuthorizedAction` arm (bridge-attested: `true`);
+      `gasPoolDeniedTags` coverage (deny-list `List.range 24`, filter
+      `≠ 0` → `[1..23]`; `Action.tag_lt_denyListBound` forcing function
+      re-pinned at `< 24`); `doesNotDebitPoolAt` arm for the pool-drain
+      bound proof (GP.7.3); CBE codec (`Encoding/Action.lean`, round-trip
+      + injectivity); `Event.ammSwapExecuted` (frozen tag 21) emission in
+      `extractEvents`; step-VM extension (`actionKindByte` = 23,
+      `actionFieldsForL1`, `readOnlyCells`, `writeCells`).
+    - `Laws.ammSwap` definition (`Laws/AmmSwap.lean`): credit
+      `ammReserveActor` at `fromResource`, debit at `toResource`;
+      preconditions `getBalance ≥ amountOut`, `fromResource ≠ toResource`,
+      `amountIn > 0`; `decPre := fun _ => inferInstance`.
+    - Theorem ladder (10 theorems): `ammSwap_increases_from_balance`,
+      `ammSwap_decreases_to_balance`, `ammSwap_other_actor_untouched`,
+      `ammSwap_other_resource_untouched`,
+      `ammSwap_does_not_touch_other_resources`,
+      `ammSwap_conserves_other_resource`,
+      `ammSwap_fromResource_supply_increase`,
+      `ammSwap_toResource_supply_decrease`,
+      `ammSwap_not_conservative_at_from`,
+      `ammSwap_not_monotonic_at_to`.
+    - Classification instances: `LocalTo [fromResource, toResource]`
+      (`ammSwap_localTo`), `FreezePreserving []`
+      (`ammSwap_freezePreserving_empty`), plus the generic theorem
+      `ammSwap_freezePreserving S h1 h2` for arbitrary disjoint `S`.
+    - `amm-swap` test suite (40 cases): precondition semantics (6),
+      apply semantics (7), theorem-backed delta witnesses (2),
+      theorem-backed locality (2), cross-resource independence (3),
+      supply-change characterisation (4), classification instances (2),
+      reversed direction + edge cases (4), term-level API stability
+      for every headline theorem (10).
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the
@@ -3804,14 +3859,15 @@ drain bound — now complete, per-resource — folds the *outflow*
 discipline over a whole admitted trace via `PoolBoundedTrace` /
 `applyTrace`; GP.7.5's per-resource bound + two-leg independence are
 delivered with GP.7.3's optimal closure); the AMM-aware
-strong-conservation extension (needs `Action.ammSwap` +
-`ammReserveActor`, GP.11); the materialised
+strong-conservation extension (needs `ammReserveActor` reservation,
+GP.11.5); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
 abstract in `bridge_accounting_equation_balanced_iff`); and GP.7.6 –
-GP.10 plus GP.11.4 – GP.11.10 (sequencer integration, the L2
-`Action.ammSwap` mirror, etc.; GP.11.1's L1 state scaffold + GP.11.2's
-deposit-side seeding + GP.11.3's L1 constant-product swap have landed).
+GP.10 plus GP.11.5 – GP.11.10 (sequencer integration, the
+`ammReserveActor` reservation, etc.; GP.11.1's L1 state scaffold +
+GP.11.2's deposit-side seeding + GP.11.3's L1 constant-product swap +
+GP.11.4's L2 `Action.ammSwap` mirror have landed).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
 step-VM execution arm for `topUpActionBudgetFor` (variant 21),

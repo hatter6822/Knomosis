@@ -85,6 +85,7 @@ import LegalKernel.Laws.DepositWithFee
 import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Laws.ClaimBudgetRefund
+import LegalKernel.Laws.AmmSwap
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.AddressBook
@@ -473,6 +474,16 @@ inductive Action
       units), leaving the signer at or above the free tier. -/
   | claimBudgetRefund (gasResource : ResourceId) (budgetUnits : Nat)
                       (weiPerBudgetUnit : Nat) (poolActor : ActorId)
+  /-- Workstream GP (GP.11.4): L2 AMM swap action.  A bridge-attested
+      constant-product ETH↔BOLD exchange mirroring the L1
+      `KnomosisBridge.ammSwap`.  The kernel-level effect credits
+      `ammReserveActor` at `fromResource` by `amountIn` and debits
+      `ammReserveActor` at `toResource` by `amountOut`.  The swap-math
+      (`getAmountOut`, k-monotonicity, no-drain) is authoritative at L1;
+      the L2 action records the already-computed amounts attested by the
+      bridge actor.  Frozen action index 23. -/
+  | ammSwap (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+            (ammReserveActor : ActorId)
   -- Workstream-LX (LX.17): codegen-managed Lex constructors land
   -- between the fence markers below.  M1's example law (frozen
   -- index 17) deliberately does not extend `Action` — it lives
@@ -481,11 +492,9 @@ inductive Action
   -- built-in laws are re-expressed in Lex.
   -- Workstream H reserves indices 17 and 18; Workstream GP reserves
   -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`),
-  -- 21 (`topUpActionBudgetFor`), and 22 (`claimBudgetRefund`).
-  -- The GP.11 `ammSwap` now appends at index 23 (the GP.7.2
-  -- `gasPoolDeniedTags` deny-list already covers index 22 via
-  -- `List.range 23`; it bumps to `List.range 24` when `ammSwap` lands).
-  -- Future Lex-generated ctors (M2+) will append at index 23+.
+  -- 21 (`topUpActionBudgetFor`), 22 (`claimBudgetRefund`),
+  -- and 23 (`ammSwap`).
+  -- Future Lex-generated ctors (M2+) will append at index 24+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
   deriving Repr, DecidableEq
@@ -594,6 +603,10 @@ def Action.compileTransition : Action → Transition
   -- `Action.toTransition` / `kernelOnlyApply` /
   -- `apply_admissible_with`, all of which have the signer in scope.
   | .claimBudgetRefund _ _ _ _      => Laws.freezeResource 0
+  -- Workstream GP (GP.11.4): L2 AMM swap.  The swap is NOT
+  -- signer-aware (both amounts are bridge-attested), so it compiles
+  -- directly to the kernel law.
+  | .ammSwap fr tr ai ao ra         => Laws.ammSwap fr tr ai ao ra
   -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
   -- arms land between the fence markers below.  Empty in M1;
   -- populated in M2 once the kernel-built-in laws are re-expressed
@@ -718,6 +731,7 @@ theorem Action.toTransition_eq_compileTransition_of_ne_topUp
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
   | depositWithFee _ _ _ _ _ _ _  => rfl
+  | ammSwap _ _ _ _ _             => rfl
 
 /-- For `topUpActionBudget` specifically, `toTransition` produces
     the signer-bound `Laws.topUpActionBudget` form. -/

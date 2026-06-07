@@ -52,6 +52,7 @@ The constructor-tag map (frozen):
   | 20  | `topUpActionBudget`  | `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 21  | `topUpActionBudgetFor` | `recipient`, `gasResource`, `gasAmount`, `budgetIncrement`, `poolActor` |
   | 22  | `claimBudgetRefund`  | `gasResource`, `budgetUnits`, `weiPerBudgetUnit`, `poolActor` |
+  | 23  | `ammSwap`            | `fromResource`, `toResource`, `amountIn`, `amountOut`, `ammReserveActor` |
 
 The `Action.fieldsBounded` predicate captures the canonical-encoding
 bound (`< 2^64`) on every numeric field.  Round-trip and injectivity
@@ -137,6 +138,10 @@ def Action.fieldsBounded : Action → Prop
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ budgetUnits < 256 ^ 8 ∧
       weiPerBudgetUnit < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
+  -- Workstream GP (GP.11.4): ammSwap.
+  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
+      fromResource.toNat < 256 ^ 8 ∧ toResource.toNat < 256 ^ 8 ∧
+      amountIn < 256 ^ 8 ∧ amountOut < 256 ^ 8 ∧ ammReserveActor.toNat < 256 ^ 8
   -- Workstream-LX (LX.18): codegen-managed Lex `fieldsBounded`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no new constructor).  M2 populates the
@@ -275,6 +280,14 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) budgetUnits ++
       Encodable.encode (T := Nat) weiPerBudgetUnit ++
       Encodable.encode (T := Nat) poolActor.toNat
+  -- Workstream GP (GP.11.4): ammSwap.
+  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
+      Encodable.encode (T := Nat) 23 ++
+      Encodable.encode (T := Nat) fromResource.toNat ++
+      Encodable.encode (T := Nat) toResource.toNat ++
+      Encodable.encode (T := Nat) amountIn ++
+      Encodable.encode (T := Nat) amountOut ++
+      Encodable.encode (T := Nat) ammReserveActor.toNat
   -- Workstream-LX (LX.18): codegen-managed Lex `encode` arms land
   -- between the fence markers below.  Empty in M1.
   -- BEGIN LEX-GENERATED (do not edit by hand)
@@ -559,6 +572,25 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
           match Action.readUInt64Field s₄ with
           | .ok (poolActor, s₅) =>
             .ok (.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor, s₅)
+          | .error e => .error e
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
+  | .ok (23, s₁) =>
+    -- ammSwap (fromResource, toResource, amountIn, amountOut, ammReserveActor)
+    match Action.readUInt64Field s₁ with
+    | .ok (fromResource, s₂) =>
+      match Action.readUInt64Field s₂ with
+      | .ok (toResource, s₃) =>
+        match Action.readNatField s₃ with
+        | .ok (amountIn, s₄) =>
+          match Action.readNatField s₄ with
+          | .ok (amountOut, s₅) =>
+            match Action.readUInt64Field s₅ with
+            | .ok (ammReserveActor, s₆) =>
+              .ok (.ammSwap fromResource toResource amountIn amountOut
+                      ammReserveActor, s₆)
+            | .error e => .error e
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e
@@ -1047,6 +1079,35 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [readNatField_roundtrip weiPerBudgetUnit _ h3]
     dsimp only
     rw [readUInt64Field_roundtrip poolActor rest]
+  | ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
+    obtain ⟨_, _, h3, h4, _⟩ := h
+    show Action.decode (Action.encode
+            (.ammSwap fromResource toResource amountIn amountOut ammReserveActor) ++ rest)
+        = .ok (_, rest)
+    unfold Action.encode Action.decode
+    rw [show
+      Encodable.encode (T := Nat) 23 ++ Encodable.encode (T := Nat) fromResource.toNat ++
+        Encodable.encode (T := Nat) toResource.toNat ++
+        Encodable.encode (T := Nat) amountIn ++
+        Encodable.encode (T := Nat) amountOut ++
+        Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest =
+      Encodable.encode (T := Nat) 23 ++ (Encodable.encode (T := Nat) fromResource.toNat ++
+        (Encodable.encode (T := Nat) toResource.toNat ++
+        (Encodable.encode (T := Nat) amountIn ++
+        (Encodable.encode (T := Nat) amountOut ++
+        (Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest)))))
+        from by simp [List.append_assoc]]
+    rw [nat_roundtrip 23 _ (by decide)]
+    dsimp only
+    rw [readUInt64Field_roundtrip fromResource _]
+    dsimp only
+    rw [readUInt64Field_roundtrip toResource _]
+    dsimp only
+    rw [readNatField_roundtrip amountIn _ h3]
+    dsimp only
+    rw [readNatField_roundtrip amountOut _ h4]
+    dsimp only
+    rw [readUInt64Field_roundtrip ammReserveActor rest]
 
 /-- Empty-suffix round-trip for `Action`. -/
 theorem action_roundtrip_empty (a : Action) (h : Action.fieldsBounded a) :
@@ -1120,6 +1181,7 @@ theorem Action.tag_matches_encode_tag (a : Action) :
   | topUpActionBudget _ _ _ _     => exact ⟨_, rfl⟩
   | topUpActionBudgetFor _ _ _ _ _ => exact ⟨_, rfl⟩
   | claimBudgetRefund _ _ _ _     => exact ⟨_, rfl⟩
+  | ammSwap _ _ _ _ _             => exact ⟨_, rfl⟩
 
 /-! ## Spot-check `example`s (compile-time-only test vectors) -/
 

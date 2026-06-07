@@ -191,6 +191,8 @@ def tagTopUpActionBudget    : ByteArray := hashString "topUpActionBudget"
 def tagTopUpActionBudgetFor : ByteArray := hashString "topUpActionBudgetFor"
 /-- Tag hash for `claimBudgetRefund` (Workstream GP.9.1, action-index 22). -/
 def tagClaimBudgetRefund    : ByteArray := hashString "claimBudgetRefund"
+/-- Tag hash for `ammSwap` (Workstream GP.11.4, action-index 23). -/
+def tagAmmSwap              : ByteArray := hashString "ammSwap"
 
 /-! ## Per-variant commit functions (one per Action constructor) -/
 
@@ -501,6 +503,28 @@ def stepCommitClaimBudgetRefund
      uint64BE gasResource ++ uint64BE signer ++
      uint256BE newSignerBalance ++ uint64BE poolActor ++
      uint256BE newPoolBalance)
+
+/-- `ammSwap` step-VM commit (Workstream GP.11.4, action-index 23).
+    Mirrors the Solidity `_stepAmmSwap` post-commit recipe:
+    `keccak256(preCommit || TAG_AMM_SWAP || fromResource || toResource
+              || ammReserveActor || newFromBalance || newToBalance
+              || signer)`.
+
+    The kernel-state effect credits `ammReserveActor` at `fromResource`
+    by `amountIn` and debits at `toResource` by `amountOut`.  Both new
+    balances are committed.  The `signer` (bridge actor) is committed
+    for replay/uniqueness binding — identical to how every other
+    variant binds the signer. -/
+def stepCommitAmmSwap
+    (preCommit : ByteArray)
+    (fromResource toResource ammReserveActor signer : Nat)
+    (newFromBalance newToBalance : Nat) : ByteArray :=
+  LegalKernel.Runtime.hashBytes
+    (preCommit ++ tagAmmSwap ++
+     uint64BE fromResource ++ uint64BE toResource ++
+     uint64BE ammReserveActor ++
+     uint256BE newFromBalance ++ uint256BE newToBalance ++
+     uint64BE signer)
 
 /-! ## Determinism + structural theorems -/
 

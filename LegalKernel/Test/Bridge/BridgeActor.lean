@@ -449,7 +449,9 @@ def tests : List TestCase :=
                  (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
                     (Action.replaceKey 1 samplePk) =
                       .depositWithFee r recipient poolActor userAmount
-                                      poolAmount budgetGrant d) :=
+                                      poolAmount budgetGrant d) ∨
+                 (∃ fr tr ai ao ra,
+                    (Action.replaceKey 1 samplePk) = .ammSwap fr tr ai ao ra) :=
           (bridgeAuthorizedAction_eq_true_iff (.replaceKey 1 samplePk)).mp (by decide)
         pure ()
     }
@@ -466,7 +468,7 @@ def tests : List TestCase :=
     , body := do
         let _h : bridgeAuthorizedAction (.depositWithFee 1 10 1 90 10 5 42) = true :=
           (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42)).mpr
-            (Or.inr (Or.inr (Or.inr ⟨1, 10, 1, 90, 10, 5, 42, rfl⟩)))
+            (Or.inr (Or.inr (Or.inr (Or.inl ⟨1, 10, 1, 90, 10, 5, 42, rfl⟩))))
         pure ()
     }
   , { name := "GP.7.0: bridgeAuthorizedAction_eq_true_iff forward at depositWithFee"
@@ -485,7 +487,9 @@ def tests : List TestCase :=
                  (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
                     (Action.depositWithFee 1 10 1 90 10 5 42) =
                       .depositWithFee r recipient poolActor userAmount
-                                      poolAmount budgetGrant d) :=
+                                      poolAmount budgetGrant d) ∨
+                 (∃ fr tr ai ao ra,
+                    (Action.depositWithFee 1 10 1 90 10 5 42) = .ammSwap fr tr ai ao ra) :=
           (bridgeAuthorizedAction_eq_true_iff (.depositWithFee 1 10 1 90 10 5 42)).mp
             (by decide)
         pure ()
@@ -499,7 +503,8 @@ def tests : List TestCase :=
                    (∃ r recipient amount d, action = .deposit r recipient amount d) ∨
                    (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
                      action = .depositWithFee r recipient poolActor userAmount
-                                               poolAmount budgetGrant d)) :=
+                                               poolAmount budgetGrant d) ∨
+                   (∃ fr tr ai ao ra, action = .ammSwap fr tr ai ao ra)) :=
           bridgeAuthorizedAction_eq_true_iff
         pure ()
     }
@@ -530,7 +535,9 @@ def tests : List TestCase :=
                  (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
                     bridgePolicy.authorized bridgeActor
                       (.depositWithFee r recipient poolActor userAmount poolAmount
-                                        budgetGrant d)) :=
+                                        budgetGrant d)) ∧
+                 (∀ fr tr ai ao ra,
+                    bridgePolicy.authorized bridgeActor (.ammSwap fr tr ai ao ra)) :=
           bridgePolicy_authorizes_all_bridge_actions
         pure ()
     }
@@ -538,7 +545,7 @@ def tests : List TestCase :=
     , body := do
         let _h : ¬ bridgePolicy.authorized bridgeActor (.transfer 1 2 3 4) :=
           bridgePolicy_rejects_non_bridgeable (.transfer 1 2 3 4)
-            (by simp) (by simp) (by simp) (by simp)
+            (by simp) (by simp) (by simp) (by simp) (by simp)
         if (decide (bridgePolicy.authorized bridgeActor (.transfer 1 2 3 4))) then
           throw <| IO.userError "transfer must be rejected for bridge actor"
     }
@@ -546,7 +553,7 @@ def tests : List TestCase :=
     , body := do
         let _h : ¬ bridgePolicy.authorized bridgeActor (.mint 1 2 3) :=
           bridgePolicy_rejects_non_bridgeable (.mint 1 2 3)
-            (by simp) (by simp) (by simp) (by simp)
+            (by simp) (by simp) (by simp) (by simp) (by simp)
         if (decide (bridgePolicy.authorized bridgeActor (.mint 1 2 3))) then
           throw <| IO.userError "mint must be rejected for bridge actor"
     }
@@ -554,7 +561,7 @@ def tests : List TestCase :=
     , body := do
         let _h : ¬ bridgePolicy.authorized bridgeActor (.proportionalDilute 1 2 3) :=
           bridgePolicy_rejects_non_bridgeable (.proportionalDilute 1 2 3)
-            (by simp) (by simp) (by simp) (by simp)
+            (by simp) (by simp) (by simp) (by simp) (by simp)
         if (decide (bridgePolicy.authorized bridgeActor (.proportionalDilute 1 2 3))) then
           throw <| IO.userError "proportionalDilute must be rejected for bridge actor"
     }
@@ -562,7 +569,7 @@ def tests : List TestCase :=
     , body := do
         let _h : ¬ bridgePolicy.authorized bridgeActor (.topUpActionBudget 1 10 5 1) :=
           bridgePolicy_rejects_non_bridgeable (.topUpActionBudget 1 10 5 1)
-            (by simp) (by simp) (by simp) (by simp)
+            (by simp) (by simp) (by simp) (by simp) (by simp)
         if (decide (bridgePolicy.authorized bridgeActor (.topUpActionBudget 1 10 5 1))) then
           throw <| IO.userError "topUpActionBudget must be rejected for bridge actor"
     }
@@ -571,7 +578,7 @@ def tests : List TestCase :=
         let _h : ¬ bridgePolicy.authorized bridgeActor
                     (.topUpActionBudgetFor 20 1 10 5 1) :=
           bridgePolicy_rejects_non_bridgeable (.topUpActionBudgetFor 20 1 10 5 1)
-            (by simp) (by simp) (by simp) (by simp)
+            (by simp) (by simp) (by simp) (by simp) (by simp)
         if (decide (bridgePolicy.authorized bridgeActor
                      (.topUpActionBudgetFor 20 1 10 5 1))) then
           throw <| IO.userError "topUpActionBudgetFor must be rejected for bridge actor"
@@ -586,7 +593,7 @@ def tests : List TestCase :=
                     (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty) :=
           bridgePolicy_rejects_non_bridgeable
             (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty)
-            (by simp) (by simp) (by simp) (by simp)
+            (by simp) (by simp) (by simp) (by simp) (by simp)
         if (decide (bridgePolicy.authorized bridgeActor
                      (.faultProofChallenge ByteArray.empty 0 1 ByteArray.empty))) then
           throw <| IO.userError "faultProofChallenge must be rejected for bridge actor"
@@ -600,6 +607,7 @@ def tests : List TestCase :=
                  (∀ r recipient poolActor userAmount poolAmount budgetGrant d,
                     action ≠ .depositWithFee r recipient poolActor userAmount
                                               poolAmount budgetGrant d) →
+                 (∀ fr tr ai ao ra, action ≠ .ammSwap fr tr ai ao ra) →
                  ¬ bridgePolicy.authorized bridgeActor action :=
           bridgePolicy_rejects_non_bridgeable
         pure ()

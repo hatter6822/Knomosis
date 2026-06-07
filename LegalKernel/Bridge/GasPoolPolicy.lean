@@ -100,14 +100,13 @@ open LegalKernel.Encoding (Encodable)
 /-- The Action tags the gas-pool actor is forbidden from signing:
     every constructor index EXCEPT `transfer` (tag 0).
 
-    `(List.range 23).filter (· ≠ 0) = [1, 2, …, 22]` — the current
-    frozen Action set spans indices 0..22 (index 22 is the GP.9.1
-    `claimBudgetRefund`), all of which the pool actor must be forbidden
-    from signing.  The GP.11 `ammSwap` appends at index 23, NOT yet
-    covered.  See the module docstring's maintenance contract: a new
-    constructor at index ≥ 23 forces a bump here, caught at build time
+    `(List.range 24).filter (· ≠ 0) = [1, 2, …, 23]` — the current
+    frozen Action set spans indices 0..23 (index 23 is the GP.11.4
+    `ammSwap`), all of which the pool actor must be forbidden from
+    signing.  See the module docstring's maintenance contract: a new
+    constructor at index ≥ 24 forces a bump here, caught at build time
     by `gasPoolPolicy_denies_all_non_transfer`. -/
-def gasPoolDeniedTags : List Nat := (List.range 23).filter (· ≠ 0)
+def gasPoolDeniedTags : List Nat := (List.range 24).filter (· ≠ 0)
 
 /-- The canonical `LocalPolicy` governing `gasPoolActor` outflow.
 
@@ -150,21 +149,21 @@ the build-time forcing function described in the module docstring,
 elaborating exactly while every Action tag is `< 23`. -/
 
 /-- Every current Action's tag is strictly below the gas-pool
-    deny-list bound (`23`).  Proven by exhaustive `cases` on the
+    deny-list bound (`24`).  Proven by exhaustive `cases` on the
     inductive — this is the forcing function: appending an Action
-    constructor whose tag is `≥ 23` (i.e. a 24th constructor without
+    constructor whose tag is `≥ 24` (i.e. a 25th constructor without
     a matching `gasPoolDeniedTags` bump) breaks this proof, so the
     deny-list can never silently fall behind the Action set.  `simp`
     reduces each branch's `.tag` to a literal and discharges the
-    `literal < 23` comparison via the `Nat` comparison simproc. -/
+    `literal < 24` comparison via the `Nat` comparison simproc. -/
 theorem Action.tag_lt_denyListBound (action : Action) :
-    Action.tag action < 23 := by
+    Action.tag action < 24 := by
   cases action <;> simp [Action.tag]
 
 /-- Every non-`transfer` Action's tag is a member of
     `gasPoolDeniedTags`.  Holds because each current Action tag is
-    `< 23` (`Action.tag_lt_denyListBound`) and the deny-list is every
-    value in `[0, 23)` except `0`. -/
+    `< 24` (`Action.tag_lt_denyListBound`) and the deny-list is every
+    value in `[0, 24)` except `0`. -/
 theorem mem_gasPoolDeniedTags_of_tag_ne_zero
     (action : Action) (h : Action.tag action ≠ 0) :
     Action.tag action ∈ gasPoolDeniedTags := by
@@ -756,10 +755,10 @@ theorem gasPoolPolicy_fieldsBounded
       Encoding.LocalPolicyClause.fieldsBounded]
     -- Goal: (denyTags bound) ∧ (req₀ len) ∧ (cap₀) ∧ (req₁ len) ∧ (cap₁).
     refine ⟨⟨by decide, ?_⟩, by decide, hEth, by decide, hBold⟩
-    -- denyTags: every tag in `(List.range 23).filter (· ≠ 0)` is < 2^64.
+    -- denyTags: every tag in `(List.range 24).filter (· ≠ 0)` is < 2^64.
     apply List.all_eq_true.mpr
     intro n hn
-    have hlt : n < 23 := by
+    have hlt : n < 24 := by
       have := List.mem_filter.mp hn |>.1
       simpa using List.mem_range.mp this
     exact decide_eq_true (by omega)
