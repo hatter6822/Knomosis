@@ -440,7 +440,9 @@ impl Event {
             Self::FaultProofGameSettled { winner, .. } => Some(*winner),
             Self::ActionBudgetTopUp { signer, .. } => Some(*signer),
             Self::GasPoolClaim { sequencer, .. } => Some(*sequencer),
-            Self::AmmSwapExecuted { amm_reserve_actor, .. } => Some(*amm_reserve_actor),
+            Self::AmmSwapExecuted {
+                amm_reserve_actor, ..
+            } => Some(*amm_reserve_actor),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,
@@ -490,8 +492,8 @@ impl Event {
 
 /// The number of frozen `Event` constructors.  Bumped by amendment
 /// when a new constructor lands.  Useful for exhaustive coverage
-/// tests.  GP.6.4 widened 20 → 21 by adding `BudgetConsumed`.
-pub const EVENT_TAG_COUNT: u8 = 21;
+/// tests.  GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`.
+pub const EVENT_TAG_COUNT: u8 = 22;
 
 #[cfg(test)]
 mod tests {
@@ -678,10 +680,10 @@ mod tests {
     }
 
     /// `EVENT_TAG_COUNT` matches the number of constructors.
-    /// GP.6.4 widened 20 → 21.
+    /// GP.11.4 widened 21 → 22.
     #[test]
     fn tag_count_constant() {
-        assert_eq!(EVENT_TAG_COUNT, 21);
+        assert_eq!(EVENT_TAG_COUNT, 22);
     }
 
     /// Canonical resource-id constants pinned.
