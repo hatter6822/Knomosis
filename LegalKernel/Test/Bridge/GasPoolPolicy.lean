@@ -108,30 +108,30 @@ def nonTransferSamples : List (Nat × Action) :=
 /-- All GP.7.2 test cases. -/
 def tests : List TestCase :=
   [ -- ## Deny-list shape
-    { name := "GP.7.2: gasPoolDeniedTags = [1..22]"
+    { name := "GP.7.2: gasPoolDeniedTags = [1..23]"
     , body := do
-        assertEq (expected := (List.range 23).filter (· ≠ 0))
+        assertEq (expected := (List.range 24).filter (· ≠ 0))
           (actual := gasPoolDeniedTags) "deny-list contents"
     }
-  , { name := "GP.7.2: gasPoolDeniedTags has 22 entries (1..22)"
+  , { name := "GP.7.2: gasPoolDeniedTags has 23 entries (1..23)"
     , body := do
-        assertEq (expected := 22) (actual := gasPoolDeniedTags.length) "deny-list length"
+        assertEq (expected := 23) (actual := gasPoolDeniedTags.length) "deny-list length"
     }
   , { name := "GP.7.2: 0 ∉ gasPoolDeniedTags (transfer survives)"
     , body := do
         assert (decide ((0 : Nat) ∉ gasPoolDeniedTags)) "0 should not be denied"
     }
-  , { name := "GP.7.2: every tag 1..22 ∈ gasPoolDeniedTags"
+  , { name := "GP.7.2: every tag 1..23 ∈ gasPoolDeniedTags"
     , body := do
-        for t in List.range 23 do
+        for t in List.range 24 do
           if t ≠ 0 then
             assert (decide (t ∈ gasPoolDeniedTags)) s!"tag {t} should be denied"
     }
-  , { name := "GP.7.2: 22 ∈ gasPoolDeniedTags (reserved ammSwap slot)"
+  , { name := "GP.7.2: 23 ∈ gasPoolDeniedTags (ammSwap denied for pool)"
     , body := do
-        -- Index 22 is reserved for the GP.11 `ammSwap`; the pool
-        -- actor must be forbidden from signing it once it lands.
-        assert (decide ((22 : Nat) ∈ gasPoolDeniedTags)) "ammSwap slot pre-denied"
+        -- Index 23 (`ammSwap`) is denied for gasPoolActor; the pool
+        -- cannot sign an AMM swap (swaps are bridge-attested).
+        assert (decide ((23 : Nat) ∈ gasPoolDeniedTags)) "ammSwap tag denied"
     }
   , { name := "GP.7.2: zero_not_mem_gasPoolDeniedTags term-level API"
     , body := do
@@ -140,7 +140,7 @@ def tests : List TestCase :=
     }
   , { name := "GP.7.2: Action.tag_lt_denyListBound term-level API"
     , body := do
-        let _f : (a : Action) → Action.tag a < 23 := Action.tag_lt_denyListBound
+        let _f : (a : Action) → Action.tag a < 24 := Action.tag_lt_denyListBound
         pure ()
     }
   , { name := "GP.7.2: mem_gasPoolDeniedTags_of_tag_ne_zero term-level API"

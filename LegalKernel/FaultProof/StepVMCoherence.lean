@@ -202,23 +202,27 @@ def actionKindByte : Action → UInt8
   -- now returns the empty-hash sentinel only for kinds `≥ 23` (see
   -- `stepVMHash_unknown_kind_empty`).
   | .claimBudgetRefund _ _ _ _      => 22
+  -- Workstream GP (GP.11.4): L2 AMM swap.  Dispatcher index 23.
+  -- The `stepVMHash` execution arm (kind 23, `stepCommitAmmSwap`), the
+  -- Solidity `_stepAmmSwap` decoder, and the cross-stack fixtures ship
+  -- alongside, so kind 23 is L1-fault-proof-*executable*.
+  | .ammSwap _ _ _ _ _              => 23
 
-/-- The `stepVMHash`-*dispatched* kind range, `0..22` — the 23
+/-- The `stepVMHash`-*dispatched* kind range, `0..23` — the 24
     variants for which the L1 step-VM has a real execution arm with a
     cross-stack Solidity counterpart.  Used by the coverage regression
     test (`for kind in actionKindByteCases`) to assert each dispatched
     kind yields a non-empty hash.
 
-    Note (GP.9.1): index `22` (`claimBudgetRefund`) joined this list
-    once its `stepVMHash` execution arm (`stepCommitClaimBudgetRefund`)
-    and the Solidity `_stepClaimBudgetRefund` decoder + cross-stack
-    fixtures landed; `stepVMHash` now returns the empty-hash sentinel
-    only for kinds `≥ 23` (see `stepVMHash_unknown_kind_empty`).  This
-    list enumerates the kinds that are currently
-    L1-fault-proof-*executable*, which is the property the coverage test
-    needs. -/
+    Note (GP.11.4): index `23` (`ammSwap`) joined this list once its
+    `stepVMHash` execution arm (`stepCommitAmmSwap`) and the Solidity
+    `_stepAmmSwap` decoder + cross-stack fixtures landed; `stepVMHash`
+    now returns the empty-hash sentinel only for kinds `≥ 24` (see
+    `stepVMHash_unknown_kind_empty`).  This list enumerates the kinds
+    that are currently L1-fault-proof-*executable*, which is the
+    property the coverage test needs. -/
 def actionKindByteCases : List UInt8 :=
-  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
 /-! ## `actionFieldsForL1` — canonical byte layout per variant
 
@@ -345,6 +349,15 @@ def actionFieldsForL1 : Action → ByteArray
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
       uint64BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
+  -- Workstream GP (GP.11.4): ammSwap is a structured variant:
+  -- `uint64BE fromResource || uint64BE toResource || uint64BE amountIn
+  -- || uint64BE amountOut || uint64BE ammReserveActor`.  The kernel-
+  -- state effect (credit ammReserveActor at fromResource by amountIn,
+  -- debit ammReserveActor at toResource by amountOut) is mirrored
+  -- byte-for-byte by the Solidity `_stepAmmSwap`.
+  | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
+      uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
+      uint64BE amountIn ++ uint64BE amountOut ++ uint64BE ammReserveActor.toNat
 
 /-! ## Helpers for reading cell values from cell-proof bundles
 
@@ -822,9 +835,29 @@ def stepVMHash
         poolBalance - refundAmount               -- pool DEBITED (Nat sub; unreachable for admitted)
     stepCommitClaimBudgetRefund preCommit gasResource signer poolActor
       newSignerBalance newPoolBalance
-  -- Unknown kind (≥ 23): return empty bytes (won't match any L1 output).
-  -- With kinds 19 / 20 / 21 / 22 above, the dispatcher now covers the
-  -- full 0..22 range that `actionKindByte` produces.  Any future Action
+  -- GP.11.4 L2 AMM swap (action-index 23).  Layout
+  -- `fromResource ‖ toResource ‖ amountIn ‖ amountOut ‖ ammReserveActor`
+  -- (5 × uint64BE).  The kernel-state effect credits the reserve actor at
+  -- `fromResource` by `amountIn` and debits at `toResource` by `amountOut`.
+  | 23 =>
+    let fromResource     := readUint64BE fields 0
+    let toResource       := readUint64BE fields 8
+    let amountIn         := readUint64BE fields 16
+    let amountOut        := readUint64BE fields 24
+    let ammReserveActor  := readUint64BE fields 32
+    let fromBalance :=
+      decodeCellNat (readCellValue bundle
+                      (.balance fromResource.toUInt64 ammReserveActor.toUInt64))
+    let toBalance :=
+      decodeCellNat (readCellValue bundle
+                      (.balance toResource.toUInt64 ammReserveActor.toUInt64))
+    let newFromBalance := fromBalance + amountIn
+    let newToBalance   := toBalance - amountOut
+    stepCommitAmmSwap preCommit fromResource toResource ammReserveActor signer
+      newFromBalance newToBalance
+  -- Unknown kind (≥ 24): return empty bytes (won't match any L1 output).
+  -- With kinds 19 / 20 / 21 / 22 / 23 above, the dispatcher now covers
+  -- the full 0..23 range that `actionKindByte` produces.  Any future Action
   -- constructor addition MUST extend this match before merging —
   -- enforced by the `actionKindByteCases` coverage regression test.
   | _ => ByteArray.empty
@@ -1247,17 +1280,43 @@ theorem stepVMHash_claimBudgetRefund_kind
      stepCommitClaimBudgetRefund preCommit gasResource signer poolActor
        newSignerBalance newPoolBalance) := rfl
 
-/-- For unknown kinds (≥ 23), `stepVMHash` returns empty bytes.
+/-- GP.11.4: the `stepVMHash` kind-23 arm reduces to `stepCommitAmmSwap`
+    with the reserve actor's from/to-resource balance reads from the
+    cell-proof bundle.  The kernel-state effect credits the reserve
+    actor at `fromResource` by `amountIn` and debits at `toResource`
+    by `amountOut`. -/
+theorem stepVMHash_ammSwap_kind
+    (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
+    (bundle : CellProofBundle) :
+    stepVMHash preCommit 23 fields signer bundle =
+    (let fromResource    := readUint64BE fields 0
+     let toResource      := readUint64BE fields 8
+     let amountIn        := readUint64BE fields 16
+     let amountOut       := readUint64BE fields 24
+     let ammReserveActor := readUint64BE fields 32
+     let fromBalance :=
+       decodeCellNat (readCellValue bundle
+                       (.balance fromResource.toUInt64 ammReserveActor.toUInt64))
+     let toBalance :=
+       decodeCellNat (readCellValue bundle
+                       (.balance toResource.toUInt64 ammReserveActor.toUInt64))
+     let newFromBalance := fromBalance + amountIn
+     let newToBalance   := toBalance - amountOut
+     stepCommitAmmSwap preCommit fromResource toResource ammReserveActor signer
+       newFromBalance newToBalance) := rfl
 
-    Note: `actionKindByte` is provably in `0..22` after the
-    Workstream-GP extension (kinds 19 / 20 / 21 / 22 for `.depositWithFee` /
-    `.topUpActionBudget` / `.topUpActionBudgetFor` / `.claimBudgetRefund`),
-    so the catch-all path is unreachable from `stepVMHashFromAction`; this
-    property is only relevant for caller-supplied raw `UInt8` inputs ≥ 23. -/
+/-- For unknown kinds (≥ 24), `stepVMHash` returns empty bytes.
+
+    Note: `actionKindByte` is provably in `0..23` after the
+    Workstream-GP extension (kinds 19 / 20 / 21 / 22 / 23 for
+    `.depositWithFee` / `.topUpActionBudget` / `.topUpActionBudgetFor` /
+    `.claimBudgetRefund` / `.ammSwap`), so the catch-all path is
+    unreachable from `stepVMHashFromAction`; this property is only
+    relevant for caller-supplied raw `UInt8` inputs ≥ 24. -/
 theorem stepVMHash_unknown_kind_empty
     (preCommit : ByteArray) (fields : ByteArray) (signer : Nat)
     (bundle : CellProofBundle) :
-    stepVMHash preCommit 23 fields signer bundle = ByteArray.empty := rfl
+    stepVMHash preCommit 24 fields signer bundle = ByteArray.empty := rfl
 
 /-! ## `stepVMHashFromAction` — the action-driven convenience form
 

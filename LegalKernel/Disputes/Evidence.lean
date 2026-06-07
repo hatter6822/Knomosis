@@ -175,6 +175,11 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- this layer (the refund's budget DEBIT is an admission-layer effect
   -- that `kernelOnlyApply` deliberately doesn't model).
   | .claimBudgetRefund _ _ _ _     => es''
+  -- Workstream GP (GP.11.4): L2 AMM swap.  The swap is NOT signer-
+  -- aware; `Action.compileTransition` (and thus `Action.toTransition`)
+  -- maps it directly to `Laws.ammSwap`.  No registry / local-policy
+  -- mutation.
+  | .ammSwap _ _ _ _ _             => es''
 
 /-- **Bridge-scope invariant.**  `kernelOnlyApply` leaves the bridge
     sub-state (`consumed` / `pending` / `nextWdId`) completely
@@ -645,6 +650,7 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   -- `Action.toTransition`, wrapped in `step_impl`.
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
+  | ammSwap _ _ _ _ _             => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

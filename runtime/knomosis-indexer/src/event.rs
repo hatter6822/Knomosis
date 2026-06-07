@@ -38,12 +38,14 @@
 //! | 18  | `GasPoolClaim`                 | `resource, sequencer, amount`                                     |
 //! | 19  | `DelegatedActionBudgetTopUp`   | `recipient, signer, gas_resource, gas_amount, budget_inc, pool`   |
 //! | 20  | `BudgetConsumed`               | `actor, amount`                                                   |
+//! | 21  | `AmmSwapExecuted`              | `from_resource, to_resource, amount_in, amount_out, amm_actor`    |
 //!
 //! Tags 16..=20 are the Workstream-GP "gas pool" family (per
 //! `LegalKernel/Events/Types.lean::Event.tag` 16..=20).  Tags
 //! 16..=19 enable per-actor budget views; tag 20 (added in GP.6.4)
 //! enables per-epoch consumption tracking, completing the
-//! "N actions remaining this epoch" semantics.
+//! "N actions remaining this epoch" semantics.  Tag 21 (added in
+//! GP.11.4) is the AMM swap execution event.
 //!
 //! ## Field types (mirrored from Lean)
 //!
@@ -352,6 +354,20 @@ pub enum Event {
         /// signers).
         amount: BudgetUnits,
     },
+    /// An AMM swap was executed (ETH↔BOLD exchange against the
+    /// gas-pool reserves; Workstream GP / GP.11.4).  Tag 21.
+    AmmSwapExecuted {
+        /// Source resource (the one the swapper pays in).
+        from_resource: ResourceId,
+        /// Destination resource (the one the swapper receives).
+        to_resource: ResourceId,
+        /// Amount paid in by the swapper.
+        amount_in: Amount,
+        /// Amount received by the swapper.
+        amount_out: Amount,
+        /// The AMM reserve actor.
+        amm_reserve_actor: ActorId,
+    },
 }
 
 impl Event {
@@ -381,6 +397,7 @@ impl Event {
             Self::GasPoolClaim { .. } => 18,
             Self::DelegatedActionBudgetTopUp { .. } => 19,
             Self::BudgetConsumed { .. } => 20,
+            Self::AmmSwapExecuted { .. } => 21,
         }
     }
 
@@ -423,6 +440,9 @@ impl Event {
             Self::FaultProofGameSettled { winner, .. } => Some(*winner),
             Self::ActionBudgetTopUp { signer, .. } => Some(*signer),
             Self::GasPoolClaim { sequencer, .. } => Some(*sequencer),
+            Self::AmmSwapExecuted {
+                amm_reserve_actor, ..
+            } => Some(*amm_reserve_actor),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,
@@ -472,8 +492,8 @@ impl Event {
 
 /// The number of frozen `Event` constructors.  Bumped by amendment
 /// when a new constructor lands.  Useful for exhaustive coverage
-/// tests.  GP.6.4 widened 20 → 21 by adding `BudgetConsumed`.
-pub const EVENT_TAG_COUNT: u8 = 21;
+/// tests.  GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`.
+pub const EVENT_TAG_COUNT: u8 = 22;
 
 #[cfg(test)]
 mod tests {
@@ -660,10 +680,10 @@ mod tests {
     }
 
     /// `EVENT_TAG_COUNT` matches the number of constructors.
-    /// GP.6.4 widened 20 → 21.
+    /// GP.11.4 widened 21 → 22.
     #[test]
     fn tag_count_constant() {
-        assert_eq!(EVENT_TAG_COUNT, 21);
+        assert_eq!(EVENT_TAG_COUNT, 22);
     }
 
     /// Canonical resource-id constants pinned.

@@ -110,6 +110,7 @@ def Action.isBridgeOnly : Action → Bool
   | .registerIdentity _ _              => true
   | .deposit _ _ _ _                   => true
   | .depositWithFee _ _ _ _ _ _ _      => true
+  | .ammSwap _ _ _ _ _                 => true
   | _                                  => false
 
 /-- **Bridge-classification consistency invariant.**  Every
@@ -216,6 +217,7 @@ theorem applyActionToBridgeState_non_bridge
   | topUpActionBudget _ _ _ _     => rfl
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
+  | ammSwap _ _ _ _ _             => rfl
 
 /-- A `.depositWithFee` admission persists the `depositId` in
     `bridge.consumed`.  Companion to `applyActionToBridgeState`'s

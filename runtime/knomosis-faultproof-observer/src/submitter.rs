@@ -609,6 +609,14 @@ pub enum ActionKind {
     /// production terminate-calldata path uses the raw `u8`, so kind 22
     /// already flowed through.
     ClaimBudgetRefund = 22,
+    /// `ammSwap(fromResource, toResource, amountIn, amountOut,
+    /// ammReserveActor)` — Workstream GP action-index 23 (GP.11.4
+    /// L2-side AMM mirroring).  The bridge actor signs this in
+    /// response to an L1 `AmmSwapExecuted` event: credit
+    /// `ammReserveActor` at `fromResource` by `amountIn`, debit at
+    /// `toResource` by `amountOut`.  The L1 step-VM execution arm
+    /// landed in GP.11.4.
+    AmmSwap = 23,
 }
 
 /// Encode the FULL-FORM `terminateOnSingleStep` calldata.  The
@@ -1343,6 +1351,7 @@ mod tests {
         assert_eq!(ActionKind::TopUpActionBudget as u8, 20);
         assert_eq!(ActionKind::TopUpActionBudgetFor as u8, 21);
         assert_eq!(ActionKind::ClaimBudgetRefund as u8, 22);
+        assert_eq!(ActionKind::AmmSwap as u8, 23);
     }
 
     /// Game id is encoded as 32-byte big-endian.

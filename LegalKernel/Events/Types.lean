@@ -250,6 +250,21 @@ inductive Event
       bridgeActor's L1-gas-gated authority makes L2 budget
       gating redundant).  Frozen index 20. -/
   | budgetConsumed         (actor : ActorId) (amount : Nat)
+  /-- An L2 AMM swap was executed (Workstream GP / GP.11.4).  Carries
+      the `fromResource` (credited to the reserve), `toResource`
+      (debited from the reserve), the `amountIn` (input amount credited
+      to the reserve at `fromResource`), the `amountOut` (output amount
+      debited from the reserve at `toResource`), and the
+      `ammReserveActor` whose balance cells were mutated.  Indexers
+      consume this event to maintain AMM reserve views and LP yield
+      accounting (every swap accrues the fee into the reserves, so
+      `k = reserveFrom × reserveTo` is monotonically non-decreasing).
+      Distinct from `balanceChanged` so subscribers can identify
+      AMM-class balance mutations without re-deriving the action's
+      intent.  Frozen index 21. -/
+  | ammSwapExecuted        (fromResource toResource : ResourceId)
+                            (amountIn amountOut : Amount)
+                            (ammReserveActor : ActorId)
   deriving Repr, DecidableEq
 
 /-! ## §8.9.1.bis Event constructor-index projection (AR.6)
@@ -285,6 +300,7 @@ above):
   18 — `gasPoolClaim`            (Workstream GP §15E v1.0)
   19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4)
   20 — `budgetConsumed`          (Workstream GP / GP.6.4)
+  21 — `ammSwapExecuted`         (Workstream GP / GP.11.4)
 
 The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
 
@@ -313,6 +329,7 @@ def Event.tag : Event → Nat
   | .gasPoolClaim         _ _ _       => 18
   | .delegatedActionBudgetTopUp _ _ _ _ _ _ => 19
   | .budgetConsumed       _ _         => 20
+  | .ammSwapExecuted     _ _ _ _ _   => 21
 
 /-! ## Convenience predicates -/
 
@@ -356,6 +373,8 @@ def Event.actor : Event → Option ActorId
   | .delegatedActionBudgetTopUp recipient _ _ _ _ _ => some recipient
   -- GP.6.4: the actor whose budget was debited.
   | .budgetConsumed a _                             => some a
+  -- GP.11.4: the reserve actor whose balances were mutated.
+  | .ammSwapExecuted _ _ _ _ ra                     => some ra
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId

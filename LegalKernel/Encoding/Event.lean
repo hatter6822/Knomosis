@@ -195,6 +195,13 @@ def Event.encode : Event → Stream
       Encodable.encode (T := Nat) 20 ++
       Encodable.encode (T := Nat) actor.toNat ++
       Encodable.encode (T := Nat) amount
+  | .ammSwapExecuted fromResource toResource amountIn amountOut ammReserveActor =>
+      Encodable.encode (T := Nat) 21 ++
+      Encodable.encode (T := Nat) fromResource.toNat ++
+      Encodable.encode (T := Nat) toResource.toNat ++
+      Encodable.encode (T := Nat) amountIn ++
+      Encodable.encode (T := Nat) amountOut ++
+      Encodable.encode (T := Nat) ammReserveActor.toNat
 
 /-! ## `Event.decode` (§8.9.2)
 
@@ -459,6 +466,24 @@ def Event.decode (s : Stream) : Except DecodeError (Event × Stream) :=
       | .ok (amount, s₃) => .ok (.budgetConsumed actor amount, s₃)
       | .error e => .error e
     | .error e => .error e
+  | .ok (21, s₁) =>
+    match Action.readUInt64Field s₁ with
+    | .ok (fromResource, s₂) =>
+      match Action.readUInt64Field s₂ with
+      | .ok (toResource, s₃) =>
+        match Action.readNatField s₃ with
+        | .ok (amountIn, s₄) =>
+          match Action.readNatField s₄ with
+          | .ok (amountOut, s₅) =>
+            match Action.readUInt64Field s₅ with
+            | .ok (ammReserveActor, s₆) =>
+              .ok (.ammSwapExecuted fromResource toResource amountIn amountOut
+                    ammReserveActor, s₆)
+            | .error e => .error e
+          | .error e => .error e
+        | .error e => .error e
+      | .error e => .error e
+    | .error e => .error e
   | .ok (n, _) => .error (.invalidConstructorIndex n)
 
 /-- `Encodable Event` — the symmetric CBE codec used by the
@@ -505,6 +530,7 @@ theorem Event.tag_matches_encode_tag (e : Event) :
   | gasPoolClaim _ _ _                  => exact ⟨_, rfl⟩
   | delegatedActionBudgetTopUp _ _ _ _ _ _ => exact ⟨_, rfl⟩
   | budgetConsumed _ _                  => exact ⟨_, rfl⟩
+  | ammSwapExecuted _ _ _ _ _           => exact ⟨_, rfl⟩
 
 end Encoding
 end LegalKernel

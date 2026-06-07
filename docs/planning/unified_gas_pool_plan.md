@@ -6669,7 +6669,7 @@ make each sub-WU's audit obligation tractable in isolation.
 | GP.11.3.g    | Slippage + deadline tests (12+ cases)                                              | 2          | 1         | `test/AmmSlippage.t.sol`               |
 | GP.11.3.h    | Sandwich-attack simulator (4 cases: front-run, back-run, slippage stops it)        | 2          | 1         | `test/AmmSandwich.t.sol`               |
 | **GP.11.3 total** |                                                                              | **25**     |           |                                        |
-| GP.11.4.a    | New `Action.ammSwap` constructor at frozen index 22 (action layer)                 | 2          | 1         | `Authority/Action.lean`                |
+| GP.11.4.a    | New `Action.ammSwap` constructor at frozen index 23 (action layer)                 | 2          | 1         | `Authority/Action.lean`                |
 | GP.11.4.b    | `Laws/AmmSwap.lean` definition (kernel law)                                        | 3          | 2         | `Laws/AmmSwap.lean`                    |
 | GP.11.4.c    | Theorem ladder (8 theorems: increase_from, decrease_to, locality, ...)             | 5          | 2         | `Laws/AmmSwap.lean`                    |
 | GP.11.4.d    | Lex re-expression of `ammSwap` for the Lex registry                                | 2          | 1         | `Laws/AmmSwap.lean`                    |
@@ -7633,6 +7633,13 @@ sub-WU table above is the implementation roadmap.
   * **Dependencies.**  GP.2.3 (Action layer integration —
     extended to handle index 22).
   * **Estimated effort.**  ~16 hours.
+  * **Status.**  **Complete** (Lean side).  The action index landed
+    at 23 (not 22 as originally planned — index 22 was taken by
+    `claimBudgetRefund` from GP.9.1).  `Laws/AmmSwap.lean` ships the
+    full law + 10-theorem ladder + 2 classification instances.
+    `Bridge/AmmReserves.lean` deferred to GP.11.5 (the reserve-actor
+    reservation is a separate WU).  40-case `amm-swap` test suite
+    passes.  All audit gates green.
 
 #### WU GP.11.5: `ammReserveActor` reservation
 

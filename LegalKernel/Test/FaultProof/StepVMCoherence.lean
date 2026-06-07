@@ -579,14 +579,15 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=18 ⇒ stepCommitFaultProofResolution dispatch"
     }
-  , { name := "stepVMHash: unknown kind 23 returns empty"
+  , { name := "stepVMHash: unknown kind 24 returns empty"
     , body := do
         -- Kinds 19 (`.depositWithFee`), 20 (`.topUpActionBudget`),
-        -- 21 (`.topUpActionBudgetFor`, GP.5.3), and 22
-        -- (`.claimBudgetRefund`, GP.9.1) are now wired through the
-        -- dispatcher.  The catch-all path fires only for kinds ≥ 23.
+        -- 21 (`.topUpActionBudgetFor`, GP.5.3), 22
+        -- (`.claimBudgetRefund`, GP.9.1), and 23 (`.ammSwap`,
+        -- GP.11.4) are now wired through the dispatcher.  The
+        -- catch-all path fires only for kinds ≥ 24.
         let pc := ByteArray.mk #[(0xAA : UInt8)]
-        let h := stepVMHash pc 23 ByteArray.empty 7 { proofs := [] }
+        let h := stepVMHash pc 24 ByteArray.empty 7 { proofs := [] }
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
     }
@@ -1007,6 +1008,117 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=22 exact-pool-drain ⇒ newPool=0, claimant credited full amount"
     }
+    -- ## kind=23 (.ammSwap, GP.11.4)
+  , { name := "stepVMHash: kind=23 (AmmSwap) dispatches credit-from / debit-to"
+    , body := do
+        -- Mirror Solidity's `_stepAmmSwap` byte-for-byte:
+        -- fromResource=0, toResource=1, amountIn=500, amountOut=480,
+        -- ammReserveActor=3.  Signer (bridge) = 0.
+        -- Pre-balances: fromBalance=1000, toBalance=2000.
+        -- Expected: newFromBalance = 1000 + 500 = 1500,
+        --           newToBalance = 2000 - 480 = 1520.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .ammSwap (0 : UInt64) (1 : UInt64) (500 : Nat) (480 : Nat) (3 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal1000 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 1000).toArray
+        let bal2000 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 2000).toArray
+        let pFrom : CellProof :=
+          { cellTag := .balance (0 : UInt64) (3 : UInt64),
+            cellValue := bal1000, witnessState := ExtendedState.empty }
+        let pTo : CellProof :=
+          { cellTag := .balance (1 : UInt64) (3 : UInt64),
+            cellValue := bal2000, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pFrom, pTo] }
+        let h1 := stepVMHash pc 23 fields 0 bundle
+        let h2 := stepCommitAmmSwap pc 0 1 3 0 1500 1520
+        assertEq (expected := h2) (actual := h1)
+          "kind=23 distinct from/to resources ⇒ credit-from / debit-to"
+    }
+  , { name := "stepVMHash: kind=23 distinct from kind=20/21/22 via the ammSwap tag"
+    , body := do
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let hSwap := stepCommitAmmSwap pc 0 1 3 0 1500 1520
+        let hTopUp := stepCommitTopUpActionBudget pc 0 0 3 1500 500
+        let hRefund := stepCommitClaimBudgetRefund pc 0 0 3 1500 1520
+        assert (hSwap ≠ hTopUp) "ammSwap tag ≠ topUpActionBudget tag"
+        assert (hSwap ≠ hRefund) "ammSwap tag ≠ claimBudgetRefund tag"
+    }
+  , { name := "stepVMHash: kind=23 (AmmSwap) exact-reserve-drain zeroes the to-balance (Nat boundary)"
+    , body := do
+        -- toBalance=480, amountOut=480 ⇒ newToBalance = 0 (exact drain).
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .ammSwap (0 : UInt64) (1 : UInt64) (100 : Nat) (480 : Nat) (3 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal500 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 500).toArray
+        let bal480 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 480).toArray
+        let pFrom : CellProof :=
+          { cellTag := .balance (0 : UInt64) (3 : UInt64),
+            cellValue := bal500, witnessState := ExtendedState.empty }
+        let pTo : CellProof :=
+          { cellTag := .balance (1 : UInt64) (3 : UInt64),
+            cellValue := bal480, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pFrom, pTo] }
+        let h1 := stepVMHash pc 23 fields 0 bundle
+        -- newFromBalance = 500 + 100 = 600, newToBalance = 480 - 480 = 0
+        let h2 := stepCommitAmmSwap pc 0 1 3 0 600 0
+        assertEq (expected := h2) (actual := h1)
+          "kind=23 exact-drain ⇒ newToBalance=0"
+    }
+  , { name := "stepVMHash: kind=23 (AmmSwap) reversed direction (BOLD→ETH)"
+    , body := do
+        -- fromResource=1 (BOLD), toResource=0 (ETH), amountIn=200,
+        -- amountOut=150, ammReserveActor=3.
+        let pc := ByteArray.mk #[(0xCD : UInt8)]
+        let action : Action :=
+          .ammSwap (1 : UInt64) (0 : UInt64) (200 : Nat) (150 : Nat) (3 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal800 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 800).toArray
+        let bal1000 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 1000).toArray
+        let pFrom : CellProof :=
+          { cellTag := .balance (1 : UInt64) (3 : UInt64),
+            cellValue := bal800, witnessState := ExtendedState.empty }
+        let pTo : CellProof :=
+          { cellTag := .balance (0 : UInt64) (3 : UInt64),
+            cellValue := bal1000, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pFrom, pTo] }
+        let h1 := stepVMHash pc 23 fields 0 bundle
+        -- newFromBalance = 800 + 200 = 1000, newToBalance = 1000 - 150 = 850
+        let h2 := stepCommitAmmSwap pc 1 0 3 0 1000 850
+        assertEq (expected := h2) (actual := h1)
+          "kind=23 BOLD→ETH ⇒ reversed resources"
+    }
+  , { name := "stepVMHash: kind=23 stepVMHash_ammSwap_kind term-level API"
+    , body := do
+        let _f :
+          (preCommit : ByteArray) → (fields : ByteArray) →
+          (signer : Nat) → (bundle : CellProofBundle) →
+          stepVMHash preCommit 23 fields signer bundle =
+          (let fromResource    := readUint64BE fields 0
+           let toResource      := readUint64BE fields 8
+           let amountIn        := readUint64BE fields 16
+           let amountOut       := readUint64BE fields 24
+           let ammReserveActor := readUint64BE fields 32
+           let fromBalance :=
+             decodeCellNat (readCellValue bundle
+                             (.balance fromResource.toUInt64 ammReserveActor.toUInt64))
+           let toBalance :=
+             decodeCellNat (readCellValue bundle
+                             (.balance toResource.toUInt64 ammReserveActor.toUInt64))
+           let newFromBalance := fromBalance + amountIn
+           let newToBalance   := toBalance - amountOut
+           stepCommitAmmSwap preCommit fromResource toResource ammReserveActor signer
+             newFromBalance newToBalance) :=
+          stepVMHash_ammSwap_kind
+        pure ()
+    }
     -- ## stepVMHashFromAction: composition
   , { name := "stepVMHashFromAction: composition equality"
     , body := do
@@ -1152,6 +1264,25 @@ def tests : List TestCase :=
             signer.toNat 40 20 11
         assertEq (expected := viaCommit) (actual := viaDispatcher)
           "absent pre-balances read as 0, credited to amounts"
+    }
+  , { name := "stepVMHashFromAction: ammSwap reads ammReserveActor balances from observer bundle"
+    , body := do
+        -- GP.11.4 end-to-end: pre-state balance(0,3)=1000 (ETH at
+        -- ammReserveActor), balance(1,3)=2000 (BOLD at ammReserveActor).
+        -- Swap ETH→BOLD: amountIn=500, amountOut=480.  signer = bridge.
+        let es : ExtendedState :=
+          let b1 := LegalKernel.setBalance LegalKernel.genesisState 0 3 1000
+          let b2 := LegalKernel.setBalance b1 1 3 2000
+          { ExtendedState.empty with base := b2 }
+        let action : Action := .ammSwap 0 1 500 480 3
+        let signer : ActorId := Bridge.bridgeActor
+        let viaDispatcher := stepVMHashFromAction es action signer
+        -- fromBalance 1000 + 500 = 1500; toBalance 2000 - 480 = 1520.
+        let viaCommit :=
+          stepCommitAmmSwap (commitExtendedState es) 0 1 3
+            signer.toNat 1500 1520
+        assertEq (expected := viaCommit) (actual := viaDispatcher)
+          "full path computes fromBal=1500, toBal=1520 from observer bundle"
     }
     -- ## API-stability for the per-variant dispatch theorems
   , { name := "stepVMHash_transfer_kind API stable"
@@ -1417,6 +1548,11 @@ def tests : List TestCase :=
   , { name := "stepVMHash_claimBudgetRefund_kind API stable"
     , body := do
         let _ := @stepVMHash_claimBudgetRefund_kind
+        assert true "API exists"
+    }
+  , { name := "stepVMHash_ammSwap_kind API stable"
+    , body := do
+        let _ := @stepVMHash_ammSwap_kind
         assert true "API exists"
     }
   ]

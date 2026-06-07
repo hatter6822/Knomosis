@@ -34,8 +34,8 @@ use knomosis_indexer::event::Event;
 use serde::Deserialize;
 
 /// The highest event tag the indexer's `Event` mirror models.
-/// GP.6.4 widened this from 15 to 19.
-const INDEXER_MAX_KNOWN_TAG: u64 = 20;
+/// GP.11.4 widened this from 20 to 21 by adding `AmmSwapExecuted`.
+const INDEXER_MAX_KNOWN_TAG: u64 = 21;
 
 /// Pinned generator identifier (a Lean-side version bump forces an
 /// explicit update here).
@@ -169,20 +169,21 @@ fn lean_event_bytes_round_trip_through_indexer() {
         }
     }
     // Sanity: the corpus exercised both the pre-GP family
-    // (tags 0..=15) and the GP family (tags 16..=20).
+    // (tags 0..=15) and the extended family (tags 16..=21).
     assert!(
         known_seen >= 13,
         "expected the canonical 0..=15 tags, saw {known_seen}"
     );
     assert!(
-        gp_seen >= 5,
-        "expected the GP-family 16..=20 tags, saw {gp_seen}"
+        gp_seen >= 6,
+        "expected the extended-family 16..=21 tags, saw {gp_seen}"
     );
 }
 
-/// **GP.6.4** — Round-tripping the GP-family fixture entries
-/// through the indexer's `Event` mirror preserves the field
-/// semantics, not just the byte shape.  Specifically:
+/// **GP.6.4 + GP.11.4** — Round-tripping the extended-family
+/// fixture entries (tags 16..=21) through the indexer's `Event`
+/// mirror preserves the field semantics, not just the byte shape.
+/// Specifically:
 ///
 ///   * `DepositWithFeeCredited`: `Event::tag() == 16`, `actor()`
 ///     returns the recipient, `resource()` returns the deposit
@@ -194,6 +195,11 @@ fn lean_event_bytes_round_trip_through_indexer() {
 ///   * `DelegatedActionBudgetTopUp`: `tag() == 19`, `actor()`
 ///     returns the RECIPIENT (not the signer), `resource()`
 ///     returns `gas_resource`.
+///   * `BudgetConsumed`: `tag() == 20`, `actor()` returns the
+///     actor, `resource()` returns `None`.
+///   * `AmmSwapExecuted`: `tag() == 21`, `actor()` returns the
+///     `amm_reserve_actor`, `resource()` returns `None` (the
+///     event is multi-resource: `from_resource` / `to_resource`).
 #[test]
 fn gp_family_field_projections_consistent() {
     let Some(fx) = load_fixture() else { return };
@@ -205,31 +211,47 @@ fn gp_family_field_projections_consistent() {
         let decoded = decode_event(&bytes).unwrap();
         // Tag matches.
         assert_eq!(u64::from(decoded.tag()), e.tag);
-        // Every GP-family event has an `actor()` projection.
+        // Every event with tag >= 16 has an `actor()` projection.
         assert!(
             decoded.actor().is_some(),
-            "GP family {} ({}) has no actor",
+            "tag-{} event {} ({}) has no actor",
+            e.tag,
             e.kind,
             e.category
         );
         // Most GP-family events have a `resource()`, EXCEPT tag
         // 20 (`BudgetConsumed`) which is resource-independent
-        // (the consumption is in budget units, not a resource).
-        if e.tag != 20 {
+        // (budget units, not a resource) and tag 21
+        // (`AmmSwapExecuted`) which is multi-resource (from/to).
+        if e.tag != 20 && e.tag != 21 {
             assert!(
                 decoded.resource().is_some(),
-                "GP family {} ({}) has no resource",
+                "tag-{} event {} ({}) has no resource",
+                e.tag,
                 e.kind,
                 e.category
             );
         }
-        // `is_gas_pool_family` is exhaustive on tags 16..=20.
-        assert!(
-            decoded.is_gas_pool_family(),
-            "GP family {} ({}) not flagged as gas-pool family",
-            e.kind,
-            e.category
-        );
+        // `is_gas_pool_family` is exhaustive on tags 16..=20;
+        // tag 21 (`AmmSwapExecuted`) is an AMM event, not
+        // gas-pool family.
+        if e.tag <= 20 {
+            assert!(
+                decoded.is_gas_pool_family(),
+                "tag-{} event {} ({}) not flagged as gas-pool family",
+                e.tag,
+                e.kind,
+                e.category
+            );
+        } else {
+            assert!(
+                !decoded.is_gas_pool_family(),
+                "tag-{} event {} ({}) should NOT be gas-pool family",
+                e.tag,
+                e.kind,
+                e.category
+            );
+        }
         // Per-variant: `DelegatedActionBudgetTopUp` returns
         // recipient (NOT signer) from `actor()`.
         if let Event::DelegatedActionBudgetTopUp {
