@@ -7836,10 +7836,18 @@ sub-WU table above is the implementation roadmap.
       Keep it for symmetry with `gasPoolPolicy`; the real
       gating happens in `bridgePolicy`.
 
-  * **Tests.**  5 cases.
+  * **Tests.**  46 cases (`bridge-amm-reserve-policy` suite).
   * **Acceptance criteria.**  One reviewer.
   * **Dependencies.**  GP.11.5.
   * **Estimated effort.**  ~3 hours.
+  * **Status.**  **Complete** (Lean side).  Ships as
+    `LegalKernel/Bridge/AmmReservePolicy.lean`: the
+    `ammReservePolicy` (`denyTags [0..22]`) + the LP.7
+    escape-hatch-closing `ammReserveAuthorityPolicy` + the
+    `AmmReserveGenesis` bundled wiring + 16 headline theorems +
+    `fieldsBounded` / `roundtrip` + the 42-case test suite.  Uses
+    `List.range 24 |>.filter (· ≠ 23)` per the index note above
+    (the sketch's stale `22` is corrected to `23`).
 
 #### WU GP.11.7: Cross-stack AMM fixture corpus
 

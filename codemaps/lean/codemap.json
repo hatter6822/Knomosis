@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "8c3cc92fc96882cf55f9a5833bd0d67ad0ab9dba549f4ccb5b3ba5e9066f0371"
+    "source_digest": "b154bd330c8df27fc88cd284abae494448168fb63a7886f531fa915700a87fe9"
   },
   "summary": {
     "module_count": 297,
@@ -510,13 +510,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 303,
+          "line": 306,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 316,
+          "line": 319,
           "called": [
             "LegalKernel"
           ]
@@ -58693,7 +58693,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 207,
+          "line": 208,
           "called": [
             "runAll"
           ]

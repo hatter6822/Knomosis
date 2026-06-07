@@ -94,7 +94,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
