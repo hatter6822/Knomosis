@@ -14,9 +14,9 @@ Exercises the Workstream-B address-book infrastructure
 (`LegalKernel/Bridge/AddressBook.lean`).  Coverage:
 
   * **Empty fixture properties.**  `empty.lookup` and
-    `empty.lookupRev` return `none`; `empty.nextActorId = 3`
-    (GP.7.1 reserves ids 0/1/2 for bridge/gasPool/sequencer);
-    `empty.Consistent` holds.
+    `empty.lookupRev` return `none`; `empty.nextActorId = 4`
+    (GP.7.1 + GP.11.5 reserve ids 0/1/2/3 for
+    bridge/gasPool/sequencer/ammReserve); `empty.Consistent` holds.
   * **`assign` happy paths.**  Assigning a fresh address yields a
     `some` lookup at the new id; assigning a known address is the
     identity.
@@ -71,9 +71,9 @@ def tests : List TestCase :=
         assert (empty.lookupRev 0 = none) "id 0 not in empty"
         assert (empty.lookupRev 1 = none) "id 1 not in empty"
     }
-  , { name := "empty.nextActorId = 3 (reserves ids 0/1/2 for bridge/gasPool/sequencer)"
+  , { name := "empty.nextActorId = 4 (reserves ids 0/1/2/3 for bridge/gasPool/sequencer/ammReserve)"
     , body := do
-        assertEq (expected := (3 : ActorId)) (actual := empty.nextActorId) "nextActorId"
+        assertEq (expected := (4 : ActorId)) (actual := empty.nextActorId) "nextActorId"
     }
   , -- ## EthAddress conversions
     { name := "EthAddress.zero has underlying value 0"
@@ -93,17 +93,17 @@ def tests : List TestCase :=
         assert (EthAddress.ofBytes bs' = none) "21-byte input rejected"
     }
   , -- ## Assign happy paths
-    { name := "assign on empty: addr1 → id = 3 (first non-reserved slot)"
+    { name := "assign on empty: addr1 → id = 4 (first non-reserved slot)"
     , body := do
         let (b', id) := empty.assign addr1
-        assertEq (expected := (3 : ActorId)) (actual := id) "assigned id"
-        assertEq (expected := (some 3 : Option ActorId)) (actual := b'.lookup addr1) "lookup"
-        assertEq (expected := (some addr1)) (actual := b'.lookupRev 3) "lookupRev"
+        assertEq (expected := (4 : ActorId)) (actual := id) "assigned id"
+        assertEq (expected := (some 4 : Option ActorId)) (actual := b'.lookup addr1) "lookup"
+        assertEq (expected := (some addr1)) (actual := b'.lookupRev 4) "lookupRev"
     }
   , { name := "assign on empty: nextActorId increments"
     , body := do
         let (b', _) := empty.assign addr1
-        assertEq (expected := (4 : ActorId)) (actual := b'.nextActorId) "nextActorId after one assign"
+        assertEq (expected := (5 : ActorId)) (actual := b'.nextActorId) "nextActorId after one assign"
     }
   , { name := "assign known address is idempotent"
     , body := do
@@ -118,28 +118,28 @@ def tests : List TestCase :=
     , body := do
         let (b', id1) := empty.assign addr1
         let (b'', id2) := b'.assign addr2
-        assertEq (expected := (3 : ActorId)) (actual := id1) "first id"
-        assertEq (expected := (4 : ActorId)) (actual := id2) "second id"
-        assertEq (expected := (5 : ActorId)) (actual := b''.nextActorId) "nextActorId after two"
+        assertEq (expected := (4 : ActorId)) (actual := id1) "first id"
+        assertEq (expected := (5 : ActorId)) (actual := id2) "second id"
+        assertEq (expected := (6 : ActorId)) (actual := b''.nextActorId) "nextActorId after two"
     }
   , { name := "assign three distinct addresses, each unique"
     , body := do
         let (b1, _) := empty.assign addr1
         let (b2, _) := b1.assign addr2
         let (b3, _) := b2.assign addr3
-        assert (b3.lookup addr1 = some 3) "addr1 → 3"
-        assert (b3.lookup addr2 = some 4) "addr2 → 4"
-        assert (b3.lookup addr3 = some 5) "addr3 → 5"
-        assert (b3.lookupRev 3 = some addr1) "rev 3"
-        assert (b3.lookupRev 4 = some addr2) "rev 4"
-        assert (b3.lookupRev 5 = some addr3) "rev 5"
+        assert (b3.lookup addr1 = some 4) "addr1 → 4"
+        assert (b3.lookup addr2 = some 5) "addr2 → 5"
+        assert (b3.lookup addr3 = some 6) "addr3 → 6"
+        assert (b3.lookupRev 4 = some addr1) "rev 4"
+        assert (b3.lookupRev 5 = some addr2) "rev 5"
+        assert (b3.lookupRev 6 = some addr3) "rev 6"
     }
   , -- ## Cross-actor independence
     { name := "assign addr1, then addr2: addr1 still mapped"
     , body := do
         let (b1, _) := empty.assign addr1
         let (b2, _) := b1.assign addr2
-        assertEq (expected := (some (3 : ActorId))) (actual := b2.lookup addr1) "addr1 still mapped"
+        assertEq (expected := (some (4 : ActorId))) (actual := b2.lookup addr1) "addr1 still mapped"
     }
   , { name := "assign addr1: addr2 still unmapped"
     , body := do
@@ -236,7 +236,7 @@ def tests : List TestCase :=
     , body := do
         -- Verify the freshness hypothesis at empty: reverse[3]? = none.
         let hFresh : empty.reverse[empty.nextActorId]? = none := by
-          show (∅ : Std.TreeMap ActorId EthAddress compare)[(3 : ActorId)]? = none
+          show (∅ : Std.TreeMap ActorId EthAddress compare)[(4 : ActorId)]? = none
           exact Std.TreeMap.getElem?_emptyc
         -- Apply assign_preserves_consistent.
         let h_post : (empty.assign addr1).fst.Consistent :=
@@ -247,25 +247,25 @@ def tests : List TestCase :=
   , { name := "Value-level: after assign, addressBook_invariant holds"
     , body := do
         let hFresh : empty.reverse[empty.nextActorId]? = none := by
-          show (∅ : Std.TreeMap ActorId EthAddress compare)[(3 : ActorId)]? = none
+          show (∅ : Std.TreeMap ActorId EthAddress compare)[(4 : ActorId)]? = none
           exact Std.TreeMap.getElem?_emptyc
         let b' := (empty.assign addr1).fst
         let h_post : b'.Consistent :=
           assign_preserves_consistent empty empty_consistent addr1 hFresh
         -- addressBook_invariant b' h_post: ∀ addr id, ...
         let h_inv := addressBook_invariant b' h_post
-        -- Demonstrate the iff at addr1, id 3 (the assigned id, since the
-        -- genesis nextActorId is 3 post-GP.7.1).  Both directions
+        -- Demonstrate the iff at addr1, id 4 (the assigned id, since the
+        -- genesis nextActorId is 4 post-GP.11.5).  Both directions
         -- typecheck against b''s post-assign state.
-        let _mp  : b'.lookup addr1 = some 3 → b'.lookupRev 3 = some addr1 :=
-          (h_inv addr1 3).mp
-        let _mpr : b'.lookupRev 3 = some addr1 → b'.lookup addr1 = some 3 :=
-          (h_inv addr1 3).mpr
+        let _mp  : b'.lookup addr1 = some 4 → b'.lookupRev 4 = some addr1 :=
+          (h_inv addr1 4).mp
+        let _mpr : b'.lookupRev 4 = some addr1 → b'.lookup addr1 = some 4 :=
+          (h_inv addr1 4).mpr
         -- Verify the value-level claims:
-        assertEq (expected := (some (3 : ActorId))) (actual := b'.lookup addr1)
+        assertEq (expected := (some (4 : ActorId))) (actual := b'.lookup addr1)
           "lookup addr1"
-        assertEq (expected := (some addr1)) (actual := b'.lookupRev 3)
-          "lookupRev 3"
+        assertEq (expected := (some addr1)) (actual := b'.lookupRev 4)
+          "lookupRev 4"
         pure ()
     }
   , -- ## ≤-form of assign_fresh_actorId

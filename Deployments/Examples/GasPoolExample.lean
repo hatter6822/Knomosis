@@ -85,9 +85,10 @@ def maxDrainPerActionBold : Amount := 3000
 
 /-- The first non-reserved `ActorId`: a regular L2 user.  The reserved
     slots are `bridgeActor` (0), `gasPoolActor` (1), `sequencerActor`
-    (2); a fresh deployment's first registered user is `ActorId 3`
-    (`AddressBook.empty.nextActorId = 3`, GP.7.1). -/
-def userActor : ActorId := 3
+    (2), `ammReserveActor` (3); a fresh deployment's first registered
+    user is `ActorId 4` (`AddressBook.empty.nextActorId = 4`, GP.7.1 +
+    GP.11.5). -/
+def userActor : ActorId := 4
 
 /-- The deployment's domain-separation tag (a short demo value; a
     production deployment supplies a 32-byte id via `--deployment-id`). -/

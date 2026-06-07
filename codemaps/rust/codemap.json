@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "027477c080ebbef6aa3273814f7252078c1ba121efb7777c96b929b2bfa865f6"
+    "source_digest": "c9abc2c1870ce8e04db5feaef58e8140616e6791ee4786dbad87d3a9e76510f4"
   },
   "summary": {
     "module_count": 136,
-    "declaration_count": 4574
+    "declaration_count": 4578
   },
   "modules": [
     {
@@ -37833,7 +37833,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::address_book",
       "path": "runtime/knomosis-l1-ingest/src/address_book.rs",
-      "declaration_count": 32,
+      "declaration_count": 35,
       "declarations": [
         {
           "kind": "struct",
@@ -37885,8 +37885,16 @@
         },
         {
           "kind": "const",
+          "name": "AMM_RESERVE_ACTOR_ID",
+          "line": 101,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "const",
           "name": "INITIAL_NEXT_ACTOR_ID",
-          "line": 102,
+          "line": 111,
           "called": [
             "ActorId"
           ]
@@ -37894,7 +37902,7 @@
         {
           "kind": "enum",
           "name": "AssignError",
-          "line": 106,
+          "line": 115,
           "called": [
             "error"
           ]
@@ -37902,13 +37910,13 @@
         {
           "kind": "impl",
           "name": "AddressBook",
-          "line": 115,
+          "line": 124,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 119,
+          "line": 128,
           "called": [
             "INITIAL_NEXT_ACTOR_ID",
             "next_actor_id"
@@ -37917,7 +37925,7 @@
         {
           "kind": "fn",
           "name": "lookup",
-          "line": 131,
+          "line": 140,
           "called": [
             "ActorId",
             "EthAddress",
@@ -37928,7 +37936,7 @@
         {
           "kind": "fn",
           "name": "lookup_reverse",
-          "line": 139,
+          "line": 148,
           "called": [
             "ActorId",
             "EthAddress",
@@ -37939,7 +37947,7 @@
         {
           "kind": "fn",
           "name": "try_assign",
-          "line": 154,
+          "line": 163,
           "called": [
             "ActorId",
             "AssignError",
@@ -37954,7 +37962,7 @@
         {
           "kind": "fn",
           "name": "assign",
-          "line": 181,
+          "line": 190,
           "called": [
             "ActorId",
             "EthAddress",
@@ -37965,7 +37973,7 @@
         {
           "kind": "fn",
           "name": "next_actor_id",
-          "line": 188,
+          "line": 197,
           "called": [
             "ActorId"
           ]
@@ -37973,20 +37981,21 @@
         {
           "kind": "fn",
           "name": "len",
-          "line": 194,
+          "line": 203,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 200,
+          "line": 209,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 206,
+          "line": 215,
           "called": [
+            "AMM_RESERVE_ACTOR_ID",
             "ActorId",
             "AddressBook",
             "BRIDGE_ACTOR_ID",
@@ -37999,7 +38008,7 @@
         {
           "kind": "fn",
           "name": "new_book_is_empty",
-          "line": 214,
+          "line": 225,
           "called": [
             "INITIAL_NEXT_ACTOR_ID",
             "is_empty",
@@ -38010,7 +38019,7 @@
         {
           "kind": "fn",
           "name": "lookup_unknown_is_none",
-          "line": 223,
+          "line": 234,
           "called": [
             "addr",
             "lookup"
@@ -38019,7 +38028,7 @@
         {
           "kind": "fn",
           "name": "first_assign_is_fresh",
-          "line": 233,
+          "line": 244,
           "called": [
             "addr",
             "assign",
@@ -38031,7 +38040,7 @@
         {
           "kind": "fn",
           "name": "second_assign_is_idempotent",
-          "line": 247,
+          "line": 258,
           "called": [
             "_",
             "addr",
@@ -38043,7 +38052,7 @@
         {
           "kind": "fn",
           "name": "distinct_addresses_get_distinct_ids",
-          "line": 260,
+          "line": 271,
           "called": [
             "_",
             "assign",
@@ -38054,7 +38063,7 @@
         {
           "kind": "fn",
           "name": "lookup_after_assign",
-          "line": 276,
+          "line": 287,
           "called": [
             "_",
             "addr",
@@ -38066,7 +38075,7 @@
         {
           "kind": "fn",
           "name": "reverse_after_assign",
-          "line": 285,
+          "line": 296,
           "called": [
             "_",
             "addr",
@@ -38078,7 +38087,7 @@
         {
           "kind": "fn",
           "name": "bridge_actor_id_is_reserved",
-          "line": 296,
+          "line": 307,
           "called": [
             "BRIDGE_ACTOR_ID",
             "_",
@@ -38090,7 +38099,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_and_sequencer_ids_are_reserved",
-          "line": 315,
+          "line": 329,
           "called": [
             "BRIDGE_ACTOR_ID",
             "GAS_POOL_ACTOR_ID",
@@ -38106,8 +38115,42 @@
         },
         {
           "kind": "fn",
+          "name": "amm_reserve_id_is_reserved",
+          "line": 368,
+          "called": [
+            "AMM_RESERVE_ACTOR_ID",
+            "BRIDGE_ACTOR_ID",
+            "GAS_POOL_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "_",
+            "addr",
+            "assign",
+            "id",
+            "lookup_reverse",
+            "next_actor_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "assign_chain_never_issues_reserved_id",
+          "line": 393,
+          "called": [
+            "AMM_RESERVE_ACTOR_ID",
+            "BRIDGE_ACTOR_ID",
+            "GAS_POOL_ACTOR_ID",
+            "INITIAL_NEXT_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "addr",
+            "assign",
+            "id",
+            "lookup_reverse",
+            "next_actor_id"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "assign_preserves_other_addresses",
-          "line": 349,
+          "line": 432,
           "called": [
             "_",
             "assign",
@@ -38118,7 +38161,7 @@
         {
           "kind": "fn",
           "name": "try_assign_rejects_overflow",
-          "line": 369,
+          "line": 452,
           "called": [
             "Err",
             "addr",
@@ -38131,7 +38174,7 @@
         {
           "kind": "fn",
           "name": "assign_panics_on_overflow",
-          "line": 396,
+          "line": 479,
           "called": [
             "_",
             "addr",
@@ -38142,7 +38185,7 @@
         {
           "kind": "fn",
           "name": "try_assign_failure_does_not_corrupt_book",
-          "line": 407,
+          "line": 490,
           "called": [
             "_",
             "assign",
@@ -38156,7 +38199,7 @@
         {
           "kind": "fn",
           "name": "unsafe_inject_counter",
-          "line": 438,
+          "line": 521,
           "called": [
             "ActorId",
             "AddressBook",
@@ -41908,7 +41951,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::state",
       "path": "runtime/knomosis-l1-ingest/src/state.rs",
-      "declaration_count": 52,
+      "declaration_count": 53,
       "declarations": [
         {
           "kind": "enum",
@@ -42125,7 +42168,7 @@
         {
           "kind": "fn",
           "name": "append",
-          "line": 602,
+          "line": 607,
           "called": [
             "StateError",
             "StateRecord",
@@ -42141,13 +42184,13 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 628,
+          "line": 633,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 634,
+          "line": 639,
           "called": [
             "ActorId",
             "AddressAssignment",
@@ -42162,7 +42205,7 @@
         {
           "kind": "fn",
           "name": "hex_bytes_round_trip",
-          "line": 640,
+          "line": 645,
           "called": [
             "HexBytes"
           ]
@@ -42170,7 +42213,7 @@
         {
           "kind": "fn",
           "name": "hex_bytes_rejects_malformed",
-          "line": 650,
+          "line": 655,
           "called": [
             "HexBytes"
           ]
@@ -42178,7 +42221,7 @@
         {
           "kind": "fn",
           "name": "forwarded_record_round_trip",
-          "line": 658,
+          "line": 663,
           "called": [
             "HexBytes",
             "StateRecord",
@@ -42188,7 +42231,7 @@
         {
           "kind": "fn",
           "name": "confirmed_record_round_trip",
-          "line": 673,
+          "line": 678,
           "called": [
             "StateRecord",
             "block_number"
@@ -42197,7 +42240,7 @@
         {
           "kind": "fn",
           "name": "address_assigned_record_round_trip",
-          "line": 682,
+          "line": 687,
           "called": [
             "HexBytes",
             "StateRecord"
@@ -42206,7 +42249,7 @@
         {
           "kind": "fn",
           "name": "open_creates_new_file",
-          "line": 695,
+          "line": 700,
           "called": [
             "address_book",
             "is_empty",
@@ -42219,7 +42262,7 @@
         {
           "kind": "fn",
           "name": "append_replay_round_trip",
-          "line": 709,
+          "line": 714,
           "called": [
             "ForwardedKey",
             "HexBytes",
@@ -42241,7 +42284,19 @@
         {
           "kind": "fn",
           "name": "replay_rejects_reserved_actor_id",
-          "line": 763,
+          "line": 768,
+          "called": [
+            "Err",
+            "HexBytes",
+            "_",
+            "append",
+            "path"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "replay_rejects_newly_reserved_amm_actor_id",
+          "line": 809,
           "called": [
             "Err",
             "HexBytes",
@@ -42253,7 +42308,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_reserved_actor_id_in_submitted_record",
-          "line": 803,
+          "line": 848,
           "called": [
             "AddressAssignment",
             "Err",
@@ -42268,7 +42323,7 @@
         {
           "kind": "fn",
           "name": "confirmed_overrides",
-          "line": 837,
+          "line": 882,
           "called": [
             "_",
             "append",
@@ -42281,7 +42336,7 @@
         {
           "kind": "fn",
           "name": "address_book_replay_order",
-          "line": 858,
+          "line": 903,
           "called": [
             "HexBytes",
             "_",
@@ -42296,7 +42351,7 @@
         {
           "kind": "fn",
           "name": "empty_lines_skipped",
-          "line": 909,
+          "line": 954,
           "called": [
             "_",
             "last_confirmed_block",
@@ -42307,7 +42362,7 @@
         {
           "kind": "fn",
           "name": "malformed_line_returns_error",
-          "line": 923,
+          "line": 968,
           "called": [
             "Err",
             "path"
@@ -42316,7 +42371,7 @@
         {
           "kind": "fn",
           "name": "wrong_size_block_hash_returns_error",
-          "line": 938,
+          "line": 983,
           "called": [
             "Err",
             "path"
@@ -42325,7 +42380,7 @@
         {
           "kind": "fn",
           "name": "forwarded_key_equality",
-          "line": 958,
+          "line": 1003,
           "called": [
             "ForwardedKey",
             "block_hash"
@@ -42334,7 +42389,7 @@
         {
           "kind": "fn",
           "name": "actor_id_type_check",
-          "line": 974,
+          "line": 1019,
           "called": [
             "ActorId",
             "_"
@@ -42343,7 +42398,7 @@
         {
           "kind": "fn",
           "name": "nonce_progressed_round_trip",
-          "line": 981,
+          "line": 1026,
           "called": [
             "StateRecord",
             "next_nonce"
@@ -42352,7 +42407,7 @@
         {
           "kind": "fn",
           "name": "nonce_progressed_large_value",
-          "line": 994,
+          "line": 1039,
           "called": [
             "StateRecord",
             "next_nonce"
@@ -42361,7 +42416,7 @@
         {
           "kind": "fn",
           "name": "replay_rebuilds_next_nonce_from_nonce_progressed",
-          "line": 1005,
+          "line": 1050,
           "called": [
             "HexBytes",
             "_",
@@ -42376,7 +42431,7 @@
         {
           "kind": "fn",
           "name": "replay_takes_max_nonce_across_records",
-          "line": 1055,
+          "line": 1100,
           "called": [
             "_",
             "append",
@@ -42388,7 +42443,7 @@
         {
           "kind": "fn",
           "name": "submitted_record_round_trip",
-          "line": 1077,
+          "line": 1122,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -42400,7 +42455,7 @@
         {
           "kind": "fn",
           "name": "submitted_record_without_assignment_round_trip",
-          "line": 1098,
+          "line": 1143,
           "called": [
             "HexBytes",
             "StateRecord",
@@ -42411,7 +42466,7 @@
         {
           "kind": "fn",
           "name": "replay_applies_submitted_record_effects",
-          "line": 1115,
+          "line": 1160,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -42430,7 +42485,7 @@
         {
           "kind": "fn",
           "name": "replay_tolerates_legacy_and_submitted_mix",
-          "line": 1147,
+          "line": 1192,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -42447,7 +42502,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_gapped_address_assignments",
-          "line": 1193,
+          "line": 1238,
           "called": [
             "Err",
             "HexBytes",
@@ -42457,7 +42512,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_duplicate_actor_id_with_different_addresses",
-          "line": 1227,
+          "line": 1272,
           "called": [
             "Err",
             "HexBytes",
@@ -42467,7 +42522,7 @@
         {
           "kind": "fn",
           "name": "replay_tolerates_duplicate_actor_id_with_same_address",
-          "line": 1257,
+          "line": 1302,
           "called": [
             "HexBytes",
             "_",
@@ -42481,7 +42536,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_submitted_records_with_duplicate_actor_id",
-          "line": 1275,
+          "line": 1320,
           "called": [
             "AddressAssignment",
             "Err",

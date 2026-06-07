@@ -2522,11 +2522,17 @@ companion `leafBlob` is the CBE-encoded `PendingWithdrawal`.
 authority that signs every L1-derived Knomosis action.  Reservation is
 operational, not structural:
 
-  * `Bridge.AddressBook.empty.nextActorId = 3` (post-GP.7.1) —
-    assigned ids start at 3, reserving `ActorId`s 0 / 1 / 2 for the
-    bridge actor, the `gasPoolActor`, and the `sequencerActor`
-    respectively (pinned by `addressBook_empty_nextActorId`; the
-    gas-pool / sequencer slots are the Workstream GP.7.1 reservation).
+  * `Bridge.AddressBook.empty.nextActorId = 4` (post-GP.11.5) —
+    assigned ids start at 4, reserving `ActorId`s 0 / 1 / 2 / 3 for the
+    bridge actor, the `gasPoolActor`, the `sequencerActor`, and the
+    `ammReserveActor` respectively (pinned by
+    `addressBook_empty_nextActorId`; the gas-pool / sequencer slots are
+    the Workstream GP.7.1 reservation, the AMM-reserve slot is the
+    Workstream GP.11.5 reservation).  A deployment bootstrapped on a
+    pre-GP.11.5 build that allocated a user in slot 3 must remap it to an
+    id `>= 4` via the GP.10.4 migration before upgrading; the Rust
+    adaptor's state-file replay rejects a persisted reserved-range id
+    rather than silently violating the reservation.
   * `bridgeActor : ActorId := 0` (`LegalKernel/Bridge/BridgeActor.lean`).
   * `bridgePolicy : AuthorityPolicy` admits only
     `Action.replaceKey`, `Action.registerIdentity`, and

@@ -363,20 +363,22 @@ and identifiers; any divergence elsewhere in the document is a bug.
 
 `AddressBook.empty.nextActorId` advances incrementally as each
 reserved slot lands: `1` (pre-GP) → `3` (post-GP.7.1, reserving
-`gasPoolActor` = 1 and `sequencerActor` = 2; **current Lean genesis**,
-pinned by `addressBook_empty_nextActorId`) → `4` (post-v1.3 GP.11.5,
-reserving `ammReserveActor` = 3).  Pre-existing deployments must remap
+`gasPoolActor` = 1 and `sequencerActor` = 2) → `4` (**current genesis**,
+post-GP.11.5, reserving `ammReserveActor` = 3; pinned by
+`addressBook_empty_nextActorId`).  Pre-existing deployments must remap
 any user-allocated ActorIds in the reserved range via the migration
 helper (GP.10.4).
 
-The `ammReserveActor` row above describes the **post-v1.3 target**: its
-`ActorId 3` is reserved only once GP.11.5 lands (see the `Reserved by`
-column).  In the **current** post-GP.7.1 build — both the Lean genesis
-and the Rust `knomosis-l1-ingest` adaptor — `ActorId 3` is the first
-*user* actor a fresh deployment registers; GP.11.5 will advance the
-genesis a further step (3 → 4) and re-home that slot to
-`ammReserveActor`, at which point pre-GP.11.5 deployments remap via the
-same GP.10.4 helper.
+The `ammReserveActor` row above is now **live**: as of GP.11.5 its
+`ActorId 3` is reserved end-to-end — both the Lean genesis
+(`AddressBook.empty.nextActorId = 4`) and the Rust `knomosis-l1-ingest`
+adaptor (`INITIAL_NEXT_ACTOR_ID = 4`, `AMM_RESERVE_ACTOR_ID = 3`) issue
+the first *user* actor `ActorId 4`, never a reserved slot.  A
+deployment that was bootstrapped on a pre-GP.11.5 build and allocated a
+user in slot `3` must remap it to an id `>= 4` via the GP.10.4 helper
+before upgrading; the adaptor's state-file replay rejects a persisted
+reserved-range id loudly rather than silently violating the
+reservation.
 
 ### Frozen Action constructor indices
 
@@ -7643,10 +7645,79 @@ sub-WU table above is the implementation roadmap.
 
 #### WU GP.11.5: `ammReserveActor` reservation
 
+  * **Status: COMPLETE (Lean + Rust, end-to-end).**  Reserves
+    `ActorId 3` for `ammReserveActor` and advances the genesis
+    `AddressBook.empty.nextActorId` from `3` (GP.7.1) to `4`, so the
+    first user a fresh deployment registers is `ActorId 4`.  Shipped:
+
+    * **Lean** (`LegalKernel/Bridge/BridgeActor.lean`): the
+      `ammReserveActor : ActorId := 3` constant + three axiom-free
+      `decide` disjointness theorems (`ammReserveActor_ne_bridgeActor`
+      / `_ne_gasPoolActor` / `_ne_sequencerActor`); the
+      `empty_assign_id_avoids_reserved` reservation guarantee widened
+      to a fourth conjunct (the issued id is none of the four reserved
+      slots).  `LegalKernel/Bridge/AddressBook.lean`: `empty.nextActorId
+      = 4`, and the existing `addressBook_empty_nextActorId` theorem
+      updated to `= 4` (the single source of truth — NOT a
+      `_v1_3`-suffixed new theorem; the plan sketch's
+      `addressBook_empty_nextActorId_v1_3` name carries a version marker
+      forbidden by the naming discipline / `naming_audit`).  The worked
+      `Deployments/Examples/GasPoolExample.lean`'s demo `userActor`
+      advances 3 → 4 (the former first-user slot is now reserved).
+    * **Chain-level reservation guarantee** (closing the single-step
+      limitation `empty_assign_id_avoids_reserved` left as "deferred"):
+      the idiomatic invariant decomposition `empty_nextActorId_ge_reserved`
+      (genesis base case `4 ≤ nextActorId.toNat`) +
+      `assign_preserves_reserved_invariant` (per-step preservation under
+      no-overflow, on the new general `AddressBook.assign_nextActorId_mono`
+      monotonicity lemma) + `fresh_assign_avoids_reserved` (the safety
+      payoff for a fresh `assign` into *any* invariant-respecting book,
+      not only `empty`).  Composed by induction these prove no
+      user-registered identity in any `empty` + `assign` chain is ever
+      issued a reserved slot — the complete guarantee, mirroring the
+      kernel's established-at-genesis / preserved-by-step / implies-safety
+      `invariant_preservation` form.  All touched theorems' axioms ⊆ the
+      canonical `{propext, Classical.choice, Quot.sound}`; the three
+      disjointness theorems depend on no axioms.
+    * **Rust lockstep** (`runtime/knomosis-l1-ingest`, pulled forward
+      from GP.10 exactly as the GP.7.1 reservation was): the production
+      adaptor's `AddressBook::INITIAL_NEXT_ACTOR_ID` becomes `4` with a
+      new mirror `AMM_RESERVE_ACTOR_ID = 3` constant, so the adaptor that
+      performs the actual `assign` honours the reservation — a fresh L1
+      identity registration is issued `ActorId 4`, never the reserved
+      AMM slot.  This is load-bearing for correctness: leaving the
+      adaptor at `3` while Lean reserves `3` would have the adaptor
+      assign `ActorId 3` to the first user, colliding with
+      `ammReserveActor` in production.  The state-file replay's
+      reserved-range rejection now covers id `3` (a state file from a
+      GP.7.1-era deployment that legitimately allocated id 3 to a user is
+      rejected on upgrade with the actionable GP.10.4-migration
+      diagnostic — pinned by `replay_rejects_newly_reserved_amm_actor_id`),
+      and the `l1_ingest.cxsf` cross-stack corpus + the `address_book` /
+      `state` / `translation` / `watcher` / integration tests are rebased
+      onto the genesis-4 allocation.
+    * **Tests.**  `bridge-actor` suite 71 → 82 (the `ammReserveActor = 3`
+      value, the three disjointness theorems' value-level + term-level
+      API, the four-slot reservation-guarantee cases, and the chain-level
+      guarantee cases — genesis base, per-step, fresh-assign-on-a-non-empty-book,
+      a 3-assign-chain value witness, and term-level API for every new
+      theorem); the Rust `assign_chain_never_issues_reserved_id` adds the
+      value-level mirror of the chain guarantee; the `bridge-address-book`
+      / `bridge-ingest` Lean value fixtures and every Rust test are rebased
+      onto genesis-4.  Released as the **minor** bump `0.4.x → 0.5.0` (new
+      public API + the slot-3 migration is backward-incompatible).  Full
+      `lake build` + `lake test` + the five audit gates green; full `cargo
+      test --workspace` + `clippy -D warnings` + `fmt` green.  This is the
+      *fresh-genesis* half; the orthogonal migration of *existing*
+      deployments that already allocated a user in slot 3 remains Phase
+      GP.10.4.
+
   * **Goal.**  Reserve `ActorId 3` for `ammReserveActor`.  This
     is the L2-side counterpart to the L1 `ammReserveEth` and
     `ammReserveBold` storage slots.
-  * **Files:** `LegalKernel/Bridge/BridgeActor.lean` (constants).
+  * **Files:** `LegalKernel/Bridge/BridgeActor.lean` (constants),
+    `LegalKernel/Bridge/AddressBook.lean` (genesis `nextActorId`),
+    + the Rust `runtime/knomosis-l1-ingest` lockstep.
   * **Deliverables.**
 
     ```lean
@@ -7667,13 +7738,25 @@ sub-WU table above is the implementation roadmap.
     * `ammReserveActor_ne_bridgeActor`
     * `ammReserveActor_ne_gasPoolActor`
     * `ammReserveActor_ne_sequencerActor`
-    * `addressBook_empty_nextActorId_v1_3`: equals 4
+    * `addressBook_empty_nextActorId`: equals 4 (the existing GP.7.1
+      theorem, updated in place — NOT a new `_v1_3`-suffixed theorem;
+      version-marker identifiers are forbidden by the naming discipline).
 
   * **Acceptance criteria.**  One reviewer.
   * **Dependencies.**  GP.7.1.
   * **Estimated effort.**  ~2 hours.
 
 #### WU GP.11.6: `ammReserveActor` local policy
+
+  > **Index note (stale sketch — correct before implementing).**  This
+  > sketch predates GP.9.1, which inserted `claimBudgetRefund` at frozen
+  > `Action` index 22, pushing `ammSwap` to index **23**.  The deny-list
+  > below (`List.range 23 |>.filter (· ≠ 22)`) and the "`ammSwap` (= 22)"
+  > prose are therefore off by one against the shipped inductive.  The
+  > implemented policy must use `List.range 24 |>.filter (· ≠ 23)` (deny
+  > tags `[0..22]`, permit `ammSwap` = 23), matching `gasPoolDeniedTags`'s
+  > current `List.range 24` bound and `Action.tag_lt_denyListBound`.  Do
+  > NOT copy the literal `22` below.
 
   * **Goal.**  Constrain `ammReserveActor`'s outflow via a
     `LocalPolicy` declaration: it can only be mutated by
