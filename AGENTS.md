@@ -1283,7 +1283,7 @@ and `amm_swap_cxsf_matches_json` (CXSF-JSON content cross-check:
 per-record `expected` bytes byte-match `expectedCbe` from JSON, plus
 CBE tag-byte verification at offsets 0/1)
 — plus the `mul_wide_known_vectors` (12 hand-computed u256 multiply
-assertions), `div_u256_by_u128_known_vectors` (10 assertions incl.
+assertions), `div_u256_by_u128_known_vectors` (11 assertions incl.
 mul/div round-trips), and `get_amount_out_wide_known_vectors` (5
 canonical formula vectors) unit tests for the u256 arithmetic helpers
 — plus 2 new `knomosis-cross-stack` tag-8 enumeration / pin tests;
@@ -4101,18 +4101,18 @@ contributions surviving in current code:
     `Action.ammSwap` encoding + the `getAmountOut` pricing function.
     A single Lean generator
     (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`, suite
-    `crosscheck-amm-swap`, 19 cases) authors BOTH a rich JSON fixture
+    `crosscheck-amm-swap`, 20 cases) authors BOTH a rich JSON fixture
     (`solidity/test/CrossCheck/fixtures/amm_swap.json`, `{ header,
     entries }` shape) and a binary CXSF corpus
     (`runtime/tests/cross-stack/amm_swap.cxsf`, new
-    `FixtureKind::AmmSwap` / on-disk tag 8) from ONE 70-entry list:
+    `FixtureKind::AmmSwap` / on-disk tag 8) from ONE 71-entry list:
     a 54-entry grid over `reserve ∈ {Small (10^12 / 3×10^15), Medium
     (10^15 / 3×10^18), Large (10^16 / 3×10^19)}` × `direction ∈
     {ETH→BOLD, BOLD→ETH}` × `swapSize ∈ {1%, 10%, 50%}` ×
-    `slippage ∈ {exact, 1% slack, 50% slack}`, plus 16 corner-case
+    `slippage ∈ {exact, 1% slack, 50% slack}`, plus 17 corner-case
     entries (dust, max-U64, zero output, asymmetric pools, paired
     round-trip checks, varied fees, zero-reserveIn, zero-reserveOut,
-    zero-amount, same-resource).  Reserve sizes are scaled to u64-safe
+    zero-amount, same-resource, and slippage-unsatisfied).  Reserve sizes are scaled to u64-safe
     ranges satisfying the CBE encoding constraint
     `amountIn, amountOut ≤ u64::MAX` (1500 × R ≤ u64::MAX).
     Amount-scale fields (`amountIn`, `reserveIn`, `reserveOut`,
@@ -4145,9 +4145,9 @@ contributions surviving in current code:
     quantitatively that a ETH→BOLD→ETH round-trip is lossy
     (`outB < a`) with strictly positive k-deltas on both legs.
     The Rust consumer
-    (`runtime/knomosis-l1-ingest/tests/cross_stack_amm_swap.rs`, 11
+    (`runtime/knomosis-l1-ingest/tests/cross_stack_amm_swap.rs`, 15
     tests) byte-matches `encode_action` against Lean's `expectedCbe`
-    for all 70 entries, recomputes `getAmountOut` via u256
+    for all 71 entries, recomputes `getAmountOut` via u256
     intermediates (100% coverage — `mul_wide` / `div_u256_by_u128`
     eliminate the u128 overflow gap), and independently verifies
     k-monotonicity (via u256 pair comparison), no-drain, slippage
@@ -4155,12 +4155,13 @@ contributions surviving in current code:
     coverage (grid + corner), post-swap reserve arithmetic, L2
     balance deltas, and CXSF binary corpus loading (kind + record
     count + byte-shape).  The Solidity consumer
-    (`solidity/test/CrossCheck/AmmSwapFixtures.t.sol`, 9 tests)
+    (`solidity/test/CrossCheck/AmmSwapFixtures.t.sol`, 11 tests)
     recomputes `AmmMath.getAmountOut` per entry and byte-matches
     Lean's `expectedOut`, verifies header constants (workstream,
     fee, denominator, ammReserveActor, actionTag), k-monotonicity,
     no-drain, slippage consistency, CBE byte-length (54 bytes per
-    entry), post-swap reserves, L2 balance deltas, and two
+    entry), post-swap reserves, L2 balance deltas, CBE tag-byte
+    pin, a live-contract `ammSwap` integration test, and two
     hand-vector anchors (`no-fee half-pool` /
     `0.30%-fee half-pool`).  Hash-independent: no keccak-binding
     gate needed (the swap-math corpus involves no hashing).
