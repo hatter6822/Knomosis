@@ -149,6 +149,7 @@ import LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplitBold
 import LegalKernel.Test.Bridge.CrossCheck.DepositWithFeeAction
 import LegalKernel.Test.Bridge.CrossCheck.BoldDeposit
 import LegalKernel.Test.Bridge.CrossCheck.AmmMath
+import LegalKernel.Test.Bridge.CrossCheck.AmmSwap
 import LegalKernel.Test.Bridge.CrossCheck.EventCbe
 import LegalKernel.Test.Bridge.CrossCheck.WithdrawalProof
 import LegalKernel.Test.Bridge.CrossCheck.DisputeEvidence
@@ -377,6 +378,8 @@ def main : IO UInt32 := do
                                     Bridge.CrossCheck.BoldDeposit.tests)
   failed := failed + (← runAll "crosscheck-amm-getamountout"
                                     Bridge.CrossCheck.AmmMathCrossCheck.tests)
+  failed := failed + (← runAll "crosscheck-amm-swap"
+                                    Bridge.CrossCheck.AmmSwapCrossCheck.tests)
   failed := failed + (← runAll "crosscheck-event-cbe"
                                     Bridge.CrossCheck.EventCbe.tests)
   failed := failed + (← runAll "crosscheck-withdrawal-proof"

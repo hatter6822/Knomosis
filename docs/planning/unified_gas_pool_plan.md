@@ -7871,8 +7871,8 @@ sub-WU table above is the implementation roadmap.
       (new Solidity consumer).
   * **Deliverables.**
     * 60+ fixture entries covering:
-      - Starting reserves: small (1 ETH / 3000 BOLD), medium
-        (100 ETH / 300000 BOLD), large (1000 ETH / 3M BOLD).
+      - Starting reserves (u64-safe): small (10^12 / 3×10^15),
+        medium (10^15 / 3×10^18), large (10^16 / 3×10^19).
       - Swap directions: ETH→BOLD and BOLD→ETH.
       - Swap sizes: 1 % of reserve, 10 % of reserve, 50 % of
         reserve (extreme).
@@ -7901,6 +7901,63 @@ sub-WU table above is the implementation roadmap.
     Lean all produce identical results.
   * **Dependencies.**  GP.11.3, GP.11.4, GP.6.5.
   * **Estimated effort.**  ~14 hours.
+  * **Status.**  **Complete** (tri-stack: Lean + Rust + Solidity).
+    The Lean generator (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`,
+    suite `crosscheck-amm-swap`, 20 cases) emits a 71-entry corpus
+    (54 grid + 17 corner) into both `solidity/test/CrossCheck/fixtures/
+    amm_swap.json` (JSON, consumed by Solidity + Rust) and
+    `runtime/tests/cross-stack/amm_swap.cxsf` (binary CXSF tag 8,
+    consumed by Rust).  Reserve sizes scaled to u64-safe ranges
+    (Small 10^12 / Medium 10^15 / Large 10^16) satisfying the CBE
+    encoding constraint `amountIn, amountOut ≤ u64::MAX`.
+    Amount-scale fields and k-products emitted as `0x`-prefixed
+    32-byte BE hex strings (matching the established
+    `hexFromUint256BE` pattern from the GP.11.3 `AmmMath` corpus).
+    Each entry carries the plan-specified `(amountOut, new_R_in,
+    new_R_out)` output fields plus the `ammReserveActor` L2 balance
+    deltas (`reserveActorCreditFrom`, `reserveActorDebitTo`), the
+    constant product before and after the swap (`kBefore`, `kAfter`),
+    and the CBE-encoded `Action.ammSwap` bytes — all verified
+    cross-stack.  The 17 corner cases include four degenerate entries
+    (zero-reserveIn, zero-reserveOut, zero-amount, same-resource)
+    exercising the Lean `getAmountOut` function at domain boundaries
+    where the Solidity `AmmMath` reverts (degenerate entries are
+    skipped in the formula-compliance test, verified only for
+    CBE/k/reserve/delta consistency) plus a `corner:slippage-unsatisfied`
+    entry (`minAmountOut > expectedOut`) exercising the `slippageSatisfied
+    = false` path (proven by the `corpus covers both slippageSatisfied
+    = true and false` test).  The round-trip test verifies
+    quantitatively that ETH→BOLD→ETH is lossy (`outB < a`) with
+    strictly positive k-deltas on both legs.
+    The Rust consumer (`runtime/knomosis-l1-ingest/tests/
+    cross_stack_amm_swap.rs`, 15 tests) byte-matches `encode_action`
+    against Lean's `expectedCbe`, recomputes `getAmountOut` via u256
+    intermediates (100% coverage), verifies k-monotonicity / no-drain /
+    slippage / post-swap reserves / L2 balance deltas / CXSF binary
+    loading, and additionally cross-checks the CXSF binary corpus
+    against the JSON corpus per-record (`amm_swap_cxsf_matches_json`)
+    with CBE tag-byte verification at offsets 0/1.  Unit tests for the
+    u256 arithmetic helpers (`mul_wide_known_vectors`,
+    `div_u256_by_u128_known_vectors`, `get_amount_out_wide_known_vectors`)
+    anchor the wide-integer primitives against hand-computed vectors.
+    The Solidity consumer
+    (`solidity/test/CrossCheck/AmmSwapFixtures.t.sol`, 11 tests)
+    recomputes `AmmMath.getAmountOut` per entry and verifies header
+    constants, k-monotonicity, no-drain, slippage consistency, CBE
+    byte-length (54 bytes), post-swap reserves, L2 balance deltas,
+    two hand-vector anchors, per-entry CBE tag-byte verification
+    (`test_perEntry_cbeTagByte`), and a live-contract `ammSwap`
+    execution (`test_liveContract_ammSwapMatchesFormula`) that deploys
+    a BOLD-enabled bridge with AMM reserves seeded via real
+    `depositETHWithFee` / `depositBoldWithFee` deposits and asserts
+    swap outputs match `AmmMath.getAmountOut`.  Hash-independent: no
+    keccak-binding gate needed (the swap-math corpus involves no
+    hashing).
+    `FixtureKind::AmmSwap` (tag 8) added to `knomosis-cross-stack`.
+    All gates green (`lake build`, `lake test`,
+    `cargo test --workspace`, `cargo clippy`, `cargo fmt`,
+    `forge test`, `count_sorries`, `naming_audit`, `tcb_audit`,
+    `stub_audit`, codemap regeneration).
 
 #### WU GP.11.8: AMM state-root commitment integration (v1.4)
 

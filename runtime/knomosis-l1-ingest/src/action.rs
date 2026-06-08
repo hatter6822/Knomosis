@@ -39,6 +39,7 @@
 //! | 20  | `TopUpActionBudget`       | `gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 21  | `TopUpActionBudgetFor`    | `recipient, gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 22  | `ClaimBudgetRefund`       | `gas_resource, budget_units, wei_per_budget_unit, pool_actor` |
+//! | 23  | `AmmSwap`                 | `from_resource, to_resource, amount_in, amount_out, amm_reserve_actor` |
 //!
 //! ## What this crate models
 //!
@@ -414,6 +415,24 @@ pub enum Action {
         /// The gas-pool actor the refund is paid from.
         pool_actor: ActorId,
     },
+    /// `ammSwap(fromResource, toResource, amountIn, amountOut, ammReserveActor)`.
+    /// Tag 23 (Workstream GP.11.4).  Bridge-attested constant-product
+    /// swap between two resources via the AMM reserve actor.
+    /// Never an L1-ingested event (it is an L2 user/bridge action);
+    /// included for `Action`-mirror completeness + cross-stack CBE
+    /// byte-equivalence (the Lean->Rust differential pins it).
+    AmmSwap {
+        /// The resource being swapped in.
+        from_resource: ResourceId,
+        /// The resource being swapped out.
+        to_resource: ResourceId,
+        /// The input amount.
+        amount_in: Amount,
+        /// The output amount.
+        amount_out: Amount,
+        /// The AMM reserve actor whose balances are adjusted.
+        amm_reserve_actor: ActorId,
+    },
 }
 
 impl Action {
@@ -442,6 +461,7 @@ impl Action {
             Self::TopUpActionBudget { .. } => 20,
             Self::TopUpActionBudgetFor { .. } => 21,
             Self::ClaimBudgetRefund { .. } => 22,
+            Self::AmmSwap { .. } => 23,
         }
     }
 }
@@ -613,6 +633,17 @@ mod tests {
             }
             .tag(),
             21
+        );
+        assert_eq!(
+            Action::AmmSwap {
+                from_resource: 0,
+                to_resource: 1,
+                amount_in: 0,
+                amount_out: 0,
+                amm_reserve_actor: 0,
+            }
+            .tag(),
+            23
         );
     }
 

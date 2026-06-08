@@ -965,7 +965,20 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 948 tests across 147 suites (the GP.11.6
+**Test count.**  ~2 968 tests across 148 suites (the GP.11.7
+cross-stack AMM fixture corpus adds the `crosscheck-amm-swap` suite,
+20 cases — the 71-entry fixture generator (54 grid + 17 corner,
+including zero-reserve, zero-amount, same-resource, and
+slippage-unsatisfied degenerate cases),
+header-shape validation, per-entry u64 guard (`amountIn` / `expectedOut`
+≤ u64::MAX), k-monotonicity (`kBefore ≤ kAfter`), no-drain
+(`expectedOut < reserveOut`), post-swap reserve verification
+(`newReserveIn` / `newReserveOut`), L2 balance delta verification
+(`reserveActorCreditFrom` / `reserveActorDebitTo`), slippage coverage
+(both `true` and `false` values), CXSF binary corpus
+generation (tag 8), grid/corner count agreement, and term-level API
+stability for the `getAmountOut` / `getAmountOut_lt_reserveOut` /
+`k_nondecreasing` theorems; the GP.11.6
 `ammReservePolicy` adds the `bridge-amm-reserve-policy` suite, 68 cases —
 the deny-list shape + count, only-`ammSwap` outflow across every non-ammSwap
 Action tag (0..22, none skipped), the `permits_iff` source-of-truth
@@ -1248,8 +1261,33 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 933 tests across the 11 workspace
-crates (the GP.11.5 `ammReserveActor` reservation adds 3
+**Rust-side test count.**  ~1 950 tests across the 11 workspace
+crates (the GP.11.7 cross-stack AMM fixture corpus adds 15
+`knomosis-l1-ingest` tests in `cross_stack_amm_swap.rs` —
+`amm_swap_corpus_byte_equivalence` (Rust `encode_action` bytes ==
+Lean `expectedCbe` for all 71 entries), `amm_swap_corpus_coverage`
+(grid + corner count agreement), `amm_swap_corpus_tag_pin` (tag 23),
+`amm_swap_corpus_header_constants` (workstream / fee / denominator /
+actor / tag), `amm_swap_corpus_formula_compliance` (Rust
+`get_amount_out_wide` recomputation via u256 intermediates, 100%
+entries verified), `amm_swap_corpus_no_drain` (`expectedOut <
+reserveOut`), `amm_swap_corpus_k_monotonicity` (u256 pair
+comparison, `kBefore ≤ kAfter`),
+`amm_swap_corpus_slippage` (`slippageSatisfied` flag consistency),
+`amm_swap_corpus_post_swap_reserves` (`newReserveIn` / `newReserveOut`
+arithmetic verification), `amm_swap_corpus_l2_balance_deltas`
+(`reserveActorCreditFrom` / `reserveActorDebitTo` match swap amounts),
+`amm_swap_cxsf_consumer` (CXSF binary corpus loading with kind +
+record count + byte-shape validation),
+and `amm_swap_cxsf_matches_json` (CXSF-JSON content cross-check:
+per-record `expected` bytes byte-match `expectedCbe` from JSON, plus
+CBE tag-byte verification at offsets 0/1)
+— plus the `mul_wide_known_vectors` (12 hand-computed u256 multiply
+assertions), `div_u256_by_u128_known_vectors` (11 assertions incl.
+mul/div round-trips), and `get_amount_out_wide_known_vectors` (5
+canonical formula vectors) unit tests for the u256 arithmetic helpers
+— plus 2 new `knomosis-cross-stack` tag-8 enumeration / pin tests;
+the GP.11.5 `ammReserveActor` reservation adds 3
 `knomosis-l1-ingest` tests — `address_book::amm_reserve_id_is_reserved`
 (the `AMM_RESERVE_ACTOR_ID = 3` slot is reserved + distinct + never
 issued), `address_book::assign_chain_never_issues_reserved_id` (the
@@ -1388,10 +1426,10 @@ landing:
 | Crate                            | Tests | Role                                                       |
 |----------------------------------|-------|------------------------------------------------------------|
 | `knomosis-cli-common`               |   ~8  | shared logging / exit-code / paths helpers                 |
-| `knomosis-cross-stack`              |  ~33  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind)      |
+| `knomosis-cross-stack`              |  ~35  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind + GP.11.7 `AmmSwap` kind) |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~324  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 / GP.11.5 genesis-4 reservation lockstep (`INITIAL_NEXT_ACTOR_ID = 4`, `AMM_RESERVE_ACTOR_ID = 3`) + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) |
+| `knomosis-l1-ingest`                | ~341  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 / GP.11.5 genesis-4 reservation lockstep (`INITIAL_NEXT_ACTOR_ID = 4`, `AMM_RESERVE_ACTOR_ID = 3`) + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) + GP.11.7 AMM swap cross-stack consumer |
 | `knomosis-host`                     | ~426  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + `--max-conn-backlog` aggregate cap + `--persistent-connections` pipelined mode (DRR exercised over the wire) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events + GP.11.4 `AmmSwapExecuted` |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
@@ -3877,8 +3915,9 @@ contributions surviving in current code:
     ladder + classification instances + 40-case test suite + Lex
     `lexlaw` re-expression + per-variant coherence theorems + step-VM
     kind-23 test coverage + Rust event mirrors.  The Solidity step-VM
-    execution arm + Rust ingestor action encoder + cross-stack fixture
-    corpus are future work under GP.11.7 / GP.11.8.  Shipped:
+    execution arm + Rust ingestor action encoder are future work under
+    GP.11.8; the cross-stack fixture corpus is complete (GP.11.7).
+    Shipped:
     - `Action.ammSwap` at frozen index 23 (`Authority/Action.lean`).
       Exhaustive `bridgeAuthorizedAction` arm (bridge-attested: `true`);
       `gasPoolDeniedTags` coverage (deny-list `List.range 24`, filter
@@ -4057,6 +4096,76 @@ contributions surviving in current code:
     `Classical.choice` via `ExtendedState`).  No kernel TCB delta.
     `bridge-amm-reserve-policy` suite (68 cases).  Lean-only; no Rust
     or Solidity change.
+  * **GP.11.7** Cross-stack AMM fixture corpus — the tri-stack
+    (Lean → Rust → Solidity) byte-equivalence closure of the
+    `Action.ammSwap` encoding + the `getAmountOut` pricing function.
+    A single Lean generator
+    (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`, suite
+    `crosscheck-amm-swap`, 20 cases) authors BOTH a rich JSON fixture
+    (`solidity/test/CrossCheck/fixtures/amm_swap.json`, `{ header,
+    entries }` shape) and a binary CXSF corpus
+    (`runtime/tests/cross-stack/amm_swap.cxsf`, new
+    `FixtureKind::AmmSwap` / on-disk tag 8) from ONE 71-entry list:
+    a 54-entry grid over `reserve ∈ {Small (10^12 / 3×10^15), Medium
+    (10^15 / 3×10^18), Large (10^16 / 3×10^19)}` × `direction ∈
+    {ETH→BOLD, BOLD→ETH}` × `swapSize ∈ {1%, 10%, 50%}` ×
+    `slippage ∈ {exact, 1% slack, 50% slack}`, plus 17 corner-case
+    entries (dust, max-U64, zero output, asymmetric pools, paired
+    round-trip checks, varied fees, zero-reserveIn, zero-reserveOut,
+    zero-amount, same-resource, and slippage-unsatisfied).  Reserve sizes are scaled to u64-safe
+    ranges satisfying the CBE encoding constraint
+    `amountIn, amountOut ≤ u64::MAX` (1500 × R ≤ u64::MAX).
+    Amount-scale fields (`amountIn`, `reserveIn`, `reserveOut`,
+    `expectedOut`, `minAmountOut`) and k-products (`kBefore`,
+    `kAfter`) are emitted as `0x`-prefixed 32-byte BE hex strings
+    via `hexFromUint256BE` (matching the established
+    `AmmMath` / `DepositFeeSplit` cross-check pattern) — Solidity
+    reads them with `vm.parseJsonBytes32`, Rust parses with custom
+    `parse_hex_u128` / `parse_hex_u256`.  Each entry carries:
+    `fromResource`, `toResource`, `amountIn`, `reserveIn`,
+    `reserveOut`, `feeBps`, `expectedOut` (Lean's `getAmountOut`),
+    `minAmountOut`, `slippageSatisfied`, `kBefore` (= reserveIn ×
+    reserveOut), `kAfter` (= (reserveIn + amountIn) × (reserveOut
+    − expectedOut)), `newReserveIn` (= reserveIn + amountIn),
+    `newReserveOut` (= reserveOut − expectedOut),
+    `reserveActorCreditFrom` (= amountIn),
+    `reserveActorDebitTo` (= expectedOut), `ammReserveActor`, and
+    `expectedCbe` (Lean's `Encoding.Action.encode` of the
+    corresponding `Action.AmmSwap`).
+    Header: `workstream "GP.11.7"`, `count 70`, `gridCount 54`,
+    `cornerCount 16`, `ammSwapFeeBps 30`, `bpsDenominator 10000`,
+    `ammReserveActor 3`, `actionTag 23`.  The Lean generator proves
+    a u64 guard (`ammSwap_corpus_all_amounts_fit_u64`, all grid
+    `amountIn` / `expectedOut` ≤ u64::MAX), a k-monotonicity
+    assertion (`kBefore ≤ kAfter` for every entry), a no-drain
+    assertion (`expectedOut < reserveOut` for every valid entry),
+    post-swap reserve arithmetic (`newReserveIn` / `newReserveOut`),
+    and L2 balance delta consistency (`reserveActorCreditFrom` /
+    `reserveActorDebitTo`).  The round-trip test verifies
+    quantitatively that a ETH→BOLD→ETH round-trip is lossy
+    (`outB < a`) with strictly positive k-deltas on both legs.
+    The Rust consumer
+    (`runtime/knomosis-l1-ingest/tests/cross_stack_amm_swap.rs`, 15
+    tests) byte-matches `encode_action` against Lean's `expectedCbe`
+    for all 71 entries, recomputes `getAmountOut` via u256
+    intermediates (100% coverage — `mul_wide` / `div_u256_by_u128`
+    eliminate the u128 overflow gap), and independently verifies
+    k-monotonicity (via u256 pair comparison), no-drain, slippage
+    consistency, header constants, tag pin (tag 23), corpus
+    coverage (grid + corner), post-swap reserve arithmetic, L2
+    balance deltas, and CXSF binary corpus loading (kind + record
+    count + byte-shape).  The Solidity consumer
+    (`solidity/test/CrossCheck/AmmSwapFixtures.t.sol`, 11 tests)
+    recomputes `AmmMath.getAmountOut` per entry and byte-matches
+    Lean's `expectedOut`, verifies header constants (workstream,
+    fee, denominator, ammReserveActor, actionTag), k-monotonicity,
+    no-drain, slippage consistency, CBE byte-length (54 bytes per
+    entry), post-swap reserves, L2 balance deltas, CBE tag-byte
+    pin, a live-contract `ammSwap` integration test, and two
+    hand-vector anchors (`no-fee half-pool` /
+    `0.30%-fee half-pool`).  Hash-independent: no keccak-binding
+    gate needed (the swap-math corpus involves no hashing).
+    `FixtureKind::AmmSwap` (tag 8) added to `knomosis-cross-stack`.
 
 Out of scope for this in-flight closure: the
 GP.4.2 pool-solvency reconciliation's *deposit-fold* promotion (the
@@ -4072,11 +4181,12 @@ itself remains follow-up work); the materialised
 `bridgeEscrowBalance` RHS + full inductive accounting equation (the
 WU C.6.4 / C.6.5 `BridgeReachable` follow-up; the `escrow` term stays
 abstract in `bridge_accounting_equation_balanced_iff`); and GP.7.6 –
-GP.10 plus GP.11.6 – GP.11.10 (sequencer integration, the
-`ammReserveActor` local policy, etc.; GP.11.1's L1 state scaffold +
-GP.11.2's deposit-side seeding + GP.11.3's L1 constant-product swap +
-GP.11.4's L2 `Action.ammSwap` mirror + GP.11.5's `ammReserveActor`
-reservation have landed).
+GP.10 plus GP.11.8 – GP.11.10 (sequencer integration, etc.;
+GP.11.1's L1 state scaffold + GP.11.2's deposit-side seeding +
+GP.11.3's L1 constant-product swap + GP.11.4's L2 `Action.ammSwap`
+mirror + GP.11.5's `ammReserveActor` reservation + GP.11.6's
+`ammReservePolicy` declaration + GP.11.7's cross-stack AMM fixture
+corpus have landed).
 GP.5.1's ETH fee-split entry point,
 GP.5.2's constitutional fee-split-cap audit gate, GP.5.3's L1
 step-VM execution arm for `topUpActionBudgetFor` (variant 21),

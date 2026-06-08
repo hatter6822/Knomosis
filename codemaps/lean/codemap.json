@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b3fe74e747c4552f04eab82d19851ea64db81bfd541d20ba7f1b47b5eacfa758"
+    "source_digest": "53a1f505f7fff6801171a018a622247323b8952771d9bbfa95fd6d10ae11e30f"
   },
   "summary": {
-    "module_count": 299,
-    "declaration_count": 4978
+    "module_count": 300,
+    "declaration_count": 5006
   },
   "modules": [
     {
@@ -33373,6 +33373,262 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.AmmSwap",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean",
+      "declaration_count": 28,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 69,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge.AmmMath",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "AmmSwapCrossCheck",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ammSwapFeeBps",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveActorId",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e12",
+          "line": 86,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e15",
+          "line": 89,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e16",
+          "line": 92,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e18",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "e9",
+          "line": 98,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "maxU64",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "encodeActionHex",
+          "line": 105,
+          "called": [
+            "Action",
+            "hexFromBytes"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Entry",
+          "line": 109,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "mkEntry",
+          "line": 144,
+          "called": [
+            "Entry",
+            "getAmountOut"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entryJson",
+          "line": 170,
+          "called": [
+            "Action",
+            "Entry",
+            "Json",
+            "ammReserveActorId",
+            "ammSwap",
+            "encodeActionHex",
+            "hexFromUint256BE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "reserveConfigs",
+          "line": 213,
+          "called": [
+            "e12",
+            "e15",
+            "e16"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "swapFractions",
+          "line": 222,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "slippageThresholds",
+          "line": 231,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "directionEntries",
+          "line": 241,
+          "called": [
+            "Entry",
+            "ammSwapFeeBps",
+            "getAmountOut",
+            "mkEntry",
+            "slippageThresholds"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gridEntries",
+          "line": 253,
+          "called": [
+            "Entry",
+            "directionEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cornerEntries",
+          "line": 259,
+          "called": [
+            "Entry",
+            "ammSwapFeeBps",
+            "e12",
+            "e9",
+            "getAmountOut",
+            "maxU64",
+            "mkEntry"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entries",
+          "line": 301,
+          "called": [
+            "Entry",
+            "cornerEntries",
+            "gridEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildJson",
+          "line": 304,
+          "called": [
+            "Json",
+            "ammReserveActorId",
+            "ammSwapFeeBps",
+            "bpsDenominator",
+            "entryJson"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 320,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cxsfKindTag",
+          "line": 329,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "entryCxsf",
+          "line": 332,
+          "called": [
+            "Action",
+            "Entry",
+            "ammReserveActorId",
+            "ammSwap",
+            "beBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildCxsfBlob",
+          "line": 346,
+          "called": [
+            "buildCxsf",
+            "cxsfKindTag",
+            "entryCxsf"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cxsfName",
+          "line": 350,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 357,
+          "called": [
+            "Action",
+            "AmmSwapCrossCheck",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "ammReserveActorId",
+            "ammSwap",
+            "ammSwapFeeBps",
+            "assertEq",
+            "bpsDenominator",
+            "buildCxsfBlob",
+            "cxsfName",
+            "e12",
+            "encodeActionHex",
+            "entries",
+            "fixtureName",
+            "getAmountOut",
+            "getAmountOut_lt_reserveOut",
+            "k_nondecreasing",
+            "maxU64",
+            "writeBinFixture",
+            "writeFixture"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.BisectionGame",
       "path": "LegalKernel/Test/Bridge/CrossCheck/BisectionGame.lean",
       "declaration_count": 9,
@@ -59410,7 +59666,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 208,
+          "line": 209,
           "called": [
             "runAll"
           ]

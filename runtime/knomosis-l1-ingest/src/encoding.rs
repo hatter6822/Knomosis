@@ -385,6 +385,26 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_u64(*wei_per_budget_unit));
             out.extend_from_slice(&encode_u64(*pool_actor));
         }
+        Action::AmmSwap {
+            from_resource,
+            to_resource,
+            amount_in,
+            amount_out,
+            amm_reserve_actor,
+        } => {
+            // Field order matches `Encoding/Action.lean::Action.encode`'s
+            // `.ammSwap` arm:
+            //   fromResource ‖ toResource ‖ amountIn ‖ amountOut
+            //     ‖ ammReserveActor.
+            // All five are CBE uints (9-byte heads).  `amountIn` and
+            // `amountOut` are `Nat`s on the Lean side, bounded < 2^64
+            // at the encoding level via `Action.fieldsBounded`.
+            out.extend_from_slice(&encode_u64(*from_resource));
+            out.extend_from_slice(&encode_u64(*to_resource));
+            out.extend_from_slice(&encode_amount(*amount_in)?);
+            out.extend_from_slice(&encode_amount(*amount_out)?);
+            out.extend_from_slice(&encode_u64(*amm_reserve_actor));
+        }
     }
     Ok(out)
 }
@@ -1103,6 +1123,36 @@ mod tests {
             // wei_per_budget_unit 5.
             0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // pool_actor 2.
             0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    /// Known-vector test for `AmmSwap` — pinned against
+    /// `LegalKernel.Encoding.Action.encode
+    /// (.ammSwap 0 1 1000 500 3)`.
+    #[test]
+    fn encode_amm_swap_known_vector() {
+        let action = Action::AmmSwap {
+            from_resource: 0,
+            to_resource: 1,
+            amount_in: 1000,
+            amount_out: 500,
+            amm_reserve_actor: 3,
+        };
+        let actual = encode_action(&action).unwrap();
+        // tag 23 | fromResource 0 | toResource 1
+        // amountIn 1000 (0xe803 LE) | amountOut 500 (0xf401 LE)
+        // ammReserveActor 3
+        let expected: Vec<u8> = vec![
+            // tag 23 = 0x17
+            0x00, 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // fromResource 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // toResource 1
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // amountIn 1000 = 0x03e8
+            0x00, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // amountOut 500 = 0x01f4
+            0x00, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ammReserveActor 3
+            0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
     }
