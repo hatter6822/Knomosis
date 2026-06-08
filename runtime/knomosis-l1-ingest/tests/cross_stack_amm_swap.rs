@@ -575,10 +575,10 @@ fn mul_wide_known_vectors() {
     assert_eq!(mul_wide(two_64, two_64), (1, 0));
     // 10^18 * 10^18 = 10^36
     let e18: u128 = 1_000_000_000_000_000_000;
-    let product = e18 as u128 * e18 as u128; // fits in u128
+    let product = e18 * e18; // fits in u128
     assert_eq!(mul_wide(e18, e18), (0, product));
     // (2^64-1) * (2^64-1) = 2^128 - 2^65 + 1 = (0, u128::MAX - 2*(2^64) + 2)
-    let m64 = u64::MAX as u128;
+    let m64 = u128::from(u64::MAX);
     let expected_low = m64 * m64;
     assert_eq!(mul_wide(m64, m64), (0, expected_low));
 }
@@ -603,7 +603,7 @@ fn div_u256_by_u128_known_vectors() {
     let product = mul_wide(a, b);
     assert_eq!(div_u256_by_u128(product, b), a);
     // mul_wide(u64::MAX, u64::MAX) / u64::MAX == u64::MAX (round-trip)
-    let m64 = u64::MAX as u128;
+    let m64 = u128::from(u64::MAX);
     let product = mul_wide(m64, m64);
     assert_eq!(div_u256_by_u128(product, m64), m64);
     // floor division: (0, 7) / 3 == 2
