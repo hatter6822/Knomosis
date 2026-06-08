@@ -7871,8 +7871,8 @@ sub-WU table above is the implementation roadmap.
       (new Solidity consumer).
   * **Deliverables.**
     * 60+ fixture entries covering:
-      - Starting reserves: small (1 ETH / 3000 BOLD), medium
-        (100 ETH / 300000 BOLD), large (1000 ETH / 3M BOLD).
+      - Starting reserves (u64-safe): small (10^12 / 3×10^15),
+        medium (10^15 / 3×10^18), large (10^16 / 3×10^19).
       - Swap directions: ETH→BOLD and BOLD→ETH.
       - Swap sizes: 1 % of reserve, 10 % of reserve, 50 % of
         reserve (extreme).
@@ -7903,8 +7903,8 @@ sub-WU table above is the implementation roadmap.
   * **Estimated effort.**  ~14 hours.
   * **Status.**  **Complete** (tri-stack: Lean + Rust + Solidity).
     The Lean generator (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`,
-    suite `crosscheck-amm-swap`, 17 cases) emits a 66-entry corpus
-    (54 grid + 12 corner) into both `solidity/test/CrossCheck/fixtures/
+    suite `crosscheck-amm-swap`, 19 cases) emits a 70-entry corpus
+    (54 grid + 16 corner) into both `solidity/test/CrossCheck/fixtures/
     amm_swap.json` (JSON, consumed by Solidity + Rust) and
     `runtime/tests/cross-stack/amm_swap.cxsf` (binary CXSF tag 8,
     consumed by Rust).  Reserve sizes scaled to u64-safe ranges
@@ -7913,20 +7913,36 @@ sub-WU table above is the implementation roadmap.
     Amount-scale fields and k-products emitted as `0x`-prefixed
     32-byte BE hex strings (matching the established
     `hexFromUint256BE` pattern from the GP.11.3 `AmmMath` corpus).
+    Each entry carries the plan-specified `(amountOut, new_R_in,
+    new_R_out)` output fields plus the `ammReserveActor` L2 balance
+    deltas (`reserveActorCreditFrom`, `reserveActorDebitTo`), the
+    constant product before and after the swap (`kBefore`, `kAfter`),
+    and the CBE-encoded `Action.ammSwap` bytes — all verified
+    cross-stack.  The 16 corner cases include four degenerate entries
+    (zero-reserveIn, zero-reserveOut, zero-amount, same-resource)
+    exercising the Lean `getAmountOut` function at domain boundaries
+    where the Solidity `AmmMath` reverts (degenerate entries are
+    skipped in the formula-compliance test, verified only for
+    CBE/k/reserve/delta consistency).  The round-trip test verifies
+    quantitatively that ETH→BOLD→ETH is lossy (`outB < a`) with
+    strictly positive k-deltas on both legs.
     The Rust consumer (`runtime/knomosis-l1-ingest/tests/
-    cross_stack_amm_swap.rs`, 8 tests) byte-matches `encode_action`
-    against Lean's `expectedCbe`, recomputes `getAmountOut` in u128,
-    and verifies k-monotonicity / no-drain / slippage across the
-    corpus.  The Solidity consumer (`solidity/test/CrossCheck/
-    AmmSwapFixtures.t.sol`, 7 tests) recomputes `AmmMath.getAmountOut`
-    per entry and verifies header constants, k-monotonicity, no-drain,
-    slippage consistency, CBE byte-length (54 bytes), and two
-    hand-vector anchors.  Hash-independent: no keccak-binding gate
-    needed (the swap-math corpus involves no hashing).  `FixtureKind::
-    AmmSwap` (tag 8) added to `knomosis-cross-stack`.  All gates green
-    (`lake build`, `lake test`, `cargo test --workspace`, `cargo clippy`,
-    `cargo fmt`, `forge test`, `count_sorries`, `naming_audit`,
-    `tcb_audit`, `stub_audit`, codemap regeneration).
+    cross_stack_amm_swap.rs`, 11 tests) byte-matches `encode_action`
+    against Lean's `expectedCbe`, recomputes `getAmountOut` via u256
+    intermediates (100% coverage), and verifies k-monotonicity /
+    no-drain / slippage / post-swap reserves / L2 balance deltas /
+    CXSF binary loading across the corpus.  The Solidity consumer
+    (`solidity/test/CrossCheck/AmmSwapFixtures.t.sol`, 9 tests)
+    recomputes `AmmMath.getAmountOut` per entry and verifies header
+    constants, k-monotonicity, no-drain, slippage consistency, CBE
+    byte-length (54 bytes), post-swap reserves, L2 balance deltas,
+    and two hand-vector anchors.  Hash-independent: no keccak-binding
+    gate needed (the swap-math corpus involves no hashing).
+    `FixtureKind::AmmSwap` (tag 8) added to `knomosis-cross-stack`.
+    All gates green (`lake build`, `lake test`,
+    `cargo test --workspace`, `cargo clippy`, `cargo fmt`,
+    `forge test`, `count_sorries`, `naming_audit`, `tcb_audit`,
+    `stub_audit`, codemap regeneration).
 
 #### WU GP.11.8: AMM state-root commitment integration (v1.4)
 

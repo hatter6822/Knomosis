@@ -43,6 +43,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         bool slippageSatisfied;
         uint256 kBefore;
         uint256 kAfter;
+        uint256 newReserveIn;
+        uint256 newReserveOut;
+        uint256 reserveActorCreditFrom;
+        uint256 reserveActorDebitTo;
         uint256 ammReserveActor;
     }
 
@@ -75,6 +79,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
         e.slippageSatisfied = vm.parseJsonBool(raw, string.concat(base, ".slippageSatisfied"));
         e.kBefore = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".kBefore")));
         e.kAfter = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".kAfter")));
+        e.newReserveIn = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".newReserveIn")));
+        e.newReserveOut = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".newReserveOut")));
+        e.reserveActorCreditFrom = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".reserveActorCreditFrom")));
+        e.reserveActorDebitTo = uint256(vm.parseJsonBytes32(raw, string.concat(base, ".reserveActorDebitTo")));
         e.ammReserveActor = vm.parseJsonUint(raw, string.concat(base, ".ammReserveActor"));
     }
 
@@ -122,8 +130,10 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
     // Per-entry getAmountOut formula compliance
     // ------------------------------------------------------------------
 
-    /// @notice For EVERY corpus entry, `AmmMath.getAmountOut` reproduces
-    ///         the Lean `expectedOut` byte-for-byte.
+    /// @notice For every non-degenerate corpus entry, `AmmMath.getAmountOut`
+    ///         reproduces the Lean `expectedOut` byte-for-byte.  Degenerate
+    ///         entries (zero reserves, zero amountIn, fee >= 100%) are
+    ///         skipped because the Solidity library reverts on those inputs.
     function test_perEntry_getAmountOut_matchesLean() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("amm_swap.json not generated (run `lake test`)");
@@ -134,6 +144,9 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
 
         for (uint256 i = 0; i < n; i++) {
             Entry memory e = _loadEntry(raw, i);
+            if (e.reserveIn == 0 || e.reserveOut == 0 || e.amountIn == 0 || e.feeBps >= 10000) {
+                continue;
+            }
             uint256 got = AmmMath.getAmountOut(e.amountIn, e.reserveIn, e.reserveOut, e.feeBps);
             assertEq(got, e.expectedOut, "Solidity getAmountOut diverges from Lean");
         }
@@ -224,6 +237,46 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             string memory cbeHex = vm.parseJsonString(raw, string.concat(base, ".expectedCbe"));
             bytes memory cbeBytes = vm.parseBytes(cbeHex);
             assertEq(cbeBytes.length, 54, "CBE must be 54 bytes (tag + 5 x 9-byte heads)");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Post-swap reserves
+    // ------------------------------------------------------------------
+
+    /// @notice Post-swap reserves equal `reserveIn + amountIn` / `reserveOut - expectedOut`.
+    function test_perEntry_postSwapReserves() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("amm_swap.json not generated (run `lake test`)");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = _count(raw);
+
+        for (uint256 i = 0; i < n; i++) {
+            Entry memory e = _loadEntry(raw, i);
+            assertEq(e.newReserveIn, e.reserveIn + e.amountIn, "newReserveIn mismatch");
+            assertEq(e.newReserveOut, e.reserveOut - e.expectedOut, "newReserveOut mismatch");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // L2 balance deltas
+    // ------------------------------------------------------------------
+
+    /// @notice L2 balance deltas: credit = amountIn, debit = expectedOut.
+    function test_perEntry_l2BalanceDeltas() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("amm_swap.json not generated (run `lake test`)");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = _count(raw);
+
+        for (uint256 i = 0; i < n; i++) {
+            Entry memory e = _loadEntry(raw, i);
+            assertEq(e.reserveActorCreditFrom, e.amountIn, "reserveActorCreditFrom != amountIn");
+            assertEq(e.reserveActorDebitTo, e.expectedOut, "reserveActorDebitTo != expectedOut");
         }
     }
 }

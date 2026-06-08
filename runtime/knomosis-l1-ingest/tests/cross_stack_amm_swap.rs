@@ -59,6 +59,10 @@ struct Entry {
     slippage_satisfied: bool,
     k_before: String,
     k_after: String,
+    new_reserve_in: String,
+    new_reserve_out: String,
+    reserve_actor_credit_from: String,
+    reserve_actor_debit_to: String,
     amm_reserve_actor: u64,
     expected_cbe: String,
 }
@@ -151,23 +155,70 @@ fn decode_hex(s: &str) -> Vec<u8> {
     hex::decode(stripped).unwrap_or_else(|e| panic!("expectedCbe is not valid hex ({s}): {e}"))
 }
 
+/// Multiply two u128 values, returning a u256 as `(high, low)`.
+fn mul_wide(a: u128, b: u128) -> (u128, u128) {
+    let a_lo = a & 0xFFFF_FFFF_FFFF_FFFF;
+    let a_hi = a >> 64;
+    let b_lo = b & 0xFFFF_FFFF_FFFF_FFFF;
+    let b_hi = b >> 64;
+    let ll = a_lo * b_lo;
+    let lh = a_lo * b_hi;
+    let hl = a_hi * b_lo;
+    let hh = a_hi * b_hi;
+    let mid = (ll >> 64) + (lh & 0xFFFF_FFFF_FFFF_FFFF) + (hl & 0xFFFF_FFFF_FFFF_FFFF);
+    let low = (ll & 0xFFFF_FFFF_FFFF_FFFF) | ((mid & 0xFFFF_FFFF_FFFF_FFFF) << 64);
+    let high = hh + (lh >> 64) + (hl >> 64) + (mid >> 64);
+    (high, low)
+}
+
+/// Divide a u256 `(high, low)` by a u128 divisor, returning a u128
+/// quotient.  Panics if the quotient exceeds u128 or the divisor is 0.
+fn div_u256_by_u128(num: (u128, u128), den: u128) -> u128 {
+    assert!(den != 0, "division by zero");
+    if num.0 == 0 {
+        return num.1 / den;
+    }
+    let mut rem: u128 = 0;
+    let mut quot: u128 = 0;
+    let bits = 256u32;
+    for i in (0..bits).rev() {
+        rem <<= 1;
+        let bit = if i >= 128 {
+            (num.0 >> (i - 128)) & 1
+        } else {
+            (num.1 >> i) & 1
+        };
+        rem |= bit;
+        if rem >= den {
+            rem -= den;
+            if i < 128 {
+                quot |= 1u128 << i;
+            } else {
+                panic!("quotient exceeds u128");
+            }
+        }
+    }
+    quot
+}
+
 /// Rust mirror of the Lean `getAmountOut` pricing function.
-/// Uses checked arithmetic to detect overflow.
-fn get_amount_out(
+/// Uses u256 intermediates via `mul_wide` / `div_u256_by_u128` so it
+/// never overflows on corpus-range values.
+fn get_amount_out_wide(
     amount_in: u128,
     reserve_in: u128,
     reserve_out: u128,
     fee_bps: u128,
-) -> Option<u128> {
-    let amount_in_with_fee = amount_in.checked_mul(BPS_DENOMINATOR.checked_sub(fee_bps)?)?;
-    let numerator = amount_in_with_fee.checked_mul(reserve_out)?;
-    let denominator = reserve_in
-        .checked_mul(BPS_DENOMINATOR)?
-        .checked_add(amount_in_with_fee)?;
+) -> u128 {
+    let factor = BPS_DENOMINATOR - fee_bps;
+    let amount_in_with_fee = amount_in * factor;
+    let numerator = mul_wide(amount_in_with_fee, reserve_out);
+    let denom_base = reserve_in * BPS_DENOMINATOR;
+    let denominator = denom_base + amount_in_with_fee;
     if denominator == 0 {
-        return Some(0);
+        return 0;
     }
-    Some(numerator / denominator)
+    div_u256_by_u128(numerator, denominator)
 }
 
 /// Headline differential: every Lean-computed `expectedCbe` equals
@@ -270,37 +321,27 @@ fn amm_swap_corpus_header_constants() {
     assert_eq!(fixture.header.action_tag, 23);
 }
 
-/// Every entry's `expectedOut` matches the Rust `get_amount_out`
-/// recomputation.  Entries whose intermediate products overflow u128
-/// are skipped (the Lean/Solidity side uses unbounded/256-bit
-/// arithmetic natively).
+/// Every entry's `expectedOut` matches the Rust `get_amount_out_wide`
+/// recomputation using u256 intermediates — 100% coverage.
 #[test]
 fn amm_swap_corpus_formula_compliance() {
     let Some(fixture) = load_fixture() else {
         eprintln!("[SKIP] amm_swap.json not found.");
         return;
     };
-    let mut checked = 0usize;
     for (i, e) in fixture.entries.iter().enumerate() {
         let amount_in = parse_hex_u128(&e.amount_in);
         let reserve_in = parse_hex_u128(&e.reserve_in);
         let reserve_out = parse_hex_u128(&e.reserve_out);
         let fee_bps = u128::from(e.fee_bps);
         let expected_out = parse_hex_u128(&e.expected_out);
-        if let Some(recomputed) = get_amount_out(amount_in, reserve_in, reserve_out, fee_bps) {
-            assert_eq!(
-                expected_out, recomputed,
-                "entry {i} ({}): formula mismatch (expected_out={}, recomputed={})",
-                e.category, expected_out, recomputed
-            );
-            checked += 1;
-        }
+        let recomputed = get_amount_out_wide(amount_in, reserve_in, reserve_out, fee_bps);
+        assert_eq!(
+            expected_out, recomputed,
+            "entry {i} ({}): formula mismatch (expected_out={expected_out}, recomputed={recomputed})",
+            e.category,
+        );
     }
-    assert!(
-        checked > fixture.entries.len() / 2,
-        "fewer than half the entries were formula-checked ({checked}/{})",
-        fixture.entries.len()
-    );
 }
 
 /// No-drain: `expectedOut < reserveOut` for every valid entry.
@@ -366,6 +407,104 @@ fn amm_swap_corpus_slippage() {
             e.slippage_satisfied, expected,
             "entry {i} ({}): slippage flag mismatch",
             e.category
+        );
+    }
+}
+
+/// Post-swap reserves match `reserveIn + amountIn` / `reserveOut - expectedOut`.
+#[test]
+fn amm_swap_corpus_post_swap_reserves() {
+    let Some(fixture) = load_fixture() else {
+        eprintln!("[SKIP] amm_swap.json not found.");
+        return;
+    };
+    for (i, e) in fixture.entries.iter().enumerate() {
+        let amount_in = parse_hex_u128(&e.amount_in);
+        let reserve_in = parse_hex_u128(&e.reserve_in);
+        let reserve_out = parse_hex_u128(&e.reserve_out);
+        let expected_out = parse_hex_u128(&e.expected_out);
+        let new_reserve_in = parse_hex_u128(&e.new_reserve_in);
+        let new_reserve_out = parse_hex_u128(&e.new_reserve_out);
+        assert_eq!(
+            new_reserve_in,
+            reserve_in + amount_in,
+            "entry {i} ({}): newReserveIn mismatch",
+            e.category
+        );
+        assert_eq!(
+            new_reserve_out,
+            reserve_out - expected_out,
+            "entry {i} ({}): newReserveOut mismatch",
+            e.category
+        );
+    }
+}
+
+/// L2 balance deltas on `ammReserveActor`: credit = amountIn, debit = expectedOut.
+#[test]
+fn amm_swap_corpus_l2_balance_deltas() {
+    let Some(fixture) = load_fixture() else {
+        eprintln!("[SKIP] amm_swap.json not found.");
+        return;
+    };
+    for (i, e) in fixture.entries.iter().enumerate() {
+        let amount_in = parse_hex_u128(&e.amount_in);
+        let expected_out = parse_hex_u128(&e.expected_out);
+        let credit = parse_hex_u128(&e.reserve_actor_credit_from);
+        let debit = parse_hex_u128(&e.reserve_actor_debit_to);
+        assert_eq!(
+            credit, amount_in,
+            "entry {i} ({}): reserveActorCreditFrom != amountIn",
+            e.category
+        );
+        assert_eq!(
+            debit, expected_out,
+            "entry {i} ({}): reserveActorDebitTo != expectedOut",
+            e.category
+        );
+    }
+}
+
+/// CXSF binary corpus loads with the correct kind and record count.
+#[test]
+fn amm_swap_cxsf_consumer() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo = manifest
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("repo root");
+    let cxsf_path = repo.join("runtime/tests/cross-stack/amm_swap.cxsf");
+    if !cxsf_path.exists() {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "amm_swap.cxsf is absent under CI"
+        );
+        eprintln!("[SKIP] amm_swap.cxsf not found.");
+        return;
+    }
+    let fixture = knomosis_cross_stack::FixtureFile::load(&cxsf_path)
+        .unwrap_or_else(|e| panic!("failed to load amm_swap.cxsf: {e}"));
+    assert_eq!(
+        fixture.kind(),
+        knomosis_cross_stack::FixtureKind::AmmSwap,
+        "CXSF kind tag must be AmmSwap"
+    );
+    let records = fixture.records();
+    assert!(
+        records.len() >= 70,
+        "CXSF should have >= 70 records, got {}",
+        records.len()
+    );
+    for (i, rec) in records.iter().enumerate() {
+        assert_eq!(
+            rec.input.len(),
+            40,
+            "record {i}: input should be 40 bytes (5 × 8 BE u64)"
+        );
+        assert_eq!(
+            rec.expected.len(),
+            54,
+            "record {i}: expected should be 54 bytes (Action.ammSwap CBE)"
         );
     }
 }

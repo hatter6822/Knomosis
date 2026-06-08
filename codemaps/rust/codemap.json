@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "63a299c316a98ad3c3367608ea0837c42180cb94a362a99e2b7ea642685cb205"
+    "source_digest": "7ae5fe3565f833dcf30947ac39f59dd0014fa20176dd716db6209106889b5caa"
   },
   "summary": {
-    "module_count": 136,
-    "declaration_count": 4580
+    "module_count": 137,
+    "declaration_count": 4605
   },
   "modules": [
     {
@@ -44445,6 +44445,258 @@
             "record",
             "records",
             "u"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-l1-ingest::tests::cross_stack_amm_swap",
+      "path": "runtime/knomosis-l1-ingest/tests/cross_stack_amm_swap.rs",
+      "declaration_count": 25,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "AMM_SWAP_FEE_BPS",
+          "line": 27,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "BPS_DENOMINATOR",
+          "line": 28,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Header",
+          "line": 33,
+          "called": [
+            "count"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Entry",
+          "line": 48,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Fixture",
+          "line": 72,
+          "called": [
+            "Entry",
+            "Header",
+            "header"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_hex_u128",
+          "line": 79,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "parse_hex_u256",
+          "line": 90,
+          "called": [
+            "bytes",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "u256_le",
+          "line": 109,
+          "called": [
+            "b"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "locate_fixture",
+          "line": 114,
+          "called": [
+            "fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "load_fixture",
+          "line": 130,
+          "called": [
+            "Fixture",
+            "bytes",
+            "fixture",
+            "locate_fixture",
+            "path"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_hex",
+          "line": 150,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "mul_wide",
+          "line": 158,
+          "called": [
+            "b"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "div_u256_by_u128",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "get_amount_out_wide",
+          "line": 206,
+          "called": [
+            "BPS_DENOMINATOR",
+            "div_u256_by_u128",
+            "mul_wide"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_byte_equivalence",
+          "line": 226,
+          "called": [
+            "action",
+            "count",
+            "decode_hex",
+            "encode_action",
+            "fixture",
+            "header",
+            "iter",
+            "len",
+            "load_fixture",
+            "parse_hex_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_coverage",
+          "line": 263,
+          "called": [
+            "count",
+            "fixture",
+            "header",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_tag_pin",
+          "line": 285,
+          "called": [
+            "action",
+            "fixture",
+            "iter",
+            "load_fixture",
+            "parse_hex_u128",
+            "tag"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_header_constants",
+          "line": 311,
+          "called": [
+            "AMM_SWAP_FEE_BPS",
+            "BPS_DENOMINATOR",
+            "fixture",
+            "header",
+            "load_fixture"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_formula_compliance",
+          "line": 326,
+          "called": [
+            "fixture",
+            "get_amount_out_wide",
+            "iter",
+            "load_fixture",
+            "parse_hex_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_no_drain",
+          "line": 348,
+          "called": [
+            "BPS_DENOMINATOR",
+            "fixture",
+            "iter",
+            "load_fixture",
+            "parse_hex_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_k_monotonicity",
+          "line": 378,
+          "called": [
+            "fixture",
+            "iter",
+            "load_fixture",
+            "parse_hex_u256",
+            "u256_le"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_slippage",
+          "line": 396,
+          "called": [
+            "fixture",
+            "iter",
+            "load_fixture",
+            "parse_hex_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_post_swap_reserves",
+          "line": 415,
+          "called": [
+            "fixture",
+            "iter",
+            "load_fixture",
+            "parse_hex_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_corpus_l2_balance_deltas",
+          "line": 444,
+          "called": [
+            "credit",
+            "debit",
+            "fixture",
+            "iter",
+            "load_fixture",
+            "parse_hex_u128"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_cxsf_consumer",
+          "line": 469,
+          "called": [
+            "fixture",
+            "iter",
+            "kind",
+            "len",
+            "records"
           ]
         }
       ]

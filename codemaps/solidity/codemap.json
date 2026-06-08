@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c4e3e6bbd02744938daf9a7b0a08cd66926e851cc2e4886cddcf09344a59ac76"
+    "source_digest": "4be58dec9e9a6fb837c5516a61af6065cec8465539a68f93848e06259b33e30f"
   },
   "summary": {
-    "module_count": 74,
-    "declaration_count": 1665
+    "module_count": 75,
+    "declaration_count": 1680
   },
   "modules": [
     {
@@ -8935,6 +8935,161 @@
           "name": "test_handVectors_knownGroundTruth",
           "line": 169,
           "called": []
+        }
+      ]
+    },
+    {
+      "module": "AmmSwapFixtures.t",
+      "path": "solidity/test/CrossCheck/AmmSwapFixtures.t.sol",
+      "declaration_count": 15,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "AmmSwapFixturesCrossCheck",
+          "line": 25,
+          "called": [
+            "CrossCheckFramework"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "Entry",
+          "line": 33,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_count",
+          "line": 56,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_gridCount",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cornerCount",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_loadEntry",
+          "line": 68,
+          "called": [
+            "Entry"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_header_shape",
+          "line": 92,
+          "called": [
+            "_cornerCount",
+            "_count",
+            "_gridCount",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_getAmountOut_matchesLean",
+          "line": 136,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_noDrain",
+          "line": 158,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_kNonDecreasing",
+          "line": 179,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_slippageConsistency",
+          "line": 197,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_handVectors_knownGroundTruth",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_cbeByteLength",
+          "line": 226,
+          "called": [
+            "_count",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_postSwapReserves",
+          "line": 247,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_l2BalanceDeltas",
+          "line": 267,
+          "called": [
+            "Entry",
+            "_count",
+            "_loadEntry",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
         }
       ]
     },

@@ -22,9 +22,10 @@ The corpus covers:
 
   * 3 reserve sizes × 2 directions × 3 swap fractions × 3 slippage
     thresholds = 54 grid entries
-  * 12 boundary corner cases (dust, max-U64, zero output, asymmetric
-    pools, paired round-trip checks, varied fees)
-  = 66 entries total.
+  * 16 boundary corner cases (dust, max-U64, zero output, asymmetric
+    pools, paired round-trip checks, varied fees, degenerate reserves,
+    zero-amount, same-resource)
+  = 70 entries total.
 
 Each entry carries:
 
@@ -39,6 +40,11 @@ Each entry carries:
   * `feeBps`: the swap fee in basis points (always 30 in production).
   * `kBefore`, `kAfter`: the constant product before and after the
     swap, as 0x-prefixed 32-byte BE hex strings (k-monotonicity).
+  * `newReserveIn`, `newReserveOut`: the post-swap reserves
+    (`reserveIn + amountIn`, `reserveOut - expectedOut`).
+  * `reserveActorCreditFrom`, `reserveActorDebitTo`: the L2 balance
+    deltas on `ammReserveActor` (credit at `fromResource` = `amountIn`,
+    debit at `toResource` = `expectedOut`).
   * `minAmountOut`: the slippage threshold the entry exercises.
   * `slippageSatisfied`: whether `expectedOut >= minAmountOut`.
 
@@ -126,6 +132,14 @@ structure Entry where
   kBefore       : Nat
   /-- Constant product after the swap. -/
   kAfter        : Nat
+  /-- Post-swap reserve of the input asset (`reserveIn + amountIn`). -/
+  newReserveIn  : Nat
+  /-- Post-swap reserve of the output asset (`reserveOut - expectedOut`). -/
+  newReserveOut : Nat
+  /-- L2 balance credit to `ammReserveActor` at `fromResource` (= `amountIn`). -/
+  reserveActorCreditFrom : Nat
+  /-- L2 balance debit from `ammReserveActor` at `toResource` (= `expectedOut`). -/
+  reserveActorDebitTo    : Nat
 
 /-- Build an entry from the swap parameters, computing all derived fields. -/
 def mkEntry (fromR toR amountIn reserveIn reserveOut feeBps minOut : Nat)
@@ -145,6 +159,10 @@ def mkEntry (fromR toR amountIn reserveIn reserveOut feeBps minOut : Nat)
   , slippageSatisfied := out >= minOut
   , kBefore := kB
   , kAfter := kA
+  , newReserveIn := reserveIn + amountIn
+  , newReserveOut := reserveOut - out
+  , reserveActorCreditFrom := amountIn
+  , reserveActorDebitTo := out
   }
 
 /-- Serialise one entry to JSON.  Amount-scale fields use 32-byte BE
@@ -167,6 +185,10 @@ def entryJson (e : Entry) : Json :=
     , ("slippageSatisfied", Json.bool e.slippageSatisfied)
     , ("kBefore",           Json.str (hexFromUint256BE e.kBefore))
     , ("kAfter",            Json.str (hexFromUint256BE e.kAfter))
+    , ("newReserveIn",      Json.str (hexFromUint256BE e.newReserveIn))
+    , ("newReserveOut",     Json.str (hexFromUint256BE e.newReserveOut))
+    , ("reserveActorCreditFrom", Json.str (hexFromUint256BE e.reserveActorCreditFrom))
+    , ("reserveActorDebitTo",    Json.str (hexFromUint256BE e.reserveActorDebitTo))
     , ("ammReserveActor",   Json.num ammReserveActorId)
     , ("expectedCbe",       Json.str (encodeActionHex a))
     ]
@@ -263,6 +285,14 @@ def cornerEntries : List Entry :=
       "corner:high-fee-5000bps"
   , mkEntry 0 1 e12 (100 * e12) (300000 * e12) 9999 0
       "corner:fee-just-below-100pct"
+  , mkEntry 0 1 100 0 1000 ammSwapFeeBps 0
+      "corner:zero-reserveIn"
+  , mkEntry 0 1 100 1000 0 ammSwapFeeBps 0
+      "corner:zero-reserveOut"
+  , mkEntry 0 1 0 1000 3000000 ammSwapFeeBps 0
+      "corner:zero-amount"
+  , mkEntry 0 0 1000 (1000 * e12) (3000000 * e12) ammSwapFeeBps 0
+      "corner:same-resource"
   ]
 
 /-- The full corpus. -/
@@ -323,10 +353,10 @@ def cxsfName : String := "amm_swap.cxsf"
     byte-shape, hand-pinned vectors, round-trip, slippage, and the
     fixture write. -/
 def tests : List TestCase :=
-  [ { name := "GP.11.7: amm_swap corpus has >= 66 entries"
+  [ { name := "GP.11.7: amm_swap corpus has >= 70 entries"
     , body := do
-        if entries.length < 66 then
-          throw <| IO.userError s!"expected >= 66 entries, got {entries.length}"
+        if entries.length < 70 then
+          throw <| IO.userError s!"expected >= 70 entries, got {entries.length}"
     }
   , { name := "GP.11.7: grid has 54 entries (2 directions × 3 pools × 3 fracs × 3 slippage)"
     , body := do
@@ -407,20 +437,54 @@ def tests : List TestCase :=
           if tagHex ≠ "17" then
             throw <| IO.userError s!"tag byte {tagHex} ≠ 17 for {e.category}"
     }
-  , { name := "GP.11.7: paired round-trip entries show k never decreases across both swaps"
+  , { name := "GP.11.7: paired round-trip entries show k grows and round-trip is lossy"
     , body := do
-        let outA := getAmountOut e12 (100 * e12) (300000 * e12) ammSwapFeeBps
-        let kBeforeA := (100 * e12) * (300000 * e12)
-        let kAfterA := (100 * e12 + e12) * (300000 * e12 - outA)
+        let a := e12
+        let rEth := 100 * e12
+        let rBold := 300000 * e12
+        let outA := getAmountOut a rEth rBold ammSwapFeeBps
+        let kBeforeA := rEth * rBold
+        let kAfterA := (rEth + a) * (rBold - outA)
         unless kBeforeA ≤ kAfterA do
           throw <| IO.userError "round-trip leg A: k decreased"
-        let newResEth := 100 * e12 + e12
-        let newResBold := 300000 * e12 - outA
+        let newResEth := rEth + a
+        let newResBold := rBold - outA
         let outB := getAmountOut outA newResBold newResEth ammSwapFeeBps
         let kBeforeB := newResBold * newResEth
         let kAfterB := (newResBold + outA) * (newResEth - outB)
         unless kBeforeB ≤ kAfterB do
           throw <| IO.userError "round-trip leg B: k decreased"
+        unless outB < a do
+          throw <| IO.userError s!"round-trip not lossy: returned {outB} ≥ deposited {a}"
+        let kDelta := (a - outB) * rBold
+        unless kDelta > 0 do
+          throw <| IO.userError "round-trip k-delta is zero"
+        let legADelta := kAfterA - kBeforeA
+        let legBDelta := kAfterB - kBeforeB
+        unless legADelta > 0 do
+          throw <| IO.userError "leg A k-delta is zero (expected strictly positive from fee)"
+        unless legBDelta > 0 do
+          throw <| IO.userError "leg B k-delta is zero (expected strictly positive from fee)"
+    }
+  , { name := "GP.11.7: every entry's post-swap reserves match arithmetic"
+    , body := do
+        for e in entries do
+          unless e.newReserveIn = e.reserveIn + e.amountIn do
+            throw <| IO.userError
+              s!"newReserveIn mismatch: {e.category}"
+          unless e.newReserveOut = e.reserveOut - e.expectedOut do
+            throw <| IO.userError
+              s!"newReserveOut mismatch: {e.category}"
+    }
+  , { name := "GP.11.7: every entry's L2 balance deltas match swap amounts"
+    , body := do
+        for e in entries do
+          unless e.reserveActorCreditFrom = e.amountIn do
+            throw <| IO.userError
+              s!"reserveActorCreditFrom ≠ amountIn: {e.category}"
+          unless e.reserveActorDebitTo = e.expectedOut do
+            throw <| IO.userError
+              s!"reserveActorDebitTo ≠ expectedOut: {e.category}"
     }
   , { name := "GP.11.7: slippageSatisfied is correctly computed for every entry"
     , body := do
