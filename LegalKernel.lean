@@ -248,6 +248,9 @@ import LegalKernel.Bridge.Accounting
 -- governing `gasPoolActor` outflow (capped `transfer`-to-sequencer
 -- only).  Non-TCB; consumed by the GP.7.3 pool-drain bound.
 import LegalKernel.Bridge.GasPoolPolicy
+-- Workstream GP.11.6 — the canonical `LocalPolicy` + `AuthorityPolicy`
+-- governing `ammReserveActor` outflow (`ammSwap`-only).  Non-TCB.
+import LegalKernel.Bridge.AmmReservePolicy
 -- Workstream GP.7.3 — the inductive pool-drain bound: across any
 -- contiguous trace of `n` admitted SignedActions respecting the
 -- GP.7.2 gas-pool authority discipline, `gasPoolActor`'s ETH-leg

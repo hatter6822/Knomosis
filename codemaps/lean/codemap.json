@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "8c3cc92fc96882cf55f9a5833bd0d67ad0ab9dba549f4ccb5b3ba5e9066f0371"
+    "source_digest": "b3fe74e747c4552f04eab82d19851ea64db81bfd541d20ba7f1b47b5eacfa758"
   },
   "summary": {
-    "module_count": 297,
-    "declaration_count": 4922
+    "module_count": 299,
+    "declaration_count": 4978
   },
   "modules": [
     {
@@ -510,13 +510,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 303,
+          "line": 306,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 316,
+          "line": 319,
           "called": [
             "LegalKernel"
           ]
@@ -6357,6 +6357,568 @@
             "bpsDenominator",
             "getAmountOut",
             "getAmountOut_lt_reserveOut"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Bridge.AmmReservePolicy",
+      "path": "LegalKernel/Bridge/AmmReservePolicy.lean",
+      "declaration_count": 49,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 82,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Bridge",
+          "line": 83,
+          "called": [
+            "Encodable"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveDeniedTags",
+          "line": 99,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ammReservePolicy",
+          "line": 116,
+          "called": [
+            "LocalPolicy",
+            "ammReserveDeniedTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammSwap_tag_not_mem_ammReserveDeniedTags",
+          "line": 124,
+          "called": [
+            "ammReserveDeniedTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_ammReserveDeniedTags_of_tag_ne_ammSwap",
+          "line": 132,
+          "called": [
+            "Action",
+            "Action.tag",
+            "Action.tag_lt_denyListBound",
+            "ammReserveDeniedTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReservePolicy_denies_all_non_ammSwap",
+          "line": 151,
+          "called": [
+            "Action",
+            "Action.tag",
+            "ammReserveActor",
+            "ammReserveDeniedTags",
+            "ammReservePolicy",
+            "mem_ammReserveDeniedTags_of_tag_ne_ammSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReservePolicy_permits_ammSwap",
+          "line": 163,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "ammReserveActor",
+            "ammReservePolicy",
+            "ammSwap",
+            "ammSwap_tag_not_mem_ammReserveDeniedTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReservePolicy_permits_iff",
+          "line": 175,
+          "called": [
+            "Action",
+            "Action.tag",
+            "ammReserveActor",
+            "ammReserveDeniedTags",
+            "ammReservePolicy",
+            "ammReservePolicy_denies_all_non_ammSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReservePolicy_admission_permits_meta_actions",
+          "line": 209,
+          "called": [
+            "ExtendedState",
+            "ammReserveActor",
+            "ammReservePolicy",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReservePolicy_admission_permits_iff",
+          "line": 223,
+          "called": [
+            "Action",
+            "ExtendedState",
+            "ammReserveActor",
+            "ammReservePolicy",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveActorAuthorized",
+          "line": 266,
+          "called": [
+            "Action",
+            "ActorId",
+            "ammReserveActor",
+            "ammSwap"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "ammReserveActorAuthorized_decidable",
+          "line": 275,
+          "called": [
+            "Action",
+            "ActorId",
+            "ammReserveActor",
+            "ammReserveActorAuthorized"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveAuthorityPolicy",
+          "line": 287,
+          "called": [
+            "AuthorityPolicy",
+            "ammReserveActorAuthorized"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveAuthorityPolicy_rejects_meta",
+          "line": 295,
+          "called": [
+            "ammReserveActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveAuthorityPolicy_rejects_non_ammSwap",
+          "line": 305,
+          "called": [
+            "Action",
+            "Action.tag",
+            "ammReserveActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveAuthorityPolicy_authorizes_ammSwap",
+          "line": 316,
+          "called": [
+            "Amount",
+            "ResourceId",
+            "ammReserveActor",
+            "ammSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveAuthorityPolicy_rejects_non_reserve_target",
+          "line": 328,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "ammReserveActor",
+            "ammSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveAuthorityPolicy_authorized_ammSwap_target",
+          "line": 341,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "ammReserveActor",
+            "ammSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveAuthorityPolicy_other_actors_unrestricted",
+          "line": 352,
+          "called": [
+            "Action",
+            "ActorId",
+            "AuthorityPolicy",
+            "AuthorityPolicy.intersect",
+            "ammReserveActor",
+            "ammReserveActorAuthorized",
+            "ammReserveAuthorityPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveAuthorityPolicy_intersect_rejects_meta",
+          "line": 364,
+          "called": [
+            "AuthorityPolicy",
+            "ammReserveActor",
+            "ammReserveAuthorityPolicy",
+            "ammReserveAuthorityPolicy_rejects_meta"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveGenesisState",
+          "line": 392,
+          "called": [
+            "ExtendedState",
+            "ammReserveActor",
+            "ammReservePolicy",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveGenesisPolicy",
+          "line": 399,
+          "called": [
+            "AuthorityPolicy",
+            "ammReserveAuthorityPolicy"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "AmmReserveGenesis",
+          "line": 406,
+          "called": [
+            "AuthorityPolicy",
+            "ExtendedState",
+            "policy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveGenesis",
+          "line": 417,
+          "called": [
+            "AmmReserveGenesis",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "ammReserveGenesisPolicy",
+            "ammReserveGenesisState",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisState_declares_policy",
+          "line": 427,
+          "called": [
+            "ExtendedState",
+            "ammReserveActor",
+            "ammReserveGenesisState",
+            "ammReservePolicy",
+            "es",
+            "lookup"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisState_preserves_other_localPolicies",
+          "line": 435,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ammReserveActor",
+            "ammReserveGenesisState",
+            "ammReservePolicy",
+            "es",
+            "lookup"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisState_preserves_kernel_substates",
+          "line": 445,
+          "called": [
+            "ExtendedState",
+            "ammReserveGenesisState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicy_rejects_meta",
+          "line": 461,
+          "called": [
+            "AuthorityPolicy",
+            "ammReserveActor",
+            "ammReserveAuthorityPolicy_intersect_rejects_meta",
+            "ammReserveGenesisPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicy_other_actors_unrestricted",
+          "line": 471,
+          "called": [
+            "Action",
+            "ActorId",
+            "AuthorityPolicy",
+            "ammReserveActor",
+            "ammReserveAuthorityPolicy_other_actors_unrestricted",
+            "ammReserveGenesisPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicy_rejects_non_ammSwap",
+          "line": 480,
+          "called": [
+            "Action",
+            "Action.tag",
+            "AuthorityPolicy",
+            "ammReserveActor",
+            "ammReserveAuthorityPolicy_rejects_non_ammSwap",
+            "ammReserveGenesisPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicy_authorizes_ammSwap",
+          "line": 489,
+          "called": [
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "ammReserveActor",
+            "ammReserveAuthorityPolicy_authorizes_ammSwap",
+            "ammReserveGenesisPolicy",
+            "ammSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicy_rejects_non_reserve_target",
+          "line": 502,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "ResourceId",
+            "ammReserveActor",
+            "ammReserveAuthorityPolicy_rejects_non_reserve_target",
+            "ammReserveGenesisPolicy",
+            "ammSwap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesis_wires_both_halves",
+          "line": 516,
+          "called": [
+            "AuthorityPolicy",
+            "ExtendedState",
+            "ammReserveGenesis",
+            "ammReserveGenesisPolicy",
+            "ammReserveGenesisState",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicy_bars_self_declaration",
+          "line": 526,
+          "called": [
+            "AuthorityPolicy",
+            "LocalPolicy",
+            "ammReserveActor",
+            "ammReserveGenesisPolicy",
+            "ammReserveGenesisPolicy_rejects_meta"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicy_preserves_gasPool_authority",
+          "line": 544,
+          "called": [
+            "Action",
+            "AuthorityPolicy",
+            "ammReserveActor_ne_gasPoolActor",
+            "ammReserveAuthorityPolicy_other_actors_unrestricted",
+            "ammReserveGenesisPolicy",
+            "gasPoolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisState_preserves_gasPool_localPolicy",
+          "line": 554,
+          "called": [
+            "ExtendedState",
+            "ammReserveActor_ne_gasPoolActor",
+            "ammReserveGenesisState",
+            "ammReserveGenesisState_preserves_other_localPolicies",
+            "es",
+            "gasPoolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReservePolicy_fieldsBounded",
+          "line": 567,
+          "called": [
+            "ammReservePolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReservePolicy_roundtrip",
+          "line": 586,
+          "called": [
+            "LocalPolicy",
+            "ammReservePolicy",
+            "ammReservePolicy_fieldsBounded"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisState_preserves_ammReserve_localPolicy",
+          "line": 600,
+          "called": [
+            "Amount",
+            "ExtendedState",
+            "ammReserveActor",
+            "ammReserveActor_ne_gasPoolActor",
+            "es",
+            "gasPoolGenesisState",
+            "gasPoolGenesisState_preserves_other_localPolicies",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "gasPoolGenesisPolicy_preserves_ammReserve_authority",
+          "line": 610,
+          "called": [
+            "Action",
+            "Amount",
+            "AuthorityPolicy",
+            "ammReserveActor",
+            "ammReserveActor_ne_gasPoolActor",
+            "gasPoolAuthorityPolicy_other_actors_unrestricted",
+            "gasPoolGenesisPolicy",
+            "mBold",
+            "mEth"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "AmmReserveConfig",
+          "line": 629,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveGenesisStateOfConfig",
+          "line": 635,
+          "called": [
+            "AmmReserveConfig",
+            "ExtendedState",
+            "ammReserveGenesisState",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveGenesisPolicyOfConfig",
+          "line": 643,
+          "called": [
+            "AmmReserveConfig",
+            "AuthorityPolicy",
+            "ammReserveGenesisPolicy"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ammReserveGenesisOfConfig",
+          "line": 651,
+          "called": [
+            "AmmReserveConfig",
+            "AmmReserveGenesis",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "ammReserveGenesisPolicyOfConfig",
+            "ammReserveGenesisStateOfConfig",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisStateOfConfig_none",
+          "line": 658,
+          "called": [
+            "ExtendedState",
+            "ammReserveGenesisStateOfConfig",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicyOfConfig_none",
+          "line": 662,
+          "called": [
+            "AuthorityPolicy",
+            "ammReserveGenesisPolicyOfConfig"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisStateOfConfig_some_declares_policy",
+          "line": 667,
+          "called": [
+            "AmmReserveConfig",
+            "ExtendedState",
+            "ammReserveActor",
+            "ammReserveGenesisStateOfConfig",
+            "ammReserveGenesisState_declares_policy",
+            "ammReservePolicy",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "ammReserveGenesisPolicyOfConfig_some_rejects_meta",
+          "line": 677,
+          "called": [
+            "AmmReserveConfig",
+            "AuthorityPolicy",
+            "Bridge",
+            "LegalKernel",
+            "ammReserveActor",
+            "ammReserveGenesisPolicyOfConfig",
+            "ammReserveGenesisPolicy_rejects_meta"
           ]
         }
       ]
@@ -32099,6 +32661,161 @@
             "getAmountOut",
             "getAmountOut_lt_reserveOut",
             "k_nondecreasing"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.AmmReservePolicy",
+      "path": "LegalKernel/Test/Bridge/AmmReservePolicy.lean",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge",
+          "line": 40,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "AmmReservePolicyTests",
+          "line": 41,
+          "called": [
+            "Encodable",
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "someUser",
+          "line": 52,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sampleVerdict",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleDispute",
+          "line": 59,
+          "called": [
+            "challenger",
+            "someUser"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "nonAmmSwapSamples",
+          "line": 67,
+          "called": [
+            "Action",
+            "EthAddress.zero",
+            "LocalPolicy.empty",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "distributeOthers",
+            "freezeResource",
+            "gasPoolActor",
+            "mint",
+            "proportionalDilute",
+            "reward",
+            "sampleDispute",
+            "sampleVerdict",
+            "someUser",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 95,
+          "called": [
+            "Action",
+            "Action.tag",
+            "ActorId",
+            "AmmReserveConfig",
+            "AmmReservePolicyTests",
+            "Amount",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "LegalKernel.Test.Bridge",
+            "LocalPolicy",
+            "LocalPolicy.empty",
+            "ResourceId",
+            "TestCase",
+            "ammReserveActor",
+            "ammReserveAuthorityPolicy",
+            "ammReserveAuthorityPolicy_authorized_ammSwap_target",
+            "ammReserveAuthorityPolicy_authorizes_ammSwap",
+            "ammReserveAuthorityPolicy_intersect_rejects_meta",
+            "ammReserveAuthorityPolicy_other_actors_unrestricted",
+            "ammReserveAuthorityPolicy_rejects_meta",
+            "ammReserveAuthorityPolicy_rejects_non_ammSwap",
+            "ammReserveAuthorityPolicy_rejects_non_reserve_target",
+            "ammReserveDeniedTags",
+            "ammReserveGenesis",
+            "ammReserveGenesisPolicy",
+            "ammReserveGenesisPolicyOfConfig",
+            "ammReserveGenesisPolicyOfConfig_none",
+            "ammReserveGenesisPolicyOfConfig_some_rejects_meta",
+            "ammReserveGenesisPolicy_authorizes_ammSwap",
+            "ammReserveGenesisPolicy_bars_self_declaration",
+            "ammReserveGenesisPolicy_other_actors_unrestricted",
+            "ammReserveGenesisPolicy_preserves_gasPool_authority",
+            "ammReserveGenesisPolicy_rejects_meta",
+            "ammReserveGenesisPolicy_rejects_non_ammSwap",
+            "ammReserveGenesisPolicy_rejects_non_reserve_target",
+            "ammReserveGenesisState",
+            "ammReserveGenesisStateOfConfig",
+            "ammReserveGenesisStateOfConfig_none",
+            "ammReserveGenesisStateOfConfig_some_declares_policy",
+            "ammReserveGenesisState_declares_policy",
+            "ammReserveGenesisState_preserves_gasPool_localPolicy",
+            "ammReserveGenesisState_preserves_kernel_substates",
+            "ammReserveGenesisState_preserves_other_localPolicies",
+            "ammReserveGenesis_wires_both_halves",
+            "ammReservePolicy",
+            "ammReservePolicy_admission_permits_iff",
+            "ammReservePolicy_admission_permits_meta_actions",
+            "ammReservePolicy_denies_all_non_ammSwap",
+            "ammReservePolicy_fieldsBounded",
+            "ammReservePolicy_permits_ammSwap",
+            "ammReservePolicy_permits_iff",
+            "ammReservePolicy_roundtrip",
+            "ammSwap",
+            "ammSwap_tag_not_mem_ammReserveDeniedTags",
+            "assert",
+            "assertEq",
+            "bridgeActor",
+            "bridgePolicy",
+            "deposit",
+            "es",
+            "gasPoolActor",
+            "gasPoolGenesisPolicy",
+            "gasPoolGenesisPolicy_preserves_ammReserve_authority",
+            "gasPoolGenesisState",
+            "gasPoolGenesisState_preserves_ammReserve_localPolicy",
+            "mBold",
+            "mEth",
+            "mem_ammReserveDeniedTags_of_tag_ne_ammSwap",
+            "nonAmmSwapSamples",
+            "policy",
+            "sequencerActor",
+            "someUser",
+            "transfer"
           ]
         }
       ]
@@ -58693,7 +59410,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 207,
+          "line": 208,
           "called": [
             "runAll"
           ]

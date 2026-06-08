@@ -128,6 +128,7 @@ import LegalKernel.Test.Bridge.AddressBook
 import LegalKernel.Test.Bridge.BridgeActor
 import LegalKernel.Test.Bridge.AmmMath
 import LegalKernel.Test.Bridge.GasPoolPolicy
+import LegalKernel.Test.Bridge.AmmReservePolicy
 import LegalKernel.Test.Bridge.PoolDrainBound
 import LegalKernel.Test.Bridge.BudgetRefund
 import LegalKernel.Test.Bridge.Ingest
@@ -334,6 +335,8 @@ def main : IO UInt32 := do
                                     Bridge.AmmMathTests.tests)
   failed := failed + (← runAll "bridge-gas-pool-policy"
                                     Bridge.GasPoolPolicyTests.tests)
+  failed := failed + (← runAll "bridge-amm-reserve-policy"
+                                    Bridge.AmmReservePolicyTests.tests)
   failed := failed + (← runAll "bridge-pool-drain-bound"
                                     Bridge.PoolDrainBoundTests.tests)
   failed := failed + (← runAll "bridge-budget-refund"
