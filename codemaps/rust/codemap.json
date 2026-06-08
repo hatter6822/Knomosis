@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7ae5fe3565f833dcf30947ac39f59dd0014fa20176dd716db6209106889b5caa"
+    "source_digest": "3552234ec286ad28a0361c9502421b5e15a3765852b39f203be5e2608b02b737"
   },
   "summary": {
     "module_count": 137,
-    "declaration_count": 4605
+    "declaration_count": 4609
   },
   "modules": [
     {
@@ -44452,7 +44452,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::tests::cross_stack_amm_swap",
       "path": "runtime/knomosis-l1-ingest/tests/cross_stack_amm_swap.rs",
-      "declaration_count": 25,
+      "declaration_count": 29,
       "declarations": [
         {
           "kind": "const",
@@ -44697,6 +44697,45 @@
             "kind",
             "len",
             "records"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "amm_swap_cxsf_matches_json",
+          "line": 514,
+          "called": [
+            "decode_hex",
+            "fixture",
+            "iter",
+            "len",
+            "load_fixture",
+            "records"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "mul_wide_known_vectors",
+          "line": 559,
+          "called": [
+            "mul_wide"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "div_u256_by_u128_known_vectors",
+          "line": 587,
+          "called": [
+            "b",
+            "div_u256_by_u128",
+            "mul_wide"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_amount_out_wide_known_vectors",
+          "line": 618,
+          "called": [
+            "get_amount_out_wide"
           ]
         }
       ]

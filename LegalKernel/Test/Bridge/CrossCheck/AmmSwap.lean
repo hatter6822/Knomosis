@@ -22,10 +22,10 @@ The corpus covers:
 
   * 3 reserve sizes × 2 directions × 3 swap fractions × 3 slippage
     thresholds = 54 grid entries
-  * 16 boundary corner cases (dust, max-U64, zero output, asymmetric
+  * 17 boundary corner cases (dust, max-U64, zero output, asymmetric
     pools, paired round-trip checks, varied fees, degenerate reserves,
-    zero-amount, same-resource)
-  = 70 entries total.
+    zero-amount, same-resource, slippage-unsatisfied)
+  = 71 entries total.
 
 Each entry carries:
 
@@ -293,6 +293,9 @@ def cornerEntries : List Entry :=
       "corner:zero-amount"
   , mkEntry 0 0 1000 (1000 * e12) (3000000 * e12) ammSwapFeeBps 0
       "corner:same-resource"
+  , let out := getAmountOut e12 (100 * e12) (300000 * e12) ammSwapFeeBps
+    mkEntry 0 1 e12 (100 * e12) (300000 * e12) ammSwapFeeBps (out + 1)
+      "corner:slippage-unsatisfied"
   ]
 
 /-- The full corpus. -/
@@ -353,10 +356,10 @@ def cxsfName : String := "amm_swap.cxsf"
     byte-shape, hand-pinned vectors, round-trip, slippage, and the
     fixture write. -/
 def tests : List TestCase :=
-  [ { name := "GP.11.7: amm_swap corpus has >= 70 entries"
+  [ { name := "GP.11.7: amm_swap corpus has >= 71 entries"
     , body := do
-        if entries.length < 70 then
-          throw <| IO.userError s!"expected >= 70 entries, got {entries.length}"
+        if entries.length < 71 then
+          throw <| IO.userError s!"expected >= 71 entries, got {entries.length}"
     }
   , { name := "GP.11.7: grid has 54 entries (2 directions × 3 pools × 3 fracs × 3 slippage)"
     , body := do
@@ -493,6 +496,15 @@ def tests : List TestCase :=
           unless e.slippageSatisfied = expected do
             throw <| IO.userError
               s!"slippage flag mismatch: {e.category} (out={e.expectedOut}, min={e.minAmountOut})"
+    }
+  , { name := "GP.11.7: corpus covers both slippageSatisfied = true and false"
+    , body := do
+        let hasTrue := entries.any (·.slippageSatisfied)
+        let hasFalse := entries.any (!·.slippageSatisfied)
+        unless hasTrue do
+          throw <| IO.userError "no entry with slippageSatisfied = true"
+        unless hasFalse do
+          throw <| IO.userError "no entry with slippageSatisfied = false"
     }
   , { name := "GP.11.7: header constants match the Lean definitions"
     , body := do

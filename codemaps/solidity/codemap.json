@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "4be58dec9e9a6fb837c5516a61af6065cec8465539a68f93848e06259b33e30f"
+    "source_digest": "e57789f36449e48ff598d546fdaa1719186383299bad37718b0668efa0e8fb5b"
   },
   "summary": {
     "module_count": 75,
-    "declaration_count": 1680
+    "declaration_count": 1682
   },
   "modules": [
     {
@@ -8941,12 +8941,12 @@
     {
       "module": "AmmSwapFixtures.t",
       "path": "solidity/test/CrossCheck/AmmSwapFixtures.t.sol",
-      "declaration_count": 15,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "contract",
           "name": "AmmSwapFixturesCrossCheck",
-          "line": 25,
+          "line": 27,
           "called": [
             "CrossCheckFramework"
           ]
@@ -8954,31 +8954,31 @@
         {
           "kind": "struct",
           "name": "Entry",
-          "line": 33,
+          "line": 35,
           "called": []
         },
         {
           "kind": "function",
           "name": "_count",
-          "line": 56,
+          "line": 58,
           "called": []
         },
         {
           "kind": "function",
           "name": "_gridCount",
-          "line": 60,
+          "line": 62,
           "called": []
         },
         {
           "kind": "function",
           "name": "_cornerCount",
-          "line": 64,
+          "line": 66,
           "called": []
         },
         {
           "kind": "function",
           "name": "_loadEntry",
-          "line": 68,
+          "line": 70,
           "called": [
             "Entry"
           ]
@@ -8986,7 +8986,7 @@
         {
           "kind": "function",
           "name": "test_header_shape",
-          "line": 92,
+          "line": 94,
           "called": [
             "_cornerCount",
             "_count",
@@ -8999,7 +8999,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_getAmountOut_matchesLean",
-          "line": 136,
+          "line": 138,
           "called": [
             "Entry",
             "_count",
@@ -9012,7 +9012,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_noDrain",
-          "line": 158,
+          "line": 160,
           "called": [
             "Entry",
             "_count",
@@ -9025,7 +9025,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_kNonDecreasing",
-          "line": 179,
+          "line": 181,
           "called": [
             "Entry",
             "_count",
@@ -9038,7 +9038,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_slippageConsistency",
-          "line": 197,
+          "line": 199,
           "called": [
             "Entry",
             "_count",
@@ -9051,13 +9051,13 @@
         {
           "kind": "function",
           "name": "test_handVectors_knownGroundTruth",
-          "line": 216,
+          "line": 218,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cbeByteLength",
-          "line": 226,
+          "line": 228,
           "called": [
             "_count",
             "_skipWithReason",
@@ -9068,7 +9068,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_postSwapReserves",
-          "line": 247,
+          "line": 249,
           "called": [
             "Entry",
             "_count",
@@ -9081,7 +9081,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_l2BalanceDeltas",
-          "line": 267,
+          "line": 269,
           "called": [
             "Entry",
             "_count",
@@ -9089,6 +9089,34 @@
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_perEntry_cbeTagByte",
+          "line": 291,
+          "called": [
+            "_count",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_liveContract_ammSwapMatchesFormula",
+          "line": 316,
+          "called": [
+            "KnomosisBridge",
+            "MockBold",
+            "approve",
+            "attestor",
+            "bridge",
+            "disputeVerifier",
+            "disputeWindowBlocks",
+            "migration",
+            "mint",
+            "sequencerStake"
           ]
         }
       ]

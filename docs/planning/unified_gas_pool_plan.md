@@ -7903,8 +7903,8 @@ sub-WU table above is the implementation roadmap.
   * **Estimated effort.**  ~14 hours.
   * **Status.**  **Complete** (tri-stack: Lean + Rust + Solidity).
     The Lean generator (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`,
-    suite `crosscheck-amm-swap`, 19 cases) emits a 70-entry corpus
-    (54 grid + 16 corner) into both `solidity/test/CrossCheck/fixtures/
+    suite `crosscheck-amm-swap`, 20 cases) emits a 71-entry corpus
+    (54 grid + 17 corner) into both `solidity/test/CrossCheck/fixtures/
     amm_swap.json` (JSON, consumed by Solidity + Rust) and
     `runtime/tests/cross-stack/amm_swap.cxsf` (binary CXSF tag 8,
     consumed by Rust).  Reserve sizes scaled to u64-safe ranges
@@ -7918,26 +7918,41 @@ sub-WU table above is the implementation roadmap.
     deltas (`reserveActorCreditFrom`, `reserveActorDebitTo`), the
     constant product before and after the swap (`kBefore`, `kAfter`),
     and the CBE-encoded `Action.ammSwap` bytes — all verified
-    cross-stack.  The 16 corner cases include four degenerate entries
+    cross-stack.  The 17 corner cases include four degenerate entries
     (zero-reserveIn, zero-reserveOut, zero-amount, same-resource)
     exercising the Lean `getAmountOut` function at domain boundaries
     where the Solidity `AmmMath` reverts (degenerate entries are
     skipped in the formula-compliance test, verified only for
-    CBE/k/reserve/delta consistency).  The round-trip test verifies
+    CBE/k/reserve/delta consistency) plus a `corner:slippage-unsatisfied`
+    entry (`minAmountOut > expectedOut`) exercising the `slippageSatisfied
+    = false` path (proven by the `corpus covers both slippageSatisfied
+    = true and false` test).  The round-trip test verifies
     quantitatively that ETH→BOLD→ETH is lossy (`outB < a`) with
     strictly positive k-deltas on both legs.
     The Rust consumer (`runtime/knomosis-l1-ingest/tests/
-    cross_stack_amm_swap.rs`, 11 tests) byte-matches `encode_action`
+    cross_stack_amm_swap.rs`, 15 tests) byte-matches `encode_action`
     against Lean's `expectedCbe`, recomputes `getAmountOut` via u256
-    intermediates (100% coverage), and verifies k-monotonicity /
-    no-drain / slippage / post-swap reserves / L2 balance deltas /
-    CXSF binary loading across the corpus.  The Solidity consumer
-    (`solidity/test/CrossCheck/AmmSwapFixtures.t.sol`, 9 tests)
+    intermediates (100% coverage), verifies k-monotonicity / no-drain /
+    slippage / post-swap reserves / L2 balance deltas / CXSF binary
+    loading, and additionally cross-checks the CXSF binary corpus
+    against the JSON corpus per-record (`amm_swap_cxsf_matches_json`)
+    with CBE tag-byte verification at offsets 0/1.  Unit tests for the
+    u256 arithmetic helpers (`mul_wide_known_vectors`,
+    `div_u256_by_u128_known_vectors`, `get_amount_out_wide_known_vectors`)
+    anchor the wide-integer primitives against hand-computed vectors.
+    The Solidity consumer
+    (`solidity/test/CrossCheck/AmmSwapFixtures.t.sol`, 11 tests)
     recomputes `AmmMath.getAmountOut` per entry and verifies header
     constants, k-monotonicity, no-drain, slippage consistency, CBE
     byte-length (54 bytes), post-swap reserves, L2 balance deltas,
-    and two hand-vector anchors.  Hash-independent: no keccak-binding
-    gate needed (the swap-math corpus involves no hashing).
+    two hand-vector anchors, per-entry CBE tag-byte verification
+    (`test_perEntry_cbeTagByte`), and a live-contract `ammSwap`
+    execution (`test_liveContract_ammSwapMatchesFormula`) that deploys
+    a BOLD-enabled bridge with AMM reserves seeded via real
+    `depositETHWithFee` / `depositBoldWithFee` deposits and asserts
+    swap outputs match `AmmMath.getAmountOut`.  Hash-independent: no
+    keccak-binding gate needed (the swap-math corpus involves no
+    hashing).
     `FixtureKind::AmmSwap` (tag 8) added to `knomosis-cross-stack`.
     All gates green (`lake build`, `lake test`,
     `cargo test --workspace`, `cargo clippy`, `cargo fmt`,

@@ -491,8 +491,8 @@ fn amm_swap_cxsf_consumer() {
     );
     let records = fixture.records();
     assert!(
-        records.len() >= 70,
-        "CXSF should have >= 70 records, got {}",
+        records.len() >= 71,
+        "CXSF should have >= 71 records, got {}",
         records.len()
     );
     for (i, rec) in records.iter().enumerate() {
@@ -507,4 +507,121 @@ fn amm_swap_cxsf_consumer() {
             "record {i}: expected should be 54 bytes (Action.ammSwap CBE)"
         );
     }
+}
+
+/// CXSF-JSON content cross-check: the CXSF binary corpus's `expected`
+/// bytes MUST equal the JSON corpus's `expectedCbe` for every record.
+#[test]
+fn amm_swap_cxsf_matches_json() {
+    let Some(fixture) = load_fixture() else {
+        eprintln!("[SKIP] amm_swap.json not found.");
+        return;
+    };
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo = manifest
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("repo root");
+    let cxsf_path = repo.join("runtime/tests/cross-stack/amm_swap.cxsf");
+    if !cxsf_path.exists() {
+        eprintln!("[SKIP] amm_swap.cxsf not found.");
+        return;
+    }
+    let cxsf = knomosis_cross_stack::FixtureFile::load(&cxsf_path)
+        .unwrap_or_else(|e| panic!("failed to load amm_swap.cxsf: {e}"));
+    let records = cxsf.records();
+    assert_eq!(
+        records.len(),
+        fixture.entries.len(),
+        "CXSF record count must equal JSON entry count"
+    );
+    for (i, (rec, entry)) in records.iter().zip(fixture.entries.iter()).enumerate() {
+        let json_cbe = decode_hex(&entry.expected_cbe);
+        assert_eq!(
+            rec.expected, json_cbe,
+            "record {i} ({}): CXSF expected bytes differ from JSON expectedCbe",
+            entry.category
+        );
+        assert_eq!(
+            rec.expected[0], 0x00,
+            "record {i} ({}): first byte must be 0x00 (CBE Nat type)",
+            entry.category
+        );
+        assert_eq!(
+            rec.expected[1], 0x17,
+            "record {i} ({}): second byte must be 0x17 (= 23, ammSwap tag LE)",
+            entry.category
+        );
+    }
+}
+
+/// `mul_wide` known-vector unit tests (hand-computed).
+#[test]
+fn mul_wide_known_vectors() {
+    assert_eq!(mul_wide(0, 0), (0, 0));
+    assert_eq!(mul_wide(1, 1), (0, 1));
+    assert_eq!(mul_wide(0, u128::MAX), (0, 0));
+    assert_eq!(mul_wide(u128::MAX, 0), (0, 0));
+    assert_eq!(mul_wide(1, u128::MAX), (0, u128::MAX));
+    assert_eq!(mul_wide(u128::MAX, 1), (0, u128::MAX));
+    // 2 * u128::MAX = 2^129 - 2 = (1, u128::MAX - 1)
+    assert_eq!(mul_wide(2, u128::MAX), (1, u128::MAX - 1));
+    assert_eq!(mul_wide(u128::MAX, 2), (1, u128::MAX - 1));
+    // u128::MAX * u128::MAX = (2^128-1)^2 = 2^256 - 2^129 + 1
+    //   high = u128::MAX - 1, low = 1
+    assert_eq!(mul_wide(u128::MAX, u128::MAX), (u128::MAX - 1, 1));
+    // 2^64 * 2^64 = 2^128 = (1, 0)
+    let two_64: u128 = 1u128 << 64;
+    assert_eq!(mul_wide(two_64, two_64), (1, 0));
+    // 10^18 * 10^18 = 10^36
+    let e18: u128 = 1_000_000_000_000_000_000;
+    let product = e18 as u128 * e18 as u128; // fits in u128
+    assert_eq!(mul_wide(e18, e18), (0, product));
+    // (2^64-1) * (2^64-1) = 2^128 - 2^65 + 1 = (0, u128::MAX - 2*(2^64) + 2)
+    let m64 = u64::MAX as u128;
+    let expected_low = m64 * m64;
+    assert_eq!(mul_wide(m64, m64), (0, expected_low));
+}
+
+/// `div_u256_by_u128` known-vector unit tests (hand-computed).
+#[test]
+fn div_u256_by_u128_known_vectors() {
+    assert_eq!(div_u256_by_u128((0, 0), 1), 0);
+    assert_eq!(div_u256_by_u128((0, 1), 1), 1);
+    assert_eq!(div_u256_by_u128((0, 100), 10), 10);
+    assert_eq!(div_u256_by_u128((0, u128::MAX), 1), u128::MAX);
+    assert_eq!(div_u256_by_u128((0, u128::MAX), u128::MAX), 1);
+    // (1, 0) = 2^128 / 2 = 2^127
+    assert_eq!(div_u256_by_u128((1, 0), 2), 1u128 << 127);
+    // (1, 0) = 2^128 / 2^128 = 1 — but 2^128 > u128::MAX, so den must be u128
+    // Instead: (1, 0) / (2^64) = 2^128 / 2^64 = 2^64
+    let two_64: u128 = 1u128 << 64;
+    assert_eq!(div_u256_by_u128((1, 0), two_64), two_64);
+    // mul_wide(a, b) / b == a  for non-zero b (round-trip)
+    let a: u128 = 999_999_999_999_999;
+    let b: u128 = 1_000_000_000_000_000_000;
+    let product = mul_wide(a, b);
+    assert_eq!(div_u256_by_u128(product, b), a);
+    // mul_wide(u64::MAX, u64::MAX) / u64::MAX == u64::MAX (round-trip)
+    let m64 = u64::MAX as u128;
+    let product = mul_wide(m64, m64);
+    assert_eq!(div_u256_by_u128(product, m64), m64);
+    // floor division: (0, 7) / 3 == 2
+    assert_eq!(div_u256_by_u128((0, 7), 3), 2);
+    // (0, 10^36) / 10^18 = 10^18
+    let e18: u128 = 1_000_000_000_000_000_000;
+    let e36: u128 = e18 * e18;
+    assert_eq!(div_u256_by_u128((0, e36), e18), e18);
+}
+
+/// `get_amount_out_wide` matches expected values for canonical hand vectors.
+#[test]
+fn get_amount_out_wide_known_vectors() {
+    assert_eq!(get_amount_out_wide(1000, 1000, 1000, 0), 500);
+    assert_eq!(get_amount_out_wide(1000, 1000, 1000, 30), 499);
+    assert_eq!(get_amount_out_wide(0, 1000, 1000, 30), 0);
+    // reserve_in = 0: denominator = amountIn*(10000-fee), output = reserveOut
+    assert_eq!(get_amount_out_wide(1000, 0, 1000, 30), 1000);
+    // Both denominator factors zero → denominator = 0 → returns 0
+    assert_eq!(get_amount_out_wide(0, 0, 1000, 30), 0);
 }

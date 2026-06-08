@@ -965,15 +965,17 @@ every match before submission.
 value in regression tests, so any phase / milestone bump must
 update the constant and every pinning test in the same PR.
 
-**Test count.**  ~2 967 tests across 148 suites (the GP.11.7
+**Test count.**  ~2 968 tests across 148 suites (the GP.11.7
 cross-stack AMM fixture corpus adds the `crosscheck-amm-swap` suite,
-19 cases — the 70-entry fixture generator (54 grid + 16 corner,
-including zero-reserve, zero-amount, and same-resource degenerate cases),
+20 cases — the 71-entry fixture generator (54 grid + 17 corner,
+including zero-reserve, zero-amount, same-resource, and
+slippage-unsatisfied degenerate cases),
 header-shape validation, per-entry u64 guard (`amountIn` / `expectedOut`
 ≤ u64::MAX), k-monotonicity (`kBefore ≤ kAfter`), no-drain
 (`expectedOut < reserveOut`), post-swap reserve verification
 (`newReserveIn` / `newReserveOut`), L2 balance delta verification
-(`reserveActorCreditFrom` / `reserveActorDebitTo`), CXSF binary corpus
+(`reserveActorCreditFrom` / `reserveActorDebitTo`), slippage coverage
+(both `true` and `false` values), CXSF binary corpus
 generation (tag 8), grid/corner count agreement, and term-level API
 stability for the `getAmountOut` / `getAmountOut_lt_reserveOut` /
 `k_nondecreasing` theorems; the GP.11.6
@@ -1259,11 +1261,11 @@ Notable Lean suites at the current build tag:
     / bridge sub-state injectivity ladders, plus value-level
     smoke checks on the `State.Equiv` corollaries.
 
-**Rust-side test count.**  ~1 946 tests across the 11 workspace
-crates (the GP.11.7 cross-stack AMM fixture corpus adds 11
+**Rust-side test count.**  ~1 950 tests across the 11 workspace
+crates (the GP.11.7 cross-stack AMM fixture corpus adds 15
 `knomosis-l1-ingest` tests in `cross_stack_amm_swap.rs` —
 `amm_swap_corpus_byte_equivalence` (Rust `encode_action` bytes ==
-Lean `expectedCbe` for all 70 entries), `amm_swap_corpus_coverage`
+Lean `expectedCbe` for all 71 entries), `amm_swap_corpus_coverage`
 (grid + corner count agreement), `amm_swap_corpus_tag_pin` (tag 23),
 `amm_swap_corpus_header_constants` (workstream / fee / denominator /
 actor / tag), `amm_swap_corpus_formula_compliance` (Rust
@@ -1275,8 +1277,15 @@ comparison, `kBefore ≤ kAfter`),
 `amm_swap_corpus_post_swap_reserves` (`newReserveIn` / `newReserveOut`
 arithmetic verification), `amm_swap_corpus_l2_balance_deltas`
 (`reserveActorCreditFrom` / `reserveActorDebitTo` match swap amounts),
-and `amm_swap_cxsf_consumer` (CXSF binary corpus loading with kind +
-record count + byte-shape validation)
+`amm_swap_cxsf_consumer` (CXSF binary corpus loading with kind +
+record count + byte-shape validation),
+and `amm_swap_cxsf_matches_json` (CXSF-JSON content cross-check:
+per-record `expected` bytes byte-match `expectedCbe` from JSON, plus
+CBE tag-byte verification at offsets 0/1)
+— plus the `mul_wide_known_vectors` (12 hand-computed u256 multiply
+assertions), `div_u256_by_u128_known_vectors` (10 assertions incl.
+mul/div round-trips), and `get_amount_out_wide_known_vectors` (5
+canonical formula vectors) unit tests for the u256 arithmetic helpers
 — plus 2 new `knomosis-cross-stack` tag-8 enumeration / pin tests;
 the GP.11.5 `ammReserveActor` reservation adds 3
 `knomosis-l1-ingest` tests — `address_book::amm_reserve_id_is_reserved`
@@ -1420,7 +1429,7 @@ landing:
 | `knomosis-cross-stack`              |  ~35  | fixture loader dev-dep (+ GP.6.5 `L1IngestBold` kind + GP.11.7 `AmmSwap` kind) |
 | `knomosis-verify-secp256k1`         |  ~42  | RH-A.1 ECDSA secp256k1 verifier (cdylib)                   |
 | `knomosis-hash-keccak256`           |  ~32  | RH-A.2 Keccak-256 hash adaptor (cdylib)                    |
-| `knomosis-l1-ingest`                | ~334  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 / GP.11.5 genesis-4 reservation lockstep (`INITIAL_NEXT_ACTOR_ID = 4`, `AMM_RESERVE_ACTOR_ID = 3`) + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) + GP.11.7 AMM swap cross-stack consumer |
+| `knomosis-l1-ingest`                | ~341  | RH-B L1 event watcher daemon + GP.6.1 fee-split mirror + GP.6.5 BOLD corpus consumer + GP.7.1 / GP.11.5 genesis-4 reservation lockstep (`INITIAL_NEXT_ACTOR_ID = 4`, `AMM_RESERVE_ACTOR_ID = 3`) + FQ.13a raw-TCP `knomosis-host` submitter (opt-in signer hints) + GP.11.7 AMM swap cross-stack consumer |
 | `knomosis-host`                     | ~426  | RH-C network adaptor + GP.6.2 budget admission gate + FQ Rung-0/1 two-tier DRR fair scheduler + signer-hint wire (`PROTOCOL_VERSION 2`) + `--max-conn-backlog` aggregate cap + `--persistent-connections` pipelined mode (DRR exercised over the wire) |
 | `knomosis-event-subscribe`          | ~219  | RH-D event subscription server + GP.6.3 registry + extract-events + GP.11.4 `AmmSwapExecuted` |
 | `knomosis-storage`                  | ~100  | RH-E.0 storage abstraction + SQLite impl + GP.6.4 budget tables / combined transaction |
