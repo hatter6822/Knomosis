@@ -131,6 +131,12 @@ pub enum FixtureKind {
     /// the budget-grant dimension too.  The input layout is the same
     /// 58-byte [`FeeSplitInput`] as the fee-split corpus.
     L1IngestBold,
+    /// `(40-byte AMM swap inputs, 54-byte CBE-encoded ammSwap Action)`
+    /// — used by RH-B (GP.11.7) for the Lean→Rust AMM swap
+    /// cross-stack corpus.  Input layout: 5 × 8-byte BE u64
+    /// `(fromResource, toResource, amountIn, amountOut, ammReserveActor)`;
+    /// expected output is the CBE `Action.ammSwap` encoding (54 bytes).
+    AmmSwap,
     /// Out-of-band custom kind, identified by its on-disk u32 tag.
     /// Allows downstream work units to introduce new fixture types
     /// without amending this crate's enum.
@@ -140,7 +146,7 @@ pub enum FixtureKind {
 impl FixtureKind {
     /// Decode from the on-disk u32 tag.
     ///
-    /// Tags 1..=7 are the named kinds; any other value decodes to
+    /// Tags 1..=8 are the named kinds; any other value decodes to
     /// [`FixtureKind::Custom`].  Forward-compatibility: a
     /// future-defined kind in a Lean-side fixture generator does
     /// not break this loader; consumers that care about strictly
@@ -155,6 +161,7 @@ impl FixtureKind {
             5 => Self::FaultProofObserver,
             6 => Self::L1IngestFeeSplit,
             7 => Self::L1IngestBold,
+            8 => Self::AmmSwap,
             other => Self::Custom(other),
         }
     }
@@ -170,6 +177,7 @@ impl FixtureKind {
             Self::FaultProofObserver => 5,
             Self::L1IngestFeeSplit => 6,
             Self::L1IngestBold => 7,
+            Self::AmmSwap => 8,
             Self::Custom(t) => t,
         }
     }
@@ -814,6 +822,7 @@ mod tests {
             FixtureKind::FaultProofObserver,
             FixtureKind::L1IngestFeeSplit,
             FixtureKind::L1IngestBold,
+            FixtureKind::AmmSwap,
             FixtureKind::Custom(0xABCD),
             FixtureKind::Custom(0),
         ] {
@@ -835,6 +844,7 @@ mod tests {
             FixtureKind::FaultProofObserver,
             FixtureKind::L1IngestFeeSplit,
             FixtureKind::L1IngestBold,
+            FixtureKind::AmmSwap,
         ];
         for i in 0..named.len() {
             for j in (i + 1)..named.len() {
@@ -858,6 +868,37 @@ mod tests {
             FixtureKind::FaultProofObserver,
             FixtureKind::L1IngestFeeSplit,
             FixtureKind::L1IngestBold,
+            FixtureKind::AmmSwap,
+        ];
+        for i in 0..named.len() {
+            for j in (i + 1)..named.len() {
+                assert_ne!(
+                    named[i].to_tag(),
+                    named[j].to_tag(),
+                    "named kinds {:?} and {:?} share a tag",
+                    named[i],
+                    named[j]
+                );
+            }
+        }
+    }
+
+    /// `FixtureKind::AmmSwap` has the on-disk tag 8 and is
+    /// pairwise-distinct from every other named variant.  Pins the
+    /// GP.11.7 AMM swap corpus kind's wire-format identity.
+    #[test]
+    fn amm_swap_tag_is_eight_and_distinct() {
+        assert_eq!(FixtureKind::AmmSwap.to_tag(), 8);
+        assert_eq!(FixtureKind::from_tag(8), FixtureKind::AmmSwap);
+        let named = [
+            FixtureKind::Hash,
+            FixtureKind::Ecdsa,
+            FixtureKind::SignedAction,
+            FixtureKind::L1Ingest,
+            FixtureKind::FaultProofObserver,
+            FixtureKind::L1IngestFeeSplit,
+            FixtureKind::L1IngestBold,
+            FixtureKind::AmmSwap,
         ];
         for i in 0..named.len() {
             for j in (i + 1)..named.len() {

@@ -7901,6 +7901,32 @@ sub-WU table above is the implementation roadmap.
     Lean all produce identical results.
   * **Dependencies.**  GP.11.3, GP.11.4, GP.6.5.
   * **Estimated effort.**  ~14 hours.
+  * **Status.**  **Complete** (tri-stack: Lean + Rust + Solidity).
+    The Lean generator (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`,
+    suite `crosscheck-amm-swap`, 17 cases) emits a 66-entry corpus
+    (54 grid + 12 corner) into both `solidity/test/CrossCheck/fixtures/
+    amm_swap.json` (JSON, consumed by Solidity + Rust) and
+    `runtime/tests/cross-stack/amm_swap.cxsf` (binary CXSF tag 8,
+    consumed by Rust).  Reserve sizes scaled to u64-safe ranges
+    (Small 10^12 / Medium 10^15 / Large 10^16) satisfying the CBE
+    encoding constraint `amountIn, amountOut ≤ u64::MAX`.
+    Amount-scale fields and k-products emitted as `0x`-prefixed
+    32-byte BE hex strings (matching the established
+    `hexFromUint256BE` pattern from the GP.11.3 `AmmMath` corpus).
+    The Rust consumer (`runtime/knomosis-l1-ingest/tests/
+    cross_stack_amm_swap.rs`, 8 tests) byte-matches `encode_action`
+    against Lean's `expectedCbe`, recomputes `getAmountOut` in u128,
+    and verifies k-monotonicity / no-drain / slippage across the
+    corpus.  The Solidity consumer (`solidity/test/CrossCheck/
+    AmmSwapFixtures.t.sol`, 7 tests) recomputes `AmmMath.getAmountOut`
+    per entry and verifies header constants, k-monotonicity, no-drain,
+    slippage consistency, CBE byte-length (54 bytes), and two
+    hand-vector anchors.  Hash-independent: no keccak-binding gate
+    needed (the swap-math corpus involves no hashing).  `FixtureKind::
+    AmmSwap` (tag 8) added to `knomosis-cross-stack`.  All gates green
+    (`lake build`, `lake test`, `cargo test --workspace`, `cargo clippy`,
+    `cargo fmt`, `forge test`, `count_sorries`, `naming_audit`,
+    `tcb_audit`, `stub_audit`, codemap regeneration).
 
 #### WU GP.11.8: AMM state-root commitment integration (v1.4)
 
