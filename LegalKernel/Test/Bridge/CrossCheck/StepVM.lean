@@ -1360,7 +1360,7 @@ def faultProofResolutionFixtures : List StepVMFixture :=
     buildAdversarialBadPreCommit i "faultProofResolution")
 
 /-- The full corpus: every variant's fixtures concatenated.
-    Total: 24 + 24 + 19 × 10 + 2 × 10 = 268 entries (post-GP.11.8:
+    Total: 24 + 24 + 19 × 10 + 3 × 10 = 268 entries (post-GP.11.8:
     +ammSwap on top of the 258 entries that already carried
     +claimBudgetRefund). -/
 def allFixtures : List StepVMFixture :=

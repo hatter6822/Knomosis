@@ -8071,9 +8071,11 @@ sub-WU table above is the implementation roadmap.
     (4) **Cross-stack corpus:** fixture generator adds 10 ammSwap
     entries (6 happy + 4 adversarial), widening corpus from 258 to
     268 entries; Solidity consumer tests updated (164 happy / 104
-    adversarial, kind range 0..23).  `forge test` 785 passed; `lake
-    test` 2990 (149 suites); 19 acceptance tests in
-    `faultproof-amm-commit` suite.  No kernel TCB delta, no new
+    adversarial, kind range 0..23); 4 ammSwap unit tests added
+    (happy path, exact drain, short fields, insufficient balance).
+    `forge test` 789 passed; `lake test` 2990 (149 suites); 19
+    acceptance tests in `faultproof-amm-commit` suite.  No kernel
+    TCB delta, no new
     axioms.
 
 #### WU GP.11.9: Gas-cost benchmarks for v1.3 operations (v1.4)

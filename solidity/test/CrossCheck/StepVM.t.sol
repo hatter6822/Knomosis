@@ -238,8 +238,8 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         `KnomosisStepVM.executeStep`, and asserts byte
     ///         equality against `expectedStepVMCommitHex`.
     ///
-    ///         Under `isKeccak256Linked = true`, all 158 happy
-    ///         fixtures (16 transfer + 16 mint + 21 x6 other
+    ///         Under `isKeccak256Linked = true`, all 164 happy
+    ///         fixtures (16 transfer + 16 mint + 22 x6 other
     ///         variants) must produce identical bytes on both
     ///         sides.  Skipped under FNV fallback.
     ///

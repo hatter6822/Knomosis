@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0eeefede69c758c9f51d3b3de84844238ded0946f6ad7c1de93f4f3407e3f6c5"
+    "source_digest": "b976f962b694fe598c706f672e007d4a31a8d63170b72abd0b6bf377fed35125"
   },
   "summary": {
     "module_count": 75,
-    "declaration_count": 1683
+    "declaration_count": 1687
   },
   "modules": [
     {
@@ -12944,7 +12944,7 @@
     {
       "module": "KnomosisStepVM.t",
       "path": "solidity/test/KnomosisStepVM.t.sol",
-      "declaration_count": 59,
+      "declaration_count": 63,
       "declarations": [
         {
           "kind": "contract",
@@ -13392,20 +13392,53 @@
         },
         {
           "kind": "function",
+          "name": "test_ammSwap_happy_path",
+          "line": 956,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_exact_drain",
+          "line": 981,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_rejects_short_fields",
+          "line": 1002,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_rejects_insufficient_balance",
+          "line": 1012,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_executeStep_kind_24_reverts",
-          "line": 952,
+          "line": 1026,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_assertConsistent_does_not_revert",
-          "line": 969,
+          "line": 1043,
           "called": []
         },
         {
           "kind": "function",
           "name": "_encodeCbeNat",
-          "line": 978,
+          "line": 1052,
           "called": []
         }
       ]

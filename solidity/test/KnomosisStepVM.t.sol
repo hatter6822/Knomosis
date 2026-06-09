@@ -950,6 +950,80 @@ contract KnomosisStepVMTest is Test {
             FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
     }
 
+    /* -------- ammSwap (kind 23) -------- */
+
+    /// @notice GP.11.7 happy-path: a well-formed ammSwap with valid
+    ///         cell proofs produces the expected commit.
+    function test_ammSwap_happy_path() public view {
+        // ammReserveActor=3, fromResource=0, toResource=1.
+        // fromBalance=500, amountIn=100 => newFromBalance=600.
+        // toBalance=800, amountOut=200 => newToBalance=600.
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);  // from: res=0, actor=3
+        proofs[1] = _makeCellProof(
+            0, 1, 3, _encodeCbeNat(800), FIXTURE_PRE_COMMIT);  // to: res=1, actor=3
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(1), uint64(100), uint64(200), uint64(3));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
+
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("ammSwap"),
+            uint64(0), uint64(1), uint64(3),
+            uint256(600), uint256(600), uint64(10)));
+        assertEq(result, expected, "ammSwap happy path commit");
+    }
+
+    /// @notice GP.11.7 boundary: exact drain (toBalance == amountOut)
+    ///         must succeed, leaving newToBalance = 0.
+    function test_ammSwap_exact_drain() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 3, _encodeCbeNat(300), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(1), uint64(50), uint64(300), uint64(3));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(7), proofs);
+
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("ammSwap"),
+            uint64(0), uint64(1), uint64(3),
+            uint256(150), uint256(0), uint64(7)));
+        assertEq(result, expected, "ammSwap exact drain => newToBalance=0");
+    }
+
+    /// @notice GP.11.7: short actionFields (< 40 bytes) must revert.
+    function test_ammSwap_rejects_short_fields() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
+        bytes memory actionFields = new bytes(39);
+        vm.expectRevert(bytes("AmmSwapFieldsTooShort"));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(0), proofs);
+    }
+
+    /// @notice GP.11.7: toBalance < amountOut must revert with
+    ///         InsufficientBalance (underflow guard).
+    function test_ammSwap_rejects_insufficient_balance() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 3, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // to=100 < amountOut=200
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(1), uint64(50), uint64(200), uint64(3));
+        vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
+    }
+
     function test_executeStep_kind_24_reverts() public {
         // GP.11.7 closed kind 23 (AmmSwap).  The catch-all path now
         // fires for kinds ≥ 24.  This regression test pins the upper
