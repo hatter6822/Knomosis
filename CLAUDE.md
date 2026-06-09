@@ -444,12 +444,12 @@ foreground agent has already modified the same files.
   ```toml
   # runtime/Cargo.toml
   [workspace.package]
-  version = "0.5.5"     # <-- bump this; member crates inherit
+  version = "0.5.6"     # <-- bump this; member crates inherit
   ```
   ```lean
   -- lakefile.lean
   package knomosis where
-    version := v!"0.5.5"     -- <-- bump this in lockstep
+    version := v!"0.5.6"     -- <-- bump this in lockstep
   ```
   `Cargo.lock` is regenerated automatically and must be committed.
 
@@ -537,7 +537,7 @@ work units.  Status:
 | Phase | Title | Status |
 |-------|-------|--------|
 | 0–4 | Foundations through DSL/serialization | Complete |
-| 5 | Runtime and extraction | Complete (Lean; some Rust WUs deferred) |
+| 5 | Runtime and extraction | Complete |
 | 6 | Disputes and adjudication | Complete |
 | E-A–G | Ethereum integration (7 workstreams) | Complete |
 | LP | Actor-scoped policies | Complete (Lean side) |
