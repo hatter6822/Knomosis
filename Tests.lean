@@ -159,6 +159,7 @@ import LegalKernel.Test.Bridge.CrossCheck.Goldens
 import LegalKernel.Test.FaultProof.Cell
 import LegalKernel.Test.FaultProof.Smt
 import LegalKernel.Test.FaultProof.Commit
+import LegalKernel.Test.FaultProof.AmmCommit
 import LegalKernel.Test.FaultProof.Step
 import LegalKernel.Test.FaultProof.Game
 import LegalKernel.Test.FaultProof.LawClassification
@@ -397,6 +398,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.Smt.tests)
   failed := failed + (← runAll "faultproof-commit"
                                     LegalKernel.Test.FaultProof.Commit.tests)
+  failed := failed + (← runAll "faultproof-amm-commit"
+                                    LegalKernel.Test.FaultProof.AmmCommit.tests)
   failed := failed + (← runAll "faultproof-step"
                                     LegalKernel.Test.FaultProof.Step.tests)
   failed := failed + (← runAll "faultproof-game"

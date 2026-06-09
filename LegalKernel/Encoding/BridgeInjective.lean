@@ -531,33 +531,71 @@ theorem Bridge.BridgeState.encodePending_injective
           exact this
   exact Std.TreeMap.equiv_iff_toList_eq.mpr h_toList
 
+/-! ## Helper: self-delimiting Nat split
+
+    Given `enc(n₁) ++ rest₁ = enc(n₂) ++ rest₂` where both Nats are
+    in the CBE canonical range, recover `n₁ = n₂ ∧ rest₁ = rest₂`.
+    Used to split the 6-Nat tail of the GP.11.8 extended encoding. -/
+
+/-- Self-delimiting split for a single CBE-encoded `Nat` prefix.
+    Under the canonical `< 2^64` bound, equal concatenations of
+    an encoded Nat followed by arbitrary trailing bytes imply the
+    Nat values agree and the suffixes agree. -/
+private theorem nat_encode_suffix_split
+    (n₁ n₂ : Nat) (rest₁ rest₂ : Stream)
+    (h₁ : n₁ < 256 ^ 8) (h₂ : n₂ < 256 ^ 8)
+    (h : Encodable.encode (T := Nat) n₁ ++ rest₁ =
+         Encodable.encode (T := Nat) n₂ ++ rest₂) :
+    n₁ = n₂ ∧ rest₁ = rest₂ := by
+  have r₁ := nat_roundtrip n₁ rest₁ h₁
+  have r₂ := nat_roundtrip n₂ rest₂ h₂
+  rw [h] at r₁
+  have heq : (Except.ok (n₁, rest₁) : Except DecodeError (Nat × Stream))
+           = Except.ok (n₂, rest₂) := r₁.symm.trans r₂
+  have hprod := Prod.mk.injEq n₁ rest₁ n₂ rest₂ |>.mp (Except.ok.inj heq)
+  exact ⟨hprod.1, hprod.2⟩
+
+/-! ## Bool-as-Nat injectivity
+
+    `boldCircuitClosed` is encoded as `if b then 1 else 0`.  Equal
+    Nat images imply equal Bools. -/
+
+/-- If `(if b₁ then 1 else 0) = (if b₂ then 1 else 0)` then `b₁ = b₂`. -/
+private theorem bool_as_nat_injective (b₁ b₂ : Bool)
+    (h : (if b₁ then 1 else 0 : Nat) = (if b₂ then 1 else 0 : Nat)) :
+    b₁ = b₂ := by
+  cases b₁ <;> cases b₂ <;> simp_all
+
 /-! ## EI.7.e — `Bridge.BridgeState.encode_injective`
 
-The three-segment concatenation injectivity headline theorem.
+The eight-segment concatenation injectivity headline theorem (GP.11.8).
 `Bridge.BridgeState.encode bs = encodeConsumed bs ++ encodePending bs
-++ encode_nat bs.nextWdId` is a flat concatenation of two CBE maps
-plus a CBE Nat tail.
+++ encode_nat bs.nextWdId ++ encode_nat bs.ammReserveEth ++
+encode_nat bs.ammReserveBold ++ encode_nat (boolToNat bs.boldCircuitClosed)
+++ encode_nat bs.boldTvlCap ++ encode_nat bs.boldTotalLockedValue`
+is a flat concatenation of two CBE maps plus six CBE Nat segments.
 
 Proof structure:
 
-  1. Apply `encodeSortedPairs_self_delim_split` (EI.7.e precursor in
-     `Encoding/State.lean`) to the `encodeConsumed` prefix to extract
-     `encodeConsumed bs₁ = encodeConsumed bs₂` and the suffix equality
-     `encodePending bs₁ ++ enc_n₁ = encodePending bs₂ ++ enc_n₂`.
-  2. Apply EI.6.c to the consumed-byte-equality to derive
-     `bs₁.consumed.Equiv bs₂.consumed`.
+  1. Apply `encodeSortedPairs_self_delim_split` to the `encodeConsumed`
+     prefix to extract consumed-equality and the trailing suffix.
+  2. Apply EI.6.c to derive `bs₁.consumed.Equiv bs₂.consumed`.
   3. Repeat step 1 on the pending segment.
-  4. Apply EI.7.d to the pending-byte-equality.
-  5. Apply `nat_encode_injective` to the final nextWdId encoding.
+  4. Apply EI.7.d to derive `bs₁.pending.Equiv bs₂.pending`.
+  5. Apply `nat_encode_suffix_split` six times to extract the
+     remaining Nat fields.
+  6. Apply `bool_as_nat_injective` for `boldCircuitClosed`.
 -/
 
 /-- EI.7.e — `Bridge.BridgeState.encode_injective`.  Equal canonical
     encodings of two `BridgeState`s imply (1) `Equiv` on the consumed
-    map, (2) `Equiv` on the pending map, and (3) `Eq` on `nextWdId`.
+    map, (2) `Equiv` on the pending map, (3) `Eq` on `nextWdId`, and
+    (4–8) `Eq` on the five GP.11.8 AMM/BOLD state fields.
 
     **Hypotheses.**  Inherits the bounds from EI.6.c (consumed map)
-    and EI.7.d (pending map) plus the `nextWdId < 2^64` bound for
-    the trailing CBE Nat. -/
+    and EI.7.d (pending map) plus per-field `< 2^64` bounds for the
+    six trailing CBE Nats (the Bool field's bound is discharged
+    inline since `if b then 1 else 0 < 256^8` is trivial). -/
 theorem Bridge.BridgeState.encode_injective
     (bs₁ bs₂ : Bridge.BridgeState)
     (h_cons_len₁ : bs₁.consumed.toList.length < 256 ^ 8)
@@ -592,17 +630,28 @@ theorem Bridge.BridgeState.encode_injective
                   p.2.l2LogIndex < 256 ^ 8)
     (h_nxt₁ : bs₁.nextWdId < 256 ^ 8)
     (h_nxt₂ : bs₂.nextWdId < 256 ^ 8)
+    (h_ammEth₁ : bs₁.ammReserveEth < 256 ^ 8)
+    (h_ammEth₂ : bs₂.ammReserveEth < 256 ^ 8)
+    (h_ammBold₁ : bs₁.ammReserveBold < 256 ^ 8)
+    (h_ammBold₂ : bs₂.ammReserveBold < 256 ^ 8)
+    (h_tvlCap₁ : bs₁.boldTvlCap < 256 ^ 8)
+    (h_tvlCap₂ : bs₂.boldTvlCap < 256 ^ 8)
+    (h_totalLocked₁ : bs₁.boldTotalLockedValue < 256 ^ 8)
+    (h_totalLocked₂ : bs₂.boldTotalLockedValue < 256 ^ 8)
     (h : Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂) :
     bs₁.consumed.Equiv bs₂.consumed ∧
     bs₁.pending.Equiv bs₂.pending ∧
-    bs₁.nextWdId = bs₂.nextWdId := by
-  -- Unfold encode to expose the three-segment concatenation.
+    bs₁.nextWdId = bs₂.nextWdId ∧
+    bs₁.ammReserveEth = bs₂.ammReserveEth ∧
+    bs₁.ammReserveBold = bs₂.ammReserveBold ∧
+    bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
+    bs₁.boldTvlCap = bs₂.boldTvlCap ∧
+    bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue := by
+  -- Unfold encode to expose the eight-segment concatenation.
   unfold Bridge.BridgeState.encode at h
   -- Step 1: Split the consumed prefix from the rest.
-  -- We rewrite encodeConsumed to expose its `encodeSortedPairs` shape.
   rw [bridgeState_encodeConsumed_eq_via_consumedProj,
       bridgeState_encodeConsumed_eq_via_consumedProj] at h
-  -- Set up the round-trip hypotheses for the consumed pairs.
   have h_cons_plen₁ : (bs₁.consumed.toList.map Bridge.BridgeState.consumedProj).length < 256 ^ 8 := by
     rw [List.length_map]; exact h_cons_len₁
   have h_cons_plen₂ : (bs₂.consumed.toList.map Bridge.BridgeState.consumedProj).length < 256 ^ 8 := by
@@ -651,11 +700,8 @@ theorem Bridge.BridgeState.encode_injective
         rw [← hq_eq]; rfl
       rw [h_proj]; exact h_cons_size₂ q hq_mem
     exact byteArray_roundtrip p.2 rest hp_size
-  -- Apply `encodeSortedPairs_self_delim_split` to extract the first
-  -- segment's byte-equality and the trailing suffix equality.
-  -- We need to re-associate so the consumed prefix is followed by a
-  -- single suffix `(encodePending bs ++ encode_nat bs.nextWdId)`.
-  rw [List.append_assoc, List.append_assoc] at h
+  -- Re-associate so the consumed prefix is followed by one suffix.
+  simp only [List.append_assoc] at h
   have h_split_cons :=
     encodeSortedPairs_self_delim_split
       (bs₁.consumed.toList.map Bridge.BridgeState.consumedProj)
@@ -663,9 +709,6 @@ theorem Bridge.BridgeState.encode_injective
       h_cons_plen₁ h_cons_plen₂
       h_cons_hK₁ h_cons_hV₁ h_cons_hK₂ h_cons_hV₂
       _ _ h
-  -- h_split_cons.1 : consumed pair-list equality (we use the byte-equality form).
-  -- h_split_cons.2 : suffix equality (encodePending ++ encode_nat).
-  -- Re-derive byte equality on encodeConsumed.
   have h_cons_bytes : Bridge.BridgeState.encodeConsumed bs₁
                    = Bridge.BridgeState.encodeConsumed bs₂ := by
     rw [bridgeState_encodeConsumed_eq_via_consumedProj,
@@ -675,11 +718,8 @@ theorem Bridge.BridgeState.encode_injective
     Bridge.BridgeState.encodeConsumed_injective bs₁ bs₂
       h_cons_len₁ h_cons_len₂ h_cons_id₁ h_cons_id₂
       h_cons_size₁ h_cons_size₂ h_cons_rec₁ h_cons_rec₂ h_cons_bytes
-  -- Step 2: Split the pending prefix from the trailing nextWdId.
-  have h_suffix : Bridge.BridgeState.encodePending bs₁ ++
-                  Encodable.encode (T := Nat) bs₁.nextWdId =
-                  Bridge.BridgeState.encodePending bs₂ ++
-                  Encodable.encode (T := Nat) bs₂.nextWdId := h_split_cons.2
+  -- Step 2: Split the pending prefix from the trailing Nat tail.
+  have h_suffix := h_split_cons.2
   rw [bridgeState_encodePending_eq_via_pendingProj,
       bridgeState_encodePending_eq_via_pendingProj] at h_suffix
   have h_pend_plen₁ : (bs₁.pending.toList.map Bridge.BridgeState.pendingProj).length < 256 ^ 8 := by
@@ -746,12 +786,45 @@ theorem Bridge.BridgeState.encode_injective
     Bridge.BridgeState.encodePending_injective bs₁ bs₂
       h_pend_len₁ h_pend_len₂ h_pend_id₁ h_pend_id₂
       h_pend_size₁ h_pend_size₂ h_pend_wd₁ h_pend_wd₂ h_pend_bytes
-  -- Step 3: Decode the final nextWdId Nat encoding.
-  have h_nxt_bytes : Encodable.encode (T := Nat) bs₁.nextWdId
-                   = Encodable.encode (T := Nat) bs₂.nextWdId := h_split_pend.2
-  have h_nxt : bs₁.nextWdId = bs₂.nextWdId :=
-    nat_encode_injective bs₁.nextWdId bs₂.nextWdId h_nxt₁ h_nxt₂ h_nxt_bytes
-  exact ⟨h_consumed, h_pending, h_nxt⟩
+  -- Step 3: Chain-split the six trailing Nat encodings via
+  -- `nat_encode_suffix_split`.  Each application extracts one
+  -- Nat equality and advances to the next segment.
+  have h_nat_tail := h_split_pend.2
+  -- Split nextWdId.
+  have ⟨h_nxt, h_after_nxt⟩ :=
+    nat_encode_suffix_split bs₁.nextWdId bs₂.nextWdId _ _ h_nxt₁ h_nxt₂ h_nat_tail
+  -- Split ammReserveEth.
+  have ⟨h_ammEth, h_after_ammEth⟩ :=
+    nat_encode_suffix_split bs₁.ammReserveEth bs₂.ammReserveEth _ _
+      h_ammEth₁ h_ammEth₂ h_after_nxt
+  -- Split ammReserveBold.
+  have ⟨h_ammBold, h_after_ammBold⟩ :=
+    nat_encode_suffix_split bs₁.ammReserveBold bs₂.ammReserveBold _ _
+      h_ammBold₁ h_ammBold₂ h_after_ammEth
+  -- Split boldCircuitClosed (encoded as Nat 0/1).
+  have h_circuitBound₁ : (if bs₁.boldCircuitClosed then 1 else 0 : Nat) < 256 ^ 8 := by
+    have : (1 : Nat) < 256 ^ 8 := by decide
+    split <;> omega
+  have h_circuitBound₂ : (if bs₂.boldCircuitClosed then 1 else 0 : Nat) < 256 ^ 8 := by
+    have : (1 : Nat) < 256 ^ 8 := by decide
+    split <;> omega
+  have ⟨h_circuitNat, h_after_circuit⟩ :=
+    nat_encode_suffix_split
+      (if bs₁.boldCircuitClosed then 1 else 0)
+      (if bs₂.boldCircuitClosed then 1 else 0)
+      _ _ h_circuitBound₁ h_circuitBound₂ h_after_ammBold
+  have h_circuit : bs₁.boldCircuitClosed = bs₂.boldCircuitClosed :=
+    bool_as_nat_injective _ _ h_circuitNat
+  -- Split boldTvlCap.
+  have ⟨h_tvlCap, h_after_tvlCap⟩ :=
+    nat_encode_suffix_split bs₁.boldTvlCap bs₂.boldTvlCap _ _
+      h_tvlCap₁ h_tvlCap₂ h_after_circuit
+  -- Split boldTotalLockedValue (final segment — suffix must be []).
+  have h_totalLocked : bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue :=
+    nat_encode_injective bs₁.boldTotalLockedValue bs₂.boldTotalLockedValue
+      h_totalLocked₁ h_totalLocked₂ h_after_tvlCap
+  exact ⟨h_consumed, h_pending, h_nxt, h_ammEth, h_ammBold, h_circuit,
+         h_tvlCap, h_totalLocked⟩
 
 end Encoding
 end LegalKernel

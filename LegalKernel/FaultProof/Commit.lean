@@ -179,7 +179,14 @@ def extendedStateExtensionallyEqual (es₁ es₂ : ExtendedState) : Prop :=
   es₁.nonces.next.toList   = es₂.nonces.next.toList ∧
   es₁.registry.toList      = es₂.registry.toList ∧
   es₁.localPolicies.toList = es₂.localPolicies.toList ∧
-  es₁.bridge               = es₂.bridge
+  es₁.bridge.consumed.toList = es₂.bridge.consumed.toList ∧
+  es₁.bridge.pending.toList  = es₂.bridge.pending.toList ∧
+  es₁.bridge.nextWdId        = es₂.bridge.nextWdId ∧
+  es₁.bridge.ammReserveEth   = es₂.bridge.ammReserveEth ∧
+  es₁.bridge.ammReserveBold  = es₂.bridge.ammReserveBold ∧
+  es₁.bridge.boldCircuitClosed    = es₂.bridge.boldCircuitClosed ∧
+  es₁.bridge.boldTvlCap           = es₂.bridge.boldTvlCap ∧
+  es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue
 
 /-! ## Per-sub-state injectivity (#256)
 
@@ -469,18 +476,28 @@ def ExtendedState.extEq (es₁ es₂ : ExtendedState) : Prop :=
   es₁.localPolicies.Equiv es₂.localPolicies ∧
   es₁.bridge.consumed.Equiv es₂.bridge.consumed ∧
   es₁.bridge.pending.Equiv es₂.bridge.pending ∧
-  es₁.bridge.nextWdId = es₂.bridge.nextWdId
+  es₁.bridge.nextWdId = es₂.bridge.nextWdId ∧
+  es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth ∧
+  es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold ∧
+  es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed ∧
+  es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap ∧
+  es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue
 
 /-- `ExtendedState.extEq` is reflexive.  Trivially derived from the
     per-sub-state `Equiv.refl` lemmas. -/
 theorem ExtendedState.extEq.refl (es : ExtendedState) : ExtendedState.extEq es es := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact State.Equiv.refl es.base
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
   · exact Std.TreeMap.Equiv.rfl
+  · rfl
+  · rfl
+  · rfl
+  · rfl
+  · rfl
   · rfl
 
 /-- The canonical-bounds bundle for an `ExtendedState`.  Each
@@ -540,6 +557,14 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
                p.2.l2LogIndex < 256 ^ 8
   /-- The bridge nextWdId fits. -/
   bs_nxt : es.bridge.nextWdId < 256 ^ 8
+  /-- GP.11.8: AMM ETH reserve fits. -/
+  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 8
+  /-- GP.11.8: AMM BOLD reserve fits. -/
+  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 8
+  /-- GP.11.8: BOLD TVL cap fits. -/
+  bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 8
+  /-- GP.11.8: BOLD total locked value fits. -/
+  bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 8
 
 /-- EI.8.b — Composition theorem.  Under
     `CollisionFree hashBytes` plus the canonical-bounds invariants
@@ -654,11 +679,12 @@ theorem commitExtendedState_subcommits_extensional_eq_under_collision_free
       h_b₁.lp_size h_b₂.lp_size
       h_b₁.lp_pol h_b₂.lp_pol
       h_lp_stream'
-  -- EI.7.e for bridge (three-segment concatenation).
+  -- EI.7.e for bridge (eight-segment concatenation, GP.11.8).
   have h_bridge_stream' :
       Bridge.BridgeState.encode es₁.bridge = Bridge.BridgeState.encode es₂.bridge :=
     h_bridge_stream
-  have ⟨h_consumed, h_pending, h_nextWdId⟩ :=
+  have ⟨h_consumed, h_pending, h_nextWdId, h_ammEth, h_ammBold,
+        h_circuit, h_tvlCap, h_totalLocked⟩ :=
     Bridge.BridgeState.encode_injective es₁.bridge es₂.bridge
       h_b₁.bs_cons_len h_b₂.bs_cons_len
       h_b₁.bs_cons_id h_b₂.bs_cons_id
@@ -669,9 +695,66 @@ theorem commitExtendedState_subcommits_extensional_eq_under_collision_free
       h_b₁.bs_pend_size h_b₂.bs_pend_size
       h_b₁.bs_pend_wd h_b₂.bs_pend_wd
       h_b₁.bs_nxt h_b₂.bs_nxt
+      h_b₁.bs_ammEth h_b₂.bs_ammEth
+      h_b₁.bs_ammBold h_b₂.bs_ammBold
+      h_b₁.bs_tvlCap h_b₂.bs_tvlCap
+      h_b₁.bs_totalLocked h_b₂.bs_totalLocked
       h_bridge_stream'
   -- Step 4: Assemble the per-sub-state conjuncts into ExtendedState.extEq.
-  exact ⟨h_base, h_nonces, h_registry, h_lp_equiv, h_consumed, h_pending, h_nextWdId⟩
+  exact ⟨h_base, h_nonces, h_registry, h_lp_equiv, h_consumed, h_pending,
+         h_nextWdId, h_ammEth, h_ammBold, h_circuit, h_tvlCap, h_totalLocked⟩
+
+/-! ## GP.11.8 — AMM state-root commitment integration theorems
+
+The following two theorems ratify that the GP.11.8 extension to
+`BridgeState` achieves its goal: the state-root preimage now covers
+every AMM/BOLD governance field, and existing states migrate
+deterministically. -/
+
+/-- GP.11.8: the state-root preimage covers `ammReserveEth`,
+    `ammReserveBold`, `boldCircuitClosed`, `boldTvlCap`,
+    `boldTotalLockedValue`.  Proof: the `BridgeState.encode`
+    definition includes all five fields in sequence after the
+    v1.2 segments. -/
+theorem bridgeState_commit_includes_ammState (bs : Bridge.BridgeState) :
+    Bridge.BridgeState.encode bs =
+      Bridge.BridgeState.encodeConsumed bs ++
+      Bridge.BridgeState.encodePending bs ++
+      Encodable.encode (T := Nat) bs.nextWdId ++
+      Encodable.encode (T := Nat) bs.ammReserveEth ++
+      Encodable.encode (T := Nat) bs.ammReserveBold ++
+      Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
+      Encodable.encode (T := Nat) bs.boldTvlCap ++
+      Encodable.encode (T := Nat) bs.boldTotalLockedValue := by
+  rfl
+
+/-- GP.11.8: backwards-compatible migration.  Two `BridgeState`s that
+    agree on the v1.2 fields (`consumed`, `pending`, `nextWdId`) and
+    both have genesis AMM values produce the same commitment.  This
+    certifies that upgrading from v1.2 to v1.4 is deterministic when
+    the new fields are defaulted to their genesis values. -/
+theorem bridgeState_commit_extends_v1_2
+    (bs₁ bs₂ : Bridge.BridgeState)
+    (h_consumed : bs₁.consumed = bs₂.consumed)
+    (h_pending  : bs₁.pending  = bs₂.pending)
+    (h_nextWdId : bs₁.nextWdId = bs₂.nextWdId)
+    (h_genesis₁ : bs₁.ammReserveEth = 0 ∧ bs₁.ammReserveBold = 0 ∧
+                   bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
+                   bs₁.boldTotalLockedValue = 0)
+    (h_genesis₂ : bs₂.ammReserveEth = 0 ∧ bs₂.ammReserveBold = 0 ∧
+                   bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
+                   bs₂.boldTotalLockedValue = 0) :
+    commitBridgeState bs₁ = commitBridgeState bs₂ := by
+  have h_eq : bs₁ = bs₂ := by
+    cases bs₁; cases bs₂
+    simp only at h_consumed h_pending h_nextWdId h_genesis₁ h_genesis₂
+    obtain ⟨hae₁, hab₁, hbc₁, htc₁, htl₁⟩ := h_genesis₁
+    obtain ⟨hae₂, hab₂, hbc₂, htc₂, htl₂⟩ := h_genesis₂
+    subst h_consumed; subst h_pending; subst h_nextWdId
+    subst hae₁; subst hab₁; subst hbc₁; subst htc₁; subst htl₁
+    subst hae₂; subst hab₂; subst hbc₂; subst htc₂; subst htl₂
+    rfl
+  rw [h_eq]
 
 /-! ## Smoke checks -/
 

@@ -8046,6 +8046,17 @@ sub-WU table above is the implementation roadmap.
     `lake test` passes; forge tests pass.
   * **Dependencies.**  GP.11.1, GP.11.2, GP.11.3, GP.11.4.
   * **Estimated effort.**  ~12 hours.
+  * **Status.**  Complete (v0.5.7, 2026-06-09).  All deliverables
+    landed: BridgeState encoder/decoder extended with 5 AMM fields,
+    EI.7.e injectivity proof updated (3-way → 8-way conjunction via
+    `nat_encode_suffix_split` + `bool_as_nat_injective` helpers),
+    `ExtendedState.extEq` widened (7 → 12 conjuncts),
+    `CanonicalBounds` extended (4 new bound fields), both headline
+    theorems proved (`bridgeState_commit_includes_ammState` by `rfl`,
+    `bridgeState_commit_extends_v1_2` by structural equality under
+    genesis defaults), 15 acceptance tests in `faultproof-amm-commit`
+    suite (all pass), encoding round-trip verified.  No kernel TCB
+    delta, no new axioms.
 
 #### WU GP.11.9: Gas-cost benchmarks for v1.3 operations (v1.4)
 

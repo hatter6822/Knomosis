@@ -780,11 +780,21 @@ def Bridge.BridgeState.encodePending (bs : Bridge.BridgeState) : Stream :=
   encodeSortedPairs (bs.pending.toList.map (fun (wid, wd) =>
     (wid, Bridge.PendingWithdrawal.encodeAsBytes wd)))
 
-/-- Encode a `BridgeState`: `[consumed; pending; nextWdId]`. -/
+/-- Encode a `BridgeState`:
+    `[consumed; pending; nextWdId; ammReserveEth; ammReserveBold;
+      boldCircuitClosed; boldTvlCap; boldTotalLockedValue]`.
+    GP.11.8 extends the v1.2 three-segment encoding with five
+    AMM/BOLD state fields so the state-root commitment covers
+    the full AMM state for fault-proof adjudication. -/
 def Bridge.BridgeState.encode (bs : Bridge.BridgeState) : Stream :=
   Bridge.BridgeState.encodeConsumed bs ++
   Bridge.BridgeState.encodePending bs ++
-  Encodable.encode (T := Nat) bs.nextWdId
+  Encodable.encode (T := Nat) bs.nextWdId ++
+  Encodable.encode (T := Nat) bs.ammReserveEth ++
+  Encodable.encode (T := Nat) bs.ammReserveBold ++
+  Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
+  Encodable.encode (T := Nat) bs.boldTvlCap ++
+  Encodable.encode (T := Nat) bs.boldTotalLockedValue
 
 /-- Decode the `consumed` map, rebuilding each inner `DepositRecord`
     from the framed inner bytes. -/
@@ -825,7 +835,7 @@ def Bridge.BridgeState.decodePending (s : Stream) :
     | .error e => .error e
   | .error e => .error e
 
-/-- Decode a `BridgeState`. -/
+/-- Decode a `BridgeState` (GP.11.8: includes AMM/BOLD fields). -/
 def Bridge.BridgeState.decode (s : Stream) :
     Except DecodeError (Bridge.BridgeState × Stream) :=
   match Bridge.BridgeState.decodeConsumed s with
@@ -834,7 +844,26 @@ def Bridge.BridgeState.decode (s : Stream) :
     | .ok (pending, s₂) =>
       match Encodable.decode (T := Nat) s₂ with
       | .ok (nextWdId, s₃) =>
-        .ok ({ consumed, pending, nextWdId }, s₃)
+        match Encodable.decode (T := Nat) s₃ with
+        | .ok (ammReserveEth, s₄) =>
+          match Encodable.decode (T := Nat) s₄ with
+          | .ok (ammReserveBold, s₅) =>
+            match Encodable.decode (T := Nat) s₅ with
+            | .ok (circuitN, s₆) =>
+              let boldCircuitClosed := circuitN != 0
+              match Encodable.decode (T := Nat) s₆ with
+              | .ok (boldTvlCap, s₇) =>
+                match Encodable.decode (T := Nat) s₇ with
+                | .ok (boldTotalLockedValue, s₈) =>
+                  .ok ({ consumed, pending, nextWdId,
+                         ammReserveEth, ammReserveBold,
+                         boldCircuitClosed, boldTvlCap,
+                         boldTotalLockedValue }, s₈)
+                | .error e => .error e
+              | .error e => .error e
+            | .error e => .error e
+          | .error e => .error e
+        | .error e => .error e
       | .error e => .error e
     | .error e => .error e
   | .error e => .error e
