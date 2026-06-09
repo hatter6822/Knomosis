@@ -728,11 +728,57 @@ theorem bridgeState_commit_includes_ammState (bs : Bridge.BridgeState) :
       Encodable.encode (T := Nat) bs.boldTotalLockedValue := by
   rfl
 
+/-- GP.11.8 helper: v1.2 base-encoding prefix — consumed deposits,
+    pending withdrawals, and next-withdrawal-ID. -/
+def bridgeStateEncodeBase (bs : Bridge.BridgeState) : Encoding.Stream :=
+  Bridge.BridgeState.encodeConsumed bs ++
+  Bridge.BridgeState.encodePending bs ++
+  Encodable.encode (T := Nat) bs.nextWdId
+
+/-- GP.11.8 helper: AMM suffix — the five AMM/BOLD fields appended
+    by GP.11.8.  At genesis defaults this suffix is a fixed constant,
+    which is the structural reason the v1.2→v1.4 migration is
+    deterministic (see `bridgeState_amm_genesis_suffix_const`). -/
+def bridgeStateEncodeAmmSuffix (bs : Bridge.BridgeState) : Encoding.Stream :=
+  Encodable.encode (T := Nat) bs.ammReserveEth ++
+  Encodable.encode (T := Nat) bs.ammReserveBold ++
+  Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
+  Encodable.encode (T := Nat) bs.boldTvlCap ++
+  Encodable.encode (T := Nat) bs.boldTotalLockedValue
+
+/-- GP.11.8: the v1.4 encoding factorizes as a v1.2 base prefix
+    appended with the AMM suffix. -/
+theorem bridgeState_encode_factored (bs : Bridge.BridgeState) :
+    Bridge.BridgeState.encode bs =
+    bridgeStateEncodeBase bs ++ bridgeStateEncodeAmmSuffix bs := by
+  simp only [Bridge.BridgeState.encode, bridgeStateEncodeBase,
+             bridgeStateEncodeAmmSuffix, List.append_assoc]
+
+/-- GP.11.8: two bridge states whose AMM fields are all at genesis
+    defaults produce identical AMM encoding suffixes. -/
+theorem bridgeState_amm_genesis_suffix_const
+    (bs₁ bs₂ : Bridge.BridgeState)
+    (h₁ : bs₁.ammReserveEth = 0 ∧ bs₁.ammReserveBold = 0 ∧
+           bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
+           bs₁.boldTotalLockedValue = 0)
+    (h₂ : bs₂.ammReserveEth = 0 ∧ bs₂.ammReserveBold = 0 ∧
+           bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
+           bs₂.boldTotalLockedValue = 0) :
+    bridgeStateEncodeAmmSuffix bs₁ = bridgeStateEncodeAmmSuffix bs₂ := by
+  obtain ⟨he₁, hb₁, hc₁, ht₁, hl₁⟩ := h₁
+  obtain ⟨he₂, hb₂, hc₂, ht₂, hl₂⟩ := h₂
+  simp only [bridgeStateEncodeAmmSuffix, he₁, hb₁, hc₁, ht₁, hl₁,
+             he₂, hb₂, hc₂, ht₂, hl₂]
+
 /-- GP.11.8: backwards-compatible migration.  Two `BridgeState`s that
     agree on the v1.2 fields (`consumed`, `pending`, `nextWdId`) and
-    both have genesis AMM values produce the same commitment.  This
-    certifies that upgrading from v1.2 to v1.4 is deterministic when
-    the new fields are defaulted to their genesis values. -/
+    both have genesis AMM values produce the same commitment.
+
+    **Structural argument:** the v1.4 encoding factorizes as
+    `encodeBase ++ encodeAmmSuffix`.  When v1.2 fields agree the
+    base prefixes are identical; when AMM fields are at genesis the
+    suffixes are identical; therefore the full encodings agree and
+    `commitBridgeState` (which hashes the encoding) agrees. -/
 theorem bridgeState_commit_extends_v1_2
     (bs₁ bs₂ : Bridge.BridgeState)
     (h_consumed : bs₁.consumed = bs₂.consumed)
@@ -745,16 +791,18 @@ theorem bridgeState_commit_extends_v1_2
                    bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
                    bs₂.boldTotalLockedValue = 0) :
     commitBridgeState bs₁ = commitBridgeState bs₂ := by
-  have h_eq : bs₁ = bs₂ := by
-    cases bs₁; cases bs₂
-    simp only at h_consumed h_pending h_nextWdId h_genesis₁ h_genesis₂
-    obtain ⟨hae₁, hab₁, hbc₁, htc₁, htl₁⟩ := h_genesis₁
-    obtain ⟨hae₂, hab₂, hbc₂, htc₂, htl₂⟩ := h_genesis₂
-    subst h_consumed; subst h_pending; subst h_nextWdId
-    subst hae₁; subst hab₁; subst hbc₁; subst htc₁; subst htl₁
-    subst hae₂; subst hab₂; subst hbc₂; subst htc₂; subst htl₂
-    rfl
-  rw [h_eq]
+  have hbase : bridgeStateEncodeBase bs₁ = bridgeStateEncodeBase bs₂ := by
+    simp only [bridgeStateEncodeBase, Bridge.BridgeState.encodeConsumed,
+               Bridge.BridgeState.encodePending, h_consumed, h_pending, h_nextWdId]
+  have hsuffix : bridgeStateEncodeAmmSuffix bs₁ = bridgeStateEncodeAmmSuffix bs₂ :=
+    bridgeState_amm_genesis_suffix_const bs₁ bs₂ h_genesis₁ h_genesis₂
+  have henc : Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ := by
+    rw [bridgeState_encode_factored, bridgeState_encode_factored, hbase, hsuffix]
+  show commitBridgeState bs₁ = commitBridgeState bs₂
+  unfold commitBridgeState
+  rw [show Encodable.encode (T := BridgeState) bs₁ = Bridge.BridgeState.encode bs₁ from rfl,
+      show Encodable.encode (T := BridgeState) bs₂ = Bridge.BridgeState.encode bs₂ from rfl,
+      henc]
 
 /-! ## Smoke checks -/
 

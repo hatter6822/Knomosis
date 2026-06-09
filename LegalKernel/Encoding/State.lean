@@ -850,7 +850,9 @@ def Bridge.BridgeState.decode (s : Stream) :
           | .ok (ammReserveBold, s₅) =>
             match Encodable.decode (T := Nat) s₅ with
             | .ok (circuitN, s₆) =>
-              let boldCircuitClosed := circuitN != 0
+              if circuitN > 1 then .error (.nonCanonical "boldCircuitClosed: expected 0 or 1")
+              else
+              let boldCircuitClosed := circuitN == 1
               match Encodable.decode (T := Nat) s₆ with
               | .ok (boldTvlCap, s₇) =>
                 match Encodable.decode (T := Nat) s₇ with

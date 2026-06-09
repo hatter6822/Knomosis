@@ -950,18 +950,16 @@ contract KnomosisStepVMTest is Test {
             FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
     }
 
-    function test_executeStep_kind_23_reverts() public {
-        // Workstream GP closed kinds 19/20; GP.5.3 closed kind 21
-        // (TopUpActionBudgetFor); GP.9.1 closed kind 22
-        // (ClaimBudgetRefund).  The catch-all path now fires for kinds
-        // ≥ 23.  This regression test pins the upper bound: a future
-        // Action constructor addition MUST extend `_toActionKind` AND
-        // the dispatcher AND this test before merging.
+    function test_executeStep_kind_24_reverts() public {
+        // GP.11.7 closed kind 23 (AmmSwap).  The catch-all path now
+        // fires for kinds ≥ 24.  This regression test pins the upper
+        // bound: a future Action constructor addition MUST extend
+        // `_toActionKind` AND the dispatcher AND this test before merging.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
         vm.expectRevert(KnomosisStepVM.UnknownActionKind.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT,
-            uint8(23),
+            uint8(24),
             new bytes(0),
             uint64(0),
             proofs);

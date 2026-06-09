@@ -11,14 +11,17 @@
 LegalKernel.Test.FaultProof.AmmCommit — GP.11.8 acceptance tests for
 AMM state-root commitment integration.
 
-15 test cases per the GP.11.8 specification:
+19 test cases per the GP.11.8 specification:
   * Genesis state-root with all AMM fields at zero.
   * Post-deposit / post-swap / post-circuit-close commitment changes.
   * Each AMM field independently alters the commitment.
-  * Term-level API stability for the two GP.11.8 theorems.
+  * Term-level API stability for the four GP.11.8 theorems.
   * Encoding round-trip with AMM fields.
   * Migration: v1.2 state with genesis AMM defaults → well-formed commitment.
   * Determinism: same AMM state → same commitment.
+  * Decoder rejects non-canonical boldCircuitClosed encoding.
+  * Encoding factoring: base prefix ++ AMM suffix decomposition.
+  * AMM genesis suffix constancy across states.
 -/
 
 import LegalKernel.FaultProof.Commit
@@ -209,6 +212,57 @@ def tests : List TestCase :=
           assertEq (expected := bs.boldTvlCap) (actual := bs'.boldTvlCap) "boldTvlCap roundtrip"
           assertEq (expected := bs.boldTotalLockedValue) (actual := bs'.boldTotalLockedValue) "boldTotalLockedValue roundtrip"
         | .error e => throw <| IO.userError s!"decode failed: {repr e}"
+    }
+  -- 16. Non-canonical boldCircuitClosed encoding is rejected.
+  , { name := "GP.11.8: decoder rejects non-canonical boldCircuitClosed"
+    , body := do
+        let bs := BridgeState.empty
+        let tampered : Encoding.Stream :=
+          Bridge.BridgeState.encodeConsumed bs ++
+          Bridge.BridgeState.encodePending bs ++
+          Encodable.encode (T := Nat) bs.nextWdId ++
+          Encodable.encode (T := Nat) bs.ammReserveEth ++
+          Encodable.encode (T := Nat) bs.ammReserveBold ++
+          Encodable.encode (T := Nat) 2 ++
+          Encodable.encode (T := Nat) bs.boldTvlCap ++
+          Encodable.encode (T := Nat) bs.boldTotalLockedValue
+        match Bridge.BridgeState.decode tampered with
+        | .error _ => pure ()
+        | .ok _ => throw <| IO.userError "decoder accepted non-canonical circuitClosed=2"
+    }
+  -- 17. Term-level API: bridgeState_encode_factored.
+  , { name := "GP.11.8: bridgeState_encode_factored API stable"
+    , body := do
+        let _proof : ∀ (bs : Bridge.BridgeState),
+            Bridge.BridgeState.encode bs =
+            bridgeStateEncodeBase bs ++ bridgeStateEncodeAmmSuffix bs :=
+          bridgeState_encode_factored
+        pure ()
+    }
+  -- 18. Term-level API: bridgeState_amm_genesis_suffix_const.
+  , { name := "GP.11.8: bridgeState_amm_genesis_suffix_const API stable"
+    , body := do
+        let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
+            (bs₁.ammReserveEth = 0 ∧ bs₁.ammReserveBold = 0 ∧
+             bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
+             bs₁.boldTotalLockedValue = 0) →
+            (bs₂.ammReserveEth = 0 ∧ bs₂.ammReserveBold = 0 ∧
+             bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
+             bs₂.boldTotalLockedValue = 0) →
+            bridgeStateEncodeAmmSuffix bs₁ = bridgeStateEncodeAmmSuffix bs₂ :=
+          bridgeState_amm_genesis_suffix_const
+        pure ()
+    }
+  -- 19. Value-level: factored encoding round-trips back to the same bytes.
+  , { name := "GP.11.8: factored encoding produces same bytes as direct"
+    , body := do
+        let bs : BridgeState := { BridgeState.empty with
+          ammReserveEth := 42, ammReserveBold := 99,
+          boldCircuitClosed := true, boldTvlCap := 1000,
+          boldTotalLockedValue := 500 }
+        let direct := Bridge.BridgeState.encode bs
+        let factored := bridgeStateEncodeBase bs ++ bridgeStateEncodeAmmSuffix bs
+        assertEq (expected := direct) (actual := factored) "factored encoding matches direct"
     }
   ]
 

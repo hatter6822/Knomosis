@@ -8022,41 +8022,59 @@ sub-WU table above is the implementation roadmap.
       State-root commitment closes the loop.
 
   * **Theorems.**
-    * `bridgeState_commit_includes_ammState` (new): the
-      state-root preimage covers `ammReserveEth`,
-      `ammReserveBold`, `boldCircuitClosed`, `boldTvlCap`,
-      `boldTotalLockedValue`.  Proof: trivial — direct
-      computation.
-    * `bridgeState_commit_extends_v1_2`: every pre-v1.4
-      state-root remains valid under the v1.4 preimage
-      formula when the v1.3 fields are at their genesis
-      values (0 for reserves, false for circuit-closed, etc.).
-      Backwards-compatible migration.
+    * `bridgeState_commit_includes_ammState`: the state-root
+      preimage covers all 5 AMM fields.  Proof: `rfl`.
+    * `bridgeState_commit_extends_v1_2`: backward-compatible
+      migration — identical core fields + genesis AMM defaults ⇒
+      identical commitment.  Proved via structural encoding
+      factoring.
+    * `bridgeState_encode_factored`: v1.4 encoding = v1.2 base
+      prefix ++ AMM suffix.
+    * `bridgeState_amm_genesis_suffix_const`: genesis AMM fields
+      produce identical encoding suffixes.
 
-  * **Tests.**  15 cases:
-    * Genesis state-root matches expected (all v1.3 fields zero).
-    * Post-deposit state-root matches expected.
-    * Post-swap state-root matches expected.
-    * Post-circuit-close state-root matches expected.
-    * Cross-stack: Solidity state-root == Lean reference
-      state-root over the 50+ cross-stack fixture corpus.
+  * **Tests.**  19 cases:
+    * Genesis state-root (all AMM fields zero) → 32-byte commit.
+    * Each AMM field independently alters commitment (5 cases).
+    * Post-deposit / post-swap / post-circuit-close changes (3).
+    * Encoding distinguishes non-zero AMM fields.
+    * Term-level API stability for all 4 theorems.
+    * Determinism, v1.2 migration, encoding round-trip.
+    * Non-canonical Bool decoder rejection.
+    * Factored-encoding value check.
+    * Cross-stack: Solidity step-VM byte-equivalence over 268-
+      entry corpus (164 happy ammSwap entries byte-match Lean).
 
   * **Acceptance criteria.**  Two reviewers (touches fault-
     proof commit machinery, which is critical for L1 safety);
     `lake test` passes; forge tests pass.
   * **Dependencies.**  GP.11.1, GP.11.2, GP.11.3, GP.11.4.
   * **Estimated effort.**  ~12 hours.
-  * **Status.**  Complete (v0.5.7, 2026-06-09).  All deliverables
-    landed: BridgeState encoder/decoder extended with 5 AMM fields,
-    EI.7.e injectivity proof updated (3-way → 8-way conjunction via
-    `nat_encode_suffix_split` + `bool_as_nat_injective` helpers),
-    `ExtendedState.extEq` widened (7 → 12 conjuncts),
-    `CanonicalBounds` extended (4 new bound fields), both headline
-    theorems proved (`bridgeState_commit_includes_ammState` by `rfl`,
-    `bridgeState_commit_extends_v1_2` by structural equality under
-    genesis defaults), 15 acceptance tests in `faultproof-amm-commit`
-    suite (all pass), encoding round-trip verified.  No kernel TCB
-    delta, no new axioms.
+  * **Status.**  Complete (v0.5.7, 2026-06-09).  Full tri-stack
+    delivery: (1) **Lean encoding:** BridgeState encoder/decoder
+    extended with 5 AMM fields, strict canonical Bool decoder
+    (rejects values > 1); EI.7.e injectivity proof updated (3-way →
+    8-way conjunction via `nat_encode_suffix_split` +
+    `bool_as_nat_injective`); `ExtendedState.extEq` widened (7 → 12
+    conjuncts); `CanonicalBounds` extended (4 new bound fields).
+    (2) **Commitment theorems:** four GP.11.8 theorems —
+    `bridgeState_commit_includes_ammState` (encoding includes all 5
+    AMM fields, by `rfl`), `bridgeState_commit_extends_v1_2` (v1.2
+    backward compatibility, proved via structural encoding factoring),
+    `bridgeState_encode_factored` (v1.4 encoding = v1.2 base prefix
+    ++ AMM suffix), `bridgeState_amm_genesis_suffix_const` (genesis
+    AMM fields produce identical suffixes).  All depend only on
+    `{propext, Classical.choice, Quot.sound}`.  (3) **Solidity
+    step-VM:** `KnomosisStepVM.sol` gains `AmmSwap` (kind 23) with
+    `_stepAmmSwap` (5 uint64BE action fields, 2 balance cell proofs,
+    keccak256 commit matching Lean's `stepCommitAmmSwap`).
+    (4) **Cross-stack corpus:** fixture generator adds 10 ammSwap
+    entries (6 happy + 4 adversarial), widening corpus from 258 to
+    268 entries; Solidity consumer tests updated (164 happy / 104
+    adversarial, kind range 0..23).  `forge test` 785 passed; `lake
+    test` 2990 (149 suites); 19 acceptance tests in
+    `faultproof-amm-commit` suite.  No kernel TCB delta, no new
+    axioms.
 
 #### WU GP.11.9: Gas-cost benchmarks for v1.3 operations (v1.4)
 

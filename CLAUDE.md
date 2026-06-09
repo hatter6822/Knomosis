@@ -496,6 +496,8 @@ The Genesis Plan promises a small set of type-level guarantees
 | GP.11.6 | AMM reserve outflow restricted | `ammReservePolicy_permits_iff` | `Bridge/AmmReservePolicy.lean` |
 | GP.11.8 | AMM state committed to bridge | `bridgeState_commit_includes_ammState` | `FaultProof/Commit.lean` |
 | GP.11.8 | v1.2 backward compatibility | `bridgeState_commit_extends_v1_2` | `FaultProof/Commit.lean` |
+| GP.11.8 | Encoding factoring | `bridgeState_encode_factored` | `FaultProof/Commit.lean` |
+| GP.11.8 | AMM genesis suffix const | `bridgeState_amm_genesis_suffix_const` | `FaultProof/Commit.lean` |
 | H | Bisection convergence | `bisection_converges_after_enough_rounds` | `FaultProof/Convergence.lean` |
 | H | Honest challenger wins | `honest_challenger_wins_against_invalid_state_root` | `FaultProof/Settlement.lean` |
 | SC.1 | SMT cell-proof soundness | `smtCellProof_sound_under_collision_free` | `FaultProof/Smt.lean` |
@@ -613,9 +615,9 @@ at the current build tag:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~2 983 | ~149 | `lake test` |
+| Lean | ~2 990 | ~149 | `lake test` |
 | Rust | ~1 950 | across 11 crates | `cargo test --workspace` |
-| Solidity | ~774 passed | 20+ forge suites | `cd solidity && forge test` |
+| Solidity | ~785 passed | 20+ forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -624,9 +626,9 @@ full catalogue):
 
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
-- `faultproof-stepvm-coherence` — 23-variant step-VM dispatcher
+- `faultproof-stepvm-coherence` — 24-variant step-VM dispatcher
   byte-equivalence (kinds 0–23).
-- `crosscheck-step-vm` — 258-entry cross-stack fixture corpus.
+- `crosscheck-step-vm` — 268-entry cross-stack fixture corpus.
 - `faultproof-smt` — SC.1 SMT cell-proof soundness.
 - `encoding-injectivity` — EI.2–EI.8 injectivity ladder.
 - `bridge-gas-pool-policy` — GP.7.2 gas-pool policy characterisation.
@@ -713,7 +715,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.7.0–7.4 | Complete | Bridge-policy characterisation, reserved actors, `gasPoolPolicy`, inductive drain bound, genesis ratification + CLI |
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
-| GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` theorems, 15 acceptance tests |
+| GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
 
 ### Ethereum integration (Workstreams A–G)
 
