@@ -25,7 +25,17 @@
 #      half of the cap protection
 #      (`BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned` and the
 #      constructor-guard revert tests), alongside every other forge
-#      suite.
+#      suite.  After the test run, the GP.11.9 gas-benchmark gate
+#      (`make snapshot-gas-check`) re-runs the deterministic
+#      `BenchmarkGasV1_3` suite and fails the job on (a) any
+#      per-benchmark gas INCREASE beyond 5% over the committed
+#      baseline (`solidity/test/BenchmarkGasV1_3.gas-baseline.json`;
+#      one-sided per the GP.11.9 plan rule — improvements only warn),
+#      (b) benchmark-set drift (a benchmark added / removed / renamed
+#      without a regenerated baseline), or (c) a runbook §9.2 table
+#      out of sync with the baseline.  The gate's own behavioural
+#      self-tests run in the fast `caps-audit` job
+#      (`make snapshot-gas-selftest`; pure python3, no toolchain).
 #
 # Keeping the two jobs separate means a cap drift is caught by the fast,
 # toolchain-free `caps-audit` job even while the heavier `forge` job is
@@ -48,12 +58,19 @@ on:
     paths:
       - 'solidity/**'
       - '.github/workflows/ci-solidity.yml'
+      # The GP.11.9 runbook §9.2 gas table is a GENERATED artifact of
+      # `solidity/test/BenchmarkGasV1_3.gas-baseline.json`; a docs-only
+      # PR that hand-edits it must still trip the table-sync check
+      # (run in the fast `caps-audit` job below), so the runbook is a
+      # trigger path for this workflow.
+      - 'docs/gas_pool_runbook.md'
   pull_request:
     branches:
       - main
     paths:
       - 'solidity/**'
       - '.github/workflows/ci-solidity.yml'
+      - 'docs/gas_pool_runbook.md'
 
 # Cancel in-progress runs of the same workflow on the same ref.
 concurrency:
@@ -89,6 +106,25 @@ jobs:
         # Proves the gate accepts canonical source and rejects every
         # drift class, so the tripwire cannot be silently disabled.
         run: make audit-caps-selftest
+
+      - name: make snapshot-gas-selftest (GP.11.9 gate self-tests)
+        # Behavioural self-tests for the gas-benchmark regression gate
+        # (scripts/check_gas_baseline.py) and the runbook-table
+        # generator (scripts/generate_gas_runbook_table.py): accept
+        # within-budget drift, reject >5% increases and benchmark-set
+        # drift, warn-only on improvements, reject out-of-sync /
+        # hand-edited runbook tables.  Pure python3 stdlib; no
+        # Solidity toolchain, so it belongs in this fast job.
+        run: make snapshot-gas-selftest
+
+      - name: Runbook gas-table sync (GP.11.9)
+        # The runbook §9.2 table is generated from the committed gas
+        # baseline; verify they match WITHOUT running forge, so the
+        # check also covers docs-only PRs that hand-edit the runbook
+        # (this workflow triggers on `docs/gas_pool_runbook.md` for
+        # exactly that case).  The heavier `forge` job additionally
+        # re-measures the baseline itself.
+        run: python3 scripts/generate_gas_runbook_table.py --check
 
   forge:
     name: forge build + test
@@ -146,3 +182,21 @@ jobs:
 
       - name: forge test
         run: forge test
+
+      - name: Gas-benchmark regression gate (GP.11.9)
+        # Re-runs the deterministic BenchmarkGasV1_3 suite (per-call gas
+        # + exact calldata cost via the snapshotGas cheatcodes) and
+        # checks it against the committed baseline
+        # (test/BenchmarkGasV1_3.gas-baseline.json): any per-benchmark
+        # increase beyond 5% fails (one-sided, per the GP.11.9 rule),
+        # benchmark-set drift fails, improvements beyond 5% warn, and
+        # the generated runbook table must match the baseline.  A
+        # deliberate gas change runs `make snapshot-gas` (which
+        # regenerates baseline + runbook table together) in the same
+        # PR.  Pinned to the default profile so the comparison uses
+        # exactly the settings the committed baseline was generated with
+        # (the benchmarks are fuzz-free, so the profiles agree anyway —
+        # this pin just makes that independence explicit).
+        env:
+          FOUNDRY_PROFILE: default
+        run: make snapshot-gas-check

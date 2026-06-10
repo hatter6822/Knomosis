@@ -36,6 +36,74 @@ coverage:
 coverage-lcov:
 	forge coverage --ir-minimum --report lcov
 
+# Workstream GP.11.9 — gas-cost benchmarks for the v1.3 L1 operations.
+#
+# The deterministic `BenchmarkGasV1_3` suite (test/BenchmarkGasV1_3.t.sol)
+# runs under forge's ISOLATED mode (`--isolate`), in which every
+# benchmarked call executes as its own EVM transaction — foundry's
+# documented-accurate mode for the `snapshotGas*` cheatcodes.  The
+# recorded value is therefore the TRUE end-user transaction gas:
+# 21 000 intrinsic + EIP-2028 calldata + execution, with EIP-3529
+# refunds netted and the transaction target pre-warmed (EIP-2929),
+# exactly as on L1.  (Empirically verified: isolated-vs-unisolated
+# deltas decode to the gas to `21 000 + calldata − refunds` on every
+# benchmark.)  Each benchmark also records the exact EIP-2028 calldata
+# cost of its canonical calldata (`vm.snapshotValue`,
+# `<name>.calldata_gas`) so the runbook table can break the total down.
+# Both land in the forge scratch file `snapshots/BenchmarkGasV1_3.json`
+# (gitignored; a PARTIAL or non-isolated forge run rewrites it, so it
+# is never committed directly).  The committed baseline is the
+# verified isolated full-run copy below.
+#
+#   make snapshot-gas          — re-run the suite (isolated), promote
+#                                the fresh snapshot to the committed
+#                                baseline, and regenerate the runbook
+#                                §9.2 table derived from it (one
+#                                command keeps measurement and
+#                                documentation in lockstep)
+#   make snapshot-gas-check    — CI gate: re-runs the suite, then
+#                                (a) fails on any per-benchmark gas
+#                                INCREASE beyond 5% (the GP.11.9 rule;
+#                                one-sided — improvements only WARN, with
+#                                a nudge to ratchet them in),
+#                                (b) fails on benchmark-set drift (a
+#                                benchmark added/removed/renamed without a
+#                                regenerated baseline), and
+#                                (c) fails if the runbook table is out of
+#                                sync with the committed baseline
+#   make snapshot-gas-selftest — behavioural self-tests for the gate and
+#                                the table generator (pure python3, no
+#                                forge), proving the tripwires cannot be
+#                                silently disabled
+#
+# `FORGE_SNAPSHOT_CHECK=false` guards against an exported environment
+# override flipping forge's cheatcode snapshots from record mode into its
+# built-in exact-match compare mode.  Baselines are stable for the pinned
+# (forge 1.7.0, solc 0.8.20, foundry.toml) toolchain; regenerating with a
+# different toolchain may shift numbers and fail the check.
+SNAPSHOT_GAS_BASELINE = test/BenchmarkGasV1_3.gas-baseline.json
+SNAPSHOT_GAS_FRESH    = snapshots/BenchmarkGasV1_3.json
+SNAPSHOT_GAS_RUN      = --match-contract BenchmarkGasV1_3 --isolate
+
+.PHONY: snapshot-gas
+snapshot-gas:
+	rm -f $(SNAPSHOT_GAS_FRESH)
+	FORGE_SNAPSHOT_CHECK=false forge test $(SNAPSHOT_GAS_RUN)
+	cp $(SNAPSHOT_GAS_FRESH) $(SNAPSHOT_GAS_BASELINE)
+	python3 scripts/generate_gas_runbook_table.py
+
+.PHONY: snapshot-gas-check
+snapshot-gas-check:
+	rm -f $(SNAPSHOT_GAS_FRESH)
+	FORGE_SNAPSHOT_CHECK=false forge test $(SNAPSHOT_GAS_RUN)
+	python3 scripts/check_gas_baseline.py --baseline $(SNAPSHOT_GAS_BASELINE) --fresh $(SNAPSHOT_GAS_FRESH) --max-increase-pct 5
+	python3 scripts/generate_gas_runbook_table.py --check
+
+.PHONY: snapshot-gas-selftest
+snapshot-gas-selftest:
+	python3 scripts/check_gas_baseline.py --selftest
+	python3 scripts/generate_gas_runbook_table.py --selftest
+
 # Workstream GP.5.2 — constitutional fee-split-cap audit gate.
 # Pure grep/sed/awk; no solc/forge dependency.  Fails if MAX_FEE_BPS_CAP,
 # MIN_WEI_PER_BUDGET_UNIT, or MAX_BUDGET_PER_DEPOSIT drift from their

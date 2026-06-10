@@ -6097,13 +6097,23 @@ does what, in what file, in what order).
            document expected MEV cost increase per claim.
 
     5. **Gas-cost projections** (v1.4):
-       * Reference baseline numbers from GP.11.9:
-         depositETH ~80-120k, depositBold ~140-180k,
-         ammSwap ETH→BOLD ~110-140k, ammSwap BOLD→ETH
-         ~140-170k, closeBoldCircuit ~30-40k,
-         closeBoldCircuitIfAnyLiquityBranchShutdown ~50-70k
-         (close path, ETH-branch fast case; up to ~100k for the
-         no-shutdown 3-branch read path).
+       * Reference the MEASURED baseline numbers from GP.11.9
+         (now landed — the generated table in
+         `docs/gas_pool_runbook.md` §9.2 is the canonical source;
+         the committed CI-gated baseline is
+         `solidity/test/BenchmarkGasV1_3.gas-baseline.json`).
+         Measured user-tx envelopes (forge isolated mode — full
+         transaction gas, refunds netted): depositETHWithFee
+         ~49-66k, depositBoldWithFee ~77-94k, ammSwap ETH→BOLD
+         ~59-76k, ammSwap BOLD→ETH ~68-70k, closeBoldCircuit ~45k,
+         closeBoldCircuitIfAnyLiquityBranchShutdown ~54k
+         (ETH-branch fast close) to ~69k (last-branch close),
+         ~47k for the no-shutdown 3-branch keeper probe;
+         migration-wired deployments add ~3.1k per circuit-gated
+         operation; the withdrawWithProof exit legs ~861-878k
+         (the round trip's dominant cost).  (These supersede the
+         pre-measurement sketch envelopes that previously stood
+         here.)
        * UI guidance: display estimated bridge-gas cost at
          current gas price, factoring in user's chosen fee
          currency.
@@ -8123,6 +8133,71 @@ sub-WU table above is the implementation roadmap.
     documented; CI gate added.
   * **Dependencies.**  GP.5.1, GP.5.4, GP.5.5, GP.11.3.
   * **Estimated effort.**  ~8 hours.
+  * **Status.**  Complete (v0.5.8, 2026-06-10).
+    `solidity/test/BenchmarkGasV1_3.t.sol` lands 21 deterministic
+    benchmarks across 9 scenario contracts (34 tests incl. the
+    `test_sanity_*` companions that pin every scenario assumption and
+    every benchmarked operation's effects).  The suite runs under
+    forge's ISOLATED mode (`--isolate`, enforced by the make targets)
+    — foundry's documented-accurate mode for the `snapshotGas*`
+    cheatcodes — so each benchmark's `vm.snapshotGasLastCall` value is
+    the FULL user-transaction gas (21k intrinsic + EIP-2028 calldata +
+    execution, EIP-3529 refunds netted, target pre-warmed per
+    EIP-2929); the isolated-vs-unisolated deltas decode to the gas as
+    `21 000 + calldata − refunds` on all 21 benchmarks, verifying the
+    semantics, and deltas land exactly on EVM constants (the
+    first-interaction premium measures precisely the 17 100-gas
+    zero→non-zero SSTORE surcharge in both the deposit and swap
+    pairs).  Each benchmark also records the exact EIP-2028 calldata
+    cost of its canonical calldata (`vm.snapshotValue`,
+    `<name>.calldata_gas`) as a breakdown.  Coverage: the six planned operations in
+    their distinct recurring shapes (first/repeat depositor;
+    first/repeat BOLD recipient; exact/infinite approval — measured
+    against the OZ-faithful `MockBoldOz`, so production BOLD's
+    `_spendAllowance` max-allowance skip carries its real cost, and
+    the refund-netted measurement surfaces that PER TRANSACTION the
+    exact shape is ~1.7k cheaper — its 4 800 allowance-clear refund
+    outweighs the ~3.1k execution the infinite shape saves — while
+    per FLOW infinite approval still wins from the second swap onward), the operator extras (`openBoldCircuit`,
+    `setBoldTvlCap`, `emergencyDisableAmm`), migration-wired deposit +
+    swap variants (the external `activated()` read costs ~3.1k per
+    operation on deployments that pre-wire a successor), the BOLD
+    `approve` prerequisite, the `withdrawWithProof` exit legs
+    (canonical 64-sibling proof; a measured ~861–878k per transaction
+    incl. ~37.9k proof calldata, dominated by the CBE byte-loop decode
+    of the ~2.7 kB blob — the round trip's dominant cost, flagged for
+    a future calldata-slice decoder), and a plain-`depositETH` v1.0 reference row.  Committed
+    baseline: `solidity/test/BenchmarkGasV1_3.gas-baseline.json`,
+    promoted from a verified full run by `make snapshot-gas`, which
+    ALSO regenerates the runbook §9.2 table from it
+    (`scripts/generate_gas_runbook_table.py` — derived-artifact
+    discipline mirroring `regenerate_codemaps.py`; measured numbers
+    and documentation cannot drift).  CI gate (`make
+    snapshot-gas-check`, `scripts/check_gas_baseline.py`): any
+    per-benchmark gas INCREASE beyond 5% fails — ONE-SIDED, exactly
+    this WU's ">5 % increase fails CI" rule (the sketched `forge
+    snapshot --diff` prints but never fails, and its `--tolerance` is
+    two-sided, so a purpose-built comparator implements the spec) —
+    plus benchmark-set drift (added/removed/renamed benchmarks without
+    a regenerated baseline) and runbook-table desync fail, while
+    improvements beyond 5% warn with a ratchet nudge.  Both scripts
+    carry behavioural self-tests (8 cases each, `make
+    snapshot-gas-selftest`, run in the fast `caps-audit` CI job), and
+    all gate behaviours were additionally verified end-to-end through
+    the real make pipeline (regression / improvement / stale-entry /
+    table-tamper / green).  Headline measured user-tx baselines:
+    `depositETHWithFee` 66 261 first / 49 161 repeat;
+    `depositBoldWithFee` 94 242 / 77 142; `ammSwap` ETH→BOLD 75 726
+    first-recipient / 58 626 repeat; BOLD→ETH 68 204 exact / 69 870
+    infinite; `closeBoldCircuit` 44 825; auto-trigger close 53 834
+    (first branch) / 69 037 (last); no-shutdown keeper probe 47 250
+    (measured through a plain low-level call — no `expectRevert`
+    interference).  Every measured value lands at or below the
+    sketched envelopes; the full table + $-cost methodology ("a
+    typical first fee-split deposit ≈ $6.0 at 30 gwei and $3 000/ETH;
+    the exit leg ≈ $77.5–79.0 dominates the round trip") live in
+    `docs/gas_pool_runbook.md` §9.
+    `forge test` 825 passed / 0 failed (34 new tests).
 
 #### WU GP.11.10: AMM disaster recovery (v1.4)
 

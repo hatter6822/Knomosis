@@ -85,6 +85,9 @@ cd solidity && forge test
 cd solidity && make test-cross-stack          # F.1.x equivalence suite
 cd solidity && make audit-caps                # GP.5.2 fee-split-cap audit gate
 cd solidity && make audit-caps-selftest       # self-test for the cap gate
+cd solidity && make snapshot-gas-check        # GP.11.9 gas-benchmark gate
+cd solidity && make snapshot-gas              # regenerate gas baseline + runbook table
+cd solidity && make snapshot-gas-selftest     # self-tests for the GP.11.9 gate
 cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
 
 # Keccak-linked cross-stack verification (Lean <-> EVM byte-equivalence).
@@ -551,7 +554,7 @@ work units.  Status:
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Track A complete; Tracks B–D future |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–8 complete) |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–9 complete) |
 | AR | Audit remediation | Complete |
 | EI | Encoder injectivity | Complete |
 | 7 | Advanced capabilities | Not started |
@@ -617,7 +620,7 @@ at the current build tag:
 |---------|-------|--------|-----------------|
 | Lean | ~2 990 | ~149 | `lake test` |
 | Rust | ~1 950 | across 11 crates | `cargo test --workspace` |
-| Solidity | ~791 passed | 20+ forge suites | `cd solidity && forge test` |
+| Solidity | ~825 passed | 55 forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -716,6 +719,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
 | GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
+| GP.11.9 | Complete | Gas-cost benchmarks for the v1.3 L1 operations + round-trip exit legs: 21 isolated-mode (tx-exact, refund-netted) benchmarks with exact calldata breakdowns (`solidity/test/BenchmarkGasV1_3.t.sol`, `forge test --isolate` + `vm.snapshotGasLastCall` + `vm.snapshotValue`, OZ-faithful `MockBoldOz`), committed baseline (`test/BenchmarkGasV1_3.gas-baseline.json`), one-sided >5%-increase CI gate + set-drift + runbook-sync checks (`scripts/check_gas_baseline.py`), generated runbook §9.2 table (`scripts/generate_gas_runbook_table.py`), self-tested via `make snapshot-gas-selftest` |
 
 ### Ethereum integration (Workstreams A–G)
 
