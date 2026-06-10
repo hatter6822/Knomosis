@@ -71,6 +71,11 @@ Coverage map:
     `LegacyDepositRecord` + `DepositRecord.fromLegacy` /
     `DepositRecord.toLegacy` + the `toLegacy_fromLegacy`
     round-trip lemma.
+  * GP.11.8 — `BridgeState` extended with five AMM/BOLD
+    state fields (`ammReserveEth`, `ammReserveBold`,
+    `boldCircuitClosed`, `boldTvlCap`, `boldTotalLockedValue`)
+    so the fault-proof game can adjudicate disputes that turn
+    on AMM state.
 -/
 
 import LegalKernel.Kernel
@@ -288,16 +293,33 @@ structure BridgeState where
   /-- The next withdrawal id to assign on the next `withdraw`
       action.  Monotonically increases; never reused. -/
   nextWdId : WithdrawalId
+  /-- GP.11.8: L2 reflection of L1 AMM ETH reserve.  Committed to the
+      state root so the fault-proof game can adjudicate disputes that
+      turn on AMM state. -/
+  ammReserveEth : Amount := 0
+  /-- GP.11.8: L2 reflection of L1 AMM BOLD reserve. -/
+  ammReserveBold : Amount := 0
+  /-- GP.11.8: Whether the BOLD circuit breaker is closed on L1. -/
+  boldCircuitClosed : Bool := false
+  /-- GP.11.8: L1 per-BOLD TVL cap. -/
+  boldTvlCap : Amount := 0
+  /-- GP.11.8: L1 per-BOLD total locked value. -/
+  boldTotalLockedValue : Amount := 0
   deriving Repr
 
 namespace BridgeState
 
 /-- The genesis bridge state: empty consumed set, empty pending set,
-    next withdrawal id 0. -/
+    next withdrawal id 0, AMM reserves at zero, BOLD circuit open. -/
 def empty : BridgeState where
-  consumed := ∅
-  pending  := ∅
-  nextWdId := 0
+  consumed             := ∅
+  pending              := ∅
+  nextWdId             := 0
+  ammReserveEth        := 0
+  ammReserveBold       := 0
+  boldCircuitClosed    := false
+  boldTvlCap           := 0
+  boldTotalLockedValue := 0
 
 /-- §7.1.1 smoke-test: `BridgeState.empty.consumed` is the empty
     `TreeMap`. -/
@@ -313,6 +335,26 @@ theorem empty_pending_empty :
 theorem empty_nextWdId_zero :
     empty.nextWdId = 0 := rfl
 
+/-- GP.11.8 smoke-test: `BridgeState.empty.ammReserveEth = 0`. -/
+theorem empty_ammReserveEth_zero :
+    empty.ammReserveEth = 0 := rfl
+
+/-- GP.11.8 smoke-test: `BridgeState.empty.ammReserveBold = 0`. -/
+theorem empty_ammReserveBold_zero :
+    empty.ammReserveBold = 0 := rfl
+
+/-- GP.11.8 smoke-test: `BridgeState.empty.boldCircuitClosed = false`. -/
+theorem empty_boldCircuitClosed_false :
+    empty.boldCircuitClosed = false := rfl
+
+/-- GP.11.8 smoke-test: `BridgeState.empty.boldTvlCap = 0`. -/
+theorem empty_boldTvlCap_zero :
+    empty.boldTvlCap = 0 := rfl
+
+/-- GP.11.8 smoke-test: `BridgeState.empty.boldTotalLockedValue = 0`. -/
+theorem empty_boldTotalLockedValue_zero :
+    empty.boldTotalLockedValue = 0 := rfl
+
 /-! ## Convenience accessors / mutators -/
 
 /-- Mark a deposit-id as consumed with the given metadata.  Inserts
@@ -323,12 +365,12 @@ theorem empty_nextWdId_zero :
   { bs with consumed := bs.consumed.insert depositId rec }
 
 /-- Insert a pending withdrawal at `bs.nextWdId` and bump the
-    counter.  Leaves `consumed` unchanged. -/
+    counter.  Leaves `consumed` and AMM state unchanged. -/
 @[inline] def appendWithdrawal (bs : BridgeState) (wd : PendingWithdrawal) :
-    BridgeState where
-  consumed := bs.consumed
-  pending  := bs.pending.insert bs.nextWdId wd
-  nextWdId := bs.nextWdId + 1
+    BridgeState :=
+  { bs with
+    pending  := bs.pending.insert bs.nextWdId wd
+    nextWdId := bs.nextWdId + 1 }
 
 /-- Look up whether a deposit-id has been consumed. -/
 @[inline] def isConsumed (bs : BridgeState) (depositId : DepositId) : Bool :=

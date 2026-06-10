@@ -111,7 +111,8 @@ contract KnomosisStepVM {
         DepositWithFee,       // 19
         TopUpActionBudget,    // 20
         TopUpActionBudgetFor, // 21 (GP.3.4 delegated top-up; GP.5.3)
-        ClaimBudgetRefund     // 22 (GP.9.1 refund-on-exit)
+        ClaimBudgetRefund,    // 22 (GP.9.1 refund-on-exit)
+        AmmSwap               // 23 (GP.11.4 L2 AMM swap)
     }
 
     /* ---------------------------------------------------------- */
@@ -160,6 +161,7 @@ contract KnomosisStepVM {
     error MissingCellProof(uint8 cellKind, uint256 keyA);
     error InsufficientBalance();
     error AmountMustBePositive();
+    error SameResourceSwap();
     error UnauthorizedSigner();
     error TooManyCellProofs();
     error MalformedCellValue();
@@ -210,6 +212,7 @@ contract KnomosisStepVM {
     bytes32 internal constant TAG_TOPUP_ACTION_BUDGET_FOR =
         keccak256("topUpActionBudgetFor");
     bytes32 internal constant TAG_CLAIM_BUDGET_REFUND  = keccak256("claimBudgetRefund");
+    bytes32 internal constant TAG_AMM_SWAP             = keccak256("ammSwap");
 
     /* ---------------------------------------------------------- */
     /* External: executeStep                                      */
@@ -219,7 +222,7 @@ contract KnomosisStepVM {
     ///         commit that the responding party must claim.
     ///
     /// @param preStateCommit       the pre-state commit (32 bytes).
-    /// @param actionKind           the Action variant index (0..21).
+    /// @param actionKind           the Action variant index (0..23).
     /// @param actionFields         the variant's parameter bytes
     ///                             (per-variant ABI: see _decode<Variant>).
     /// @param signer               the action's signer ActorId.
@@ -318,6 +321,10 @@ contract KnomosisStepVM {
             // Workstream GP (action-index 22; GP.9.1 refund-on-exit).
             postStateCommit = _stepClaimBudgetRefund(
               preStateCommit, actionFields, signer, cellProofs);
+        } else if (kind == ActionKind.AmmSwap) {
+            // Workstream GP (action-index 23; GP.11.4 L2 AMM swap).
+            postStateCommit = _stepAmmSwap(
+              preStateCommit, actionFields, signer, cellProofs);
         } else {
             revert UnknownActionKind();
         }
@@ -328,13 +335,14 @@ contract KnomosisStepVM {
     /* ---------------------------------------------------------- */
 
     function _toActionKind(uint8 idx) internal pure returns (ActionKind) {
-        // Workstream GP extension: indices 19/20/21/22 are now valid
+        // Workstream GP extension: indices 19/20/21/22/23 are now valid
         // (GP.5.3 added 21 = TopUpActionBudgetFor; GP.9.1 added 22 =
-        // ClaimBudgetRefund).  Updating this bound is mandatory when a
+        // ClaimBudgetRefund; GP.11.4 added 23 = AmmSwap).  Updating
+        // this bound is mandatory when a
         // new Action constructor is appended to the Lean-side inductive
         // — the Lean cross-stack fixture corpus exercises every kind on
         // both sides via the `crosscheck-step-vm` suite.
-        if (idx > 22) revert UnknownActionKind();
+        if (idx > 23) revert UnknownActionKind();
         return ActionKind(idx);
     }
 
@@ -1168,6 +1176,58 @@ contract KnomosisStepVM {
             preStateCommit, TAG_CLAIM_BUDGET_REFUND,
             gasResource, signer, newSignerBalance,
             poolActor, newPoolBalance));
+    }
+
+    /// @notice Step function for `ammSwap` (action-index 23;
+    ///         GP.11.4 L2 AMM swap).  Field layout (40 bytes,
+    ///         5 x uint64BE): `fromResource | toResource | amountIn |
+    ///         amountOut | ammReserveActor`.  The swap credits
+    ///         `amountIn` to the reserve actor's `fromResource` balance
+    ///         and debits `amountOut` from its `toResource` balance.
+    ///
+    ///         Mirrors Lean's `Laws.ammSwap` preconditions
+    ///         (`getBalance toResource ammReserveActor >= amountOut`,
+    ///         `fromResource != toResource`, `amountIn > 0`).  Without
+    ///         the `amountIn > 0` and `fromResource != toResource`
+    ///         checks, a zero-input or same-resource swap passes
+    ///         Solidity but is a no-op on Lean (the kernel rejects the
+    ///         precondition, so `step_impl` leaves the state unchanged
+    ///         and the honest post-commit equals the pre-commit) — a
+    ///         cross-stack divergence the bisection game would settle
+    ///         incorrectly.  `fromResource == toResource` additionally
+    ///         aliases the two reserve cells, so the sequential
+    ///         credit/debit writes would collide.
+    function _stepAmmSwap(
+        bytes32 preStateCommit,
+        bytes calldata actionFields,
+        uint64 signer,
+        CellProof[] calldata cellProofs
+    ) internal pure returns (bytes32) {
+        require(actionFields.length >= 40, "AmmSwapFieldsTooShort");
+        uint64 fromResource    = _decodeUint64BE(actionFields, 0);
+        uint64 toResource      = _decodeUint64BE(actionFields, 8);
+        uint256 amountIn       = uint256(_decodeUint64BE(actionFields, 16));
+        uint256 amountOut      = uint256(_decodeUint64BE(actionFields, 24));
+        uint64 ammReserveActor = _decodeUint64BE(actionFields, 32);
+
+        // Lean `Laws.ammSwap` preconditions (see NatSpec above).
+        if (amountIn == 0) revert AmountMustBePositive();
+        if (fromResource == toResource) revert SameResourceSwap();
+
+        uint256 fromProofIdx = _findBalanceCellProof(cellProofs, fromResource, ammReserveActor);
+        uint256 fromBalance  = _decodeNat(cellProofs[fromProofIdx].cellValue);
+
+        uint256 toProofIdx = _findBalanceCellProof(cellProofs, toResource, ammReserveActor);
+        uint256 toBalance  = _decodeNat(cellProofs[toProofIdx].cellValue);
+
+        uint256 newFromBalance = fromBalance + amountIn;
+        if (toBalance < amountOut) revert InsufficientBalance();
+        uint256 newToBalance = toBalance - amountOut;
+
+        return keccak256(abi.encodePacked(
+            preStateCommit, TAG_AMM_SWAP,
+            fromResource, toResource, ammReserveActor,
+            newFromBalance, newToBalance, signer));
     }
 
     /* ---------------------------------------------------------- */

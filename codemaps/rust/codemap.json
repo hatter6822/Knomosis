@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1010f63664f9b6a50bfaaf66dfc46f416997a47ecf19aafb1152743989e3f320"
+    "source_digest": "5efdcd9841a35e6ba5e84bf7f0e8a3338ea5ca8560b879e303836bf3960976df"
   },
   "summary": {
     "module_count": 137,
@@ -15879,7 +15879,7 @@
         {
           "kind": "struct",
           "name": "TerminateBundle",
-          "line": 470,
+          "line": 471,
           "called": [
             "signer"
           ]
@@ -15887,25 +15887,25 @@
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_JSON_BYTES",
-          "line": 516,
+          "line": 518,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES",
-          "line": 524,
+          "line": 526,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_TERMINATE_BUNDLE_CELL_PROOFS",
-          "line": 528,
+          "line": 530,
           "called": []
         },
         {
           "kind": "enum",
           "name": "TerminateBundleError",
-          "line": 532,
+          "line": 534,
           "called": [
             "LogIndex",
             "error"
@@ -15914,13 +15914,13 @@
         {
           "kind": "fn",
           "name": "serialize_bytes_hex_lower",
-          "line": 567,
+          "line": 569,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_bytes_hex_or_array",
-          "line": 576,
+          "line": 578,
           "called": [
             "_"
           ]
@@ -15928,7 +15928,7 @@
         {
           "kind": "enum",
           "name": "HexOrArray",
-          "line": 583,
+          "line": 585,
           "called": [
             "Err",
             "MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES",
@@ -15939,13 +15939,13 @@
         {
           "kind": "fn",
           "name": "serialize_bytes32_hex_lower",
-          "line": 615,
+          "line": 617,
           "called": []
         },
         {
           "kind": "fn",
           "name": "deserialize_bytes32_hex_or_array",
-          "line": 624,
+          "line": 626,
           "called": [
             "_"
           ]
@@ -15953,7 +15953,7 @@
         {
           "kind": "enum",
           "name": "HexOrArray",
-          "line": 631,
+          "line": 633,
           "called": [
             "Err",
             "_",
@@ -15964,7 +15964,7 @@
         {
           "kind": "fn",
           "name": "parse_terminate_bundle_json",
-          "line": 667,
+          "line": 669,
           "called": [
             "Err",
             "LogIndex",
@@ -15978,13 +15978,13 @@
         {
           "kind": "trait",
           "name": "TerminateBundleOracle",
-          "line": 709,
+          "line": 711,
           "called": []
         },
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 717,
+          "line": 719,
           "called": [
             "LogIndex",
             "TerminateBundle",
@@ -15994,7 +15994,7 @@
         {
           "kind": "impl",
           "name": "TerminateBundleOracle for Box<T>",
-          "line": 725,
+          "line": 727,
           "called": [
             "TerminateBundleOracle"
           ]
@@ -16002,7 +16002,7 @@
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 726,
+          "line": 728,
           "called": [
             "LogIndex",
             "TerminateBundle",
@@ -16012,7 +16012,7 @@
         {
           "kind": "struct",
           "name": "MemoryTerminateBundleOracle",
-          "line": 736,
+          "line": 738,
           "called": [
             "LogIndex",
             "TerminateBundle"
@@ -16021,19 +16021,19 @@
         {
           "kind": "impl",
           "name": "MemoryTerminateBundleOracle",
-          "line": 740,
+          "line": 742,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 743,
+          "line": 745,
           "called": []
         },
         {
           "kind": "fn",
           "name": "insert",
-          "line": 749,
+          "line": 751,
           "called": [
             "LogIndex",
             "TerminateBundle"
@@ -16042,19 +16042,19 @@
         {
           "kind": "fn",
           "name": "len",
-          "line": 755,
+          "line": 757,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_empty",
-          "line": 761,
+          "line": 763,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TerminateBundleOracle for MemoryTerminateBundleOracle",
-          "line": 766,
+          "line": 768,
           "called": [
             "MemoryTerminateBundleOracle",
             "TerminateBundleOracle"
@@ -16063,7 +16063,7 @@
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 767,
+          "line": 769,
           "called": [
             "LogIndex",
             "TerminateBundle",
@@ -16074,13 +16074,13 @@
         {
           "kind": "impl",
           "name": "SubprocessTruthOracle",
-          "line": 775,
+          "line": 777,
           "called": []
         },
         {
           "kind": "fn",
           "name": "spawn_bundle_drain_thread",
-          "line": 781,
+          "line": 783,
           "called": [
             "Err",
             "_",
@@ -16092,7 +16092,7 @@
         {
           "kind": "fn",
           "name": "wait_for_bundle_child",
-          "line": 809,
+          "line": 811,
           "called": [
             "Err",
             "_"
@@ -16101,7 +16101,7 @@
         {
           "kind": "fn",
           "name": "join_bundle_drain",
-          "line": 838,
+          "line": 840,
           "called": [
             "DRAIN_POLL",
             "DRAIN_TIMEOUT",
@@ -16114,7 +16114,7 @@
         {
           "kind": "fn",
           "name": "build_bundle_command",
-          "line": 868,
+          "line": 870,
           "called": [
             "LogIndex",
             "log_path",
@@ -16124,7 +16124,7 @@
         {
           "kind": "impl",
           "name": "TerminateBundleOracle for SubprocessTruthOracle",
-          "line": 888,
+          "line": 890,
           "called": [
             "SubprocessTruthOracle",
             "TerminateBundleOracle"
@@ -16133,7 +16133,7 @@
         {
           "kind": "fn",
           "name": "terminate_bundle_at",
-          "line": 900,
+          "line": 902,
           "called": [
             "Err",
             "LogIndex",
@@ -16150,7 +16150,7 @@
         {
           "kind": "enum",
           "name": "HonestMoveError",
-          "line": 944,
+          "line": 946,
           "called": [
             "LogIndex",
             "error"
@@ -16159,7 +16159,7 @@
         {
           "kind": "enum",
           "name": "HonestMove",
-          "line": 959,
+          "line": 961,
           "called": [
             "Claim",
             "StateCommit"
@@ -16168,13 +16168,13 @@
         {
           "kind": "impl",
           "name": "HonestMove",
-          "line": 979,
+          "line": 981,
           "called": []
         },
         {
           "kind": "fn",
           "name": "to_transition",
-          "line": 984,
+          "line": 986,
           "called": [
             "GameTransition"
           ]
@@ -16182,7 +16182,7 @@
         {
           "kind": "fn",
           "name": "compute_next_move",
-          "line": 1015,
+          "line": 1017,
           "called": [
             "Claim",
             "GameState",
@@ -16201,7 +16201,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1083,
+          "line": 1085,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16219,7 +16219,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 1087,
+          "line": 1089,
           "called": [
             "StateCommit",
             "seed"
@@ -16228,7 +16228,7 @@
         {
           "kind": "fn",
           "name": "commit_at_retrying",
-          "line": 1103,
+          "line": 1105,
           "called": [
             "StateCommit",
             "_",
@@ -16238,7 +16238,7 @@
         {
           "kind": "fn",
           "name": "fresh_game",
-          "line": 1113,
+          "line": 1115,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16252,7 +16252,7 @@
         {
           "kind": "fn",
           "name": "no_move_when_not_in_progress",
-          "line": 1139,
+          "line": 1141,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -16261,7 +16261,7 @@
         {
           "kind": "fn",
           "name": "no_move_when_not_my_turn",
-          "line": 1149,
+          "line": 1151,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -16270,7 +16270,7 @@
         {
           "kind": "fn",
           "name": "submit_truthful_midpoint",
-          "line": 1158,
+          "line": 1160,
           "called": [
             "commit",
             "compute_next_move",
@@ -16281,7 +16281,7 @@
         {
           "kind": "fn",
           "name": "submit_truth_missing_errors",
-          "line": 1174,
+          "line": 1176,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -16290,7 +16290,7 @@
         {
           "kind": "fn",
           "name": "respond_agree_when_midpoint_truthful",
-          "line": 1186,
+          "line": 1188,
           "called": [
             "Claim",
             "commit",
@@ -16302,7 +16302,7 @@
         {
           "kind": "fn",
           "name": "respond_disagree_when_midpoint_wrong",
-          "line": 1200,
+          "line": 1202,
           "called": [
             "Claim",
             "commit",
@@ -16314,7 +16314,7 @@
         {
           "kind": "fn",
           "name": "respond_truth_missing_errors",
-          "line": 1214,
+          "line": 1216,
           "called": [
             "Claim",
             "commit",
@@ -16325,7 +16325,7 @@
         {
           "kind": "fn",
           "name": "terminate_on_single_step",
-          "line": 1231,
+          "line": 1233,
           "called": [
             "commit",
             "compute_next_move",
@@ -16336,7 +16336,7 @@
         {
           "kind": "fn",
           "name": "terminate_truth_missing_errors",
-          "line": 1248,
+          "line": 1250,
           "called": [
             "compute_next_move",
             "fresh_game"
@@ -16345,7 +16345,7 @@
         {
           "kind": "fn",
           "name": "honest_move_to_transition_projection",
-          "line": 1257,
+          "line": 1259,
           "called": [
             "Claim",
             "_",
@@ -16356,7 +16356,7 @@
         {
           "kind": "fn",
           "name": "memory_oracle_round_trip",
-          "line": 1287,
+          "line": 1289,
           "called": [
             "commit",
             "commit_at",
@@ -16368,7 +16368,7 @@
         {
           "kind": "fn",
           "name": "end_to_end_honest_challenger_narrows_against_invalid_root",
-          "line": 1307,
+          "line": 1309,
           "called": [
             "Claim",
             "DisputedRange",
@@ -16389,7 +16389,7 @@
         {
           "kind": "fn",
           "name": "truth_oracle_is_object_safe",
-          "line": 1380,
+          "line": 1382,
           "called": [
             "TruthOracle",
             "commit",
@@ -16400,7 +16400,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_parses_mock_knomosis_output",
-          "line": 1391,
+          "line": 1393,
           "called": [
             "b",
             "commit_at_retrying",
@@ -16412,7 +16412,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_on_failure",
-          "line": 1429,
+          "line": 1431,
           "called": [
             "b",
             "commit_at",
@@ -16424,7 +16424,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_returns_none_for_missing_binary",
-          "line": 1454,
+          "line": 1456,
           "called": [
             "commit_at"
           ]
@@ -16432,7 +16432,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_with_flag_passes_through",
-          "line": 1468,
+          "line": 1470,
           "called": [
             "b",
             "clone",
@@ -16446,7 +16446,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_timeout_kills_hung_knomosis",
-          "line": 1514,
+          "line": 1516,
           "called": [
             "b",
             "commit_at",
@@ -16459,7 +16459,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_stdout_cap_rejects_oversize_output",
-          "line": 1561,
+          "line": 1563,
           "called": [
             "b",
             "commit_at",
@@ -16472,7 +16472,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_does_not_deadlock_on_large_stdout",
-          "line": 1614,
+          "line": 1616,
           "called": [
             "b",
             "commit_at",
@@ -16484,7 +16484,7 @@
         {
           "kind": "fn",
           "name": "subprocess_oracle_drain_timeout_handles_orphan_pipe",
-          "line": 1665,
+          "line": 1667,
           "called": [
             "b",
             "commit_at",
@@ -16495,7 +16495,7 @@
         {
           "kind": "mod",
           "name": "terminate_bundle_tests",
-          "line": 1711,
+          "line": 1713,
           "called": [
             "MAX_TERMINATE_BUNDLE_JSON_BYTES",
             "MemoryTerminateBundleOracle",
@@ -16508,7 +16508,7 @@
         {
           "kind": "fn",
           "name": "sample_bundle",
-          "line": 1718,
+          "line": 1720,
           "called": [
             "TerminateBundle",
             "signer"
@@ -16517,7 +16517,7 @@
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_missed_default",
-          "line": 1732,
+          "line": 1734,
           "called": [
             "Err",
             "terminate_bundle_at"
@@ -16526,7 +16526,7 @@
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_roundtrip",
-          "line": 1744,
+          "line": 1746,
           "called": [
             "clone",
             "insert",
@@ -16539,7 +16539,7 @@
         {
           "kind": "fn",
           "name": "memory_bundle_oracle_overwrite",
-          "line": 1757,
+          "line": 1759,
           "called": [
             "clone",
             "insert",
@@ -16551,7 +16551,7 @@
         {
           "kind": "fn",
           "name": "box_dyn_terminate_oracle_dispatches",
-          "line": 1772,
+          "line": 1774,
           "called": [
             "TerminateBundleOracle",
             "clone",
@@ -16563,7 +16563,7 @@
         {
           "kind": "fn",
           "name": "parse_minimal_bundle_round_trip",
-          "line": 1783,
+          "line": 1785,
           "called": [
             "parse_terminate_bundle_json",
             "sample_bundle"
@@ -16572,7 +16572,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_oversize_json",
-          "line": 1792,
+          "line": 1794,
           "called": [
             "MAX_TERMINATE_BUNDLE_JSON_BYTES",
             "parse_terminate_bundle_json"
@@ -16581,7 +16581,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_malformed_json",
-          "line": 1800,
+          "line": 1802,
           "called": [
             "parse_terminate_bundle_json"
           ]
@@ -16589,7 +16589,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_missing_fields",
-          "line": 1807,
+          "line": 1809,
           "called": [
             "parse_terminate_bundle_json"
           ]
@@ -16597,7 +16597,7 @@
         {
           "kind": "fn",
           "name": "parse_hex_action_fields",
-          "line": 1815,
+          "line": 1817,
           "called": [
             "parse_terminate_bundle_json"
           ]
@@ -16605,7 +16605,7 @@
         {
           "kind": "fn",
           "name": "parse_rejects_oversize_cell_proof_count",
-          "line": 1831,
+          "line": 1833,
           "called": [
             "CellProof",
             "TerminateBundle",
@@ -16618,7 +16618,7 @@
         {
           "kind": "fn",
           "name": "serde_round_trip_equality",
-          "line": 1862,
+          "line": 1864,
           "called": [
             "TerminateBundle",
             "sample_bundle"
@@ -16627,7 +16627,7 @@
         {
           "kind": "fn",
           "name": "lean_emitted_json_compatible_with_rust_construction",
-          "line": 1872,
+          "line": 1874,
           "called": [
             "len",
             "parse_terminate_bundle_json",

@@ -494,6 +494,10 @@ The Genesis Plan promises a small set of type-level guarantees
 | GP.7.2 | Gas-pool outflow capped | `gasPoolPolicy_permits_transfer_iff` | `Bridge/GasPoolPolicy.lean` |
 | GP.7.3 | Per-resource pool drain bound | `pool_drain_bounded_by_action_count_per_resource` | `Bridge/PoolDrainBound.lean` |
 | GP.11.6 | AMM reserve outflow restricted | `ammReservePolicy_permits_iff` | `Bridge/AmmReservePolicy.lean` |
+| GP.11.8 | AMM state committed to bridge | `bridgeState_commit_includes_ammState` | `FaultProof/Commit.lean` |
+| GP.11.8 | v1.2 backward compatibility | `bridgeState_commit_extends_v1_2` | `FaultProof/Commit.lean` |
+| GP.11.8 | Encoding factoring | `bridgeState_encode_factored` | `FaultProof/Commit.lean` |
+| GP.11.8 | AMM genesis suffix const | `bridgeState_amm_genesis_suffix_const` | `FaultProof/Commit.lean` |
 | H | Bisection convergence | `bisection_converges_after_enough_rounds` | `FaultProof/Convergence.lean` |
 | H | Honest challenger wins | `honest_challenger_wins_against_invalid_state_root` | `FaultProof/Settlement.lean` |
 | SC.1 | SMT cell-proof soundness | `smtCellProof_sound_under_collision_free` | `FaultProof/Smt.lean` |
@@ -547,7 +551,7 @@ work units.  Status:
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Track A complete; Tracks B–D future |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–7 complete) |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–8 complete) |
 | AR | Audit remediation | Complete |
 | EI | Encoder injectivity | Complete |
 | 7 | Advanced capabilities | Not started |
@@ -611,9 +615,9 @@ at the current build tag:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~2 968 | ~148 | `lake test` |
+| Lean | ~2 990 | ~149 | `lake test` |
 | Rust | ~1 950 | across 11 crates | `cargo test --workspace` |
-| Solidity | ~774 passed | 20+ forge suites | `cd solidity && forge test` |
+| Solidity | ~791 passed | 20+ forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -622,15 +626,16 @@ full catalogue):
 
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
-- `faultproof-stepvm-coherence` — 23-variant step-VM dispatcher
+- `faultproof-stepvm-coherence` — 24-variant step-VM dispatcher
   byte-equivalence (kinds 0–23).
-- `crosscheck-step-vm` — 258-entry cross-stack fixture corpus.
+- `crosscheck-step-vm` — 268-entry cross-stack fixture corpus.
 - `faultproof-smt` — SC.1 SMT cell-proof soundness.
 - `encoding-injectivity` — EI.2–EI.8 injectivity ladder.
 - `bridge-gas-pool-policy` — GP.7.2 gas-pool policy characterisation.
 - `bridge-pool-drain-bound` — GP.7.3 inductive pool-drain bound.
 - `bridge-amm-reserve-policy` — GP.11.6 AMM reserve policy.
 - `crosscheck-amm-swap` — GP.11.7 tri-stack AMM fixture corpus.
+- `faultproof-amm-commit` — GP.11.8 AMM state-root commitment integration.
 - `deployments-gas-pool-example` — GP.7.4 end-to-end genesis ratification.
 
 **Notable Rust crates by test count:**
@@ -710,6 +715,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.7.0–7.4 | Complete | Bridge-policy characterisation, reserved actors, `gasPoolPolicy`, inductive drain bound, genesis ratification + CLI |
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
+| GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
 
 ### Ethereum integration (Workstreams A–G)
 
@@ -718,7 +724,7 @@ Plan: `docs/planning/ethereum_integration_plan.md`
 All seven Lean-side workstreams complete.  Solidity surface:
 10 contracts + 6 libraries in `solidity/`.  Cross-stack: F.1.x
 equivalence corpus + SC.3 SMT cell-proof corpus + SVC step-VM
-corpus (258 entries / 158 happy).
+corpus (268 entries / 164 happy).
 
 ### Fault-proof migration (Workstream H)
 

@@ -455,10 +455,11 @@ pub(crate) struct _TerminateBundleCellProofDocsAnchor;
 /// Field encodings (matches the Lean emitter, Workstream SVC.3):
 ///
 ///   * `fixture_id` — operator-supplied identifier, free-form.
-///   * `action_kind` — 0..20 dispatcher byte (Solidity
+///   * `action_kind` — 0..23 dispatcher byte (Solidity
 ///     `actionKind` parameter; widened from 0..18 by Workstream
-///     GP — indices 19 (`DepositWithFee`) and 20
-///     (`TopUpActionBudget`)).
+///     GP — indices 19 (`DepositWithFee`), 20
+///     (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),
+///     22 (`ClaimBudgetRefund`), and 23 (`AmmSwap`)).
 ///   * `action_fields` — canonical byte layout the L1 `_stepXX`
 ///     decoder consumes.
 ///   * `signer` — the action's signer's `ActorId` (`u64`).
@@ -472,10 +473,11 @@ pub struct TerminateBundle {
     /// Operator-supplied identifier (e.g. `"log[7]"`).  Free-form;
     /// used for logging.
     pub fixture_id: String,
-    /// Action dispatcher byte (0..20 post-Workstream-GP) — the
+    /// Action dispatcher byte (0..23 post-Workstream-GP) — the
     /// Solidity `actionKind` argument.  The range widened from
-    /// 0..18 by Workstream GP — indices 19 (`DepositWithFee`)
-    /// and 20 (`TopUpActionBudget`).
+    /// 0..18 by Workstream GP — indices 19 (`DepositWithFee`),
+    /// 20 (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),
+    /// 22 (`ClaimBudgetRefund`), and 23 (`AmmSwap`).
     pub action_kind: u8,
     /// Canonical byte layout the L1 `_stepXX` decoder consumes.
     ///

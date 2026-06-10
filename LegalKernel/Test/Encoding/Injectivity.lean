@@ -1545,9 +1545,18 @@ def test_bridgeState_encode_injective_api : TestCase := {
         (∀ p ∈ bs₂.pending.toList,
           p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
         bs₁.nextWdId < 256 ^ 8 → bs₂.nextWdId < 256 ^ 8 →
+        bs₁.ammReserveEth < 256 ^ 8 → bs₂.ammReserveEth < 256 ^ 8 →
+        bs₁.ammReserveBold < 256 ^ 8 → bs₂.ammReserveBold < 256 ^ 8 →
+        bs₁.boldTvlCap < 256 ^ 8 → bs₂.boldTvlCap < 256 ^ 8 →
+        bs₁.boldTotalLockedValue < 256 ^ 8 → bs₂.boldTotalLockedValue < 256 ^ 8 →
         Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ →
         bs₁.consumed.Equiv bs₂.consumed ∧ bs₁.pending.Equiv bs₂.pending ∧
-        bs₁.nextWdId = bs₂.nextWdId :=
+        bs₁.nextWdId = bs₂.nextWdId ∧
+        bs₁.ammReserveEth = bs₂.ammReserveEth ∧
+        bs₁.ammReserveBold = bs₂.ammReserveBold ∧
+        bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
+        bs₁.boldTvlCap = bs₂.boldTvlCap ∧
+        bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue :=
       Bridge.BridgeState.encode_injective
     pure ()
 }
@@ -1577,7 +1586,12 @@ def test_extendedState_extEq_api : TestCase := {
           es₁.localPolicies.Equiv es₂.localPolicies ∧
           es₁.bridge.consumed.Equiv es₂.bridge.consumed ∧
           es₁.bridge.pending.Equiv es₂.bridge.pending ∧
-          es₁.bridge.nextWdId = es₂.bridge.nextWdId :=
+          es₁.bridge.nextWdId = es₂.bridge.nextWdId ∧
+          es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth ∧
+          es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold ∧
+          es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed ∧
+          es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap ∧
+          es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue :=
       fun _ _ => Iff.rfl
     pure ()
 }
