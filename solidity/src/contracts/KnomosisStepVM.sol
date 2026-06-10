@@ -161,6 +161,7 @@ contract KnomosisStepVM {
     error MissingCellProof(uint8 cellKind, uint256 keyA);
     error InsufficientBalance();
     error AmountMustBePositive();
+    error SameResourceSwap();
     error UnauthorizedSigner();
     error TooManyCellProofs();
     error MalformedCellValue();
@@ -1183,6 +1184,19 @@ contract KnomosisStepVM {
     ///         amountOut | ammReserveActor`.  The swap credits
     ///         `amountIn` to the reserve actor's `fromResource` balance
     ///         and debits `amountOut` from its `toResource` balance.
+    ///
+    ///         Mirrors Lean's `Laws.ammSwap` preconditions
+    ///         (`getBalance toResource ammReserveActor >= amountOut`,
+    ///         `fromResource != toResource`, `amountIn > 0`).  Without
+    ///         the `amountIn > 0` and `fromResource != toResource`
+    ///         checks, a zero-input or same-resource swap passes
+    ///         Solidity but is a no-op on Lean (the kernel rejects the
+    ///         precondition, so `step_impl` leaves the state unchanged
+    ///         and the honest post-commit equals the pre-commit) — a
+    ///         cross-stack divergence the bisection game would settle
+    ///         incorrectly.  `fromResource == toResource` additionally
+    ///         aliases the two reserve cells, so the sequential
+    ///         credit/debit writes would collide.
     function _stepAmmSwap(
         bytes32 preStateCommit,
         bytes calldata actionFields,
@@ -1195,6 +1209,10 @@ contract KnomosisStepVM {
         uint256 amountIn       = uint256(_decodeUint64BE(actionFields, 16));
         uint256 amountOut      = uint256(_decodeUint64BE(actionFields, 24));
         uint64 ammReserveActor = _decodeUint64BE(actionFields, 32);
+
+        // Lean `Laws.ammSwap` preconditions (see NatSpec above).
+        if (amountIn == 0) revert AmountMustBePositive();
+        if (fromResource == toResource) revert SameResourceSwap();
 
         uint256 fromProofIdx = _findBalanceCellProof(cellProofs, fromResource, ammReserveActor);
         uint256 fromBalance  = _decodeNat(cellProofs[fromProofIdx].cellValue);

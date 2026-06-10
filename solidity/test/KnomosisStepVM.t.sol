@@ -1008,6 +1008,43 @@ contract KnomosisStepVMTest is Test {
             FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(0), proofs);
     }
 
+    /// @notice GP.11.8 cross-stack: a zero `amountIn` swap must revert
+    ///         per Lean's `Laws.ammSwap` precondition `amountIn > 0`.
+    ///         Without this, a zero-input swap passes Solidity but
+    ///         no-ops on Lean — a bisection-game divergence.
+    function test_ammSwap_rejects_zero_amountIn() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 1, 3, _encodeCbeNat(800), FIXTURE_PRE_COMMIT);
+
+        // amountIn = 0, fromResource=0 != toResource=1.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(1), uint64(0), uint64(200), uint64(3));
+        vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
+    }
+
+    /// @notice GP.11.8 cross-stack: `fromResource == toResource` must
+    ///         revert per Lean's `Laws.ammSwap` precondition
+    ///         `fromResource != toResource`.  Same-resource swaps alias
+    ///         the two reserve cells (the credit/debit writes collide)
+    ///         and no-op on Lean, so Solidity must reject them too.
+    function test_ammSwap_rejects_same_resource() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);
+
+        // fromResource == toResource == 0, amountIn=100 > 0.
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(0), uint64(100), uint64(50), uint64(3));
+        vm.expectRevert(KnomosisStepVM.SameResourceSwap.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
+    }
+
     /// @notice GP.11.7: toBalance < amountOut must revert with
     ///         InsufficientBalance (underflow guard).
     function test_ammSwap_rejects_insufficient_balance() public {

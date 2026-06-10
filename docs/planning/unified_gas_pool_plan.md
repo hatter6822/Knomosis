@@ -8068,14 +8068,23 @@ sub-WU table above is the implementation roadmap.
     step-VM:** `KnomosisStepVM.sol` gains `AmmSwap` (kind 23) with
     `_stepAmmSwap` (5 uint64BE action fields, 2 balance cell proofs,
     keccak256 commit matching Lean's `stepCommitAmmSwap`).
-    (4) **Cross-stack corpus:** fixture generator adds 10 ammSwap
-    entries (6 happy + 4 adversarial), widening corpus from 258 to
-    268 entries; Solidity consumer tests updated (164 happy / 104
-    adversarial, kind range 0..23); 4 ammSwap unit tests added
-    (happy path, exact drain, short fields, insufficient balance).
-    `forge test` 789 passed; `lake test` 2990 (149 suites); 19
-    acceptance tests in `faultproof-amm-commit` suite.  No kernel
-    TCB delta, no new
+    `_stepAmmSwap` enforces the full `Laws.ammSwap` precondition set
+    to preserve cross-stack coherence: `amountIn > 0` (reverts
+    `AmountMustBePositive`), `fromResource != toResource` (reverts
+    `SameResourceSwap`), and `toBalance >= amountOut` (reverts
+    `InsufficientBalance`).  Without the first two, a zero-input or
+    same-resource swap would mutate the Solidity commit while the
+    Lean kernel no-ops (`impl_noop_if_not_pre`), letting the
+    bisection game settle a malformed step incorrectly — the same
+    discipline `_stepBurn` / `_stepReward` / `_stepProportionalDilute`
+    already follow.  (4) **Cross-stack corpus:** fixture generator
+    adds 10 ammSwap entries (6 happy + 4 adversarial), widening
+    corpus from 258 to 268 entries; Solidity consumer tests updated
+    (164 happy / 104 adversarial, kind range 0..23); 6 ammSwap unit
+    tests added (happy path, exact drain, short fields, insufficient
+    balance, zero amountIn, same resource).  `forge test` 791 passed;
+    `lake test` 2990 (149 suites); 19 acceptance tests in
+    `faultproof-amm-commit` suite.  No kernel TCB delta, no new
     axioms.
 
 #### WU GP.11.9: Gas-cost benchmarks for v1.3 operations (v1.4)

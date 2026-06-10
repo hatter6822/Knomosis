@@ -617,7 +617,7 @@ at the current build tag:
 |---------|-------|--------|-----------------|
 | Lean | ~2 990 | ~149 | `lake test` |
 | Rust | ~1 950 | across 11 crates | `cargo test --workspace` |
-| Solidity | ~789 passed | 20+ forge suites | `cd solidity && forge test` |
+| Solidity | ~791 passed | 20+ forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
 
