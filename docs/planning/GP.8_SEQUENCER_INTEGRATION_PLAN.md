@@ -1967,13 +1967,17 @@ original GP.8.3 lacked because FQ was a separate document.
        decision tree (redeploy via `KnomosisMigration` vs degraded mode
        with external L1 DEXes for ETH↔BOLD, documenting the MEV-cost
        increase per claim).
-    5. **Gas-cost projections.**  Baseline numbers from GP.11.9
-       (depositETH ~80–120k; depositBold ~140–180k; ammSwap ETH→BOLD
-       ~110–140k; BOLD→ETH ~140–170k; closeBoldCircuit ~30–40k;
-       closeBoldCircuitIfAnyLiquityBranchShutdown ~50–70k close path, up
-       to ~100k for the no-shutdown 3-branch read).  UI guidance:
-       estimated bridge-gas cost at current gas price by chosen fee
-       currency.
+    5. **Gas-cost projections.**  MEASURED baseline numbers from
+       GP.11.9 (landed — `docs/gas_pool_runbook.md` §9.2 is the
+       canonical table, CI-gated via
+       `solidity/test/BenchmarkGasV1_3.gas-snapshot`).  End-user
+       envelopes (execution baseline + 21k intrinsic):
+       depositETHWithFee ~66–83k; depositBoldWithFee ~87–104k; ammSwap
+       ETH→BOLD ~75–92k; BOLD→ETH ~78k; closeBoldCircuit ~53k;
+       closeBoldCircuitIfAnyLiquityBranchShutdown ~59k (ETH-branch
+       fast close) to ~74k (last-branch close), ~55k for the
+       no-shutdown 3-branch probe.  UI guidance: estimated bridge-gas
+       cost at current gas price by chosen fee currency.
     6. **Delegated-top-up deployment guidance.**  Recipients opt in via
        `Action.declareLocalPolicy` with an `allowTopUpFrom` clause
        (default-deny, GP.3.4); the service-provider integration pattern;

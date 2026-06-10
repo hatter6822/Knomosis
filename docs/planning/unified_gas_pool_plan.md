@@ -6097,13 +6097,19 @@ does what, in what file, in what order).
            document expected MEV cost increase per claim.
 
     5. **Gas-cost projections** (v1.4):
-       * Reference baseline numbers from GP.11.9:
-         depositETH ~80-120k, depositBold ~140-180k,
-         ammSwap ETH→BOLD ~110-140k, ammSwap BOLD→ETH
-         ~140-170k, closeBoldCircuit ~30-40k,
-         closeBoldCircuitIfAnyLiquityBranchShutdown ~50-70k
-         (close path, ETH-branch fast case; up to ~100k for the
-         no-shutdown 3-branch read path).
+       * Reference the MEASURED baseline numbers from GP.11.9
+         (now landed — `docs/gas_pool_runbook.md` §9.2 is the
+         canonical table; the committed CI-gated baseline is
+         `solidity/test/BenchmarkGasV1_3.gas-snapshot`).
+         End-user envelopes (execution baseline + 21k intrinsic):
+         depositETHWithFee ~66-83k, depositBoldWithFee ~87-104k,
+         ammSwap ETH→BOLD ~75-92k, ammSwap BOLD→ETH ~78k,
+         closeBoldCircuit ~53k,
+         closeBoldCircuitIfAnyLiquityBranchShutdown ~59k
+         (ETH-branch fast close) to ~74k (last-branch close);
+         ~55k for the no-shutdown 3-branch probe.  (These
+         supersede the pre-measurement sketch envelopes that
+         previously stood here.)
        * UI guidance: display estimated bridge-gas cost at
          current gas price, factoring in user's chosen fee
          currency.
@@ -8123,6 +8129,31 @@ sub-WU table above is the implementation roadmap.
     documented; CI gate added.
   * **Dependencies.**  GP.5.1, GP.5.4, GP.5.5, GP.11.3.
   * **Estimated effort.**  ~8 hours.
+  * **Status.**  Complete (v0.5.8, 2026-06-10).
+    `solidity/test/BenchmarkGasV1_3.t.sol` lands 15 deterministic
+    pure-call benchmarks (no fuzz; scenario state staged per-contract
+    in `setUp`; companion `test_sanity_*` tests pin every scenario
+    assumption) covering the six planned operations plus the
+    operator-surface extras (`openBoldCircuit`, `setBoldTvlCap`,
+    `emergencyDisableAmm`) and a plain-`depositETH` v1.0 reference
+    row.  Committed baseline:
+    `solidity/test/BenchmarkGasV1_3.gas-snapshot`, regenerated via
+    `make snapshot-gas` and gated in CI by `make snapshot-gas-check`
+    on every `solidity/**` PR.  The gate uses the *gating* form of the
+    sketched `forge snapshot --diff`: `forge snapshot --check
+    --tolerance 5` (`--diff` prints but never fails), scoped by a
+    shared `--match-contract BenchmarkGasV1_3 --match-test test_gas_`
+    filter so generation and check always cover the same set; >5%
+    deviation in either direction fails (improvements are ratcheted
+    into the baseline).  Measured end-user estimates (baseline +
+    21k intrinsic) land inside or below every sketched envelope —
+    `depositETHWithFee` ~83k (sketch 80–120k), `depositBoldWithFee`
+    ~104k (sketch over-estimated `transferFrom` at 140–180k), ammSwap
+    ~75–92k, `closeBoldCircuit` ~53k, auto-trigger close ~59–74k,
+    no-shutdown probe ~55k.  Baseline table + $-cost rationale +
+    regeneration discipline documented in `docs/gas_pool_runbook.md`
+    §9 ("at 30 gwei and $3 000/ETH a typical first fee-split deposit
+    costs ~$7.5 in L1 gas").  `forge test` 815 passed (24 new tests).
 
 #### WU GP.11.10: AMM disaster recovery (v1.4)
 

@@ -14,6 +14,12 @@ lib/forge-std/
 test/fixtures/*.json
 !test/fixtures/.gitkeep
 
+# Bare `forge snapshot` output (a full-suite snapshot at the default
+# path, including run-to-run-noisy fuzz entries).  The committed GP.11.9
+# benchmark baseline lives at `test/BenchmarkGasV1_3.gas-snapshot` and is
+# regenerated only via `make snapshot-gas`.
+.gas-snapshot
+
 # Editor / OS noise
 .vscode/
 .idea/

@@ -36,6 +36,39 @@ coverage:
 coverage-lcov:
 	forge coverage --ir-minimum --report lcov
 
+# Workstream GP.11.9 — gas-cost benchmarks for the v1.3 L1 operations.
+#
+# The deterministic `BenchmarkGasV1_3` suite (test/BenchmarkGasV1_3.t.sol)
+# pins per-operation gas baselines in the committed snapshot below; the
+# operator-facing numbers + $-cost rationale live in
+# `docs/gas_pool_runbook.md` ("Gas economics").
+#
+#   make snapshot-gas        — regenerate the committed baseline (run after
+#                              any deliberate gas-affecting change, and
+#                              update the runbook table in the same PR)
+#   make snapshot-gas-check  — CI gate: re-runs the suite and fails on any
+#                              per-benchmark deviation beyond 5% in either
+#                              direction (regressions fail outright;
+#                              improvements beyond 5% must be ratcheted
+#                              into the baseline via `make snapshot-gas`)
+#
+# The filter is shared by both targets so the generated and checked test
+# sets are always identical: only the pure-call `test_gas_*` benchmarks
+# enter the snapshot; the behavioural `test_sanity_*` companions run under
+# plain `forge test` only.  Baselines are stable for the pinned
+# (forge 1.7.0, solc 0.8.20, foundry.toml) toolchain; regenerating with a
+# different toolchain may shift numbers and fail the check.
+SNAPSHOT_GAS_FILE   = test/BenchmarkGasV1_3.gas-snapshot
+SNAPSHOT_GAS_FILTER = --match-contract BenchmarkGasV1_3 --match-test test_gas_
+
+.PHONY: snapshot-gas
+snapshot-gas:
+	forge snapshot $(SNAPSHOT_GAS_FILTER) --snap $(SNAPSHOT_GAS_FILE)
+
+.PHONY: snapshot-gas-check
+snapshot-gas-check:
+	forge snapshot $(SNAPSHOT_GAS_FILTER) --check $(SNAPSHOT_GAS_FILE) --tolerance 5
+
 # Workstream GP.5.2 — constitutional fee-split-cap audit gate.
 # Pure grep/sed/awk; no solc/forge dependency.  Fails if MAX_FEE_BPS_CAP,
 # MIN_WEI_PER_BUDGET_UNIT, or MAX_BUDGET_PER_DEPOSIT drift from their

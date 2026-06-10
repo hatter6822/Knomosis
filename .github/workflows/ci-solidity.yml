@@ -25,7 +25,11 @@
 #      half of the cap protection
 #      (`BridgeFeeSplit.t.sol::test_compileTimeCaps_pinned` and the
 #      constructor-guard revert tests), alongside every other forge
-#      suite.
+#      suite.  After the test run, the GP.11.9 gas-benchmark gate
+#      (`make snapshot-gas-check`) re-runs the deterministic
+#      `BenchmarkGasV1_3` suite and fails the job if any benchmark
+#      deviates more than 5% from the committed baseline
+#      (`solidity/test/BenchmarkGasV1_3.gas-snapshot`).
 #
 # Keeping the two jobs separate means a cap drift is caught by the fast,
 # toolchain-free `caps-audit` job even while the heavier `forge` job is
@@ -146,3 +150,17 @@ jobs:
 
       - name: forge test
         run: forge test
+
+      - name: Gas-benchmark regression gate (GP.11.9)
+        # Re-runs the deterministic BenchmarkGasV1_3 suite and compares
+        # each benchmark against the committed baseline
+        # (test/BenchmarkGasV1_3.gas-snapshot), failing on any deviation
+        # beyond 5%.  A deliberate gas change regenerates the baseline
+        # with `make snapshot-gas` (and updates the runbook table) in the
+        # same PR.  Pinned to the default profile so the comparison uses
+        # exactly the settings the committed baseline was generated with
+        # (the benchmarks are fuzz-free, so the profiles agree anyway —
+        # this pin just makes that independence explicit).
+        env:
+          FOUNDRY_PROFILE: default
+        run: make snapshot-gas-check
