@@ -724,7 +724,7 @@ Plan: `docs/planning/ethereum_integration_plan.md`
 All seven Lean-side workstreams complete.  Solidity surface:
 10 contracts + 6 libraries in `solidity/`.  Cross-stack: F.1.x
 equivalence corpus + SC.3 SMT cell-proof corpus + SVC step-VM
-corpus (258 entries / 158 happy).
+corpus (268 entries / 164 happy).
 
 ### Fault-proof migration (Workstream H)
 
