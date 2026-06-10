@@ -14,10 +14,19 @@ lib/forge-std/
 test/fixtures/*.json
 !test/fixtures/.gitkeep
 
-# Bare `forge snapshot` output (a full-suite snapshot at the default
-# path, including run-to-run-noisy fuzz entries).  The committed GP.11.9
-# benchmark baseline lives at `test/BenchmarkGasV1_3.gas-snapshot` and is
-# regenerated only via `make snapshot-gas`.
+# GP.11.9 gas-benchmark scratch output.
+#
+# `snapshots/` is forge's cheatcode gas-snapshot scratch dir
+# (`vm.snapshotGasLastCall` / `vm.snapshotValue`); ANY forge run that
+# includes the benchmark contracts rewrites it, and a PARTIAL run rewrites
+# it with only the entries that ran — so it must never be committed.  The
+# committed baseline is `test/BenchmarkGasV1_3.gas-baseline.json`,
+# promoted from a verified full run only via `make snapshot-gas`.
+#
+# `.gas-snapshot` is bare `forge snapshot` output (a full-suite per-test
+# snapshot, including run-to-run-noisy fuzz entries) — unrelated to the
+# GP.11.9 flow and equally non-committable.
+snapshots/
 .gas-snapshot
 
 # Editor / OS noise

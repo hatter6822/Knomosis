@@ -46,17 +46,22 @@ solidity/
 │       ├── SmtCellVerifier.sol  — state-cell SMT verifier (SC.2, depth 256)
 │       ├── CREATE3.sol          — proxy-factory deploy for cyclic refs
 │       └── StepVMMerkle.sol     — per-cell proof helpers (H + SC.2)
+├── scripts/
+│   ├── audit_compile_time_caps*.sh   — GP.5.2 cap gate + self-test
+│   ├── check_gas_baseline.py         — GP.11.9 gas-regression gate
+│   ├── generate_gas_runbook_table.py — GP.11.9 runbook-table generator
+│   └── vendor-deps.sh                — pinned dependency vendoring
 └── test/
     ├── *.t.sol                  — per-contract unit suites (incl. the
     │                               GP.11.9 BenchmarkGasV1_3 gas benchmarks)
-    ├── BenchmarkGasV1_3.gas-snapshot — committed GP.11.9 gas baseline
+    ├── BenchmarkGasV1_3.gas-baseline.json — committed GP.11.9 gas baseline
     ├── CrossCheck/*.t.sol       — cross-stack suites (Lean ↔ Solidity)
     └── utils/                   — Deployer.sol (CREATE3 harness),
                                     MockERC20.sol, MockBold.sol,
-                                    MockLiquityV2.sol
+                                    MockBoldOz.sol, MockLiquityV2.sol
 ```
 
-Total: **~815 forge tests passing across 53 suites** (`forge test`;
+Total: **~825 forge tests passing across 55 suites** (`forge test`;
 fuzz and property tests additionally report per-test run counts). A
 subset is conditionally skipped when the production keccak256 binding
 is not linked (the cross-check suites probe `isKeccak256Linked` on
@@ -86,7 +91,8 @@ make test-cross-stack             # CrossCheck/ only
 make audit-caps                   # GP.5.2 fee-split-cap audit gate
 make audit-caps-selftest          # self-test: prove the gate trips
 make snapshot-gas-check           # GP.11.9 gas-benchmark regression gate
-make snapshot-gas                 # regenerate the GP.11.9 gas baseline
+make snapshot-gas                 # regenerate the GP.11.9 baseline + runbook table
+make snapshot-gas-selftest        # self-tests for the GP.11.9 gate + generator
 make testnet-acceptance-dryrun    # F.3 testnet acceptance dry-run
 ```
 
@@ -108,9 +114,13 @@ installs the pinned Foundry + solc, vendors dependencies, and runs
 `[profile.ci]` (`FOUNDRY_PROFILE=ci`, fuzz = 1000), followed by the
 GP.11.9 gas-benchmark regression gate (`make snapshot-gas-check` —
 re-runs the deterministic `BenchmarkGasV1_3` suite and fails on any
-deviation beyond 5% from the committed
-`test/BenchmarkGasV1_3.gas-snapshot` baseline).  The split keeps the
-fast cap-drift tripwire independent of the slower contract build.
+per-benchmark gas increase beyond 5% over the committed
+`test/BenchmarkGasV1_3.gas-baseline.json`, on benchmark-set drift, or
+on a runbook table out of sync with the baseline; improvements beyond
+5% warn).  The gate's behavioural self-tests
+(`make snapshot-gas-selftest`; pure python3) run in the fast
+`caps-audit` job.  The split keeps the fast tripwires independent of
+the slower contract build.
 
 ## Immutability discipline
 
@@ -229,7 +239,7 @@ The L1 escrow for deposits and withdrawals.
 | GP.11.1 | `ammReserveEth()` / `ammReserveBold()` / `ammSeedRatioBps()` — embedded-AMM L1 state scaffold (reserves + immutable seed ratio) |
 | GP.11.2 | deposit-side AMM seeding — `_registerDepositWithFee` routes `floor(poolAmount * ammSeedRatioBps / 10000)` of each fee-split deposit into the matching reserve; the split is carried in `DepositWithFeeInitiated.ammSeedAmount` and bound in the `receiptHash` |
 | GP.11.3 | `ammSwap(uint64 fromResource, uint256 amountIn, uint256 minAmountOut, uint256 deadline)` — permissionless constant-product ETH↔BOLD swap over the embedded reserves; `emergencyDisableAmm()` — one-way AMM kill switch (`ammDisasterRecovery` role) |
-| GP.11.9 | gas-cost benchmarks — `test/BenchmarkGasV1_3.t.sol` + committed `test/BenchmarkGasV1_3.gas-snapshot` baseline + `make snapshot-gas{,-check}` + 5%-tolerance CI gate |
+| GP.11.9 | gas-cost benchmarks — `test/BenchmarkGasV1_3.t.sol` (per-call gas + exact calldata cost) + committed `test/BenchmarkGasV1_3.gas-baseline.json` + `make snapshot-gas{,-check,-selftest}` + one-sided >5%-increase CI gate + generated runbook table |
 
 **GP.5.1 fee-split deposit.**  `depositETHWithFee(chosenFeeBps)` lets
 the caller pick a fee in basis points within the deployment's
@@ -492,21 +502,36 @@ mock in `test/utils/MockBold.sol`.  The operator runbook
 circuit and the branch-shutdown signal calibration.
 
 **GP.11.9 gas-cost benchmarks.**  `test/BenchmarkGasV1_3.t.sol` pins a
-deterministic gas baseline for every v1.3 L1 operation
-(`depositETHWithFee` / `depositBoldWithFee` in first-deposit and
-repeat shapes, `ammSwap` in both directions, the BOLD circuit-breaker
-surface, the Liquity auto-trigger's fast / worst / no-shutdown paths,
-and `emergencyDisableAmm`), plus a plain-`depositETH` v1.0 reference
-row.  Each benchmark is a pure call from scenario state staged in
-`setUp` (no fuzz, so the snapshot is byte-stable on the pinned
-toolchain), with companion `test_sanity_*` tests pinning every
-scenario assumption.  The committed baseline
-(`test/BenchmarkGasV1_3.gas-snapshot`) is regenerated via
-`make snapshot-gas` and enforced by the `make snapshot-gas-check` CI
-gate (fails on any per-benchmark deviation beyond 5%, in either
-direction).  Operator-facing numbers and the $-cost methodology live
-in `docs/gas_pool_runbook.md` §9; a deliberate gas change updates the
-baseline AND that table in the same PR.
+deterministic gas baseline for every v1.3 L1 operation and the
+round-trip exit legs: `depositETHWithFee` / `depositBoldWithFee` in
+first-deposit and repeat shapes, the BOLD `approve` prerequisite,
+`ammSwap` in both directions and BOTH approval shapes (exact, and
+infinite — measured against the OZ-faithful `MockBoldOz`, whose
+`_spendAllowance` skips the allowance write at max allowance exactly
+like production BOLD), migration-wired variants (a deployment that
+pre-wires a `KnomosisMigration` successor pays an external
+`activated()` read per `circuitOpen` operation and per swap — measured
+at ~3.1k gas), the BOLD circuit-breaker surface, the Liquity
+auto-trigger's fast / worst / no-shutdown paths, `emergencyDisableAmm`,
+`withdrawWithProof` on both legs (canonical 64-sibling SMT proof), and
+a plain-`depositETH` v1.0 reference row — 21 benchmarks across 9
+scenario contracts.  Each benchmark records PER-CALL gas
+(`vm.snapshotGasLastCall`: the call frame only, no harness overhead —
+deltas land exactly on EVM constants, e.g. the first-interaction
+premium is precisely the 17 100-gas zero→non-zero SSTORE surcharge)
+plus the exact EIP-2028 calldata cost of its canonical calldata
+(`vm.snapshotValue`, `<name>.calldata_gas`), with companion
+`test_sanity_*` tests pinning every scenario assumption.  The
+committed baseline (`test/BenchmarkGasV1_3.gas-baseline.json`) and the
+runbook §9.2 table generated from it
+(`scripts/generate_gas_runbook_table.py`) are regenerated together by
+`make snapshot-gas`; the `make snapshot-gas-check` CI gate
+(`scripts/check_gas_baseline.py`) fails on any per-benchmark gas
+increase beyond 5% (one-sided, per the GP.11.9 plan rule), on
+benchmark-set drift, and on a stale runbook table, while improvements
+beyond 5% warn (ratchet them in).  Both scripts carry behavioural
+self-tests (`make snapshot-gas-selftest`).  Operator-facing numbers
+and the $-cost methodology live in `docs/gas_pool_runbook.md` §9.
 
 ### `KnomosisDisputeVerifier.sol` (E.2)
 

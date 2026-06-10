@@ -1968,16 +1968,19 @@ original GP.8.3 lacked because FQ was a separate document.
        with external L1 DEXes for ETH↔BOLD, documenting the MEV-cost
        increase per claim).
     5. **Gas-cost projections.**  MEASURED baseline numbers from
-       GP.11.9 (landed — `docs/gas_pool_runbook.md` §9.2 is the
-       canonical table, CI-gated via
-       `solidity/test/BenchmarkGasV1_3.gas-snapshot`).  End-user
-       envelopes (execution baseline + 21k intrinsic):
-       depositETHWithFee ~66–83k; depositBoldWithFee ~87–104k; ammSwap
-       ETH→BOLD ~75–92k; BOLD→ETH ~78k; closeBoldCircuit ~53k;
-       closeBoldCircuitIfAnyLiquityBranchShutdown ~59k (ETH-branch
-       fast close) to ~74k (last-branch close), ~55k for the
-       no-shutdown 3-branch probe.  UI guidance: estimated bridge-gas
-       cost at current gas price by chosen fee currency.
+       GP.11.9 (landed — the generated table in
+       `docs/gas_pool_runbook.md` §9.2 is the canonical source,
+       CI-gated via `solidity/test/BenchmarkGasV1_3.gas-baseline.json`).
+       End-user envelopes (per-call execution + 21k intrinsic + exact
+       calldata): depositETHWithFee ~52–69k; depositBoldWithFee
+       ~85–102k; ammSwap ETH→BOLD ~61–79k; BOLD→ETH ~73–76k;
+       closeBoldCircuit ~45k; closeBoldCircuitIfAnyLiquityBranchShutdown
+       ~54k (ETH-branch fast close) to ~69k (last-branch close), ~47k
+       for the no-shutdown 3-branch keeper probe; migration-wired
+       deployments add ~3.1k per circuit-gated operation; the
+       withdrawWithProof exit legs ~864–881k (the round trip's
+       dominant cost).  UI guidance: estimated bridge-gas cost at
+       current gas price by chosen fee currency.
     6. **Delegated-top-up deployment guidance.**  Recipients opt in via
        `Action.declareLocalPolicy` with an `allowTopUpFrom` clause
        (default-deny, GP.3.4); the service-provider integration pattern;

@@ -334,120 +334,181 @@ See `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2 (design) and
 
 ## 9. Gas economics (v1.3 L1 operations; WU GP.11.9)
 
-Every new v1.3 L1 operation has a committed, CI-gated gas baseline so
-deployments can budget L1 costs, UIs can quote bridging fees, and
-review can spot performance regressions mechanically.
+Every v1.3 L1 operation — plus the `withdrawWithProof` exit legs that
+complete a user's round trip — has a committed, CI-gated gas baseline
+so deployments can budget L1 costs, UIs can quote bridging fees, and
+review catches performance regressions mechanically.
 
 ### 9.1 Where the numbers come from
 
 The deterministic forge suite
 `solidity/test/BenchmarkGasV1_3.t.sol` measures each operation as a
-pure call from a staged, steady-state scenario (pool pre-warmed, AMM
+single call from a staged, steady-state scenario (pool pre-warmed, AMM
 seeded to a realistic 15 ETH : 45 000 BOLD depth, fee 100 bps, the
-production-recommended `ammSeedRatioBps = 3000`).  The baseline file
-is `solidity/test/BenchmarkGasV1_3.gas-snapshot`:
+production-recommended `ammSeedRatioBps = 3000`, BOLD modelled by the
+real vendored OpenZeppelin ERC-20 so allowance semantics carry real
+costs).  Two values are recorded per benchmark:
+
+* **Execution gas** (`vm.snapshotGasLastCall`) — the gas consumed by
+  the call frame itself.  Test-harness overhead is excluded *by
+  construction*, and so is the harness's caller-side CALL accounting
+  (cold-account and value-transfer surcharges) — which a real
+  transaction does not pay either, because a transaction's target is
+  pre-warmed (EIP-2929) and top-level value transfers carry no CALL
+  surcharge.  The number is therefore what a user's transaction
+  actually executes.
+* **Calldata gas** (`<name>.calldata_gas`) — the exact EIP-2028
+  intrinsic cost (16/non-zero byte, 4/zero byte) of the canonical
+  calldata the benchmark sent.  This matters: a `withdrawWithProof`
+  carries a ~2.7 kB SMT proof costing ~37.9k in calldata alone, two
+  orders of magnitude above the small-call rows.
+
+The committed baseline is
+`solidity/test/BenchmarkGasV1_3.gas-baseline.json`; the table in §9.2
+is **generated from it** — measurement and documentation cannot drift
+apart:
 
 ```bash
 cd solidity
-make snapshot-gas         # regenerate the committed baseline
-make snapshot-gas-check   # the CI gate: fails on any deviation > 5%
+make snapshot-gas           # re-measure; promote the baseline; regenerate §9.2
+make snapshot-gas-check     # the CI gate (see below)
+make snapshot-gas-selftest  # behavioural self-tests for the gate + generator
 ```
 
-The CI gate runs on every PR touching `solidity/**`
-(`.github/workflows/ci-solidity.yml`).  A *deliberate* gas change must
-regenerate the baseline AND update the table below in the same PR; an
-improvement beyond 5% must likewise be ratcheted into the baseline
-(the gate is two-sided, which keeps the committed numbers honest).
+**The CI gate** (`make snapshot-gas-check`, run by
+`.github/workflows/ci-solidity.yml` on every PR touching
+`solidity/**`) enforces, per the GP.11.9 plan rule:
+
+* any per-benchmark gas **increase beyond 5% fails** (one-sided —
+  exactly the plan's ">5 % increase fails CI");
+* benchmark-set drift fails (a benchmark added, removed, or renamed
+  without `make snapshot-gas` — stale baselines cannot linger);
+* a §9.2 table out of sync with the committed baseline fails;
+* improvements beyond 5% **warn** without failing: nobody's unrelated
+  PR is blocked by somebody else's optimisation, but the nudge to
+  ratchet the baseline (and table) keeps the documented numbers
+  honest.
+
 Baselines are stable only for the pinned toolchain (Foundry v1.7.0,
 solc 0.8.20, the committed `foundry.toml`) — regenerate with exactly
 that toolchain.
 
-**Reading a baseline.**  A snapshot entry is the gas consumed
-executing the benchmark's call from the test harness.  An end-user
-transaction additionally pays the 21 000 intrinsic transaction cost
-plus calldata gas (a few hundred for these small calldata shapes),
-and does *not* pay the harness's internal-call accounting (cold
-account access + value-transfer surcharge, roughly 3–10k depending on
-the operation).  The estimate
+**Reading a row.**  The end-user estimate is mechanical:
 
 ```text
-user-tx gas ≈ baseline + 21 000        (slightly conservative)
-usd         ≈ user-tx gas × gas-price-gwei × eth-usd × 10⁻⁹
+est. user tx ≈ execution + 21 000 intrinsic + calldata
+usd          ≈ est. user tx × gas-price-gwei × eth-usd × 10⁻⁹
 ```
 
-therefore over-approximates the on-chain total by a few thousand gas —
-the right direction for UX budgeting.  Worked example: a first-time
-`depositETHWithFee` is 62 401 + 21 000 ≈ 83 000 gas; at a 30 gwei gas
-price and $3 000/ETH that is 83 000 × 30 × 3 000 × 10⁻⁹ ≈ **$7.5** of
-L1 gas, which the user absorbs in their bridging UX.
+The residual model error is small and conservative: gas *refunds*
+(e.g. an exact-approval `transferFrom` zeroing the allowance slot, or
+`openBoldCircuit` clearing the flag) are netted at transaction level,
+so refund-generating rows slightly overstate a real transaction's net
+cost.  Worked examples at 30 gwei and $3 000/ETH: a first-time
+`depositETHWithFee` is 47 857 + 21 000 + 204 ≈ 69 000 gas ≈ **$6.2**
+of L1 gas, which the user absorbs in their bridging UX; the
+`withdrawWithProof` exit leg is ≈ 864 000 gas ≈ **$77.8** — the
+dominant cost of the round trip (see §9.3).
 
-### 9.2 Baseline table (toolchain-pinned, 2026-06-10)
+### 9.2 Baseline table
 
-| Operation (scenario)                                   | Baseline (gas) | Est. user tx | $ @ 30 gwei, $3k/ETH |
-|--------------------------------------------------------|---------------:|-------------:|---------------------:|
-| `depositETH` (v1.0 reference, first deposit)           |         53 876 |        ~75k  |                ~$6.7 |
-| `depositETHWithFee` (first deposit)                    |         62 401 |        ~83k  |                ~$7.5 |
-| `depositETHWithFee` (repeat deposit)                   |         45 015 |        ~66k  |                ~$5.9 |
-| `depositBoldWithFee` (first deposit)                   |         83 261 |       ~104k  |                ~$9.4 |
-| `depositBoldWithFee` (repeat deposit)                  |         66 051 |        ~87k  |                ~$7.8 |
-| `ammSwap` ETH→BOLD (first-ever BOLD recipient)         |         71 491 |        ~92k  |                ~$8.3 |
-| `ammSwap` ETH→BOLD (repeat recipient)                  |         54 303 |        ~75k  |                ~$6.8 |
-| `ammSwap` BOLD→ETH (exact approval)                    |         56 876 |        ~78k  |                ~$7.0 |
-| `closeBoldCircuit`                                     |         31 904 |        ~53k  |                ~$4.8 |
-| `openBoldCircuit`                                      |         10 108 |        ~31k  |                ~$2.8 |
-| `setBoldTvlCap`                                        |         15 253 |        ~36k  |                ~$3.3 |
-| `emergencyDisableAmm`                                  |         36 790 |        ~58k  |                ~$5.2 |
-| Auto-trigger close (first branch, ETH, in shutdown)    |         37 999 |        ~59k  |                ~$5.3 |
-| Auto-trigger close (last branch, rETH, in shutdown)    |         53 400 |        ~74k  |                ~$6.7 |
-| Auto-trigger probe (no shutdown — reverts)             |         34 444 |        ~55k  |                ~$5.0 |
+<!-- BEGIN GP.11.9 GENERATED BASELINE TABLE (regenerate: cd solidity && make snapshot-gas) -->
+*This table is generated from the committed baseline `solidity/test/BenchmarkGasV1_3.gas-baseline.json` by `solidity/scripts/generate_gas_runbook_table.py`; edit neither by hand.  Model: est. user tx = execution + 21 000 intrinsic + calldata; $ at 30 gwei and $3 000/ETH.*
 
-Cost-structure observations (deltas between rows, useful when judging
-a future regression):
+| Operation (scenario) | Execution (gas) | Calldata (gas) | Est. user tx | $ @ 30 gwei, $3k/ETH |
+|---|---:|---:|---:|---:|
+| `depositETH` (v1.0 reference, first deposit) | 39 391 | 64 | ~60k | ~$5.4 |
+| `depositETHWithFee` (first deposit) | 47 857 | 204 | ~69k | ~$6.2 |
+| `depositETHWithFee` (repeat deposit) | 30 757 | 204 | ~52k | ~$4.7 |
+| `depositETHWithFee` (repeat, migration-wired bridge) | 33 864 | 204 | ~55k | ~$5.0 |
+| `depositBoldWithFee` (first deposit) | 80 426 | 416 | ~102k | ~$9.2 |
+| `depositBoldWithFee` (repeat deposit) | 63 326 | 416 | ~85k | ~$7.6 |
+| BOLD `approve` (prerequisite, fresh allowance) | 24 348 | 644 | ~46k | ~$4.1 |
+| `ammSwap` ETH→BOLD (first-ever BOLD recipient) | 56 842 | 684 | ~79k | ~$7.1 |
+| `ammSwap` ETH→BOLD (repeat recipient) | 39 742 | 684 | ~61k | ~$5.5 |
+| `ammSwap` ETH→BOLD (repeat, migration-wired bridge) | 42 852 | 684 | ~65k | ~$5.8 |
+| `ammSwap` BOLD→ETH (exact approval) | 54 096 | 708 | ~76k | ~$6.8 |
+| `ammSwap` BOLD→ETH (infinite approval) | 50 962 | 708 | ~73k | ~$6.5 |
+| `withdrawWithProof` ETH (canonical 64-sibling proof) | 805 348 | 37 844 | ~864k | ~$77.8 |
+| `withdrawWithProof` BOLD (canonical 64-sibling proof) | 821 691 | 37 868 | ~881k | ~$79.3 |
+| `closeBoldCircuit` | 23 761 | 64 | ~45k | ~$4.0 |
+| `openBoldCircuit` | 6 721 | 64 | ~28k | ~$2.5 |
+| `setBoldTvlCap` | 6 814 | 276 | ~28k | ~$2.5 |
+| `emergencyDisableAmm` | 28 559 | 64 | ~50k | ~$4.5 |
+| Auto-trigger close (first branch, ETH, in shutdown) | 32 770 | 64 | ~54k | ~$4.8 |
+| Auto-trigger close (last branch, rETH, in shutdown) | 47 973 | 64 | ~69k | ~$6.2 |
+| Auto-trigger probe (no shutdown — reverts) | 26 186 | 64 | ~47k | ~$4.3 |
+<!-- END GP.11.9 GENERATED BASELINE TABLE -->
 
+### 9.3 Cost-structure observations
+
+Deltas between rows (useful when judging a future regression; all from
+the committed baseline, which is why adjacent variant rows exist):
+
+* **First-interaction premium = 17 100 gas exactly.**  A depositor's
+  first deposit writes a fresh `depositNonce` slot, and a swapper's
+  first-ever BOLD credits a fresh ERC-20 balance slot; both pairs of
+  rows differ by precisely the EVM's zero→non-zero SSTORE surcharge
+  (22 100 − 5 000).  Quote first-time users the "first" rows.
 * **Fee-split machinery overhead ≈ 8.5k gas.**  `depositETHWithFee`
-  (first) minus the plain `depositETH` reference = 62 401 − 53 876 =
-  8 525: the fee arithmetic, budget-grant conversion, AMM seeding, and
-  the richer event + receipt hash, all-in.
-* **BOLD-leg premium ≈ 21k gas.**  `depositBoldWithFee` minus
-  `depositETHWithFee` (same shape) ≈ 20.9k: the `transferFrom` pull,
-  the two `balanceOf` delta reads, the allowance write, and the
-  per-BOLD TVL accounting.
-* **First-interaction premium ≈ 17.2k gas.**  A depositor's first
-  deposit writes a fresh `depositNonce` slot, and a swapper's
-  first-ever BOLD credits a fresh ERC-20 balance slot (both are the
-  EVM's zero→non-zero SSTORE surcharge).  Quote first-time users the
-  "first" rows.
-* **Swap directions are near-symmetric.**  BOLD→ETH costs only ~2.6k
-  more than a repeat ETH→BOLD (the `transferFrom` pull + allowance
-  write + ETH send, mostly offset by not paying a BOLD transfer out).
-* **BOLD prerequisites.**  `depositBoldWithFee` and BOLD→ETH `ammSwap`
-  flows assume a prior ERC-20 `approve` — a separate ~46k-gas
-  transaction (~$4.2 at the reference prices) not included in the
-  rows above.
+  (first) minus the plain `depositETH` reference: the fee arithmetic,
+  budget-grant conversion, AMM seeding, and the richer event + receipt
+  hash, all-in.
+* **BOLD-leg premium ≈ 32.6k gas.**  `depositBoldWithFee` minus
+  `depositETHWithFee` (same shape): the `transferFrom` pull, the two
+  `balanceOf` delta reads, the allowance write, and the per-BOLD TVL
+  accounting.
+* **Migration-wired premium ≈ 3.1k gas per operation.**  Production
+  deployments that pre-wire a predicted `KnomosisMigration` successor
+  (solidity/README, "Production deployment notes") pay one external
+  `activated()` read in every `circuitOpen` operation and every
+  `ammSwap` — measured by the two "migration-wired" rows (+3 107 on
+  the deposit, +3 110 on the swap).  Initial deployments with
+  `migration = address(0)` skip it.
+* **Infinite approval saves ≈ 3.1k gas per BOLD pull.**  Production
+  BOLD's OpenZeppelin `_spendAllowance` skips the allowance write when
+  the standing allowance is `type(uint256).max`; the two BOLD→ETH rows
+  measure both shapes.  The same saving applies to
+  `depositBoldWithFee` for users holding a standing approval.
+* **The exit leg dominates the round trip.**  `withdrawWithProof`
+  costs ~805k execution + ~37.9k calldata — roughly ten times a
+  deposit.  Execution is dominated by the byte-loop CBE decode of the
+  ~2.7 kB, 64-sibling proof blob (the 64-keccak SMT walk itself is a
+  few thousand gas), and is essentially independent of tree population
+  (`SmtVerifier.recomputeRoot` always walks all 64 levels over
+  same-sized siblings).  Operators quoting "bridging cost" should
+  quote deposit + withdrawal; a future calldata-slice decoder is the
+  obvious optimisation target if exit costs ever matter commercially.
+* **Keeper-probe budgeting.**  The no-shutdown probe row (26 186
+  execution) is measured through a plain low-level call — no test
+  cheatcode interferes with the revert — so it is the keeper bot's
+  true recurring cost: ~47.2k/probe all-in (+21k intrinsic + 64
+  calldata) ≈ $4.3 at the reference prices.
 
-### 9.3 Caveats and calibration notes
+### 9.4 Caveats and calibration notes
 
-* **Mock fidelity.**  The benchmarks run against `MockBold` (a plain
-  ERC-20) and `MockLiquityV2TroveManager` (a plain storage getter).
-  Real BOLD is a standard OpenZeppelin-style ERC-20 and the real
-  Liquity V2 `shutdownTime()` is a public storage read, so costs are
-  comparable; one known divergence is that real BOLD skips the
-  allowance write for *infinite* approvals, saving a few thousand gas
-  per `transferFrom` relative to the exact-approval shape benchmarked
-  here.
-* **Keeper probe cost.**  The "no shutdown" row is the auto-trigger
-  keeper bot's recurring probe (all three TroveManager reads, then
-  `NoLiquityBranchShutdown`); its snapshot value includes a small
-  test-harness overhead for the expected revert.  Budget keeper bots
-  off this row, not the close rows.
+* **Mock fidelity.**  BOLD is modelled by `MockBoldOz` — the real
+  vendored OpenZeppelin v5 `ERC20` implementation (production BOLD's
+  base), so storage-op behaviour including the infinite-approval skip
+  is exact, and the benchmark's companion sanity test proves the skip.
+  The Liquity TroveManagers are mocks whose `shutdownTime()` is a
+  plain storage getter, like the real contracts'.  Residual divergence
+  from production bytecode (larger dispatch tables, BOLD's recipient
+  checks) is on the order of a few hundred gas per call, not
+  thousands.
+* **Refund-bearing rows.**  `ammSwap_boldToEth_exactApproval`,
+  `depositBoldWithFee` (exact approval), and `openBoldCircuit` earn
+  EIP-3529 refunds a real transaction nets (capped at 1/5 of used
+  gas); their rows overstate the net cost by up to a few thousand gas
+  — the conservative direction for budgeting.
 * **UI guidance.**  Wallets / bridge UIs should compute the estimate
-  at the *current* gas price using the formula in §9.1 and display it
+  at the *current* gas price using the §9.1 formula and display it
   before the user signs — at 100 gwei the typical fee-split deposit is
-  ~$25, not ~$7.5, and surprising users with that is avoidable.
+  ~$21, the exit leg ~$260, not the reference-price figures.
 * **Plan-sketch reconciliation.**  The GP.11.9 plan sketch quoted
-  end-user envelopes (e.g. deposits "~80–120k").  Measured end-user
-  estimates land inside or below every sketched envelope — the sketch
-  over-estimated `transferFrom` and TroveManager read costs
-  (`depositBoldWithFee` ~104k vs "~140–180k"; the no-shutdown probe
-  ~55k vs "up to ~100k").  The committed baselines above are the
-  canonical numbers.
+  rough per-test envelopes estimated before measurement.  The
+  per-call baselines here are the canonical numbers; they land at or
+  below every sketched envelope once the sketch's implicit harness
+  overhead and the +21k intrinsic adjustment are accounted for (e.g.
+  deposits "~80–120k" vs a measured ~69k all-in first deposit; the
+  no-shutdown probe "up to ~100k" vs a measured ~47.2k all-in).

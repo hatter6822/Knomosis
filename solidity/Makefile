@@ -39,35 +39,61 @@ coverage-lcov:
 # Workstream GP.11.9 — gas-cost benchmarks for the v1.3 L1 operations.
 #
 # The deterministic `BenchmarkGasV1_3` suite (test/BenchmarkGasV1_3.t.sol)
-# pins per-operation gas baselines in the committed snapshot below; the
-# operator-facing numbers + $-cost rationale live in
-# `docs/gas_pool_runbook.md` ("Gas economics").
+# records each operation's PER-CALL gas (`vm.snapshotGasLastCall` — the
+# call frame only, no test-harness overhead) plus the exact EIP-2028
+# calldata cost of its canonical calldata (`vm.snapshotValue`,
+# `<name>.calldata_gas`) into the forge scratch file
+# `snapshots/BenchmarkGasV1_3.json` (gitignored; a PARTIAL forge run
+# rewrites it with only the entries that ran, so it is never committed
+# directly).  The committed baseline is the verified full-run copy below.
 #
-#   make snapshot-gas        — regenerate the committed baseline (run after
-#                              any deliberate gas-affecting change, and
-#                              update the runbook table in the same PR)
-#   make snapshot-gas-check  — CI gate: re-runs the suite and fails on any
-#                              per-benchmark deviation beyond 5% in either
-#                              direction (regressions fail outright;
-#                              improvements beyond 5% must be ratcheted
-#                              into the baseline via `make snapshot-gas`)
+#   make snapshot-gas          — re-run the suite, promote the fresh
+#                                snapshot to the committed baseline, and
+#                                regenerate the runbook §9.2 table derived
+#                                from it (one command keeps measurement
+#                                and documentation in lockstep)
+#   make snapshot-gas-check    — CI gate: re-runs the suite, then
+#                                (a) fails on any per-benchmark gas
+#                                INCREASE beyond 5% (the GP.11.9 rule;
+#                                one-sided — improvements only WARN, with
+#                                a nudge to ratchet them in),
+#                                (b) fails on benchmark-set drift (a
+#                                benchmark added/removed/renamed without a
+#                                regenerated baseline), and
+#                                (c) fails if the runbook table is out of
+#                                sync with the committed baseline
+#   make snapshot-gas-selftest — behavioural self-tests for the gate and
+#                                the table generator (pure python3, no
+#                                forge), proving the tripwires cannot be
+#                                silently disabled
 #
-# The filter is shared by both targets so the generated and checked test
-# sets are always identical: only the pure-call `test_gas_*` benchmarks
-# enter the snapshot; the behavioural `test_sanity_*` companions run under
-# plain `forge test` only.  Baselines are stable for the pinned
+# `FORGE_SNAPSHOT_CHECK=false` guards against an exported environment
+# override flipping forge's cheatcode snapshots from record mode into its
+# built-in exact-match compare mode.  Baselines are stable for the pinned
 # (forge 1.7.0, solc 0.8.20, foundry.toml) toolchain; regenerating with a
 # different toolchain may shift numbers and fail the check.
-SNAPSHOT_GAS_FILE   = test/BenchmarkGasV1_3.gas-snapshot
-SNAPSHOT_GAS_FILTER = --match-contract BenchmarkGasV1_3 --match-test test_gas_
+SNAPSHOT_GAS_BASELINE = test/BenchmarkGasV1_3.gas-baseline.json
+SNAPSHOT_GAS_FRESH    = snapshots/BenchmarkGasV1_3.json
+SNAPSHOT_GAS_MATCH    = --match-contract BenchmarkGasV1_3
 
 .PHONY: snapshot-gas
 snapshot-gas:
-	forge snapshot $(SNAPSHOT_GAS_FILTER) --snap $(SNAPSHOT_GAS_FILE)
+	rm -f $(SNAPSHOT_GAS_FRESH)
+	FORGE_SNAPSHOT_CHECK=false forge test $(SNAPSHOT_GAS_MATCH)
+	cp $(SNAPSHOT_GAS_FRESH) $(SNAPSHOT_GAS_BASELINE)
+	python3 scripts/generate_gas_runbook_table.py
 
 .PHONY: snapshot-gas-check
 snapshot-gas-check:
-	forge snapshot $(SNAPSHOT_GAS_FILTER) --check $(SNAPSHOT_GAS_FILE) --tolerance 5
+	rm -f $(SNAPSHOT_GAS_FRESH)
+	FORGE_SNAPSHOT_CHECK=false forge test $(SNAPSHOT_GAS_MATCH)
+	python3 scripts/check_gas_baseline.py --baseline $(SNAPSHOT_GAS_BASELINE) --fresh $(SNAPSHOT_GAS_FRESH) --max-increase-pct 5
+	python3 scripts/generate_gas_runbook_table.py --check
+
+.PHONY: snapshot-gas-selftest
+snapshot-gas-selftest:
+	python3 scripts/check_gas_baseline.py --selftest
+	python3 scripts/generate_gas_runbook_table.py --selftest
 
 # Workstream GP.5.2 — constitutional fee-split-cap audit gate.
 # Pure grep/sed/awk; no solc/forge dependency.  Fails if MAX_FEE_BPS_CAP,
