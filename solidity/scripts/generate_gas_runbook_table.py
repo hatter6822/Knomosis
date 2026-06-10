@@ -22,12 +22,20 @@ baseline, because
 
 Per-row model (all inputs measured, none hand-maintained)::
 
-    est. user tx  =  execution gas            (vm.snapshotGasLastCall)
-                   + 21 000                    (intrinsic transaction cost)
-                   + calldata gas              (<name>.calldata_gas entry —
-                                                exact EIP-2028 byte cost of
-                                                the canonical calldata)
-    usd           =  est. user tx x 30 gwei x $3 000/ETH
+    user tx  =  the recorded baseline value, used DIRECTLY.  The suite
+                runs under forge's isolated mode (``--isolate``), in
+                which each benchmarked call executes as its own EVM
+                transaction, so ``vm.snapshotGasLastCall`` records the
+                full transaction gas: 21 000 intrinsic + EIP-2028
+                calldata + execution, with EIP-3529 refunds netted and
+                the transaction target pre-warmed (EIP-2929) — exactly
+                what the user pays on L1.
+    usd      =  user tx x 30 gwei x $3 000/ETH
+
+The ``<name>.calldata_gas`` companion (exact EIP-2028 byte cost of the
+canonical calldata) is shown as a breakdown column — load-bearing for
+the withdrawal rows, whose ~2.7 kB proof dominates their intrinsic
+cost.
 
 The row list below is the single place a new benchmark gets its
 operator-facing label; the script FAILS if the baseline and the row list
@@ -62,9 +70,9 @@ BEGIN_MARKER = (
 )
 END_MARKER = "<!-- END GP.11.9 GENERATED BASELINE TABLE -->"
 
-# The $-cost reference model.  21 000 is the EIP-2 intrinsic transaction
-# cost; the price points are the runbook's worked-example references.
-INTRINSIC_TX_GAS = 21_000
+# The $-cost reference price points (the runbook's worked-example
+# references).  No intrinsic-gas constant is needed: under isolated mode
+# the recorded baseline value already IS the full transaction gas.
 REF_GAS_PRICE_GWEI = 30
 REF_ETH_USD = 3_000
 
@@ -145,22 +153,21 @@ def render_table(baseline: dict[str, int]) -> str:
         "*This table is generated from the committed baseline "
         "`solidity/test/BenchmarkGasV1_3.gas-baseline.json` by "
         "`solidity/scripts/generate_gas_runbook_table.py`; edit neither by "
-        "hand.  Model: est. user tx = execution + "
-        f"{fmt_gas(INTRINSIC_TX_GAS)} intrinsic + calldata; $ at "
+        "hand.  The user-tx column is the value MEASURED under forge's "
+        "isolated mode — the full transaction gas (intrinsic + calldata + "
+        "execution, refunds netted); $ at "
         f"{REF_GAS_PRICE_GWEI} gwei and ${fmt_gas(REF_ETH_USD)}/ETH.*",
         "",
-        "| Operation (scenario) | Execution (gas) | Calldata (gas) "
-        "| Est. user tx | $ @ 30 gwei, $3k/ETH |",
-        "|---|---:|---:|---:|---:|",
+        "| Operation (scenario) | User tx (gas, measured) "
+        "| of which calldata (gas) | $ @ 30 gwei, $3k/ETH |",
+        "|---|---:|---:|---:|",
     ]
     for key, label in ROWS:
-        execution = baseline[key]
+        tx_gas = baseline[key]
         calldata = baseline[f"{key}.calldata_gas"]
-        est = execution + INTRINSIC_TX_GAS + calldata
-        usd = est * REF_GAS_PRICE_GWEI * REF_ETH_USD * 1e-9
+        usd = tx_gas * REF_GAS_PRICE_GWEI * REF_ETH_USD * 1e-9
         lines.append(
-            f"| {label} | {fmt_gas(execution)} | {fmt_gas(calldata)} "
-            f"| ~{round(est / 1000)}k | ~${usd:.1f} |"
+            f"| {label} | {fmt_gas(tx_gas)} | {fmt_gas(calldata)} | ~${usd:.1f} |"
         )
     return "\n".join(lines)
 

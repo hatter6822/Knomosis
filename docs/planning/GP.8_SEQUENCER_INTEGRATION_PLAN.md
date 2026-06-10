@@ -1971,15 +1971,15 @@ original GP.8.3 lacked because FQ was a separate document.
        GP.11.9 (landed — the generated table in
        `docs/gas_pool_runbook.md` §9.2 is the canonical source,
        CI-gated via `solidity/test/BenchmarkGasV1_3.gas-baseline.json`).
-       End-user envelopes (per-call execution + 21k intrinsic + exact
-       calldata): depositETHWithFee ~52–69k; depositBoldWithFee
-       ~85–102k; ammSwap ETH→BOLD ~61–79k; BOLD→ETH ~73–76k;
-       closeBoldCircuit ~45k; closeBoldCircuitIfAnyLiquityBranchShutdown
-       ~54k (ETH-branch fast close) to ~69k (last-branch close), ~47k
-       for the no-shutdown 3-branch keeper probe; migration-wired
-       deployments add ~3.1k per circuit-gated operation; the
-       withdrawWithProof exit legs ~864–881k (the round trip's
-       dominant cost).  UI guidance: estimated bridge-gas cost at
+       Measured user-tx envelopes (forge isolated mode — full
+       transaction gas, refunds netted): depositETHWithFee ~49–66k;
+       depositBoldWithFee ~77–94k; ammSwap ETH→BOLD ~59–76k; BOLD→ETH
+       ~68–70k; closeBoldCircuit ~45k;
+       closeBoldCircuitIfAnyLiquityBranchShutdown ~54k (ETH-branch
+       fast close) to ~69k (last-branch close), ~47k for the
+       no-shutdown 3-branch keeper probe; migration-wired deployments
+       add ~3.1k per circuit-gated operation; the withdrawWithProof
+       exit legs ~861–878k (the round trip's dominant cost).  UI guidance: estimated bridge-gas cost at
        current gas price by chosen fee currency.
     6. **Delegated-top-up deployment guidance.**  Recipients opt in via
        `Action.declareLocalPolicy` with an `allowTopUpFrom` clause

@@ -515,13 +515,15 @@ at ~3.1k gas), the BOLD circuit-breaker surface, the Liquity
 auto-trigger's fast / worst / no-shutdown paths, `emergencyDisableAmm`,
 `withdrawWithProof` on both legs (canonical 64-sibling SMT proof), and
 a plain-`depositETH` v1.0 reference row — 21 benchmarks across 9
-scenario contracts.  Each benchmark records PER-CALL gas
-(`vm.snapshotGasLastCall`: the call frame only, no harness overhead —
-deltas land exactly on EVM constants, e.g. the first-interaction
-premium is precisely the 17 100-gas zero→non-zero SSTORE surcharge)
-plus the exact EIP-2028 calldata cost of its canonical calldata
-(`vm.snapshotValue`, `<name>.calldata_gas`), with companion
-`test_sanity_*` tests pinning every scenario assumption.  The
+scenario contracts.  The suite runs under forge's
+isolated mode (`--isolate`, enforced by the make targets), so each
+`vm.snapshotGasLastCall` value is the FULL user-transaction gas
+(intrinsic + calldata + execution, EIP-3529 refunds netted; deltas
+land exactly on EVM constants, e.g. the first-interaction premium is
+precisely the 17 100-gas zero→non-zero SSTORE surcharge), plus the
+exact EIP-2028 calldata cost of its canonical calldata
+(`vm.snapshotValue`, `<name>.calldata_gas`) as a breakdown, with
+companion `test_sanity_*` tests pinning every scenario assumption.  The
 committed baseline (`test/BenchmarkGasV1_3.gas-baseline.json`) and the
 runbook §9.2 table generated from it
 (`scripts/generate_gas_runbook_table.py`) are regenerated together by

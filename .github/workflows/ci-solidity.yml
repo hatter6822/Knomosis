@@ -58,12 +58,19 @@ on:
     paths:
       - 'solidity/**'
       - '.github/workflows/ci-solidity.yml'
+      # The GP.11.9 runbook §9.2 gas table is a GENERATED artifact of
+      # `solidity/test/BenchmarkGasV1_3.gas-baseline.json`; a docs-only
+      # PR that hand-edits it must still trip the table-sync check
+      # (run in the fast `caps-audit` job below), so the runbook is a
+      # trigger path for this workflow.
+      - 'docs/gas_pool_runbook.md'
   pull_request:
     branches:
       - main
     paths:
       - 'solidity/**'
       - '.github/workflows/ci-solidity.yml'
+      - 'docs/gas_pool_runbook.md'
 
 # Cancel in-progress runs of the same workflow on the same ref.
 concurrency:
@@ -109,6 +116,15 @@ jobs:
         # hand-edited runbook tables.  Pure python3 stdlib; no
         # Solidity toolchain, so it belongs in this fast job.
         run: make snapshot-gas-selftest
+
+      - name: Runbook gas-table sync (GP.11.9)
+        # The runbook §9.2 table is generated from the committed gas
+        # baseline; verify they match WITHOUT running forge, so the
+        # check also covers docs-only PRs that hand-edit the runbook
+        # (this workflow triggers on `docs/gas_pool_runbook.md` for
+        # exactly that case).  The heavier `forge` job additionally
+        # re-measures the baseline itself.
+        run: python3 scripts/generate_gas_runbook_table.py --check
 
   forge:
     name: forge build + test

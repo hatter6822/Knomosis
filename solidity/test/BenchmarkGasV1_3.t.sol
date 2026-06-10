@@ -48,26 +48,29 @@ contract InactiveMigration {
 ///
 /// @dev    Measurement discipline:
 ///
-///         1. Every benchmark measures ONE call via
-///            `vm.snapshotGasLastCall`, so the recorded number is the gas
-///            consumed by the bridge call frame itself — test-harness
-///            overhead (pranks, asserts, calldata abi-encoding, the
-///            caller-side CALL surcharges) is excluded BY CONSTRUCTION,
-///            not by discipline.  Assertions after the call cannot
-///            pollute the number, and the recorded value is what a
-///            top-level transaction's execution would consume (a tx
-///            target is pre-warmed per EIP-2929, so the caller-side
-///            cold-account surcharge the harness pays is not part of a
-///            real user's cost either).
+///         1. The suite is RUN UNDER FORGE'S ISOLATED MODE (`--isolate`,
+///            enforced by the `make snapshot-gas{,-check}` targets):
+///            every benchmarked call executes as its own EVM
+///            transaction, which is foundry's documented-accurate mode
+///            for the `snapshotGas*` cheatcodes.  The value
+///            `vm.snapshotGasLastCall` records is therefore the FULL
+///            TRANSACTION GAS the user pays on L1 — 21 000 intrinsic +
+///            EIP-2028 calldata + execution, with EIP-3529 refunds
+///            netted and the transaction target pre-warmed (EIP-2929).
+///            Test-harness overhead (pranks, asserts, calldata
+///            abi-encoding) is excluded by construction.  Empirically
+///            verified: isolated-vs-unisolated deltas decode to the gas
+///            as `21 000 + calldata − refunds` on all 21 benchmarks
+///            (e.g. `closeBoldCircuit` +21 064 = 21 000 + 64;
+///            `depositBoldWithFee` +13 816 = 21 000 + 416 − 2 800
+///            reentrancy-guard reset − 4 800 allowance-clear refund).
 ///         2. Alongside every gas entry the helper records
 ///            `<name>.calldata_gas` — the exact EIP-2028 intrinsic
 ///            calldata cost (16/non-zero byte, 4/zero byte) of the
-///            canonical calldata it sent — so the runbook's
-///            user-transaction estimates (`execution + 21 000 intrinsic +
-///            calldata`) are derived mechanically with no hand-maintained
-///            constants.  This matters: a `withdrawWithProof` carries a
-///            ~2.7 kB SMT proof whose calldata cost (~30-45k) dwarfs the
-///            "few hundred gas" of the small-call operations.
+///            canonical calldata it sent — as a breakdown of the total.
+///            This matters: a `withdrawWithProof` carries a ~2.7 kB SMT
+///            proof whose calldata cost (~37.9k) dwarfs the "few
+///            hundred gas" of the small-call operations.
 ///         3. NO fuzz / invariant tests — every benchmark is a fixed
 ///            scenario, so the recorded values are byte-stable for the
 ///            pinned (forge 1.7.0, solc 0.8.20, foundry.toml) toolchain.
@@ -81,16 +84,15 @@ contract InactiveMigration {
 ///         5. BOLD is modelled by `MockBoldOz` — the real vendored
 ///            OpenZeppelin v5 ERC-20 (matching production BOLD's OZ
 ///            base), so allowance semantics (including the
-///            infinite-approval storage-write skip) carry real gas costs.
+///            infinite-approval storage-write skip) carry real gas
+///            costs; under isolated mode this surfaces the true
+///            refund-netted trade-off between the exact- and
+///            infinite-approval flows.
 ///
-///         Known residual model gaps (kept honest in the runbook): gas
-///         REFUNDS (e.g. an exact-approval `transferFrom` zeroing the
-///         allowance slot) are netted at transaction level, not call
-///         level, so refund-generating rows slightly OVERSTATE a real
-///         transaction's net cost — the conservative direction for
-///         budgeting; and production BOLD / TroveManager bytecode may
-///         differ marginally from the mocks (larger dispatch tables,
-///         recipient checks) — a few hundred gas, not thousands.
+///         Known residual model gap (kept honest in the runbook):
+///         production BOLD / TroveManager bytecode may differ marginally
+///         from the mocks (larger dispatch tables, recipient checks) —
+///         a few hundred gas, not thousands.
 abstract contract BenchmarkGasV1_3Base is Test {
     /// @dev The snapshot group: all benchmarks across all scenario
     ///      contracts aggregate into `snapshots/BenchmarkGasV1_3.json`
@@ -153,15 +155,17 @@ abstract contract BenchmarkGasV1_3Base is Test {
     // The measurement core
     // ------------------------------------------------------------------
 
-    /// @notice Execute exactly one benchmarked call and record (a) the
-    ///         gas consumed by the call frame
-    ///         (`vm.snapshotGasLastCall`) and (b) the exact EIP-2028
-    ///         calldata cost of `data` (`vm.snapshotValue`, entry
-    ///         `<name>.calldata_gas`).  The call is made low-level so a
-    ///         designed-to-revert benchmark (the keeper probe) records
-    ///         its true consumed gas with no `vm.expectRevert` harness
-    ///         interference; `expectOk` then asserts the intended
-    ///         outcome AFTER the measurement.
+    /// @notice Execute exactly one benchmarked call and record (a) its
+    ///         gas via `vm.snapshotGasLastCall` — under the make
+    ///         targets' isolated mode this is the call's FULL
+    ///         transaction gas (intrinsic + calldata + execution,
+    ///         refunds netted) — and (b) the exact EIP-2028 calldata
+    ///         cost of `data` (`vm.snapshotValue`, entry
+    ///         `<name>.calldata_gas`) as a breakdown.  The call is made
+    ///         low-level so a designed-to-revert benchmark (the keeper
+    ///         probe) records its true consumed gas with no
+    ///         `vm.expectRevert` harness interference; `expectOk` then
+    ///         asserts the intended outcome AFTER the measurement.
     function _bench(
         string memory name,
         address sender,

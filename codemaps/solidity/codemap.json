@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7efb099544da82b2acf88f9b764a425e43450987a790b991ea687f7fd2ae5fdc"
+    "source_digest": "c256a3c8770142a1b9cd5c1d3257e6ddb1e8fdb1b06b91b8101958d57c0511c3"
   },
   "summary": {
     "module_count": 77,
@@ -5918,7 +5918,7 @@
         {
           "kind": "abstract_contract",
           "name": "BenchmarkGasV1_3Base",
-          "line": 93,
+          "line": 95,
           "called": [
             "KnomosisBridge",
             "bridge"
@@ -5927,7 +5927,7 @@
         {
           "kind": "function",
           "name": "_bench",
-          "line": 164,
+          "line": 168,
           "called": [
             "_calldataGas",
             "name"
@@ -5936,13 +5936,13 @@
         {
           "kind": "function",
           "name": "_calldataGas",
-          "line": 181,
+          "line": 185,
           "called": []
         },
         {
           "kind": "function",
           "name": "_etchMocks",
-          "line": 197,
+          "line": 201,
           "called": [
             "MockBoldOz",
             "MockLiquityV2TroveManager"
@@ -5951,7 +5951,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 217,
+          "line": 221,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -5964,7 +5964,7 @@
         {
           "kind": "function",
           "name": "_mintApprove",
-          "line": 251,
+          "line": 255,
           "called": [
             "KnomosisBridge",
             "MockBoldOz",
@@ -5975,7 +5975,7 @@
         {
           "kind": "function",
           "name": "_seedPool",
-          "line": 263,
+          "line": 267,
           "called": [
             "KnomosisBridge",
             "_mintApprove"
@@ -5984,13 +5984,13 @@
         {
           "kind": "function",
           "name": "_farDeadline",
-          "line": 273,
+          "line": 277,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3DepositsTest",
-          "line": 286,
+          "line": 290,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -5998,7 +5998,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 296,
+          "line": 300,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -6012,7 +6012,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETH_reference",
-          "line": 337,
+          "line": 341,
           "called": [
             "_bench",
             "bridge"
@@ -6021,7 +6021,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_firstDeposit",
-          "line": 349,
+          "line": 353,
           "called": [
             "_bench",
             "bridge"
@@ -6030,7 +6030,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_repeatDeposit",
-          "line": 361,
+          "line": 365,
           "called": [
             "_bench",
             "bridge"
@@ -6039,7 +6039,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositBoldWithFee_firstDeposit",
-          "line": 374,
+          "line": 378,
           "called": [
             "_bench",
             "bridge"
@@ -6048,7 +6048,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositBoldWithFee_repeatDeposit",
-          "line": 386,
+          "line": 390,
           "called": [
             "_bench",
             "bridge"
@@ -6057,7 +6057,7 @@
         {
           "kind": "function",
           "name": "test_gas_boldApprove_fresh",
-          "line": 400,
+          "line": 404,
           "called": [
             "_bench",
             "bridge"
@@ -6066,7 +6066,7 @@
         {
           "kind": "function",
           "name": "test_sanity_depositScenarioAssumptions",
-          "line": 414,
+          "line": 418,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -6077,7 +6077,7 @@
         {
           "kind": "function",
           "name": "test_sanity_depositEffects",
-          "line": 447,
+          "line": 451,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -6088,7 +6088,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3SwapsTest",
-          "line": 492,
+          "line": 496,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6096,7 +6096,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 502,
+          "line": 506,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -6110,7 +6110,7 @@
         {
           "kind": "function",
           "name": "_swapData",
-          "line": 528,
+          "line": 532,
           "called": [
             "_farDeadline"
           ]
@@ -6118,7 +6118,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_firstBoldRecipient",
-          "line": 534,
+          "line": 538,
           "called": [
             "_bench",
             "_swapData",
@@ -6128,7 +6128,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_repeatRecipient",
-          "line": 547,
+          "line": 551,
           "called": [
             "_bench",
             "_swapData",
@@ -6138,7 +6138,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_boldToEth_exactApproval",
-          "line": 560,
+          "line": 564,
           "called": [
             "_bench",
             "_swapData",
@@ -6148,7 +6148,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_boldToEth_infiniteApproval",
-          "line": 574,
+          "line": 578,
           "called": [
             "_bench",
             "_swapData",
@@ -6158,7 +6158,7 @@
         {
           "kind": "function",
           "name": "test_sanity_swapScenarioAssumptions",
-          "line": 587,
+          "line": 591,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -6169,7 +6169,7 @@
         {
           "kind": "function",
           "name": "test_sanity_swapEffects",
-          "line": 621,
+          "line": 625,
           "called": [
             "MockBoldOz",
             "_farDeadline",
@@ -6181,7 +6181,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3MigrationWiredTest",
-          "line": 664,
+          "line": 668,
           "called": [
             "BenchmarkGasV1_3Base",
             "InactiveMigration",
@@ -6191,7 +6191,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 672,
+          "line": 676,
           "called": [
             "InactiveMigration",
             "MockBoldOz",
@@ -6206,7 +6206,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_repeat_migrationWired",
-          "line": 693,
+          "line": 697,
           "called": [
             "_bench",
             "bridge"
@@ -6215,7 +6215,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_repeat_migrationWired",
-          "line": 708,
+          "line": 712,
           "called": [
             "_bench",
             "_farDeadline",
@@ -6225,7 +6225,7 @@
         {
           "kind": "function",
           "name": "test_sanity_migrationWiredAssumptions",
-          "line": 720,
+          "line": 724,
           "called": [
             "MockBoldOz",
             "balanceOf",
@@ -6235,7 +6235,7 @@
         {
           "kind": "function",
           "name": "test_sanity_migrationWiredEffects",
-          "line": 733,
+          "line": 737,
           "called": [
             "_farDeadline"
           ]
@@ -6243,7 +6243,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3BreakerTest",
-          "line": 750,
+          "line": 754,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6251,7 +6251,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 751,
+          "line": 755,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -6261,7 +6261,7 @@
         {
           "kind": "function",
           "name": "test_gas_closeBoldCircuit",
-          "line": 757,
+          "line": 761,
           "called": [
             "_bench",
             "bridge"
@@ -6270,7 +6270,7 @@
         {
           "kind": "function",
           "name": "test_gas_setBoldTvlCap",
-          "line": 770,
+          "line": 774,
           "called": [
             "_bench",
             "bridge"
@@ -6279,7 +6279,7 @@
         {
           "kind": "function",
           "name": "test_gas_emergencyDisableAmm",
-          "line": 782,
+          "line": 786,
           "called": [
             "_bench",
             "bridge"
@@ -6288,13 +6288,13 @@
         {
           "kind": "function",
           "name": "test_sanity_breakerEffects",
-          "line": 794,
+          "line": 798,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3BreakerReopenTest",
-          "line": 816,
+          "line": 820,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6302,7 +6302,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 817,
+          "line": 821,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -6312,7 +6312,7 @@
         {
           "kind": "function",
           "name": "test_gas_openBoldCircuit",
-          "line": 825,
+          "line": 829,
           "called": [
             "_bench",
             "bridge"
@@ -6321,13 +6321,13 @@
         {
           "kind": "function",
           "name": "test_sanity_reopenEffects",
-          "line": 837,
+          "line": 841,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerFirstBranchTest",
-          "line": 849,
+          "line": 853,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6335,7 +6335,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 853,
+          "line": 857,
           "called": [
             "MockLiquityV2TroveManager",
             "_deployBridge",
@@ -6347,7 +6347,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerClose_firstBranch",
-          "line": 861,
+          "line": 865,
           "called": [
             "_bench",
             "bridge"
@@ -6356,7 +6356,7 @@
         {
           "kind": "function",
           "name": "test_sanity_firstBranchEffects",
-          "line": 873,
+          "line": 877,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -6365,7 +6365,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerLastBranchTest",
-          "line": 887,
+          "line": 891,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6373,7 +6373,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 891,
+          "line": 895,
           "called": [
             "MockLiquityV2TroveManager",
             "_deployBridge",
@@ -6385,7 +6385,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerClose_lastBranch",
-          "line": 899,
+          "line": 903,
           "called": [
             "_bench",
             "bridge"
@@ -6394,7 +6394,7 @@
         {
           "kind": "function",
           "name": "test_sanity_lastBranchEffects",
-          "line": 911,
+          "line": 915,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -6403,7 +6403,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerNoShutdownTest",
-          "line": 928,
+          "line": 932,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6411,7 +6411,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 932,
+          "line": 936,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -6421,7 +6421,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerProbe_noShutdown",
-          "line": 939,
+          "line": 943,
           "called": [
             "_bench",
             "bridge"
@@ -6430,7 +6430,7 @@
         {
           "kind": "function",
           "name": "test_sanity_noShutdownEffects",
-          "line": 951,
+          "line": 955,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -6439,7 +6439,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3WithdrawalsTest",
-          "line": 978,
+          "line": 982,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6447,7 +6447,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 995,
+          "line": 999,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -6463,7 +6463,7 @@
         {
           "kind": "function",
           "name": "test_gas_withdrawWithProof_eth",
-          "line": 1040,
+          "line": 1044,
           "called": [
             "_bench",
             "bridge"
@@ -6472,7 +6472,7 @@
         {
           "kind": "function",
           "name": "test_gas_withdrawWithProof_bold",
-          "line": 1053,
+          "line": 1057,
           "called": [
             "_bench",
             "bridge"
@@ -6481,7 +6481,7 @@
         {
           "kind": "function",
           "name": "test_sanity_withdrawalScenarioAssumptions",
-          "line": 1067,
+          "line": 1071,
           "called": [
             "MockBoldOz",
             "balanceOf"
@@ -6490,7 +6490,7 @@
         {
           "kind": "function",
           "name": "test_sanity_withdrawalEffects",
-          "line": 1086,
+          "line": 1090,
           "called": [
             "MockBoldOz",
             "balanceOf"
@@ -6499,7 +6499,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 1118,
+          "line": 1122,
           "called": [
             "bridge"
           ]
@@ -6507,20 +6507,12 @@
         {
           "kind": "function",
           "name": "_leBytes8",
-          "line": 1134,
+          "line": 1138,
           "called": []
         },
         {
           "kind": "function",
           "name": "_cbeUint",
-          "line": 1142,
-          "called": [
-            "_leBytes8"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_cbeBytes",
           "line": 1146,
           "called": [
             "_leBytes8"
@@ -6528,8 +6520,16 @@
         },
         {
           "kind": "function",
+          "name": "_cbeBytes",
+          "line": 1150,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "_cbeArrayHead",
-          "line": 1151,
+          "line": 1155,
           "called": [
             "_leBytes8"
           ]
@@ -6537,7 +6537,7 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalLeaf",
-          "line": 1155,
+          "line": 1159,
           "called": [
             "_cbeBytes",
             "_cbeUint"
@@ -6546,7 +6546,7 @@
         {
           "kind": "function",
           "name": "_encodeWithdrawalProof",
-          "line": 1169,
+          "line": 1173,
           "called": [
             "_cbeArrayHead",
             "_cbeBytes",
