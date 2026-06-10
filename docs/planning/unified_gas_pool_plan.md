@@ -8361,6 +8361,100 @@ sub-WU table above is the implementation roadmap.
     operator runbook section reviewed by deployment operators.
   * **Dependencies.**  GP.11.3, GP.11.8.
   * **Estimated effort.**  ~12 hours.
+  * **Status: COMPLETE (tri-surface: Solidity multisig + Lean
+    state-root mirror + operator runbook).**  The kill-switch
+    *mechanism* itself landed early, in GP.11.3's v1.24 completion
+    round (one-way `emergencyDisableAmm()`, the immutable
+    `ammDisasterRecovery` role with the `AmmDisasterRecoveryRequired`
+    / `AmmRoleIsBridge` constructor guards, the `ammActive` modifier
+    on `ammSwap`, the `_seedAmmReserves` early-out, and the three
+    GP.11.10 theorems pinned as `AmmKillSwitch.t.sol` tests).  This
+    WU closes the three deferred obligations:
+
+    1. **3-of-N multisig hardening.**  New single-purpose reference
+       contract `KnomosisAmmDisasterRecoveryMultisig.sol` (+ the
+       minimal `IKnomosisAmmDisasterRecovery` interface): an M-of-N
+       confirm-to-execute multisig whose only capability is calling
+       `emergencyDisableAmm()` on its immutable bridge.  The
+       GP.11.10 3-of-N floor is CONSTRUCTOR-ENFORCED
+       (`MIN_DISABLE_THRESHOLD = 3`; `ThresholdBelowMinimum`
+       otherwise), signer-set hygiene is checked at construction
+       (zero / duplicate / bridge-as-signer / self-as-signer /
+       `MAX_SIGNERS = 32` cap / unreachable-threshold), the
+       threshold-th `confirmDisable()` fires the bridge call
+       atomically (no separate front-runnable execute step),
+       `revokeConfirmation()` lets a signer stand down, and stale
+       approvals expire as a group (`CONFIRMATION_WINDOW = 7 days`,
+       O(1) round-roll — approvals from one incident can never
+       silently combine with a later signature to fire the one-way
+       switch out of context; fail-safe direction: an expired round
+       costs a re-confirmation, a stale-quorum disable would cost a
+       redeploy).  Wiring uses the predicted-CREATE-address pattern
+       already established for pre-wired `KnomosisMigration`
+       successors.  21 new forge cases in
+       `KnomosisAmmDisasterRecoveryMultisig.t.sol` (constructor
+       guards incl. thresholds 0/1/2 each rejected; 3-of-3 minimum
+       valid; sub-threshold quorum provably does NOT disable while
+       a live swap still succeeds; third confirmation disables
+       end-to-end against a real `KnomosisBridge` with reserves
+       preserved + both events; revoke-blocks-then-reconfirm-fires;
+       expiry resets instead of executing + boundary-instant
+       execution; signers cannot bypass the multisig directly; the
+       quorum's blast radius leaves every other bridge control
+       untouched), plus the GP.11.10 degraded-mode test
+       `test_ammDisabled_withdrawStillWorks_bothLegs` in
+       `AmmKillSwitch.t.sol` (post-disable `withdrawWithProof` pays
+       out on BOTH legs through a finalised state root — the kill
+       switch can never trap user funds).
+    2. **`ammDisabled` in the state-root preimage.**  The Lean
+       `BridgeState` gains the `ammDisabled : Bool` L1-mirror field
+       (per the WU decision there is NO `Action.disableAmm`; the
+       flag is a passive mirror like the five GP.11.8 fields):
+       `BridgeState.encode/decode` append it as a ninth segment
+       (canonical 0/1, strict `nonCanonical` rejection mirroring
+       `boldCircuitClosed`), EI.7.e
+       (`Bridge.BridgeState.encode_injective`) extends from 8 to 9
+       conjuncts, `ExtendedState.extEq` /
+       `extendedStateExtensionallyEqual` widen to 13 conjuncts, and
+       the GP.11.8 factoring/migration theorems extend
+       (`bridgeStateEncodeAmmSuffix` now 6 fields;
+       `bridgeState_amm_genesis_suffix_const` +
+       `bridgeState_commit_extends_v1_2` gain the
+       `ammDisabled = false` genesis conjunct).  Two NEW theorems:
+       `bridgeState_commit_extends_v1_3` (a GP.11.8-era state
+       migrates deterministically while the switch has not fired)
+       and the headline
+       `commitBridgeState_reflects_ammDisabled` (under
+       `CollisionFree hashBytes`, two states differing only in
+       `ammDisabled` have DIFFERENT commitments — a sequencer
+       cannot publish a state root that misrepresents the
+       kill-switch state, and the fault-proof game can adjudicate
+       disputes that turn on it).  Both `#print axioms`-clean.
+       The `faultproof-amm-commit` suite grows 19 → 26 cases
+       (disable flips the bridge commit + the top-level root, on
+       genesis and populated states; non-canonical `ammDisabled=2`
+       rejected; `ammDisabled=true` round-trips; API pins for the
+       two new theorems + the three extended signatures); the
+       EI.7.e / extEq pins and the `bridge-state` +
+       `encoding-injectivity` suites extend to match.  The
+       268-entry step-VM cross-stack corpus is regenerated (every
+       `commitExtendedState` shifts with the widened encoding);
+       the Solidity step VM and Rust runtime need NO code change
+       (neither consumes `BridgeState.encode` bytes — the step-VM
+       commit recipe is unchanged).  `docs/abi.md` §16.3 now
+       documents the full nine-segment wire format (it had been
+       stale at the v1.2 three-segment form).
+    3. **Operator runbook.**  `docs/gas_pool_runbook.md` gains §10
+       (AMM disaster recovery): the four invocation conditions with
+       thresholds, the 3-of-N custody + reference-multisig
+       semantics, the predicted-address deployment wiring, the
+       firing procedure, the post-disable recovery decision tree
+       (redeploy-via-`KnomosisMigration` vs degraded v1.2 mode),
+       the state-root-visibility note (the Lean mirror + the
+       reflects-theorem), and the measured gas cost; §1's role
+       table, §6's monitoring checklist, and §7's quick reference
+       extend to cover the role, the kill-switch alerts, and the
+       multisig calls.
 
 ---
 
@@ -8504,6 +8598,14 @@ easy review:
 | `delegatedTopUp_grants_budget_to_recipient`       | `Authority/SignedAction.lean`         | new (v1.3) |
 | `delegatedTopUp_requires_allowTopUpFrom`          | `Authority/SignedAction.lean`         | new (v1.3) |
 | `delegatedTopUp_signer_balance_debited`           | `Authority/SignedAction.lean`         | new (v1.3) |
+| `BridgeState.empty_ammDisabled_false`             | `Bridge/State.lean`                   | **done** (GP.11.10) |
+| `Bridge.BridgeState.encode_injective` (9-segment) | `Encoding/BridgeInjective.lean`       | upd. (GP.11.10) |
+| `bridgeState_commit_includes_ammState` (+ `ammDisabled`) | `FaultProof/Commit.lean`       | upd. (GP.11.10) |
+| `bridgeState_commit_extends_v1_3`                 | `FaultProof/Commit.lean`              | **done** (GP.11.10) |
+| `commitBridgeState_reflects_ammDisabled`          | `FaultProof/Commit.lean`              | **done** (GP.11.10; headline) |
+| `emergencyDisableAmm_preserves_reserves`          | `AmmKillSwitch.t.sol` (forge test)    | **done** (GP.11.3 pull-forward) |
+| `ammDisabled_implies_swap_reverts`                | `AmmKillSwitch.t.sol` (forge test)    | **done** (GP.11.3 pull-forward) |
+| `ammDisabled_is_monotonic`                        | `AmmKillSwitch.t.sol` (forge test)    | **done** (GP.11.3 pull-forward) |
 
 **Total new theorems: ~81** (+3 v1.0→v1.1 for the bridge-
 deposit budget-grant trio; +6 v1.1→v1.2 for the multi-resource

@@ -54,6 +54,12 @@ def tests : List TestCase :=
           BridgeState.empty_nextWdId_zero
         pure ()
     }
+  , { name := "BridgeState.empty: ammDisabled is false (GP.11.10)"
+    , body := do
+        let _proof : BridgeState.empty.ammDisabled = false :=
+          BridgeState.empty_ammDisabled_false
+        pure ()
+    }
   , { name := "BridgeState.markConsumed inserts the deposit record"
     , body := do
         let bs := BridgeState.empty.markConsumed 42 ({ resource := 1, userAmount := 100, poolAmount := 0, budgetGrant := 0 })

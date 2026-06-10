@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c256a3c8770142a1b9cd5c1d3257e6ddb1e8fdb1b06b91b8101958d57c0511c3"
+    "source_digest": "13e89eba8795567054e96bfcdbb9987d35e38481c752e2669cdc4c48459427e3"
   },
   "summary": {
     "module_count": 77,
-    "declaration_count": 1765
+    "declaration_count": 1774
   },
   "modules": [
     {
@@ -4618,12 +4618,12 @@
     {
       "module": "AmmKillSwitch.t",
       "path": "solidity/test/AmmKillSwitch.t.sol",
-      "declaration_count": 18,
+      "declaration_count": 27,
       "declarations": [
         {
           "kind": "contract",
           "name": "AmmKillSwitchTest",
-          "line": 20,
+          "line": 26,
           "called": [
             "AmmTestBase"
           ]
@@ -4631,13 +4631,13 @@
         {
           "kind": "event",
           "name": "AmmDisabled",
-          "line": 22,
+          "line": 28,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_emergencyDisableAmm_onlyRole",
-          "line": 31,
+          "line": 40,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4647,7 +4647,7 @@
         {
           "kind": "function",
           "name": "test_constructor_functionalAmmRequiresRole",
-          "line": 56,
+          "line": 65,
           "called": [
             "KnomosisBridge",
             "_boldEnabledArgs",
@@ -4657,7 +4657,7 @@
         {
           "kind": "function",
           "name": "test_constructor_disabledAmmMayOptOutOfRole",
-          "line": 68,
+          "line": 77,
           "called": [
             "KnomosisBridge",
             "_boldEnabledArgs",
@@ -4668,7 +4668,7 @@
         {
           "kind": "function",
           "name": "test_constructor_ammRoleIsBridge_reverts",
-          "line": 84,
+          "line": 93,
           "called": [
             "KnomosisBridge",
             "_boldEnabledArgs",
@@ -4678,7 +4678,7 @@
         {
           "kind": "function",
           "name": "test_emergencyDisableAmm_preservesReserves_andEmits",
-          "line": 102,
+          "line": 111,
           "called": [
             "AmmDisabled",
             "KnomosisBridge",
@@ -4690,7 +4690,7 @@
         {
           "kind": "function",
           "name": "test_ammDisabled_swapReverts_bothDirections",
-          "line": 118,
+          "line": 127,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4703,7 +4703,7 @@
         {
           "kind": "function",
           "name": "test_ammDisabled_isMonotonic",
-          "line": 137,
+          "line": 146,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4713,7 +4713,7 @@
         {
           "kind": "function",
           "name": "test_ammDisabled_stopsSeeding_depositStillWorks",
-          "line": 153,
+          "line": 162,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4723,8 +4723,23 @@
         },
         {
           "kind": "function",
+          "name": "test_ammDisabled_withdrawStillWorks_bothLegs",
+          "line": 183,
+          "called": [
+            "KnomosisBridge",
+            "MockBold",
+            "_boldEnabledArgs",
+            "_etchBold",
+            "_finaliseAndRedeem",
+            "_seedBothLegs",
+            "balanceOf",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_breaker_closedHaltsSwaps_bothDirections",
-          "line": 174,
+          "line": 222,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4737,7 +4752,7 @@
         {
           "kind": "function",
           "name": "test_breaker_reopenedResumesSwaps",
-          "line": 193,
+          "line": 241,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4749,7 +4764,7 @@
         {
           "kind": "function",
           "name": "test_brakes_areIndependent",
-          "line": 214,
+          "line": 262,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4760,7 +4775,7 @@
         {
           "kind": "function",
           "name": "test_brakes_killSwitchPrecedesBreaker",
-          "line": 232,
+          "line": 280,
           "called": [
             "KnomosisBridge",
             "_deploySeededReady",
@@ -4772,7 +4787,7 @@
         {
           "kind": "function",
           "name": "test_swap_freezesAfterMigration",
-          "line": 257,
+          "line": 305,
           "called": [
             "KnomosisBridge",
             "MockToggleMigration",
@@ -4785,21 +4800,91 @@
           ]
         },
         {
+          "kind": "function",
+          "name": "_finaliseAndRedeem",
+          "line": 340,
+          "called": [
+            "KnomosisBridge",
+            "_encodeWithdrawalLeaf",
+            "_encodeWithdrawalProof",
+            "_signStateRoot",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_signStateRoot",
+          "line": 357,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_leBytes8",
+          "line": 377,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cbeUint",
+          "line": 385,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cbeBytes",
+          "line": 389,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cbeArrayHead",
+          "line": 394,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_encodeWithdrawalLeaf",
+          "line": 398,
+          "called": [
+            "_cbeBytes",
+            "_cbeUint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_encodeWithdrawalProof",
+          "line": 412,
+          "called": [
+            "_cbeArrayHead",
+            "_cbeBytes",
+            "_cbeUint"
+          ]
+        },
+        {
           "kind": "contract",
           "name": "MockToggleMigration",
-          "line": 292,
+          "line": 431,
           "called": []
         },
         {
           "kind": "function",
           "name": "activate",
-          "line": 295,
+          "line": 434,
           "called": []
         },
         {
           "kind": "function",
           "name": "activated",
-          "line": 299,
+          "line": 438,
           "called": []
         }
       ]

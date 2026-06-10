@@ -2470,13 +2470,21 @@ by AR.6 regression tests and the `Event.tag` projection
 ### 16.3 BridgeState CBE encoding
 
 `Bridge.BridgeState.encode` (defined in
-`LegalKernel/Encoding/State.lean`) concatenates three segments:
+`LegalKernel/Encoding/State.lean`) concatenates nine segments — the
+v1.2 ledger triple, the five GP.11.8 AMM/BOLD L1-mirror fields, and
+the GP.11.10 `ammDisabled` kill-switch mirror:
 
 ```
 BridgeState.encode bs =
   encodeConsumed bs ++       -- consumed: TreeMap DepositId DepositRecord
   encodePending  bs ++       -- pending:  TreeMap WithdrawalId PendingWithdrawal
-  CBE-uint(bs.nextWdId)
+  CBE-uint(bs.nextWdId) ++
+  CBE-uint(bs.ammReserveEth) ++              -- GP.11.8
+  CBE-uint(bs.ammReserveBold) ++             -- GP.11.8
+  CBE-uint(bs.boldCircuitClosed ? 1 : 0) ++  -- GP.11.8 (canonical 0/1)
+  CBE-uint(bs.boldTvlCap) ++                 -- GP.11.8
+  CBE-uint(bs.boldTotalLockedValue) ++       -- GP.11.8
+  CBE-uint(bs.ammDisabled ? 1 : 0)           -- GP.11.10 (canonical 0/1)
 ```
 
 Where:
@@ -2493,14 +2501,30 @@ Where:
   * Each `PendingWithdrawal` encodes as
     `CBE-uint(resource.toNat) ++ CBE-bstr(EthAddress.toBytes recipient) ++
      CBE-uint(amount) ++ CBE-uint(l2LogIndex)`.
+  * The two Bool mirrors (`boldCircuitClosed`, `ammDisabled`) encode
+    as canonical `0`/`1` CBE uints; the decoder rejects any other
+    value (`nonCanonical`).
 
 `BridgeState.decode` is the strict inverse (rejects malformed inputs,
-out-of-bound resource ids, sub-20-byte EthAddress strings, etc.).
-The injectivity theorems
+out-of-bound resource ids, sub-20-byte EthAddress strings,
+non-canonical Bool segments, etc.).  The injectivity theorems
 `Bridge.BridgeState.encodeConsumed_injective`,
 `encodePending_injective`, and `encode_injective` (Workstream EI.6 /
-EI.7, in `LegalKernel/Encoding/BridgeInjective.lean`) ship under
+EI.7 extended by GP.11.8 / GP.11.10, in
+`LegalKernel/Encoding/BridgeInjective.lean`) ship under
 `#print axioms` ⊆ `[propext, Classical.choice, Quot.sound]`.
+
+**Wire-format note.**  GP.11.8 and GP.11.10 are append-only
+extensions of the v1.2 three-segment form: the encoding factorises as
+`bridgeStateEncodeBase ++ bridgeStateEncodeAmmSuffix`
+(`bridgeState_encode_factored`), and at genesis AMM defaults the
+suffix is a fixed constant, which is what makes the v1.2 → v1.4
+migration deterministic (`bridgeState_commit_extends_v1_2` /
+`bridgeState_commit_extends_v1_3` in
+`LegalKernel/FaultProof/Commit.lean`).  Snapshots and state
+commitments produced before a field addition are not byte-compatible
+with the extended encoder; re-snapshot from genesis (or replay the
+log) when upgrading a persisted deployment.
 
 ### 16.4 WithdrawalProof CBE encoding (on-wire)
 

@@ -2,25 +2,34 @@
 pragma solidity ^0.8.20;
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
+import {SmtVerifier} from "src/lib/SmtVerifier.sol";
+import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 import {AmmTestBase} from "test/utils/AmmTestBase.sol";
 
 /// @title AmmKillSwitchTest
-/// @notice Workstream GP.11.3 — the two emergency brakes on `ammSwap`: the
-///         one-way `emergencyDisableAmm` kill switch (GP.11.10's
-///         disaster-recovery control, pulled forward) and the automatic
+/// @notice Workstream GP.11.3 / GP.11.10 — the two emergency brakes on
+///         `ammSwap`: the one-way `emergencyDisableAmm` kill switch
+///         (GP.11.10's disaster-recovery control) and the automatic
 ///         GP.5.5 BOLD circuit-breaker gating (depeg freeze).
 ///
 /// @dev    Pins the three GP.11.10 theorems as tests:
 ///         `emergencyDisableAmm_preserves_reserves`,
 ///         `ammDisabled_implies_swap_reverts`, `ammDisabled_is_monotonic`;
 ///         the access control on the disaster-recovery role; the
-///         seeding-stops-when-disabled effect; the breaker gating in both
-///         directions; the breaker/kill-switch independence + precedence;
-///         and the constructor `AmmRoleIsBridge` guard.
+///         seeding-stops-when-disabled effect; the GP.11.10
+///         "post-disable deposit + withdraw still work" degraded-mode
+///         guarantee; the breaker gating in both directions; the
+///         breaker/kill-switch independence + precedence; and the
+///         constructor `AmmRoleIsBridge` guard.  The 3-of-N multisig
+///         hardening of the role lives in
+///         `KnomosisAmmDisasterRecoveryMultisig.t.sol`.
 contract AmmKillSwitchTest is AmmTestBase {
     /// @dev Local copy of the contract event for `vm.expectEmit`.
     event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
+
+    /// @dev Attestor key for the post-disable withdrawal round trip.
+    uint256 private constant ATTESTOR_PK = 0xA77E5709;
 
     // ------------------------------------------------------------------
     // Kill switch — access control
@@ -166,6 +175,45 @@ contract AmmKillSwitchTest is AmmTestBase {
         assertEq(bridge.totalLockedValue(), tvlBefore + 10 ether, "deposit still credits TVL");
     }
 
+    /// @notice GP.11.10 "post-disable deposit + withdraw still work", the
+    ///         withdrawal half: with the kill switch FIRED, the full exit
+    ///         path stays open on BOTH legs — a state root finalises and
+    ///         `withdrawWithProof` pays out ETH and BOLD.  The kill switch
+    ///         degrades the bridge to the v1.2 "external L1 DEX" mode for
+    ///         swaps; it must never trap user funds.
+    function test_ammDisabled_withdrawStillWorks_bothLegs() public {
+        // A bridge whose attestor key the test controls, so it can
+        // finalise withdrawal state roots.
+        _etchBold();
+        KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
+        args.attestor = vm.addr(ATTESTOR_PK);
+        KnomosisBridge bridge = new KnomosisBridge(args);
+        _seedBothLegs(bridge); // funds the escrow on both legs
+
+        vm.prank(AMM_DR);
+        bridge.emergencyDisableAmm();
+        assertTrue(bridge.ammDisabled(), "kill switch fired before the exits");
+
+        // ETH leg: a single-leaf withdrawal tree, attested, finalised,
+        // and redeemed — all post-disable.
+        address ethRecipient = address(0xE7B1);
+        uint64 ethAmount = 700_000;
+        _finaliseAndRedeem(bridge, NATIVE_ETH, ethRecipient, ethAmount, 1);
+        assertEq(ethRecipient.balance, ethAmount, "ETH redeemed while AMM disabled");
+
+        // BOLD leg: same flow under the next monotonic log index.
+        address boldRecipient = address(0xB07D);
+        uint64 boldAmount = 400_000;
+        _finaliseAndRedeem(bridge, BOLD_RID, boldRecipient, boldAmount, 2);
+        assertEq(
+            MockBold(BOLD).balanceOf(boldRecipient), boldAmount, "BOLD redeemed while AMM disabled"
+        );
+
+        // The reserves were never touched by the exits (withdrawals pay
+        // from escrow; the frozen AMM reserves are a sub-pool of it).
+        assertTrue(bridge.ammDisabled(), "kill switch still set after the exits");
+    }
+
     // ------------------------------------------------------------------
     // BOLD circuit-breaker gating (automatic depeg freeze)
     // ------------------------------------------------------------------
@@ -283,6 +331,97 @@ contract AmmKillSwitchTest is AmmTestBase {
         // The freeze is a gate, not a state change: reserves + kill switch
         // are untouched.
         assertFalse(bridge.ammDisabled(), "migration freeze does not flip the kill switch");
+    }
+
+    // ------------------------------------------------------------------
+    // Withdrawal-flow helpers (CBE + EIP-712; mirror the canonical
+    // encodings used by `BoldCircuitBreaker.t.sol`'s end-to-end tests)
+    // ------------------------------------------------------------------
+
+    function _finaliseAndRedeem(
+        KnomosisBridge bridge,
+        uint64 resourceId,
+        address recipient,
+        uint64 wAmount,
+        uint64 logIdx
+    ) internal {
+        uint64 leafIdx = 0;
+        bytes memory leaf = _encodeWithdrawalLeaf(resourceId, recipient, wAmount, leafIdx);
+        bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
+        bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
+        bridge.submitStateRoot(root, logIdx, _signStateRoot(bridge, root, logIdx));
+        vm.roll(block.number + 100); // past the 100-block dispute window
+        bytes memory proofBlob = _encodeWithdrawalProof(leaf, leafIdx, siblings);
+        bridge.withdrawWithProof(logIdx, proofBlob, leaf);
+    }
+
+    function _signStateRoot(KnomosisBridge bridge, bytes32 root, uint64 idx)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 ds = KnomosisEip712.domainSeparator(
+            "KnomosisBridge", "1", block.chainid, uint256(0), address(bridge)
+        );
+        bytes32 sh = keccak256(
+            abi.encode(
+                keccak256("StateRoot(bytes32 root,uint64 logIndexHigh,bytes32 deploymentId)"),
+                root,
+                uint256(idx),
+                bridge.deploymentId()
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ATTESTOR_PK, KnomosisEip712.digest(ds, sh));
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _leBytes8(uint64 v) internal pure returns (bytes memory out) {
+        out = new bytes(8);
+        for (uint256 i = 0; i < 8; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            out[i] = bytes1(uint8(v >> (8 * i)));
+        }
+    }
+
+    function _cbeUint(uint64 v) internal pure returns (bytes memory) {
+        return bytes.concat(hex"00", _leBytes8(v));
+    }
+
+    function _cbeBytes(bytes memory payload) internal pure returns (bytes memory) {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return bytes.concat(hex"02", _leBytes8(uint64(payload.length)), payload);
+    }
+
+    function _cbeArrayHead(uint64 count) internal pure returns (bytes memory) {
+        return bytes.concat(hex"04", _leBytes8(count));
+    }
+
+    function _encodeWithdrawalLeaf(
+        uint64 resourceId,
+        address recipient,
+        uint64 amount,
+        uint64 l2LogIndex
+    ) internal pure returns (bytes memory) {
+        return bytes.concat(
+            _cbeUint(resourceId),
+            _cbeBytes(abi.encodePacked(recipient)),
+            _cbeUint(amount),
+            _cbeUint(l2LogIndex)
+        );
+    }
+
+    function _encodeWithdrawalProof(bytes memory leaf, uint64 idx, bytes[] memory siblings)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes memory out =
+            bytes.concat(_cbeBytes(leaf), _cbeUint(idx), _cbeArrayHead(uint64(siblings.length)));
+        for (uint256 i = 0; i < siblings.length; i++) {
+            out = bytes.concat(out, _cbeBytes(siblings[i]));
+        }
+        return out;
     }
 }
 

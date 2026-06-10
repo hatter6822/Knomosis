@@ -46,11 +46,17 @@ This file ships nine theorems:
     PendingWithdrawal compare` sub-state.
 
   * **EI.7.e** `Bridge.BridgeState.encode_injective` — the
-    three-segment concatenation injectivity.  Decomposes the bytes
-    via `encodeSortedPairs_self_delim_split` (a new helper in
-    `Encoding/State.lean`) plus `nat_encode_injective` for the
-    final `nextWdId` segment.  Concludes
-    `consumed.Equiv ∧ pending.Equiv ∧ nextWdId.Eq`.
+    nine-segment concatenation injectivity (GP.11.8 widened the
+    original three-segment form with the five AMM/BOLD mirror
+    fields; GP.11.10 appended the `ammDisabled` kill-switch
+    mirror).  Decomposes the bytes via
+    `encodeSortedPairs_self_delim_split` (a helper in
+    `Encoding/State.lean`), chain-splits the seven trailing CBE
+    Nat segments via `nat_encode_suffix_split` /
+    `nat_encode_injective`, and lifts the two Bool-as-Nat
+    segments via `bool_as_nat_injective`.  Concludes
+    `consumed.Equiv ∧ pending.Equiv ∧` field-wise `Eq` on the
+    seven scalar fields.
 
 Per OQ-EI-2's resolution (mirroring EI.2's), the `*.encodeAsBytes`
 framing helpers were promoted from `private` to non-private so the
@@ -535,7 +541,8 @@ theorem Bridge.BridgeState.encodePending_injective
 
     Given `enc(n₁) ++ rest₁ = enc(n₂) ++ rest₂` where both Nats are
     in the CBE canonical range, recover `n₁ = n₂ ∧ rest₁ = rest₂`.
-    Used to split the 6-Nat tail of the GP.11.8 extended encoding. -/
+    Used to split the 7-Nat tail of the GP.11.8 / GP.11.10 extended
+    encoding. -/
 
 /-- Self-delimiting split for a single CBE-encoded `Nat` prefix.
     Under the canonical `< 2^64` bound, equal concatenations of
@@ -557,8 +564,8 @@ private theorem nat_encode_suffix_split
 
 /-! ## Bool-as-Nat injectivity
 
-    `boldCircuitClosed` is encoded as `if b then 1 else 0`.  Equal
-    Nat images imply equal Bools. -/
+    `boldCircuitClosed` and `ammDisabled` are encoded as
+    `if b then 1 else 0`.  Equal Nat images imply equal Bools. -/
 
 /-- If `(if b₁ then 1 else 0) = (if b₂ then 1 else 0)` then `b₁ = b₂`. -/
 private theorem bool_as_nat_injective (b₁ b₂ : Bool)
@@ -568,12 +575,14 @@ private theorem bool_as_nat_injective (b₁ b₂ : Bool)
 
 /-! ## EI.7.e — `Bridge.BridgeState.encode_injective`
 
-The eight-segment concatenation injectivity headline theorem (GP.11.8).
+The nine-segment concatenation injectivity headline theorem
+(GP.11.8, extended by GP.11.10).
 `Bridge.BridgeState.encode bs = encodeConsumed bs ++ encodePending bs
 ++ encode_nat bs.nextWdId ++ encode_nat bs.ammReserveEth ++
 encode_nat bs.ammReserveBold ++ encode_nat (boolToNat bs.boldCircuitClosed)
-++ encode_nat bs.boldTvlCap ++ encode_nat bs.boldTotalLockedValue`
-is a flat concatenation of two CBE maps plus six CBE Nat segments.
+++ encode_nat bs.boldTvlCap ++ encode_nat bs.boldTotalLockedValue ++
+encode_nat (boolToNat bs.ammDisabled)`
+is a flat concatenation of two CBE maps plus seven CBE Nat segments.
 
 Proof structure:
 
@@ -582,20 +591,23 @@ Proof structure:
   2. Apply EI.6.c to derive `bs₁.consumed.Equiv bs₂.consumed`.
   3. Repeat step 1 on the pending segment.
   4. Apply EI.7.d to derive `bs₁.pending.Equiv bs₂.pending`.
-  5. Apply `nat_encode_suffix_split` six times to extract the
+  5. Apply `nat_encode_suffix_split` seven times to extract the
      remaining Nat fields.
-  6. Apply `bool_as_nat_injective` for `boldCircuitClosed`.
+  6. Apply `bool_as_nat_injective` for `boldCircuitClosed` and
+     `ammDisabled`.
 -/
 
 /-- EI.7.e — `Bridge.BridgeState.encode_injective`.  Equal canonical
     encodings of two `BridgeState`s imply (1) `Equiv` on the consumed
-    map, (2) `Equiv` on the pending map, (3) `Eq` on `nextWdId`, and
-    (4–8) `Eq` on the five GP.11.8 AMM/BOLD state fields.
+    map, (2) `Equiv` on the pending map, (3) `Eq` on `nextWdId`,
+    (4–8) `Eq` on the five GP.11.8 AMM/BOLD state fields, and
+    (9) `Eq` on the GP.11.10 `ammDisabled` kill-switch mirror.
 
     **Hypotheses.**  Inherits the bounds from EI.6.c (consumed map)
     and EI.7.d (pending map) plus per-field `< 2^64` bounds for the
-    six trailing CBE Nats (the Bool field's bound is discharged
-    inline since `if b then 1 else 0 < 256^8` is trivial). -/
+    five trailing scalar CBE Nats (the two Bool fields' bounds are
+    discharged inline since `if b then 1 else 0 < 256^8` is
+    trivial). -/
 theorem Bridge.BridgeState.encode_injective
     (bs₁ bs₂ : Bridge.BridgeState)
     (h_cons_len₁ : bs₁.consumed.toList.length < 256 ^ 8)
@@ -646,8 +658,9 @@ theorem Bridge.BridgeState.encode_injective
     bs₁.ammReserveBold = bs₂.ammReserveBold ∧
     bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
     bs₁.boldTvlCap = bs₂.boldTvlCap ∧
-    bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue := by
-  -- Unfold encode to expose the eight-segment concatenation.
+    bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue ∧
+    bs₁.ammDisabled = bs₂.ammDisabled := by
+  -- Unfold encode to expose the nine-segment concatenation.
   unfold Bridge.BridgeState.encode at h
   -- Step 1: Split the consumed prefix from the rest.
   rw [bridgeState_encodeConsumed_eq_via_consumedProj,
@@ -786,7 +799,7 @@ theorem Bridge.BridgeState.encode_injective
     Bridge.BridgeState.encodePending_injective bs₁ bs₂
       h_pend_len₁ h_pend_len₂ h_pend_id₁ h_pend_id₂
       h_pend_size₁ h_pend_size₂ h_pend_wd₁ h_pend_wd₂ h_pend_bytes
-  -- Step 3: Chain-split the six trailing Nat encodings via
+  -- Step 3: Chain-split the seven trailing Nat encodings via
   -- `nat_encode_suffix_split`.  Each application extracts one
   -- Nat equality and advances to the next segment.
   have h_nat_tail := h_split_pend.2
@@ -819,12 +832,29 @@ theorem Bridge.BridgeState.encode_injective
   have ⟨h_tvlCap, h_after_tvlCap⟩ :=
     nat_encode_suffix_split bs₁.boldTvlCap bs₂.boldTvlCap _ _
       h_tvlCap₁ h_tvlCap₂ h_after_circuit
-  -- Split boldTotalLockedValue (final segment — suffix must be []).
-  have h_totalLocked : bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue :=
-    nat_encode_injective bs₁.boldTotalLockedValue bs₂.boldTotalLockedValue
+  -- Split boldTotalLockedValue.
+  have ⟨h_totalLocked, h_after_totalLocked⟩ :=
+    nat_encode_suffix_split bs₁.boldTotalLockedValue bs₂.boldTotalLockedValue _ _
       h_totalLocked₁ h_totalLocked₂ h_after_tvlCap
+  -- Split ammDisabled (encoded as Nat 0/1; final segment — suffix
+  -- exhausted, so the plain encoding-injectivity lemma closes it).
+  have h_disabledBound₁ : (if bs₁.ammDisabled then 1 else 0 : Nat) < 256 ^ 8 := by
+    have : (1 : Nat) < 256 ^ 8 := by decide
+    split <;> omega
+  have h_disabledBound₂ : (if bs₂.ammDisabled then 1 else 0 : Nat) < 256 ^ 8 := by
+    have : (1 : Nat) < 256 ^ 8 := by decide
+    split <;> omega
+  have h_disabledNat :
+      (if bs₁.ammDisabled then 1 else 0 : Nat) =
+      (if bs₂.ammDisabled then 1 else 0 : Nat) :=
+    nat_encode_injective
+      (if bs₁.ammDisabled then 1 else 0)
+      (if bs₂.ammDisabled then 1 else 0)
+      h_disabledBound₁ h_disabledBound₂ h_after_totalLocked
+  have h_disabled : bs₁.ammDisabled = bs₂.ammDisabled :=
+    bool_as_nat_injective _ _ h_disabledNat
   exact ⟨h_consumed, h_pending, h_nxt, h_ammEth, h_ammBold, h_circuit,
-         h_tvlCap, h_totalLocked⟩
+         h_tvlCap, h_totalLocked, h_disabled⟩
 
 end Encoding
 end LegalKernel

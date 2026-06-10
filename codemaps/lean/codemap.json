@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d5ba6edb231d83349c024bc44d3be2b1a1a41f81e9683f42038ccb64503eaa78"
+    "source_digest": "b8e58e786a3134826e3c7a35b8ca80786cbc34e7239ce8358dff42d57cea7bcf"
   },
   "summary": {
     "module_count": 301,
-    "declaration_count": 5023
+    "declaration_count": 5027
   },
   "modules": [
     {
@@ -10149,36 +10149,36 @@
     {
       "module": "LegalKernel.Bridge.State",
       "path": "LegalKernel/Bridge/State.lean",
-      "declaration_count": 26,
+      "declaration_count": 27,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 86,
+          "line": 93,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Bridge",
-          "line": 87,
+          "line": 94,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "DepositId",
-          "line": 142,
+          "line": 149,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "WithdrawalId",
-          "line": 147,
+          "line": 154,
           "called": []
         },
         {
           "kind": "structure",
           "name": "DepositRecord",
-          "line": 179,
+          "line": 186,
           "called": [
             "Amount",
             "ResourceId"
@@ -10187,7 +10187,7 @@
         {
           "kind": "structure",
           "name": "LegacyDepositRecord",
-          "line": 210,
+          "line": 217,
           "called": [
             "Amount",
             "ResourceId"
@@ -10196,7 +10196,7 @@
         {
           "kind": "def",
           "name": "DepositRecord.fromLegacy",
-          "line": 221,
+          "line": 228,
           "called": [
             "DepositRecord",
             "LegacyDepositRecord"
@@ -10205,7 +10205,7 @@
         {
           "kind": "def",
           "name": "DepositRecord.toLegacy",
-          "line": 230,
+          "line": 237,
           "called": [
             "DepositRecord",
             "LegacyDepositRecord"
@@ -10214,7 +10214,7 @@
         {
           "kind": "theorem",
           "name": "DepositRecord.toLegacy_fromLegacy",
-          "line": 237,
+          "line": 244,
           "called": [
             "DepositRecord.fromLegacy",
             "LegacyDepositRecord"
@@ -10223,7 +10223,7 @@
         {
           "kind": "theorem",
           "name": "DepositRecord.fromLegacy_toLegacy_of_zero_pool_budget",
-          "line": 249,
+          "line": 256,
           "called": [
             "DepositRecord",
             "DepositRecord.fromLegacy"
@@ -10232,7 +10232,7 @@
         {
           "kind": "structure",
           "name": "PendingWithdrawal",
-          "line": 262,
+          "line": 269,
           "called": [
             "Amount",
             "EthAddress",
@@ -10242,7 +10242,7 @@
         {
           "kind": "structure",
           "name": "BridgeState",
-          "line": 287,
+          "line": 294,
           "called": [
             "Amount",
             "DepositId",
@@ -10254,13 +10254,13 @@
         {
           "kind": "namespace",
           "name": "BridgeState",
-          "line": 309,
+          "line": 324,
           "called": []
         },
         {
           "kind": "def",
           "name": "empty",
-          "line": 313,
+          "line": 329,
           "called": [
             "BridgeState"
           ]
@@ -10268,7 +10268,7 @@
         {
           "kind": "theorem",
           "name": "empty_consumed_empty",
-          "line": 325,
+          "line": 342,
           "called": [
             "DepositId",
             "DepositRecord"
@@ -10277,7 +10277,7 @@
         {
           "kind": "theorem",
           "name": "empty_pending_empty",
-          "line": 330,
+          "line": 347,
           "called": [
             "PendingWithdrawal",
             "WithdrawalId"
@@ -10286,43 +10286,49 @@
         {
           "kind": "theorem",
           "name": "empty_nextWdId_zero",
-          "line": 334,
+          "line": 351,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "empty_ammReserveEth_zero",
-          "line": 338,
+          "line": 355,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "empty_ammReserveBold_zero",
-          "line": 342,
+          "line": 359,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "empty_boldCircuitClosed_false",
-          "line": 346,
+          "line": 363,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "empty_boldTvlCap_zero",
-          "line": 350,
+          "line": 367,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "empty_boldTotalLockedValue_zero",
-          "line": 354,
+          "line": 371,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "empty_ammDisabled_false",
+          "line": 376,
           "called": []
         },
         {
           "kind": "def",
           "name": "markConsumed",
-          "line": 362,
+          "line": 384,
           "called": [
             "BridgeState",
             "DepositId",
@@ -10332,7 +10338,7 @@
         {
           "kind": "def",
           "name": "appendWithdrawal",
-          "line": 368,
+          "line": 390,
           "called": [
             "BridgeState",
             "PendingWithdrawal"
@@ -10341,7 +10347,7 @@
         {
           "kind": "def",
           "name": "isConsumed",
-          "line": 375,
+          "line": 397,
           "called": [
             "BridgeState",
             "DepositId"
@@ -10350,7 +10356,7 @@
         {
           "kind": "def",
           "name": "hasConsumed",
-          "line": 380,
+          "line": 402,
           "called": [
             "Bridge",
             "BridgeState",
@@ -14408,19 +14414,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 68,
+          "line": 74,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Encoding",
-          "line": 69,
+          "line": 75,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "Bridge.DepositRecord.encode_injective",
-          "line": 92,
+          "line": 98,
           "called": [
             "Bridge.DepositRecord.encode",
             "DecodeError",
@@ -14431,7 +14437,7 @@
         {
           "kind": "theorem",
           "name": "Bridge.DepositRecord.encodeAsBytes_injective",
-          "line": 118,
+          "line": 124,
           "called": [
             "Bridge.DepositRecord.encode",
             "Bridge.DepositRecord.encodeAsBytes",
@@ -14441,7 +14447,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.consumedProj",
-          "line": 144,
+          "line": 150,
           "called": [
             "Bridge.DepositRecord.encodeAsBytes"
           ]
@@ -14449,7 +14455,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encodeConsumed_eq_via_consumedProj",
-          "line": 150,
+          "line": 156,
           "called": [
             "Bridge.BridgeState.consumedProj",
             "Bridge.BridgeState.encodeConsumed",
@@ -14459,7 +14465,7 @@
         {
           "kind": "theorem",
           "name": "Bridge.BridgeState.encodeConsumed_injective",
-          "line": 168,
+          "line": 174,
           "called": [
             "Bridge.BridgeState.consumedProj",
             "Bridge.BridgeState.encodeConsumed",
@@ -14475,13 +14481,13 @@
         {
           "kind": "theorem",
           "name": "Bridge.EthAddress.toBytes_injective",
-          "line": 308,
+          "line": 314,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "Bridge.PendingWithdrawal.encode_injective",
-          "line": 338,
+          "line": 344,
           "called": [
             "Bridge.PendingWithdrawal.encode",
             "DecodeError",
@@ -14492,7 +14498,7 @@
         {
           "kind": "theorem",
           "name": "Bridge.PendingWithdrawal.encodeAsBytes_injective",
-          "line": 365,
+          "line": 371,
           "called": [
             "Bridge.PendingWithdrawal.encode",
             "Bridge.PendingWithdrawal.encodeAsBytes",
@@ -14502,7 +14508,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.pendingProj",
-          "line": 394,
+          "line": 400,
           "called": [
             "Bridge.PendingWithdrawal.encodeAsBytes"
           ]
@@ -14510,7 +14516,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encodePending_eq_via_pendingProj",
-          "line": 400,
+          "line": 406,
           "called": [
             "Bridge.BridgeState.encodePending",
             "Bridge.BridgeState.pendingProj",
@@ -14520,7 +14526,7 @@
         {
           "kind": "theorem",
           "name": "Bridge.BridgeState.encodePending_injective",
-          "line": 407,
+          "line": 413,
           "called": [
             "Bridge.BridgeState.encodePending",
             "Bridge.BridgeState.pendingProj",
@@ -14536,7 +14542,7 @@
         {
           "kind": "theorem",
           "name": "nat_encode_suffix_split",
-          "line": 543,
+          "line": 550,
           "called": [
             "DecodeError",
             "Stream",
@@ -14546,13 +14552,13 @@
         {
           "kind": "theorem",
           "name": "bool_as_nat_injective",
-          "line": 563,
+          "line": 570,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "Bridge.BridgeState.encode_injective",
-          "line": 598,
+          "line": 610,
           "called": [
             "Bridge.BridgeState.consumedProj",
             "Bridge.BridgeState.encode",
@@ -17065,7 +17071,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.encode",
-          "line": 674,
+          "line": 679,
           "called": [
             "Stream"
           ]
@@ -17073,7 +17079,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.decode",
-          "line": 682,
+          "line": 687,
           "called": [
             "DecodeError",
             "Stream"
@@ -17082,7 +17088,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.encodeAsBytes",
-          "line": 713,
+          "line": 718,
           "called": [
             "Bridge.DepositRecord.encode"
           ]
@@ -17090,7 +17096,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encodeConsumed",
-          "line": 718,
+          "line": 723,
           "called": [
             "Bridge.DepositRecord.encodeAsBytes",
             "Stream",
@@ -17100,7 +17106,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.encode",
-          "line": 730,
+          "line": 735,
           "called": [
             "Stream"
           ]
@@ -17108,7 +17114,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.encodeAsBytes",
-          "line": 744,
+          "line": 749,
           "called": [
             "Bridge.PendingWithdrawal.encode"
           ]
@@ -17116,7 +17122,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.decode",
-          "line": 749,
+          "line": 754,
           "called": [
             "DecodeError",
             "Stream"
@@ -17125,7 +17131,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encodePending",
-          "line": 778,
+          "line": 783,
           "called": [
             "Bridge.PendingWithdrawal.encodeAsBytes",
             "Stream",
@@ -17135,7 +17141,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encode",
-          "line": 788,
+          "line": 797,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending",
@@ -17145,7 +17151,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decodeConsumed",
-          "line": 800,
+          "line": 810,
           "called": [
             "Bridge.DepositRecord.decode",
             "DecodeError",
@@ -17157,7 +17163,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decodePending",
-          "line": 819,
+          "line": 829,
           "called": [
             "Bridge.PendingWithdrawal.decode",
             "DecodeError",
@@ -17169,7 +17175,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decode",
-          "line": 838,
+          "line": 850,
           "called": [
             "Bridge.BridgeState.decodeConsumed",
             "Bridge.BridgeState.decodePending",
@@ -17180,7 +17186,7 @@
         {
           "kind": "instance",
           "name": "instEncodableBridgeState",
-          "line": 872,
+          "line": 891,
           "called": [
             "Bridge.BridgeState.decode",
             "Bridge.BridgeState.encode",
@@ -17192,7 +17198,7 @@
         {
           "kind": "def",
           "name": "ActorBudget.encode",
-          "line": 877,
+          "line": 896,
           "called": [
             "ActorBudget",
             "Stream"
@@ -17201,7 +17207,7 @@
         {
           "kind": "def",
           "name": "ActorBudget.decode",
-          "line": 882,
+          "line": 901,
           "called": [
             "ActorBudget",
             "DecodeError",
@@ -17211,7 +17217,7 @@
         {
           "kind": "instance",
           "name": "instEncodableActorBudget",
-          "line": 891,
+          "line": 910,
           "called": [
             "ActorBudget",
             "ActorBudget.decode",
@@ -17224,7 +17230,7 @@
         {
           "kind": "def",
           "name": "BudgetPolicy.encode",
-          "line": 897,
+          "line": 916,
           "called": [
             "BudgetPolicy",
             "Stream",
@@ -17235,7 +17241,7 @@
         {
           "kind": "def",
           "name": "BudgetPolicy.decode",
-          "line": 905,
+          "line": 924,
           "called": [
             "BudgetPolicy",
             "DecodeError",
@@ -17247,7 +17253,7 @@
         {
           "kind": "instance",
           "name": "instEncodableBudgetPolicy",
-          "line": 924,
+          "line": 943,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.decode",
@@ -17260,7 +17266,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_roundtrip",
-          "line": 953,
+          "line": 972,
           "called": [
             "ActorBudget",
             "ActorBudget.decode",
@@ -17272,7 +17278,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_encode_injective",
-          "line": 972,
+          "line": 991,
           "called": [
             "ActorBudget",
             "ActorBudget.encode",
@@ -17284,7 +17290,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_bounded_roundtrip",
-          "line": 995,
+          "line": 1014,
           "called": [
             "BudgetPolicy.decode",
             "BudgetPolicy.encode",
@@ -17297,7 +17303,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_encode_injective",
-          "line": 1030,
+          "line": 1049,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.encode",
@@ -17309,7 +17315,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.encode",
-          "line": 1060,
+          "line": 1079,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.encode",
@@ -17327,7 +17333,7 @@
         {
           "kind": "def",
           "name": "NonceState.decode",
-          "line": 1072,
+          "line": 1091,
           "called": [
             "ActorId",
             "DecodeError",
@@ -17340,7 +17346,7 @@
         {
           "kind": "def",
           "name": "KeyRegistry.decodeMap",
-          "line": 1082,
+          "line": 1101,
           "called": [
             "ActorId",
             "DecodeError",
@@ -17352,7 +17358,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.decode",
-          "line": 1093,
+          "line": 1112,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.decode",
@@ -17370,7 +17376,7 @@
         {
           "kind": "instance",
           "name": "instEncodableExtendedState",
-          "line": 1119,
+          "line": 1138,
           "called": [
             "Encodable",
             "ExtendedState",
@@ -17383,7 +17389,7 @@
         {
           "kind": "theorem",
           "name": "state_encode_deterministic",
-          "line": 1145,
+          "line": 1164,
           "called": [
             "State"
           ]
@@ -17391,7 +17397,7 @@
         {
           "kind": "theorem",
           "name": "balanceMap_encode_deterministic_of_equiv",
-          "line": 1152,
+          "line": 1171,
           "called": [
             "BalanceMap",
             "BalanceMap.encode"
@@ -17400,7 +17406,7 @@
         {
           "kind": "theorem",
           "name": "extendedState_encode_deterministic",
-          "line": 1162,
+          "line": 1181,
           "called": [
             "ExtendedState",
             "es"
@@ -17409,13 +17415,13 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_deterministic",
-          "line": 1173,
+          "line": 1192,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "depositRecord_encode_deterministic",
-          "line": 1181,
+          "line": 1200,
           "called": [
             "Bridge.DepositRecord.encode"
           ]
@@ -17423,7 +17429,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_encode_deterministic",
-          "line": 1187,
+          "line": 1206,
           "called": [
             "Bridge.PendingWithdrawal.encode"
           ]
@@ -17431,7 +17437,7 @@
         {
           "kind": "theorem",
           "name": "depositRecord_roundtrip",
-          "line": 1197,
+          "line": 1216,
           "called": [
             "Bridge.DepositRecord.decode",
             "Bridge.DepositRecord.encode",
@@ -17442,7 +17448,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_roundtrip",
-          "line": 1254,
+          "line": 1273,
           "called": [
             "Bridge.PendingWithdrawal.decode",
             "Bridge.PendingWithdrawal.encode",
@@ -17454,7 +17460,7 @@
         {
           "kind": "theorem",
           "name": "actorId_encode_injective",
-          "line": 1334,
+          "line": 1353,
           "called": [
             "ActorId",
             "Stream",
@@ -17464,7 +17470,7 @@
         {
           "kind": "theorem",
           "name": "resourceId_encode_injective",
-          "line": 1340,
+          "line": 1359,
           "called": [
             "ResourceId",
             "Stream",
@@ -17474,7 +17480,7 @@
         {
           "kind": "theorem",
           "name": "amount_encode_injective",
-          "line": 1346,
+          "line": 1365,
           "called": [
             "Amount",
             "nat_encode_injective"
@@ -17483,7 +17489,7 @@
         {
           "kind": "theorem",
           "name": "nonce_encode_injective",
-          "line": 1355,
+          "line": 1374,
           "called": [
             "Nonce",
             "nat_encode_injective"
@@ -17492,7 +17498,7 @@
         {
           "kind": "theorem",
           "name": "depositId_encode_injective",
-          "line": 1364,
+          "line": 1383,
           "called": [
             "nat_encode_injective"
           ]
@@ -17500,7 +17506,7 @@
         {
           "kind": "theorem",
           "name": "withdrawalId_encode_injective",
-          "line": 1374,
+          "line": 1393,
           "called": [
             "nat_encode_injective"
           ]
@@ -17508,7 +17514,7 @@
         {
           "kind": "theorem",
           "name": "publicKey_encode_injective",
-          "line": 1387,
+          "line": 1406,
           "called": [
             "Encoding",
             "LegalKernel",
@@ -18588,7 +18594,7 @@
     {
       "module": "LegalKernel.FaultProof.Commit",
       "path": "LegalKernel/FaultProof/Commit.lean",
-      "declaration_count": 41,
+      "declaration_count": 43,
       "declarations": [
         {
           "kind": "namespace",
@@ -18800,7 +18806,7 @@
         {
           "kind": "theorem",
           "name": "commitState_bytes_injective_under_collision_free",
-          "line": 199,
+          "line": 200,
           "called": [
             "State.encode",
             "commitState",
@@ -18810,7 +18816,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_bytes_injective_under_collision_free",
-          "line": 209,
+          "line": 210,
           "called": [
             "NonceState",
             "NonceState.encode",
@@ -18821,7 +18827,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_bytes_injective_under_collision_free",
-          "line": 219,
+          "line": 220,
           "called": [
             "KeyRegistry",
             "KeyRegistry.encodeMap",
@@ -18832,7 +18838,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_bytes_injective_under_collision_free",
-          "line": 229,
+          "line": 230,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies",
@@ -18842,7 +18848,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_bytes_injective_under_collision_free",
-          "line": 239,
+          "line": 240,
           "called": [
             "BridgeState",
             "commitBridgeState",
@@ -18852,13 +18858,13 @@
         {
           "kind": "theorem",
           "name": "byteArrayAppendInj",
-          "line": 276,
+          "line": 277,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_concat_five_split",
-          "line": 302,
+          "line": 303,
           "called": [
             "byteArrayAppendInj"
           ]
@@ -18866,7 +18872,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_eq_under_collision_free",
-          "line": 352,
+          "line": 353,
           "called": [
             "ExtendedState",
             "byteArray_concat_five_split",
@@ -18888,7 +18894,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_bytes_eq_under_collision_free",
-          "line": 402,
+          "line": 403,
           "called": [
             "BridgeState",
             "ExtendedState",
@@ -18910,7 +18916,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.extEq",
-          "line": 471,
+          "line": 472,
           "called": [
             "ExtendedState",
             "State.Equiv",
@@ -18920,7 +18926,7 @@
         {
           "kind": "theorem",
           "name": "ExtendedState.extEq.refl",
-          "line": 487,
+          "line": 489,
           "called": [
             "ExtendedState",
             "ExtendedState.extEq",
@@ -18931,7 +18937,7 @@
         {
           "kind": "structure",
           "name": "ExtendedState.CanonicalBounds",
-          "line": 509,
+          "line": 512,
           "called": [
             "BalanceMap.encodeAsBytes",
             "Bridge.DepositRecord.encodeAsBytes",
@@ -18945,7 +18951,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_extensional_eq_under_collision_free",
-          "line": 591,
+          "line": 594,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encode_injective",
@@ -18972,7 +18978,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_includes_ammState",
-          "line": 718,
+          "line": 723,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -18982,7 +18988,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeBase",
-          "line": 732,
+          "line": 738,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending"
@@ -18991,13 +18997,13 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeAmmSuffix",
-          "line": 741,
+          "line": 748,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "bridgeState_encode_factored",
-          "line": 750,
+          "line": 758,
           "called": [
             "Bridge.BridgeState.encode",
             "bridgeStateEncodeAmmSuffix",
@@ -19007,7 +19013,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_amm_genesis_suffix_const",
-          "line": 758,
+          "line": 767,
           "called": [
             "bridgeStateEncodeAmmSuffix"
           ]
@@ -19015,7 +19021,35 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_2",
-          "line": 781,
+          "line": 790,
+          "called": [
+            "Bridge.BridgeState.encode",
+            "Bridge.BridgeState.encodeConsumed",
+            "Bridge.BridgeState.encodePending",
+            "BridgeState",
+            "bridgeStateEncodeAmmSuffix",
+            "bridgeStateEncodeBase",
+            "bridgeState_amm_genesis_suffix_const",
+            "bridgeState_encode_factored",
+            "commitBridgeState"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeState_commit_extends_v1_3",
+          "line": 825,
+          "called": [
+            "Bridge.BridgeState.encode",
+            "Bridge.BridgeState.encodeConsumed",
+            "Bridge.BridgeState.encodePending",
+            "BridgeState",
+            "commitBridgeState"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "commitBridgeState_reflects_ammDisabled",
+          "line": 863,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -19024,13 +19058,13 @@
             "ExtendedState.empty",
             "FaultProof",
             "LegalKernel",
-            "bridgeStateEncodeAmmSuffix",
-            "bridgeStateEncodeBase",
-            "bridgeState_amm_genesis_suffix_const",
-            "bridgeState_encode_factored",
+            "bridgeState_commit_includes_ammState",
             "commitBridgeState",
+            "commitBridgeState_bytes_injective_under_collision_free",
             "commitExtendedState",
-            "commitExtendedState_size"
+            "commitExtendedState_size",
+            "hashBytes",
+            "nat_encode_injective"
           ]
         }
       ]
@@ -44162,7 +44196,7 @@
     {
       "module": "LegalKernel.Test.Encoding.Injectivity",
       "path": "LegalKernel/Test/Encoding/Injectivity.lean",
-      "declaration_count": 101,
+      "declaration_count": 102,
       "declarations": [
         {
           "kind": "namespace",
@@ -45189,8 +45223,21 @@
         },
         {
           "kind": "def",
+          "name": "test_bridgeState_encode_distinguishes_ammDisabled",
+          "line": 1565,
+          "called": [
+            "Bridge.BridgeState.encode",
+            "TestCase",
+            "assert",
+            "bs1",
+            "bs2",
+            "genBridgeState_single_consumed"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "test_bridgeState_encode_distinguishes",
-          "line": 1564,
+          "line": 1576,
           "called": [
             "Bridge.BridgeState.encode",
             "TestCase",
@@ -45203,7 +45250,7 @@
         {
           "kind": "def",
           "name": "test_extendedState_extEq_api",
-          "line": 1577,
+          "line": 1589,
           "called": [
             "ExtendedState.extEq",
             "State.Equiv",
@@ -45214,7 +45261,7 @@
         {
           "kind": "def",
           "name": "test_extendedState_extEq_refl_empty",
-          "line": 1599,
+          "line": 1612,
           "called": [
             "ExtendedState.extEq",
             "ExtendedState.extEq.refl",
@@ -45225,7 +45272,7 @@
         {
           "kind": "def",
           "name": "test_extendedState_extEq_refl_nonEmpty",
-          "line": 1610,
+          "line": 1623,
           "called": [
             "ActorId",
             "Amount",
@@ -45240,7 +45287,7 @@
         {
           "kind": "def",
           "name": "test_commitExtendedState_subcommits_extensional_eq_api",
-          "line": 1632,
+          "line": 1645,
           "called": [
             "ExtendedState.CanonicalBounds",
             "ExtendedState.extEq",
@@ -45253,7 +45300,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1653,
+          "line": 1666,
           "called": [
             "InjectivityTests",
             "LegalKernel.Test.Encoding",
@@ -45275,6 +45322,7 @@
             "test_bridgeState_encodeConsumed_injective_api",
             "test_bridgeState_encodePending_injective_api",
             "test_bridgeState_encode_distinguishes",
+            "test_bridgeState_encode_distinguishes_ammDisabled",
             "test_bridgeState_encode_injective_api",
             "test_cborHeadEncode_distinguishes_major",
             "test_cborHeadEncode_distinguishes_payload",
@@ -46935,13 +46983,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.AmmCommit",
-          "line": 37,
+          "line": 43,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 40,
+          "line": 46,
           "called": [
             "Bridge.BridgeState.decode",
             "Bridge.BridgeState.encode",
@@ -46960,10 +47008,12 @@
             "bridgeStateEncodeBase",
             "bridgeState_amm_genesis_suffix_const",
             "bridgeState_commit_extends_v1_2",
+            "bridgeState_commit_extends_v1_3",
             "bridgeState_commit_includes_ammState",
             "bridgeState_encode_factored",
             "bs1",
             "commitBridgeState",
+            "commitBridgeState_reflects_ammDisabled",
             "commitExtendedState",
             "es0"
           ]

@@ -76,6 +76,13 @@ Coverage map:
     `boldCircuitClosed`, `boldTvlCap`, `boldTotalLockedValue`)
     so the fault-proof game can adjudicate disputes that turn
     on AMM state.
+  * GP.11.10 — `BridgeState` extended with the `ammDisabled`
+    kill-switch mirror so the state-root preimage reflects the
+    L1 `emergencyDisableAmm()` disaster-recovery state.  Per the
+    GP.11.10 design decision there is NO `Action.disableAmm`
+    variant: the flag is a passive L1 mirror (like the five
+    GP.11.8 fields), populated by the deployment's ingest layer
+    and committed by `commitBridgeState`.
 -/
 
 import LegalKernel.Kernel
@@ -305,12 +312,21 @@ structure BridgeState where
   boldTvlCap : Amount := 0
   /-- GP.11.8: L1 per-BOLD total locked value. -/
   boldTotalLockedValue : Amount := 0
+  /-- GP.11.10: Whether the L1 AMM kill switch has fired
+      (`emergencyDisableAmm()` sets the one-way `ammDisabled` flag on
+      L1).  Committed to the state root so the fault-proof game can
+      adjudicate disputes that turn on the AMM's disabled state and
+      the L2 ingestor learns the disable from the commitment alone
+      (the GP.11.10 design decision: no `Action.disableAmm`).
+      One-way on L1; the L2 mirror simply reflects the L1 value. -/
+  ammDisabled : Bool := false
   deriving Repr
 
 namespace BridgeState
 
 /-- The genesis bridge state: empty consumed set, empty pending set,
-    next withdrawal id 0, AMM reserves at zero, BOLD circuit open. -/
+    next withdrawal id 0, AMM reserves at zero, BOLD circuit open,
+    AMM enabled (kill switch not fired). -/
 def empty : BridgeState where
   consumed             := ∅
   pending              := ∅
@@ -320,6 +336,7 @@ def empty : BridgeState where
   boldCircuitClosed    := false
   boldTvlCap           := 0
   boldTotalLockedValue := 0
+  ammDisabled          := false
 
 /-- §7.1.1 smoke-test: `BridgeState.empty.consumed` is the empty
     `TreeMap`. -/
@@ -354,6 +371,11 @@ theorem empty_boldTvlCap_zero :
 /-- GP.11.8 smoke-test: `BridgeState.empty.boldTotalLockedValue = 0`. -/
 theorem empty_boldTotalLockedValue_zero :
     empty.boldTotalLockedValue = 0 := rfl
+
+/-- GP.11.10 smoke-test: `BridgeState.empty.ammDisabled = false` —
+    the genesis AMM is enabled (the kill switch has not fired). -/
+theorem empty_ammDisabled_false :
+    empty.ammDisabled = false := rfl
 
 /-! ## Convenience accessors / mutators -/
 
