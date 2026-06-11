@@ -87,6 +87,7 @@ def Action.tag : Action → Nat
   | .topUpActionBudgetFor _ _ _ _ _ => 21
   | .claimBudgetRefund   _ _ _ _ => 22
   | .ammSwap             _ _ _ _ _ => 23
+  | .reclaimAmmReserves  _ _ _ _ => 24
 
 /-! ## §3.4 Per-clause semantic predicate
 

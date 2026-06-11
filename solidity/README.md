@@ -37,8 +37,9 @@ solidity/
 │   │   ├── KnomosisStateRootSubmission.sol (H)   — state-root window + bonds
 │   │   ├── KnomosisFaultProofGame.sol     (H)    — bisection-game arbiter
 │   │   ├── KnomosisStepVM.sol             (H)    — single-step verifier (pure)
-│   │   └── KnomosisFaultProofMigration.sol (H)   — v1 → v2 migration
-│   ├── interfaces/                            — public interface files (E.1-E.5)
+│   │   ├── KnomosisFaultProofMigration.sol (H)   — v1 → v2 migration
+│   │   └── KnomosisAmmDisasterRecoveryMultisig.sol (GP.11.10) — 3-of-N AMM kill-switch quorum
+│   ├── interfaces/                            — public interface files (E.1-E.5, GP.11.10)
 │   └── lib/
 │       ├── KnomosisEip712.sol      — EIP-712 domain + struct-hash helpers
 │       ├── CBEDecode.sol        — CBE byte decoder (mirrors Lean)
@@ -635,6 +636,33 @@ The v1 → v2 migration contract. Same attested-handoff pattern as
 `KnomosisDisputeVerifier` (v1) + `KnomosisBridge` deployment to the
 `KnomosisDisputeVerifierV2` + `KnomosisStateRootSubmission` +
 `KnomosisFaultProofGame` + `KnomosisStepVM` quartet.
+
+## Workstream GP.11.10 contract (AMM disaster recovery)
+
+### `KnomosisAmmDisasterRecoveryMultisig.sol`
+
+The reference 3-of-N multisig for the bridge's `ammDisasterRecovery`
+kill-switch role (operator + community representatives + auditor per
+the GP.11.10 custody spec).  Single-purpose by construction: its only
+capability is calling `emergencyDisableAmm()` on the immutable
+`bridge` once `threshold` distinct signers confirm within one
+7-day confirmation round.
+
+* `MIN_DISABLE_THRESHOLD = 3` — the 3-of-N floor is
+  constructor-enforced (`ThresholdBelowMinimum` otherwise), not a
+  deployment-checklist promise.
+* The threshold-th `confirmDisable()` fires the bridge call
+  atomically — in a disaster the final signature IS the trigger; no
+  separate execute step to forget, grief, or front-run.
+* `revokeConfirmation()` lets a signer stand down; stale approvals
+  additionally expire as a group (`CONFIRMATION_WINDOW = 7 days`,
+  O(1) round-roll), so approvals from one incident can never combine
+  with a later signature to fire the one-way switch out of context.
+* Wiring: deploy the multisig against the *predicted* bridge CREATE
+  address, then the bridge with
+  `ammDisasterRecovery = address(multisig)` — the same pre-wiring
+  pattern as predicted `KnomosisMigration` successors.  Operator
+  procedure: `docs/gas_pool_runbook.md` §10.
 
 ## Production deployment notes
 

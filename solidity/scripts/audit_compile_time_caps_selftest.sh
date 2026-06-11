@@ -237,6 +237,48 @@ expect 1 "missing EXPECTED_BOLD_SYMBOL rejected" "${sym_missing}"
 expect 2 "missing audited file reported as env error" "${TMP}/does_not_exist.sol"
 
 echo "selftest: ${passed} passed, ${failed} failed."
+# ------------------------------------------------------------------
+# GP.11.10 multisig governance constants
+# (`KnomosisAmmDisasterRecoveryMultisig.sol`, the gate's optional $2).
+# Drift / missing tampers on the 3-of-N floor, the signer-set bound,
+# and the confirmation window must each fail the gate; the canonical
+# multisig source must pass.
+# ------------------------------------------------------------------
+MSRC="${SCRIPT_DIR}/../src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol"
+if [[ ! -f "${MSRC}" ]]; then
+    echo "selftest: FAIL: multisig contract not found: ${MSRC}" >&2
+    failed=$((failed + 1))
+else
+    expect 0 "canonical multisig accepted" "${SRC}" "${MSRC}"
+
+    out="${TMP}/ms_threshold_drift.sol"
+    sed -E 's/(constant[[:space:]]+MIN_DISABLE_THRESHOLD[[:space:]]*=[[:space:]]*)3([[:space:]]*;)/\12\2/' \
+        "${MSRC}" >"${out}"
+    expect 1 "MIN_DISABLE_THRESHOLD drift (3 -> 2) rejected" "${SRC}" "${out}"
+
+    out="${TMP}/ms_threshold_missing.sol"
+    grep -vE "constant MIN_DISABLE_THRESHOLD[[:space:]]*=" "${MSRC}" >"${out}"
+    expect 1 "missing MIN_DISABLE_THRESHOLD rejected" "${SRC}" "${out}"
+
+    out="${TMP}/ms_max_signers_drift.sol"
+    sed -E 's/(constant[[:space:]]+MAX_SIGNERS[[:space:]]*=[[:space:]]*)32([[:space:]]*;)/\1320\2/' \
+        "${MSRC}" >"${out}"
+    expect 1 "MAX_SIGNERS drift (32 -> 320) rejected" "${SRC}" "${out}"
+
+    out="${TMP}/ms_window_drift.sol"
+    sed -E 's/(constant[[:space:]]+CONFIRMATION_WINDOW[[:space:]]*=[[:space:]]*)7[[:space:]]+days([[:space:]]*;)/\11 days\2/' \
+        "${MSRC}" >"${out}"
+    expect 1 "CONFIRMATION_WINDOW drift (7 days -> 1 days) rejected" "${SRC}" "${out}"
+
+    out="${TMP}/ms_threshold_comment_mask.sol"
+    # Comment out the real threshold declaration and add a drifted real
+    # one — the comment-stripped audit must read the REAL (drifted)
+    # value and fail.
+    sed -E 's|(uint256[[:space:]]+public[[:space:]]+constant[[:space:]]+MIN_DISABLE_THRESHOLD[[:space:]]*=[[:space:]]*3[[:space:]]*;)|// \1\n    uint256 public constant MIN_DISABLE_THRESHOLD = 2;|' \
+        "${MSRC}" >"${out}"
+    expect 1 "comment-masked MIN_DISABLE_THRESHOLD drift rejected" "${SRC}" "${out}"
+fi
+
 if (( failed > 0 )); then
     exit 1
 fi

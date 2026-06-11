@@ -251,6 +251,35 @@ instance BridgeAdmissibleWith.dec_registrationFresh
       exact hcon (h actor pk rfl)
   | _ => apply isTrue; intro _ _ heq; cases heq
 
+/-- RB.1.d — Decidable instance for the GP.11.10 reclamation
+    obligation (`BridgeAdmissibleWith` conjunct 9).  Reduces to the
+    decidable conjunction "threaded actors are the canonical reserved
+    slots ∧ the L2 `ammDisabled` mirror is set" when the action is a
+    `.reclaimAmmReserves`, and to `Decidable True` for every other
+    constructor.  Same `generalize` rationale as conjunct 6. -/
+instance BridgeAdmissibleWith.dec_reclaimGate
+    (es : ExtendedState) (st : SignedAction) :
+    Decidable
+      (∀ r amount reserveActor poolActor,
+         st.action = .reclaimAmmReserves r amount reserveActor poolActor →
+         reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
+         es.bridge.ammDisabled = true) := by
+  generalize _h_eq : st.action = a
+  cases a with
+  | reclaimAmmReserves r amount reserveActor poolActor =>
+    by_cases hcon : reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
+        es.bridge.ammDisabled = true
+    · apply isTrue
+      intro _ _ _ _ heq
+      injection heq with _ _ hra hpa
+      subst hra
+      subst hpa
+      exact hcon
+    · apply isFalse
+      intro h
+      exact hcon (h r amount reserveActor poolActor rfl)
+  | _ => apply isTrue; intro _ _ _ _ heq; cases heq
+
 /-- RB.1.c — Umbrella `Decidable` instance for `BridgeAdmissibleWith`.
     Composes the kernel-level `AdmissibleWith.decidable` with the
     two bridge-specific helpers above plus the bridge-only-signer

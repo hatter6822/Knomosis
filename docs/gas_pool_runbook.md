@@ -15,20 +15,23 @@ day-to-day operation of the L1 `KnomosisBridge` BOLD safety surface
 introduced in **WU GP.5.5: BOLD-specific safety hardening** — the
 per-currency circuit breaker, the Liquity-V2 depeg auto-trigger, and
 the per-BOLD TVL cap — plus the optional `knomosis-host` fair
-scheduler (§8) and the L1 gas economics of the v1.3 operations
-(§9, **WU GP.11.9**).
+scheduler (§8), the L1 gas economics of the v1.3 operations
+(§9, **WU GP.11.9**), and the embedded-AMM disaster-recovery
+procedure (§10, **WU GP.11.10**).
 
 The mechanisms here are *deployment-side, L1-only* operational
 controls.  They do not touch the Lean kernel, its theorems, or the
-fault-proof game; they are the analogue of the four automatic
-`circuitOpen` breakers, but BOLD-deposit-scoped and operator-toggled.
+fault-proof game (the one Lean-side mirror — the GP.11.10
+`ammDisabled` state-root commitment — is described in §10.5); they
+are the analogue of the four automatic `circuitOpen` breakers, but
+scoped and operator-controlled.
 
 ---
 
 ## 1. Roles
 
-A BOLD-enabled deployment pins two **immutable** roles in the
-`KnomosisBridge` constructor.  Both are tightly scoped — neither can
+A BOLD-enabled deployment pins three **immutable** roles in the
+`KnomosisBridge` constructor.  All are tightly scoped — none can
 move funds, alter state roots, change any immutable, halt the ETH leg,
 or stop withdrawals.
 
@@ -36,17 +39,23 @@ or stop withdrawals.
 |-----------------------|---------------------------------------------------------------------|----------------------------------|
 | `boldCircuitBreaker`  | `closeBoldCircuit()`, `openBoldCircuit()` — pause / resume BOLD deposits | Hot key / on-call keeper (fast)  |
 | `boldAdmin`           | `setBoldTvlCap(uint256)` — tune the per-BOLD TVL cap within `[0, tvlCap]` | Cold key / multisig (deliberate) |
+| `ammDisasterRecovery` | `emergencyDisableAmm()` — ONE-WAY pause of the embedded AMM (§10)   | **3-of-N multisig** (operator + community representatives + auditor; see §10.2) |
 
 The split is deliberate (least privilege): the frequently-used
-emergency-pause key cannot change the cap, and the parameter-tuning
-key cannot pause.  The permissionless `closeBoldCircuitIfRedeeming
-Heavily()` auto-trigger needs no role — anyone may call it — but only
-*closes* (never opens) the circuit, and only when the on-chain depeg
-signal fires.
+emergency-pause key cannot change the cap, the parameter-tuning
+key cannot pause, and the one-way AMM kill switch sits behind the
+heaviest custody of the three because its effect cannot be rolled
+back within a deployment.  The permissionless `closeBoldCircuitIf
+AnyLiquityBranchShutdown()` auto-trigger needs no role — anyone may
+call it — but only *closes* (never opens) the circuit, and only when
+the on-chain depeg signal fires.
 
-Both roles are `address public immutable`: they are fixed at
+All three roles are `address public immutable`: they are fixed at
 deployment and cannot be rotated.  Choose keys accordingly, and plan a
 full redeploy + `KnomosisMigration` handoff if a role key must change.
+A FUNCTIONAL AMM (BOLD-enabled with `ammSeedRatioBps > 0`) cannot opt
+out of `ammDisasterRecovery` — the constructor rejects `address(0)`
+with `AmmDisasterRecoveryRequired`.
 
 ---
 
@@ -261,6 +270,16 @@ total back under the new cap.
   `boldTotalLockedValue()` and the L2 accounting equation.
 * Alert on any `LiquityV2ReadFailed` from a keeper calling the
   auto-trigger — the oracle may have changed.
+* Alert when AMM reserve depth drops: either leg below
+  `MIN_VIABLE_DEPTH_USD = $10 000` is a §10.1 disaster-recovery
+  trigger condition (page the on-call operator; start the 24-hour
+  arbitrage-recovery clock).
+* Alert when `ammDisabled()` flips / the `AmmDisabled` event fires —
+  the kill switch is one-way, so this is always a major incident
+  marker (§10).
+* Alert on any `DisableConfirmed` event from the disaster-recovery
+  multisig — a quorum is forming; all signers and operators should
+  be aware in real time.
 
 ---
 
@@ -272,7 +291,11 @@ total back under the new cap.
 | Resume BOLD deposits            | `openBoldCircuit()`                      | `boldCircuitBreaker` | `BoldCircuitOpened`             |
 | Auto-pause on depeg             | `closeBoldCircuitIfAnyLiquityBranchShutdown()` | anyone (opt-in) | `BoldCircuitClosedByAutoTrigger` |
 | Adjust per-BOLD TVL cap         | `setBoldTvlCap(uint256)`                  | `boldAdmin`          | `BoldTvlCapUpdated`             |
+| **Disable AMM (one-way; §10)**  | `emergencyDisableAmm()`                   | `ammDisasterRecovery` (3-of-N multisig) | `AmmDisabled`  |
+| Confirm AMM disable             | `confirmDisable()` on the multisig        | multisig signer      | `DisableConfirmed` / `AmmDisableExecuted` |
+| Withdraw a disable confirmation | `revokeConfirmation()` on the multisig    | multisig signer      | `DisableConfirmationRevoked`     |
 | Read pause state                | `boldCircuitClosed()`                     | anyone (view)        | —                                |
+| Read kill-switch state          | `ammDisabled()`                           | anyone (view)        | —                                |
 | Read per-BOLD locked value      | `boldTotalLockedValue()`                  | anyone (view)        | —                                |
 | Read per-BOLD cap               | `boldTvlCap()`                            | anyone (view)        | —                                |
 
@@ -440,6 +463,8 @@ round trip (see §9.3).
 | `openBoldCircuit` | 22 985 | 64 | ~$2.1 |
 | `setBoldTvlCap` | 28 090 | 276 | ~$2.5 |
 | `emergencyDisableAmm` | 49 623 | 64 | ~$4.5 |
+| `confirmDisable` (3-of-N multisig, non-final confirmation) | 59 629 | 64 | ~$5.4 |
+| `confirmDisable` (3-of-N multisig, threshold-th — executes disable) | 112 582 | 64 | ~$10.1 |
 | Auto-trigger close (first branch, ETH, in shutdown) | 53 834 | 64 | ~$4.8 |
 | Auto-trigger close (last branch, rETH, in shutdown) | 69 037 | 64 | ~$6.2 |
 | Auto-trigger probe (no shutdown — reverts) | 47 250 | 64 | ~$4.3 |
@@ -523,3 +548,212 @@ the committed baseline, which is why adjacent variant rows exist):
   sketched envelope (e.g. deposits "~80–120k" vs a measured 66 261
   first fee-split deposit; the no-shutdown probe "up to ~100k" vs a
   measured 47 250).
+
+---
+
+## 10. AMM disaster recovery (`emergencyDisableAmm`; WU GP.11.10)
+
+The embedded ETH↔BOLD AMM ships a **one-way kill switch**:
+`emergencyDisableAmm()`, callable only by the immutable
+`ammDisasterRecovery` role.  Once fired:
+
+* every `ammSwap` reverts `AmmIsDisabled` (both directions, forever
+  within this deployment);
+* deposit-time AMM seeding stops (`_seedAmmReserves` early-outs, so
+  the whole pool fee routes to sequencer-claimable free reserves);
+* the reserves are **preserved** — nothing is zeroed, moved, or paid
+  out by the disable itself.  `ammReserveEth` / `ammReserveBold`
+  freeze at their pre-disable values and remain part of the bridge's
+  escrow; their L2 representation is then re-tagged as free gas-pool
+  funds through the bridge-attested `Action.reclaimAmmReserves`
+  exact sweep (§10.4), after which the sequencer claims them through
+  the existing `gasPoolPolicy` mechanism;
+* everything else keeps working: deposits (both legs), withdrawals
+  (`withdrawWithProof`), state-root submission, disputes, and the
+  BOLD circuit breaker are all untouched.  The bridge degrades to
+  the v1.2 "external L1 DEX" mode for ETH↔BOLD conversion.
+
+This is a *graceful shutdown of the AMM, not a value drain*.  The
+three properties are pinned as forge tests
+(`AmmKillSwitch.t.sol`): `emergencyDisableAmm_preserves_reserves`,
+`ammDisabled_implies_swap_reverts`, `ammDisabled_is_monotonic`.
+
+**One-way by design.**  `ammDisabled` cannot be unset.  Reactivating
+the AMM requires a fresh `KnomosisBridge` deployment via
+`KnomosisMigration`.  The asymmetry is deliberate: disabling is light
+(one quorum), re-enabling is heavy (full migration) — that prevents
+flip-flopping mid-crisis and is strictly stricter than the toggling
+BOLD circuit breaker (§3).  When both brakes are engaged the kill
+switch takes precedence (`AmmIsDisabled` is the revert you will see).
+
+### 10.1 When to invoke
+
+Invoke `emergencyDisableAmm()` when any of the following holds:
+
+* **Reserve-depth pathology.**  Either reserve leg drops below
+  `MIN_VIABLE_DEPTH_USD = $10 000` (at spot prices) AND off-bridge
+  arbitrage has not restored depth within **24 hours**.  A thin leg
+  means even tiny swaps cause huge slippage — the AMM is
+  functionally stuck even though the curve has mathematically not
+  "drained" (the GP.11.3 no-drain theorem still holds).
+* **Math bug suspected.**  Any reproducible discrepancy between the
+  Lean fixture reference (`crosscheck-amm-getamountout` /
+  `crosscheck-amm-swap` corpora) and Solidity execution output, or
+  an on-chain `AmmKInvariantViolated` revert (which should be
+  mathematically unreachable).
+* **Liquity V2 unreachable.**  Persistent `LiquityV2ReadFailed`
+  errors AND operator-side monitoring confirms a Liquity-V2 contract
+  failure (not just an integration bug on our side).  Note: a mere
+  depeg is the *circuit breaker's* job (§3) — reach for the kill
+  switch only when the BOLD leg is operationally broken, not merely
+  re-pricing.
+* **Audit-flagged critical issue.**  An independent auditor reports
+  a severity-critical vulnerability in the AMM swap math and the
+  fix requires a redeploy.
+
+The §6 monitoring checklist carries the matching alerts (reserve
+depth below `MIN_VIABLE_DEPTH_USD`, `AmmDisabled`,
+`DisableConfirmed`).
+
+### 10.2 The 3-of-N disaster-recovery multisig
+
+The `ammDisasterRecovery` role MUST be a **3-of-N multisig** holding
+operator + community-representative + auditor keys — never a single
+hot key.  The repository ships the audited reference implementation,
+`KnomosisAmmDisasterRecoveryMultisig.sol`:
+
+* **Single-purpose.**  The contract can do exactly one thing: call
+  `emergencyDisableAmm()` on its immutable `bridge` once `threshold`
+  distinct signers have confirmed.  No generic execution surface, no
+  value transfer, no signer rotation, no upgradability.
+* **Constructor-enforced 3-of-N floor.**  `threshold < 3` reverts
+  `ThresholdBelowMinimum` at deployment — the GP.11.10 quorum rule
+  is mechanical, not a checklist item.  Signers must be non-zero,
+  pairwise distinct, not the bridge, and not the multisig itself.
+* **The final signature is the trigger.**  The `threshold`-th
+  `confirmDisable()` fires the bridge call in the same transaction —
+  in a disaster there is no separate execute step to forget or
+  front-run.
+* **Stale confirmations expire as a group.**  A confirmation round
+  lasts `CONFIRMATION_WINDOW = 7 days` from its first signature; a
+  confirmation arriving later discards the stale approvals and opens
+  a fresh round.  Approvals gathered during one incident can never
+  silently combine with a later signature to fire the one-way switch
+  out of context.  Signers should still `revokeConfirmation()`
+  promptly when an incident resolves without a disable — the window
+  is the backstop, not the discipline.
+
+Deployments may substitute any battle-tested multisig (e.g. a Safe)
+at the same custody bar; the bridge only sees an address.
+
+**Deployment wiring.**  Both pins are immutable, so one side deploys
+against the other's *predicted* CREATE address (the same pattern as
+pre-wired `KnomosisMigration` successors):
+
+1. Predict the bridge address (deployer nonce + 1).
+2. Deploy `KnomosisAmmDisasterRecoveryMultisig(predictedBridge,
+   signers, 3)`.
+3. Deploy `KnomosisBridge` with
+   `ammDisasterRecovery = address(multisig)`.
+4. Verify `multisig.bridge() == address(bridge)` and
+   `bridge.ammDisasterRecovery() == address(multisig)` before
+   accepting traffic.
+
+### 10.3 Firing procedure
+
+1. The proposing signer confirms on-chain
+   (`multisig.confirmDisable()`) and pages the other signers with
+   the incident summary (which §10.1 condition fired, evidence
+   links).
+2. Each agreeing signer independently verifies the condition and
+   confirms.  Watch `confirmationCount()` / `DisableConfirmed`.
+3. The third (threshold-th) confirmation executes
+   `emergencyDisableAmm()` atomically.  Confirm
+   `bridge.ammDisabled() == true` and that the `AmmDisabled` event
+   carries the expected frozen reserves.
+4. If the incident resolves before quorum: every confirmed signer
+   calls `revokeConfirmation()`.  Do not rely solely on the 7-day
+   expiry.
+
+### 10.4 Recovery decision tree (post-disable)
+
+1. **Run a post-mortem (1–7 days).**  Root-cause the trigger
+   condition; reconcile the frozen reserves against
+   `address(bridge).balance` / `BOLD.balanceOf(bridge)` and the L2
+   accounting equation.
+2. **Commit the L2 mirror, then sweep the L2 reserves.**  The
+   sequencer commits `BridgeState.ammDisabled = true` in the next
+   state root (§10.5) and then materialises one bridge-signed
+   `Action.reclaimAmmReserves` per funded leg (frozen Action
+   index 24; the `knomosis-l1-ingest` watcher surfaces the
+   `AmmDisabled` L1 event as the machine-readable trigger).  Each
+   sweep is EXACT — the action's `amount` must equal the reserve
+   actor's entire balance at that resource, machine-checked by the
+   law's precondition — and moves the frozen liquidity from
+   `ammReserveActor` to `gasPoolActor`, where it becomes ordinary
+   sequencer-claimable free-pool funds.  Admission rejects the
+   sweep while the mirror is unset
+   (`reclaim_inadmissible_while_amm_enabled`), so it can never
+   front-run the disaster it recovers from.  Sequencer claims
+   against the reclaimed funds go through the unchanged
+   `gasPoolPolicy` per-action caps (the GP.7.2/GP.7.3 drain bounds
+   still apply — the kill switch loosens NO outflow discipline).
+   Indexers observe the sweep as `Event.ammReservesReclaimed`
+   (frozen Event index 22).
+3. **Decide: redeploy or degraded mode.**
+   * **Redeploy path:** prepare a new `KnomosisBridge` deployment
+     via `KnomosisMigration` (with corrected parameters or patched
+     code).  The reserves carry over physically with the rest of
+     the escrow; the new contract's AMM is seeded fresh from
+     post-migration deposits per its `ammSeedRatioBps`.
+   * **Degraded path:** operate permanently without the embedded
+     AMM.  The sequencer converts ETH↔BOLD on external L1 DEXes
+     (the v1.2 posture); document the expected per-claim MEV/fee
+     cost increase.  All other v1.3 mechanisms (fee-split deposits,
+     budgets, gas-pool claims, circuit breaker) remain fully
+     functional.
+
+### 10.5 State-root visibility (the Lean-side mirror)
+
+`ammDisabled` is committed to the L2 state root: the Lean
+`BridgeState` carries an `ammDisabled` mirror field (GP.11.10),
+appended to the canonical CBE encoding after the five GP.11.8
+AMM/BOLD fields and committed by `commitBridgeState` /
+`commitExtendedState`.  Consequences operators should know:
+
+* the L2 ingestor learns the disable from the state commitment —
+  there is deliberately NO `Action.disableAmm` L2 action to sign or
+  sequence (the only new action is the §10.4 reclamation sweep,
+  which the mirror GATES rather than sets);
+* a sequencer cannot publish a state root that misrepresents the
+  kill-switch state: under collision resistance, two states
+  differing only in `ammDisabled` have different top-level roots
+  (`commitExtendedState_reflects_ammDisabled` /
+  `commitBridgeState_reflects_ammDisabled`, machine-checked in
+  `LegalKernel/FaultProof/Commit.lean`), so the fault-proof game can
+  adjudicate a dispute that turns on it;
+* WITHIN a committed action batch the mirror cannot move: all six
+  AMM-mirror fields are step-invariant under every admissible
+  action (`amm_mirrors_constant_over_admitted_trace`,
+  `LegalKernel/Bridge/Admissible.lean`).  The mirror changes only
+  at attested-snapshot boundaries, where the sequencer's ingest
+  tooling rebuilds `BridgeState` from observed L1 state — setting
+  it is an operational obligation of the sequencer (the
+  `knomosis-l1-ingest` watcher's decoded `AmmDisabled` event is the
+  trigger signal), and the commitment binding above is what keeps
+  the published value honest.
+
+### 10.6 Cost
+
+All three legs are measured in §9.2 (isolated mode — full
+transaction gas, refunds netted).  At 30 gwei / $3 000 ETH:
+
+| Leg | Gas (measured) | $ |
+|---|---:|---:|
+| `confirmDisable` (each non-final signer) | 59 629 | ~$5.4 |
+| `confirmDisable` (threshold-th signer — executes the disable through the bridge) | 112 582 | ~$10.1 |
+| `emergencyDisableAmm` (direct `recoveryCouncil` call, no multisig) | 49 623 | ~$4.5 |
+
+A full 3-of-N multisig firing therefore costs two non-final
+confirms plus one executing confirm — about **$21** total.  Gas
+cost is never a reason to delay firing it.

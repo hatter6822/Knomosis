@@ -108,22 +108,22 @@ def nonTransferSamples : List (Nat × Action) :=
 /-- All GP.7.2 test cases. -/
 def tests : List TestCase :=
   [ -- ## Deny-list shape
-    { name := "GP.7.2: gasPoolDeniedTags = [1..23]"
+    { name := "GP.7.2: gasPoolDeniedTags = [1..24]"
     , body := do
-        assertEq (expected := (List.range 24).filter (· ≠ 0))
+        assertEq (expected := (List.range 25).filter (· ≠ 0))
           (actual := gasPoolDeniedTags) "deny-list contents"
     }
-  , { name := "GP.7.2: gasPoolDeniedTags has 23 entries (1..23)"
+  , { name := "GP.7.2: gasPoolDeniedTags has 24 entries (1..24)"
     , body := do
-        assertEq (expected := 23) (actual := gasPoolDeniedTags.length) "deny-list length"
+        assertEq (expected := 24) (actual := gasPoolDeniedTags.length) "deny-list length"
     }
   , { name := "GP.7.2: 0 ∉ gasPoolDeniedTags (transfer survives)"
     , body := do
         assert (decide ((0 : Nat) ∉ gasPoolDeniedTags)) "0 should not be denied"
     }
-  , { name := "GP.7.2: every tag 1..23 ∈ gasPoolDeniedTags"
+  , { name := "GP.7.2: every tag 1..24 ∈ gasPoolDeniedTags"
     , body := do
-        for t in List.range 24 do
+        for t in List.range 25 do
           if t ≠ 0 then
             assert (decide (t ∈ gasPoolDeniedTags)) s!"tag {t} should be denied"
     }
@@ -140,7 +140,7 @@ def tests : List TestCase :=
     }
   , { name := "GP.7.2: Action.tag_lt_denyListBound term-level API"
     , body := do
-        let _f : (a : Action) → Action.tag a < 24 := Action.tag_lt_denyListBound
+        let _f : (a : Action) → Action.tag a < 25 := Action.tag_lt_denyListBound
         pure ()
     }
   , { name := "GP.7.2: mem_gasPoolDeniedTags_of_tag_ne_zero term-level API"

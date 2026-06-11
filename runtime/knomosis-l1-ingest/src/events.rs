@@ -111,6 +111,26 @@ pub const DEPOSIT_WITH_FEE_INITIATED_TOPIC: TopicHash = [
     0x76, 0x4a, 0xc7, 0x8f, 0x9a, 0xe2, 0xa0, 0xef, 0xbb, 0x6f, 0x3c, 0xfa, 0xe0, 0xe4, 0xc8, 0xf5,
 ];
 
+/// Compile-time-pinned `keccak256` topic-0 hash for the Workstream
+/// GP.11.10 disaster-recovery event
+/// `AmmDisabled(uint256,uint256,uint256)`.
+///
+/// Emitted exactly once per deployment by
+/// `KnomosisBridge.emergencyDisableAmm()` — the one-way AMM kill
+/// switch.  The ingestor decodes it for observability (the watcher's
+/// audit log is the operator's machine-readable signal that the
+/// switch fired) and as the trigger for the sequencer-side GP.11.10
+/// follow-ups: committing the L2 `ammDisabled` state-root mirror and
+/// materialising the `reclaimAmmReserves` (tag 24) sweeps.  Like the
+/// deposit events, no L2 action is emitted by the TRANSLATOR itself
+/// (materialisation is the sequencer's responsibility).
+/// The `topic_constants_match_keccak_of_signature` test verifies the
+/// pin equals `keccak256(EventTopic::AmmDisabled.signature())`.
+pub const AMM_DISABLED_TOPIC: TopicHash = [
+    0x62, 0x7d, 0x75, 0xba, 0x7f, 0x7f, 0x70, 0xdf, 0x8f, 0x25, 0x47, 0x96, 0x22, 0x17, 0x59, 0xe6,
+    0xde, 0x47, 0xdf, 0x17, 0x12, 0x08, 0x65, 0xd2, 0x4e, 0x72, 0x0f, 0x85, 0xc2, 0x3c, 0xad, 0x58,
+];
+
 /// Minimal Ethereum log record.  Carries the bare fields RH-B
 /// consumes: the emitting contract address, the 1–4 indexed topics
 /// (topic 0 is the event signature hash, topics 1..3 are the
@@ -158,6 +178,11 @@ pub enum EventTopic {
     /// (`KnomosisBridge.depositETHWithFee`).  Note three indexed
     /// params (`token` is indexed here, unlike `DepositInitiated`).
     DepositWithFeeInitiated,
+    /// `AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256
+    /// reserveBold)` — the Workstream-GP.11.10 one-way AMM kill
+    /// switch (`KnomosisBridge.emergencyDisableAmm()`).  No indexed
+    /// params.
+    AmmDisabled,
 }
 
 impl EventTopic {
@@ -181,6 +206,11 @@ impl EventTopic {
                 // (Workstream GP.5.1; GP.11.2 inserted `ammSeedAmount` after
                 // `poolAmount`).
                 "DepositWithFeeInitiated(address,uint64,address,uint256,uint256,uint256,uint64,uint64,bytes32)"
+            }
+            Self::AmmDisabled => {
+                // Matches `KnomosisBridge.AmmDisabled` (Workstream
+                // GP.11.3 / GP.11.10).
+                "AmmDisabled(uint256,uint256,uint256)"
             }
         }
     }
@@ -207,6 +237,7 @@ impl EventTopic {
             Self::Revoked => REVOKED_TOPIC,
             Self::DepositInitiated => DEPOSIT_INITIATED_TOPIC,
             Self::DepositWithFeeInitiated => DEPOSIT_WITH_FEE_INITIATED_TOPIC,
+            Self::AmmDisabled => AMM_DISABLED_TOPIC,
         }
     }
 
@@ -214,7 +245,7 @@ impl EventTopic {
     /// recognised.  Used by the decoder to dispatch on `topics[0]`.
     #[must_use]
     pub fn from_hash(hash: &TopicHash) -> Option<Self> {
-        // Iterate; the five variants make this O(5) hashes per
+        // Iterate; the six variants make this O(6) hashes per
         // log decode — at L1 block rates (`< 100` logs/block in
         // practice) this is negligible.
         for variant in [
@@ -223,6 +254,7 @@ impl EventTopic {
             Self::Revoked,
             Self::DepositInitiated,
             Self::DepositWithFeeInitiated,
+            Self::AmmDisabled,
         ] {
             if &variant.hash() == hash {
                 return Some(variant);
@@ -357,6 +389,30 @@ pub enum IngestedEvent {
         /// Log index within the transaction.
         log_index: u64,
     },
+    /// `AmmDisabled` — the one-way AMM kill switch fired on L1
+    /// (Workstream GP.11.10).  `Bridge.Ingest.ingest` returns `none`
+    /// for this variant: the GP.11.10 follow-ups (committing the L2
+    /// `ammDisabled` state-root mirror; materialising the
+    /// `reclaimAmmReserves` sweeps) are the sequencer's
+    /// responsibility, mirroring how deposit materialisation is
+    /// handled.  The ingestor decodes it for observability + dedup:
+    /// the watcher's audit log carries the frozen reserves, giving
+    /// operators the machine-readable disaster marker the runbook's
+    /// monitoring checklist alerts on.
+    AmmDisabled {
+        /// `block.timestamp` at the moment of the disable.
+        timestamp: [u8; 32],
+        /// The frozen ETH reserve (raw `uint256` bytes).
+        reserve_eth: [u8; 32],
+        /// The frozen BOLD reserve (raw `uint256` bytes).
+        reserve_bold: [u8; 32],
+        /// L1 block number.
+        block_number: u64,
+        /// L1 transaction hash.
+        tx_hash: TopicHash,
+        /// Log index within the transaction.
+        log_index: u64,
+    },
 }
 
 impl IngestedEvent {
@@ -394,6 +450,12 @@ impl IngestedEvent {
                 tx_hash,
                 log_index,
                 ..
+            }
+            | Self::AmmDisabled {
+                block_number,
+                tx_hash,
+                log_index,
+                ..
             } => (*block_number, *tx_hash, *log_index),
         }
     }
@@ -407,6 +469,7 @@ impl IngestedEvent {
             Self::Revoked { .. } => "Revoked",
             Self::DepositInitiated { .. } => "DepositInitiated",
             Self::DepositWithFeeInitiated { .. } => "DepositWithFeeInitiated",
+            Self::AmmDisabled { .. } => "AmmDisabled",
         }
     }
 }
@@ -735,6 +798,29 @@ pub fn decode_event(log: &RawLog) -> Result<Option<IngestedEvent>, DecodeError> 
                 log_index: log.log_index,
             }))
         }
+        EventTopic::AmmDisabled => {
+            // Topics: [signature_hash] — no indexed params.
+            // Data: uint256 timestamp + uint256 reserveEth + uint256
+            // reserveBold (3 × 32 = 96 bytes).
+            if log.topics.len() != 1 {
+                return Err(DecodeError::TopicCountMismatch {
+                    event: "AmmDisabled",
+                    expected: 1,
+                    actual: log.topics.len(),
+                });
+            }
+            let timestamp = read_slot(&log.data, 0)?;
+            let reserve_eth = read_slot(&log.data, 32)?;
+            let reserve_bold = read_slot(&log.data, 64)?;
+            Ok(Some(IngestedEvent::AmmDisabled {
+                timestamp,
+                reserve_eth,
+                reserve_bold,
+                block_number: log.block_number,
+                tx_hash: log.tx_hash,
+                log_index: log.log_index,
+            }))
+        }
     }
 }
 
@@ -760,14 +846,15 @@ mod tests {
         out
     }
 
-    /// The five enumerated event topics.  Single source of truth for
+    /// The six enumerated event topics.  Single source of truth for
     /// the topic-iterating tests below.
-    const ALL_TOPICS: [EventTopic; 5] = [
+    const ALL_TOPICS: [EventTopic; 6] = [
         EventTopic::RegisteredEcdsa,
         EventTopic::RegisteredEip1271,
         EventTopic::Revoked,
         EventTopic::DepositInitiated,
         EventTopic::DepositWithFeeInitiated,
+        EventTopic::AmmDisabled,
     ];
 
     /// Every compile-time-pinned topic constant equals
@@ -1184,6 +1271,89 @@ mod tests {
             }
             _ => panic!("expected DepositWithFeeInitiated"),
         }
+    }
+
+    /// GP.11.10: `AmmDisabled` decodes its three uint256 data slots
+    /// with a single (signature-only) topic.
+    #[test]
+    fn decode_event_amm_disabled() {
+        let mut data = Vec::new();
+        let mut ts = [0u8; 32];
+        ts[31] = 0x2A; // timestamp 42
+        let mut re = [0u8; 32];
+        re[30] = 0x01; // reserveEth 256
+        let mut rb = [0u8; 32];
+        rb[31] = 0x07; // reserveBold 7
+        data.extend_from_slice(&ts);
+        data.extend_from_slice(&re);
+        data.extend_from_slice(&rb);
+        let log = RawLog {
+            address: EthAddress::from_bytes(&[0x11; 20]).unwrap(),
+            topics: vec![EventTopic::AmmDisabled.hash()],
+            data,
+            block_number: 99,
+            tx_hash: [0x55; 32],
+            log_index: 3,
+        };
+        match decode_event(&log) {
+            Ok(Some(IngestedEvent::AmmDisabled {
+                timestamp,
+                reserve_eth,
+                reserve_bold,
+                block_number,
+                tx_hash,
+                log_index,
+            })) => {
+                assert_eq!(timestamp, ts);
+                assert_eq!(reserve_eth, re);
+                assert_eq!(reserve_bold, rb);
+                assert_eq!(block_number, 99);
+                assert_eq!(tx_hash, [0x55; 32]);
+                assert_eq!(log_index, 3);
+            }
+            other => panic!("expected AmmDisabled, got {other:?}"),
+        }
+    }
+
+    /// GP.11.10: `AmmDisabled` with a spurious extra topic is
+    /// rejected (the event has no indexed params).
+    #[test]
+    fn decode_event_amm_disabled_topic_count() {
+        let log = RawLog {
+            address: EthAddress::from_bytes(&[0x11; 20]).unwrap(),
+            topics: vec![EventTopic::AmmDisabled.hash(), [0xAA; 32]],
+            data: vec![0u8; 96],
+            block_number: 1,
+            tx_hash: [0x00; 32],
+            log_index: 0,
+        };
+        match decode_event(&log) {
+            Err(DecodeError::TopicCountMismatch {
+                event,
+                expected,
+                actual,
+            }) => {
+                assert_eq!(event, "AmmDisabled");
+                assert_eq!(expected, 1);
+                assert_eq!(actual, 2);
+            }
+            other => panic!("expected TopicCountMismatch, got {other:?}"),
+        }
+    }
+
+    /// GP.11.10: truncated `AmmDisabled` data (< 96 bytes) is
+    /// rejected by the slot reader, never silently zero-filled.
+    #[test]
+    fn decode_event_amm_disabled_short_data() {
+        let log = RawLog {
+            address: EthAddress::from_bytes(&[0x11; 20]).unwrap(),
+            topics: vec![EventTopic::AmmDisabled.hash()],
+            data: vec![0u8; 64], // missing the reserveBold slot
+            block_number: 1,
+            tx_hash: [0x00; 32],
+            log_index: 0,
+        };
+        assert!(decode_event(&log).is_err(), "short data must error");
     }
 
     /// `decode_event` rejects a `DepositWithFeeInitiated` log with the

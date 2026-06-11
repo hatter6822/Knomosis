@@ -72,6 +72,7 @@ const EVENT_TAG_REGISTERED_EIP1271: u8 = 1;
 const EVENT_TAG_REVOKED: u8 = 2;
 const EVENT_TAG_DEPOSIT_INITIATED: u8 = 3;
 const EVENT_TAG_DEPOSIT_WITH_FEE: u8 = 4;
+const EVENT_TAG_AMM_DISABLED: u8 = 5;
 
 /// Defensive bound on the address-book length field decoded
 /// from a fixture input.  Production bridges have ≤ ~10k
@@ -233,6 +234,23 @@ pub fn encode_input(input: &FixtureInput) -> Result<Vec<u8>, FixtureError> {
             out.extend_from_slice(&depositor_nonce.to_be_bytes());
             out.extend_from_slice(receipt_hash);
         }
+        IngestedEvent::AmmDisabled {
+            timestamp,
+            reserve_eth,
+            reserve_bold,
+            block_number,
+            tx_hash,
+            log_index,
+        } => {
+            // GP.11.10: the one-way kill switch marker.
+            out.push(EVENT_TAG_AMM_DISABLED);
+            out.extend_from_slice(&block_number.to_be_bytes());
+            out.extend_from_slice(tx_hash);
+            out.extend_from_slice(&log_index.to_be_bytes());
+            out.extend_from_slice(timestamp);
+            out.extend_from_slice(reserve_eth);
+            out.extend_from_slice(reserve_bold);
+        }
     }
     // Address book.
     let book_len = u64::try_from(input.address_book.len()).map_err(|_| {
@@ -318,6 +336,7 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
             | EVENT_TAG_REVOKED
             | EVENT_TAG_DEPOSIT_INITIATED
             | EVENT_TAG_DEPOSIT_WITH_FEE
+            | EVENT_TAG_AMM_DISABLED
     ) {
         return Err(FixtureError::UnknownEventTag {
             tag,
@@ -420,7 +439,24 @@ fn decode_event(bytes: &[u8], cursor: &mut usize) -> Result<IngestedEvent, Fixtu
                 log_index,
             })
         }
-        // Unreachable: the tag was validated against the five
+        EVENT_TAG_AMM_DISABLED => {
+            // GP.11.10: the one-way kill switch marker.
+            let mut timestamp = [0u8; 32];
+            timestamp.copy_from_slice(read_bytes(bytes, cursor, 32)?);
+            let mut reserve_eth = [0u8; 32];
+            reserve_eth.copy_from_slice(read_bytes(bytes, cursor, 32)?);
+            let mut reserve_bold = [0u8; 32];
+            reserve_bold.copy_from_slice(read_bytes(bytes, cursor, 32)?);
+            Ok(IngestedEvent::AmmDisabled {
+                timestamp,
+                reserve_eth,
+                reserve_bold,
+                block_number,
+                tx_hash,
+                log_index,
+            })
+        }
+        // Unreachable: the tag was validated against the six
         // recognised values at the top of this function.
         _ => unreachable!("unreachable: invalid tag {tag} reached match after validation"),
     }
@@ -930,6 +966,32 @@ mod tests {
         };
         let encoded = encode_input(&input).unwrap();
         let decoded = decode_input(&encoded).unwrap();
+        assert_eq!(decoded, input);
+    }
+
+    /// `AmmDisabled` input round-trips (GP.11.10).
+    #[test]
+    fn amm_disabled_roundtrip() {
+        let mut ts = [0u8; 32];
+        ts[31] = 42;
+        let mut re = [0u8; 32];
+        re[30] = 1;
+        let mut rb = [0u8; 32];
+        rb[31] = 7;
+        let input = FixtureInput {
+            event: IngestedEvent::AmmDisabled {
+                timestamp: ts,
+                reserve_eth: re,
+                reserve_bold: rb,
+                block_number: 1234,
+                tx_hash: [0xAB; 32],
+                log_index: 5,
+            },
+            address_book: vec![],
+            current_nonce: 0,
+        };
+        let bytes = encode_input(&input).unwrap();
+        let decoded = decode_input(&bytes).unwrap();
         assert_eq!(decoded, input);
     }
 

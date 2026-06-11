@@ -163,7 +163,8 @@ knomosis/
 │   │                             deposit, withdraw, replaceKey, registerIdentity,
 │   │                             depositWithFee, topUpActionBudget,
 │   │                             topUpActionBudgetFor, claimBudgetRefund,
-│   │                             ammSwap, dispute pipeline, local-policy laws)
+│   │                             ammSwap, reclaimAmmReserves, dispute
+│   │                             pipeline, local-policy laws)
 │   ├── Authority/             -- Crypto, Action, Identity, Nonce, LocalPolicy,
 │   │                             LocalPolicySemantics, SignedAction, ActorBudget
 │   ├── Encoding/              -- CBE codec (CBOR, Encodable, Action, Event,
@@ -554,7 +555,7 @@ work units.  Status:
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Track A complete; Tracks B–D future |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–9 complete) |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–10 complete) |
 | AR | Audit remediation | Complete |
 | EI | Encoder injectivity | Complete |
 | 7 | Advanced capabilities | Not started |
@@ -618,9 +619,9 @@ at the current build tag:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~2 990 | ~149 | `lake test` |
-| Rust | ~1 950 | across 11 crates | `cargo test --workspace` |
-| Solidity | ~825 passed | 55 forge suites | `cd solidity && forge test` |
+| Lean | ~3 040 | ~150 | `lake test` |
+| Rust | ~1 960 | across 11 crates | `cargo test --workspace` |
+| Solidity | ~867 passed | 58 forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -629,16 +630,19 @@ full catalogue):
 
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
-- `faultproof-stepvm-coherence` — 24-variant step-VM dispatcher
-  byte-equivalence (kinds 0–23).
-- `crosscheck-step-vm` — 268-entry cross-stack fixture corpus.
+- `faultproof-stepvm-coherence` — 25-variant step-VM dispatcher
+  byte-equivalence (kinds 0–24).
+- `crosscheck-step-vm` — 278-entry cross-stack fixture corpus.
+- `reclaim-amm-reserves` — GP.11.10 exact-sweep law + AMM-mirror
+  trace-constancy theorems.
 - `faultproof-smt` — SC.1 SMT cell-proof soundness.
 - `encoding-injectivity` — EI.2–EI.8 injectivity ladder.
 - `bridge-gas-pool-policy` — GP.7.2 gas-pool policy characterisation.
 - `bridge-pool-drain-bound` — GP.7.3 inductive pool-drain bound.
 - `bridge-amm-reserve-policy` — GP.11.6 AMM reserve policy.
 - `crosscheck-amm-swap` — GP.11.7 tri-stack AMM fixture corpus.
-- `faultproof-amm-commit` — GP.11.8 AMM state-root commitment integration.
+- `faultproof-amm-commit` — GP.11.8 AMM state-root commitment
+  integration + GP.11.10 `ammDisabled` kill-switch mirror (28 cases).
 - `deployments-gas-pool-example` — GP.7.4 end-to-end genesis ratification.
 
 **Notable Rust crates by test count:**
@@ -720,6 +724,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
 | GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
 | GP.11.9 | Complete | Gas-cost benchmarks for the v1.3 L1 operations + round-trip exit legs: 21 isolated-mode (tx-exact, refund-netted) benchmarks with exact calldata breakdowns (`solidity/test/BenchmarkGasV1_3.t.sol`, `forge test --isolate` + `vm.snapshotGasLastCall` + `vm.snapshotValue`, OZ-faithful `MockBoldOz`), committed baseline (`test/BenchmarkGasV1_3.gas-baseline.json`), one-sided >5%-increase CI gate + set-drift + runbook-sync checks (`scripts/check_gas_baseline.py`), generated runbook §9.2 table (`scripts/generate_gas_runbook_table.py`), self-tested via `make snapshot-gas-selftest` |
+| GP.11.10 | Complete | AMM disaster recovery (quad-surface): single-purpose 3-of-N reference multisig `KnomosisAmmDisasterRecoveryMultisig.sol` (constructor-enforced `MIN_DISABLE_THRESHOLD = 3`, atomic threshold-th-confirm execution, revocation, 7-day group-expiry; 100% line/branch coverage, 7-invariant stateful suite, 2 gas benchmarks, cap-gate widened to the 3 multisig governance constants) + `IKnomosisAmmDisasterRecovery`; `ammDisabled` committed to the state root (Lean `BridgeState` 9th field, EI.7.e 9-way injectivity, `bridgeState_commit_extends_v1_3` + `commitBridgeState_reflects_ammDisabled` + `commitExtendedState_reflects_ammDisabled` theorems); L2 reserve-reclamation law `Laws.reclaimAmmReserves` (frozen `Action` index 24, `Event.ammReservesReclaimed` 22, exact-sweep precondition, `IsConservative`/`LocalTo`/`FreezePreserving` instances, bridge-admissibility conjunct gating on `ammDisabled = true` + reserved actors, step-VM kind 24 tri-stack, Rust l1-ingest/event-subscribe/indexer/observer mirrors, `AmmDisabled` L1-event ingest); AMM-mirror step-invariance (`amm_mirrors_constant_over_admitted_trace`); 278-entry step-VM corpus; post-disable deposit+withdraw degraded-mode tests; operator runbook §10 (invocation conditions, firing procedure, L2 reclamation flow, recovery decision tree) |
 
 ### Ethereum integration (Workstreams A–G)
 

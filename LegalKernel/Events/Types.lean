@@ -265,6 +265,19 @@ inductive Event
   | ammSwapExecuted        (fromResource toResource : ResourceId)
                             (amountIn amountOut : Amount)
                             (ammReserveActor : ActorId)
+  /-- An `Action.reclaimAmmReserves` was applied (Workstream
+      GP.11.10): the disabled AMM's frozen L2 reserve balance at
+      `resource` was swept — exactly `amount`, the reserve actor's
+      ENTIRE balance under the law's exact-sweep precondition — from
+      `reserveActor` into `poolActor`.  Indexers consume this event
+      to close out their AMM reserve views (the swept leg reads zero
+      afterwards) and to attribute the matching gas-pool credit to
+      the disaster-recovery flow rather than to ordinary pool inflow.
+      Emitted at most once per resource per deployment in practice
+      (the exact-sweep precondition rejects a second sweep of an
+      already-zero reserve).  Frozen index 22. -/
+  | ammReservesReclaimed   (resource : ResourceId) (amount : Amount)
+                            (reserveActor poolActor : ActorId)
   deriving Repr, DecidableEq
 
 /-! ## §8.9.1.bis Event constructor-index projection (AR.6)
@@ -301,6 +314,7 @@ above):
   19 — `delegatedActionBudgetTopUp` (Workstream GP / GP.3.4)
   20 — `budgetConsumed`          (Workstream GP / GP.6.4)
   21 — `ammSwapExecuted`         (Workstream GP / GP.11.4)
+  22 — `ammReservesReclaimed`    (Workstream GP / GP.11.10)
 
 The regression-tier pins live in `LegalKernel/Test/Events/Types.lean`. -/
 
@@ -330,6 +344,7 @@ def Event.tag : Event → Nat
   | .delegatedActionBudgetTopUp _ _ _ _ _ _ => 19
   | .budgetConsumed       _ _         => 20
   | .ammSwapExecuted     _ _ _ _ _   => 21
+  | .ammReservesReclaimed _ _ _ _    => 22
 
 /-! ## Convenience predicates -/
 
@@ -375,6 +390,10 @@ def Event.actor : Event → Option ActorId
   | .budgetConsumed a _                             => some a
   -- GP.11.4: the reserve actor whose balances were mutated.
   | .ammSwapExecuted _ _ _ _ ra                     => some ra
+  -- GP.11.10: the reserve actor whose balance was swept (indexers
+  -- close out the reserve view keyed on this actor; the pool credit
+  -- surfaces via the accompanying `balanceChanged`).
+  | .ammReservesReclaimed _ _ ra _                  => some ra
 
 /-- The resource that this event affects, if any. -/
 def Event.resource : Event → Option ResourceId
@@ -386,6 +405,7 @@ def Event.resource : Event → Option ResourceId
   | .actionBudgetTopUp _ r _ _ _   => some r
   | .gasPoolClaim r _ _            => some r
   | .delegatedActionBudgetTopUp _ _ r _ _ _ => some r
+  | .ammReservesReclaimed r _ _ _  => some r
   | _                              => none
 
 /-- True iff `e` records a dispute-pipeline observation

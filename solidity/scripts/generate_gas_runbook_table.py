@@ -107,6 +107,14 @@ ROWS: list[tuple[str, str]] = [
     ("openBoldCircuit", "`openBoldCircuit`"),
     ("setBoldTvlCap", "`setBoldTvlCap`"),
     ("emergencyDisableAmm", "`emergencyDisableAmm`"),
+    (
+        "confirmDisable_nonFinal",
+        "`confirmDisable` (3-of-N multisig, non-final confirmation)",
+    ),
+    (
+        "confirmDisable_executes",
+        "`confirmDisable` (3-of-N multisig, threshold-th — executes disable)",
+    ),
     ("autoTriggerClose_firstBranch", "Auto-trigger close (first branch, ETH, in shutdown)"),
     ("autoTriggerClose_lastBranch", "Auto-trigger close (last branch, rETH, in shutdown)"),
     ("autoTriggerProbe_noShutdown", "Auto-trigger probe (no shutdown — reverts)"),

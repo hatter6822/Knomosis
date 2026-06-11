@@ -112,7 +112,8 @@ contract KnomosisStepVM {
         TopUpActionBudget,    // 20
         TopUpActionBudgetFor, // 21 (GP.3.4 delegated top-up; GP.5.3)
         ClaimBudgetRefund,    // 22 (GP.9.1 refund-on-exit)
-        AmmSwap               // 23 (GP.11.4 L2 AMM swap)
+        AmmSwap,              // 23 (GP.11.4 L2 AMM swap)
+        ReclaimAmmReserves    // 24 (GP.11.10 post-disable reserve sweep)
     }
 
     /* ---------------------------------------------------------- */
@@ -162,6 +163,18 @@ contract KnomosisStepVM {
     error InsufficientBalance();
     error AmountMustBePositive();
     error SameResourceSwap();
+    /// @notice GP.11.10: a `reclaimAmmReserves` step named the same actor
+    ///         as both the swept reserve and the credited pool.  Lean's
+    ///         `Laws.reclaimAmmReserves` precondition rejects the shape
+    ///         (`reserveActor != poolActor`), so the step VM must revert
+    ///         rather than diverge from the kernel's no-op.
+    error SameActorSweep();
+    /// @notice GP.11.10: a `reclaimAmmReserves` step's `amount` field does
+    ///         not equal the reserve actor's proven balance.  The Lean law
+    ///         is an EXACT sweep (`getBalance r reserveActor = amount`), so
+    ///         a partial or over-claiming sweep is a kernel no-op; the step
+    ///         VM reverts instead of committing a divergent post-state.
+    error SweepAmountMismatch(uint256 expected, uint256 actual);
     error UnauthorizedSigner();
     error TooManyCellProofs();
     error MalformedCellValue();
@@ -213,6 +226,7 @@ contract KnomosisStepVM {
         keccak256("topUpActionBudgetFor");
     bytes32 internal constant TAG_CLAIM_BUDGET_REFUND  = keccak256("claimBudgetRefund");
     bytes32 internal constant TAG_AMM_SWAP             = keccak256("ammSwap");
+    bytes32 internal constant TAG_RECLAIM_AMM_RESERVES = keccak256("reclaimAmmReserves");
 
     /* ---------------------------------------------------------- */
     /* External: executeStep                                      */
@@ -325,6 +339,11 @@ contract KnomosisStepVM {
             // Workstream GP (action-index 23; GP.11.4 L2 AMM swap).
             postStateCommit = _stepAmmSwap(
               preStateCommit, actionFields, signer, cellProofs);
+        } else if (kind == ActionKind.ReclaimAmmReserves) {
+            // Workstream GP (action-index 24; GP.11.10 post-disable
+            // reserve sweep).
+            postStateCommit = _stepReclaimAmmReserves(
+              preStateCommit, actionFields, signer, cellProofs);
         } else {
             revert UnknownActionKind();
         }
@@ -335,14 +354,15 @@ contract KnomosisStepVM {
     /* ---------------------------------------------------------- */
 
     function _toActionKind(uint8 idx) internal pure returns (ActionKind) {
-        // Workstream GP extension: indices 19/20/21/22/23 are now valid
-        // (GP.5.3 added 21 = TopUpActionBudgetFor; GP.9.1 added 22 =
-        // ClaimBudgetRefund; GP.11.4 added 23 = AmmSwap).  Updating
-        // this bound is mandatory when a
-        // new Action constructor is appended to the Lean-side inductive
-        // — the Lean cross-stack fixture corpus exercises every kind on
-        // both sides via the `crosscheck-step-vm` suite.
-        if (idx > 23) revert UnknownActionKind();
+        // Workstream GP extension: indices 19/20/21/22/23/24 are now
+        // valid (GP.5.3 added 21 = TopUpActionBudgetFor; GP.9.1 added
+        // 22 = ClaimBudgetRefund; GP.11.4 added 23 = AmmSwap; GP.11.10
+        // added 24 = ReclaimAmmReserves).  Updating this bound is
+        // mandatory when a new Action constructor is appended to the
+        // Lean-side inductive — the Lean cross-stack fixture corpus
+        // exercises every kind on both sides via the
+        // `crosscheck-step-vm` suite.
+        if (idx > 24) revert UnknownActionKind();
         return ActionKind(idx);
     }
 
@@ -1228,6 +1248,60 @@ contract KnomosisStepVM {
             preStateCommit, TAG_AMM_SWAP,
             fromResource, toResource, ammReserveActor,
             newFromBalance, newToBalance, signer));
+    }
+
+    /// @notice Step function for `reclaimAmmReserves` (action-index 24;
+    ///         GP.11.10 post-disable reserve sweep).  Field layout
+    ///         (32 bytes, 4 x uint64BE): `r | amount | reserveActor |
+    ///         poolActor`.  The sweep debits the reserve actor's ENTIRE
+    ///         `r` balance (the exact-sweep rule) and credits the pool
+    ///         actor the same amount.
+    ///
+    ///         Mirrors Lean's `Laws.reclaimAmmReserves` preconditions
+    ///         (`getBalance r reserveActor = amount`,
+    ///         `reserveActor != poolActor`, `amount > 0`).  Without the
+    ///         exact-balance check a partial or over-claiming sweep would
+    ///         pass Solidity but be a no-op on Lean (the kernel rejects
+    ///         the precondition, so the honest post-commit equals the
+    ///         pre-commit) — a cross-stack divergence the bisection game
+    ///         would settle incorrectly.  `reserveActor == poolActor`
+    ///         additionally aliases the two balance cells, so the
+    ///         sequential debit/credit writes would collide.  The
+    ///         `ammDisabled`-mirror gate is an ADMISSION-layer check
+    ///         (`BridgeAdmissibleWith` conjunct 9), deliberately not
+    ///         re-checked here: the step VM re-executes kernel steps,
+    ///         and the kernel law itself carries no mirror read.
+    function _stepReclaimAmmReserves(
+        bytes32 preStateCommit,
+        bytes calldata actionFields,
+        uint64 signer,
+        CellProof[] calldata cellProofs
+    ) internal pure returns (bytes32) {
+        require(actionFields.length >= 32, "ReclaimAmmReservesFieldsTooShort");
+        uint64 r            = _decodeUint64BE(actionFields, 0);
+        uint256 amount      = uint256(_decodeUint64BE(actionFields, 8));
+        uint64 reserveActor = _decodeUint64BE(actionFields, 16);
+        uint64 poolActor    = _decodeUint64BE(actionFields, 24);
+
+        // Lean `Laws.reclaimAmmReserves` preconditions (see NatSpec).
+        if (amount == 0) revert AmountMustBePositive();
+        if (reserveActor == poolActor) revert SameActorSweep();
+
+        uint256 reserveProofIdx = _findBalanceCellProof(cellProofs, r, reserveActor);
+        uint256 reserveBalance  = _decodeNat(cellProofs[reserveProofIdx].cellValue);
+        if (reserveBalance != amount) revert SweepAmountMismatch(reserveBalance, amount);
+
+        uint256 poolProofIdx = _findBalanceCellProof(cellProofs, r, poolActor);
+        uint256 poolBalance  = _decodeNat(cellProofs[poolProofIdx].cellValue);
+
+        // Exact sweep: the reserve drains to 0; the pool gains `amount`.
+        uint256 newReserveBalance = 0;
+        uint256 newPoolBalance = poolBalance + amount;
+
+        return keccak256(abi.encodePacked(
+            preStateCommit, TAG_RECLAIM_AMM_RESERVES,
+            r, reserveActor, poolActor,
+            newReserveBalance, newPoolBalance, signer));
     }
 
     /* ---------------------------------------------------------- */

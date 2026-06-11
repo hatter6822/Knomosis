@@ -55,6 +55,7 @@ import LegalKernel.Test.Laws.Withdraw
 import LegalKernel.Test.Laws.DepositWithFee
 import LegalKernel.Test.Laws.TopUpActionBudget
 import LegalKernel.Test.Laws.AmmSwap
+import LegalKernel.Test.Laws.ReclaimAmmReserves
 import LegalKernel.Test.Authority.Action
 import LegalKernel.Test.Authority.Identity
 import LegalKernel.Test.Authority.LocalPolicy
@@ -224,6 +225,7 @@ def main : IO UInt32 := do
   failed := failed + (← runAll "deposit"             Laws.DepositTests.tests)
   failed := failed + (← runAll "withdraw"            Laws.WithdrawTests.tests)
   failed := failed + (← runAll "amm-swap"            Laws.AmmSwapTests.tests)
+  failed := failed + (← runAll "reclaim-amm-reserves" Laws.ReclaimAmmReservesTests.tests)
   failed := failed + (← runAll "authority-action"   Authority.ActionTests.tests)
   failed := failed + (← runAll "authority-identity" Authority.IdentityTests.tests)
   failed := failed + (← runAll "authority-localpolicy"

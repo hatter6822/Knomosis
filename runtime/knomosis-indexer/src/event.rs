@@ -39,6 +39,7 @@
 //! | 19  | `DelegatedActionBudgetTopUp`   | `recipient, signer, gas_resource, gas_amount, budget_inc, pool`   |
 //! | 20  | `BudgetConsumed`               | `actor, amount`                                                   |
 //! | 21  | `AmmSwapExecuted`              | `from_resource, to_resource, amount_in, amount_out, amm_actor`    |
+//! | 22  | `AmmReservesReclaimed`         | `resource, amount, reserve_actor, pool_actor`                     |
 //!
 //! Tags 16..=20 are the Workstream-GP "gas pool" family (per
 //! `LegalKernel/Events/Types.lean::Event.tag` 16..=20).  Tags
@@ -368,6 +369,20 @@ pub enum Event {
         /// The AMM reserve actor.
         amm_reserve_actor: ActorId,
     },
+    /// The disabled AMM's frozen L2 reserve balance was swept into
+    /// the gas-pool actor (Workstream GP.11.10 post-disable
+    /// reclamation; the exact sweep drains the reserve to zero).
+    /// Tag 22.
+    AmmReservesReclaimed {
+        /// The swept resource.
+        resource: ResourceId,
+        /// The swept amount (the reserve's entire balance).
+        amount: Amount,
+        /// The drained AMM reserve actor.
+        reserve_actor: ActorId,
+        /// The credited gas-pool actor.
+        pool_actor: ActorId,
+    },
 }
 
 impl Event {
@@ -398,6 +413,7 @@ impl Event {
             Self::DelegatedActionBudgetTopUp { .. } => 19,
             Self::BudgetConsumed { .. } => 20,
             Self::AmmSwapExecuted { .. } => 21,
+            Self::AmmReservesReclaimed { .. } => 22,
         }
     }
 
@@ -443,6 +459,7 @@ impl Event {
             Self::AmmSwapExecuted {
                 amm_reserve_actor, ..
             } => Some(*amm_reserve_actor),
+            Self::AmmReservesReclaimed { reserve_actor, .. } => Some(*reserve_actor),
             Self::TimeRecorded { .. }
             | Self::DisputeWithdrawn { .. }
             | Self::VerdictApplied { .. } => None,
@@ -459,7 +476,8 @@ impl Event {
             | Self::WithdrawalRequested { resource, .. }
             | Self::DepositCredited { resource, .. }
             | Self::DepositWithFeeCredited { resource, .. }
-            | Self::GasPoolClaim { resource, .. } => Some(*resource),
+            | Self::GasPoolClaim { resource, .. }
+            | Self::AmmReservesReclaimed { resource, .. } => Some(*resource),
             Self::ActionBudgetTopUp { gas_resource, .. }
             | Self::DelegatedActionBudgetTopUp { gas_resource, .. } => Some(*gas_resource),
             _ => None,
@@ -492,8 +510,9 @@ impl Event {
 
 /// The number of frozen `Event` constructors.  Bumped by amendment
 /// when a new constructor lands.  Useful for exhaustive coverage
-/// tests.  GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`.
-pub const EVENT_TAG_COUNT: u8 = 22;
+/// tests.  GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`;
+/// GP.11.10 widened 22 → 23 by adding `AmmReservesReclaimed`.
+pub const EVENT_TAG_COUNT: u8 = 23;
 
 #[cfg(test)]
 mod tests {
@@ -683,7 +702,7 @@ mod tests {
     /// GP.11.4 widened 21 → 22.
     #[test]
     fn tag_count_constant() {
-        assert_eq!(EVENT_TAG_COUNT, 22);
+        assert_eq!(EVENT_TAG_COUNT, 23);
     }
 
     /// Canonical resource-id constants pinned.

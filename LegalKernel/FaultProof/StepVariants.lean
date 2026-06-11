@@ -106,6 +106,11 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
   -- L1 contract prevents double-execution operationally via
   -- nonReentrant + single-atomic-swap semantics).
   | .ammSwap _ _ _ _ _,            signer => [.registry signer]
+  -- GP.11.10: post-disable reserve sweep.  Reads only the signer's
+  -- registry entry; the exact-sweep + kill-switch gates are
+  -- admission-layer checks (`BridgeAdmissibleWith` conjunct 9 over the
+  -- L2 `ammDisabled` mirror), not L1 step-VM cell reads.
+  | .reclaimAmmReserves _ _ _ _,   signer => [.registry signer]
 
 /-- The cell tags an action writes.  Per the §4.13 contract,
     every action advances the signer's nonce; the per-action
@@ -207,6 +212,11 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- the signer's nonce.
   | .ammSwap fr tr _ _ ra,         signer =>
       [.balance fr ra, .balance tr ra, .nonce signer]
+  -- GP.11.10: post-disable reserve sweep writes BOTH actors' balances
+  -- at the single swept resource (debit the reserve actor to zero,
+  -- credit the pool actor) plus the signer's nonce.
+  | .reclaimAmmReserves r _ ra pa, signer =>
+      [.balance r ra, .balance r pa, .nonce signer]
 
 /-- The complete cell set an action touches: read-only ++ writes.
     The L1 step VM expects a `CellProofBundle` of exactly this

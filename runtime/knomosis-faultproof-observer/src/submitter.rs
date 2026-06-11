@@ -617,6 +617,10 @@ pub enum ActionKind {
     /// `toResource` by `amountOut`.  The L1 step-VM execution arm
     /// landed in GP.11.4.
     AmmSwap = 23,
+    /// `ReclaimAmmReserves(r, amount, reserve_actor, pool_actor)` —
+    /// the GP.11.10 post-disable exact sweep of the frozen AMM
+    /// reserve into the gas pool.
+    ReclaimAmmReserves = 24,
 }
 
 /// Encode the FULL-FORM `terminateOnSingleStep` calldata.  The
@@ -1352,6 +1356,7 @@ mod tests {
         assert_eq!(ActionKind::TopUpActionBudgetFor as u8, 21);
         assert_eq!(ActionKind::ClaimBudgetRefund as u8, 22);
         assert_eq!(ActionKind::AmmSwap as u8, 23);
+        assert_eq!(ActionKind::ReclaimAmmReserves as u8, 24);
     }
 
     /// Game id is encoded as 32-byte big-endian.

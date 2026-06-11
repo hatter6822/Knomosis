@@ -1556,9 +1556,21 @@ def test_bridgeState_encode_injective_api : TestCase := {
         bs₁.ammReserveBold = bs₂.ammReserveBold ∧
         bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
         bs₁.boldTvlCap = bs₂.boldTvlCap ∧
-        bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue :=
+        bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue ∧
+        bs₁.ammDisabled = bs₂.ammDisabled :=
       Bridge.BridgeState.encode_injective
     pure ()
+}
+
+/-- GP.11.10: distinct `ammDisabled` flags produce distinct encodings. -/
+def test_bridgeState_encode_distinguishes_ammDisabled : TestCase := {
+  name := "Bridge.BridgeState.encode distinguishes ammDisabled"
+  body := do
+    let bs1 := genBridgeState_single_consumed
+    let bs2 : LegalKernel.Bridge.BridgeState := { bs1 with ammDisabled := true }
+    let e1 := Bridge.BridgeState.encode bs1
+    let e2 := Bridge.BridgeState.encode bs2
+    assert (e1 != e2) "BridgeState.encode collided on distinct ammDisabled"
 }
 
 /-- Distinct full bridge states produce distinct encodings. -/
@@ -1591,7 +1603,8 @@ def test_extendedState_extEq_api : TestCase := {
           es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold ∧
           es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed ∧
           es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap ∧
-          es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue :=
+          es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue ∧
+          es₁.bridge.ammDisabled = es₂.bridge.ammDisabled :=
       fun _ _ => Iff.rfl
     pure ()
 }
@@ -1757,6 +1770,7 @@ def tests : List TestCase :=
     -- EI.7.e — Bridge.BridgeState.encode_injective.
   , test_bridgeState_encode_injective_api
   , test_bridgeState_encode_distinguishes
+  , test_bridgeState_encode_distinguishes_ammDisabled
     -- EI.8 — Composition theorem + ExtendedState.extEq.
   , test_extendedState_extEq_api
   , test_extendedState_extEq_refl_empty

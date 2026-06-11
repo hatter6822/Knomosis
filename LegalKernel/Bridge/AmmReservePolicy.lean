@@ -44,18 +44,22 @@ the LP.7 meta-action escape hatch), this means `ammReserveActor`'s
 balances can only be mutated by a legitimate, L1-attested AMM swap.
 
 **Deny-list maintenance contract (forcing function).**
-`ammReserveDeniedTags` is `(List.range 24).filter (· ≠ 23)` =
-`[0, 1, …, 22]` — every Action tag except `ammSwap`, covering the
-current frozen set (0..23).  This range is a manually-maintained
-constant: whenever a NEW Action constructor is appended at index N,
-this constant must be bumped to `List.range (N+1)`.  The maintenance
-is mechanically enforced by `Action.tag_lt_denyListBound` (already
-defined in `GasPoolPolicy.lean`), whose exhaustive `cases action`
-proof fails to elaborate the moment an Action constructor whose tag is
-`≥ 24` is added; `ammReservePolicy_denies_all_non_ammSwap` consumes
-that bound (via `mem_ammReserveDeniedTags_of_tag_ne_ammSwap`), so a
-forgotten range bump is a build break rather than a silent reserve-
-outflow escalation.
+`ammReserveDeniedTags` is `(List.range 25).filter (· ≠ 23)` =
+`[0, 1, …, 22, 24]` — every Action tag except `ammSwap`, covering the
+current frozen set (0..24; the GP.11.10 `reclaimAmmReserves` at 24 is
+bridge-SIGNED, so the reserve actor itself must be barred from it like
+every other non-swap action — the sweep moves the reserve's balance
+through the bridge's signature, never the reserve's own).  This range
+is a manually-maintained constant: whenever a NEW Action constructor
+is appended at index N, this constant must be bumped to
+`List.range (N+1)`.  The maintenance is mechanically enforced by
+`Action.tag_lt_denyListBound` (already defined in
+`GasPoolPolicy.lean`), whose exhaustive `cases action` proof fails to
+elaborate the moment an Action constructor whose tag is `≥ 25` is
+added; `ammReservePolicy_denies_all_non_ammSwap` consumes that bound
+(via `mem_ammReserveDeniedTags_of_tag_ne_ammSwap`), so a forgotten
+range bump is a build break rather than a silent reserve-outflow
+escalation.
 
 **Two-layer policy discipline (mirrors GP.7.2's `gasPoolPolicy`).**
 The `ammReservePolicy` (a `LocalPolicy`) is structurally unable to bar
@@ -91,13 +95,16 @@ open LegalKernel.Encoding (Encodable)
 /-- The Action tags the AMM-reserve actor is forbidden from signing:
     every constructor index EXCEPT `ammSwap` (tag 23).
 
-    `(List.range 24).filter (· ≠ 23) = [0, 1, …, 22]` — the current
-    frozen Action set spans indices 0..23, all of which (except `ammSwap`
-    = 23) the reserve actor must be forbidden from signing.  See the
-    module docstring's maintenance contract: a new constructor at index
-    ≥ 24 forces a bump here, caught at build time by
+    `(List.range 25).filter (· ≠ 23) = [0, 1, …, 22, 24]` — the
+    current frozen Action set spans indices 0..24, all of which
+    (except `ammSwap` = 23) the reserve actor must be forbidden from
+    signing.  In particular the GP.11.10 `reclaimAmmReserves` (24) is
+    denied: the post-disable sweep is signed by `bridgeActor`, never
+    by the reserve actor itself.  See the module docstring's
+    maintenance contract: a new constructor at index ≥ 25 forces a
+    bump here, caught at build time by
     `ammReservePolicy_denies_all_non_ammSwap`. -/
-def ammReserveDeniedTags : List Nat := (List.range 24).filter (· ≠ 23)
+def ammReserveDeniedTags : List Nat := (List.range 25).filter (· ≠ 23)
 
 /-- The canonical `LocalPolicy` governing `ammReserveActor` outflow.
 
@@ -128,8 +135,8 @@ theorem ammSwap_tag_not_mem_ammReserveDeniedTags :
 
 /-- Every non-`ammSwap` Action's tag is a member of
     `ammReserveDeniedTags`.  Holds because each current Action tag is
-    `< 24` (`Action.tag_lt_denyListBound`) and the deny-list is every
-    value in `[0, 24)` except `23`. -/
+    `< 25` (`Action.tag_lt_denyListBound`) and the deny-list is every
+    value in `[0, 25)` except `23`. -/
 theorem mem_ammReserveDeniedTags_of_tag_ne_ammSwap
     (action : Action) (h : Action.tag action ≠ 23) :
     Action.tag action ∈ ammReserveDeniedTags := by
@@ -576,7 +583,7 @@ theorem ammReservePolicy_fieldsBounded :
   refine ⟨by decide, ?_⟩
   apply List.all_eq_true.mpr
   intro n hn
-  have hlt : n < 24 := by
+  have hlt : n < 25 := by
     have := List.mem_filter.mp hn |>.1
     simpa using List.mem_range.mp this
   exact decide_eq_true (by omega)

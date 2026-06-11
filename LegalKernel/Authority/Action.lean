@@ -86,6 +86,7 @@ import LegalKernel.Laws.TopUpActionBudget
 import LegalKernel.Laws.TopUpActionBudgetFor
 import LegalKernel.Laws.ClaimBudgetRefund
 import LegalKernel.Laws.AmmSwap
+import LegalKernel.Laws.ReclaimAmmReserves
 import LegalKernel.Authority.Crypto
 import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.AddressBook
@@ -484,6 +485,19 @@ inductive Action
       bridge actor.  Frozen action index 23. -/
   | ammSwap (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
             (ammReserveActor : ActorId)
+  /-- Workstream GP (GP.11.10): post-disable AMM reserve reclamation.
+      A bridge-attested EXACT SWEEP of the disabled AMM's frozen L2
+      reserve balance at one resource into the gas-pool actor: the
+      kernel-level effect debits `reserveActor` at `r` by `amount`
+      (its entire balance, by the law's exact-sweep precondition) and
+      credits `poolActor` the same `amount`.  Admissible only after
+      the L1 `emergencyDisableAmm()` kill switch is mirrored on L2
+      (`BridgeAdmissibleWith` conjunct 9 requires
+      `es.bridge.ammDisabled = true` and pins the threaded actors to
+      the canonical `ammReserveActor` / `gasPoolActor`).  Frozen
+      action index 24. -/
+  | reclaimAmmReserves (r : ResourceId) (amount : Amount)
+                       (reserveActor poolActor : ActorId)
   -- Workstream-LX (LX.17): codegen-managed Lex constructors land
   -- between the fence markers below.  M1's example law (frozen
   -- index 17) deliberately does not extend `Action` — it lives
@@ -493,8 +507,8 @@ inductive Action
   -- Workstream H reserves indices 17 and 18; Workstream GP reserves
   -- indices 19 (`depositWithFee`), 20 (`topUpActionBudget`),
   -- 21 (`topUpActionBudgetFor`), 22 (`claimBudgetRefund`),
-  -- and 23 (`ammSwap`).
-  -- Future Lex-generated ctors (M2+) will append at index 24+.
+  -- 23 (`ammSwap`), and 24 (`reclaimAmmReserves`).
+  -- Future Lex-generated ctors (M2+) will append at index 25+.
   -- BEGIN LEX-GENERATED (do not edit by hand)
   -- END LEX-GENERATED
   deriving Repr, DecidableEq
@@ -607,6 +621,11 @@ def Action.compileTransition : Action → Transition
   -- signer-aware (both amounts are bridge-attested), so it compiles
   -- directly to the kernel law.
   | .ammSwap fr tr ai ao ra         => Laws.ammSwap fr tr ai ao ra
+  -- Workstream GP (GP.11.10): post-disable reserve reclamation.  Like
+  -- ammSwap, the sweep is NOT signer-aware (the amount and both actors
+  -- are bridge-attested action fields), so it compiles directly to the
+  -- kernel law.
+  | .reclaimAmmReserves r amt ra pa => Laws.reclaimAmmReserves r amt ra pa
   -- Workstream-LX (LX.17): codegen-managed Lex `compileTransition`
   -- arms land between the fence markers below.  Empty in M1;
   -- populated in M2 once the kernel-built-in laws are re-expressed
@@ -732,6 +751,7 @@ theorem Action.toTransition_eq_compileTransition_of_ne_topUp
   | faultProofResolution _ _ _ _  => rfl
   | depositWithFee _ _ _ _ _ _ _  => rfl
   | ammSwap _ _ _ _ _             => rfl
+  | reclaimAmmReserves _ _ _ _    => rfl
 
 /-- For `topUpActionBudget` specifically, `toTransition` produces
     the signer-bound `Laws.topUpActionBudget` form. -/
@@ -927,6 +947,10 @@ example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat) (pa : A
 example (gr : ResourceId) (bu : Nat) (w : Nat) (pa : ActorId) :
     (Action.compile (.claimBudgetRefund gr bu w pa)).source =
       .claimBudgetRefund gr bu w pa := rfl
+
+example (r : ResourceId) (amt : Amount) (ra pa : ActorId) :
+    (Action.compile (.reclaimAmmReserves r amt ra pa)).source =
+      .reclaimAmmReserves r amt ra pa := rfl
 
 end Authority
 end LegalKernel

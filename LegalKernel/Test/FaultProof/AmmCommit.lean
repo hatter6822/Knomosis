@@ -8,18 +8,24 @@
 -/
 
 /-
-LegalKernel.Test.FaultProof.AmmCommit — GP.11.8 acceptance tests for
-AMM state-root commitment integration.
+LegalKernel.Test.FaultProof.AmmCommit — GP.11.8 + GP.11.10 acceptance
+tests for AMM state-root commitment integration.
 
-19 test cases per the GP.11.8 specification:
+19 GP.11.8 cases plus 7 GP.11.10 cases:
   * Genesis state-root with all AMM fields at zero.
   * Post-deposit / post-swap / post-circuit-close commitment changes.
-  * Each AMM field independently alters the commitment.
-  * Term-level API stability for the four GP.11.8 theorems.
-  * Encoding round-trip with AMM fields.
+  * Each AMM field independently alters the commitment (including
+    the GP.11.10 `ammDisabled` kill-switch mirror).
+  * Term-level API stability for the GP.11.8 + GP.11.10 theorems
+    (`bridgeState_commit_includes_ammState`,
+    `bridgeState_commit_extends_v1_2`, `bridgeState_encode_factored`,
+    `bridgeState_amm_genesis_suffix_const`,
+    `bridgeState_commit_extends_v1_3`,
+    `commitBridgeState_reflects_ammDisabled`).
+  * Encoding round-trip with AMM fields (including `ammDisabled`).
   * Migration: v1.2 state with genesis AMM defaults → well-formed commitment.
   * Determinism: same AMM state → same commitment.
-  * Decoder rejects non-canonical boldCircuitClosed encoding.
+  * Decoder rejects non-canonical boldCircuitClosed / ammDisabled encodings.
   * Encoding factoring: base prefix ++ AMM suffix decomposition.
   * AMM genesis suffix constancy across states.
 -/
@@ -37,7 +43,7 @@ open LegalKernel.Test
 
 namespace LegalKernel.Test.FaultProof.AmmCommit
 
-/-- GP.11.8 acceptance tests. -/
+/-- GP.11.8 + GP.11.10 acceptance tests. -/
 def tests : List TestCase :=
   [
   -- 1. Genesis state-root: all AMM fields at zero → 32-byte well-formed commitment.
@@ -51,6 +57,7 @@ def tests : List TestCase :=
       assertEq (expected := false) (actual := bs.boldCircuitClosed) "genesis boldCircuitClosed"
       assertEq (expected := (0 : Nat)) (actual := bs.boldTvlCap) "genesis boldTvlCap"
       assertEq (expected := (0 : Nat)) (actual := bs.boldTotalLockedValue) "genesis boldTotalLockedValue"
+      assertEq (expected := false) (actual := bs.ammDisabled) "genesis ammDisabled"
   }
   -- 2. Changing ammReserveEth changes the commitment.
   , { name := "GP.11.8: ammReserveEth change alters bridge commitment"
@@ -151,7 +158,8 @@ def tests : List TestCase :=
               Encodable.encode (T := Nat) bs.ammReserveBold ++
               Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
               Encodable.encode (T := Nat) bs.boldTvlCap ++
-              Encodable.encode (T := Nat) bs.boldTotalLockedValue :=
+              Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+              Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0) :=
           bridgeState_commit_includes_ammState
         pure ()
     }
@@ -164,10 +172,10 @@ def tests : List TestCase :=
             bs₁.nextWdId = bs₂.nextWdId →
             (bs₁.ammReserveEth = 0 ∧ bs₁.ammReserveBold = 0 ∧
              bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
-             bs₁.boldTotalLockedValue = 0) →
+             bs₁.boldTotalLockedValue = 0 ∧ bs₁.ammDisabled = false) →
             (bs₂.ammReserveEth = 0 ∧ bs₂.ammReserveBold = 0 ∧
              bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
-             bs₂.boldTotalLockedValue = 0) →
+             bs₂.boldTotalLockedValue = 0 ∧ bs₂.ammDisabled = false) →
             commitBridgeState bs₁ = commitBridgeState bs₂ :=
           bridgeState_commit_extends_v1_2
         pure ()
@@ -201,7 +209,7 @@ def tests : List TestCase :=
         let bs : BridgeState := { BridgeState.empty with
           ammReserveEth := 7777, ammReserveBold := 8888,
           boldCircuitClosed := true, boldTvlCap := 99999,
-          boldTotalLockedValue := 55555 }
+          boldTotalLockedValue := 55555, ammDisabled := true }
         let encoded := Bridge.BridgeState.encode bs
         match Bridge.BridgeState.decode encoded with
         | .ok (bs', rest) =>
@@ -211,6 +219,7 @@ def tests : List TestCase :=
           assertEq (expected := bs.boldCircuitClosed) (actual := bs'.boldCircuitClosed) "boldCircuitClosed roundtrip"
           assertEq (expected := bs.boldTvlCap) (actual := bs'.boldTvlCap) "boldTvlCap roundtrip"
           assertEq (expected := bs.boldTotalLockedValue) (actual := bs'.boldTotalLockedValue) "boldTotalLockedValue roundtrip"
+          assertEq (expected := bs.ammDisabled) (actual := bs'.ammDisabled) "ammDisabled roundtrip"
         | .error e => throw <| IO.userError s!"decode failed: {repr e}"
     }
   -- 16. Non-canonical boldCircuitClosed encoding is rejected.
@@ -225,7 +234,8 @@ def tests : List TestCase :=
           Encodable.encode (T := Nat) bs.ammReserveBold ++
           Encodable.encode (T := Nat) 2 ++
           Encodable.encode (T := Nat) bs.boldTvlCap ++
-          Encodable.encode (T := Nat) bs.boldTotalLockedValue
+          Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+          Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0)
         match Bridge.BridgeState.decode tampered with
         | .error _ => pure ()
         | .ok _ => throw <| IO.userError "decoder accepted non-canonical circuitClosed=2"
@@ -245,10 +255,10 @@ def tests : List TestCase :=
         let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
             (bs₁.ammReserveEth = 0 ∧ bs₁.ammReserveBold = 0 ∧
              bs₁.boldCircuitClosed = false ∧ bs₁.boldTvlCap = 0 ∧
-             bs₁.boldTotalLockedValue = 0) →
+             bs₁.boldTotalLockedValue = 0 ∧ bs₁.ammDisabled = false) →
             (bs₂.ammReserveEth = 0 ∧ bs₂.ammReserveBold = 0 ∧
              bs₂.boldCircuitClosed = false ∧ bs₂.boldTvlCap = 0 ∧
-             bs₂.boldTotalLockedValue = 0) →
+             bs₂.boldTotalLockedValue = 0 ∧ bs₂.ammDisabled = false) →
             bridgeStateEncodeAmmSuffix bs₁ = bridgeStateEncodeAmmSuffix bs₂ :=
           bridgeState_amm_genesis_suffix_const
         pure ()
@@ -259,10 +269,147 @@ def tests : List TestCase :=
         let bs : BridgeState := { BridgeState.empty with
           ammReserveEth := 42, ammReserveBold := 99,
           boldCircuitClosed := true, boldTvlCap := 1000,
-          boldTotalLockedValue := 500 }
+          boldTotalLockedValue := 500, ammDisabled := true }
         let direct := Bridge.BridgeState.encode bs
         let factored := bridgeStateEncodeBase bs ++ bridgeStateEncodeAmmSuffix bs
         assertEq (expected := direct) (actual := factored) "factored encoding matches direct"
+    }
+  -- 20. GP.11.10: flipping ammDisabled changes the bridge commitment.
+  , { name := "GP.11.10: ammDisabled change alters bridge commitment"
+    , body := do
+        let bs0 := BridgeState.empty
+        let bs1 : BridgeState := { bs0 with ammDisabled := true }
+        let c0 := commitBridgeState bs0
+        let c1 := commitBridgeState bs1
+        assert (c0 ≠ c1) "ammDisabled change must alter commit"
+    }
+  -- 21. GP.11.10: ammDisabled propagates to the top-level state root.
+  , { name := "GP.11.10: ammDisabled change alters top-level state-root"
+    , body := do
+        let es0 := ExtendedState.empty
+        let bs1 : BridgeState := { es0.bridge with ammDisabled := true }
+        let es1 : ExtendedState := { es0 with bridge := bs1 }
+        let c0 := commitExtendedState es0
+        let c1 := commitExtendedState es1
+        assert (c0 ≠ c1) "post-kill-switch state root differs from genesis"
+    }
+  -- 22. GP.11.10: ammDisabled flips independently of the other AMM fields
+  --     (a populated state changes its commit on disable alone).
+  , { name := "GP.11.10: populated AMM state still distinguishes ammDisabled"
+    , body := do
+        let bs0 : BridgeState := { BridgeState.empty with
+          ammReserveEth := 123456, ammReserveBold := 654321,
+          boldCircuitClosed := true, boldTvlCap := 777,
+          boldTotalLockedValue := 888 }
+        let bs1 : BridgeState := { bs0 with ammDisabled := true }
+        assert (commitBridgeState bs0 ≠ commitBridgeState bs1)
+          "disable flips the commit even with all other AMM fields populated"
+    }
+  -- 23. GP.11.10: decoder rejects non-canonical ammDisabled encoding.
+  , { name := "GP.11.10: decoder rejects non-canonical ammDisabled"
+    , body := do
+        let bs := BridgeState.empty
+        let tampered : Encoding.Stream :=
+          Bridge.BridgeState.encodeConsumed bs ++
+          Bridge.BridgeState.encodePending bs ++
+          Encodable.encode (T := Nat) bs.nextWdId ++
+          Encodable.encode (T := Nat) bs.ammReserveEth ++
+          Encodable.encode (T := Nat) bs.ammReserveBold ++
+          Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
+          Encodable.encode (T := Nat) bs.boldTvlCap ++
+          Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+          Encodable.encode (T := Nat) 2
+        match Bridge.BridgeState.decode tampered with
+        | .error _ => pure ()
+        | .ok _ => throw <| IO.userError "decoder accepted non-canonical ammDisabled=2"
+    }
+  -- 24. GP.11.10: ammDisabled=true round-trips through encode/decode and
+  --     the disabled-state commitment is deterministic.
+  , { name := "GP.11.10: disabled-AMM state round-trips and commits deterministically"
+    , body := do
+        let bs : BridgeState := { BridgeState.empty with ammDisabled := true }
+        match Bridge.BridgeState.decode (Bridge.BridgeState.encode bs) with
+        | .ok (bs', rest) =>
+          assert (rest == []) "no trailing bytes after decode"
+          assertEq (expected := true) (actual := bs'.ammDisabled) "ammDisabled=true roundtrip"
+        | .error e => throw <| IO.userError s!"decode failed: {repr e}"
+        assertEq (expected := commitBridgeState bs) (actual := commitBridgeState bs)
+          "determinism on the disabled state"
+    }
+  -- 25. Term-level API: bridgeState_commit_extends_v1_3 (toList /
+  --     extensional hypotheses: the encoders read only `toList`, so
+  --     the migration statement covers RB-shape-divergent states too).
+  , { name := "GP.11.10: bridgeState_commit_extends_v1_3 API stable"
+    , body := do
+        let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
+            bs₁.consumed.toList = bs₂.consumed.toList →
+            bs₁.pending.toList = bs₂.pending.toList →
+            bs₁.nextWdId = bs₂.nextWdId →
+            bs₁.ammReserveEth = bs₂.ammReserveEth →
+            bs₁.ammReserveBold = bs₂.ammReserveBold →
+            bs₁.boldCircuitClosed = bs₂.boldCircuitClosed →
+            bs₁.boldTvlCap = bs₂.boldTvlCap →
+            bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue →
+            bs₁.ammDisabled = false →
+            bs₂.ammDisabled = false →
+            commitBridgeState bs₁ = commitBridgeState bs₂ :=
+          bridgeState_commit_extends_v1_3
+        pure ()
+    }
+  -- 26. Term-level API: commitBridgeState_reflects_ammDisabled
+  --     (toList hypotheses, same rationale as test 25).
+  , { name := "GP.11.10: commitBridgeState_reflects_ammDisabled API stable"
+    , body := do
+        let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
+            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            bs₁.consumed.toList = bs₂.consumed.toList →
+            bs₁.pending.toList = bs₂.pending.toList →
+            bs₁.nextWdId = bs₂.nextWdId →
+            bs₁.ammReserveEth = bs₂.ammReserveEth →
+            bs₁.ammReserveBold = bs₂.ammReserveBold →
+            bs₁.boldCircuitClosed = bs₂.boldCircuitClosed →
+            bs₁.boldTvlCap = bs₂.boldTvlCap →
+            bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue →
+            bs₁.ammDisabled ≠ bs₂.ammDisabled →
+            commitBridgeState bs₁ ≠ commitBridgeState bs₂ :=
+          commitBridgeState_reflects_ammDisabled
+        pure ()
+    }
+  -- 27. Term-level API: commitExtendedState_reflects_ammDisabled —
+  --     the GP.11.10 TOP-LEVEL headline (the kill switch is reflected
+  --     in the published state root itself, with no hypotheses on the
+  --     non-bridge sub-states).
+  , { name := "GP.11.10: commitExtendedState_reflects_ammDisabled API stable"
+    , body := do
+        let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
+            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            es₁.bridge.consumed.toList = es₂.bridge.consumed.toList →
+            es₁.bridge.pending.toList = es₂.bridge.pending.toList →
+            es₁.bridge.nextWdId = es₂.bridge.nextWdId →
+            es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth →
+            es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold →
+            es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed →
+            es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap →
+            es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue →
+            es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled →
+            commitExtendedState es₁ ≠ commitExtendedState es₂ :=
+          commitExtendedState_reflects_ammDisabled
+        pure ()
+    }
+  -- 28. Value-level: flipping ONLY ammDisabled on a populated extended
+  --     state (non-trivial kernel + nonce sub-states) flips the
+  --     top-level root — the value-level twin of test 27.
+  , { name := "GP.11.10: top-level root reflects ammDisabled on populated states"
+    , body := do
+        let es0 := ExtendedState.empty
+        let es1 : ExtendedState :=
+          { es0 with
+            base := LegalKernel.setBalance es0.base 0 7 1000
+            bridge := { es0.bridge with ammReserveEth := 5555 } }
+        let es2 : ExtendedState :=
+          { es1 with bridge := { es1.bridge with ammDisabled := true } }
+        assert (commitExtendedState es1 ≠ commitExtendedState es2)
+          "kill-switch flip alters the top-level root on a populated state"
     }
   ]
 

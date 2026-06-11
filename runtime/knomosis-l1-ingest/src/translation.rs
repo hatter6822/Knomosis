@@ -169,6 +169,16 @@ pub fn preview_ingest(
             // and dedup symmetry with `DepositInitiated`.
             Translated::NoAction
         }
+        IngestedEvent::AmmDisabled { .. } => {
+            // GP.11.10: the one-way kill switch fired.  Like the
+            // deposit events, the L2 follow-ups (the `ammDisabled`
+            // state-root mirror; the `reclaimAmmReserves` sweeps) are
+            // the SEQUENCER's responsibility — the translator emits no
+            // `Action`.  The watcher's audit log (keyed on this
+            // variant's name + origin) is the operator-visible
+            // disaster marker.
+            Translated::NoAction
+        }
     }
 }
 

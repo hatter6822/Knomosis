@@ -259,14 +259,76 @@ else
     fi
 fi
 
+# ------------------------------------------------------------------
+# GP.11.10 disaster-recovery multisig governance constants
+# (`KnomosisAmmDisasterRecoveryMultisig.sol`).  The 3-of-N floor is the
+# constitutional value: weakening MIN_DISABLE_THRESHOLD below 3 would
+# let a deployment ship a sub-quorum kill switch, defeating the
+# GP.11.10 custody rule.  MAX_SIGNERS bounds the signer set;
+# CONFIRMATION_WINDOW is the stale-approval group-expiry horizon.
+# Audited with the same strict-literal + comment-stripped discipline
+# as the bridge caps.
+# ------------------------------------------------------------------
+
+# Parameterised (like the bridge's `$1`) so the behavioural self-test
+# can inject tampered copies; defaults to the canonical source.
+MULTISIG="${2:-${SCRIPT_DIR}/../src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol}"
+if [[ ! -f "${MULTISIG}" ]]; then
+    fail "multisig contract file not found: ${MULTISIG}"
+else
+    MSTRIPPED="$(mktemp)"
+    strip_solidity_comments "${MULTISIG}" \
+        | sed -E ':a;N;$!ba;s/=\n[[:space:]]+/= /g' \
+        >"${MSTRIPPED}"
+
+    MULTISIG_CAPS=(
+        "MIN_DISABLE_THRESHOLD|3"
+        "MAX_SIGNERS|32"
+    )
+    for spec in "${MULTISIG_CAPS[@]}"; do
+        IFS='|' read -r name want_value <<<"${spec}"
+        decl_re="uint256[[:space:]]+public[[:space:]]+constant[[:space:]]+${name}[[:space:]]*=[[:space:]]*[0-9][0-9_]*[[:space:]]*;"
+        hits="$(grep -nE "${decl_re}" "${MSTRIPPED}" || true)"
+        if [[ -z "${hits}" ]]; then
+            fail "${name}: no canonical \\`uint256 public constant ${name} = …;\\` declaration found in the multisig"
+            continue
+        fi
+        count="$(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')"
+        if [[ "${count}" != "1" ]]; then
+            fail "${name}: expected exactly 1 declaration, found ${count}"
+            continue
+        fi
+        got_value="$(printf '%s\n' "${hits}" | sed -E "s/.*constant[[:space:]]+${name}[[:space:]]*=[[:space:]]*([0-9][0-9_]*)[[:space:]]*;.*/\1/")"
+        got_value="${got_value//_/}"
+        if [[ "${got_value}" != "${want_value}" ]]; then
+            fail "${name}: value is ${got_value}, expected ${want_value}"
+        else
+            echo "audit_compile_time_caps: ok: ${name} = ${want_value} (uint256, multisig)"
+        fi
+    done
+
+    # CONFIRMATION_WINDOW carries a time-unit literal (\\`7 days\\`), so it
+    # gets its own kind-specific exact pattern.
+    window_re="uint256[[:space:]]+public[[:space:]]+constant[[:space:]]+CONFIRMATION_WINDOW[[:space:]]*=[[:space:]]*7[[:space:]]+days[[:space:]]*;"
+    hits="$(grep -nE "${window_re}" "${MSTRIPPED}" || true)"
+    if [[ -z "${hits}" ]]; then
+        fail "CONFIRMATION_WINDOW: no canonical \\`uint256 public constant CONFIRMATION_WINDOW = 7 days;\\` declaration found"
+    elif [[ "$(printf '%s\n' "${hits}" | wc -l | tr -d '[:space:]')" != "1" ]]; then
+        fail "CONFIRMATION_WINDOW: expected exactly 1 declaration"
+    else
+        echo "audit_compile_time_caps: ok: CONFIRMATION_WINDOW = 7 days (uint256, multisig)"
+    fi
+    rm -f "${MSTRIPPED}"
+fi
+
 if (( failures > 0 )); then
     {
         echo "audit_compile_time_caps: ${failures} cap check(s) FAILED — see above."
-        echo "  Changing a constitutional fee-split cap requires a Genesis-Plan"
-        echo "  §13.6 amendment and the two-reviewer rule.  If this change is"
-        echo "  intentional, update this gate's CAPS table in the same PR."
+        echo "  Changing a constitutional cap requires a Genesis-Plan §13.6"
+        echo "  amendment and the two-reviewer rule.  If this change is"
+        echo "  intentional, update this gate's tables in the same PR."
     } >&2
     exit 1
 fi
 
-echo "audit_compile_time_caps: 6 compile-time caps + 4 address pins + 1 symbol pin verified."
+echo "audit_compile_time_caps: 6 compile-time caps + 4 address pins + 1 symbol pin + 3 multisig governance constants verified."

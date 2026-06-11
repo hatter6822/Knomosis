@@ -35,7 +35,7 @@ use serde::Deserialize;
 
 /// The highest event tag the indexer's `Event` mirror models.
 /// GP.11.4 widened this from 20 to 21 by adding `AmmSwapExecuted`.
-const INDEXER_MAX_KNOWN_TAG: u64 = 21;
+const INDEXER_MAX_KNOWN_TAG: u64 = 22;
 
 /// Pinned generator identifier (a Lean-side version bump forces an
 /// explicit update here).
@@ -115,7 +115,7 @@ fn lean_event_fixture_header_ok() {
     assert_eq!(fx.header.count, fx.entries.len());
 }
 
-/// The load-bearing proof: every tag in the corpus (0..=20)
+/// The load-bearing proof: every tag in the corpus (0..=22)
 /// decodes + re-encodes to the EXACT Lean bytes.
 ///
 /// Before GP.6.4 the indexer's `Event` mirror modelled only tags

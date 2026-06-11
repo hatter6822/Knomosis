@@ -1061,16 +1061,144 @@ contract KnomosisStepVMTest is Test {
             FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
     }
 
-    function test_executeStep_kind_24_reverts() public {
-        // GP.11.7 closed kind 23 (AmmSwap).  The catch-all path now
-        // fires for kinds ≥ 24.  This regression test pins the upper
-        // bound: a future Action constructor addition MUST extend
+    /* -------- reclaimAmmReserves (kind 24) -------- */
+
+    /// @notice GP.11.10 happy-path: a well-formed exact sweep with valid
+    ///         cell proofs produces the expected commit (reserve drains
+    ///         to 0; pool credited the swept amount).
+    function test_reclaimAmmReserves_happy_path() public view {
+        // reserveActor=3, poolActor=1, r=0.
+        // reserveBalance=5000 == amount=5000 (the exact sweep);
+        // poolBalance=700 => newPoolBalance=5700.
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT); // reserve: res=0, actor=3
+        proofs[1] = _makeCellProof(
+            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);  // pool: res=0, actor=1
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(5000), uint64(3), uint64(1));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
+
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("reclaimAmmReserves"),
+            uint64(0), uint64(3), uint64(1),
+            uint256(0), uint256(5700), uint64(0)));
+        assertEq(result, expected, "reclaimAmmReserves happy path commit");
+    }
+
+    /// @notice GP.11.10 boundary: a fresh (zero-balance) pool is a valid
+    ///         credit target — the sweep is the pool's first inflow.
+    function test_reclaimAmmReserves_fresh_pool() public view {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 1, 3, _encodeCbeNat(4500), FIXTURE_PRE_COMMIT); // reserve: res=1 (BOLD leg)
+        proofs[1] = _makeCellProof(
+            0, 1, 1, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);    // pool: zero balance
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(4500), uint64(3), uint64(1));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
+
+        bytes32 expected = keccak256(abi.encodePacked(
+            FIXTURE_PRE_COMMIT,
+            keccak256("reclaimAmmReserves"),
+            uint64(1), uint64(3), uint64(1),
+            uint256(0), uint256(4500), uint64(0)));
+        assertEq(result, expected, "fresh-pool sweep commit");
+    }
+
+    /// @notice GP.11.10: short actionFields (< 32 bytes) must revert.
+    function test_reclaimAmmReserves_rejects_short_fields() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
+        bytes memory actionFields = new bytes(31);
+        vm.expectRevert(bytes("ReclaimAmmReservesFieldsTooShort"));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
+    }
+
+    /// @notice GP.11.10 cross-stack: a zero-amount sweep must revert per
+    ///         Lean's `Laws.reclaimAmmReserves` precondition
+    ///         `amount > 0` (a zero sweep no-ops on Lean).
+    function test_reclaimAmmReserves_rejects_zero_amount() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(0), uint64(3), uint64(1));
+        vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
+    }
+
+    /// @notice GP.11.10 cross-stack: `reserveActor == poolActor` must
+    ///         revert per Lean's precondition (the two balance cells
+    ///         would alias and the sweep no-ops on Lean).
+    function test_reclaimAmmReserves_rejects_same_actor() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(5000), uint64(3), uint64(3));
+        vm.expectRevert(KnomosisStepVM.SameActorSweep.selector);
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
+    }
+
+    /// @notice GP.11.10 cross-stack: a PARTIAL sweep (`amount <
+    ///         reserveBalance`) must revert — the Lean law is an exact
+    ///         sweep, so a partial claim is a kernel no-op and a
+    ///         Solidity commit for it would diverge.
+    function test_reclaimAmmReserves_rejects_partial_sweep() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(4999), uint64(3), uint64(1));
+        vm.expectRevert(abi.encodeWithSelector(
+            KnomosisStepVM.SweepAmountMismatch.selector, uint256(5000), uint256(4999)));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
+    }
+
+    /// @notice GP.11.10 cross-stack: an OVER-claiming sweep (`amount >
+    ///         reserveBalance`) must revert for the same exact-sweep
+    ///         reason (and to never compute a wrapped subtraction).
+    function test_reclaimAmmReserves_rejects_over_sweep() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(
+            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT);
+        proofs[1] = _makeCellProof(
+            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);
+
+        bytes memory actionFields = abi.encodePacked(
+            uint64(0), uint64(5001), uint64(3), uint64(1));
+        vm.expectRevert(abi.encodeWithSelector(
+            KnomosisStepVM.SweepAmountMismatch.selector, uint256(5000), uint256(5001)));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
+    }
+
+    function test_executeStep_kind_25_reverts() public {
+        // GP.11.10 closed kind 24 (ReclaimAmmReserves).  The catch-all
+        // path now fires for kinds ≥ 25.  This regression test pins the
+        // upper bound: a future Action constructor addition MUST extend
         // `_toActionKind` AND the dispatcher AND this test before merging.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](0);
         vm.expectRevert(KnomosisStepVM.UnknownActionKind.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT,
-            uint8(24),
+            uint8(25),
             new bytes(0),
             uint64(0),
             proofs);

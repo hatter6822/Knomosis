@@ -434,6 +434,24 @@ theorem coherence_ammSwap
         signer := signer, nonce := nonce, sig := sig })) :=
   recomputeCommitment_eq_signedActionToLogEntry es _
 
+/-- #250.reclaimAmmReserves (GP.11.10) — `recomputeCommitment` agrees
+    with `commitExtendedState ∘ kernelOnlyApply` for
+    `Action.reclaimAmmReserves`.  Proves the fault-proof re-execution
+    step is commit-coherent with the kernel-only replay path for the
+    post-disable reserve sweep. -/
+theorem coherence_reclaimAmmReserves
+    (es : ExtendedState)
+    (r : ResourceId) (amount : Amount)
+    (reserveActor poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    recomputeCommitment es
+      { action := .reclaimAmmReserves r amount reserveActor poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    commitExtendedState (kernelOnlyApply es (signedActionToLogEntry
+      { action := .reclaimAmmReserves r amount reserveActor poolActor,
+        signer := signer, nonce := nonce, sig := sig })) :=
+  recomputeCommitment_eq_signedActionToLogEntry es _
+
 /-! ## #251.* — Per-variant cell-write semantic agreement.
 
 `applyCellWrites_to_state` agrees with `kernelOnlyApply` on the
@@ -795,6 +813,26 @@ theorem cellwrites_ammSwap
         signer := signer, nonce := nonce, sig := sig } =
     kernelOnlyApply es (signedActionToLogEntry
       { action := .ammSwap fromResource toResource amountIn amountOut ammReserveActor,
+        signer := signer, nonce := nonce, sig := sig }) :=
+  applyCellWrites_eq_signedActionToLogEntry es _
+
+/-- #251.reclaimAmmReserves (GP.11.10) — semantic agreement for
+    `Action.reclaimAmmReserves`: its static cell-write set
+    (`Action.writeCells` = `[.balance r reserveActor,
+    .balance r poolActor, .nonce signer]`) applied via
+    `applyCellWrites_to_state` matches `kernelOnlyApply`, so the
+    static cell declaration is semantically correct for the
+    post-disable reserve sweep. -/
+theorem cellwrites_reclaimAmmReserves
+    (es : ExtendedState)
+    (r : ResourceId) (amount : Amount)
+    (reserveActor poolActor : ActorId)
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
+    applyCellWrites_to_state es
+      { action := .reclaimAmmReserves r amount reserveActor poolActor,
+        signer := signer, nonce := nonce, sig := sig } =
+    kernelOnlyApply es (signedActionToLogEntry
+      { action := .reclaimAmmReserves r amount reserveActor poolActor,
         signer := signer, nonce := nonce, sig := sig }) :=
   applyCellWrites_eq_signedActionToLogEntry es _
 
