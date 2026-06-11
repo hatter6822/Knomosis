@@ -1,0 +1,30 @@
+{"version": "1.0.0",
+ "source_location":
+ {"position": {"line": 301, "column": 0},
+  "file": "LegalKernel/Laws/ReclaimAmmReserves.lean"},
+ "signed_by": {"name": "bridge", "kind": "actorRef"},
+ "schema_version": 1,
+ "satisfies":
+ [{"name": "conservative", "args": []},
+  {"name": "monotonic", "args": []},
+  {"name": "local", "args": []},
+  {"name": "freeze_preserving", "args": []},
+  {"name": "nonce_advances", "args": []},
+  {"name": "registry_preserving", "args": []}],
+ "registry_effect": {"kind": "none"},
+ "proof_overrides": [],
+ "pre_expr":
+ "fun s => getBalance s r reserveActor = amount ∧\n             reserveActor ≠ poolActor ∧\n             amount > 0\n  ",
+ "params":
+ [{"type": "ResourceId", "name": "r", "kind": "explicit"},
+  {"type": "Amount", "name": "amount", "kind": "explicit"},
+  {"type": "ActorId", "name": "reserveActor", "kind": "explicit"},
+  {"type": "ActorId", "name": "poolActor", "kind": "explicit"}],
+ "intent":
+ "Sweep the disabled AMM's frozen L2 reserve balance at one resource into the gas-pool actor.  The bridge actor signs this action after the L1 `emergencyDisableAmm()` kill switch fires; admission additionally requires the L2 `ammDisabled` state-root mirror to be set.  The sweep is exact (the action's `amount` must equal the reserve actor's entire balance), so the reserve drains to zero and the reclaimed liquidity becomes ordinary sequencer-claimable free-pool funds.",
+ "impl_block":
+ "fun s =>\n      let s1 := setBalance s r reserveActor\n                  (getBalance s r reserveActor - amount)\n      let s2 := setBalance s1 r poolActor\n                  (getBalance s1 r poolActor + amount)\n      s2\n  ",
+ "identifier": "reserved.gp.reclaimAmmReserves",
+ "events_block": "[]\n\n",
+ "authorized_by": {"kind": "policyRef", "expr": "(fun _ _ => True)\n  "},
+ "action_index": 21}

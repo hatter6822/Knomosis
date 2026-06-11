@@ -111,6 +111,7 @@ def Action.isBridgeOnly : Action → Bool
   | .deposit _ _ _ _                   => true
   | .depositWithFee _ _ _ _ _ _ _      => true
   | .ammSwap _ _ _ _ _                 => true
+  | .reclaimAmmReserves _ _ _ _        => true
   | _                                  => false
 
 /-- **Bridge-classification consistency invariant.**  Every
@@ -218,6 +219,7 @@ theorem applyActionToBridgeState_non_bridge
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
+  | reclaimAmmReserves _ _ _ _    => rfl
 
 /-- A `.depositWithFee` admission persists the `depositId` in
     `bridge.consumed`.  Companion to `applyActionToBridgeState`'s
@@ -289,7 +291,23 @@ def BridgeAdmissibleWith
     st.action = .registerIdentity actor pk →
     es.registry[actor]? = none) ∧
   -- (8) bridge-only authority for bridge-emitted actions:
-  (Action.isBridgeOnly st.action = true → st.signer = bridgeActor)
+  (Action.isBridgeOnly st.action = true → st.signer = bridgeActor) ∧
+  -- (9) post-disable reserve reclamation (Workstream GP.11.10).
+  -- A `.reclaimAmmReserves` is admissible only when (a) the threaded
+  -- actor fields are the canonical reserved slots — the kernel law is
+  -- actor-parametric, so without this pin a bridge-signed action
+  -- could sweep an ARBITRARY actor's balance into an arbitrary
+  -- recipient — and (b) the L2 kill-switch mirror is set: the L1
+  -- `emergencyDisableAmm()` has fired and the sequencer has committed
+  -- the `ammDisabled` state-root mirror.  While the AMM is live the
+  -- reclamation is inadmissible, so the GP.11.6 reserve isolation
+  -- (`ammReservePolicy` + this conjunct) keeps its pre-disaster
+  -- strength: the ONLY action that can move the reserve actor's
+  -- balances before a disaster remains `ammSwap`.
+  (∀ r amount reserveActor poolActor,
+    st.action = .reclaimAmmReserves r amount reserveActor poolActor →
+    reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
+    es.bridge.ammDisabled = true)
 
 /-- Projection: bridge admissibility implies kernel admissibility.
     Direct consequence of `BridgeAdmissibleWith`'s definition: the
@@ -347,7 +365,38 @@ theorem BridgeAdmissibleWith.bridgeOnlySigner
     (h : BridgeAdmissibleWith verify P d es st)
     (hBridgeOnly : Action.isBridgeOnly st.action = true) :
     st.signer = bridgeActor :=
-  h.2.2.2.2 hBridgeOnly
+  h.2.2.2.2.1 hBridgeOnly
+
+/-- The GP.11.10 reclamation conjunct, projected: an admissible
+    `.reclaimAmmReserves` carries the canonical reserved actors and
+    the L2 kill-switch mirror is set. -/
+theorem BridgeAdmissibleWith.reclaimGate
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h : BridgeAdmissibleWith verify P d es st)
+    (r : ResourceId) (amount : Amount) (reserveActor poolActor : ActorId)
+    (heq : st.action = .reclaimAmmReserves r amount reserveActor poolActor) :
+    reserveActor = ammReserveActor ∧ poolActor = gasPoolActor ∧
+    es.bridge.ammDisabled = true :=
+  h.2.2.2.2.2 r amount reserveActor poolActor heq
+
+/-- GP.11.10 headline (admission half): while the L2 kill-switch
+    mirror is UNSET (`ammDisabled = false`), no `.reclaimAmmReserves`
+    is bridge-admissible — the reserve sweep cannot front-run the
+    disaster it recovers from. -/
+theorem reclaim_inadmissible_while_amm_enabled
+    {verify : PublicKey → ByteArray → Signature → Bool}
+    {P : AuthorityPolicy} {d : ByteArray}
+    {es : ExtendedState} {st : SignedAction}
+    (h_enabled : es.bridge.ammDisabled = false)
+    (r : ResourceId) (amount : Amount) (reserveActor poolActor : ActorId)
+    (heq : st.action = .reclaimAmmReserves r amount reserveActor poolActor) :
+    ¬ BridgeAdmissibleWith verify P d es st := by
+  intro h
+  have hgate := h.reclaimGate r amount reserveActor poolActor heq
+  rw [h_enabled] at hgate
+  exact Bool.false_ne_true hgate.2.2
 
 /-! ## apply_bridge_admissible_with
 
@@ -500,6 +549,175 @@ theorem apply_admissible_preserves_bridge
     (P : AuthorityPolicy) (es : ExtendedState) (st : SignedAction)
     (h : Admissible P es st) :
     (apply_admissible P es st h).bridge = es.bridge := rfl
+
+/-! ## GP.11.10 — AMM-mirror step-invariance
+
+The six GP.11.8 / GP.11.10 L1-mirror fields of `BridgeState`
+(`ammReserveEth`, `ammReserveBold`, `boldCircuitClosed`, `boldTvlCap`,
+`boldTotalLockedValue`, `ammDisabled`) are **constant under every
+admissible step**: `applyActionToBridgeState` mutates only the v1.2
+ledger triple (`consumed` / `pending` / `nextWdId`), so no L2 action —
+including the bridge-mutating deposit / withdraw family and the
+GP.11.10 `reclaimAmmReserves` sweep (which moves *kernel-state*
+balances, not bridge-ledger fields) — can move a mirror.
+
+This is the formal transition semantics of the mirror design: within
+an `apply_bridge_admissible_with` chain the mirrors are frozen at
+their chain-entry values; they change ONLY at attested-snapshot /
+genesis boundaries, where the deployment's ingest layer rebuilds the
+`BridgeState` from observed L1 state and the commitment scheme
+(`commitBridgeState`, with `commitBridgeState_reflects_ammDisabled`)
+binds the published value.  A sequencer therefore cannot smuggle a
+mirror flip into the middle of a committed action batch — the
+fault-proof game re-executes the batch through this very function. -/
+
+/-- The per-mirror agreement bundle: two bridge states share all six
+    GP.11.8 / GP.11.10 AMM-mirror fields. -/
+def BridgeState.AmmMirrorsEq (bs₁ bs₂ : BridgeState) : Prop :=
+  bs₁.ammReserveEth = bs₂.ammReserveEth ∧
+  bs₁.ammReserveBold = bs₂.ammReserveBold ∧
+  bs₁.boldCircuitClosed = bs₂.boldCircuitClosed ∧
+  bs₁.boldTvlCap = bs₂.boldTvlCap ∧
+  bs₁.boldTotalLockedValue = bs₂.boldTotalLockedValue ∧
+  bs₁.ammDisabled = bs₂.ammDisabled
+
+/-- `AmmMirrorsEq` is reflexive. -/
+theorem BridgeState.AmmMirrorsEq.refl (bs : BridgeState) :
+    BridgeState.AmmMirrorsEq bs bs :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- `AmmMirrorsEq` is transitive. -/
+theorem BridgeState.AmmMirrorsEq.trans {bs₁ bs₂ bs₃ : BridgeState}
+    (h₁₂ : BridgeState.AmmMirrorsEq bs₁ bs₂)
+    (h₂₃ : BridgeState.AmmMirrorsEq bs₂ bs₃) :
+    BridgeState.AmmMirrorsEq bs₁ bs₃ :=
+  ⟨h₁₂.1.trans h₂₃.1, h₁₂.2.1.trans h₂₃.2.1, h₁₂.2.2.1.trans h₂₃.2.2.1,
+   h₁₂.2.2.2.1.trans h₂₃.2.2.2.1, h₁₂.2.2.2.2.1.trans h₂₃.2.2.2.2.1,
+   h₁₂.2.2.2.2.2.trans h₂₃.2.2.2.2.2⟩
+
+/-- Per-action mirror invariance: EVERY action — bridge-mutating or
+    not — leaves all six AMM-mirror fields unchanged.  The three
+    mutating arms go through `markConsumed` / `appendWithdrawal`,
+    both of which are `{ bs with … }` updates on the ledger triple
+    only. -/
+theorem applyActionToBridgeState_preserves_amm_mirrors
+    (bs : BridgeState) (action : Action) (idx : Nat) :
+    BridgeState.AmmMirrorsEq (applyActionToBridgeState bs action idx) bs := by
+  unfold applyActionToBridgeState
+  cases action <;>
+    simp [BridgeState.AmmMirrorsEq, BridgeState.markConsumed,
+          BridgeState.appendWithdrawal]
+
+/-- Entry-point lift: one bridge-aware admitted step preserves all
+    six mirrors. -/
+theorem apply_bridge_admissible_with_preserves_amm_mirrors
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st) :
+    BridgeState.AmmMirrorsEq
+      (apply_bridge_admissible_with verify P d es st idx h).bridge
+      es.bridge := by
+  show BridgeState.AmmMirrorsEq
+    (applyActionToBridgeState es.bridge st.action idx) es.bridge
+  exact applyActionToBridgeState_preserves_amm_mirrors es.bridge st.action idx
+
+/-- Runtime-entry lift: when the budget-gated bridge entry admits a
+    step (`= some es'`), all six mirrors carry over unchanged.  The
+    budget layer wraps `apply_bridge_admissible_with` and further
+    touches only `epochBudgets`. -/
+theorem apply_bridge_admissible_with_budget_preserves_amm_mirrors
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (idx : Nat)
+    (h : BridgeAdmissibleWith verify P d es st)
+    (refundRate : ResourceId → Nat)
+    (es' : ExtendedState)
+    (happly : apply_bridge_admissible_with_budget verify P d es st idx h refundRate
+              = some es') :
+    BridgeState.AmmMirrorsEq es'.bridge es.bridge := by
+  unfold apply_bridge_admissible_with_budget at happly
+  cases hp : es.budgetPolicy with
+  | bounded freeTier actionCost currentEpoch =>
+    rw [hp] at happly
+    dsimp only at happly
+    -- Walk the five gate `if`s; each `none` (then-)branch contradicts
+    -- `happly : none = some es'`.
+    split at happly
+    · exact absurd happly (by simp)
+    split at happly
+    · exact absurd happly (by simp)
+    split at happly
+    · exact absurd happly (by simp)
+    split at happly
+    · exact absurd happly (by simp)
+    split at happly
+    · exact absurd happly (by simp)
+    -- The two `some` arms (bridgeActor-exempt / consume-some) both wrap
+    -- `apply_bridge_admissible_with` and override only `epochBudgets`,
+    -- so `.bridge` projects through the record update definitionally.
+    split at happly
+    · -- bridgeActor exemption arm.
+      have hes' := Option.some.inj happly
+      rw [← hes']
+      exact apply_bridge_admissible_with_preserves_amm_mirrors
+        verify P d es st idx h
+    · -- consume path: the inner match on `EpochBudgetState.consume`.
+      split at happly
+      · exact absurd happly (by simp)
+      · have hes' := Option.some.inj happly
+        rw [← hes']
+        exact apply_bridge_admissible_with_preserves_amm_mirrors
+          verify P d es st idx h
+
+/-! ### The admitted-step trace and chain-level mirror constancy -/
+
+/-- A contiguous trace of `n` bridge-aware admitted steps from `es0`
+    (the GP.11.10 analogue of `PoolBoundedTrace`, without a per-step
+    side discipline: any admissible step extends the trace). -/
+inductive BridgeAdmittedTrace
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es0 : ExtendedState) :
+    Nat → ExtendedState → Prop where
+  /-- The empty trace: `es0` reaches itself in zero steps. -/
+  | refl : BridgeAdmittedTrace verify P d es0 0 es0
+  /-- Extend a length-`n` trace by one bridge-aware admitted step. -/
+  | step {n : Nat} {es : ExtendedState} (st : SignedAction) (idx : Nat)
+      (hprev : BridgeAdmittedTrace verify P d es0 n es)
+      (hadm : BridgeAdmissibleWith verify P d es st) :
+      BridgeAdmittedTrace verify P d es0 (n + 1)
+        (apply_bridge_admissible_with verify P d es st idx hadm)
+
+/-- **GP.11.10 chain-level mirror constancy.**  Across ANY contiguous
+    trace of bridge-aware admitted steps, all six AMM-mirror fields —
+    including the `ammDisabled` kill switch — are exactly their
+    chain-entry values.  Together with
+    `commitBridgeState_reflects_ammDisabled` (the commitment binding),
+    this pins the mirror lifecycle end-to-end: in-batch the mirrors
+    cannot move; across batches the published commitment cannot lie
+    about them. -/
+theorem amm_mirrors_constant_over_admitted_trace
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es0 : ExtendedState)
+    (n : Nat) (es' : ExtendedState)
+    (h : BridgeAdmittedTrace verify P d es0 n es') :
+    BridgeState.AmmMirrorsEq es'.bridge es0.bridge := by
+  induction h with
+  | refl => exact BridgeState.AmmMirrorsEq.refl es0.bridge
+  | step st idx _hprev hadm ih =>
+      exact BridgeState.AmmMirrorsEq.trans
+        (apply_bridge_admissible_with_preserves_amm_mirrors
+          verify P d _ st idx hadm) ih
+
+/-- Headline projection: the `ammDisabled` kill-switch mirror in
+    particular is constant over every admitted trace. -/
+theorem ammDisabled_constant_over_admitted_trace
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es0 : ExtendedState)
+    (n : Nat) (es' : ExtendedState)
+    (h : BridgeAdmittedTrace verify P d es0 n es') :
+    es'.bridge.ammDisabled = es0.bridge.ammDisabled :=
+  (amm_mirrors_constant_over_admitted_trace verify P d es0 n es' h).2.2.2.2.2
 
 /-! ## Bridge-aware kernel agreement (§7.0a) -/
 

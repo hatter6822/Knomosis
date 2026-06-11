@@ -95,22 +95,22 @@ def nonAmmSwapSamples : List (Nat × Action) :=
 /-- All GP.11.6 test cases. -/
 def tests : List TestCase :=
   [ -- ## Deny-list shape
-    { name := "GP.11.6: ammReserveDeniedTags = [0..22]"
+    { name := "GP.11.6: ammReserveDeniedTags = [0..22] ++ [24]"
     , body := do
-        assertEq (expected := (List.range 24).filter (· ≠ 23))
+        assertEq (expected := (List.range 25).filter (· ≠ 23))
           (actual := ammReserveDeniedTags) "deny-list contents"
     }
-  , { name := "GP.11.6: ammReserveDeniedTags has 23 entries (0..22)"
+  , { name := "GP.11.6: ammReserveDeniedTags has 24 entries (0..22 ++ 24)"
     , body := do
-        assertEq (expected := 23) (actual := ammReserveDeniedTags.length) "deny-list length"
+        assertEq (expected := 24) (actual := ammReserveDeniedTags.length) "deny-list length"
     }
   , { name := "GP.11.6: 23 ∉ ammReserveDeniedTags (ammSwap survives)"
     , body := do
         assert (decide ((23 : Nat) ∉ ammReserveDeniedTags)) "23 should not be denied"
     }
-  , { name := "GP.11.6: every tag 0..22 ∈ ammReserveDeniedTags"
+  , { name := "GP.11.6: every non-23 tag in 0..24 ∈ ammReserveDeniedTags"
     , body := do
-        for t in List.range 24 do
+        for t in List.range 25 do
           if t ≠ 23 then
             assert (decide (t ∈ ammReserveDeniedTags)) s!"tag {t} should be denied"
     }

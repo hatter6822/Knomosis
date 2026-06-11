@@ -46,3 +46,4 @@ example.example_lex_only_law   17   v0.7.0-lx-m1
 reserved.gp.topUpActionBudget  18   v0.7.1-gp0
 reserved.gp.topUpActionBudgetFor 19   v0.7.1-gp0
 reserved.gp.ammSwap              20   v0.4.12
+reserved.gp.reclaimAmmReserves   21   v0.6.0-gp11-10

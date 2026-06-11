@@ -825,8 +825,8 @@ theorem bridgeState_commit_extends_v1_2
     kill switch fires. -/
 theorem bridgeState_commit_extends_v1_3
     (bs₁ bs₂ : Bridge.BridgeState)
-    (h_consumed : bs₁.consumed = bs₂.consumed)
-    (h_pending  : bs₁.pending  = bs₂.pending)
+    (h_consumed : bs₁.consumed.toList = bs₂.consumed.toList)
+    (h_pending  : bs₁.pending.toList  = bs₂.pending.toList)
     (h_nextWdId : bs₁.nextWdId = bs₂.nextWdId)
     (h_ammEth   : bs₁.ammReserveEth = bs₂.ammReserveEth)
     (h_ammBold  : bs₁.ammReserveBold = bs₂.ammReserveBold)
@@ -847,6 +847,7 @@ theorem bridgeState_commit_extends_v1_3
       show Encodable.encode (T := BridgeState) bs₂ = Bridge.BridgeState.encode bs₂ from rfl,
       henc]
 
+
 /-- GP.11.10 headline: `ammDisabled` is *reflected in the state-root
     preimage*.  Under `CollisionFree hashBytes`, two bridge states
     that agree on every other field but differ on the `ammDisabled`
@@ -864,8 +865,8 @@ theorem bridgeState_commit_extends_v1_3
 theorem commitBridgeState_reflects_ammDisabled
     (bs₁ bs₂ : Bridge.BridgeState)
     (h_cf : Bridge.CollisionFree hashBytes)
-    (h_consumed : bs₁.consumed = bs₂.consumed)
-    (h_pending  : bs₁.pending  = bs₂.pending)
+    (h_consumed : bs₁.consumed.toList = bs₂.consumed.toList)
+    (h_pending  : bs₁.pending.toList  = bs₂.pending.toList)
     (h_nextWdId : bs₁.nextWdId = bs₂.nextWdId)
     (h_ammEth   : bs₁.ammReserveEth = bs₂.ammReserveEth)
     (h_ammBold  : bs₁.ammReserveBold = bs₂.ammReserveBold)
@@ -935,6 +936,38 @@ theorem commitBridgeState_reflects_ammDisabled
     revert h_nat
     cases bs₁.ammDisabled <;> cases bs₂.ammDisabled <;> simp
   exact h_ne h_flag
+
+/-- GP.11.10 top-level headline: `ammDisabled` is reflected in the
+    published STATE ROOT itself.  Under `CollisionFree hashBytes`, two
+    extended states whose bridge sub-states agree on every other
+    field but differ on the `ammDisabled` kill-switch mirror produce
+    **different** `commitExtendedState` roots — regardless of their
+    kernel / nonce / registry / policy sub-states.
+
+    **Proof.**  Equal top-level roots decompose (under
+    collision-freedom) into equal per-sub-state commits
+    (`commitExtendedState_subcommits_eq_under_collision_free`); the
+    bridge sub-commit equality then contradicts
+    `commitBridgeState_reflects_ammDisabled`. -/
+theorem commitExtendedState_reflects_ammDisabled
+    (es₁ es₂ : ExtendedState)
+    (h_cf : Bridge.CollisionFree hashBytes)
+    (h_consumed : es₁.bridge.consumed.toList = es₂.bridge.consumed.toList)
+    (h_pending  : es₁.bridge.pending.toList  = es₂.bridge.pending.toList)
+    (h_nextWdId : es₁.bridge.nextWdId = es₂.bridge.nextWdId)
+    (h_ammEth   : es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth)
+    (h_ammBold  : es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold)
+    (h_circuit  : es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed)
+    (h_tvlCap   : es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap)
+    (h_totalLocked : es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue)
+    (h_ne : es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled) :
+    commitExtendedState es₁ ≠ commitExtendedState es₂ := by
+  intro h_eq
+  obtain ⟨_, _, _, _, h_bs⟩ :=
+    commitExtendedState_subcommits_eq_under_collision_free es₁ es₂ h_cf h_eq
+  exact commitBridgeState_reflects_ammDisabled es₁.bridge es₂.bridge h_cf
+    h_consumed h_pending h_nextWdId h_ammEth h_ammBold h_circuit
+    h_tvlCap h_totalLocked h_ne h_bs
 
 /-! ## Smoke checks -/
 

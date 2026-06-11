@@ -463,6 +463,8 @@ round trip (see §9.3).
 | `openBoldCircuit` | 22 985 | 64 | ~$2.1 |
 | `setBoldTvlCap` | 28 090 | 276 | ~$2.5 |
 | `emergencyDisableAmm` | 49 623 | 64 | ~$4.5 |
+| `confirmDisable` (3-of-N multisig, non-final confirmation) | 59 629 | 64 | ~$5.4 |
+| `confirmDisable` (3-of-N multisig, threshold-th — executes disable) | 112 582 | 64 | ~$10.1 |
 | Auto-trigger close (first branch, ETH, in shutdown) | 53 834 | 64 | ~$4.8 |
 | Auto-trigger close (last branch, rETH, in shutdown) | 69 037 | 64 | ~$6.2 |
 | Auto-trigger probe (no shutdown — reverts) | 47 250 | 64 | ~$4.3 |
@@ -560,10 +562,12 @@ The embedded ETH↔BOLD AMM ships a **one-way kill switch**:
 * deposit-time AMM seeding stops (`_seedAmmReserves` early-outs, so
   the whole pool fee routes to sequencer-claimable free reserves);
 * the reserves are **preserved** — nothing is zeroed, moved, or paid
-  out.  `ammReserveEth` / `ammReserveBold` freeze at their
-  pre-disable values and remain part of the bridge's escrow,
-  re-tagged for accounting as free gas-pool funds the sequencer can
-  claim through the existing `gasPoolPolicy` mechanism on L2;
+  out by the disable itself.  `ammReserveEth` / `ammReserveBold`
+  freeze at their pre-disable values and remain part of the bridge's
+  escrow; their L2 representation is then re-tagged as free gas-pool
+  funds through the bridge-attested `Action.reclaimAmmReserves`
+  exact sweep (§10.4), after which the sequencer claims them through
+  the existing `gasPoolPolicy` mechanism;
 * everything else keeps working: deposits (both legs), withdrawals
   (`withdrawWithProof`), state-root submission, disputes, and the
   BOLD circuit breaker are all untouched.  The bridge degrades to
@@ -677,7 +681,26 @@ pre-wired `KnomosisMigration` successors):
    condition; reconcile the frozen reserves against
    `address(bridge).balance` / `BOLD.balanceOf(bridge)` and the L2
    accounting equation.
-2. **Decide: redeploy or degraded mode.**
+2. **Commit the L2 mirror, then sweep the L2 reserves.**  The
+   sequencer commits `BridgeState.ammDisabled = true` in the next
+   state root (§10.5) and then materialises one bridge-signed
+   `Action.reclaimAmmReserves` per funded leg (frozen Action
+   index 24; the `knomosis-l1-ingest` watcher surfaces the
+   `AmmDisabled` L1 event as the machine-readable trigger).  Each
+   sweep is EXACT — the action's `amount` must equal the reserve
+   actor's entire balance at that resource, machine-checked by the
+   law's precondition — and moves the frozen liquidity from
+   `ammReserveActor` to `gasPoolActor`, where it becomes ordinary
+   sequencer-claimable free-pool funds.  Admission rejects the
+   sweep while the mirror is unset
+   (`reclaim_inadmissible_while_amm_enabled`), so it can never
+   front-run the disaster it recovers from.  Sequencer claims
+   against the reclaimed funds go through the unchanged
+   `gasPoolPolicy` per-action caps (the GP.7.2/GP.7.3 drain bounds
+   still apply — the kill switch loosens NO outflow discipline).
+   Indexers observe the sweep as `Event.ammReservesReclaimed`
+   (frozen Event index 22).
+3. **Decide: redeploy or degraded mode.**
    * **Redeploy path:** prepare a new `KnomosisBridge` deployment
      via `KnomosisMigration` (with corrected parameters or patched
      code).  The reserves carry over physically with the rest of
@@ -689,11 +712,6 @@ pre-wired `KnomosisMigration` successors):
      cost increase.  All other v1.3 mechanisms (fee-split deposits,
      budgets, gas-pool claims, circuit breaker) remain fully
      functional.
-3. **Either way, claim the frozen reserves deliberately.**  The
-   previously-locked AMM amounts are now ordinary free-pool funds;
-   sequencer claims against them go through the unchanged
-   `gasPoolPolicy` per-action caps (GP.7.2/GP.7.3 drain bounds still
-   apply — the kill switch does not loosen any outflow discipline).
 
 ### 10.5 State-root visibility (the Lean-side mirror)
 
@@ -705,20 +723,37 @@ AMM/BOLD fields and committed by `commitBridgeState` /
 
 * the L2 ingestor learns the disable from the state commitment —
   there is deliberately NO `Action.disableAmm` L2 action to sign or
-  sequence;
+  sequence (the only new action is the §10.4 reclamation sweep,
+  which the mirror GATES rather than sets);
 * a sequencer cannot publish a state root that misrepresents the
   kill-switch state: under collision resistance, two states
-  differing only in `ammDisabled` have different commitments
-  (`commitBridgeState_reflects_ammDisabled`, machine-checked in
+  differing only in `ammDisabled` have different top-level roots
+  (`commitExtendedState_reflects_ammDisabled` /
+  `commitBridgeState_reflects_ammDisabled`, machine-checked in
   `LegalKernel/FaultProof/Commit.lean`), so the fault-proof game can
   adjudicate a dispute that turns on it;
-* after the operator fires the switch, the ingest layer must set
-  the mirror in the next committed state (mirroring how the
-  GP.11.8 `boldCircuitClosed` / reserve mirrors are maintained).
+* WITHIN a committed action batch the mirror cannot move: all six
+  AMM-mirror fields are step-invariant under every admissible
+  action (`amm_mirrors_constant_over_admitted_trace`,
+  `LegalKernel/Bridge/Admissible.lean`).  The mirror changes only
+  at attested-snapshot boundaries, where the sequencer's ingest
+  tooling rebuilds `BridgeState` from observed L1 state — setting
+  it is an operational obligation of the sequencer (the
+  `knomosis-l1-ingest` watcher's decoded `AmmDisabled` event is the
+  trigger signal), and the commitment binding above is what keeps
+  the published value honest.
 
 ### 10.6 Cost
 
-`emergencyDisableAmm` itself is a measured 49 623-gas transaction
-(§9.2) — at 30 gwei / $3 000 ETH about **$4.5**, plus one ~50k
-confirm per multisig signer.  Gas cost is never a reason to delay
-firing it.
+All three legs are measured in §9.2 (isolated mode — full
+transaction gas, refunds netted).  At 30 gwei / $3 000 ETH:
+
+| Leg | Gas (measured) | $ |
+|---|---:|---:|
+| `confirmDisable` (each non-final signer) | 59 629 | ~$5.4 |
+| `confirmDisable` (threshold-th signer — executes the disable through the bridge) | 112 582 | ~$10.1 |
+| `emergencyDisableAmm` (direct `recoveryCouncil` call, no multisig) | 49 623 | ~$4.5 |
+
+A full 3-of-N multisig firing therefore costs two non-final
+confirms plus one executing confirm — about **$21** total.  Gas
+cost is never a reason to delay firing it.

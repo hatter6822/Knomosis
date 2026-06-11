@@ -405,6 +405,23 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_amount(*amount_out)?);
             out.extend_from_slice(&encode_u64(*amm_reserve_actor));
         }
+        Action::ReclaimAmmReserves {
+            r,
+            amount,
+            reserve_actor,
+            pool_actor,
+        } => {
+            // Field order matches `Encoding/Action.lean::Action.encode`'s
+            // `.reclaimAmmReserves` arm:
+            //   r ‖ amount ‖ reserveActor ‖ poolActor.
+            // All four are CBE uints (9-byte heads).  `amount` is a
+            // `Nat` on the Lean side, bounded < 2^64 at the encoding
+            // level via `Action.fieldsBounded`.
+            out.extend_from_slice(&encode_u64(*r));
+            out.extend_from_slice(&encode_amount(*amount)?);
+            out.extend_from_slice(&encode_u64(*reserve_actor));
+            out.extend_from_slice(&encode_u64(*pool_actor));
+        }
     }
     Ok(out)
 }
@@ -1155,6 +1172,48 @@ mod tests {
             0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(actual, expected);
+    }
+
+    /// Known-vector test for `ReclaimAmmReserves` — pinned against
+    /// `LegalKernel.Encoding.Action.encode
+    /// (.reclaimAmmReserves 0 5000 3 1)`.
+    #[test]
+    fn encode_reclaim_amm_reserves_known_vector() {
+        let action = Action::ReclaimAmmReserves {
+            r: 0,
+            amount: 5000,
+            reserve_actor: 3,
+            pool_actor: 1,
+        };
+        let actual = encode_action(&action).unwrap();
+        let expected: Vec<u8> = vec![
+            // tag 24 = 0x18
+            0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // r 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // amount 5000 = 0x1388 (LE: 88 13)
+            0x00, 0x88, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // reserveActor 3
+            0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // poolActor 1
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    /// `ReclaimAmmReserves` encoding rejects `amount` ≥ 2^64
+    /// (`Action.fieldsBounded` requires `amount < 2^64`).
+    #[test]
+    fn encode_reclaim_amm_reserves_rejects_oversized_amount() {
+        let action = Action::ReclaimAmmReserves {
+            r: 0,
+            amount: 1u128 << 64,
+            reserve_actor: 3,
+            pool_actor: 1,
+        };
+        match encode_action(&action) {
+            Err(super::EncodeError::FieldExceedsBound { value }) => {
+                assert_eq!(value, 1u128 << 64);
+            }
+            other => panic!("expected FieldExceedsBound, got {other:?}"),
+        }
     }
 
     /// `DepositWithFee` encoding rejects `user_amount` ≥ 2^64

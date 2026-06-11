@@ -331,6 +331,16 @@ example (recipient signer : ActorId) (gr : ResourceId) (ga : Amount)
 example (a : ActorId) (amount : Nat) :
     Event.tag (.budgetConsumed a amount) = 20 := rfl
 
+/-- AR.6 regression pin: `ammSwapExecuted` holds frozen index 21
+    (Workstream GP.11.4). -/
+example (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
+    Event.tag (.ammSwapExecuted fr tr ai ao ra) = 21 := rfl
+
+/-- AR.6 regression pin: `ammReservesReclaimed` holds frozen index 22
+    (Workstream GP.11.10). -/
+example (r : ResourceId) (amt : Amount) (ra pa : ActorId) :
+    Event.tag (.ammReservesReclaimed r amt ra pa) = 22 := rfl
+
 /-- All tests. -/
 def tests : List TestCase :=
   [isBalanceChangeT, isBalanceChangeF, isRegistryChangeT, isRegistryChangeRevoked,

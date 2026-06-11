@@ -129,6 +129,19 @@ example (recipient : ActorId) (gr : ResourceId) (ga : Amount) (bi : Nat)
     (pa : ActorId) :
     Action.tag (.topUpActionBudgetFor recipient gr ga bi pa) = 21 := rfl
 
+/-- AR.5 regression pin: `claimBudgetRefund` holds frozen index 22. -/
+example (gr : ResourceId) (bu w : Nat) (pa : ActorId) :
+    Action.tag (.claimBudgetRefund gr bu w pa) = 22 := rfl
+
+/-- AR.5 regression pin: `ammSwap` holds frozen index 23. -/
+example (fr tr : ResourceId) (ai ao : Amount) (ra : ActorId) :
+    Action.tag (.ammSwap fr tr ai ao ra) = 23 := rfl
+
+/-- AR.5 regression pin: `reclaimAmmReserves` holds frozen index 24
+    (Workstream GP.11.10). -/
+example (r : ResourceId) (amt : Amount) (ra pa : ActorId) :
+    Action.tag (.reclaimAmmReserves r amt ra pa) = 24 := rfl
+
 /-- Tests for the `Action` inductive and `Action.compile`. -/
 def tests : List TestCase :=
   [ -- WU 3.1: Action constructors are value-level distinguishable.

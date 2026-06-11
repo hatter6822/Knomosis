@@ -154,6 +154,27 @@ def tests : List TestCase :=
             (.topUpActionBudgetFor 0 0 0 0 0))
           "topUpActionBudgetFor"
     }
+  , { name := "actionKindByte: claimBudgetRefund is 22"
+    , body := do
+        assertEq (expected := (22 : UInt8))
+          (actual := actionKindByte
+            (.claimBudgetRefund 0 0 0 0))
+          "claimBudgetRefund"
+    }
+  , { name := "actionKindByte: ammSwap is 23"
+    , body := do
+        assertEq (expected := (23 : UInt8))
+          (actual := actionKindByte
+            (.ammSwap 0 1 0 0 3))
+          "ammSwap"
+    }
+  , { name := "actionKindByte: reclaimAmmReserves is 24"
+    , body := do
+        assertEq (expected := (24 : UInt8))
+          (actual := actionKindByte
+            (.reclaimAmmReserves 0 0 3 1))
+          "reclaimAmmReserves"
+    }
     -- ## actionFieldsForL1: byte-shape pinning
   , { name := "actionFieldsForL1: transfer produces 32 bytes"
     , body := do
@@ -579,17 +600,45 @@ def tests : List TestCase :=
         assertEq (expected := h2) (actual := h1)
           "kind=18 ⇒ stepCommitFaultProofResolution dispatch"
     }
-  , { name := "stepVMHash: unknown kind 24 returns empty"
+  , { name := "stepVMHash: unknown kind 25 returns empty"
     , body := do
         -- Kinds 19 (`.depositWithFee`), 20 (`.topUpActionBudget`),
         -- 21 (`.topUpActionBudgetFor`, GP.5.3), 22
-        -- (`.claimBudgetRefund`, GP.9.1), and 23 (`.ammSwap`,
-        -- GP.11.4) are now wired through the dispatcher.  The
-        -- catch-all path fires only for kinds ≥ 24.
+        -- (`.claimBudgetRefund`, GP.9.1), 23 (`.ammSwap`, GP.11.4),
+        -- and 24 (`.reclaimAmmReserves`, GP.11.10) are now wired
+        -- through the dispatcher.  The catch-all path fires only for
+        -- kinds ≥ 25.
         let pc := ByteArray.mk #[(0xAA : UInt8)]
-        let h := stepVMHash pc 24 ByteArray.empty 7 { proofs := [] }
+        let h := stepVMHash pc 25 ByteArray.empty 7 { proofs := [] }
         assertEq (expected := 0) (actual := h.size)
           "unknown kind ⇒ empty bytes"
+    }
+  , { name := "stepVMHash: kind=24 (ReclaimAmmReserves) dispatches to the sweep commit"
+    , body := do
+        -- Build a fixture matching Solidity's `_stepReclaimAmmReserves`
+        -- byte-for-byte: r=0, amount=5000, reserveActor=3, poolActor=1.
+        -- Reserve pre-balance = 5000 (the exact sweep); pool
+        -- pre-balance = 700.  Expected: newReserveBalance = 0,
+        -- newPoolBalance = 5700, signer = 0 (bridgeActor).
+        let pc := ByteArray.mk #[(0xAA : UInt8)]
+        let action : Action :=
+          .reclaimAmmReserves (0 : UInt64) (5000 : Nat) (3 : UInt64) (1 : UInt64)
+        let fields := actionFieldsForL1 action
+        let bal5000 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 5000).toArray
+        let bal700 := ByteArray.mk
+          (Encoding.Encodable.encode (T := Nat) 700).toArray
+        let pReserve : CellProof :=
+          { cellTag := .balance (0 : UInt64) (3 : UInt64),
+            cellValue := bal5000, witnessState := ExtendedState.empty }
+        let pPool : CellProof :=
+          { cellTag := .balance (0 : UInt64) (1 : UInt64),
+            cellValue := bal700, witnessState := ExtendedState.empty }
+        let bundle : CellProofBundle := { proofs := [pReserve, pPool] }
+        let h1 := stepVMHash pc 24 fields 0 bundle
+        let h2 := stepCommitReclaimAmmReserves pc 0 3 1 0 0 5700
+        assertEq (expected := h2) (actual := h1)
+          "kind=24 ⇒ exact sweep: reserve drains to 0, pool credited"
     }
     -- ## Workstream GP value-level dispatch tests (kinds 19 / 20)
   , { name := "stepVMHash: kind=19 (DepositWithFee) dispatches with distinct recipient ≠ poolActor"
@@ -1494,6 +1543,21 @@ def tests : List TestCase :=
         assertEq (expected := 4) (actual := readUint64BE bytes 24) "budgetIncrement"
         assertEq (expected := 5) (actual := readUint64BE bytes 32) "poolActor"
     }
+  , { name := "cross-stack: reclaimAmmReserves field layout matches Solidity decoder"
+    , body := do
+        -- GP.11.10: reclaimAmmReserves' four-field layout is fixed
+        -- (4 × uint64BE = 32 bytes total).  Pins the byte offsets so
+        -- the Solidity `_stepReclaimAmmReserves` decoder reads `r` at
+        -- 0, `amount` at 8, `reserveActor` at 16, `poolActor` at 24.
+        let bytes := actionFieldsForL1
+          (.reclaimAmmReserves (1 : UInt64) (2 : Nat) (3 : UInt64) (4 : UInt64))
+        assertEq (expected := 32) (actual := bytes.size)
+                 "4 fields × 8 bytes BE = 32 bytes"
+        assertEq (expected := 1) (actual := readUint64BE bytes 0)  "r"
+        assertEq (expected := 2) (actual := readUint64BE bytes 8)  "amount"
+        assertEq (expected := 3) (actual := readUint64BE bytes 16) "reserveActor"
+        assertEq (expected := 4) (actual := readUint64BE bytes 24) "poolActor"
+    }
   -- ## "Ensure this can't happen again" — dispatcher coverage
   -- regression tests.  These guarantee that every `actionKindByte`
   -- value has a non-empty `stepVMHash` dispatch path: a future PR
@@ -1553,6 +1617,11 @@ def tests : List TestCase :=
   , { name := "stepVMHash_ammSwap_kind API stable"
     , body := do
         let _ := @stepVMHash_ammSwap_kind
+        assert true "API exists"
+    }
+  , { name := "stepVMHash_reclaimAmmReserves_kind API stable"
+    , body := do
+        let _ := @stepVMHash_reclaimAmmReserves_kind
         assert true "API exists"
     }
   ]

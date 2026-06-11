@@ -411,6 +411,15 @@ def Action.doesNotDebitPoolAt (rLeg : ResourceId) (signer : ActorId) : Action �
   -- actor), but the proof obligation requires the structural guard.
   | .ammSwap _ toResource _ _ ammReserveActor =>
       toResource ≠ rLeg ∨ ammReserveActor ≠ gasPoolActor
+  -- GP.11.10: a reclaim debits its `reserveActor` field at `r` (the
+  -- exact sweep).  It misses the pool's `rLeg` slot exactly when the
+  -- resource differs OR the named reserve actor is not `gasPoolActor`.
+  -- In practice the bridge admission pins `reserveActor =
+  -- ammReserveActor ≠ gasPoolActor` (so a real sweep CREDITS the pool
+  -- and never debits it), but the proof obligation requires the
+  -- structural guard.
+  | .reclaimAmmReserves r _ reserveActor _ =>
+      r ≠ rLeg ∨ reserveActor ≠ gasPoolActor
   | _                               => True
 
 /-- `Action.doesNotDebitPoolAt` is decidable (each branch is a decidable
@@ -559,6 +568,19 @@ theorem pool_nondecreasing_of_does_not_debit
           gasPoolActor amountIn)
         (Nat.le_of_eq ?_)
       exact (getBalance_setBalance_other _ toResource rLeg ammReserveActor gasPoolActor _
+        hsafe).symm
+  | reclaimAmmReserves r amount reserveActor poolActor =>
+      -- GP.11.10: a reclaim debits `reserveActor` at `r` (inner; misses
+      -- the pool's `rLeg` cell under `hsafe`) then credits `poolActor`
+      -- at `r` (outer; non-decreasing for pool) — the transfer shape.
+      intro hsafe; simp only [Action.doesNotDebitPoolAt] at hsafe
+      show getBalance es.base rLeg gasPoolActor ≤
+        getBalance ((Laws.reclaimAmmReserves r amount reserveActor
+          poolActor).apply_impl es.base) rLeg gasPoolActor
+      simp only [Laws.reclaimAmmReserves]
+      refine Nat.le_trans (Nat.le_of_eq ?_)
+        (getBalance_credit_nondecreasing _ r rLeg poolActor gasPoolActor amount)
+      exact (getBalance_setBalance_other es.base r rLeg reserveActor gasPoolActor _
         hsafe).symm
   | freezeResource r            => intro _; exact Nat.le_refl _
   | replaceKey actor key        => intro _; exact Nat.le_refl _

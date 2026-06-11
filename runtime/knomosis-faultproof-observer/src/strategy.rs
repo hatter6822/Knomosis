@@ -455,7 +455,7 @@ pub(crate) struct _TerminateBundleCellProofDocsAnchor;
 /// Field encodings (matches the Lean emitter, Workstream SVC.3):
 ///
 ///   * `fixture_id` — operator-supplied identifier, free-form.
-///   * `action_kind` — 0..23 dispatcher byte (Solidity
+///   * `action_kind` — 0..24 dispatcher byte (Solidity
 ///     `actionKind` parameter; widened from 0..18 by Workstream
 ///     GP — indices 19 (`DepositWithFee`), 20
 ///     (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),
@@ -473,7 +473,7 @@ pub struct TerminateBundle {
     /// Operator-supplied identifier (e.g. `"log[7]"`).  Free-form;
     /// used for logging.
     pub fixture_id: String,
-    /// Action dispatcher byte (0..23 post-Workstream-GP) — the
+    /// Action dispatcher byte (0..24 post-Workstream-GP) — the
     /// Solidity `actionKind` argument.  The range widened from
     /// 0..18 by Workstream GP — indices 19 (`DepositWithFee`),
     /// 20 (`TopUpActionBudget`), 21 (`TopUpActionBudgetFor`),

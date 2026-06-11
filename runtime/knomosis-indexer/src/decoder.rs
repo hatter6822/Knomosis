@@ -410,6 +410,12 @@ pub fn decode_event(payload: &[u8]) -> Result<Event, DecodeError> {
             amount_out: cursor.read_amount()?,
             amm_reserve_actor: cursor.read_uint()?,
         },
+        22 => Event::AmmReservesReclaimed {
+            resource: cursor.read_uint()?,
+            amount: cursor.read_amount()?,
+            reserve_actor: cursor.read_uint()?,
+            pool_actor: cursor.read_uint()?,
+        },
         other => return Err(DecodeError::UnknownTag { tag: other }),
     };
     // Reject trailing bytes — the encoder is supposed to produce a
@@ -713,6 +719,17 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             write_amount(&mut out, *amount_out);
             write_uint(&mut out, *amm_reserve_actor);
         }
+        Event::AmmReservesReclaimed {
+            resource,
+            amount,
+            reserve_actor,
+            pool_actor,
+        } => {
+            write_uint(&mut out, *resource);
+            write_amount(&mut out, *amount);
+            write_uint(&mut out, *reserve_actor);
+            write_uint(&mut out, *pool_actor);
+        }
     }
     out
 }
@@ -928,6 +945,17 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_amount_checked(&mut out, *amount_in)?;
             write_amount_checked(&mut out, *amount_out)?;
             write_uint(&mut out, *amm_reserve_actor);
+        }
+        Event::AmmReservesReclaimed {
+            resource,
+            amount,
+            reserve_actor,
+            pool_actor,
+        } => {
+            write_uint(&mut out, *resource);
+            write_amount_checked(&mut out, *amount)?;
+            write_uint(&mut out, *reserve_actor);
+            write_uint(&mut out, *pool_actor);
         }
     }
     Ok(out)

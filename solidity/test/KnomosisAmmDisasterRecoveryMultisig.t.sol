@@ -4,20 +4,22 @@ pragma solidity ^0.8.20;
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
-import {AmmTestBase} from "test/utils/AmmTestBase.sol";
+import {DisasterRecoveryTestBase} from "test/utils/DisasterRecoveryTestBase.sol";
 
 /// @title KnomosisAmmDisasterRecoveryMultisigTest
 /// @notice WU GP.11.10 — the reference 3-of-N disaster-recovery multisig:
 ///         constructor validation (the constructor-enforced 3-of-N floor),
-///         the confirm / revoke flow, the stale-round expiry defence, and
-///         the end-to-end wiring where the multisig IS the bridge's
-///         `ammDisasterRecovery` role and the threshold-th confirmation
-///         fires the one-way kill switch.
+///         the confirm / revoke flow, the stale-round expiry defence, the
+///         miswired-role fail-safe, and the end-to-end wiring where the
+///         multisig IS the bridge's `ammDisasterRecovery` role and the
+///         threshold-th confirmation fires the one-way kill switch.  The
+///         stateful fuzz harness lives in
+///         `KnomosisAmmDisasterRecoveryMultisigInvariants.t.sol`.
 /// @dev    Pins the GP.11.10 test item "disaster-recovery multisig: 3-of-N
 ///         requirement enforced" in both directions: a sub-threshold quorum
 ///         can never disable the AMM, and the constructor rejects any
 ///         configuration whose threshold is below 3.
-contract KnomosisAmmDisasterRecoveryMultisigTest is AmmTestBase {
+contract KnomosisAmmDisasterRecoveryMultisigTest is DisasterRecoveryTestBase {
     /// @dev Local copies of the multisig events for `vm.expectEmit`.
     event DisableConfirmed(address indexed signer, uint256 indexed roundId, uint256 confirmations);
     event DisableConfirmationRevoked(
@@ -27,46 +29,6 @@ contract KnomosisAmmDisasterRecoveryMultisigTest is AmmTestBase {
     event AmmDisableExecuted(uint256 indexed roundId, uint256 timestamp);
     /// @dev Local copy of the bridge event for `vm.expectEmit`.
     event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
-
-    /// @dev The canonical 3-of-5 signer set (operator + community
-    ///      representatives + auditor per the GP.11.10 custody spec).
-    address internal constant SIGNER_OPERATOR = address(0xD801);
-    address internal constant SIGNER_COMMUNITY_A = address(0xD802);
-    address internal constant SIGNER_COMMUNITY_B = address(0xD803);
-    address internal constant SIGNER_AUDITOR = address(0xD804);
-    address internal constant SIGNER_BACKUP = address(0xD805);
-    address internal constant OUTSIDER = address(0xBAD);
-
-    function _signerSet() internal pure returns (address[] memory s) {
-        s = new address[](5);
-        s[0] = SIGNER_OPERATOR;
-        s[1] = SIGNER_COMMUNITY_A;
-        s[2] = SIGNER_COMMUNITY_B;
-        s[3] = SIGNER_AUDITOR;
-        s[4] = SIGNER_BACKUP;
-    }
-
-    /// @notice Deploy the production wiring: the multisig is constructed
-    ///         FIRST against the bridge's predicted CREATE address, then
-    ///         the bridge pins `ammDisasterRecovery = address(multisig)` —
-    ///         the same predicted-address pre-wiring pattern production
-    ///         deployments use for `KnomosisMigration`.
-    function _deployWired()
-        internal
-        returns (KnomosisAmmDisasterRecoveryMultisig multisig, KnomosisBridge bridge)
-    {
-        _etchBold();
-        // The multisig deploy consumes one nonce, so the bridge lands at
-        // nonce + 1.
-        address predictedBridge =
-            vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        multisig = new KnomosisAmmDisasterRecoveryMultisig(predictedBridge, _signerSet(), 3);
-        KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
-        args.ammDisasterRecovery = address(multisig);
-        bridge = new KnomosisBridge(args);
-        assertEq(address(bridge), predictedBridge, "bridge landed at the predicted address");
-        assertEq(bridge.ammDisasterRecovery(), address(multisig), "multisig holds the role");
-    }
 
     // ------------------------------------------------------------------
     // Constructor validation (the 3-of-N floor and signer-set hygiene)
@@ -415,5 +377,101 @@ contract KnomosisAmmDisasterRecoveryMultisigTest is AmmTestBase {
         vm.prank(lp);
         bridge.depositETHWithFee{value: 5 ether}(1000);
         assertEq(bridge.totalLockedValue(), tvlBefore + 5 ether, "deposits still work");
+    }
+
+    /// @notice MISWIRED-role fail-safe: a multisig pointing at a bridge
+    ///         whose role is someone else cannot execute — the
+    ///         threshold-crossing confirmation reverts
+    ///         `NotAmmDisasterRecovery` and the WHOLE transaction rolls
+    ///         back (the confirmation that would have crossed the
+    ///         threshold is not recorded), leaving the multisig retryable
+    ///         and the bridge untouched.
+    function test_miswiredRole_thresholdConfirmRollsBack() public {
+        (KnomosisAmmDisasterRecoveryMultisig multisig, KnomosisBridge bridge) = _deployMiswired();
+
+        vm.prank(SIGNER_OPERATOR);
+        multisig.confirmDisable();
+        vm.prank(SIGNER_COMMUNITY_A);
+        multisig.confirmDisable();
+
+        // The third confirmation reaches the threshold, calls the bridge,
+        // and the bridge rejects the caller — everything rolls back.
+        vm.expectRevert(KnomosisBridge.NotAmmDisasterRecovery.selector);
+        vm.prank(SIGNER_AUDITOR);
+        multisig.confirmDisable();
+
+        assertEq(multisig.confirmationCount(), 2, "the failed third confirmation rolled back");
+        assertFalse(multisig.hasConfirmed(SIGNER_AUDITOR), "no live entry for the failed signer");
+        assertFalse(multisig.executed(), "executed rolled back with the revert");
+        assertFalse(bridge.ammDisabled(), "the miswired bridge is untouched");
+
+        // The state stays retryable: the same signer can try again (and
+        // fails the same way while the wiring is wrong) — no wedged state.
+        vm.expectRevert(KnomosisBridge.NotAmmDisasterRecovery.selector);
+        vm.prank(SIGNER_AUDITOR);
+        multisig.confirmDisable();
+        assertEq(multisig.confirmationCount(), 2, "still two live confirmations");
+    }
+
+    /// @notice Full revocation restarts the window: when every approval is
+    ///         revoked, the NEXT confirmation re-anchors `roundStartedAt`
+    ///         (the empty round carries no live authority to expire), so a
+    ///         fresh quorum gathered long after the original anchor still
+    ///         executes — without any stale approval surviving.
+    function test_fullRevocation_restartsWindow() public {
+        (KnomosisAmmDisasterRecoveryMultisig multisig, KnomosisBridge bridge) = _deployWired();
+
+        vm.prank(SIGNER_OPERATOR);
+        multisig.confirmDisable();
+        uint256 staleAnchor = multisig.roundStartedAt();
+        vm.prank(SIGNER_COMMUNITY_A);
+        multisig.confirmDisable();
+
+        // The incident resolves; both signers stand down.
+        vm.prank(SIGNER_OPERATOR);
+        multisig.revokeConfirmation();
+        vm.prank(SIGNER_COMMUNITY_A);
+        multisig.revokeConfirmation();
+        assertEq(multisig.confirmationCount(), 0, "fully revoked");
+        assertFalse(multisig.roundExpired(), "an empty round is never 'expired'");
+
+        // Far past the ORIGINAL window: a new incident starts.  The first
+        // confirmation re-anchors the window instead of rolling the round
+        // (there were no live approvals to discard).
+        vm.warp(staleAnchor + multisig.CONFIRMATION_WINDOW() + 30 days);
+        vm.prank(SIGNER_AUDITOR);
+        multisig.confirmDisable();
+        assertEq(multisig.roundId(), 0, "no roll: the empty round was reused");
+        assertEq(multisig.roundStartedAt(), block.timestamp, "window re-anchored at the new round");
+        assertFalse(multisig.roundExpired(), "fresh anchor: the round is live");
+
+        // The previously-revoked signers complete the fresh quorum.
+        vm.prank(SIGNER_OPERATOR);
+        multisig.confirmDisable();
+        vm.prank(SIGNER_COMMUNITY_A);
+        multisig.confirmDisable();
+        assertTrue(bridge.ammDisabled(), "the re-anchored round executes at threshold");
+    }
+
+    /// @notice The signer who opened a stale round can be the one who rolls
+    ///         it: their own expired approval is discarded with the round,
+    ///         and they are counted exactly once in the fresh round.
+    function test_sameSigner_rollsExpiredRound() public {
+        (KnomosisAmmDisasterRecoveryMultisig multisig, KnomosisBridge bridge) = _deployWired();
+
+        vm.prank(SIGNER_OPERATOR);
+        multisig.confirmDisable();
+        vm.warp(block.timestamp + multisig.CONFIRMATION_WINDOW() + 1);
+        assertTrue(multisig.roundExpired(), "round expired");
+
+        vm.expectEmit(true, true, false, false, address(multisig));
+        emit ConfirmationRoundExpired(0, 1);
+        vm.prank(SIGNER_OPERATOR);
+        multisig.confirmDisable();
+
+        assertEq(multisig.roundId(), 1, "the stale round rolled");
+        assertEq(multisig.confirmationCount(), 1, "the same signer is counted exactly once");
+        assertTrue(multisig.hasConfirmed(SIGNER_OPERATOR), "live entry in the fresh round");
+        assertFalse(bridge.ammDisabled(), "one fresh approval is far below threshold");
     }
 }

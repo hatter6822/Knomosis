@@ -100,13 +100,15 @@ open LegalKernel.Encoding (Encodable)
 /-- The Action tags the gas-pool actor is forbidden from signing:
     every constructor index EXCEPT `transfer` (tag 0).
 
-    `(List.range 24).filter (· ≠ 0) = [1, 2, …, 23]` — the current
-    frozen Action set spans indices 0..23 (index 23 is the GP.11.4
-    `ammSwap`), all of which the pool actor must be forbidden from
-    signing.  See the module docstring's maintenance contract: a new
-    constructor at index ≥ 24 forces a bump here, caught at build time
-    by `gasPoolPolicy_denies_all_non_transfer`. -/
-def gasPoolDeniedTags : List Nat := (List.range 24).filter (· ≠ 0)
+    `(List.range 25).filter (· ≠ 0) = [1, 2, …, 24]` — the current
+    frozen Action set spans indices 0..24 (index 23 is the GP.11.4
+    `ammSwap`; index 24 is the GP.11.10 `reclaimAmmReserves`, a
+    bridge-signed action the pool actor must likewise never sign),
+    all of which the pool actor must be forbidden from signing.  See
+    the module docstring's maintenance contract: a new constructor at
+    index ≥ 25 forces a bump here, caught at build time by
+    `gasPoolPolicy_denies_all_non_transfer`. -/
+def gasPoolDeniedTags : List Nat := (List.range 25).filter (· ≠ 0)
 
 /-- The canonical `LocalPolicy` governing `gasPoolActor` outflow.
 
@@ -146,24 +148,24 @@ The single load-bearing arithmetic fact: every Action whose tag is
 non-zero lies in `gasPoolDeniedTags`.  The supporting
 `Action.tag_lt_denyListBound` exhausts the Action inductive — it is
 the build-time forcing function described in the module docstring,
-elaborating exactly while every Action tag is `< 23`. -/
+elaborating exactly while every Action tag is `< 25`. -/
 
 /-- Every current Action's tag is strictly below the gas-pool
-    deny-list bound (`24`).  Proven by exhaustive `cases` on the
+    deny-list bound (`25`).  Proven by exhaustive `cases` on the
     inductive — this is the forcing function: appending an Action
-    constructor whose tag is `≥ 24` (i.e. a 25th constructor without
+    constructor whose tag is `≥ 25` (i.e. a 26th constructor without
     a matching `gasPoolDeniedTags` bump) breaks this proof, so the
     deny-list can never silently fall behind the Action set.  `simp`
     reduces each branch's `.tag` to a literal and discharges the
-    `literal < 24` comparison via the `Nat` comparison simproc. -/
+    `literal < 25` comparison via the `Nat` comparison simproc. -/
 theorem Action.tag_lt_denyListBound (action : Action) :
-    Action.tag action < 24 := by
+    Action.tag action < 25 := by
   cases action <;> simp [Action.tag]
 
 /-- Every non-`transfer` Action's tag is a member of
     `gasPoolDeniedTags`.  Holds because each current Action tag is
-    `< 24` (`Action.tag_lt_denyListBound`) and the deny-list is every
-    value in `[0, 24)` except `0`. -/
+    `< 25` (`Action.tag_lt_denyListBound`) and the deny-list is every
+    value in `[0, 25)` except `0`. -/
 theorem mem_gasPoolDeniedTags_of_tag_ne_zero
     (action : Action) (h : Action.tag action ≠ 0) :
     Action.tag action ∈ gasPoolDeniedTags := by
@@ -755,10 +757,10 @@ theorem gasPoolPolicy_fieldsBounded
       Encoding.LocalPolicyClause.fieldsBounded]
     -- Goal: (denyTags bound) ∧ (req₀ len) ∧ (cap₀) ∧ (req₁ len) ∧ (cap₁).
     refine ⟨⟨by decide, ?_⟩, by decide, hEth, by decide, hBold⟩
-    -- denyTags: every tag in `(List.range 24).filter (· ≠ 0)` is < 2^64.
+    -- denyTags: every tag in `(List.range 25).filter (· ≠ 0)` is < 2^64.
     apply List.all_eq_true.mpr
     intro n hn
-    have hlt : n < 24 := by
+    have hlt : n < 25 := by
       have := List.mem_filter.mp hn |>.1
       simpa using List.mem_range.mp this
     exact decide_eq_true (by omega)

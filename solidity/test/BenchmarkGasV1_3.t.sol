@@ -5,8 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
-import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
+import {KnomosisAmmDisasterRecoveryMultisig} from
+    "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
+import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 import {MockBoldOz} from "test/utils/MockBoldOz.sol";
 import {MockLiquityV2TroveManager} from "test/utils/MockLiquityV2.sol";
 
@@ -220,6 +222,16 @@ abstract contract BenchmarkGasV1_3Base is Test {
     ///         (every `circuitOpen` operation and every `ammSwap` then
     ///         pays an external `activated()` read).
     function _deployBridge(address migration_) internal returns (KnomosisBridge) {
+        return _deployBridgeWithRecovery(migration_, AMM_DR);
+    }
+
+    /// @notice `_deployBridge` with an explicit `ammDisasterRecovery`
+    ///         role — the GP.11.10 disaster-recovery benchmarks wire the
+    ///         reference 3-of-N multisig in as the role.
+    function _deployBridgeWithRecovery(address migration_, address recovery_)
+        internal
+        returns (KnomosisBridge)
+    {
         uint64[] memory rids = new uint64[](0);
         address[] memory toks = new address[](0);
         return new KnomosisBridge(
@@ -244,7 +256,7 @@ abstract contract BenchmarkGasV1_3Base is Test {
                 boldAdmin: BOLD_ADMIN,
                 enableLiquityAutoCircuitTrigger: true,
                 ammSeedRatioBps: SEED_RATIO_BPS,
-                ammDisasterRecovery: AMM_DR,
+                ammDisasterRecovery: recovery_,
                 erc20ResourceIds: rids,
                 erc20TokenAddrs: toks
             })
@@ -980,7 +992,7 @@ contract BenchmarkGasV1_3AutoTriggerNoShutdownTest is BenchmarkGasV1_3Base {
 ///         other rows is calldata: the ~2.7 kB proof blob costs ~30-45k
 ///         intrinsic calldata gas, captured exactly by the recorded
 ///         `.calldata_gas` companion entry.
-contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base {
+contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base, WithdrawalFlowHarness {
     /// @dev Depositor AND withdrawal recipient (the round-trip user).
     address internal alice = address(0xA11);
 
@@ -1120,68 +1132,95 @@ contract BenchmarkGasV1_3WithdrawalsTest is BenchmarkGasV1_3Base {
     // encodings used by `BoldCircuitBreaker.t.sol`'s end-to-end tests)
     // ------------------------------------------------------------------
 
+    /// @dev Thin per-suite delegate: the CBE + EIP-712 machinery lives
+    ///      in the shared `WithdrawalFlowHarness`.
     function _signStateRoot(bytes32 root, uint64 idx) internal view returns (bytes memory) {
-        bytes32 ds = KnomosisEip712.domainSeparator(
-            "KnomosisBridge", "1", block.chainid, uint256(0), address(bridge)
+        return _signStateRootAs(ATTESTOR_PK, bridge, root, idx);
+    }
+}
+
+/// @notice GP.11.10 disaster-recovery costs: the multisig confirmation
+///         flow against the production 3-of-5 wiring.  Two benchmarks:
+///         a NON-final confirmation (the recurring per-signer cost) and
+///         the threshold-th confirmation, which atomically fires
+///         `emergencyDisableAmm()` on the bridge — the full
+///         crisis-resolution transaction.  (The direct single-key
+///         `emergencyDisableAmm` row remains the BreakerTest scenario's
+///         benchmark; these rows price the multisig custody the
+///         GP.11.10 spec mandates.)
+contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
+    KnomosisAmmDisasterRecoveryMultisig internal multisig;
+
+    address internal constant DR_OPERATOR = address(0xD811);
+    address internal constant DR_COMMUNITY_A = address(0xD812);
+    address internal constant DR_COMMUNITY_B = address(0xD813);
+    address internal constant DR_AUDITOR = address(0xD814);
+    address internal constant DR_BACKUP = address(0xD815);
+
+    function setUp() public {
+        _etchMocks();
+        address[] memory signers = new address[](5);
+        signers[0] = DR_OPERATOR;
+        signers[1] = DR_COMMUNITY_A;
+        signers[2] = DR_COMMUNITY_B;
+        signers[3] = DR_AUDITOR;
+        signers[4] = DR_BACKUP;
+        // Production predicted-address wiring: multisig first, bridge
+        // second (nonce + 1).
+        address predictedBridge =
+            vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
+        multisig = new KnomosisAmmDisasterRecoveryMultisig(predictedBridge, signers, 3);
+        bridge = _deployBridgeWithRecovery(address(0), address(multisig));
+        _seedPool(bridge);
+        // Stage the FIRST confirmation, so the non-final benchmark
+        // measures the recurring (second-signature) shape and the
+        // executing benchmark only needs one more staged signature.
+        vm.prank(DR_OPERATOR);
+        multisig.confirmDisable();
+    }
+
+    /// @notice A non-final `confirmDisable` (the second of three): the
+    ///         recurring per-signer confirmation cost.
+    function test_gas_confirmDisable_nonFinal() public {
+        _bench(
+            "confirmDisable_nonFinal",
+            DR_COMMUNITY_A,
+            address(multisig),
+            0,
+            abi.encodeCall(multisig.confirmDisable, ()),
+            true
         );
-        bytes32 sh = keccak256(
-            abi.encode(
-                keccak256("StateRoot(bytes32 root,uint64 logIndexHigh,bytes32 deploymentId)"),
-                root,
-                uint256(idx),
-                bridge.deploymentId()
-            )
+        assertEq(multisig.confirmationCount(), 2, "two live confirmations");
+        assertFalse(bridge.ammDisabled(), "below threshold: switch not fired");
+    }
+
+    /// @notice The threshold-th `confirmDisable`: includes the atomic
+    ///         `emergencyDisableAmm()` bridge call (the kill-switch
+    ///         SSTORE + both events) — the full crisis-resolution
+    ///         transaction a deployment should budget for.
+    function test_gas_confirmDisable_executes() public {
+        vm.prank(DR_COMMUNITY_A);
+        multisig.confirmDisable(); // staged second signature (unbenched)
+        _bench(
+            "confirmDisable_executes",
+            DR_AUDITOR,
+            address(multisig),
+            0,
+            abi.encodeCall(multisig.confirmDisable, ()),
+            true
         );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ATTESTOR_PK, KnomosisEip712.digest(ds, sh));
-        return abi.encodePacked(r, s, v);
+        assertTrue(multisig.executed(), "threshold reached");
+        assertTrue(bridge.ammDisabled(), "the bridge switch fired atomically");
     }
 
-    function _leBytes8(uint64 v) internal pure returns (bytes memory out) {
-        out = new bytes(8);
-        for (uint256 i = 0; i < 8; i++) {
-            // forge-lint: disable-next-line(unsafe-typecast)
-            out[i] = bytes1(uint8(v >> (8 * i)));
-        }
-    }
-
-    function _cbeUint(uint64 v) internal pure returns (bytes memory) {
-        return bytes.concat(hex"00", _leBytes8(v));
-    }
-
-    function _cbeBytes(bytes memory payload) internal pure returns (bytes memory) {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return bytes.concat(hex"02", _leBytes8(uint64(payload.length)), payload);
-    }
-
-    function _cbeArrayHead(uint64 count) internal pure returns (bytes memory) {
-        return bytes.concat(hex"04", _leBytes8(count));
-    }
-
-    function _encodeWithdrawalLeaf(
-        uint64 resourceId,
-        address recipient,
-        uint64 amount,
-        uint64 l2LogIndex
-    ) internal pure returns (bytes memory) {
-        return bytes.concat(
-            _cbeUint(resourceId),
-            _cbeBytes(abi.encodePacked(recipient)),
-            _cbeUint(amount),
-            _cbeUint(l2LogIndex)
-        );
-    }
-
-    function _encodeWithdrawalProof(bytes memory leaf, uint64 idx, bytes[] memory siblings)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        bytes memory out =
-            bytes.concat(_cbeBytes(leaf), _cbeUint(idx), _cbeArrayHead(uint64(siblings.length)));
-        for (uint256 i = 0; i < siblings.length; i++) {
-            out = bytes.concat(out, _cbeBytes(siblings[i]));
-        }
-        return out;
+    /// @notice Pins the staged scenario: the multisig holds the role,
+    ///         one confirmation is live, and the AMM is enabled.
+    function test_sanity_disasterRecoveryScenarioAssumptions() public view {
+        assertEq(bridge.ammDisasterRecovery(), address(multisig), "multisig holds the role");
+        assertEq(multisig.threshold(), 3, "3-of-5 quorum");
+        assertEq(multisig.confirmationCount(), 1, "one staged confirmation");
+        assertFalse(multisig.executed(), "not executed in the staged state");
+        assertFalse(bridge.ammDisabled(), "AMM live in the staged state");
+        assertGt(bridge.ammReserveEth(), 0, "pool seeded");
     }
 }

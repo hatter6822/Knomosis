@@ -180,6 +180,14 @@ def kernelOnlyApply (es : ExtendedState) (entry : LogEntry) : ExtendedState :=
   -- maps it directly to `Laws.ammSwap`.  No registry / local-policy
   -- mutation.
   | .ammSwap _ _ _ _ _             => es''
+  -- Workstream GP (GP.11.10): post-disable reserve sweep.  Like
+  -- `ammSwap`, the sweep is NOT signer-aware; `Action.compileTransition`
+  -- maps it directly to `Laws.reclaimAmmReserves` (handled by the
+  -- kernel step above).  No registry / local-policy mutation; the
+  -- kill-switch admission gate (`BridgeAdmissibleWith` conjunct 9) is
+  -- an admission-layer effect `kernelOnlyApply` deliberately doesn't
+  -- model.
+  | .reclaimAmmReserves _ _ _ _    => es''
 
 /-- **Bridge-scope invariant.**  `kernelOnlyApply` leaves the bridge
     sub-state (`consumed` / `pending` / `nextWdId`) completely
@@ -651,6 +659,10 @@ theorem apply_admissible_with_eq_kernelOnlyApply
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
+  -- GP.11.10: the reserve sweep is signer-unaware (it compiles
+  -- directly to `Laws.reclaimAmmReserves`); both paths wrap the same
+  -- transition in `step_impl`, so they stay byte-identical.
+  | reclaimAmmReserves _ _ _ _    => rfl
 
 /-! ### Inductive runtime-admissibility predicate
 

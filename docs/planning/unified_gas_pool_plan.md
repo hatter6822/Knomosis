@@ -382,27 +382,37 @@ reservation.
 
 ### Frozen Action constructor indices
 
-Pre-GP indices 0–18 are unchanged.  GP-era additions:
+Pre-GP indices 0–18 are unchanged.  GP-era additions, AS SHIPPED
+(the implementation is the source of truth for the frozen values;
+this table was corrected from the pre-implementation sketch, which
+had guessed `ammSwap = 22` before GP.9.1's `claimBudgetRefund`
+landed at 22):
 
 | Index | Constructor                  | Introduced | Purpose                                              |
 | ----- | ---------------------------- | ---------- | ---------------------------------------------------- |
 | 19    | `Action.depositWithFee`      | v1.0       | Bridge deposit with fee split + recipient budget grant |
 | 20    | `Action.topUpActionBudget`   | v1.0       | L2 user self-topup (signer credits own budget)        |
 | 21    | `Action.topUpActionBudgetFor`| v1.3       | L2 delegated topup (signer credits recipient's budget; gated by `allowTopUpFrom`) |
-| 22    | `Action.ammSwap`             | v1.3       | L2 mirror of L1 AMM swap (gas-pool reserves reshuffled) |
+| 22    | `Action.claimBudgetRefund`   | GP.9.1     | Refund-on-exit: retire budget units for a gas payout  |
+| 23    | `Action.ammSwap`             | v1.3       | L2 mirror of L1 AMM swap (AMM-reserve balances reshuffled) |
+| 24    | `Action.reclaimAmmReserves`  | GP.11.10   | Post-disable EXACT sweep of the frozen AMM reserve into the gas pool (admission-gated on the `ammDisabled` mirror) |
 
 ### Frozen Event indices
 
-Pre-GP indices 0–15 are unchanged.  GP-era additions:
+Pre-GP indices 0–15 are unchanged.  GP-era additions, AS SHIPPED
+(corrected from the pre-implementation sketch — the BOLD circuit
+breaker is L1-event-only and never received L2 Event indices; the
+shipped L2 events are):
 
 | Index | Event                              | Introduced | Purpose                                  |
 | ----- | ---------------------------------- | ---------- | ---------------------------------------- |
 | 16    | `Event.depositWithFeeCredited`     | v1.0       | Emitted on admitted depositWithFee       |
-| 17    | `Event.actionBudgetTopUp`          | v1.0       | Emitted on admitted topUpActionBudget(For) |
+| 17    | `Event.actionBudgetTopUp`          | v1.0       | Emitted on admitted topUpActionBudget    |
 | 18    | `Event.gasPoolClaim`               | v1.0       | Emitted on gas-pool → sequencer transfer |
-| 19    | `Event.ammSwapExecuted` (L2)       | v1.3       | Emitted on admitted ammSwap              |
-| 20    | `Event.boldCircuitClosed`          | v1.3       | Emitted when BOLD circuit-breaker fires  |
-| 21    | `Event.boldCircuitOpened`          | v1.3       | Emitted when BOLD circuit-breaker reopens |
+| 19    | `Event.delegatedActionBudgetTopUp` | v1.3       | Emitted on admitted topUpActionBudgetFor |
+| 20    | `Event.budgetConsumed`             | GP.6.4     | Emitted on per-action budget consumption |
+| 21    | `Event.ammSwapExecuted` (L2)       | v1.3       | Emitted on admitted ammSwap              |
+| 22    | `Event.ammReservesReclaimed` (L2)  | GP.11.10   | Emitted on the admitted post-disable reserve sweep |
 
 ### Immutable L1 constructor parameters
 
@@ -516,7 +526,9 @@ file partitions).
     every worst case bounded.
   * **Backwards-compat delta:** additive.  No existing `Action`
     constructor changes index; two new constructors are appended at
-    indices 19 (`depositWithFee`) and 20 (`topUpActionBudget`).  The
+    indices 19 (`depositWithFee`) and 20 (`topUpActionBudget`) —
+    later GP WUs append four more at 21..24 (see the frozen-index
+    bullet below).  The
     existing `deposit` (index 13) and `withdraw` (index 14)
     constructors are preserved and unchanged.
     Note (2026-05-22 amendment, GP.3 wiring closure): the planning
@@ -539,12 +551,19 @@ file partitions).
     `genesisDefaultDeniesAdmission` in
     `LegalKernel/Test/Runtime/LoopHappyPath.lean` pins the
     deny-by-default behaviour at value level.
-  * **Frozen indices reserved by this workstream:**
+  * **Frozen indices reserved by this workstream** (initial v1.0
+    reservation; later GP WUs extended the set — the Quick Reference
+    tables above are the canonical shipped list):
     * `Action.depositWithFee` at index 19
     * `Action.topUpActionBudget` at index 20
     * `Event.depositWithFeeCredited` at index 16
     * `Event.actionBudgetTopUp` at index 17
     * `Event.gasPoolClaim` at index 18
+    * (GP.3.4) `Action.topUpActionBudgetFor` 21, `Event.delegatedActionBudgetTopUp` 19
+    * (GP.6.4) `Event.budgetConsumed` 20
+    * (GP.9.1) `Action.claimBudgetRefund` 22
+    * (GP.11.4) `Action.ammSwap` 23, `Event.ammSwapExecuted` 21
+    * (GP.11.10) `Action.reclaimAmmReserves` 24, `Event.ammReservesReclaimed` 22
   * **Solidity-side scope:** one amended contract (`KnomosisBridge.sol`)
     with two parallel entry points (ETH + BOLD).  Immutable
     constructor parameters added by the workstream (current as of
@@ -8361,100 +8380,172 @@ sub-WU table above is the implementation roadmap.
     operator runbook section reviewed by deployment operators.
   * **Dependencies.**  GP.11.3, GP.11.8.
   * **Estimated effort.**  ~12 hours.
-  * **Status: COMPLETE (tri-surface: Solidity multisig + Lean
-    state-root mirror + operator runbook).**  The kill-switch
-    *mechanism* itself landed early, in GP.11.3's v1.24 completion
-    round (one-way `emergencyDisableAmm()`, the immutable
-    `ammDisasterRecovery` role with the `AmmDisasterRecoveryRequired`
-    / `AmmRoleIsBridge` constructor guards, the `ammActive` modifier
-    on `ammSwap`, the `_seedAmmReserves` early-out, and the three
-    GP.11.10 theorems pinned as `AmmKillSwitch.t.sol` tests).  This
-    WU closes the three deferred obligations:
+  * **Status: COMPLETE (quad-surface: Solidity multisig + L2
+    reclamation law + Lean state-root mirror + operator runbook).**
+    The kill-switch *mechanism* itself landed early, in GP.11.3's
+    v1.24 completion round (one-way `emergencyDisableAmm()`, the
+    immutable `ammDisasterRecovery` role with the
+    `AmmDisasterRecoveryRequired` / `AmmRoleIsBridge` constructor
+    guards, the `ammActive` modifier on `ammSwap`, the
+    `_seedAmmReserves` early-out, and the three GP.11.10 theorems
+    pinned as `AmmKillSwitch.t.sol` tests).  This WU closes every
+    remaining obligation:
 
-    1. **3-of-N multisig hardening.**  New single-purpose reference
-       contract `KnomosisAmmDisasterRecoveryMultisig.sol` (+ the
-       minimal `IKnomosisAmmDisasterRecovery` interface): an M-of-N
+    **AMENDMENT — the v1.4 "no new Action variant" decision is
+    SUPERSEDED.**  The original WU text deferred the L2
+    reserve-reclamation path ("Claims against the AMM reserves on L1
+    are simply gated by the ammDisabled flag.  No new Action variant
+    needed").  A completion-round audit showed that decision left the
+    frozen reserves' L2 representation permanently stranded: the
+    GP.11.6 `ammReservePolicy` bars `ammReserveActor` from every
+    action except `ammSwap`, and `ammSwap` is dead post-disable — so
+    the promised "sequencer can claim the re-tagged funds" sentence
+    had NO implemented mechanism.  GP.11.10 now ships the mechanism:
+
+    1. **`Action.reclaimAmmReserves` (frozen index 24) — the
+       exact-sweep reclamation law.**
+       `Laws.reclaimAmmReserves r amount reserveActor poolActor`
+       moves the reserve actor's ENTIRE balance at one resource to
+       the pool actor; the precondition pins
+       `getBalance r reserveActor = amount ∧ reserveActor ≠
+       poolActor ∧ amount > 0` (the EXACT-SWEEP discipline: partial
+       drains are impossible by construction, the swept amount is an
+       action field so every layer is deterministic, and a replay is
+       self-defeating against the drained-to-zero reserve).  Unlike
+       `ammSwap`, the sweep is single-resource and therefore
+       genuinely `IsConservative` (instance shipped; `IsMonotonic`
+       follows via `monotonic_of_conservative`) plus `LocalTo [r]` /
+       freeze-preserving, with the per-actor delta ladder
+       (`reclaimAmmReserves_zeroes_reserve` / `_credits_pool` /
+       `_other_actor_untouched` / `_conserves_at`).  Lex
+       re-expression at registry index 21
+       (`reserved.gp.reclaimAmmReserves`).
+       **Admission gating:** `Action.isBridgeOnly` classifies the
+       sweep bridge-only (conjunct 8 forces `signer = bridgeActor`),
+       `bridgeAuthorizedAction` authorises it (the `_eq_true_iff`
+       characterisation + positive/negative bundles extended), and a
+       NEW `BridgeAdmissibleWith` conjunct (9) pins the threaded
+       actors to the canonical `ammReserveActor` / `gasPoolActor`
+       AND requires the L2 kill-switch mirror
+       (`es.bridge.ammDisabled = true`) — headline
+       `reclaim_inadmissible_while_amm_enabled`: the sweep can never
+       front-run the disaster it recovers from.  Deny-list bumps:
+       `gasPoolDeniedTags` / `ammReserveDeniedTags` →
+       `List.range 25` (neither reserved actor may SIGN the sweep);
+       `Action.tag_lt_denyListBound` → `< 25`.  Decidability ships
+       via the new `BridgeAdmissibleWith.dec_reclaimGate` (RB.1.d).
+       **Event:** `Event.ammReservesReclaimed` (frozen index 22) +
+       delta-filtered `balanceChanged` pair; CBE codec + tag pins.
+       **Step-VM kind 24, tri-stack:** Lean
+       (`actionFieldsForL1` 4×uint64BE, `stepVMHash` arm,
+       `stepCommitReclaimAmmReserves`,
+       `stepVMHash_reclaimAmmReserves_kind`, unknown-kind boundary →
+       25, `coherence_/cellwrites_reclaimAmmReserves`), Solidity
+       (`_stepReclaimAmmReserves` enforcing the full precondition
+       set — `AmountMustBePositive` / new `SameActorSweep` / new
+       `SweepAmountMismatch(expected, actual)` for the exact-sweep
+       rule — + 7 unit tests + the kind-25 boundary), and the
+       cross-stack corpus widened 268 → 278 (6 happy sweeping both
+       legs incl. a fresh-pool boundary + 4 adversarial).
+       **Rust lockstep:** `Action::ReclaimAmmReserves` (tag 24) in
+       the l1-ingest CBE encoder with a Lean-pinned known-vector
+       test; the `AmmDisabled` L1 event is now DECODED by the
+       watcher (pinned topic
+       `keccak256("AmmDisabled(uint256,uint256,uint256)")`,
+       3×uint256 payload, `Translated::NoAction` per the
+       deposit-materialisation precedent, .cxsf codec tag 5) as the
+       sequencer's machine-readable trigger; the event-subscribe
+       registry + indexer gain tag 22
+       (`KNOWN_EVENT_TAG_COUNT` / `EVENT_TAG_COUNT` → 23, decoder +
+       projections + corpus round-trip); the observer's kind range →
+       0..24.
+    2. **3-of-N multisig hardening.**  Single-purpose reference
+       contract `KnomosisAmmDisasterRecoveryMultisig.sol` (+ minimal
+       `IKnomosisAmmDisasterRecovery` interface): an M-of-N
        confirm-to-execute multisig whose only capability is calling
        `emergencyDisableAmm()` on its immutable bridge.  The
        GP.11.10 3-of-N floor is CONSTRUCTOR-ENFORCED
-       (`MIN_DISABLE_THRESHOLD = 3`; `ThresholdBelowMinimum`
-       otherwise), signer-set hygiene is checked at construction
-       (zero / duplicate / bridge-as-signer / self-as-signer /
-       `MAX_SIGNERS = 32` cap / unreachable-threshold), the
-       threshold-th `confirmDisable()` fires the bridge call
-       atomically (no separate front-runnable execute step),
-       `revokeConfirmation()` lets a signer stand down, and stale
-       approvals expire as a group (`CONFIRMATION_WINDOW = 7 days`,
-       O(1) round-roll — approvals from one incident can never
-       silently combine with a later signature to fire the one-way
-       switch out of context; fail-safe direction: an expired round
-       costs a re-confirmation, a stale-quorum disable would cost a
-       redeploy).  Wiring uses the predicted-CREATE-address pattern
-       already established for pre-wired `KnomosisMigration`
-       successors.  21 new forge cases in
+       (`MIN_DISABLE_THRESHOLD = 3`); signer-set hygiene at
+       construction (zero / duplicate / bridge-as-signer /
+       self-as-signer / `MAX_SIGNERS = 32` / unreachable-threshold);
+       the threshold-th `confirmDisable()` fires atomically
+       (checks-effects-interactions; no separate front-runnable
+       execute step); `revokeConfirmation()`; stale approvals expire
+       AS A GROUP (`CONFIRMATION_WINDOW = 7 days`, O(1) round-roll)
+       so approvals from one incident can never combine out of
+       context — fail-safe direction: an expired round costs a
+       re-confirmation, a stale-quorum disable would cost a
+       redeploy.  Wiring uses the predicted-CREATE-address pattern.
+       The three multisig governance constants joined the GP.5.2
+       source-level cap-audit gate (now parameterised over both
+       audited files; gate output "… + 3 multisig governance
+       constants"; self-test 45 → 51 cases incl. drift / missing /
+       comment-mask tampers on the new constants).  24 unit cases in
        `KnomosisAmmDisasterRecoveryMultisig.t.sol` (constructor
-       guards incl. thresholds 0/1/2 each rejected; 3-of-3 minimum
-       valid; sub-threshold quorum provably does NOT disable while
-       a live swap still succeeds; third confirmation disables
-       end-to-end against a real `KnomosisBridge` with reserves
-       preserved + both events; revoke-blocks-then-reconfirm-fires;
-       expiry resets instead of executing + boundary-instant
-       execution; signers cannot bypass the multisig directly; the
-       quorum's blast radius leaves every other bridge control
-       untouched), plus the GP.11.10 degraded-mode test
-       `test_ammDisabled_withdrawStillWorks_bothLegs` in
-       `AmmKillSwitch.t.sol` (post-disable `withdrawWithProof` pays
-       out on BOTH legs through a finalised state root — the kill
-       switch can never trap user funds).
-    2. **`ammDisabled` in the state-root preimage.**  The Lean
-       `BridgeState` gains the `ammDisabled : Bool` L1-mirror field
-       (per the WU decision there is NO `Action.disableAmm`; the
-       flag is a passive mirror like the five GP.11.8 fields):
-       `BridgeState.encode/decode` append it as a ninth segment
-       (canonical 0/1, strict `nonCanonical` rejection mirroring
-       `boldCircuitClosed`), EI.7.e
-       (`Bridge.BridgeState.encode_injective`) extends from 8 to 9
-       conjuncts, `ExtendedState.extEq` /
-       `extendedStateExtensionallyEqual` widen to 13 conjuncts, and
-       the GP.11.8 factoring/migration theorems extend
-       (`bridgeStateEncodeAmmSuffix` now 6 fields;
-       `bridgeState_amm_genesis_suffix_const` +
-       `bridgeState_commit_extends_v1_2` gain the
-       `ammDisabled = false` genesis conjunct).  Two NEW theorems:
-       `bridgeState_commit_extends_v1_3` (a GP.11.8-era state
-       migrates deterministically while the switch has not fired)
-       and the headline
-       `commitBridgeState_reflects_ammDisabled` (under
-       `CollisionFree hashBytes`, two states differing only in
-       `ammDisabled` have DIFFERENT commitments — a sequencer
-       cannot publish a state root that misrepresents the
-       kill-switch state, and the fault-proof game can adjudicate
-       disputes that turn on it).  Both `#print axioms`-clean.
-       The `faultproof-amm-commit` suite grows 19 → 26 cases
-       (disable flips the bridge commit + the top-level root, on
-       genesis and populated states; non-canonical `ammDisabled=2`
-       rejected; `ammDisabled=true` round-trips; API pins for the
-       two new theorems + the three extended signatures); the
-       EI.7.e / extEq pins and the `bridge-state` +
-       `encoding-injectivity` suites extend to match.  The
-       268-entry step-VM cross-stack corpus is regenerated (every
-       `commitExtendedState` shifts with the widened encoding);
-       the Solidity step VM and Rust runtime need NO code change
-       (neither consumes `BridgeState.encode` bytes — the step-VM
-       commit recipe is unchanged).  `docs/abi.md` §16.3 now
-       documents the full nine-segment wire format (it had been
+       guards incl. thresholds 0/1/2 each rejected + 3-of-3 minimum;
+       sub-threshold quorum provably does NOT disable while a live
+       swap still succeeds; third confirmation disables end-to-end
+       with reserves preserved + both events;
+       revoke-blocks-then-reconfirm-fires; expiry resets instead of
+       executing + boundary-instant execution; same-signer round
+       roll; full-revocation window restart; MISWIRED-role fail-safe
+       rollback; bypass + blast-radius pins) over the shared
+       `DisasterRecoveryTestBase`, PLUS a stateful invariant harness
+       (`KnomosisAmmDisasterRecoveryMultisigInvariants.t.sol`):
+       random confirm / revoke / warp interleavings with per-edge
+       discipline `require`s and seven invariants
+       (count == live ledger; `bridge.ammDisabled ==
+       multisig.executed`; sub-threshold never executes; count ≤
+       threshold; execution one-way; at most one execution edge).
+       The degraded-mode guarantee
+       `AmmKillSwitch.t.sol::test_ammDisabled_withdrawStillWorks_bothLegs`
+       drives post-disable `withdrawWithProof` on BOTH legs through
+       finalised state roots (the kill switch can never trap user
+       funds); the withdrawal-flow CBE + EIP-712 helpers were
+       deduplicated into the shared `WithdrawalFlowHarness`
+       (consumed by `AmmKillSwitch` / `BoldCircuitBreaker` /
+       `BenchmarkGasV1_3`).  Two NEW GP.11.9-gated benchmarks price
+       the multisig custody (`confirmDisable_nonFinal` /
+       `confirmDisable_executes`, isolated-mode, baseline + runbook
+       table regenerated via `make snapshot-gas`).
+    3. **`ammDisabled` in the state-root preimage + mirror
+       transition semantics.**  The Lean `BridgeState` gains the
+       `ammDisabled : Bool` mirror (ninth CBE segment, strict 0/1
+       canonicality); EI.7.e extends 8-way → 9-way;
+       `ExtendedState.extEq` widens to 13 conjuncts; the GP.11.8
+       factoring/migration theorems gain the `ammDisabled = false`
+       genesis conjunct (mathematically forced).  Theorems (all
+       `#print axioms`-clean): `bridgeState_commit_extends_v1_3`
+       (deterministic GP.11.8-era migration; toList-extensional
+       hypotheses), `commitBridgeState_reflects_ammDisabled` AND the
+       TOP-LEVEL `commitExtendedState_reflects_ammDisabled` (a state
+       ROOT cannot misrepresent the kill switch, with no hypotheses
+       on the non-bridge sub-states).  The previously-unspecified
+       mirror lifecycle is now formal: `BridgeState.AmmMirrorsEq`,
+       `applyActionToBridgeState_preserves_amm_mirrors` (every
+       action, all six mirrors), the entry-point + budget-entry
+       lifts, and the chain-level
+       `amm_mirrors_constant_over_admitted_trace` /
+       `ammDisabled_constant_over_admitted_trace` over the new
+       `BridgeAdmittedTrace` relation — in-batch the mirrors cannot
+       move; across batches the commitment binding keeps the
+       published value honest.  The 278-entry step-VM corpus and the
+       29-entry event-CBE corpus are regenerated; `docs/abi.md`
+       §16.3 documents the nine-segment wire format (it had been
        stale at the v1.2 three-segment form).
-    3. **Operator runbook.**  `docs/gas_pool_runbook.md` gains §10
-       (AMM disaster recovery): the four invocation conditions with
-       thresholds, the 3-of-N custody + reference-multisig
-       semantics, the predicted-address deployment wiring, the
-       firing procedure, the post-disable recovery decision tree
-       (redeploy-via-`KnomosisMigration` vs degraded v1.2 mode),
-       the state-root-visibility note (the Lean mirror + the
-       reflects-theorem), and the measured gas cost; §1's role
-       table, §6's monitoring checklist, and §7's quick reference
-       extend to cover the role, the kill-switch alerts, and the
-       multisig calls.
+    4. **Operator runbook.**  `docs/gas_pool_runbook.md` §10: the
+       four invocation conditions with thresholds, the 3-of-N
+       custody + reference-multisig semantics + predicted-address
+       wiring + post-deploy verification, the firing procedure, the
+       recovery decision tree — now including the IMPLEMENTED
+       mirror-commit + per-leg `reclaimAmmReserves` sweep step —
+       the state-root-visibility note (the reflects theorems + the
+       mirror step-invariance), and the measured costs; §1 roles
+       (three immutable roles), §6 monitoring (reserve-depth /
+       `AmmDisabled` / `DisableConfirmed` alerts), and §7 quick
+       reference extend to match; §1's stale
+       `closeBoldCircuitIfRedeemingHeavily` reference fixed to the
+       shipped `closeBoldCircuitIfAnyLiquityBranchShutdown`.
 
 ---
 

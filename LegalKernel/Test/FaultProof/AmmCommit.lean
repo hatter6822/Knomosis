@@ -336,12 +336,14 @@ def tests : List TestCase :=
         assertEq (expected := commitBridgeState bs) (actual := commitBridgeState bs)
           "determinism on the disabled state"
     }
-  -- 25. Term-level API: bridgeState_commit_extends_v1_3.
+  -- 25. Term-level API: bridgeState_commit_extends_v1_3 (toList /
+  --     extensional hypotheses: the encoders read only `toList`, so
+  --     the migration statement covers RB-shape-divergent states too).
   , { name := "GP.11.10: bridgeState_commit_extends_v1_3 API stable"
     , body := do
         let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
-            bs₁.consumed = bs₂.consumed →
-            bs₁.pending = bs₂.pending →
+            bs₁.consumed.toList = bs₂.consumed.toList →
+            bs₁.pending.toList = bs₂.pending.toList →
             bs₁.nextWdId = bs₂.nextWdId →
             bs₁.ammReserveEth = bs₂.ammReserveEth →
             bs₁.ammReserveBold = bs₂.ammReserveBold →
@@ -354,13 +356,14 @@ def tests : List TestCase :=
           bridgeState_commit_extends_v1_3
         pure ()
     }
-  -- 26. Term-level API: commitBridgeState_reflects_ammDisabled.
+  -- 26. Term-level API: commitBridgeState_reflects_ammDisabled
+  --     (toList hypotheses, same rationale as test 25).
   , { name := "GP.11.10: commitBridgeState_reflects_ammDisabled API stable"
     , body := do
         let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
             Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
-            bs₁.consumed = bs₂.consumed →
-            bs₁.pending = bs₂.pending →
+            bs₁.consumed.toList = bs₂.consumed.toList →
+            bs₁.pending.toList = bs₂.pending.toList →
             bs₁.nextWdId = bs₂.nextWdId →
             bs₁.ammReserveEth = bs₂.ammReserveEth →
             bs₁.ammReserveBold = bs₂.ammReserveBold →
@@ -371,6 +374,42 @@ def tests : List TestCase :=
             commitBridgeState bs₁ ≠ commitBridgeState bs₂ :=
           commitBridgeState_reflects_ammDisabled
         pure ()
+    }
+  -- 27. Term-level API: commitExtendedState_reflects_ammDisabled —
+  --     the GP.11.10 TOP-LEVEL headline (the kill switch is reflected
+  --     in the published state root itself, with no hypotheses on the
+  --     non-bridge sub-states).
+  , { name := "GP.11.10: commitExtendedState_reflects_ammDisabled API stable"
+    , body := do
+        let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
+            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            es₁.bridge.consumed.toList = es₂.bridge.consumed.toList →
+            es₁.bridge.pending.toList = es₂.bridge.pending.toList →
+            es₁.bridge.nextWdId = es₂.bridge.nextWdId →
+            es₁.bridge.ammReserveEth = es₂.bridge.ammReserveEth →
+            es₁.bridge.ammReserveBold = es₂.bridge.ammReserveBold →
+            es₁.bridge.boldCircuitClosed = es₂.bridge.boldCircuitClosed →
+            es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap →
+            es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue →
+            es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled →
+            commitExtendedState es₁ ≠ commitExtendedState es₂ :=
+          commitExtendedState_reflects_ammDisabled
+        pure ()
+    }
+  -- 28. Value-level: flipping ONLY ammDisabled on a populated extended
+  --     state (non-trivial kernel + nonce sub-states) flips the
+  --     top-level root — the value-level twin of test 27.
+  , { name := "GP.11.10: top-level root reflects ammDisabled on populated states"
+    , body := do
+        let es0 := ExtendedState.empty
+        let es1 : ExtendedState :=
+          { es0 with
+            base := LegalKernel.setBalance es0.base 0 7 1000
+            bridge := { es0.bridge with ammReserveEth := 5555 } }
+        let es2 : ExtendedState :=
+          { es1 with bridge := { es1.bridge with ammDisabled := true } }
+        assert (commitExtendedState es1 ≠ commitExtendedState es2)
+          "kill-switch flip alters the top-level root on a populated state"
     }
   ]
 

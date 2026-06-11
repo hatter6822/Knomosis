@@ -88,12 +88,14 @@ pub const EVENT_TAG_HEAD_LEN: usize = 9;
 
 /// The number of frozen `Event` constructor tags currently defined
 /// on the Lean side (`LegalKernel/Events/Types.lean::Event.tag`,
-/// indices `0..=21`).  Bumped by amendment when the Lean inductive
+/// indices `0..=22`).  Bumped by amendment when the Lean inductive
 /// grows; GP.11.4 widened it from 21 → 22 (adding `AmmSwapExecuted`
-/// at tag 21).  The streaming path treats any tag
-/// `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and forwards
-/// it verbatim (additive-extension policy, `docs/abi.md` §11).
-pub const KNOWN_EVENT_TAG_COUNT: u64 = 22;
+/// at tag 21) and GP.11.10 from 22 → 23 (adding
+/// `AmmReservesReclaimed` at tag 22).  The streaming path treats any
+/// tag `>= KNOWN_EVENT_TAG_COUNT` as [`EventClass::Unknown`] and
+/// forwards it verbatim (additive-extension policy, `docs/abi.md`
+/// §11).
+pub const KNOWN_EVENT_TAG_COUNT: u64 = 23;
 
 /// A canonical `Events.Event` constructor, identified by its frozen
 /// wire tag.
@@ -165,13 +167,19 @@ pub enum EventType {
     /// An AMM swap was executed (ETH↔BOLD exchange against the
     /// gas-pool reserves; Workstream GP / GP.11.4).  Tag 21.
     AmmSwapExecuted,
+    /// The disabled AMM's frozen L2 reserve balance was swept into
+    /// the gas-pool actor (the GP.11.10 post-disable reclamation —
+    /// emitted by `Action.reclaimAmmReserves`, the bridge-attested
+    /// exact sweep that fires only after the L1 kill switch is
+    /// mirrored on L2).  Tag 22.
+    AmmReservesReclaimed,
 }
 
 /// Every [`EventType`] in frozen tag order.  `ALL[i].tag() == i`
 /// for every index, so iterating this array enumerates the tag
 /// space `0..KNOWN_EVENT_TAG_COUNT`.  Used by exhaustive coverage
 /// tests and by tooling that needs to walk the registry.
-pub const ALL_EVENT_TYPES: [EventType; 22] = [
+pub const ALL_EVENT_TYPES: [EventType; 23] = [
     EventType::BalanceChanged,
     EventType::NonceAdvanced,
     EventType::IdentityRegistered,
@@ -194,6 +202,7 @@ pub const ALL_EVENT_TYPES: [EventType; 22] = [
     EventType::DelegatedActionBudgetTopUp,
     EventType::BudgetConsumed,
     EventType::AmmSwapExecuted,
+    EventType::AmmReservesReclaimed,
 ];
 
 impl EventType {
@@ -224,6 +233,7 @@ impl EventType {
             Self::DelegatedActionBudgetTopUp => 19,
             Self::BudgetConsumed => 20,
             Self::AmmSwapExecuted => 21,
+            Self::AmmReservesReclaimed => 22,
         }
     }
 
@@ -256,6 +266,7 @@ impl EventType {
             Self::DelegatedActionBudgetTopUp => "delegatedActionBudgetTopUp",
             Self::BudgetConsumed => "budgetConsumed",
             Self::AmmSwapExecuted => "ammSwapExecuted",
+            Self::AmmReservesReclaimed => "ammReservesReclaimed",
         }
     }
 
@@ -574,8 +585,9 @@ mod tests {
     fn constants_pinned() {
         assert_eq!(CBE_TAG_UINT, 0x00);
         assert_eq!(EVENT_TAG_HEAD_LEN, 9);
-        // GP.11.4 widened 21 → 22 by adding `AmmSwapExecuted`.
-        assert_eq!(KNOWN_EVENT_TAG_COUNT, 22);
+        // GP.11.4 widened 21 → 22 (`AmmSwapExecuted`); GP.11.10
+        // widened 22 → 23 (`AmmReservesReclaimed`).
+        assert_eq!(KNOWN_EVENT_TAG_COUNT, 23);
     }
 
     /// `ALL_EVENT_TYPES[i].tag() == i` — the array is in frozen tag
@@ -602,7 +614,7 @@ mod tests {
     /// GP.11.4 widened known tags 0..=20 → 0..=21.
     #[test]
     fn from_tag_unknown_returns_none() {
-        for tag in [22u64, 23, 99, 1_000, u64::MAX] {
+        for tag in [23u64, 24, 99, 1_000, u64::MAX] {
             assert_eq!(
                 EventType::from_tag(tag),
                 None,

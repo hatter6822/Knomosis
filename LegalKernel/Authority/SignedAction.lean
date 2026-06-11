@@ -1278,6 +1278,7 @@ theorem apply_admissible_base
   | faultProofResolution _ _ _ _  => simp_all [step_impl]
   | depositWithFee _ _ _ _ _ _ _  => simp_all [step_impl]
   | ammSwap _ _ _ _ _             => simp_all [step_impl]
+  | reclaimAmmReserves _ _ _ _    => simp_all [step_impl]
 
 /-- The post-application `base` state for `topUpActionBudget`
     actions specifically.  The kernel step is signer-aware
@@ -1565,6 +1566,7 @@ theorem admission_consumes_budget_on_success
     | faultProofChallenge _ _ _ _   => rw [← hsuc]
     | faultProofResolution _ _ _ _  => rw [← hsuc]
     | ammSwap _ _ _ _ _             => rw [← hsuc]
+    | reclaimAmmReserves _ _ _ _    => rw [← hsuc]
   rw [hgrant]
   exact EpochBudgetState.currentBudget_after_consume_self
     es.epochBudgets st.signer currentEpoch freeTier actionCost ebs' hconsume
@@ -1742,6 +1744,7 @@ theorem bridgeActor_budget_exempt
   | faultProofChallenge _ _ _ _   => rfl
   | faultProofResolution _ _ _ _  => rfl
   | ammSwap _ _ _ _ _             => rfl
+  | reclaimAmmReserves _ _ _ _    => rfl
 
 /-- §15E (v1.0) / GP.3.2.g — `depositWithFee_grants_budget`.
 
@@ -2094,6 +2097,7 @@ theorem admission_locality_in_budget
     | faultProofChallenge _ _ _ _   => rw [← hsuc]
     | faultProofResolution _ _ _ _  => rw [← hsuc]
     | ammSwap _ _ _ _ _             => rw [← hsuc]
+    | reclaimAmmReserves _ _ _ _    => rw [← hsuc]
   rw [hgrant]
   exact EpochBudgetState.currentBudget_after_consume_other
     es.epochBudgets st.signer other currentEpoch freeTier actionCost
@@ -2870,6 +2874,7 @@ theorem non_registry_mutating_preserves_registry
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
+  | reclaimAmmReserves _ _ _ _    => rfl
   -- Workstream-LX (LX.19): codegen-managed Lex
   -- `non_registry_mutating_preserves_registry` proof arms land
   -- between the fence markers below.  Each Lex law that compiles
@@ -3090,6 +3095,7 @@ theorem non_meta_preserves_localPolicies
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
+  | reclaimAmmReserves _ _ _ _    => rfl
 
 /-- LP.5: a different actor's `localPolicies` entry is unchanged by
     `apply_admissible` regardless of the action.  The local-policy
@@ -3136,6 +3142,7 @@ theorem localPolicies_other_actor_untouched
   | topUpActionBudgetFor _ _ _ _ _ => rfl
   | claimBudgetRefund _ _ _ _     => rfl
   | ammSwap _ _ _ _ _             => rfl
+  | reclaimAmmReserves _ _ _ _    => rfl
 
 /-- LP.5: field-projection: the post-application `localPolicies`
     equals the result of `applyActionToLocalPolicies` applied to

@@ -100,12 +100,12 @@ Coverage map:
     one-constructor-at-a-time `bridgePolicy_*` family with a single
     source of truth: `bridgeAuthorizedAction_eq_true_iff` (the bridge
     actor signs EXACTLY `replaceKey` / `registerIdentity` / `deposit`
-    / `depositWithFee`), the positive `bridgePolicy_authorizes_all_bridge_actions`
+    / `depositWithFee` / `ammSwap` / `reclaimAmmReserves`), the
+    positive `bridgePolicy_authorizes_all_bridge_actions`
     (no-regression), and the negative `bridgePolicy_rejects_non_bridgeable`
     (every other action is rejected).  Because the iff is proven by
-    exhaustive `cases` on `Action`, authorising a new constructor —
-    e.g. the `ammSwap` that Workstream GP.11 will add — without
-    listing it in the iff is a compile-time failure, so the
+    exhaustive `cases` on `Action`, authorising a new constructor
+    without listing it in the iff is a compile-time failure, so the
     bridge-signable set can never widen silently.
 -/
 
@@ -398,8 +398,8 @@ each branch is a finite conjunction of decidable equalities, so
     permitted to sign.
 
     **Exhaustive match (GP.7.0), no catch-all.**  Every `Action`
-    constructor has an explicit arm — the four bridge-signable
-    variants return `true`, the other eighteen return `false`.  The
+    constructor has an explicit arm — the six bridge-signable
+    variants return `true`, the other nineteen return `false`.  The
     previous formulation ended in a `_ => false` wildcard; that was
     convenient (a new bridge-signable action was a one-line addition)
     but it silently absorbed *any* newly-added `Action` constructor as
@@ -478,6 +478,14 @@ def bridgeAuthorizedAction : Action → Bool
   -- action recording the resulting `amountOut`.  Like `depositWithFee`,
   -- the bridge is the sole authority on the swap result.
   | .ammSwap _ _ _ _ _            => true
+  -- GP.11.10: `reclaimAmmReserves` (index 24) is bridge-attested —
+  -- the L1 `emergencyDisableAmm()` kill switch fires on-chain, and
+  -- the bridge actor signs the L2 sweep that re-tags the frozen
+  -- reserve balance as gas-pool funds.  It is `Action.isBridgeOnly`,
+  -- and `BridgeAdmissibleWith` conjunct 9 additionally pins the
+  -- threaded actors to the canonical reserved slots and requires the
+  -- L2 `ammDisabled` state-root mirror to be set.
+  | .reclaimAmmReserves _ _ _ _   => true
 
 /-- The bridge actor's authorisation policy.  Authorises an action
     iff:
@@ -826,7 +834,9 @@ theorem bridgeAuthorizedAction_eq_true_iff (action : Action) :
       (∃ r recipient poolActor userAmount poolAmount budgetGrant d,
         action = .depositWithFee r recipient poolActor userAmount
                                   poolAmount budgetGrant d) ∨
-      (∃ fr tr ai ao ra, action = .ammSwap fr tr ai ao ra) := by
+      (∃ fr tr ai ao ra, action = .ammSwap fr tr ai ao ra) ∨
+      (∃ r amount reserveActor poolActor,
+        action = .reclaimAmmReserves r amount reserveActor poolActor) := by
   cases action <;> simp [bridgeAuthorizedAction]
 
 /-- **No-regression / positive half (GP.7.0).**  Every action variant
@@ -849,12 +859,16 @@ theorem bridgePolicy_authorizes_all_bridge_actions :
           (.depositWithFee r recipient poolActor userAmount poolAmount
                             budgetGrant d)) ∧
     (∀ fr tr ai ao ra,
-        bridgePolicy.authorized bridgeActor (.ammSwap fr tr ai ao ra)) :=
+        bridgePolicy.authorized bridgeActor (.ammSwap fr tr ai ao ra)) ∧
+    (∀ r amount reserveActor poolActor,
+        bridgePolicy.authorized bridgeActor
+          (.reclaimAmmReserves r amount reserveActor poolActor)) :=
   ⟨bridgePolicy_authorizes_replaceKey,
    bridgePolicy_authorizes_registerIdentity,
    bridgePolicy_authorizes_deposit,
    bridgePolicy_authorizes_depositWithFee,
-   fun _ _ _ _ _ => ⟨rfl, rfl⟩⟩
+   fun _ _ _ _ _ => ⟨rfl, rfl⟩,
+   fun _ _ _ _ => ⟨rfl, rfl⟩⟩
 
 /-- **Exhaustive rejection / negative half (GP.7.0).**  If an action is
     none of the four bridge-signable shapes, then `bridgePolicy`
@@ -876,18 +890,22 @@ theorem bridgePolicy_rejects_non_bridgeable
     (h_dwf : ∀ r recipient poolActor userAmount poolAmount budgetGrant d,
                action ≠ .depositWithFee r recipient poolActor userAmount
                                         poolAmount budgetGrant d)
-    (h_amm : ∀ fr tr ai ao ra, action ≠ .ammSwap fr tr ai ao ra) :
+    (h_amm : ∀ fr tr ai ao ra, action ≠ .ammSwap fr tr ai ao ra)
+    (h_rec : ∀ r amount reserveActor poolActor,
+               action ≠ .reclaimAmmReserves r amount reserveActor poolActor) :
     ¬ bridgePolicy.authorized bridgeActor action := by
   unfold bridgePolicy
   intro ⟨_, hauth⟩
   rcases (bridgeAuthorizedAction_eq_true_iff action).mp hauth with
     ⟨a, nk, rfl⟩ | ⟨a, pk, rfl⟩ | ⟨r, rcp, amt, d, rfl⟩
     | ⟨r, rcp, pa, ua, pamt, bg, d, rfl⟩ | ⟨fr, tr, ai, ao, ra, rfl⟩
+    | ⟨r, amt, ra, pa, rfl⟩
   · exact h_rk a nk rfl
   · exact h_ri a pk rfl
   · exact h_dep r rcp amt d rfl
   · exact h_dwf r rcp pa ua pamt bg d rfl
   · exact h_amm fr tr ai ao ra rfl
+  · exact h_rec r amt ra pa rfl
 
 /-! ## Sanity smoke checks -/
 

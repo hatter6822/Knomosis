@@ -326,6 +326,23 @@ def actionEvents
                     [Event.balanceChanged toResource ammReserveActor toOld toNew]
                   else []
     evFrom ++ evTo
+  | .reclaimAmmReserves resource _amount reserveActor poolActor =>
+    -- Workstream GP (GP.11.10): post-disable reserve sweep.  The sweep
+    -- debits the reserve actor (to zero) and credits the pool actor at
+    -- the single `resource`; emit delta-filtered `balanceChanged`
+    -- events for both legs.  The semantic `ammReservesReclaimed` event
+    -- is emitted by `extractEvents` (full action payload in scope).
+    let resOld  := LegalKernel.getBalance preState  resource reserveActor
+    let resNew  := LegalKernel.getBalance postState resource reserveActor
+    let poolOld := LegalKernel.getBalance preState  resource poolActor
+    let poolNew := LegalKernel.getBalance postState resource poolActor
+    let evRes  := if resOld != resNew then
+                    [Event.balanceChanged resource reserveActor resOld resNew]
+                  else []
+    let evPool := if poolOld != poolNew then
+                    [Event.balanceChanged resource poolActor poolOld poolNew]
+                  else []
+    evRes ++ evPool
   -- Workstream-LX (LX.19): codegen-managed Lex `actionEvents`
   -- arms land between the fence markers below.  Empty in M1
   -- (the example law has no `Action` constructor, so it has no
@@ -427,6 +444,12 @@ def extractEvents
       -- accounting (k-monotonicity tracking).
       [Event.ammSwapExecuted fromResource toResource amountIn amountOut
                               ammReserveActor]
+    | .reclaimAmmReserves resource amount reserveActor poolActor =>
+      -- GP.11.10: post-disable reserve sweep semantic event.  Emitted
+      -- UNCONDITIONALLY like the other bridge-family events: indexers
+      -- consume it to close out AMM reserve views and attribute the
+      -- pool credit to the disaster-recovery flow.
+      [Event.ammReservesReclaimed resource amount reserveActor poolActor]
     | _                                     => []
   -- Workstream GP §15E (v1.0): for `topUpActionBudget`, also emit
   -- the signer's gas-balance change as a delta-filtered

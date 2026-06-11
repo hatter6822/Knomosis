@@ -40,6 +40,7 @@
 //! | 21  | `TopUpActionBudgetFor`    | `recipient, gas_resource, gas_amount, budget_increment, pool_actor` |
 //! | 22  | `ClaimBudgetRefund`       | `gas_resource, budget_units, wei_per_budget_unit, pool_actor` |
 //! | 23  | `AmmSwap`                 | `from_resource, to_resource, amount_in, amount_out, amm_reserve_actor` |
+//! | 24  | `ReclaimAmmReserves`      | `r, amount, reserve_actor, pool_actor` |
 //!
 //! ## What this crate models
 //!
@@ -433,6 +434,26 @@ pub enum Action {
         /// The AMM reserve actor whose balances are adjusted.
         amm_reserve_actor: ActorId,
     },
+    /// `reclaimAmmReserves(r, amount, reserveActor, poolActor)`.
+    /// Tag 24 (Workstream GP.11.10).  Bridge-attested EXACT SWEEP of
+    /// the disabled AMM's frozen L2 reserve balance at one resource
+    /// into the gas-pool actor (admissible only once the L1
+    /// `emergencyDisableAmm()` kill switch is mirrored on L2).
+    /// Never an L1-ingested event (the sequencer materialises it
+    /// after observing the L1 `AmmDisabled` event); included for
+    /// `Action`-mirror completeness + cross-stack CBE
+    /// byte-equivalence.
+    ReclaimAmmReserves {
+        /// The swept resource.
+        r: ResourceId,
+        /// The swept amount (the reserve actor's ENTIRE balance,
+        /// by the law's exact-sweep precondition).
+        amount: Amount,
+        /// The AMM reserve actor being drained (canonically 3).
+        reserve_actor: ActorId,
+        /// The gas-pool actor being credited (canonically 1).
+        pool_actor: ActorId,
+    },
 }
 
 impl Action {
@@ -462,6 +483,7 @@ impl Action {
             Self::TopUpActionBudgetFor { .. } => 21,
             Self::ClaimBudgetRefund { .. } => 22,
             Self::AmmSwap { .. } => 23,
+            Self::ReclaimAmmReserves { .. } => 24,
         }
     }
 }
@@ -644,6 +666,16 @@ mod tests {
             }
             .tag(),
             23
+        );
+        assert_eq!(
+            Action::ReclaimAmmReserves {
+                r: 0,
+                amount: 0,
+                reserve_actor: 3,
+                pool_actor: 1,
+            }
+            .tag(),
+            24
         );
     }
 

@@ -159,12 +159,13 @@ Encoded as the concatenation of:
 
 ## 5. The `Action` CBE Encoding
 
-The `Action` type has 19 constructors, encoded by their inductive
+The `Action` type has 25 constructors, encoded by their inductive
 index (frozen — no phase will renumber existing constructors).
 Phase 5 ships indices 0..7; Phase 6 appends 8..11; Workstream B
 appends 12; Workstream C appends 13..14; Workstream LP (actor-
 scoped policies) appends 15..16; Workstream H (fault-proof
-migration) appends 17..18.
+migration) appends 17..18; Workstream GP (unified gas pool /
+budgets / AMM) appends 19..24.
 
 ```
 Action.transfer            := 0
@@ -186,6 +187,12 @@ Action.declareLocalPolicy  := 15  -- Workstream LP (actor-scoped policies)
 Action.revokeLocalPolicy   := 16  -- Workstream LP (actor-scoped policies)
 Action.faultProofChallenge  := 17 -- Workstream H (fault-proof migration)
 Action.faultProofResolution := 18 -- Workstream H (fault-proof migration)
+Action.depositWithFee       := 19 -- Workstream GP (fee-split deposit; GP.2.1)
+Action.topUpActionBudget    := 20 -- Workstream GP (self-funded top-up; GP.2.2)
+Action.topUpActionBudgetFor := 21 -- Workstream GP (delegated top-up; GP.3.4)
+Action.claimBudgetRefund    := 22 -- Workstream GP (budget refund; GP.9.1)
+Action.ammSwap              := 23 -- Workstream GP (constant-product swap; GP.11.4)
+Action.reclaimAmmReserves   := 24 -- Workstream GP (post-disable sweep; GP.11.10)
 ```
 
 Each Action is encoded as `<constructor uint> :: <fields>`.  For
@@ -244,6 +251,31 @@ Action.faultProofChallenge bindingHash sIdx eIdx challengerCommit  →
 Action.faultProofResolution bindingHash gameId winner revertFromIdx  →
   CBE-uint(18) ++ CBE-bstr(bindingHash) ++ CBE-uint(gameId) ++
   CBE-uint(winner) ++ CBE-uint(revertFromIdx)
+
+Action.depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId  →
+  CBE-uint(19) ++ CBE-uint(r) ++ CBE-uint(recipient) ++
+  CBE-uint(poolActor) ++ CBE-uint(userAmount) ++
+  CBE-uint(poolAmount) ++ CBE-uint(budgetGrant) ++ CBE-uint(depositId)
+
+Action.topUpActionBudget gasResource gasAmount budgetIncrement poolActor  →
+  CBE-uint(20) ++ CBE-uint(gasResource) ++ CBE-uint(gasAmount) ++
+  CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
+
+Action.topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor  →
+  CBE-uint(21) ++ CBE-uint(recipient) ++ CBE-uint(gasResource) ++
+  CBE-uint(gasAmount) ++ CBE-uint(budgetIncrement) ++ CBE-uint(poolActor)
+
+Action.claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor  →
+  CBE-uint(22) ++ CBE-uint(gasResource) ++ CBE-uint(budgetUnits) ++
+  CBE-uint(weiPerBudgetUnit) ++ CBE-uint(poolActor)
+
+Action.ammSwap fromResource toResource amountIn amountOut ammReserveActor  →
+  CBE-uint(23) ++ CBE-uint(fromResource) ++ CBE-uint(toResource) ++
+  CBE-uint(amountIn) ++ CBE-uint(amountOut) ++ CBE-uint(ammReserveActor)
+
+Action.reclaimAmmReserves r amount reserveActor poolActor  →
+  CBE-uint(24) ++ CBE-uint(r) ++ CBE-uint(amount) ++
+  CBE-uint(reserveActor) ++ CBE-uint(poolActor)
 ```
 
 The `Action.withdraw` `recipientL1` field is encoded as a
@@ -320,7 +352,7 @@ The full per-constructor table for the dispute types is in
 
 The §8.9.2 `Event` inductive grows from 5 (Phase 5) to 16
 constructors at frozen indices 0..15 (and is further extended to
-20 by Workstream GP — indices 16..19, documented in the
+23 by Workstream GP — indices 16..22, documented in the
 "Workstream-GP `Event` Inductive Extension" subsection below):
 
 ```
@@ -355,8 +387,8 @@ unrecognised by Phase-5-only consumers.
 
 ### 5.3 Workstream-GP `Event` Inductive Extension
 
-The unified-gas-pool workstream (§15E) appends five more `Event`
-constructors at frozen indices 16..20:
+The unified-gas-pool workstream (§15E) appends seven more `Event`
+constructors at frozen indices 16..22:
 
 ```
 Event.depositWithFeeCredited     := 16 -- GP §15E v1.0 (fee-split deposit)
@@ -364,6 +396,8 @@ Event.actionBudgetTopUp          := 17 -- GP §15E v1.0 (self-funded top-up)
 Event.gasPoolClaim               := 18 -- GP §15E v1.0 (pool drain; GP.7)
 Event.delegatedActionBudgetTopUp := 19 -- GP.3.4 (delegated top-up)
 Event.budgetConsumed             := 20 -- GP.6.4 (per-action budget debit)
+Event.ammSwapExecuted            := 21 -- GP.11.4 (constant-product swap)
+Event.ammReservesReclaimed       := 22 -- GP.11.10 (post-disable sweep)
 ```
 
 Field layouts (mirrored from `LegalKernel/Events/Types.lean`, each
@@ -376,6 +410,8 @@ field a CBE uint head):
 | 18  | `gasPoolClaim`               | `resource, sequencer, amount`                                                |
 | 19  | `delegatedActionBudgetTopUp` | `recipient, signer, gasResource, gasAmount, budgetIncrement, poolActor`      |
 | 20  | `budgetConsumed`             | `actor, amount`                                                              |
+| 21  | `ammSwapExecuted`            | `fromResource, toResource, amountIn, amountOut, ammReserveActor`             |
+| 22  | `ammReservesReclaimed`       | `resource, amount, reserveActor, poolActor`                                  |
 
 `depositWithFeeCredited` (16) is emitted IN ADDITION to the
 kernel-level `balanceChanged` (0) on a fee-split deposit, so an
@@ -396,11 +432,26 @@ much).  Indexers consume tag 20 to maintain a per-epoch "budget
 consumed" counter and compute "N actions remaining this epoch"
 (see §11A).
 
+`ammSwapExecuted` (21, GP.11.4) is emitted IN ADDITION to the two
+kernel-level `balanceChanged` events on every admitted
+`Action.ammSwap`, carrying the swap's intent (direction + both leg
+amounts + the reserve actor) so indexers can maintain AMM-volume
+views without re-deriving the action.  `ammReservesReclaimed`
+(22, GP.11.10) is emitted on every admitted
+`Action.reclaimAmmReserves` — the post-kill-switch sweep of the
+frozen L2 AMM reserve into the gas pool.  Under the law's
+exact-sweep precondition (`amount` = the reserve actor's ENTIRE
+balance at `resource`), the event's `amount` is definitionally the
+swept reserve, so an indexer closes out its AMM reserve view for
+that leg by zeroing it; replays are structurally impossible (a
+second sweep of an already-zero reserve fails the `amount > 0`
+precondition).
+
 These tags carry no change to the §11 EVENT-frame layout — they
 emit at the existing 9-byte CBE tag head (§11.1) and stream
 additively.  The Rust-side streamer's tag registry
 (`runtime/knomosis-event-subscribe/src/event_type.rs`) mirrors all
-five.
+seven.
 
 ### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
 
@@ -1330,9 +1381,10 @@ head `knomosis-indexer::decoder` reads).  The set of tags is
 **append-only** (`LegalKernel/Events/Types.lean::Event.tag`): a new
 constructor — e.g. the Workstream-GP gas-pool family at tags 16/17/18
 (`depositWithFeeCredited`, `actionBudgetTopUp`, `gasPoolClaim`), the
-GP.3.4 `delegatedActionBudgetTopUp` at 19, and the GP.6.4
-`budgetConsumed` at 20 — emits at the SAME 9-byte head with no new
-fields in the *frame*.  The frame layout is
+GP.3.4 `delegatedActionBudgetTopUp` at 19, the GP.6.4
+`budgetConsumed` at 20, the GP.11.4 `ammSwapExecuted` at 21, and the
+GP.11.10 `ammReservesReclaimed` at 22 — emits at the SAME 9-byte
+head with no new fields in the *frame*.  The frame layout is
 therefore unchanged, and no `PROTOCOL_VERSION` bump is required.  The
 streamer (`knomosis-event-subscribe`) forwards every event payload
 verbatim, recognised or not, so a subscriber built against an older
@@ -1340,8 +1392,8 @@ tag set keeps working against a newer server (forward
 compatibility).  The Rust-side tag catalogue lives in
 `runtime/knomosis-event-subscribe/src/event_type.rs`
 (`EventType` / `peek_event_tag` / `EventClass::classify`), which
-mirrors the frozen `Event.tag` indices `0..=20` (the
-GP.6.4 `budgetConsumed` at tag 20 included).
+mirrors the frozen `Event.tag` indices `0..=22` (the
+GP.11.10 `ammReservesReclaimed` at tag 22 included).
 
 ### 11.2 Frame kind table
 
@@ -1557,8 +1609,8 @@ graceful drain.
   * Engineering plan:
     `docs/planning/rust_host_runtime_plan.md` §RH-D; gas-pool
     event variants: `docs/planning/unified_gas_pool_plan.md` §GP.6.3.
-  * Event constructor table (frozen indices 0..20, including the
-    Workstream-GP gas-pool family 16..20):
+  * Event constructor table (frozen indices 0..22, including the
+    Workstream-GP gas-pool family 16..22):
     `LegalKernel/Events/Types.lean` + §5.3.
   * Event-extraction reference function:
     `LegalKernel/Events/Extract.lean::extractEvents`.
@@ -1641,13 +1693,14 @@ The layout is byte-for-byte the format `knomosis-indexer::decoder`
 decodes — notably tag 11 (`localPolicyDeclared`) encodes its `policy`
 as a CBE byte string (opaque bytes wrapping the structured policy),
 matching the indexer's `read_byte_string`.  The Lean↔indexer
-byte-equivalence is mechanically pinned for all 21 tags
-(0..=20) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
+byte-equivalence is mechanically pinned for all 23 tags
+(0..=22) by `knomosis-indexer/tests/cross_stack_lean_event.rs`
 (a Lean→`decode_event`→`encode_event` round-trip against the
 real `event_subscribe_cbe.json` bytes).  GP.6.4 widened the
 indexer's `Event` mirror to cover the Workstream-GP gas-pool
-family (tags 16..=19); previously those tags decoded to a
-typed `UnknownTag`.
+family (tags 16..=19); GP.11.4 and GP.11.10 widened it again
+for `ammSwapExecuted` (21) and `ammReservesReclaimed` (22).
+Previously unknown tags decode to a typed `UnknownTag`.
 
 ## 11A. Indexer Storage Layout (Workstream RH-E)
 
@@ -1790,7 +1843,7 @@ budget balance — see the `remaining_this_epoch` docstring in
 
 ### 11A.5 Event dispatch table
 
-For each `Event` (frozen tags 0..20 per §5.3), the indexer
+For each `Event` (frozen tags 0..22 per §5.3), the indexer
 applies the following balance-view and budget-table operations,
 ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
 
@@ -1813,6 +1866,8 @@ ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
 | 18  | `gasPoolClaim`                 | no-op                                           | if `--gas-pool-actor` set AND `r ∈ {0,1}`: `[gasPoolActor]` −= `amount` (halt on underflow); else no-op |
 | 19  | `delegatedActionBudgetTopUp`   | both `[recipient]` += `budgetIncrement` (NOT signer) | if `gr ∈ {0,1}`: `[poolActor]` += `gasAmount` |
 | 20  | `budgetConsumed`               | `…_current_epoch_consumed[actor]` += `amount`   | no-op                                          |
+| 21  | `ammSwapExecuted`              | no-op (typed decode only — the paired `balanceChanged` events are authoritative) | no-op |
+| 22  | `ammReservesReclaimed`         | no-op (typed decode only — the paired `balanceChanged` events are authoritative) | no-op |
 | other tags                         | no-op                                       | no-op                                          |
 
 The balance dispatch is **idempotent under `BalanceChanged`
@@ -2387,7 +2442,7 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStepVM`:
 
-  * `executeStep(bytes32 preStateCommit, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs) pure returns (bytes32 postStateCommit)` — `actionKind` is the frozen `Action` dispatcher index (`0..21`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`.
+  * `executeStep(bytes32 preStateCommit, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs) pure returns (bytes32 postStateCommit)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`.
 
 `KnomosisDisputeVerifierV2`:
 
@@ -2453,6 +2508,11 @@ Constructor indices are pinned by the AR.5 regression tests
 `naming_audit` + `lex_lint` gates enforce that no Lean rename
 silently re-grouping these indices.
 
+Workstream GP appends `Action` indices 19..24 (`depositWithFee`,
+`topUpActionBudget`, `topUpActionBudgetFor`, `claimBudgetRefund`,
+`ammSwap`, `reclaimAmmReserves`); their field layouts live in §5 /
+§5.1 and the L1-side `actionFieldsForL1` byte layouts in §15.3.
+
 ### 16.2 Event constructor encodings (Workstream E indices)
 
 | Index | Constructor             | Workstream | Field layout |
@@ -2466,6 +2526,10 @@ event extractor); the L1 ingestor and the indexer
 knomosis-event-subscribe protocol (§11).  Event indices are pinned
 by AR.6 regression tests and the `Event.tag` projection
 (`LegalKernel/Events/Types.lean`).
+
+Workstream GP appends `Event` indices 16..22 (through
+`ammSwapExecuted` at 21 and `ammReservesReclaimed` at 22); their
+field layouts live in the §5.3 Workstream-GP subsection.
 
 ### 16.3 BridgeState CBE encoding
 

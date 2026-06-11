@@ -3,9 +3,9 @@ pragma solidity ^0.8.20;
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
-import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
 import {MockBold} from "test/utils/MockBold.sol";
 import {AmmTestBase} from "test/utils/AmmTestBase.sol";
+import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 
 /// @title AmmKillSwitchTest
 /// @notice Workstream GP.11.3 / GP.11.10 — the two emergency brakes on
@@ -24,7 +24,7 @@ import {AmmTestBase} from "test/utils/AmmTestBase.sol";
 ///         constructor `AmmRoleIsBridge` guard.  The 3-of-N multisig
 ///         hardening of the role lives in
 ///         `KnomosisAmmDisasterRecoveryMultisig.t.sol`.
-contract AmmKillSwitchTest is AmmTestBase {
+contract AmmKillSwitchTest is AmmTestBase, WithdrawalFlowHarness {
     /// @dev Local copy of the contract event for `vm.expectEmit`.
     event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
 
@@ -334,8 +334,8 @@ contract AmmKillSwitchTest is AmmTestBase {
     }
 
     // ------------------------------------------------------------------
-    // Withdrawal-flow helpers (CBE + EIP-712; mirror the canonical
-    // encodings used by `BoldCircuitBreaker.t.sol`'s end-to-end tests)
+    // Withdrawal-flow staging (the CBE + EIP-712 encoders live in the
+    // shared `WithdrawalFlowHarness`)
     // ------------------------------------------------------------------
 
     function _finaliseAndRedeem(
@@ -349,79 +349,10 @@ contract AmmKillSwitchTest is AmmTestBase {
         bytes memory leaf = _encodeWithdrawalLeaf(resourceId, recipient, wAmount, leafIdx);
         bytes[] memory siblings = SmtVerifier.emptyProofSiblings();
         bytes32 root = SmtVerifier.recomputeRoot(uint256(leafIdx), leaf, siblings);
-        bridge.submitStateRoot(root, logIdx, _signStateRoot(bridge, root, logIdx));
+        bridge.submitStateRoot(root, logIdx, _signStateRootAs(ATTESTOR_PK, bridge, root, logIdx));
         vm.roll(block.number + 100); // past the 100-block dispute window
         bytes memory proofBlob = _encodeWithdrawalProof(leaf, leafIdx, siblings);
         bridge.withdrawWithProof(logIdx, proofBlob, leaf);
-    }
-
-    function _signStateRoot(KnomosisBridge bridge, bytes32 root, uint64 idx)
-        internal
-        view
-        returns (bytes memory)
-    {
-        bytes32 ds = KnomosisEip712.domainSeparator(
-            "KnomosisBridge", "1", block.chainid, uint256(0), address(bridge)
-        );
-        bytes32 sh = keccak256(
-            abi.encode(
-                keccak256("StateRoot(bytes32 root,uint64 logIndexHigh,bytes32 deploymentId)"),
-                root,
-                uint256(idx),
-                bridge.deploymentId()
-            )
-        );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ATTESTOR_PK, KnomosisEip712.digest(ds, sh));
-        return abi.encodePacked(r, s, v);
-    }
-
-    function _leBytes8(uint64 v) internal pure returns (bytes memory out) {
-        out = new bytes(8);
-        for (uint256 i = 0; i < 8; i++) {
-            // forge-lint: disable-next-line(unsafe-typecast)
-            out[i] = bytes1(uint8(v >> (8 * i)));
-        }
-    }
-
-    function _cbeUint(uint64 v) internal pure returns (bytes memory) {
-        return bytes.concat(hex"00", _leBytes8(v));
-    }
-
-    function _cbeBytes(bytes memory payload) internal pure returns (bytes memory) {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return bytes.concat(hex"02", _leBytes8(uint64(payload.length)), payload);
-    }
-
-    function _cbeArrayHead(uint64 count) internal pure returns (bytes memory) {
-        return bytes.concat(hex"04", _leBytes8(count));
-    }
-
-    function _encodeWithdrawalLeaf(
-        uint64 resourceId,
-        address recipient,
-        uint64 amount,
-        uint64 l2LogIndex
-    ) internal pure returns (bytes memory) {
-        return bytes.concat(
-            _cbeUint(resourceId),
-            _cbeBytes(abi.encodePacked(recipient)),
-            _cbeUint(amount),
-            _cbeUint(l2LogIndex)
-        );
-    }
-
-    function _encodeWithdrawalProof(bytes memory leaf, uint64 idx, bytes[] memory siblings)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        bytes memory out =
-            bytes.concat(_cbeBytes(leaf), _cbeUint(idx), _cbeArrayHead(uint64(siblings.length)));
-        for (uint256 i = 0; i < siblings.length; i++) {
-            out = bytes.concat(out, _cbeBytes(siblings[i]));
-        }
-        return out;
     }
 }
 
