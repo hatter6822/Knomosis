@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d8c038b305aaf76d98d99d0762039dfc6e06410f1792e03e69cb65efb1ebca1c"
+    "source_digest": "f7a7aec848f27e7fa636bb9223f8cc46f98a93dbf0b566f672198ac26a99bd0f"
   },
   "summary": {
-    "module_count": 301,
-    "declaration_count": 5047
+    "module_count": 303,
+    "declaration_count": 5063
   },
   "modules": [
     {
@@ -566,6 +566,7 @@
             "poolActor",
             "proportionalDilute",
             "receiver",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -591,6 +592,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -652,6 +654,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -783,6 +786,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -1754,6 +1758,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -2728,6 +2733,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "step_impl",
             "topUpActionBudget",
@@ -2900,6 +2906,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "refundConsumeExtra",
             "refundConsumeExtra_eq_zero_of_ne_refund",
             "reward",
@@ -2965,6 +2972,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3150,6 +3158,7 @@
             "other",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "refundConsumeExtra",
             "refundConsumeExtra_eq_zero_of_ne_refund",
             "reward",
@@ -3636,6 +3645,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3804,6 +3814,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -3836,6 +3847,7 @@
             "mint",
             "policy",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -5462,7 +5474,8 @@
             "Action",
             "ammSwap",
             "deposit",
-            "depositWithFee"
+            "depositWithFee",
+            "reclaimAmmReserves"
           ]
         },
         {
@@ -5505,6 +5518,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -5547,7 +5561,8 @@
             "depositWithFee",
             "es",
             "gasPoolActor",
-            "poolActor"
+            "poolActor",
+            "reclaimAmmReserves"
           ]
         },
         {
@@ -5652,7 +5667,8 @@
             "ammReserveActor",
             "es",
             "gasPoolActor",
-            "poolActor"
+            "poolActor",
+            "reclaimAmmReserves"
           ]
         },
         {
@@ -5670,7 +5686,8 @@
             "Signature",
             "SignedAction",
             "es",
-            "poolActor"
+            "poolActor",
+            "reclaimAmmReserves"
           ]
         },
         {
@@ -7246,6 +7263,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -7563,7 +7581,8 @@
             "bridgeAuthorizedAction",
             "deposit",
             "depositWithFee",
-            "poolActor"
+            "poolActor",
+            "reclaimAmmReserves"
           ]
         },
         {
@@ -7579,7 +7598,8 @@
             "bridgePolicy_authorizes_replaceKey",
             "deposit",
             "depositWithFee",
-            "poolActor"
+            "poolActor",
+            "reclaimAmmReserves"
           ]
         },
         {
@@ -7602,6 +7622,7 @@
             "depositWithFee",
             "gasPoolActor",
             "poolActor",
+            "reclaimAmmReserves",
             "sequencerActor",
             "transfer"
           ]
@@ -9877,6 +9898,7 @@
             "burn",
             "claimBudgetRefund",
             "gasPoolActor",
+            "reclaimAmmReserves",
             "sender",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -9929,6 +9951,7 @@
             "poolActor",
             "proportionalDilute",
             "receiver",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "step_impl_nondecreasing_of_apply_nondecreasing",
@@ -11858,6 +11881,7 @@
             "mint",
             "policy",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "step_impl",
             "topUpActionBudget",
@@ -12113,6 +12137,7 @@
             "kernelOnlyApply",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -14345,6 +14370,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -14384,6 +14410,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -14437,6 +14464,7 @@
             "poolActor",
             "proportionalDilute",
             "receiver",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -14509,6 +14537,7 @@
             "proportionalDilute",
             "readNatField_roundtrip",
             "readUInt64Field_roundtrip",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -14561,6 +14590,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -17982,6 +18012,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -18008,6 +18039,7 @@
             "expectsNonce",
             "gasResource",
             "poolActor",
+            "reclaimAmmReserves",
             "sender",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -20808,6 +20840,7 @@
             "es",
             "kernelOnlyApply",
             "poolActor",
+            "reclaimAmmReserves",
             "recomputeCommitment",
             "recomputeCommitment_eq_signedActionToLogEntry",
             "signedActionToLogEntry"
@@ -21261,6 +21294,7 @@
             "es",
             "kernelOnlyApply",
             "poolActor",
+            "reclaimAmmReserves",
             "signedActionToLogEntry"
           ]
         }
@@ -22660,6 +22694,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -22696,6 +22731,7 @@
             "poolActor",
             "proportionalDilute",
             "receiver",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -23365,6 +23401,7 @@
             "freezeResource",
             "mint",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -23391,6 +23428,7 @@
             "poolActor",
             "proportionalDilute",
             "receiver",
+            "reclaimAmmReserves",
             "reward",
             "sender",
             "topUpActionBudget",
@@ -26812,6 +26850,208 @@
       ]
     },
     {
+      "module": "LegalKernel.Laws.ReclaimAmmReserves",
+      "path": "LegalKernel/Laws/ReclaimAmmReserves.lean",
+      "declaration_count": 14,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Laws",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "reclaimAmmReserves",
+          "line": 91,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "Transition",
+            "getBalance",
+            "poolActor",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaimAmmReserves_other_resource_untouched",
+          "line": 111,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "poolActor",
+            "reclaimAmmReserves",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaimAmmReserves_does_not_touch_other_resources",
+          "line": 129,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "poolActor",
+            "reclaimAmmReserves",
+            "reclaimAmmReserves_other_resource_untouched",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaimAmmReserves_zeroes_reserve",
+          "line": 143,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "poolActor",
+            "reclaimAmmReserves",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaimAmmReserves_credits_pool",
+          "line": 162,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "poolActor",
+            "reclaimAmmReserves",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaimAmmReserves_other_actor_untouched",
+          "line": 180,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "other",
+            "poolActor",
+            "reclaimAmmReserves",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaim_conservation_arithmetic",
+          "line": 209,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaimAmmReserves_conserves_at",
+          "line": 219,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "getBalance",
+            "poolActor",
+            "reclaimAmmReserves",
+            "reclaim_conservation_arithmetic",
+            "setBalance",
+            "step_impl",
+            "totalSupply_setBalance"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "reclaimAmmReserves_isConservative",
+          "line": 247,
+          "called": [
+            "ActorId",
+            "Amount",
+            "IsConservative",
+            "ResourceId",
+            "TotalSupply",
+            "poolActor",
+            "reclaimAmmReserves",
+            "reclaimAmmReserves_conserves_at",
+            "reclaimAmmReserves_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "reclaimAmmReserves_localTo",
+          "line": 264,
+          "called": [
+            "ActorId",
+            "Amount",
+            "LocalTo",
+            "ResourceId",
+            "poolActor",
+            "reclaimAmmReserves",
+            "reclaimAmmReserves_does_not_touch_other_resources"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "reclaimAmmReserves_freezePreserving",
+          "line": 278,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "ResourceId",
+            "poolActor",
+            "reclaimAmmReserves",
+            "reclaimAmmReserves_other_resource_untouched"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "reclaimAmmReserves_freezePreserving_empty",
+          "line": 291,
+          "called": [
+            "ActorId",
+            "Amount",
+            "FreezePreserving",
+            "Laws",
+            "LegalKernel",
+            "ResourceId",
+            "getBalance",
+            "poolActor",
+            "reclaimAmmReserves",
+            "reclaimAmmReserves_freezePreserving",
+            "setBalance"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Laws.RegisterIdentity",
       "path": "LegalKernel/Laws/RegisterIdentity.lean",
       "declaration_count": 2,
@@ -29372,7 +29612,8 @@
             "ammReserveActor",
             "es",
             "gasPoolActor",
-            "poolActor"
+            "poolActor",
+            "reclaimAmmReserves"
           ]
         },
         {
@@ -29742,6 +29983,7 @@
             "mint",
             "poolActor",
             "proportionalDilute",
+            "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
             "topUpActionBudgetFor",
@@ -33350,6 +33592,7 @@
             "poolActor",
             "proportionalDilute",
             "receiver",
+            "reclaimAmmReserves",
             "reward",
             "samplePk",
             "sender",
@@ -38379,6 +38622,7 @@
             "encodeSignedAction",
             "es",
             "poolActor",
+            "reclaimAmmReserves",
             "recomputeCommitment",
             "stateWithBalances",
             "stepCommitReclaimAmmReserves"
@@ -48158,6 +48402,7 @@
             "proportionalDilute",
             "readCellValue",
             "readUint64BE",
+            "reclaimAmmReserves",
             "reward",
             "stepCommitAmmSwap",
             "stepCommitClaimBudgetRefund",
@@ -49810,6 +50055,72 @@
             "step_impl",
             "sumOthers",
             "totalSupply_after_proportionalDilute"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Laws.ReclaimAmmReserves",
+      "path": "LegalKernel/Test/Laws/ReclaimAmmReserves.lean",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Laws.ReclaimAmmReservesTests",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 41,
+          "called": [
+            "Action",
+            "Action.compileTransition",
+            "Action.isBridgeOnly",
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "AuthorityPolicy.unrestricted",
+            "BridgeAdmissibleWith",
+            "BridgeAdmissibleWith.reclaimGate",
+            "BridgeAdmittedTrace",
+            "BridgeState",
+            "Event",
+            "Event.tag",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "IsConservative",
+            "IsMonotonic",
+            "LegalKernel.Test.Laws.ReclaimAmmReservesTests",
+            "LocalTo",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "TestCase",
+            "TotalSupply",
+            "ammDisabled_constant_over_admitted_trace",
+            "ammReserveDeniedTags",
+            "amm_mirrors_constant_over_admitted_trace",
+            "applyActionToBridgeState",
+            "applyActionToBridgeState_preserves_amm_mirrors",
+            "assert",
+            "assertEq",
+            "bridgeActor",
+            "bridgeAuthorizedAction",
+            "emptyState",
+            "es",
+            "gasPoolDeniedTags",
+            "getBalance",
+            "reclaimAmmReserves",
+            "reclaimAmmReserves_conserves_at",
+            "reclaimAmmReserves_credits_pool",
+            "reclaimAmmReserves_other_actor_untouched",
+            "reclaimAmmReserves_zeroes_reserve",
+            "reclaim_inadmissible_while_amm_enabled",
+            "setBalance",
+            "step_impl"
           ]
         }
       ]
@@ -55392,7 +55703,7 @@
         {
           "kind": "def",
           "name": "legalkernel_transferConservativeProperty",
-          "line": 116,
+          "line": 117,
           "called": [
             "ActorId",
             "ResourceId",
@@ -55412,7 +55723,7 @@
         {
           "kind": "def",
           "name": "legalkernel_transferMonotonicProperty",
-          "line": 140,
+          "line": 141,
           "called": [
             "ActorId",
             "ResourceId",
@@ -55432,7 +55743,7 @@
         {
           "kind": "def",
           "name": "legalkernel_transferLocalProperty",
-          "line": 164,
+          "line": 165,
           "called": [
             "ActorId",
             "ResourceId",
@@ -55451,7 +55762,7 @@
         {
           "kind": "def",
           "name": "legalkernel_mintMonotonicProperty",
-          "line": 190,
+          "line": 191,
           "called": [
             "ActorId",
             "Amount",
@@ -55469,7 +55780,7 @@
         {
           "kind": "def",
           "name": "legalkernel_mintLocalProperty",
-          "line": 212,
+          "line": 213,
           "called": [
             "ActorId",
             "Amount",
@@ -55487,7 +55798,7 @@
         {
           "kind": "def",
           "name": "legalkernel_freezeResourceConservativeProperty",
-          "line": 235,
+          "line": 236,
           "called": [
             "ResourceId",
             "State",
@@ -55503,7 +55814,7 @@
         {
           "kind": "def",
           "name": "legalkernel_freezeResourceMonotonicProperty",
-          "line": 253,
+          "line": 254,
           "called": [
             "ResourceId",
             "State",
@@ -55519,7 +55830,7 @@
         {
           "kind": "def",
           "name": "legalkernel_freezeResourceFreezePreservingProperty",
-          "line": 271,
+          "line": 272,
           "called": [
             "ResourceId",
             "State",
@@ -55535,7 +55846,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 292,
+          "line": 293,
           "called": [
             "Lex.Test.AutoGenProperties",
             "TestCase",

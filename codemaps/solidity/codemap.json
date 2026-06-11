@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "de177872a635f2f26595e751ba5438b86c33789c63073ba0c046751bddb2e4e5"
+    "source_digest": "6babb01619680ab7cc1a44d1e3547063d6faa77c42c5133011cba29a8c4df19e"
   },
   "summary": {
-    "module_count": 80,
-    "declaration_count": 1828
+    "module_count": 83,
+    "declaration_count": 1856
   },
   "modules": [
     {
@@ -4877,7 +4877,8 @@
           "name": "AmmKillSwitchTest",
           "line": 26,
           "called": [
-            "AmmTestBase"
+            "AmmTestBase",
+            "WithdrawalFlowHarness"
           ]
         },
         {
@@ -5059,6 +5060,7 @@
             "KnomosisBridge",
             "_encodeWithdrawalLeaf",
             "_encodeWithdrawalProof",
+            "_signStateRootAs",
             "bridge"
           ]
         },
@@ -6728,7 +6730,8 @@
           "name": "BenchmarkGasV1_3WithdrawalsTest",
           "line": 994,
           "called": [
-            "BenchmarkGasV1_3Base"
+            "BenchmarkGasV1_3Base",
+            "WithdrawalFlowHarness"
           ]
         },
         {
@@ -6788,6 +6791,7 @@
           "name": "_signStateRoot",
           "line": 1136,
           "called": [
+            "_signStateRootAs",
             "bridge"
           ]
         },
@@ -6846,7 +6850,9 @@
           "kind": "contract",
           "name": "BoldCircuitBreakerTest",
           "line": 35,
-          "called": []
+          "called": [
+            "WithdrawalFlowHarness"
+          ]
         },
         {
           "kind": "function",
@@ -7856,6 +7862,7 @@
           "line": 1255,
           "called": [
             "KnomosisBridge",
+            "_signStateRootAs",
             "bridge"
           ]
         },
@@ -11422,7 +11429,9 @@
           "kind": "contract",
           "name": "KnomosisAmmDisasterRecoveryMultisigTest",
           "line": 21,
-          "called": []
+          "called": [
+            "DisasterRecoveryTestBase"
+          ]
         },
         {
           "kind": "event",
@@ -11459,7 +11468,8 @@
           "name": "test_constructor_thresholdBelowMinimum_reverts",
           "line": 38,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11467,7 +11477,8 @@
           "name": "test_constructor_thresholdExceedsSignerCount_reverts",
           "line": 50,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11483,7 +11494,8 @@
           "name": "test_constructor_zeroBridge_reverts",
           "line": 73,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11491,7 +11503,8 @@
           "name": "test_constructor_zeroSigner_reverts",
           "line": 79,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11499,7 +11512,8 @@
           "name": "test_constructor_duplicateSigner_reverts",
           "line": 88,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11507,7 +11521,8 @@
           "name": "test_constructor_signerIsBridge_reverts",
           "line": 101,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11515,7 +11530,8 @@
           "name": "test_constructor_signerIsSelf_reverts",
           "line": 110,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11531,7 +11547,8 @@
           "name": "test_constructor_storesConfiguration",
           "line": 133,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_signerSet"
           ]
         },
         {
@@ -11539,7 +11556,8 @@
           "name": "test_nonSigner_reverts",
           "line": 155,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_deployWired"
           ]
         },
         {
@@ -11547,7 +11565,8 @@
           "name": "test_doubleConfirm_reverts",
           "line": 167,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_deployWired"
           ]
         },
         {
@@ -11557,6 +11576,7 @@
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "_farDeadline",
             "_seedBothLegs",
             "bridge"
@@ -11572,6 +11592,7 @@
             "DisableConfirmed",
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "_farDeadline",
             "_seedBothLegs",
             "bridge"
@@ -11582,7 +11603,8 @@
           "name": "test_afterExecution_confirmAndRevoke_revert",
           "line": 232,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_deployWired"
           ]
         },
         {
@@ -11593,6 +11615,7 @@
             "DisableConfirmationRevoked",
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "bridge"
           ]
         },
@@ -11601,7 +11624,8 @@
           "name": "test_revoke_withoutConfirmation_reverts",
           "line": 281,
           "called": [
-            "KnomosisAmmDisasterRecoveryMultisig"
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "_deployWired"
           ]
         },
         {
@@ -11612,6 +11636,7 @@
             "ConfirmationRoundExpired",
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "bridge"
           ]
         },
@@ -11622,6 +11647,7 @@
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "bridge"
           ]
         },
@@ -11631,6 +11657,7 @@
           "line": 353,
           "called": [
             "KnomosisBridge",
+            "_deployWired",
             "bridge"
           ]
         },
@@ -11641,6 +11668,7 @@
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "bridge"
           ]
         },
@@ -11651,6 +11679,7 @@
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployMiswired",
             "bridge"
           ]
         },
@@ -11661,6 +11690,7 @@
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "bridge"
           ]
         },
@@ -11672,8 +11702,133 @@
             "ConfirmationRoundExpired",
             "KnomosisAmmDisasterRecoveryMultisig",
             "KnomosisBridge",
+            "_deployWired",
             "bridge"
           ]
+        }
+      ]
+    },
+    {
+      "module": "KnomosisAmmDisasterRecoveryMultisigInvariants.t",
+      "path": "solidity/test/KnomosisAmmDisasterRecoveryMultisigInvariants.t.sol",
+      "declaration_count": 15,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "DisasterRecoveryHandler",
+          "line": 16,
+          "called": [
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "KnomosisBridge",
+            "bridge",
+            "signers"
+          ]
+        },
+        {
+          "kind": "constructor",
+          "name": "constructor",
+          "line": 32,
+          "called": [
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "KnomosisBridge",
+            "bridge",
+            "signers"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "confirm",
+          "line": 45,
+          "called": [
+            "signers"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "revoke",
+          "line": 71,
+          "called": [
+            "signers"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "warp",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "liveLedgerCount",
+          "line": 87,
+          "called": [
+            "signers"
+          ]
+        },
+        {
+          "kind": "contract",
+          "name": "AmmDisasterRecoveryMultisigInvariantsTest",
+          "line": 102,
+          "called": [
+            "DisasterRecoveryHandler",
+            "DisasterRecoveryTestBase",
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 107,
+          "called": [
+            "DisasterRecoveryHandler",
+            "_deployWired",
+            "_signerSet",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "invariant_countMatchesLiveLedger",
+          "line": 117,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_bridgeMatchesExecuted",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_subThresholdNeverExecutes",
+          "line": 138,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_countNeverExceedsThreshold",
+          "line": 151,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_executionIsOneWay",
+          "line": 161,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_atMostOneExecution",
+          "line": 171,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "invariant_sequencesAreNonVacuous",
+          "line": 177,
+          "called": []
         }
       ]
     },
@@ -15585,6 +15740,53 @@
       ]
     },
     {
+      "module": "DisasterRecoveryTestBase",
+      "path": "solidity/test/utils/DisasterRecoveryTestBase.sol",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "abstract_contract",
+          "name": "DisasterRecoveryTestBase",
+          "line": 15,
+          "called": [
+            "AmmTestBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_signerSet",
+          "line": 25,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_deployWired",
+          "line": 39,
+          "called": [
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "KnomosisBridge",
+            "_boldEnabledArgs",
+            "_etchBold",
+            "_signerSet",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deployMiswired",
+          "line": 62,
+          "called": [
+            "KnomosisAmmDisasterRecoveryMultisig",
+            "KnomosisBridge",
+            "_deployBoldEnabled",
+            "_etchBold",
+            "_signerSet",
+            "bridge"
+          ]
+        }
+      ]
+    },
+    {
       "module": "FeeSplitMath",
       "path": "solidity/test/utils/FeeSplitMath.sol",
       "declaration_count": 4,
@@ -16043,6 +16245,87 @@
           "name": "shutdownTime",
           "line": 144,
           "called": []
+        }
+      ]
+    },
+    {
+      "module": "WithdrawalFlowHarness",
+      "path": "solidity/test/utils/WithdrawalFlowHarness.sol",
+      "declaration_count": 9,
+      "declarations": [
+        {
+          "kind": "abstract_contract",
+          "name": "WithdrawalFlowHarness",
+          "line": 23,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_stateRootDigest",
+          "line": 34,
+          "called": [
+            "KnomosisBridge",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_signStateRootAs",
+          "line": 56,
+          "called": [
+            "KnomosisBridge",
+            "_stateRootDigest",
+            "bridge"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_leBytes8",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cbeUint",
+          "line": 78,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cbeBytes",
+          "line": 82,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cbeArrayHead",
+          "line": 87,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_encodeWithdrawalLeaf",
+          "line": 96,
+          "called": [
+            "_cbeBytes",
+            "_cbeUint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_encodeWithdrawalProof",
+          "line": 112,
+          "called": [
+            "_cbeArrayHead",
+            "_cbeBytes",
+            "_cbeUint"
+          ]
         }
       ]
     }
