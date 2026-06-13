@@ -24,6 +24,26 @@ through the existing kernel typing rules; the trusted core
 > (Latin: *law*) for brevity.  The name is provisional; the
 > repository commits to no marketing brand at this stage.
 
+> **As-built reconciliation (read first).**  This is a *design*
+> document written before the language shipped (Workstream LX,
+> milestones M1–M3); several concrete details were renamed or
+> renumbered during implementation.  Where this document and the
+> shipped code disagree, the code wins:
+>
+> * **Macro keyword.**  The law-declaration macro is `lexlaw`
+>   (`Lex/DSL/Law.lean`), *not* `law` as the worked examples below
+>   spell it.  (The `deployment` macro keyword is as shown.)
+> * **Reserved action-index range.**  The `legalkernel.*` org prefix
+>   reserves indices **0..16** (17 kernel-built-in entries); every
+>   non-`legalkernel` law uses `action_index ≥ 17` (lint code L006).
+>   Passages below that say "0..11" / "0..14" / "≥ 15" predate the
+>   Workstream-LP and `registerIdentity` / `deposit` / `withdraw`
+>   additions.
+> * **Canonical registry.**  The live action-index registry is
+>   `Lex/IndexRegistry.txt`; a worked, end-to-end amendment is in
+>   `docs/lex_amendment_walkthrough.md`.  Consult those for the
+>   shipped surface — this document is the design rationale.
+
 ---
 
 ## Table of Contents
@@ -80,13 +100,15 @@ seven artefacts.
 **In scope:**
 
   * Single-deployment laws that extend the global `Action` inductive
-    (§4.13) at a freshly-allocated frozen index ≥ 15 (the first
-    unused index after Workstream C's `deposit` / `withdraw`).
-  * Re-expression of the existing 15 kernel-built-in laws
+    (§4.13) at a freshly-allocated frozen index ≥ 17 (the first
+    unused index after the kernel-built-in `legalkernel.*` laws,
+    which occupy 0..16).
+  * Re-expression of the existing 17 kernel-built-in laws
     (`transfer`, `mint`, `burn`, `freezeResource`, `replaceKey`,
     `reward`, `distributeOthers`, `proportionalDilute`, `dispute`,
     `disputeWithdraw`, `verdict`, `rollback`, `registerIdentity`,
-    `deposit`, `withdraw`) in Lex form, as a correctness check that
+    `deposit`, `withdraw`, `declareLocalPolicy`, `revokeLocalPolicy`)
+    in Lex form, as a correctness check that
     the language can express what the kernel already ships.
   * Deployment manifests that bind a law set, an authority
     configuration, a deployment ID, and a list of invariant claims.
@@ -930,9 +952,9 @@ deployment chooses to prove for governance reasons.
 Every `law` declaration commits to an `action_index : N`.  The
 elaborator enforces three rules:
 
-  1. **Reserved range.**  Indices 0..11 are reserved for the
-     kernel-built-in laws (the current 12 constructors of `Action`).
-     A new law with `action_index < 12` is rejected with diagnostic
+  1. **Reserved range.**  Indices 0..16 are reserved for the
+     kernel-built-in `legalkernel.*` laws (17 entries).
+     A new law with `action_index < 17` is rejected with diagnostic
      L006.
   2. **Per-deployment uniqueness.**  Within a deployment manifest's
      law set, no two laws may share an `action_index`.  Collision
@@ -1511,8 +1533,8 @@ documentation by code.
 | L002  | Missing `satisfies` clause                                   | error    | Add `satisfies := […]` listing at least the properties relevant to your law.      |
 | L003  | Precondition contains undecidable subexpression `<expr>`     | error    | Replace `<expr>` with a §6.1-grammar shape, or tag the helper `@[lex_pre]`.       |
 | L004  | Property `<P>` not synthesizable for law `<L>`               | error    | Either weaken `satisfies` or supply `proof <P> := by …` with a manual witness.    |
-| L005  | Action index `<N>` already used by law `<L>`                 | error    | Allocate a fresh index ≥ 15 and update `Lex/IndexRegistry.txt`.                  |
-| L006  | Action index `<N>` reserved (kernel-built-in range 0..14)    | error    | Allocate `<N> ≥ 15`.                                                              |
+| L005  | Action index `<N>` already used by law `<L>`                 | error    | Allocate a fresh index ≥ 17 and update `Lex/IndexRegistry.txt`.                  |
+| L006  | Action index `<N>` reserved (kernel-built-in range 0..16)    | error    | Allocate `<N> ≥ 17`.                                                              |
 | L007  | Action index renumbered from `<old>` to `<new>` for `<L>`    | error    | Restore the original index; renumbering is forbidden.                             |
 | L008  | Manifest invariant claim `<C>` not satisfiable               | error    | Either drop the claim or add the missing law's instance.                          |
 | L009  | Missing `authorized_by` clause                               | error    | Add `authorized_by <policy>` or, if appropriate, `authorized_by self_only`.       |
@@ -1655,7 +1677,7 @@ separable PR with its own CI gate.
     the old.
   * CI adds `lake exe lex_lint` (no-op until a Lex law is added).
 
-Acceptance: a stub `legalkernel.example_lex_only_law` declared in
+Acceptance: a stub `example.example_lex_only_law` declared in
 `Lex/Examples/ExampleLex.lean` elaborates cleanly, generates
 the seven artefacts, passes `lex_lint`, and `lake test` passes.
 

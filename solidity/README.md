@@ -1,7 +1,7 @@
 # Knomosis Solidity contracts
 
-L1 mirror of Knomosis's kernel: **ten immutable contracts, six shared
-libraries, five interfaces** that anchor deposits, state-root
+L1 mirror of Knomosis's kernel: **eleven immutable contracts, seven
+shared libraries, seven interfaces** that anchor deposits, state-root
 submissions, withdrawals, the dispute pipeline, sequencer staking,
 interactive fault proofs (Workstream H), SMT cell proofs (Workstream
 SC.2), L1 step-VM coherence (Workstream SVC), and the attested-handoff
@@ -39,13 +39,17 @@ solidity/
 │   │   ├── KnomosisStepVM.sol             (H)    — single-step verifier (pure)
 │   │   ├── KnomosisFaultProofMigration.sol (H)   — v1 → v2 migration
 │   │   └── KnomosisAmmDisasterRecoveryMultisig.sol (GP.11.10) — 3-of-N AMM kill-switch quorum
-│   ├── interfaces/                            — public interface files (E.1-E.5, GP.11.10)
+│   ├── interfaces/                            — 7 public interface files
+│   │                                            (E.1-E.5 + ILiquityV2TroveManager
+│   │                                            (GP.5.5) + IKnomosisAmmDisasterRecovery
+│   │                                            (GP.11.10))
 │   └── lib/
 │       ├── KnomosisEip712.sol      — EIP-712 domain + struct-hash helpers
 │       ├── CBEDecode.sol        — CBE byte decoder (mirrors Lean)
 │       ├── SmtVerifier.sol      — withdrawal-tree SMT verifier (D.1, depth 64)
 │       ├── SmtCellVerifier.sol  — state-cell SMT verifier (SC.2, depth 256)
 │       ├── CREATE3.sol          — proxy-factory deploy for cyclic refs
+│       ├── AmmMath.sol          — constant-product AMM math (GP.11.x ammSwap)
 │       └── StepVMMerkle.sol     — per-cell proof helpers (H + SC.2)
 ├── scripts/
 │   ├── audit_compile_time_caps*.sh   — GP.5.2 cap gate + self-test
@@ -62,7 +66,7 @@ solidity/
                                     MockBoldOz.sol, MockLiquityV2.sol
 ```
 
-Total: **~825 forge tests passing across 55 suites** (`forge test`;
+Total: **~867 forge tests passing across 58 suites** (`forge test`;
 fuzz and property tests additionally report per-test run counts). A
 subset is conditionally skipped when the production keccak256 binding
 is not linked (the cross-check suites probe `isKeccak256Linked` on

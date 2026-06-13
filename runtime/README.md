@@ -269,7 +269,7 @@ runtime/
 │   │   ├── lib.rs                   — umbrella + identifier constants
 │   │   ├── main.rs                  — daemon entry point + CLI dispatch
 │   │   ├── config.rs                — daemon/query CLI parsing
-│   │   ├── event.rs                 — typed Event enum (16 frozen tags)
+│   │   ├── event.rs                 — typed Event enum (23 frozen tags, 0..22)
 │   │   ├── decoder.rs               — CBE Event decoder + matching encoder
 │   │   ├── balance.rs               — per-(actor, resource) balance view
 │   │   ├── cursor.rs                — atomic seq tracker + identifier check
@@ -318,10 +318,10 @@ cd runtime/
 # downloads the pinned 1.83 stable channel via rustup.
 cargo build --workspace --all-targets
 
-# Run every member crate's tests (~1 400 tests across the 11 crates
-# at the RH-G audit-pass-4-round-6 landing).  `cargo test --workspace`
-# is the canonical query; per-crate breakdowns are recorded in
-# CLAUDE.md's "Current development status" section.
+# Run every member crate's tests (~1 960 across the 11 crates).
+# `cargo test --workspace` is the canonical query; per-crate
+# breakdowns are recorded in CLAUDE.md's "Current development
+# status" section.
 cargo test --workspace
 
 # Lint gate: every clippy warning is promoted to a hard error.

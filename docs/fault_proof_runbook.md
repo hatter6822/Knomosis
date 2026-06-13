@@ -123,11 +123,12 @@ Per-game state:
 
 ### 3.3 Off-chain observer
 
-The `runtime/knomosis-faultproof-observer` Rust crate (tracked
-separately; see §H.10.5 of the workstream plan) is the recommended
-production off-chain observer.  Until the Rust port lands, operators
-should run the Lean-side `LegalKernel.FaultProof.Observer` reference
-at audit cadence (weekly minimum) to detect:
+The `runtime/knomosis-faultproof-observer` Rust crate (Workstream
+RH-G, complete; see §7 below and §H.10.5 of the workstream plan) is
+the recommended production off-chain observer; the Lean-side
+`LegalKernel.FaultProof.Observer` reference remains available as a
+cross-check.  Run an observer continuously (and at audit cadence,
+weekly minimum, as a backstop) to detect:
 
   * State-root submissions inconsistent with the operator's
     own L2 replay.
@@ -253,29 +254,29 @@ The off-chain observer is the operational complement to the
 on-chain fault-proof game.  Per §H.10.5 of the workstream plan,
 the Rust crate `runtime/knomosis-faultproof-observer` is the
 production form; the Lean-side reference is
-`LegalKernel.FaultProof.Observer`.  As of the RH-G landing the
-Rust observer is **complete** for the core observer
-responsibilities (game state machine, honest strategy,
-persistence, L1 watcher, calldata encoding); the production
-EIP-1559 transaction encoder + `eth_sendRawTransaction` driver
-is documented as RH-G follow-up work.
+`LegalKernel.FaultProof.Observer`.  Workstream RH-G is **complete**,
+including the production EIP-1559 JSON-RPC submitter (`jsonrpc_submitter`:
+signs responses and drives `eth_sendRawTransaction`), enabled by
+supplying `--chain-id`.
 
 ### 7.1 Crate API surface
 
-The observer ships ten modules:
+The observer ships eleven modules:
 
 ```rust
 // runtime/knomosis-faultproof-observer/src/lib.rs
 
-pub mod config;      // CLI argument parsing
-pub mod error;       // Top-level error type + exit-code mapping
-pub mod events;      // L1 event-topic registry + decoder
-pub mod game;        // Rust port of LegalKernel.FaultProof.Game
-pub mod observer;    // Top-level orchestrator (Observer)
-pub mod persistence; // knomosis-storage-backed game + cursor layer
-pub mod strategy;    // Honest-strategy computation (TruthOracle)
-pub mod submitter;   // Calldata encoder + Submitter trait
-pub mod watcher;     // L1 event-watch with re-org handling
+pub mod config;            // CLI argument parsing
+pub mod error;             // Top-level error type + exit-code mapping
+pub mod events;            // L1 event-topic registry + decoder
+pub mod game;              // Rust port of LegalKernel.FaultProof.Game
+pub mod jsonrpc_submitter; // EIP-1559 JSON-RPC submitter (sign + eth_sendRawTransaction)
+pub mod observer;          // Top-level orchestrator (Observer)
+pub mod persistence;       // knomosis-storage-backed game + cursor layer
+pub mod state_reader;      // L2 log reader feeding the truthful-commit oracle
+pub mod strategy;          // Honest-strategy computation (TruthOracle)
+pub mod submitter;         // Calldata encoder + Submitter trait
+pub mod watcher;           // L1 event-watch with re-org handling
 ```
 
 The top-level type is `Observer<S: L1Source, Sub: Submitter,
@@ -337,21 +338,31 @@ equivalence is verified at the fixture-corpus level.
 # runtime/knomosis-faultproof-observer/Cargo.toml
 [package]
 name = "knomosis-faultproof-observer"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true     # 0.6.0, inherited from the workspace
+edition.workspace = true     # 2021
 
 [dependencies]
-ethers = "2.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sha3 = "0.10"
-secp256k1 = { version = "0.28", features = ["recovery"] }
-tokio = { version = "1.0", features = ["full"] }
+knomosis-cli-common = { workspace = true }
+knomosis-storage = { path = "../knomosis-storage" }
+knomosis-l1-ingest = { path = "../knomosis-l1-ingest" }  # shared re-org window + JSON-RPC L1 source + signing key
+hex = { workspace = true }
+k256 = { workspace = true }       # secp256k1 (ECDSA) — NOT the `secp256k1` crate
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha3 = { workspace = true }       # keccak256
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+zeroize = { workspace = true }    # key-material zeroization
 
 [[bin]]
 name = "knomosis-faultproof-observer"
 path = "src/main.rs"
 ```
+
+The crate uses **no** async runtime (`tokio`), `ethers`, or the
+`secp256k1` crate — consistent with the workspace conventions
+(blocking I/O; `k256` for ECDSA).
 
 ### 7.4 Deployment
 
@@ -360,15 +371,34 @@ sequencer node:
 
 ```bash
 knomosis-faultproof-observer \
-    --l2-log-path /var/lib/knomosis/log \
-    --l1-rpc-url https://mainnet.infura.io/v3/<KEY> \
-    --state-root-submission 0xDEAD... \
-    --fault-proof-game 0xC0DE... \
-    --challenger-wallet $WALLET_PATH
+    --l1-rpc https://mainnet.infura.io/v3/<KEY> \
+    --game-contract 0xC0DE... \
+    --state-root-contract 0xDEAD... \
+    --storage /var/lib/knomosis/observer.db \
+    --keystore $KEYSTORE_PATH \
+    --deployment-id <32-byte-hex> \
+    --knomosis-binary /usr/local/bin/knomosis \
+    --knomosis-log /var/lib/knomosis/log \
+    --play-as challenger \
+    --chain-id 1
 ```
 
-The observer logs detected divergences to syslog and (when
-configured with a wallet) automatically files challenges.
+The six required flags are `--l1-rpc`, `--game-contract`,
+`--state-root-contract`, `--storage`, `--keystore`, and
+`--deployment-id`.  `--knomosis-binary` and `--knomosis-log` must be
+supplied **together** (or both omitted) — supplying only one is
+rejected at startup (`--knomosis-log requires --knomosis-binary to be
+set`, and vice-versa).  The pair wires up the production truth oracle
+(the observer shells out to `knomosis replay-up-to` to compute the
+canonical state commit), which is what lets it file challenges
+automatically; without the pair it falls back to the in-memory oracle.
+`--play-as` defaults to `challenger`, and supplying `--chain-id`
+enables the production JSON-RPC submitter (otherwise the observer runs
+read-only, logging moves without submitting).  Run
+`knomosis-faultproof-observer --help` for the full flag list.
+
+The observer logs detected divergences and (when configured with
+`--chain-id` + a keystore) automatically files challenges.
 Operators should run at least 2 observers per deployment to
 satisfy the "1-of-anyone honest" trust assumption.
 

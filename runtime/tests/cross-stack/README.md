@@ -67,6 +67,7 @@ does not parse them.  Byte-equality is the contract.
 | `l1_ingest.cxsf` | `L1Ingest` | `knomosis-l1-ingest`'s `examples/gen_ingest_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack.rs` |
 | `l1_ingest_fee_split.cxsf` | `L1IngestFeeSplit` | `knomosis-l1-ingest`'s `examples/gen_fee_split_fixtures.rs` | `knomosis-l1-ingest`'s `tests/cross_stack_fee_split.rs` |
 | `l1_ingest_bold.cxsf` | `L1IngestBold` | `LegalKernel/Test/Bridge/CrossCheck/BoldDeposit.lean` (Lean-authored, written by `lake test`) | `knomosis-l1-ingest`'s `tests/cross_stack_bold.rs` |
+| `amm_swap.cxsf` | `AmmSwap` | `LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean` (Lean-authored, written by `lake test`) | `knomosis-l1-ingest`'s `tests/cross_stack_amm_swap.rs` |
 
 Each downstream work unit's fixtures are committed alongside the
 implementing PR.  See
@@ -116,6 +117,15 @@ implementing PR.  See
     committed file's drift is gated by `lake test`'s verify-mode
     re-write (the Lean-side fixture authority), not a Rust `--check`
     example.
+  * **`AmmSwap`** (GP.11.7) — 71 records (54-entry reserve × direction
+    × fraction × slippage grid + 17 boundary cases).  Each record
+    carries the five `Action.ammSwap` fields (frozen index 23), the
+    Lean `Encoding.Action.encode` bytes (`expectedCbe`), the
+    `AmmMath.getAmountOut` result (`expectedOut`), the pre-swap reserves,
+    and the 30-bps fee.  Lean-authored
+    (`LegalKernel/Test/Bridge/CrossCheck/AmmSwap.lean`), so the expected
+    bytes / amounts are produced by Lean and independently recomputed by
+    the Rust consumer and the Solidity `AmmMath.sol` mirror.
 
 A companion **Lean-sourced** differential ships as a JSON fixture
 (NOT a `.cxsf`) under

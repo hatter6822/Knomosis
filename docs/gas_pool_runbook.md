@@ -271,7 +271,8 @@ total back under the new cap.
 * Alert on any `LiquityV2ReadFailed` from a keeper calling the
   auto-trigger — the oracle may have changed.
 * Alert when AMM reserve depth drops: either leg below
-  `MIN_VIABLE_DEPTH_USD = $10 000` is a §10.1 disaster-recovery
+  `MIN_VIABLE_DEPTH_USD = $10 000` (an operator-chosen monitoring
+  threshold — not an on-chain constant) is a §10.1 disaster-recovery
   trigger condition (page the on-call operator; start the 24-hour
   arbitrage-recovery clock).
 * Alert when `ammDisabled()` flips / the `AmmDisabled` event fires —
@@ -752,7 +753,7 @@ transaction gas, refunds netted).  At 30 gwei / $3 000 ETH:
 |---|---:|---:|
 | `confirmDisable` (each non-final signer) | 59 629 | ~$5.4 |
 | `confirmDisable` (threshold-th signer — executes the disable through the bridge) | 112 582 | ~$10.1 |
-| `emergencyDisableAmm` (direct `recoveryCouncil` call, no multisig) | 49 623 | ~$4.5 |
+| `emergencyDisableAmm` (direct `ammDisasterRecovery` call, no multisig) | 49 623 | ~$4.5 |
 
 A full 3-of-N multisig firing therefore costs two non-final
 confirms plus one executing confirm — about **$21** total.  Gas

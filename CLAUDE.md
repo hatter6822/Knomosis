@@ -65,6 +65,7 @@ lake exe tcb_audit                  # TCB allowlist gate
 lake exe stub_audit                 # stub-detection gate
 lake exe naming_audit               # content-name discipline gate
 lake exe deferral_audit             # no-deferrals policy gate
+lake exe mock_import_audit          # no-test-import-in-production gate
 lake exe lex_lint                   # Lex registry + sidecar gate
 lake exe lex_codegen --check        # Lex codegen-consistency gate
 lake exe lex_diff <before> <after>  # Lex semantic-diff binary
@@ -649,11 +650,11 @@ full catalogue):
 
 | Crate | ~Tests | Role |
 |-------|--------|------|
-| `knomosis-host` | ~426 | Network adaptor + fair scheduler |
-| `knomosis-l1-ingest` | ~341 | L1 event watcher + encoder |
-| `knomosis-faultproof-observer` | ~312 | Off-chain bisection-game observer |
+| `knomosis-host` | ~436 | Network adaptor + fair scheduler |
+| `knomosis-faultproof-observer` | ~386 | Off-chain bisection-game observer |
+| `knomosis-l1-ingest` | ~347 | L1 event watcher + encoder |
 | `knomosis-event-subscribe` | ~219 | Event subscription server |
-| `knomosis-indexer` | ~205 | SQLite event indexer |
+| `knomosis-indexer` | ~206 | SQLite event indexer |
 | `knomosis-bench` | ~147 | Transfer-throughput benchmark |
 | `knomosis-storage` | ~100 | Storage abstraction + SQLite |
 
@@ -696,7 +697,7 @@ Plan: `docs/planning/rust_host_runtime_plan.md`
 | RH-A.2 | `knomosis-hash-keccak256` | Complete | Keccak-256 cdylib; 51-record .cxsf corpus |
 | RH-B | `knomosis-l1-ingest` | Complete | L1 event watcher; hand-rolled ABI decoder; re-org tolerance; raw-TCP submitter with opt-in signer hints |
 | RH-C | `knomosis-host` | Complete | TCP/TLS/Unix listener; `MockKernel` + `CommandKernel`; bounded queue; two-tier DRR fair scheduler (default-OFF `--scheduler drr`); `--persistent-connections` pipelined mode |
-| RH-D | `knomosis-event-subscribe` | Complete | Log-tail reader; `SubprocessExtractor` → `knomosis extract-events`; bounded-lag subscriber eviction; event-type registry (tags 0..21) |
+| RH-D | `knomosis-event-subscribe` | Complete | Log-tail reader; `SubprocessExtractor` → `knomosis extract-events`; bounded-lag subscriber eviction; event-type registry (tags 0..22) |
 | RH-E.0 | `knomosis-storage` | Complete | `Storage` trait; `SqliteStorage` (WAL, bundled rusqlite); migration framework |
 | RH-E.1 | `knomosis-indexer` | Complete | Per-(actor, resource) balance view; budget/pool views; two-pass dispatch; epoch resets |
 | RH-F | `knomosis-bench` | Complete | Deterministic fixture; concurrent driver; histogram; JSON report + regression check; ~7.5k ops/sec observed |

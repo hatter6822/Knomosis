@@ -53,7 +53,7 @@ and erasure is uniform.
 `opaque` declarations without `@[extern]` linkage compile to a
 placeholder body.  Two such declarations exist in the Phase-5 build:
 
-  * `LegalKernel.Authority.Verify` — body is `false` at runtime.  The
+  * `LegalKernel.Authority.Crypto.Verify` — body is `false` at runtime.  The
     deployment adaptor wires Ed25519 (or the chosen scheme) via
     `@[extern verify_impl]` linkage at link time.  See
     `LegalKernel/Authority/Crypto.lean` for the spec; Phase 5 ships
@@ -82,8 +82,19 @@ ABI symbol names: `knomosis_hash_bytes`, `knomosis_hash_stream`, and
 
 The Lean fallback (FNV-1a-64 zero-padded to 32 bytes) is the
 test-build default.  Production deployments substitute a vetted
-BLAKE3-256 implementation under the same C symbol names at link
-time.  The substitution discipline is identical to `Verify`'s:
+cryptographic hash under the same C symbol names at link time.  Two
+production targets are recognised:
+
+  * **BLAKE3-256** — the Genesis Plan §8.8.4 abstract default;
+    identifier `"blake3-256"`.
+  * **keccak256** — the Ethereum-anchored path, used so that Lean
+    state-commitments are byte-identical to the EVM `KECCAK256`
+    opcode for cross-stack verification.  This is the adaptor that
+    actually ships in-repo (`runtime/knomosis-hash-keccak256`,
+    Workstream RH-A.2; opt-in via `KNOMOSIS_HASH_BACKEND=keccak256`);
+    identifier `"keccak256/EVM-compatible/v1"`.  See TA-2.2 in §2.6.
+
+The substitution discipline is identical to `Verify`'s:
 
   * Theorems about hash determinism + output width hold for the
     Lean fallback; production implementations must respect the
@@ -92,8 +103,9 @@ time.  The substitution discipline is identical to `Verify`'s:
   * The CLI binaries (`knomosis`, `knomosis-replay`) read
     `hashImplementationIdentifier ()` at startup to determine
     whether the production swap occurred.  The fallback returns
-    `"fnv1a64-padded-32"`; production returns e.g.
-    `"blake3-256"`.
+    `"fnv1a64-padded-32"`; production returns the linked adaptor's
+    identifier (e.g. `"blake3-256"` or
+    `"keccak256/EVM-compatible/v1"`).
   * `knomosis-replay` refuses to print an `OK` line under the
     fallback unless the operator explicitly opts in via
     `--allow-fallback-hash` — the auditor's reproduction
@@ -366,8 +378,10 @@ $ file .lake/build/bin/knomosis
 
 $ .lake/build/bin/knomosis info
 knomosis: legal-kernel runtime
-  build tag: knomosis-lex-m3-manifests
-  Phases 0 – 6 + Audit-3 + Ethereum Workstreams A – F + Workstream LP + Lex LX-M1 / M2 / M3 complete
+  build tag: knomosis-step-vm-coherence
+  proof-carrying state-transition kernel (see CLAUDE.md for milestone status)
+  hash:        fnv1a64-padded-32
+  hash-grade:  fallback (FNV-1a-64 padded to 32, NOT FOR PRODUCTION)
 ```
 
 `objdump -t .lake/build/bin/knomosis | grep _verify` shows the

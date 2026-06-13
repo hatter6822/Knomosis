@@ -134,7 +134,7 @@ def formatHashHex (h : ContentHash) : String :=
 def cmdInfo : IO UInt32 := do
   IO.println s!"knomosis: legal-kernel runtime"
   IO.println s!"  build tag: {LegalKernel.kernelBuildTag}"
-  IO.println s!"  Phase 6: Disputes and Adjudication (WU 6.1 – 6.12)"
+  IO.println s!"  proof-carrying state-transition kernel (see CLAUDE.md for milestone status)"
   IO.println s!"  hash:        {hashImplementationIdentifier ()}"
   if isProductionHash then
     IO.println s!"  hash-grade:  production"
