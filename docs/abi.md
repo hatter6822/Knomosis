@@ -6,12 +6,20 @@
   under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
-# Phase 5 ABI: On-Disk and On-Wire Contracts (WU 5.10)
+# Knomosis ABI: On-Disk and On-Wire Contracts
 
-This document specifies the byte-level contracts the Phase-5
-runtime depends on.  An external implementer (e.g. a Rust network
-adaptor for WU 5.4) can reproduce a compatible client by following
-this document alone.
+This document specifies the byte-level contracts the Knomosis runtime
+and its mirrors depend on.  An external implementer (e.g. the Rust
+network adaptor in `runtime/`) can reproduce a compatible client by
+following this document alone.
+
+It began as the Phase-5 runtime ABI (WU 5.10) and has since grown to
+cover every on-disk / on-wire surface added through Workstream GP
+(§15E): the transition log and snapshot formats, the CBE `Action` /
+`Event` / `SignedAction` encodings, the runtime and network CLIs, the
+event-subscription and indexer ABIs, and the Ethereum / fault-proof
+cross-stack surfaces.  The authoritative source for any contract is
+the cited Lean / Solidity / Rust code; this document tracks it.
 
 > **Audit-3.1 ABI break.**  Pre-Audit-3 logs and snapshots
 > (produced before commit `50abca7`, which landed
@@ -385,7 +393,7 @@ The Phase-5 indexer schema continues to deserialise correctly
 under the Phase-6 schema; new event constructors are simply
 unrecognised by Phase-5-only consumers.
 
-### 5.3 Workstream-GP `Event` Inductive Extension
+### 5.4 Workstream-GP `Event` Inductive Extension
 
 The unified-gas-pool workstream (§15E) appends seven more `Event`
 constructors at frozen indices 16..22:
@@ -453,7 +461,7 @@ additively.  The Rust-side streamer's tag registry
 (`runtime/knomosis-event-subscribe/src/event_type.rs`) mirrors all
 seven.
 
-### 5.3 Phase-6 Incentive-Integration Amendment Runtime Structures
+### 5.5 Phase-6 Incentive-Integration Amendment Runtime Structures
 
 The amendment introduces three deployment-runtime structures
 that are NOT serialised to disk but DO emit `Action`s the runtime
@@ -491,7 +499,7 @@ must respect these emission semantics: rewards via
 `Action.reward`, staking via `Action.transfer`, never `burn`
 (which would break the kernel-level monotonicity firewall).
 
-### 5.4 Workstream-LP `LocalPolicy` CBE Encoding
+### 5.6 Workstream-LP `LocalPolicy` CBE Encoding
 
 Workstream LP (actor-scoped policies) introduces a
 `LocalPolicy` first-order data type that on-chain actors can
@@ -639,20 +647,32 @@ digest to `Verify`.  The Phase-5 stub passes the bytes themselves
 
 ## 8. The Runtime CLI (`knomosis`) ABI
 
-The `knomosis` binary exposes six subcommands plus a `help` alias
-(Workstream D added the sixth):
+The `knomosis` binary multiplexes eleven subcommands plus a `help`
+alias.  The canonical list is the binary's own `knomosis help` output
+(`Main.lean`, `cmdHelp`); this section must stay in sync with it:
 
 ```
 knomosis [GLOBAL_FLAGS] info
-knomosis [GLOBAL_FLAGS] process          LOG IN [OUT]
-knomosis [GLOBAL_FLAGS] replay           LOG
-knomosis [GLOBAL_FLAGS] bootstrap        LOG
-knomosis [GLOBAL_FLAGS] snapshot         LOG SNAP_PATH
-knomosis [GLOBAL_FLAGS] withdrawal-proof SNAP_PATH ID
+knomosis [GLOBAL_FLAGS] process                 LOG IN [OUT]
+knomosis [GLOBAL_FLAGS] replay                  LOG
+knomosis [GLOBAL_FLAGS] bootstrap               LOG
+knomosis [GLOBAL_FLAGS] snapshot                LOG SNAP_PATH
+knomosis [GLOBAL_FLAGS] withdrawal-proof        SNAP_PATH ID
+knomosis [GLOBAL_FLAGS] replay-up-to            LOG IDX
+knomosis [GLOBAL_FLAGS] export-cell-proofs      LOG IDX SIGNER
+knomosis [GLOBAL_FLAGS] export-terminate-bundle LOG IDX
+knomosis [GLOBAL_FLAGS] extract-events          --log LOG
+knomosis gas-pool-demo
 knomosis help
 ```
 
-Global flags (Audit-3.1 + AR.2.6):
+`gas-pool-demo` (GP.7.4) is self-contained — it runs the unified
+gas-pool worked deployment end-to-end with its own deterministic demo
+crypto and a fixed deployment id, so the global crypto / budget /
+gas-pool flags below do not apply to it.
+
+Global flags (recognised anywhere in the argument list and stripped
+before subcommand dispatch):
 
   * `--allow-fallback-hash`  — suppress the WARN-on-startup line
                                emitted when the binary is running
@@ -661,8 +681,8 @@ Global flags (Audit-3.1 + AR.2.6):
                                Use only for explicit test runs.
   * `--deployment-id <hex>`  — AR.2.6 / M-1.  The deployment's
                                32-byte content identifier (the
-                               BLAKE3 hash of the deployment's
-                               genesis state in production).
+                               production-hash digest of the
+                               deployment's genesis state).
                                Threaded into every `signInput`
                                computation as the
                                cross-deployment-replay-protection
@@ -673,6 +693,38 @@ Global flags (Audit-3.1 + AR.2.6):
                                with single-deployment dev mode;
                                `knomosis-replay` REFUSES to start
                                without this flag (see below).
+
+The remaining global flags configure the GP budget / gas-pool /
+refund-rate machinery.  Each non-default value is persisted to a
+sidecar next to the log and cross-checked on every log-touching
+command (see §10.2); a forgotten or changed flag fails with a clear
+config error rather than an opaque post-state-hash mismatch.
+
+  * `--budget-policy bounded` (GP.6.2) — enable the per-actor
+        epoch-budget admission gate.  Refine with the four sub-flags
+        below; omitting all of them keeps the deny-all genesis default.
+  * `--free-tier <N>`        — per-epoch budget floor for a normalised
+                               actor cell.
+  * `--action-cost <C>`      — per-action budget debit (clamped to ≥ 1;
+                               default 1).
+  * `--current-epoch <E>`    — base epoch index (default 0).
+  * `--epoch-length <N>`     — admitted log entries per budget epoch
+                               (default 0 = no advancement).  Persisted
+                               to the `<LOG>.budgetcfg` sidecar.
+  * `--gas-pool-eth-cap <N>` (GP.7.4) — enable the unified-gas-pool
+        genesis wiring with an ETH-leg (resource 0) per-action drain
+        cap of N.
+  * `--gas-pool-bold-cap <N>` — the BOLD-leg (resource 1) per-action
+        drain cap.  Supplying either gas-pool flag enables the wiring;
+        a missing cap defaults to 0 (that leg cannot drain).  Persisted
+        to the `<LOG>.gaspoolcfg` sidecar.
+  * `--wei-per-budget-unit-eth <N>` (GP.9.1) — the trusted
+        `weiPerBudgetUnit` an ETH-leg `claimBudgetRefund` is pinned to.
+        Omitting it keeps refunds DISABLED at the ETH leg.
+  * `--wei-per-budget-unit-bold <N>` — the BOLD-leg refund rate.
+        Supplying either refund-rate flag enables refunds at that leg;
+        a missing rate defaults to 0.  Persisted to the
+        `<LOG>.refundratecfg` sidecar.
 
 Argument semantics:
 
@@ -686,19 +738,36 @@ Argument semantics:
   * `SNAP_PATH`  — path to write or read the `Snapshot` encoding.
   * `ID`         — a `WithdrawalId` (Nat) to look up in the
                    snapshot's `bridge.pending` map (Workstream D.2).
+  * `IDX`        — a `LogIndex` (Nat) for `replay-up-to`,
+                   `export-cell-proofs`, and `export-terminate-bundle`.
+  * `SIGNER`     — an `ActorId` (Nat) for `export-cell-proofs`.
 
 Exit codes:
 
   * `0` — success.
   * `1` — runtime error (bootstrap failed, parse error, replay
-          failed, etc.).
-  * `2` — argument error (unrecognised subcommand).
+          failed, snapshot load/decode error, etc.).
+  * `2` — argument error: an unrecognised subcommand, a malformed
+          numeric global flag (e.g. `--free-tier ten`), a sidecar
+          config mismatch (budget / gas-pool / refund-rate), or a
+          non-Nat / out-of-range positional argument (`ID`, `IDX`,
+          `SIGNER`).
 
 Output format (stdout):
 
-  * `knomosis info` — five lines (Audit-3.1): name, build tag, phase
-    tag, `hash: <implementation-identifier>`, `hash-grade:
-    <production|fallback>`.
+  * `knomosis info` — five lines (Audit-3.1): name, build tag, a
+    one-line status descriptor, `hash: <implementation-identifier>`,
+    `hash-grade: <production|fallback>`.
+  * `knomosis replay-up-to` — like `replay`, but stops after the
+    first `IDX` log entries and prints the intermediate state hash.
+  * `knomosis export-cell-proofs` (SC.2) — emits the SMT cell proofs
+    for `SIGNER` at log index `IDX` (see §13 / §15).
+  * `knomosis export-terminate-bundle` (Workstream H) — emits the
+    fault-proof terminate bundle at log index `IDX`.
+  * `knomosis extract-events` (RH-D / GP.6.3) — reads the log on the
+    `--log` path and prints the extracted `Event` stream (see §11).
+  * `knomosis gas-pool-demo` (GP.7.4) — runs the worked unified
+    gas-pool deployment end-to-end and prints its trace.
   * `knomosis process` — bootstrap diagnostic, then one line per
     processed action (`[idx] OK (n events)` or `[idx] FAIL
     (<error>)`), then `final state hash: <hex>`, then optionally
@@ -772,8 +841,14 @@ Output format (one or two lines):
 
   * `OK <64-hex-chars> via=<implementation-identifier>` on a clean
     replay (Audit-3.1 fixed 32-byte width × 2 hex chars per byte =
-    64 hex chars; `via=fnv1a64-padded-32` for the Lean fallback,
-    `via=blake3-256` for the production adaptor).
+    64 hex chars).  `via=fnv1a64-padded-32` for the Lean fallback;
+    for a production adaptor `via=` reports that adaptor's own
+    identifier — e.g. `blake3-256` (the Genesis Plan §8.8.4 target),
+    or `keccak256/EVM-compatible/v1` under the keccak-linked
+    cross-stack build (`KNOMOSIS_HASH_BACKEND=keccak256`).
+  * `CONFIG_ERROR <msg>` (exit 1) when a budget / gas-pool /
+    refund-rate sidecar fails to load or is inconsistent with the
+    flags supplied to `knomosis-replay`.
   * `FALLBACK_HASH_NOT_PERMITTED` (Audit-3.1) on the fallback hash
     without `--allow-fallback-hash`.
   * `DEPLOYMENT_ID_MISSING` (AR.2.6) when `--deployment-id <hex>`
@@ -1051,6 +1126,33 @@ life of a log:
     mismatch.  A gas-pool-DISABLED run against a sidecar-bearing log is
     rejected the same way.  Gas-pool-disabled deployments write no
     sidecar (the pre-GP.7.4 on-disk footprint is unchanged).
+
+### 10.2.5 Refund-rate config + sidecar (GP.9.1)
+
+GP.9.1 adds refund-on-exit (`claimBudgetRefund`, Action tag 22).  The
+trusted per-resource `weiPerBudgetUnit` rate a refund is pinned to is
+a deployment parameter, threaded into the runtime and persisted exactly
+like the budget and gas-pool configs (see `Runtime/RefundRateSidecar.lean`):
+
+  * **Flags (`--wei-per-budget-unit-eth N` / `--wei-per-budget-unit-bold M`).**
+    Supplying EITHER enables refunds at that leg (a missing rate defaults
+    to `0`, i.e. refunds DISABLED there — the fail-safe default, since a
+    refund carrying rate 0 is a zero payout the admission gate rejects).
+    The flags are threaded through every log-touching subcommand.
+  * **`<LOG>.refundratecfg` sidecar.**  When a non-default rate is
+    configured, the `knomosis` binary writes a one-line sidecar next to
+    the log:
+
+    ```text
+    knomosis-refund-rate/v1 <ethRate> <boldRate>
+    ```
+
+    Every log-touching subcommand cross-checks the current rate against
+    this sidecar before replay; the rate decides which refunds are
+    admissible, so a refund-bearing log replays correctly only under the
+    producing rate.  A forgotten / changed flag fails with a clear
+    `refund-rate error` rather than a silently-rejected refund.  The
+    `knomosis-replay` auditor re-derives the same rate from the sidecar.
 
 ### 10.3 Transport
 
@@ -1843,7 +1945,7 @@ budget balance — see the `remaining_this_epoch` docstring in
 
 ### 11A.5 Event dispatch table
 
-For each `Event` (frozen tags 0..22 per §5.3), the indexer
+For each `Event` (frozen tags 0..22 per §5.3–5.4), the indexer
 applies the following balance-view and budget-table operations,
 ALL inside ONE `SqliteCombinedTransaction` (§11A.6).
 
@@ -2529,7 +2631,7 @@ by AR.6 regression tests and the `Event.tag` projection
 
 Workstream GP appends `Event` indices 16..22 (through
 `ammSwapExecuted` at 21 and `ammReservesReclaimed` at 22); their
-field layouts live in the §5.3 Workstream-GP subsection.
+field layouts live in the §5.4 Workstream-GP subsection.
 
 ### 16.3 BridgeState CBE encoding
 

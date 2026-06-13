@@ -6,12 +6,13 @@
   under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 -->
 
-# Std dependency audit (Phase 1 WU 1.13)
+# Std dependency audit
 
 This note records every `Std`-library lemma that the trusted-core
 modules of Knomosis (`LegalKernel.Kernel`, `LegalKernel.RBMapLemmas`)
-depend on, with stability notes.  The audit is the deliverable for
-Phase 1 work unit 1.13 (Genesis Plan §12) and is intended to be
+depend on, with stability notes.  The audit originated as the
+deliverable for Phase 1 work unit 1.13 (Genesis Plan §12) and has
+since been extended (EI.0.a / EI.2 / WG.5); it is intended to be
 reviewed alongside any toolchain bump.
 
 ## Scope

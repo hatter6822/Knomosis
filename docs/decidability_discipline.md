@@ -139,9 +139,9 @@ grep -nE 'decPre\s*:=' LegalKernel/Laws/*.lean \
 ```
 
 The §14.8 security-review template will fold this check into a
-mandatory item as the law set grows.  As of the post-LX-M3
-landing, the following laws all satisfy the discipline (every
-`decPre` is `fun _ => inferInstance`).  Laws marked **kernel-
+mandatory item as the law set grows.  As of the current build tag
+(through Workstream GP), the following laws all satisfy the
+discipline (every `decPre` is `fun _ => inferInstance`).  Laws marked **kernel-
 identity** have `pre := True` and a no-op `apply_impl` at the
 kernel level — their action-layer effects (registry mutation,
 local-policy mutation, dispute pipeline state, etc.) live OUTSIDE
@@ -164,6 +164,12 @@ layer.
 | `dispute` × 4        | `LegalKernel/Laws/Dispute.lean`             | `True` (kernel-identity; dispute pipeline runs outside `apply_admissible`) |
 | `declareLocalPolicy` | `LegalKernel/Laws/LocalPolicy.lean`         | `True` (kernel-identity; LP mutation in `applyActionToLocalPolicies`)  |
 | `revokeLocalPolicy`  | `LegalKernel/Laws/LocalPolicy.lean`         | `True` (kernel-identity)                                               |
+| `depositWithFee`       | `LegalKernel/Laws/DepositWithFee.lean`      | `True` (fee-split + budget grant enforced at the bridge admissibility layer) |
+| `topUpActionBudget`    | `LegalKernel/Laws/TopUpActionBudget.lean`   | `getBalance s gasResource a ≥ gasAmount`                               |
+| `topUpActionBudgetFor` | `LegalKernel/Laws/TopUpActionBudgetFor.lean`| `getBalance s gasResource signer ≥ gasAmount ∧ recipient ≠ signer`     |
+| `claimBudgetRefund`    | `LegalKernel/Laws/ClaimBudgetRefund.lean`   | `getBalance s gasResource poolActor ≥ refundAmount`                    |
+| `ammSwap`              | `LegalKernel/Laws/AmmSwap.lean`             | `getBalance s toResource ammReserveActor ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0` |
+| `reclaimAmmReserves`   | `LegalKernel/Laws/ReclaimAmmReserves.lean`  | `getBalance s r reserveActor = amount ∧ reserveActor ≠ poolActor ∧ amount > 0` |
 
 Each module ships an `example : Decidable ((law …).pre s) :=
 inferInstance` smoke-test that fails at compile time if the

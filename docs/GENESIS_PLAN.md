@@ -5709,7 +5709,10 @@ The integration adopts the **optimistic rollup** deployment shape:
       - `KnomosisMigration.sol` — attested handoff between predecessor and
         successor bridge deployments.
     Plus the five-contract Workstream-H fault-proof suite (§15B.5),
-    making **ten immutable contracts** total under the v2 surface.
+    making **ten immutable contracts** under the v2 surface (Workstream
+    GP.11.10 later adds an eleventh, the
+    `KnomosisAmmDisasterRecoveryMultisig` AMM kill-switch quorum — see
+    §15E — for **eleven** contracts in `solidity/` total).
   * **L2 (Knomosis kernel + Bridge).**  The Lean kernel runs as the
     sequencer's authoritative engine.  An "L1 ingestor" daemon
     (Rust: `knomosis-l1-ingest`, RH-B) watches L1 logs, translates each
@@ -5849,7 +5852,7 @@ the existing pins (see `LegalKernel/Encoding/Action.lean` and
 `LegalKernel/Events/Types.lean`).
 
 ```
--- Action constructors (frozen indices 0..21)
+-- Action constructors (frozen indices 0..24)
 Action.transfer            := 0
 Action.mint                := 1
 Action.burn                := 2
@@ -5872,8 +5875,11 @@ Action.faultProofResolution := 18 -- Workstream H
 Action.depositWithFee       := 19 -- Workstream GP (GP.2.3)
 Action.topUpActionBudget    := 20 -- Workstream GP (GP.2.3)
 Action.topUpActionBudgetFor := 21 -- Workstream GP (GP.3.4 delegated)
+Action.claimBudgetRefund    := 22 -- Workstream GP (GP.9.1 refund-on-exit)
+Action.ammSwap              := 23 -- Workstream GP (GP.11.4 AMM swap)
+Action.reclaimAmmReserves   := 24 -- Workstream GP (GP.11.10 reserve reclamation)
 
--- Event constructors (frozen indices 0..19)
+-- Event constructors (frozen indices 0..22)
 Event.balanceChanged       := 0
 Event.nonceAdvanced        := 1
 Event.identityRegistered   := 2
@@ -5894,10 +5900,13 @@ Event.depositWithFeeCredited     := 16 -- Workstream GP (GP.2.3)
 Event.actionBudgetTopUp          := 17 -- Workstream GP (GP.2.3)
 Event.gasPoolClaim               := 18 -- Workstream GP (GP.2.3)
 Event.delegatedActionBudgetTopUp := 19 -- Workstream GP (GP.3.4)
+Event.budgetConsumed             := 20 -- Workstream GP (GP.6.4 per-action debit)
+Event.ammSwapExecuted            := 21 -- Workstream GP (GP.11.4 swap)
+Event.ammReservesReclaimed       := 22 -- Workstream GP (GP.11.10 reclamation)
 ```
 
 Per-constructor field shapes are recorded in `docs/abi.md`
-§5 (`Action` CBE) and §5.3 (`Event` CBE).  The CBE-bytes form of
+§5 (`Action` CBE) and §5.3–5.4 (`Event` CBE).  The CBE-bytes form of
 each constructor is byte-determined by its index and field tuple;
 no Lean phase may re-grouping these constructors without breaking
 on-disk replay compatibility AND triggering an AR.5 / AR.6

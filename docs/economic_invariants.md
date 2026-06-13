@@ -263,11 +263,12 @@ the kernel.
   *frozen* resource genuinely change a per-actor balance —
   witnessing the necessity of the disjointness hypothesis).
 
-`lake test` runs every suite via the `Tests.lean` driver (1 596
-total tests across 89 suites as of LX-M3 audit-5; the counts above
-are the Phase-2 baselines, with Phase-4-prelude bumps documented in
-the Phase-4-prelude section below) and exits non-zero on any
-failure; CI runs the same driver.
+`lake test` runs every suite via the `Tests.lean` driver (~3 040
+total tests across ~150 suites at the current build tag; `lake test`
+is the canonical query.  The per-section counts cited above are the
+Phase-2 baselines, with Phase-4-prelude bumps documented in the
+Phase-4-prelude section below) and exits non-zero on any failure; CI
+runs the same driver.
 
 ## Axiom audit
 
@@ -535,10 +536,11 @@ why.
 - `docs/planning/actor_scoped_policies_plan.md` LP.9 — the LP-action
   classification (`declareLocalPolicy` / `revokeLocalPolicy` are
   both `IsConservative` and `IsMonotonic`).
-- `CLAUDE.md` "Type-level design properties" — table that includes
-  every Phase-2, Phase-3, Phase-4-prelude, Phase-6 base, Phase-6
-  amendment, Audit-3 hardening, Ethereum Workstream A – D, LP, and
-  LX theorem (#1 – #221 as of LX-M3).
+- `CLAUDE.md` "Type-level design properties" — the selected-headline
+  catalogue spanning every Phase-2, Phase-3, Phase-4-prelude, Phase-6
+  base, Phase-6 amendment, Audit-3 hardening, Ethereum Workstream
+  A – G, LP, LX, GP, fault-proof (H), SMT cell-proof (SC), and step-VM
+  coherence (SVC) theorem tier.
 - `docs/decidability_discipline.md` — `decPre` discipline for
   `mint`, `burn`, `freezeResource`, the three positive-incentive
   laws, and the bridge `deposit` / `withdraw` laws.

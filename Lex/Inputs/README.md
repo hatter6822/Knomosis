@@ -8,7 +8,7 @@
 
 # Lex codegen-input directory
 
-This directory accumulates one JSON file per `law` declaration that
+This directory accumulates one JSON file per `lexlaw` declaration that
 has been elaborated by the Lex `Lex.DSL.Law` macro.  The
 files are the *cross-pass medium* between Pass 1 (per-file Lean
 elaboration; emits one JSON file per law plus the `Transition` def
