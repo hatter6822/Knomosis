@@ -758,14 +758,22 @@ Output format (stdout):
   * `knomosis info` — five lines (Audit-3.1): name, build tag, a
     one-line status descriptor, `hash: <implementation-identifier>`,
     `hash-grade: <production|fallback>`.
-  * `knomosis replay-up-to` — like `replay`, but stops after the
-    first `IDX` log entries and prints the intermediate state hash.
+  * `knomosis replay-up-to` — replays only the first `IDX` log
+    entries and prints the **fault-proof extended-state commitment**
+    (`FaultProof.commitExtendedState`, 64 hex chars) of that prefix —
+    the canonical commit the observer's truth oracle defends.  This is
+    NOT the same value as `replay`'s final-state hash (`hashEncodable`);
+    an ABI consumer computing `IDX`-prefix commits must use
+    `commitExtendedState`, not the plain state hash.
   * `knomosis export-cell-proofs` (SC.2) — emits the SMT cell proofs
     for `SIGNER` at log index `IDX` (see §13 / §15).
   * `knomosis export-terminate-bundle` (Workstream H) — emits the
     fault-proof terminate bundle at log index `IDX`.
-  * `knomosis extract-events` (RH-D / GP.6.3) — reads the log on the
-    `--log` path and prints the extracted `Event` stream (see §11).
+  * `knomosis extract-events` (RH-D / GP.6.3) — reads `LogEntry`
+    frames from **stdin** (the `--log` path is used only for sidecar
+    consistency checks, not as the event source) and writes the
+    extracted `Event` stream to stdout.  See §11.10 for the
+    stdin/stdout frame protocol.
   * `knomosis gas-pool-demo` (GP.7.4) — runs the worked unified
     gas-pool deployment end-to-end and prints its trace.
   * `knomosis process` — bootstrap diagnostic, then one line per

@@ -377,6 +377,7 @@ knomosis-faultproof-observer \
     --storage /var/lib/knomosis/observer.db \
     --keystore $KEYSTORE_PATH \
     --deployment-id <32-byte-hex> \
+    --knomosis-binary /usr/local/bin/knomosis \
     --knomosis-log /var/lib/knomosis/log \
     --play-as challenger \
     --chain-id 1
@@ -384,9 +385,16 @@ knomosis-faultproof-observer \
 
 The six required flags are `--l1-rpc`, `--game-contract`,
 `--state-root-contract`, `--storage`, `--keystore`, and
-`--deployment-id`; `--play-as` defaults to `challenger`, and supplying
-`--chain-id` enables the production JSON-RPC submitter (otherwise the
-observer runs read-only, logging moves without submitting).  Run
+`--deployment-id`.  `--knomosis-binary` and `--knomosis-log` must be
+supplied **together** (or both omitted) — supplying only one is
+rejected at startup (`--knomosis-log requires --knomosis-binary to be
+set`, and vice-versa).  The pair wires up the production truth oracle
+(the observer shells out to `knomosis replay-up-to` to compute the
+canonical state commit), which is what lets it file challenges
+automatically; without the pair it falls back to the in-memory oracle.
+`--play-as` defaults to `challenger`, and supplying `--chain-id`
+enables the production JSON-RPC submitter (otherwise the observer runs
+read-only, logging moves without submitting).  Run
 `knomosis-faultproof-observer --help` for the full flag list.
 
 The observer logs detected divergences and (when configured with
