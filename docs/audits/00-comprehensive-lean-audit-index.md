@@ -15,6 +15,18 @@ and ~10 cosmetic line-count off-by-ones.  All identified errors
 have been corrected in this revision.  The substantive findings
 in `19-findings-and-followups.md` are unchanged.
 
+> **Post-AR reconciliation note (2026-06-14).**  This audit is a
+> historical snapshot (2026-05-11).  Since then, Workstream **AR** (Audit
+> Remediation) has **closed every "Remediate" finding** (M-1 … M-10 and
+> the remediable minor findings) and Workstream **EI** closed M-3; the
+> **only** finding still open is **m-16** (chain-level §7.6.4 / §7.6.5
+> accounting, triaged "Defer"), now tracked by the **CA** workstream
+> (`docs/planning/chain_level_accounting_plan.md`).  Per-finding closure
+> status is in `docs/planning/audit_remediation_plan.md` §15C.2, and
+> `19-findings-and-followups.md` carries the annotated "Open follow-ups"
+> list.  The per-area reports (01–18) are preserved verbatim as the
+> audit-time record.
+
 ## Methodology
 
 This audit was performed by line-by-line review of the source code,
