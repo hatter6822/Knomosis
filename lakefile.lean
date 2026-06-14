@@ -113,6 +113,40 @@ extern_lib knomosisHashFallback (pkg : NPackage __name__) := do
     let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
     buildStaticLib (pkg.staticLibDir / nameToStaticLib "knomosis-hash-fallback") #[oJob]
 
+/-- Security-review F-2 — default fallback static library for the
+    `knomosis_verify_identifier` C ABI symbol (the @[extern] backing
+    `LegalKernel.Bridge.verifyImplementationIdentifier`).
+
+    By default compiles `runtime/knomosis-verify-fallback.c`, whose
+    forwarder returns the Lean fallback identifier `"lean-opaque-fallback"`
+    — so `knomosis verify-check` (the F-2 deploy gate) exits 1.  A
+    production deployment swaps in a real secp256k1 adaptor by setting
+    `KNOMOSIS_VERIFY_STATICLIB` to the absolute path of a
+    `libknomosis_verify_secp256k1.a` built with
+    `cargo build -p knomosis-verify-secp256k1 --features lean-ffi`
+    (which exports a real `knomosis_verify_identifier` returning the
+    production identifier `"ecdsa-secp256k1-low-s/EVM-compatible/v1"`, so
+    `verify-check` exits 0).
+
+    Like the hash fallback above this is a SINGLE-archive swap — exactly
+    one library defines `knomosis_verify_identifier`, so there is no
+    link-order / duplicate-symbol race, and the swap is INDEPENDENT of
+    the hash archive's swap (the two trust-binding symbol groups are
+    separated, so a deployment can link a production keccak256 hash AND a
+    production secp256k1 verifier with no clash).  `scripts/verify_secp256k1_link.sh`
+    drives the production-linked build + the `verify-check` exit-0
+    assertion end-to-end. -/
+extern_lib knomosisVerifyFallback (pkg : NPackage __name__) := do
+  match (← IO.getEnv "KNOMOSIS_VERIFY_STATICLIB") with
+  | some vPath => inputBinFile (System.FilePath.mk vPath)
+  | none =>
+    let srcPath : System.FilePath := pkg.dir / "runtime" / "knomosis-verify-fallback.c"
+    let oFile := pkg.buildDir / "runtime" / "knomosis-verify-fallback.o"
+    let srcJob ← inputTextFile srcPath
+    let weakArgs := #["-I", (← getLeanIncludeDir).toString, "-fPIC"]
+    let oJob ← buildO oFile srcJob weakArgs #[] (← getLeanc)
+    buildStaticLib (pkg.staticLibDir / nameToStaticLib "knomosis-verify-fallback") #[oJob]
+
 /-- The trusted core: kernel module, plus the law set that the deployment
     chooses to admit.  See `LegalKernel.lean` for the umbrella import. -/
 @[default_target]

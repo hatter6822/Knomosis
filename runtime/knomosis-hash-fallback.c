@@ -83,18 +83,11 @@ LEAN_EXPORT lean_object *knomosis_hash_identifier(lean_object *u) {
     return lp_knomosis_LegalKernel_Runtime_hashImplementationIdentifierFallback(u);
 }
 
-/* knomosis_verify_identifier(u) — default forwarder (security-review F-2).
- * Returns the Lean fallback identifier "lean-opaque-fallback"; production
- * deployments override this by linking the knomosis-verify-secp256k1
- * adaptor ahead of this object file (it provides a real
- * `knomosis_verify_identifier` returning the production identifier).
- * Same owned-transfer discipline as the hash forwarders above: the
- * Fallback consumes its `Unit` argument's box and returns an owned
- * String constant. */
-extern LEAN_EXPORT lean_object *
-    lp_knomosis_LegalKernel_Bridge_verifyImplementationIdentifierFallback(
-        lean_object *u);
-
-LEAN_EXPORT lean_object *knomosis_verify_identifier(lean_object *u) {
-    return lp_knomosis_LegalKernel_Bridge_verifyImplementationIdentifierFallback(u);
-}
+/* NOTE.  The `knomosis_verify_identifier` forwarder (security-review F-2)
+ * lives in its OWN archive `runtime/knomosis-verify-fallback.c`, swapped
+ * independently of this hash archive by the lakefile `extern_lib
+ * knomosisVerifyFallback`.  Keeping the two trust-binding symbol groups
+ * (hash vs verify) in separate single-archive swaps means a production
+ * deployment can link a real keccak256 hash adaptor and a real
+ * secp256k1 verifier adaptor independently, with NO duplicate-symbol
+ * clash — each symbol group has exactly one defining archive. */
