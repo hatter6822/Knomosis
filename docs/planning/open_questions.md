@@ -70,9 +70,18 @@ PR descriptions can cite.
 The columns are *blocking horizon*: when a decision on the
 question becomes necessary for a workstream to proceed.
 
+> **Reconciliation note (2026-06-14).**  Several gating workstreams
+> have since landed (EI, RH, SC, SVC, WG, FQ Track A, GP through
+> GP.11.10).  The open questions whose blocking horizon was "before
+> <that workstream> lands" are therefore **resolved by landing** —
+> see each workstream's plan Status for the decision actually taken
+> (e.g. OQ-WG-1's §15 numbering resolved as **§15D**; OQ-DOC-4
+> resolved below).  This note avoids re-asserting each decision
+> here; the matrix rows are left for historical horizon context.
+
 | Horizon | Questions | Drive-by workstream |
 |---------|-----------|----------------------|
-| **NOW** (blocks an in-flight workstream) | OQ-DOC-4 | CL.1 (cleanup landing) |
+| **NOW** (was: blocked CL.1) | ~~OQ-DOC-4~~ → **RESOLVED** (synthesis doc annotated in place) | CL.1 (cleanup landing) |
 | **Before EI lands** | OQ-EI-1 (Std `toList_canonical` audit) | EI.1.b |
 | **Before RH lands** | OQ-X-1 (Rust toolchain), OQ-X-2 (corpus format), OQ-RH-2 (re-org alert depth) | RH-H, RH-B.1, RH-G.1 |
 | **Before RH-G ships** | OQ-RH-1 (cell-proof format default) | RH-G.4 (coordinated with SC.2) |
@@ -178,7 +187,7 @@ OQ-CA-1 (L1EscrowLedger type ownership)
 | OQ-DOC-1 | `kernelBuildTag` bump cadence | RESOLVED | (resolved) | (a) Bump per workstream landing |
 | OQ-DOC-2 | Single canonical "Headline theorems" location | RESOLVED | (resolved) | (a) CLAUDE.md canonical |
 | OQ-DOC-3 | `Test/Umbrella.lean` build-tag pin lift | RESOLVED | (resolved) | (a) Keep the pin |
-| OQ-DOC-4 | Audit synthesis doc post-AR refresh | OPEN | CL.1 landing | (a) Annotate in place |
+| OQ-DOC-4 | Audit synthesis doc post-AR refresh | RESOLVED | (resolved) | (a) Annotated in place |
 | OQ-EI-1 | EI.1.c necessity (Std `toList_canonical` audit) | NEW | Before EI.1.b | Audit Std first; ship EI.1.c only if Std lacks |
 | OQ-RH-1 | Witness-state vs SMT cell-proof format default in observer | NEW | RH-G.4 + SC.2 coordination | Pre-SC: witness-state; post-SC: SMT-path |
 | OQ-RH-2 | Deep L1 re-org operator-alert threshold | NEW | Before RH-B / RH-G land | (a) confirmationDepth = 12; halt on deeper |
@@ -944,7 +953,13 @@ or left as a historical record?
 trail.  This is the recommended approach in
 `cleanup_and_consolidation_plan.md` CL.1.
 
-**Status.**  OPEN until CL.1 lands.
+**Status.**  RESOLVED (2026-06-14).  Option (a) applied: the
+synthesis doc's "Open follow-ups" section
+(`docs/audits/19-findings-and-followups.md`) now carries a
+post-AR reconciliation header, strikes each AR-remediated finding
+with its AR sub-unit reference, and flags **m-16** (chain-level
+accounting, the CA workstream) as the sole remaining open audit
+follow-up.  See §10.
 
 ---
 
@@ -1177,6 +1192,18 @@ section.
 **Resolved as.**  (a) Keep the pin.
 
 **Ratifying decision.**  CLAUDE.md "Current development status".
+
+### OQ-DOC-4 — `audits/19-findings-and-followups.md` post-AR refresh
+
+**Resolved as.**  (a) Annotate in place.  The synthesis doc's
+"Open follow-ups" section now carries a post-AR reconciliation
+header, strikes each AR-remediated major finding with its AR
+sub-unit reference, and flags **m-16** (chain-level accounting,
+the CA workstream) as the sole remaining open audit follow-up.
+
+**Ratifying decision.**  `docs/audits/19-findings-and-followups.md`
+"Open follow-ups"; cross-referenced from
+`docs/planning/audit_remediation_plan.md` §15C.2.
 
 ### OQ-H-1 — SMT cell-proof depth
 
