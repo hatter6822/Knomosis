@@ -29,8 +29,8 @@ optimizer (200 runs).
 |---|----------|-------|----------|--------|
 | 1.1 | FaultProofGame | Unanchored attacker-controlled `low` interval endpoint | **Critical** | **Fixed** |
 | 1.2 | FaultProofGame | Active-game lock cleared under the wrong key (re-challenge brick) | **High** | **Fixed** |
-| 1.3 | FaultProofGame | Push-payment settlement DoS if winner/treasury rejects ETH | Medium | Open — recommended |
-| 1.4 | FaultProofGame | No constructor check `responseTimeout > stepInterval` | Low | Open — recommended |
+| 1.3 | FaultProofGame | Push-payment settlement DoS if winner/treasury rejects ETH | Medium | **Fixed** |
+| 1.4 | FaultProofGame | No constructor check `responseTimeout > stepInterval` | Low | **Fixed** |
 | B.1 | SmtVerifier / Bridge | Upper-level SMT siblings not size-checked (Lean soundness precondition) | Medium | **Fixed** |
 | B.2 | Bridge | Emergency roles are immutable single keys (no rotation) | Low | Open — deployment posture |
 | 2.1 | SequencerStake | First slash zeroes the entire stake (multi-dispute reward) | Low | Open — design note |
@@ -45,9 +45,11 @@ unanchored-`low` soundness break (1.1), the High re-challenge-bricking
 lock-key bug (1.2), and the Medium SMT sibling-size soundness gap (B.1)
 — each with regression tests, including the first end-to-end
 adjudication-outcome tests (`SequencerWon` / `ChallengerWon`) the suite
-has ever had.  One Medium robustness issue (1.3, push-payment
-settlement) and lower-severity hardening items remain documented
-follow-ups.
+has ever had.  The Medium push-payment settlement DoS (1.3) and the Low
+timeout-config footgun (1.4) were **also fixed** (pull-payment escrow +
+constructor guard, with brick-resistance and config-rejection tests).
+Only deployment-posture / design-note items (B.2, 2.1) and a couple of
+extended-coverage follow-ups remain.
 
 ---
 
@@ -111,9 +113,9 @@ precisely so settlement can recover it.
 
 ---
 
-## 3. Open — decision required / recommended
+## 3. Finding detail (1.1 / 1.3 / 1.4 fixed this PR; B.2 / 2.1 / 3.1 remaining)
 
-### 1.1 — Unanchored, attacker-controlled `low` interval endpoint (Critical)
+### 1.1 — Unanchored, attacker-controlled `low` interval endpoint (Critical — **Fixed**)
 
 **File:** `KnomosisFaultProofGame.sol:initiateChallenge` (lines
 232-289), consumed by `terminateOnSingleStep` (line 401).
@@ -164,7 +166,7 @@ Regression coverage landed with the fix:
     in the suite (closing the §4 coverage gap), exercising
     `terminateOnSingleStep` against a correctly-anchored `low`.
 
-### 1.3 — Push-payment settlement DoS if winner/treasury rejects ETH (Medium)
+### 1.3 — Push-payment settlement DoS if winner/treasury rejects ETH (Medium — **Fixed**)
 
 **File:** `KnomosisFaultProofGame.sol:_settle` (lines 545-552).
 
@@ -178,13 +180,19 @@ sequencer-contract that reverts on receive could deny an honest
 challenger their win.  This is a robustness gap, not fund theft (hence
 Medium).
 
-**Recommendation.**  Adopt pull-payment escrow: credit
-`pendingWithdrawals[recipient] += payout` in `_settle` and expose a
-separate `nonReentrant` `withdraw()`.  At minimum, constrain `treasury`
-to a known-accepting address and document the winner-must-accept-ETH
-constraint.
+**Remediation (landed).**  `_settle` now CREDITS
+`pendingWithdrawals[winner] += winnerPayout` /
+`pendingWithdrawals[treasury] += treasuryPayout` (no external call —
+settlement always completes), and a new `nonReentrant` `withdraw()`
+(strict CEI: zero-before-transfer) lets recipients pull.  A reverting
+recipient can now only fail to claim its *own* share.  Regression:
+`test_settlement_not_bricked_by_reverting_treasury` settles a game whose
+treasury reverts on receive and asserts settlement completes + the
+winner still withdraws; `test_withdraw_nothing_credited_reverts` covers
+the empty-credit path.  The settlement-outcome tests were updated to
+pull via `withdraw()`.
 
-### 1.4 — Constructor does not validate `responseTimeout > stepInterval` (Low)
+### 1.4 — Constructor does not validate `responseTimeout > stepInterval` (Low — **Fixed**)
 
 **File:** `KnomosisFaultProofGame.sol` constructor.
 
@@ -192,8 +200,11 @@ If a deployment sets `MIN_BISECTION_STEP_INTERVAL_BLOCKS >=
 BISECTION_RESPONSE_TIMEOUT`, the responsible party is physically unable
 to act before the deadline and always loses by `claimTimeout`.  A
 configuration footgun, not exploitable post-correct-deploy.
-**Recommendation:** add `require(_bisectionResponseTimeout >
-_minBisectionStepInterval)` and `require(_bisectionResponseTimeout > 0)`.
+
+**Remediation (landed).**  The constructor now rejects
+`_bisectionResponseTimeout <= _minBisectionStepInterval`
+(`InvalidTimeoutConfig`; this also forces the timeout `> 0`).
+Regression: `test_constructor_rejects_timeout_le_step_interval`.
 
 ### B.2 — Bridge emergency roles are immutable single keys (Low)
 
@@ -289,5 +300,6 @@ follow-up:** a multi-round bisection-then-terminate path and an explicit
 | 1.2 | Clear `activeGameForLogIndex[g.disputedLogIndex]` in `_settle` | **this PR** |
 | 1.1 | Anchor `lowCommit` to the submitted root + 4 regression tests | **this PR** |
 | Coverage | End-to-end `SequencerWon` / `ChallengerWon` adjudication tests | **this PR** (with 1.1) |
-| 1.3 | Pull-payment settlement escrow | follow-up |
-| 1.4 / B.2 / 2.1 | Constructor guard / multisig roles / per-dispute slash | follow-up / deployment |
+| 1.3 | Pull-payment settlement escrow + brick-resistance test | **this PR** |
+| 1.4 | Constructor `responseTimeout > stepInterval` guard | **this PR** |
+| B.2 / 2.1 | Multisig roles / per-dispute slash | follow-up / deployment |

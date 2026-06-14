@@ -128,6 +128,12 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
     ///         lock.  OQ7 resolution.
     mapping(uint64 => uint256) public activeGameForLogIndex;
 
+    /// @notice Pull-payment ledger (audit 21, finding 1.3): settlement
+    ///         CREDITS the winner's and treasury's bond shares here
+    ///         instead of pushing ETH, so a reverting recipient can
+    ///         never brick `_settle`.  Recipients claim via `withdraw()`.
+    mapping(address => uint256) public pendingWithdrawals;
+
     /* ---------------------------------------------------------- */
     /* Events                                                     */
     /* ---------------------------------------------------------- */
@@ -187,6 +193,14 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
     ///         else a dishonest challenger could fabricate a pre-state
     ///         and slash an honest sequencer in the terminal step.
     error LowCommitMismatch();
+    /// @notice The constructor's `bisectionResponseTimeout` is not
+    ///         strictly greater than `minBisectionStepInterval`, so the
+    ///         responsible party could be unable to act before the
+    ///         deadline and would always lose by timeout (audit 21, 1.4).
+    error InvalidTimeoutConfig();
+    /// @notice A pull-payment withdrawal was attempted with nothing
+    ///         credited, or its transfer failed.
+    error NothingToWithdraw();
 
     /* ---------------------------------------------------------- */
     /* Constructor                                                */
@@ -211,6 +225,16 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // the sequencer's bond unlocked.
         if (_stateRootSubmission.code.length == 0) revert ZeroAddress();
         if (_stepVM.code.length == 0) revert ZeroAddress();
+        // Finding 1.4 (audit 21): the responsible party must be able to
+        // act before its deadline.  `submitMidpoint` / `respondToMidpoint`
+        // gate on `block.number >= lastStepBlock + MIN_BISECTION_STEP_
+        // INTERVAL_BLOCKS` while the deadline is `lastStepBlock +
+        // BISECTION_RESPONSE_TIMEOUT`; if the interval >= the timeout the
+        // responsible party can NEVER respond in time and always loses by
+        // `claimTimeout`.  Reject that configuration footgun (this also
+        // forces `_bisectionResponseTimeout > 0`).
+        if (_bisectionResponseTimeout <= _minBisectionStepInterval)
+            revert InvalidTimeoutConfig();
 
         BISECTION_RESPONSE_TIMEOUT = _bisectionResponseTimeout;
         MIN_CHALLENGE_BOND = _minChallengeBond;
@@ -586,17 +610,39 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         uint128 winnerPayout    = (totalBonds * 95) / 100;
         uint128 treasuryPayout  = totalBonds - winnerPayout;
 
-        // CEI ordering: state mutation done; external calls last.
+        // Finding 1.3 (audit 21): PULL-payment, not push.  Crediting the
+        // payouts here (no external call) means settlement can NEVER be
+        // bricked by a recipient that reverts on receive — in
+        // particular a misconfigured / reverting `treasury` (immutable)
+        // could otherwise brick EVERY game globally, and a
+        // contract-`winner`/`loser` could deny the opposing party their
+        // win.  Recipients pull via `withdraw()`.  CEI is preserved
+        // (`g.status` was set above; no external call occurs in `_settle`).
         if (winnerPayout > 0) {
-            (bool ok, ) = winner.call{value: winnerPayout}("");
-            if (!ok) revert BondTransferFailed();
+            pendingWithdrawals[winner] += winnerPayout;
         }
         if (treasuryPayout > 0) {
-            (bool ok, ) = payable(treasury).call{value: treasuryPayout}("");
-            if (!ok) revert BondTransferFailed();
+            pendingWithdrawals[treasury] += treasuryPayout;
         }
 
         emit FaultProofGameSettled(gameId, finalStatus, winner, winnerPayout);
+    }
+
+    /// @notice Pull-payment withdrawal (audit 21, finding 1.3).  A
+    ///         settled game's winner and the treasury claim their
+    ///         credited bond shares here.  `nonReentrant` + strict CEI
+    ///         (zero the credit BEFORE the transfer); a failed transfer
+    ///         reverts the whole call leaving the credit intact, so a
+    ///         caller can always retry.  Decoupling the transfer from
+    ///         `_settle` means a recipient that reverts on receive can
+    ///         only ever fail to claim its OWN funds — it can no longer
+    ///         brick settlement for everyone.
+    function withdraw() external nonReentrant {
+        uint256 amount = pendingWithdrawals[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+        pendingWithdrawals[msg.sender] = 0;
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        if (!ok) revert BondTransferFailed();
     }
 
     /// @notice Receive function so `slashSequencerBond` can

@@ -89,6 +89,15 @@ contract MockStateRootSubmissionForGame {
     receive() external payable {}
 }
 
+/// @notice A recipient that ALWAYS reverts on receiving ETH.  Used to
+///         prove the pull-payment settlement (audit 21, finding 1.3)
+///         cannot be bricked by a reverting treasury / winner.
+contract RevertingReceiver {
+    receive() external payable {
+        revert("no ETH");
+    }
+}
+
 /// @title KnomosisFaultProofGameTest
 /// @notice Forge tests for the bisection-game state machine
 ///         (Workstream-H WUs H.6.1.*).
@@ -200,6 +209,25 @@ contract KnomosisFaultProofGameTest is Test {
 
     function test_constants_max_bisection_depth_is_64() public view {
         assertEq(game.MAX_BISECTION_DEPTH(), 64);
+    }
+
+    /// @notice Audit 21 finding 1.4: the constructor must reject a
+    ///         config where the bisection response timeout is not
+    ///         strictly greater than the min step interval (the
+    ///         responsible party could never act in time).
+    function test_constructor_rejects_timeout_le_step_interval() public {
+        // timeout == interval: rejected.
+        vm.expectRevert(KnomosisFaultProofGame.InvalidTimeoutConfig.selector);
+        new KnomosisFaultProofGame(
+            10, MIN_CHALLENGE_BOND, 10, treasury, address(stepVM), stateRootSubmission);
+        // timeout < interval: rejected.
+        vm.expectRevert(KnomosisFaultProofGame.InvalidTimeoutConfig.selector);
+        new KnomosisFaultProofGame(
+            5, MIN_CHALLENGE_BOND, 10, treasury, address(stepVM), stateRootSubmission);
+        // timeout == 0 (and interval 0): rejected (0 is not > 0).
+        vm.expectRevert(KnomosisFaultProofGame.InvalidTimeoutConfig.selector);
+        new KnomosisFaultProofGame(
+            0, MIN_CHALLENGE_BOND, 0, treasury, address(stepVM), stateRootSubmission);
     }
 
     /* -------- initiateChallenge -------- */
@@ -415,10 +443,17 @@ contract KnomosisFaultProofGameTest is Test {
         vm.prank(sequencer);
         game.terminateOnSingleStep(gameId, kind, actionFields, stepSigner, proofs);
 
-        // SequencerWon: the sequencer collects the winner's 95% share of
-        // the challenger's forfeited bond.
+        // SequencerWon: the sequencer is CREDITED the winner's 95% share
+        // of the challenger's forfeited bond (pull-payment, 1.3) and
+        // claims it via withdraw().
+        assertGt(game.pendingWithdrawals(sequencer), 0,
+            "sequencer must be credited the winning payout");
+        vm.prank(sequencer);
+        game.withdraw();
         assertGt(sequencer.balance, seqBalBefore,
             "honest sequencer must receive the winning payout");
+        assertEq(game.pendingWithdrawals(sequencer), 0,
+            "credit cleared after withdraw");
         // The 1.2 fix: the active-game lock is cleared under the
         // disputed index (1), freeing a re-challenge slot.
         assertEq(game.activeGameForLogIndex(1), 0,
@@ -457,6 +492,9 @@ contract KnomosisFaultProofGameTest is Test {
         vm.prank(sequencer);
         game.terminateOnSingleStep(gameId, 0, actionFields, 10, proofs);
 
+        // Pull-payment (1.3): the challenger claims its credited share.
+        vm.prank(challenger);
+        game.withdraw();
         assertGt(challenger.balance, chalBalBefore,
             "honest challenger must receive the winning payout");
         // ChallengerWon slashes the sequencer's state-root bond.
@@ -497,10 +535,67 @@ contract KnomosisFaultProofGameTest is Test {
         uint128 winnerPayout   = (total * 95) / 100;
         uint128 treasuryPayout = total - winnerPayout;
 
+        // Pull-payment (1.3): winner + treasury claim their credited
+        // shares via withdraw().
+        assertEq(game.pendingWithdrawals(challenger), winnerPayout,
+            "challenger credited 95% of the bond pool");
+        assertEq(game.pendingWithdrawals(treasury), treasuryPayout,
+            "treasury credited 5% of the bond pool");
+        vm.prank(challenger);
+        game.withdraw();
+        vm.prank(treasury);
+        game.withdraw();
+
         assertGe(challenger.balance, challengerBefore + winnerPayout - 1 ether,
             "challenger received 95% bond payout");
         assertEq(treasury.balance, treasuryBefore + treasuryPayout,
             "treasury received 5% bond payout");
+    }
+
+    /// @notice CRITICAL SECURITY TEST (audit 21, finding 1.3): a
+    ///         settlement whose treasury REVERTS on receiving ETH must
+    ///         still complete.  Under the old push-payment a reverting
+    ///         (immutable) treasury would brick EVERY game forever; the
+    ///         pull-payment fix decouples settlement from the transfer,
+    ///         so the broken treasury can only fail to claim its OWN
+    ///         share — the winner is unaffected.
+    function test_settlement_not_bricked_by_reverting_treasury() public {
+        RevertingReceiver badTreasury = new RevertingReceiver();
+        KnomosisFaultProofGame brickGame = new KnomosisFaultProofGame(
+            BISECTION_TIMEOUT, MIN_CHALLENGE_BOND, MIN_STEP_INTERVAL,
+            address(badTreasury), address(stepVM), stateRootSubmission);
+
+        vm.prank(challenger);
+        uint256 gameId = brickGame.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            12, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        // Sequencer times out → challenger wins.  This MUST NOT revert
+        // (settlement is not bricked by the reverting treasury).
+        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.prank(challenger);
+        brickGame.claimTimeout(gameId);
+
+        // The treasury was credited (but cannot pull); the winner can.
+        assertGt(brickGame.pendingWithdrawals(address(badTreasury)), 0,
+            "treasury credited despite being unable to receive ETH");
+        uint256 chalBefore = challenger.balance;
+        vm.prank(challenger);
+        brickGame.withdraw();
+        assertGt(challenger.balance, chalBefore,
+            "winner withdrew its share despite the broken treasury");
+
+        // The broken treasury's own withdraw reverts (self-harm only),
+        // proving the failure is isolated to the treasury, not the game.
+        vm.prank(address(badTreasury));
+        vm.expectRevert(KnomosisFaultProofGame.BondTransferFailed.selector);
+        brickGame.withdraw();
+    }
+
+    /// @notice `withdraw()` with nothing credited reverts cleanly.
+    function test_withdraw_nothing_credited_reverts() public {
+        vm.prank(challenger);
+        vm.expectRevert(KnomosisFaultProofGame.NothingToWithdraw.selector);
+        game.withdraw();
     }
 
     function test_claimTimeout_calls_slashSequencerBond_on_challenger_wins() public {
