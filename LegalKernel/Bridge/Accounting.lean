@@ -530,6 +530,73 @@ theorem bridge_accounting_equation_balanced_iff
     (totalDeposited es r = totalWithdrawn es r + escrow) := by
   rw [totalUserDeposited_plus_pool_eq_totalDeposited]
 
+/-! ## CA — chain-level bridge accounting (§7.6.4 / §7.6.5)
+
+Workstream CA makes the previously-abstract `escrow` term concrete.
+The escrow held by the L1 bridge for resource `r` is exactly the L2
+funds that entered via deposits and have not yet left via withdrawals:
+`totalDeposited es r − totalWithdrawn es r` (truncated `Nat`
+subtraction).  With this definition the §15D / §7.6.4 accounting
+equation `totalDeposited = totalWithdrawn + bridgeEscrowBalance` holds
+*exactly when* the bridge is solvent at `r`
+(`totalWithdrawn ≤ totalDeposited`); `Bridge/Reachable.lean`'s
+`BridgeReachable` chains preserve solvency from genesis, so along any
+bridge transition sequence the equation holds unconditionally. -/
+
+/-- The L1 escrow balance backing resource `r`, as reflected on L2: the
+    deposits that have entered minus the withdrawals that have left.
+    This is the concrete realisation of the `escrow` term left abstract
+    by `bridge_accounting_equation_balanced_iff` — an L2-derived
+    quantity (the kernel models L2; the L1 contract holds the matching
+    funds, validated by the cross-stack corpus). -/
+def bridgeEscrowBalance (es : ExtendedState) (r : ResourceId) : Nat :=
+  totalDeposited es r - totalWithdrawn es r
+
+/-- The bridge is *solvent* at every resource: no more has been
+    withdrawn than deposited.  The precondition under which the
+    accounting equation holds with a non-truncating escrow term. -/
+def BridgeSolvent (es : ExtendedState) : Prop :=
+  ∀ r : ResourceId, totalWithdrawn es r ≤ totalDeposited es r
+
+/-- **§7.6.4 accounting equation (concrete escrow).**  Under solvency at
+    `r`, total deposits equal total withdrawals plus the escrow balance.
+    Makes `bridge_accounting_equation_balanced_iff`'s abstract `escrow`
+    concrete as `bridgeEscrowBalance`. -/
+theorem bridge_accounting_equation (es : ExtendedState) (r : ResourceId)
+    (h : totalWithdrawn es r ≤ totalDeposited es r) :
+    totalDeposited es r = totalWithdrawn es r + bridgeEscrowBalance es r := by
+  unfold bridgeEscrowBalance
+  omega
+
+/-- The split (GP.4.2) form of the §7.6.4 equation, under solvency: the
+    user-credit and pool-credit legs sum to withdrawals plus escrow.
+    Combines `bridge_accounting_equation` with the GP.4.2 split
+    `totalUserDeposited + totalPoolDeposited = totalDeposited`. -/
+theorem bridge_accounting_equation_split (es : ExtendedState) (r : ResourceId)
+    (h : totalWithdrawn es r ≤ totalDeposited es r) :
+    totalUserDeposited es r + totalPoolDeposited es r =
+      totalWithdrawn es r + bridgeEscrowBalance es r := by
+  rw [totalUserDeposited_plus_pool_eq_totalDeposited]
+  exact bridge_accounting_equation es r h
+
+/-- Genesis escrow is zero (empty bridge ledger). -/
+theorem bridgeEscrowBalance_genesis (r : ResourceId) :
+    bridgeEscrowBalance { base := genesisState, nonces := NonceState.empty,
+                          registry := KeyRegistry.empty,
+                          bridge := BridgeState.empty } r = 0 := by
+  unfold bridgeEscrowBalance
+  rw [totalDeposited_genesis, totalWithdrawn_genesis]
+
+/-- The genesis state is bridge-solvent (both sums are zero). -/
+theorem genesis_bridge_solvent :
+    BridgeSolvent { base := genesisState, nonces := NonceState.empty,
+                    registry := KeyRegistry.empty,
+                    bridge := BridgeState.empty } := by
+  intro r
+  rw [totalDeposited_genesis, totalWithdrawn_genesis]
+  -- both sides are 0; solvency `0 ≤ 0` holds
+  omega
+
 /-! ### Fresh-insert deltas for the GP.4.2 folds
 
 A deposit action records a *fresh* deposit id (uniqueness is enforced
