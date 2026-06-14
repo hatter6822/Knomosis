@@ -244,6 +244,10 @@ import LegalKernel.Bridge.Ingest
 import LegalKernel.Bridge.State
 import LegalKernel.Bridge.Admissible
 import LegalKernel.Bridge.Accounting
+-- Workstream CA — chain-level bridge accounting (§7.6.4 / §7.6.5):
+-- `BridgeReachable` + `BridgeAction`, the substrate over which the
+-- per-action accounting deltas compose into the chain-level identities.
+import LegalKernel.Bridge.Reachable
 -- Workstream GP.7.2 — the canonical `gasPoolPolicy` LocalPolicy
 -- governing `gasPoolActor` outflow (capped `transfer`-to-sequencer
 -- only).  Non-TCB; consumed by the GP.7.3 pool-drain bound.
