@@ -22,39 +22,41 @@ identities.  It does **not** touch the TCB.
 
 ## Status
 
-> **Reconciliation status (2026-06-14): NOT STARTED — and the design
-> sketches below are STALE against the current code.**  CA closes audit
-> finding m-16 (the last open "Defer").  A 2026-06-14 grounding pass
-> against the shipped tree found the sketches in §2–§4 **do not match
-> reality** and must be re-designed before implementation:
+> **Reconciliation status (2026-06-14): COMPLETE — audit finding m-16
+> closed.**  CA shipped in `LegalKernel/Bridge/Reachable.lean` and
+> `LegalKernel/Bridge/ChainAccounting.lean`.  Headline theorems
+> (axiom-clean; `#print axioms` ⊆ `{propext, Classical.choice,
+> Quot.sound}`):
 >
->   * There is **no `L1EscrowLedger` / `EscrowEntry` type and no
->     `bridgeEscrowBalance` function** — they appear only as prose in
->     `Bridge/Accounting.lean` docstrings.  The real model is L2-only:
->     `BridgeState = { consumed, pending, nextWdId, …AMM mirrors }`, with
->     `totalDeposited` / `totalWithdrawn` folds over `consumed` /
->     `pending` (both append-only in-kernel; L1 redemption is off-chain,
->     and both are zero at genesis).  CA must *define*
->     `bridgeEscrowBalance` (faithfully `totalDeposited − totalWithdrawn`,
->     per resource), not assume an existing one.
->   * The kernel's `Reachable` is `inductive Reachable (s0 : State) :
->     State → Prop` — **not** the `ExtendedState → ExtendedState` shape
->     sketched in §2.3.  `BridgeReachable` must follow the real shape.
->   * The CA.3 `l1EscrowMatchesL2`-over-`entries` design **contradicts
->     this plan's own §9** ("L1-side proof … is the Solidity contract's
->     responsibility, validated by the cross-stack corpus") and the
->     project's Lean=L2 / Solidity=L1 architecture; modelling fictional
->     L1 entries is exactly the "false-secure" risk §7 flags.  The
->     faithful CA deliverable is the L2-side accounting identity
->     (`totalDeposited = totalWithdrawn + bridgeEscrowBalance` under
->     solvency) plus a chain-level conservation theorem over
->     `BridgeReachable`, with `BridgeAction ⊇ { deposit, depositWithFee,
->     withdraw }` (the three bridge-state-mutating constructors —
->     `Bridge/Admissible.lean:applyActionToBridgeState`).
+>   * `bridge_chain_conserves` — every state bridge-reachable from
+>     genesis satisfies `totalWithdrawn r + TotalSupply base r =
+>     totalDeposited r` at every resource (§7.6.5);
+>   * `bridgeReachable_solvent` — hence `totalWithdrawn r ≤
+>     totalDeposited r` (solvency, proved not assumed);
+>   * `bridge_chain_accounting_equation` — hence the §7.6.4 identity
+>     `totalDeposited r = totalWithdrawn r + bridgeEscrowBalance r` holds
+>     **unconditionally** along bridge chains.
 >
-> Treat §2–§4 as design *intent*, not an implementation spec.  All
-> bridge-surface facts must be re-derived from
-> `Bridge/{State,Accounting,Admissible}.lean` at implementation time.
+> **Design note (the §2–§4 sketches below were NOT followed; they are
+> retained only as historical intent).**  A grounding pass found them
+> stale, and CA was implemented against the real code instead:
+>
+>   * `bridgeEscrowBalance es r := totalDeposited es r − totalWithdrawn
+>     es r` is now a real `def` (`Bridge/Accounting.lean`) — there is no
+>     `L1EscrowLedger` / `EscrowEntry`; the model is L2-only.
+>   * `BridgeReachable verify P deploymentId : ExtendedState →
+>     ExtendedState → Prop` follows the kernel's real `Reachable` shape
+>     and advances through the production `apply_bridge_admissible_with`
+>     stepper, restricted to `BridgeAction = { deposit, depositWithFee,
+>     withdraw }` (the three bridge-state-mutating constructors).
+>   * No fictional L1 entries are modelled (per this plan's own §9 and
+>     the Lean=L2 / Solidity=L1 architecture).  The chain proof carries a
+>     `WithdrawalsMonotonic` well-formedness invariant (`nextWdId`
+>     freshness) alongside conservation; the L1 side remains the Solidity
+>     contract's responsibility, validated by the cross-stack corpus.
+>
+> Tests: `LegalKernel/Test/Bridge/ChainAccounting.lean` (suite
+> `bridge-chain-accounting`).
 
   * **Workstream prefix:** `CA` (Chain Accounting).  Three
     sub-units:

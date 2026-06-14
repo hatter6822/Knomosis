@@ -957,9 +957,9 @@ trail.  This is the recommended approach in
 synthesis doc's "Open follow-ups" section
 (`docs/audits/19-findings-and-followups.md`) now carries a
 post-AR reconciliation header, strikes each AR-remediated finding
-with its AR sub-unit reference, and flags **m-16** (chain-level
-accounting, the CA workstream) as the sole remaining open audit
-follow-up.  See §10.
+with its AR sub-unit reference, and records that **m-16** (chain-level
+accounting) is now closed by Workstream CA — so all audit follow-ups
+are resolved.  See §10.
 
 ---
 
@@ -1060,7 +1060,15 @@ requires a `L1EscrowLedger` type.  May not exist yet.
 **Recommendation.**  (a).  Future deployments may swap
 `L1EscrowLedger` implementations independently.
 
-**Status.**  NEW; resolves at CA.3.a.
+**Status.**  RESOLVED (2026-06-14): **moot — neither option taken.**
+The CA grounding pass found there is no `L1EscrowLedger` (it existed
+only as docstring prose) and that modelling fictional L1 entries is the
+"false-secure" risk the plan itself flags.  CA shipped against the real
+L2-only model: escrow is the *derived* quantity `bridgeEscrowBalance es
+r := totalDeposited es r − totalWithdrawn es r` (`Bridge/Accounting.lean`),
+and the chain theorems live in `Bridge/ChainAccounting.lean`.  The L1
+side remains the Solidity contract's responsibility, validated by the
+cross-stack corpus.
 
 ### OQ-PA-9 — Parameter encoder injectivity timing
 
@@ -1198,8 +1206,9 @@ section.
 **Resolved as.**  (a) Annotate in place.  The synthesis doc's
 "Open follow-ups" section now carries a post-AR reconciliation
 header, strikes each AR-remediated major finding with its AR
-sub-unit reference, and flags **m-16** (chain-level accounting,
-the CA workstream) as the sole remaining open audit follow-up.
+sub-unit reference, and records that **m-16** (chain-level
+accounting) is now closed by Workstream CA — all audit follow-ups
+are resolved.
 
 **Ratifying decision.**  `docs/audits/19-findings-and-followups.md`
 "Open follow-ups"; cross-referenced from

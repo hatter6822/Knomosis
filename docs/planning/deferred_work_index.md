@@ -21,10 +21,11 @@ questions registry.
 > the following workstreams have **completed** and are reflected in
 > the catalogue's Status column: **EI**, **RH** (all 11 crates),
 > **SC**, **SVC**, **FQ** (Track A), **WG** (E-G, ratified as
-> GENESIS_PLAN §15D), and **GP** through GP.11.10.  The genuinely
-> **open** work, in rough landing order, is: **CA** (closes m-16,
-> the last open audit finding), the **GP** tail (GP.8 Tracks B–D +
-> remaining GP.9 / GP.10), **PA** (drafted, unlanded), **Phase 7**
+> GENESIS_PLAN §15D), **GP** through GP.11.10, and **CA** (closes
+> m-16, the last open audit finding; §7.6.4 / §7.6.5).  The genuinely
+> **open** work, in rough landing order, is: the **GP** tail (GP.8
+> Tracks B–D + remaining GP.9 / GP.10), **PA** (drafted, unlanded),
+> **Phase 7**
 > (not started; project recommends P7.F + P7.A first), and the
 > **LX2 / LX3** roadmap (demand-driven).  CLAUDE.md's roadmap table
 > is the canonical status; this index navigates the plans.
@@ -41,7 +42,7 @@ counts in parentheses give the total granular landing surface.
 | `rust_host_runtime_plan.md` | RH — Phase 5 + E-A + E-B + H.10.5 Rust | 8 sub-streams (~40) | ~14–18 wks | **Complete.**  RH-H–G all shipped (11 crates: verify-secp256k1, hash-keccak256, l1-ingest, host, event-subscribe, storage, indexer, faultproof-observer, bench, cli-common, cross-stack).  CLAUDE.md roadmap: `RH-H–G | Complete`. | independent (Rust-only) |
 | `smt_cell_proofs_plan.md` | SC — cross-stack soundness for cell proofs | 3 (~15) | ~5–7 wks | **Complete.**  SC.1–SC.3 shipped (`smtCellProof_sound_under_collision_free`; tri-stack cell-proof corpus); closed the documented soundness gap. | independent of EI (uses same `CollisionFree hashBytes`) |
 | `ethereum_workstream_g_plan.md` | WG — E-G documentation amendment | 5 (~17) | ~13 days | **Complete.**  E-G ratified into the canonical docs: GENESIS_PLAN §15D (Workstream E Amendment: Ethereum Integration, §15D.1–§15D.8), `abi.md` Ethereum / bridge ABI surface, `extraction_notes.md` TA-2.1–TA-2.5, README + CLAUDE.md roadmap (`E-A–G | Complete`). | independent (documentation) |
-| `chain_level_accounting_plan.md` | CA — §7.6.4 / §7.6.5 inductive promotion | 3 (~13) | ~9 days | retires m-16, the only AR "Defer / n/a" finding | independent (Lean-only) |
+| `chain_level_accounting_plan.md` | CA — §7.6.4 / §7.6.5 inductive promotion | 3 (~13) | **Complete.**  Retired m-16, the last open AR finding: `Bridge/Reachable.lean` (`BridgeReachable`) + `Bridge/ChainAccounting.lean` (`bridge_chain_conserves`, `bridgeReachable_solvent`, `bridge_chain_accounting_equation`); concrete `bridgeEscrowBalance`. | independent (Lean-only) |
 | `parameterized_laws_landing_plan.md` | PA — land the drafted parameter substrate | 12 (~52) | ~5 wks | drafted in `parameterized_laws_plan.md` | benefits from EI; not strictly blocking |
 | `phase_7_plan.md` | P7 — advanced-capability portfolio | 7 sub-workstreams (~40) | 25+ wks (open-ended) | menu workstream; pick sub-workstreams per release | GP budget substrate is a prerequisite for variable-cost action pricing; otherwise varies per sub-workstream |
 | `unified_gas_pool_plan.md` | GP — unified gas pool + actor budgets | 12 phases (~80+) | ~20+ wks | active workstream — GP.0–7.4, GP.9.1, GP.11.1–11.10 complete (incl. the v1.4 AMM disaster-recovery quad-surface: 3-of-N multisig, `Action.reclaimAmmReserves` 24, `ammDisabled` state-root mirror); GP.8 Tracks B–D + remaining GP.9/GP.10 future | foundational for P7 variable-cost action economics |

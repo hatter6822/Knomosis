@@ -178,10 +178,11 @@ knomosis/
 │   │                             RefundRateSidecar
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6)
 │   ├── LocalPolicy/           -- Workstream LP classification typeclasses
-│   ├── Bridge/                -- Workstreams A–D + GP: crypto adaptors, identity,
-│   │                             bridge laws, withdrawal proofs, gas-pool policy,
-│   │                             pool-drain bound, AMM math, AMM reserve policy,
-│   │                             budget refund, accounting
+│   ├── Bridge/                -- Workstreams A–D + GP + CA: crypto adaptors,
+│   │                             identity, bridge laws, withdrawal proofs,
+│   │                             gas-pool policy, pool-drain bound, AMM math,
+│   │                             AMM reserve policy, budget refund, accounting,
+│   │                             BridgeReachable + chain-level conservation (CA)
 │   ├── FaultProof/            -- Workstream H: state-commitment, bisection game,
 │   │                             convergence/honesty/settlement theorems, SMT
 │   │                             cell proofs, step-VM coherence
@@ -552,6 +553,9 @@ The Genesis Plan promises a small set of type-level guarantees
 | GP.11.8 | v1.2 backward compatibility | `bridgeState_commit_extends_v1_2` | `FaultProof/Commit.lean` |
 | GP.11.8 | Encoding factoring | `bridgeState_encode_factored` | `FaultProof/Commit.lean` |
 | GP.11.8 | AMM genesis suffix const | `bridgeState_amm_genesis_suffix_const` | `FaultProof/Commit.lean` |
+| CA | Chain bridge conservation | `bridge_chain_conserves` | `Bridge/ChainAccounting.lean` |
+| CA | Chain bridge solvency | `bridgeReachable_solvent` | `Bridge/ChainAccounting.lean` |
+| CA | §7.6.4 escrow identity (unconditional) | `bridge_chain_accounting_equation` | `Bridge/ChainAccounting.lean` |
 | H | Bisection convergence | `bisection_converges_after_enough_rounds` | `FaultProof/Convergence.lean` |
 | H | Honest challenger wins | `honest_challenger_wins_against_invalid_state_root` | `FaultProof/Settlement.lean` |
 | SC.1 | SMT cell-proof soundness | `smtCellProof_sound_under_collision_free` | `FaultProof/Smt.lean` |
@@ -606,7 +610,8 @@ work units.  Status:
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Track A complete; Tracks B–D future |
 | GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–10 complete) |
-| AR | Audit remediation | Complete |
+| AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
+| CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
 | 7 | Advanced capabilities | Not started |
 
@@ -669,7 +674,7 @@ at the current build tag:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 040 | ~150 | `lake test` |
+| Lean | ~3 050 | ~150 | `lake test` |
 | Rust | ~1 960 | across 11 crates | `cargo test --workspace` |
 | Solidity | ~867 passed | 58 forge suites | `cd solidity && forge test` |
 
@@ -694,6 +699,8 @@ full catalogue):
 - `faultproof-amm-commit` — GP.11.8 AMM state-root commitment
   integration + GP.11.10 `ammDisabled` kill-switch mirror (28 cases).
 - `deployments-gas-pool-example` — GP.7.4 end-to-end genesis ratification.
+- `bridge-chain-accounting` — CA §7.6.4 / §7.6.5 chain conservation,
+  solvency, and the unconditional escrow identity (closes m-16).
 
 **Notable Rust crates by test count:**
 
@@ -809,7 +816,23 @@ Plan: `docs/planning/audit_remediation_plan.md`
 
 Complete.  Key contributions: `signedActionDomain`, deployment-id
 threading, snapshot chain-anchor checks, `Action`/`Event` tag
-regression pins, `@[extern]` hash annotations, CODEOWNERS.
+regression pins, `@[extern]` hash annotations, CODEOWNERS.  The lone
+deferred finding (m-16, chain-level accounting) is now closed by
+Workstream CA below.
+
+### Chain-level bridge accounting (Workstream CA)
+
+Plan: `docs/planning/chain_level_accounting_plan.md`
+
+Complete.  Closes audit finding m-16 (GENESIS_PLAN §7.6.4 / §7.6.5).
+`Bridge/Reachable.lean` defines `BridgeReachable` (reachability over the
+production `apply_bridge_admissible_with` stepper, restricted to the
+bridge-state-mutating actions); `Bridge/ChainAccounting.lean` proves
+`bridge_chain_conserves` (`totalWithdrawn + TotalSupply =
+totalDeposited` from genesis), `bridgeReachable_solvent`, and the
+unconditional escrow identity `bridge_chain_accounting_equation`.  The
+escrow term `bridge_accounting_equation_balanced_iff` left abstract is
+now the concrete `bridgeEscrowBalance` (`Bridge/Accounting.lean`).
 
 ### Encoder injectivity (Workstream EI)
 

@@ -634,12 +634,14 @@ All are deployment-level concerns, not kernel soundness.
 > AR (Audit Remediation) workstream has since **closed every major
 > finding** listed here; each item is annotated inline with the AR
 > sub-unit that remediated it (canonical status:
-> `docs/planning/audit_remediation_plan.md` §15C.2).  The **sole
-> remaining open audit follow-up** is **m-16** (chain-level bridge
-> accounting), tracked by the CA workstream
-> (`docs/planning/chain_level_accounting_plan.md`); see "Remaining
-> open follow-up" below.  This annotation resolves OQ-DOC-4 in
-> `docs/planning/open_questions.md`.
+> `docs/planning/audit_remediation_plan.md` §15C.2).  **All audit
+> follow-ups are now closed**: the lone deferred finding **m-16**
+> (chain-level bridge accounting) was closed by Workstream **CA**
+> (`LegalKernel/Bridge/{Reachable,ChainAccounting}.lean`; headline
+> `bridge_chain_accounting_equation` proves the §7.6.4 escrow identity
+> unconditionally along bridge chains).  The "Remaining open follow-up"
+> section below is retained as the historical record.  This annotation
+> resolves OQ-DOC-4 in `docs/planning/open_questions.md`.
 
 Pulling from the major findings and the most actionable
 minor findings, the recommended follow-up backlog is:
