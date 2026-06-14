@@ -758,3 +758,54 @@ transaction gas, refunds netted).  At 30 gwei / $3 000 ETH:
 A full 3-of-N multisig firing therefore costs two non-final
 confirms plus one executing confirm — about **$21** total.  Gas
 cost is never a reason to delay firing it.
+
+## 11. Sequencer reimbursement claims (GP.8 Track B)
+
+The sequencer pays real L1 ETH/BOLD to submit state roots; it
+reimburses itself from the gas pool (`gasPoolActor`, `ActorId 1`) by
+submitting a **reimbursement claim** — a single `transfer` of the leg
+from `gasPoolActor` to `sequencerActor` (`ActorId 2`), signed by the
+pool key.  The claim is built by
+`knomosis-l1-ingest::sequencer_claim::SequencerClaim::build` and admitted
+under the GP.7.4 `gasPoolPolicy` (see `abi.md` §10.2.6).
+
+### 11.1 Provisioning (or claims fail closed)
+
+`gasPoolActor` is **not** budget-exempt (only `bridgeActor` is) and the
+production kernel always runs in bounded-budget mode (genesis default
+`.bounded 0 1 0` is deny-by-default).  Before the first claim:
+
+  * **Register the `gasPoolActor` key** (e.g. a `bridgeActor`-signed
+    `registerIdentity`, or at genesis) and hold it behind a KMS /
+    `Zeroizing` keystore — the constructor takes a `BridgeActorKey`.
+  * **Run with `freeTier ≥ 1` and `currentEpoch ≥ 1`** (Track C already
+    requires this for users; it extends to `gasPoolActor` itself).
+  * **Track the nonce** — advance it monotonically per claim
+    (`AdmissibleWith` requires `nonce = expectsNonce`).
+
+A mis-provisioned pool actor simply *cannot* claim (it fails with
+`InsufficientBudget` or a nonce error) — a fail-closed property, not a
+vulnerability, but a real prerequisite.
+
+### 11.2 Cadence, cap, and the honour-system bound
+
+  * **Cap.** Each claim is clamped to the leg's `maxDrainPerAction`
+    (`--gas-pool-{eth,bold}-cap`); the constructor makes over-cap
+    *unconstructible*.  Across `n` admitted claims the leg balance falls
+    by at most `n × cap` (proven: GP.7.3 `pool_drain_bounded_by_action_count`).
+  * **Cadence.** Claims are periodic and infrequent; keep claim
+    frequency within `gasPoolActor`'s per-epoch budget (`freeTier` + any
+    `topUpActionBudget`).  Claiming more often than the budget allows
+    fails closed.
+  * **Honour system (v1).** `amount` is the operator's *estimate* of L1
+    gas spent — not a proven receipt.  Size the cap so the worst-case
+    over-claim per epoch is an acceptable loss; the dispute pipeline can
+    challenge sustained over-claims.  Set the claimed `amount` from your
+    L1 submitter's actual gas accounting between claims.
+
+### 11.3 Forward path (v2)
+
+The receipt-verified claim (gate `amount` on an L1 gas-receipt verifier
++ price oracle) is **OQ-GP-8b** / GP.8.5 — deferred from v1.  Prioritise
+it before the pool holds material value (see
+`docs/economic_incentive_analysis.md` §4 / IC-6).
