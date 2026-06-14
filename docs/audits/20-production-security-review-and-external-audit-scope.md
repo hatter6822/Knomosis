@@ -147,7 +147,7 @@ deliverable `docs/economic_incentive_analysis.md` (P2).
 | ID | Severity | Finding |
 |----|----------|---------|
 | **F-1** | **Medium → addressed** | The hash fallback `knomosis-hash-fallback.c` provides only **64-bit** collision resistance (FNV-1a-64); the state-commitment soundness assumes ≥128-bit. The strong binding (BLAKE3/keccak via `@[extern]`) is the production default and the fallback is for tests/CI, but previously **nothing failed if a production binary shipped the fallback**. A 64-bit hash makes state-commitment collisions feasible (~2³² work), forging fault-proof state roots. **Addressed (2026-06-14):** the `knomosis hash-check` subcommand now *fails closed* — it prints the binding and exits `1` on the fallback, `0` on a production-grade hash. Deployment/release pipelines MUST run it as a required gate (verified: exits 1 on the CI/dev fallback build). Residual operational step: wiring it into the release pipeline. |
-| **F-2** | Low (by design) | TA-1/TA-2 are deployment-injected; a deployment that injects a *broken* verifier/hash silently loses all guarantees. Mitigated by the cdylibs + the cross-stack corpora, but the **injection point is unauthenticated at the Lean level** (it's a build-time linkage). Recommendation: pin the cdylib build (SHA-256, as `scripts/setup.sh` does for the toolchain) and assert the verifier identifier at startup. |
+| **F-2** | Low → partly addressed | TA-1/TA-2 are deployment-injected; a deployment that injects a *broken* verifier/hash silently loses all guarantees. Mitigated by the cdylibs + the cross-stack corpora, but the **injection point is unauthenticated at the Lean level** (build-time linkage). **Addressed (2026-06-14):** the verifier-identifier assertion is now implemented — `knomosis verify-check` fails closed (exit 1) on the Lean-opaque fallback and exit 0 when the secp256k1 cdylib (which now exports `knomosis_verify_identifier`) is linked; mirrors the F-1 hash gate. **Residual:** SHA-256-pin the cdylib *build artefacts* (a build-pipeline step, as `scripts/setup.sh` does for the toolchain). |
 | **F-3** | Informational | Cross-stack equivalence is corpus-validated (§4.2). No finding of divergence; the risk is **coverage**, addressed by P2 §6 adversarial-corpus expansion. |
 | **F-4** | Informational | Economic incentives are unmodelled (§4.5) — not a defect, a scope gap for the companion analysis. |
 
@@ -174,8 +174,9 @@ contracts (§4.1) and the deployment-discipline items above.
 - [x] **F-1 (gate implemented):** `knomosis hash-check` fails closed on
       the FNV-1a-64 fallback (exit 1; verified). **Remaining:** wire it
       into the release/deploy pipeline as a required gate.
-- [ ] **F-2:** SHA-256-pin the cdylib artefacts; assert the verifier
-      identifier at startup.
+- [~] **F-2:** verifier-identifier startup assert **done**
+      (`knomosis verify-check`; cdylib exports `knomosis_verify_identifier`).
+      **Remaining:** SHA-256-pin the cdylib build artefacts (pipeline).
 - [ ] **Adversarial-corpus expansion** (§4.2) — boundary/adversarial
       fixtures for all 25 action variants + the fund paths
       (companion: P2 test-expansion increment).

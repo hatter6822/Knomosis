@@ -78,6 +78,9 @@ python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
                                       # FNV-1a-64 fallback, 0 if a
                                       # production hash (BLAKE3/keccak)
                                       # is @[extern]-linked.
+.lake/build/bin/knomosis verify-check # F-2 deploy gate: exit 1 on the
+                                      # Lean-opaque verifier fallback, 0
+                                      # if the secp256k1 cdylib is linked.
 .lake/build/bin/knomosis bootstrap /tmp/test.log
 .lake/build/bin/knomosis-replay /tmp/test.log
 .lake/build/bin/knomosis gas-pool-demo

@@ -165,6 +165,27 @@ def cmdHashCheck : IO UInt32 := do
                  (security-review F-1)."
     pure 1
 
+/-- Subcommand: `knomosis verify-check`.  The signature-verifier
+    counterpart of `hash-check` (security-review F-2).  Exits `0` iff a
+    production-grade ECDSA-secp256k1 verifier is linked (the
+    `knomosis-verify-secp256k1` `@[extern]` binding), and `1` if the
+    Lean-opaque fallback is in effect.  The fallback is *fail-closed*
+    (the opaque `Verify` rejects every signature — no forgery risk), but
+    it is non-functional, so a deployment must gate on this alongside
+    `hash-check`. -/
+def cmdVerifyCheck : IO UInt32 := do
+  IO.println s!"verify:       {Bridge.verifyImplementationIdentifier ()}"
+  if Bridge.isProductionVerify then
+    IO.println "verify-grade: production — OK"
+    pure 0
+  else
+    IO.eprintln "FATAL: no production signature verifier linked (the \
+                 Lean-opaque fallback rejects all signatures — \
+                 fail-closed but non-functional).  Link the \
+                 knomosis-verify-secp256k1 @[extern] binding before \
+                 deploying (security-review F-2)."
+    pure 1
+
 /-- Audit-3.1: emit a single-line stderr warning at the start of
     every chain-touching subcommand if the binary is running with
     the Lean fallback hash and the operator did not explicitly opt
@@ -685,6 +706,10 @@ def cmdHelp : IO UInt32 := do
   IO.println "  knomosis hash-check"
   IO.println "        (deployment gate: exit 0 iff a production-grade hash"
   IO.println "         is linked; exit 1 on the FNV-1a-64 fallback — F-1)"
+  IO.println "  knomosis verify-check"
+  IO.println "        (deployment gate: exit 0 iff a production-grade"
+  IO.println "         signature verifier is linked; exit 1 on the"
+  IO.println "         Lean-opaque fallback — F-2)"
   IO.println "  knomosis [GLOBAL_FLAGS] process          LOG IN [OUT]"
   IO.println "  knomosis [GLOBAL_FLAGS] replay           LOG"
   IO.println "  knomosis [GLOBAL_FLAGS] bootstrap        LOG"
@@ -1165,6 +1190,7 @@ def main (args : List String) : IO UInt32 := do
   | [] => cmdHelp
   | ["info"] => cmdInfo
   | ["hash-check"] => cmdHashCheck
+  | ["verify-check"] => cmdVerifyCheck
   | ["help"] => cmdHelp
   | ["gas-pool-demo"] => do
     -- GP.7.4 worked deployment: runs the unified-gas-pool example

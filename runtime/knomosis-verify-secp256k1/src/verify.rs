@@ -289,6 +289,9 @@ extern "C" {
     fn knomosis_lean_sarray_cptr(o: *const u8) -> *const u8;
     /// Non-inline wrapper around `lean_dec`.
     fn knomosis_lean_dec(o: *const u8);
+    /// Non-inline wrapper around `lean_mk_string_from_bytes`.  Defined
+    /// in `c/lean_shim.c`; used by `knomosis_verify_identifier`.
+    fn knomosis_lean_mk_string_from_bytes(s: *const u8, sz: usize) -> *mut u8;
 }
 
 /// `knomosis_verify_ecdsa(pk, msg, sig) -> Bool` — Lean ABI entry
@@ -338,6 +341,32 @@ pub unsafe extern "C" fn knomosis_verify_ecdsa(
     knomosis_lean_dec(sig);
 
     result
+}
+
+/// The verifier identifier bytes — single-sourced from
+/// [`crate::ADAPTOR_IDENTIFIER`] so it cannot drift from the Lean-side
+/// `Bridge.VerifyAdaptor.verifyAdaptorIdentifier` constant it mirrors.
+#[cfg(knomosis_lean_ffi)]
+const IDENTIFIER_BYTES: &[u8] = crate::ADAPTOR_IDENTIFIER.as_bytes();
+
+/// `knomosis_verify_identifier(u) -> String` — Lean ABI entry point
+/// reporting the linked verifier's identifier (security-review F-2).
+/// When this adaptor is linked ahead of `knomosis-hash-fallback.o`, it
+/// overrides the default fallback forwarder so `knomosis verify-check`
+/// reports `production` (the gate's true-positive path).
+///
+/// # Safety
+///
+/// `u` must be a valid owned `lean_object *` (the Lean `Unit`
+/// argument).  It is `knomosis_lean_dec`-released; a fresh owned Lean
+/// `String` is returned (owned-transfer ABI, matching the hash adaptor's
+/// `knomosis_hash_identifier`).
+#[cfg(knomosis_lean_ffi)]
+#[no_mangle]
+#[allow(unsafe_code)]
+pub unsafe extern "C" fn knomosis_verify_identifier(u: *const u8) -> *mut u8 {
+    knomosis_lean_dec(u);
+    knomosis_lean_mk_string_from_bytes(IDENTIFIER_BYTES.as_ptr(), IDENTIFIER_BYTES.len())
 }
 
 #[cfg(test)]

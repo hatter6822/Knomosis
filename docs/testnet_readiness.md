@@ -64,9 +64,10 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       gate is **implemented** (exit 1 on the FNV-1a-64 fallback, exit 0
       on a production-grade hash) — so the 64-bit fallback can **never**
       reach production.
-- [ ] **F-2:** cdylib artefacts (`knomosis-verify-secp256k1`,
-      `knomosis-hash-keccak256`) SHA-256-pinned; verifier identifier
-      asserted at startup.
+- [ ] **F-2:** verifier-identifier assert — **done** (run
+      `knomosis verify-check` in the deploy pipeline; exit 1 on the
+      Lean-opaque fallback). **Remaining:** SHA-256-pin the cdylib
+      artefacts (`knomosis-verify-secp256k1`, `knomosis-hash-keccak256`).
 
 ### 3.3 Liveness / watchtower (the IC-3 assumption)
 - [ ] ≥1 **independent** `knomosis-faultproof-observer` running and

@@ -139,6 +139,34 @@ def verifyAdaptorIdentifier : String := "ecdsa-secp256k1-low-s/EVM-compatible/v1
     invalid". -/
 def fallbackVerifyAdaptorIdentifier : String := "lean-opaque-fallback"
 
+/-- AR.10 / F-2 Lean fallback for `verifyImplementationIdentifier`.
+    The default C stub (`runtime/knomosis-hash-fallback.c`) forwards
+    `knomosis_verify_identifier` to this function's compiled symbol
+    (`lp_knomosis_LegalKernel_Bridge_verifyImplementationIdentifierFallback`);
+    production deployments link the secp256k1 adaptor ahead of the stub,
+    overriding it with `verifyAdaptorIdentifier`. -/
+def verifyImplementationIdentifierFallback (_ : Unit) : String :=
+  fallbackVerifyAdaptorIdentifier
+
+/-- The identifier reported by the linked signature verifier.  The Lean
+    fallback returns `"lean-opaque-fallback"`; the production runtime
+    overrides this function's compiled implementation under the C ABI
+    symbol `knomosis_verify_identifier` (provided by
+    `knomosis-verify-secp256k1`) to return `verifyAdaptorIdentifier`.
+    The `@[extern]` annotation materialises the swap-point at link time
+    (mirrors `hashImplementationIdentifier`).  Read at startup by
+    `knomosis verify-check` (security-review F-2). -/
+@[extern "knomosis_verify_identifier"]
+def verifyImplementationIdentifier (u : Unit) : String :=
+  verifyImplementationIdentifierFallback u
+
+/-- True iff the linked verifier reports a non-fallback identifier.
+    A fallback verifier is *fail-closed* (the opaque `Verify` returns
+    `false` for every input — no forgery risk), but it is non-functional;
+    the `verify-check` deploy gate fails on it. -/
+def isProductionVerify : Bool :=
+  decide (verifyImplementationIdentifier () ≠ fallbackVerifyAdaptorIdentifier)
+
 /-! ## Low-s predicate
 
 A signature `(r, s)` is *low-s* iff `s ≤ n / 2`.  The Rust adaptor
