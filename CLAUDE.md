@@ -349,6 +349,55 @@ foreground agent has already modified the same files.
 4. **Check background results before acting on shared state.**
 5. **When in doubt, run in foreground.**
 
+## Implement-the-improvement rule
+
+When an audit, code review, or any reading of the codebase surfaces a
+discrepancy between the **code** and the **documentation, docstring,
+comment, type signature, or design intent** that describes it, and the
+description represents an *improvement* over the actual code (a more
+complete behaviour, a more symmetric API, a stronger invariant, a
+routed dispatch where the code is a stub, a function that "should"
+exist but does not), the remediation is **always** to implement the
+improvement so the description becomes true.
+
+It is **forbidden** to weaken, dilute, qualify, or rewrite the
+documentation to match inferior code. Documenting incorrect or
+incomplete code in lieu of fixing it is not an acceptable engineering
+outcome on this project.
+
+Concretely:
+
+- A comment referencing a function `X` that does not exist →
+  **implement `X`**, never "remove the reference."
+- A docstring describing a complete spec while the implementation is
+  truncated → **complete the implementation**, never "document the
+  truncation."
+- A stub returning `NotImplemented` while the design says it should
+  route to a verified entry point → **wire up the routing.**
+- Two API call paths handling the same condition asymmetrically →
+  **make them symmetric**, never "document the asymmetry."
+- An implicit invariant maintained only by convention → **enforce it
+  structurally** (record field, refinement type, smart-constructor
+  obligation, opaque type whose constructors discharge the invariant),
+  never "add an inline comment about the convention."
+- A computed-and-proven data structure that the surrounding code does
+  not consume → **wire it into the consumer** so the proof carries
+  through to runtime, never "remove the unwired structure."
+- Deferred items buried in source comments → **fix them** if the
+  current scope permits; otherwise lift them into the project debt
+  register (`docs/audits/`, `docs/WORKSTREAM_HISTORY.md`). Never leave
+  in-source TODOs that age out with the surrounding workstream.
+- A "first hardware target" or similar capability claim while the path
+  is non-functional → **make the path functional**, never qualify the
+  claim with a stub-status caveat.
+
+The single legitimate exception is when the documentation describes a
+**worse** state than the code (e.g. a stale `STATUS: staged` marker on
+a file that has since been wired into production, or a deprecation note
+on a function the project has decided to keep). In that direction the
+documentation is the inferior artefact and updating it to match the
+better code is correct.
+
 ## Key conventions
 
 - **Two-reviewer rule for kernel-touching changes (ABSOLUTE).**  Any
