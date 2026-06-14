@@ -184,6 +184,50 @@ fn apply_to_reference(
     Ok(())
 }
 
+/// Strategy for **adversarial** balance-affecting events: the same
+/// credit / debit / set tags the indexer's two-pass dispatch acts on,
+/// but with FULL-RANGE `u128` amounts (not the ≤ 1 000 caps the other
+/// strategies use).  Drives the dispatch arithmetic into the
+/// saturating-add / checked-sub overflow regimes a small-amount stream
+/// never reaches.
+fn adversarial_balance_event_strategy() -> impl Strategy<Value = Event> {
+    prop_oneof![
+        (0u64..=4, 0u64..=4, any::<u128>()).prop_map(|(r, a, v)| Event::BalanceChanged {
+            resource: r,
+            actor: a,
+            old_value: 0,
+            new_value: v,
+        }),
+        (0u64..=4, 0u64..=4, any::<u128>()).prop_map(|(r, a, amt)| Event::RewardIssued {
+            resource: r,
+            recipient: a,
+            amount: amt,
+        }),
+        (0u64..=4, 0u64..=4, any::<u128>(), any::<u64>()).prop_map(|(r, a, amt, did)| {
+            Event::DepositCredited {
+                resource: r,
+                recipient: a,
+                amount: amt,
+                deposit_id: did,
+            }
+        }),
+        (
+            0u64..=4,
+            0u64..=4,
+            any::<u128>(),
+            any::<[u8; 20]>(),
+            any::<u64>()
+        )
+            .prop_map(|(r, s, amt, addr, wid)| Event::WithdrawalRequested {
+                resource: r,
+                sender: s,
+                amount: amt,
+                recipient_l1: addr,
+                withdrawal_id: wid,
+            }),
+    ]
+}
+
 proptest! {
     /// Round-trip: every Event survives encode → decode.
     #[test]
@@ -316,5 +360,59 @@ proptest! {
         // Either Ok (for valid tag values + well-formed tail)
         // or Err — never panic.
         let _ = knomosis_indexer::decoder::decode_event(&payload);
+    }
+
+    /// **Dispatch fuzz**: feed a stream of arbitrary all-tag
+    /// `Event`s (decoder fuzz covers byte robustness; this covers
+    /// the indexer's two-pass dispatch on *structurally valid but
+    /// adversarial* events) to `apply_batch` and assert it NEVER
+    /// panics — every step returns `Ok` or a typed error, and the
+    /// cursor never regresses.  Complements
+    /// `balance_view_matches_reference` (which uses the restricted
+    /// small-amount strategy) by exercising the full `Event`
+    /// surface, including the non-balance tags the dispatch must
+    /// skip cleanly.
+    #[test]
+    fn indexer_apply_arbitrary_events_never_panics(
+        events in vec(event_strategy(), 0..40)
+    ) {
+        let storage = SqliteStorage::open_in_memory().unwrap();
+        let mut indexer = Indexer::open(&storage).unwrap();
+        let mut last_cursor = 0u64;
+        for (i, event) in events.iter().enumerate() {
+            let seq = (i + 1) as u64;
+            // Load-bearing assertion: no panic on ANY tag / value.
+            let _ = indexer.apply_batch(seq, &[event.clone()]);
+            // The cursor must never regress, whatever the verdict.
+            prop_assert!(indexer.cursor() >= last_cursor);
+            last_cursor = indexer.cursor();
+        }
+    }
+
+    /// **Dispatch overflow fuzz**: stream FULL-RANGE-`u128`-amount
+    /// balance events (credits up to `u128::MAX`, withdrawals that
+    /// would underflow) into `apply_batch`.  The indexer must
+    /// handle the saturating-add / checked-sub boundaries WITHOUT
+    /// panicking — the small-amount strategies never reach these
+    /// regimes.
+    #[test]
+    fn indexer_apply_adversarial_amounts_never_panics(
+        events in vec(adversarial_balance_event_strategy(), 0..40)
+    ) {
+        let storage = SqliteStorage::open_in_memory().unwrap();
+        let mut indexer = Indexer::open(&storage).unwrap();
+        for (i, event) in events.iter().enumerate() {
+            let seq = (i + 1) as u64;
+            // No panic on overflow-adjacent amounts.
+            let _ = indexer.apply_batch(seq, &[event.clone()]);
+        }
+        // The balance view must remain queryable (no corruption) for
+        // every actor/resource the stream could have touched.
+        let view = BalanceView::new(&storage);
+        for actor in 0u64..=4 {
+            for resource in 0u64..=4 {
+                let _ = view.get(actor, resource);
+            }
+        }
     }
 }
