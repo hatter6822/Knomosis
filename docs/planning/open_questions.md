@@ -1262,6 +1262,12 @@ ships this layout.
   * OQ-GP-6 — Per-resource gas-pool drain-cap defaults.
   * OQ-GP-7 — BOLD-circuit emergency closure operational policy.
   * OQ-GP-8 — Event-index compatibility and indexer rollout policy.
+  * OQ-GP-8b — Receipt-verified sequencer reimbursement (GP.8.5 v2):
+    gate the v1 honour-system claim's `amount` on an L1 gas-receipt
+    verifier (the `l1FaultProofVerifier` trust-pattern) + a price
+    oracle, turning the cap-bounded honour system into a cryptographic
+    bound.  Deferred from v1 (see `abi.md` §10.2.6 and
+    `knomosis-l1-ingest/src/sequencer_claim.rs`).
   * OQ-GP-9 — Sequencer reimbursement cadence and batch sizing.
   * OQ-GP-10 — Bridge-actor automation failure-domain isolation.
   * OQ-GP-11 — Whether the L1 step-VM commit (`stepVMHash` /

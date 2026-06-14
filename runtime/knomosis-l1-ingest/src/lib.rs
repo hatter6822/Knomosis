@@ -162,6 +162,7 @@ pub mod events;
 pub mod fixture;
 pub mod key;
 pub mod reorg;
+pub mod sequencer_claim;
 pub mod source;
 pub mod state;
 pub mod submitter;

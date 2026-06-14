@@ -1162,6 +1162,49 @@ like the budget and gas-pool configs (see `Runtime/RefundRateSidecar.lean`):
     `refund-rate error` rather than a silently-rejected refund.  The
     `knomosis-replay` auditor re-derives the same rate from the sidecar.
 
+### 10.2.6 Sequencer reimbursement claim (GP.8 Track B, v1)
+
+The sequencer funds its L1 state-root submissions from the gas pool
+(`gasPoolActor`, `ActorId 1`).  A **reimbursement claim** is a single
+kernel action — a `transfer` of the claimed leg from `gasPoolActor` to
+`sequencerActor` (`ActorId 2`):
+
+```text
+Action.transfer resource gasPoolActor sequencerActor amount
+  signer = gasPoolActor          -- the pool's own registered key
+```
+
+signed by the gas-pool actor's key and admitted under the GP.7.4
+genesis-ratified `gasPoolPolicy` (which — proven in Lean — denies every
+non-`transfer`, requires `recipient = sequencerActor`, and caps
+`amount ≤ maxDrainPerAction` for the leg).
+
+**Constructor.**  `knomosis-l1-ingest::sequencer_claim::SequencerClaim`
+builds and signs the claim, returning the CBE `SignedAction` wire bytes
+(§10.1 frame).  Two invariants hold *by construction* (so an ill-shaped
+claim is unconstructible, independent of the kernel's own rejection):
+the recipient is hard-wired to `sequencerActor`, and the amount is
+clamped to the supplied per-action cap.  The pool key is held behind
+`BridgeActorKey` (`Zeroizing`); no key material is logged.
+
+**Honour-system caveat (v1).**  `amount` is the operator's *estimate* of
+L1 gas spent on the leg since the last claim — it is **not** proven to
+equal real spend.  A malicious operator can claim up to the cap every
+epoch; this is bounded (per action by the cap, per trace by the GP.7.3
+`pool_drain_bounded_by_action_count`), and adds no trust beyond the
+liveness trust already placed in the sequencer.
+
+**Provisioning.**  `gasPoolActor` is not budget-exempt (only
+`bridgeActor` is), so a claiming deployment must run with `freeTier ≥ 1`
+and a registered, nonce-tracked `gasPoolActor` key, or claims fail
+closed (`InsufficientBudget` / nonce error); see `docs/gas_pool_runbook.md`.
+
+**Forward path (v2, GP.8.5 — deferred).**  Make `amount` provable via an
+L1 gas-receipt verifier (the `l1FaultProofVerifier` trust-pattern) plus
+a price oracle, gating admissibility on `amount ≤ priceOf(receipt)`.
+Tracked as **OQ-GP-8b**; out of scope for v1.  The v1 action shape is
+forward-compatible (v2 adds a gate, not a new action).
+
 ### 10.3 Transport
 
   * **Plain TCP.**  `--listen <ADDR>` (e.g. `127.0.0.1:7654`).
