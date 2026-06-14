@@ -376,6 +376,7 @@ contract KnomosisFaultProofGameTest is Test {
         bytes memory result = new bytes(9);
         result[0] = 0x1B;
         for (uint256 i = 0; i < 8; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             result[1 + i] = bytes1(uint8(v >> (8 * i)));
         }
         return result;

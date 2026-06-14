@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b648120dd94155b6be5c7aee8530f7bb9cdec9de36b7ad0373cd7469fe5bd925"
+    "source_digest": "d2e9a8f9ffb37d24dfbae01c5b058e76a0de21bff72f27bc49a8d3ce671299a0"
   },
   "summary": {
     "module_count": 138,
-    "declaration_count": 4657
+    "declaration_count": 4660
   },
   "modules": [
     {
@@ -37146,7 +37146,7 @@
     {
       "module": "runtime::knomosis-indexer::tests::property",
       "path": "runtime/knomosis-indexer/tests/property.rs",
-      "declaration_count": 10,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "fn",
@@ -37192,8 +37192,20 @@
         },
         {
           "kind": "fn",
+          "name": "adversarial_balance_event_strategy",
+          "line": 192,
+          "called": [
+            "Event",
+            "actor",
+            "addr",
+            "amount",
+            "resource"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "round_trip_arbitrary_event",
-          "line": 189,
+          "line": 233,
           "called": [
             "bytes",
             "decode_event",
@@ -37205,7 +37217,7 @@
         {
           "kind": "fn",
           "name": "encoded_tag_is_preserved",
-          "line": 198,
+          "line": 242,
           "called": [
             "bytes",
             "decode_event",
@@ -37218,7 +37230,7 @@
         {
           "kind": "fn",
           "name": "balance_view_matches_reference",
-          "line": 213,
+          "line": 257,
           "called": [
             "_",
             "actor",
@@ -37240,7 +37252,7 @@
         {
           "kind": "fn",
           "name": "cursor_monotonic",
-          "line": 243,
+          "line": 287,
           "called": [
             "Err",
             "_",
@@ -37258,7 +37270,7 @@
         {
           "kind": "fn",
           "name": "restart_preserves_state",
-          "line": 265,
+          "line": 309,
           "called": [
             "apply_batch",
             "balance_event_strategy",
@@ -37275,7 +37287,7 @@
         {
           "kind": "fn",
           "name": "decoder_fuzz_never_panics",
-          "line": 296,
+          "line": 340,
           "called": [
             "_",
             "bytes"
@@ -37284,11 +37296,48 @@
         {
           "kind": "fn",
           "name": "decoder_fuzz_with_valid_tag_prefix",
-          "line": 308,
+          "line": 352,
           "called": [
             "_",
             "tag",
             "tail"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "indexer_apply_arbitrary_events_never_panics",
+          "line": 375,
+          "called": [
+            "_",
+            "apply_batch",
+            "clone",
+            "cursor",
+            "event",
+            "event_strategy",
+            "events",
+            "indexer",
+            "iter",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "indexer_apply_adversarial_amounts_never_panics",
+          "line": 398,
+          "called": [
+            "_",
+            "actor",
+            "adversarial_balance_event_strategy",
+            "apply_batch",
+            "clone",
+            "event",
+            "events",
+            "get",
+            "indexer",
+            "iter",
+            "resource",
+            "storage",
+            "view"
           ]
         }
       ]
