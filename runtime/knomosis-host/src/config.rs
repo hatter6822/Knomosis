@@ -1078,6 +1078,19 @@ mod tests {
         }
     }
 
+    /// GP.8 Track C: the epoch clock is an **action** clock (epochs
+    /// advance by `--current-epoch` / `--epoch-length`, not by
+    /// wall-clock seconds).  Pin that no `--epoch-duration-seconds`
+    /// flag exists, so a wall-clock epoch policy can never be
+    /// silently introduced.
+    #[test]
+    fn epoch_duration_seconds_flag_does_not_exist() {
+        match parse_args(&args(&["--epoch-duration-seconds", "60"])) {
+            Err(ParseError::UnknownFlag(s)) => assert_eq!(s, "--epoch-duration-seconds"),
+            other => panic!("expected UnknownFlag for the wall-clock flag, got {other:?}"),
+        }
+    }
+
     /// Missing value returns `MissingValue`.
     #[test]
     fn missing_value_returns_error() {
