@@ -179,9 +179,12 @@ contracts (§4.1) and the deployment-discipline items above.
 - [ ] **Adversarial-corpus expansion** (§4.2) — boundary/adversarial
       fixtures for all 25 action variants + the fund paths
       (companion: P2 test-expansion increment).
-- [ ] **Fuzz the untrusted-input boundaries** (§4.3) — `cargo-fuzz` /
-      `proptest` targets for the frame parser, ABI decoder, indexer,
-      observer.
+- [~] **Fuzz the untrusted-input boundaries** (§4.3) — *started:* the
+      L1-log ABI decoder (`decode_event`) is proptest-fuzzed for
+      never-panics on arbitrary topics/data
+      (`knomosis-l1-ingest/tests/property.rs`). **Remaining:** the host
+      frame parser, the indexer state reconstruction, and the observer
+      game state machine (same never-panics property).
 - [ ] **Economic-incentive analysis** (§4.5) —
       `docs/economic_incentive_analysis.md`.
 - [ ] **Testnet-readiness** — `docs/testnet_readiness.md`: exercise the

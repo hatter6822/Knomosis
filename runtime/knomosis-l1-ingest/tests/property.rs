@@ -14,7 +14,7 @@
 use knomosis_l1_ingest::action::{Action, EthAddress, PublicKey};
 use knomosis_l1_ingest::address_book::AddressBook;
 use knomosis_l1_ingest::encoding::{encode_action, encode_signed_action, signing_input};
-use knomosis_l1_ingest::events::IngestedEvent;
+use knomosis_l1_ingest::events::{decode_event, IngestedEvent, RawLog};
 use knomosis_l1_ingest::fixture::{FeeSplitInput, MAX_BUDGET_PER_DEPOSIT};
 use knomosis_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgWindow};
 use knomosis_l1_ingest::translation::ingest;
@@ -410,5 +410,35 @@ proptest! {
         }
         prop_assert!(window.len() <= capacity);
         prop_assert!(window.len() <= count);
+    }
+}
+
+// Adversarial robustness (production security review §4.3): the L1-log
+// ABI decoder is an *untrusted-input* boundary — an L1 RPC / re-org feed
+// can hand it arbitrary topics + data.  It must return `Ok`/`Err` on ANY
+// input and **never panic** (an unchecked index / slice / `unwrap` would
+// be a DoS on the ingestor).  This fuzz throws random logs at it and
+// asserts only that it returns (the harness fails on any panic).
+proptest! {
+    #[test]
+    fn decode_event_never_panics_on_arbitrary_input(
+        address in proptest::array::uniform20(any::<u8>()),
+        topics in proptest::collection::vec(proptest::array::uniform32(any::<u8>()), 0..6),
+        data in proptest::collection::vec(any::<u8>(), 0..1024),
+        block_number in any::<u64>(),
+        tx_hash in proptest::array::uniform32(any::<u8>()),
+        log_index in any::<u64>(),
+    ) {
+        let log = RawLog {
+            address: EthAddress(address),
+            topics,
+            data,
+            block_number,
+            tx_hash,
+            log_index,
+        };
+        // The result is intentionally discarded: the property under test
+        // is termination-without-panic, not a specific decode outcome.
+        let _: Result<Option<IngestedEvent>, _> = decode_event(&log);
     }
 }
