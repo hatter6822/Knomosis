@@ -158,6 +158,14 @@ testnet-acceptance:
 testnet-acceptance-dryrun:
 	forge script script/TestnetAcceptance.s.sol
 
+# Local devnet end-to-end: spins up a LIVE anvil node, BROADCAST-deploys
+# the full suite to it, and verifies against the DEPLOYED contracts
+# (on-chain bytecode + live reads) — the live-node counterpart to the
+# in-memory dry-run above (closes docs/testnet_readiness.md §3.4).
+.PHONY: devnet
+devnet:
+	./scripts/local_devnet.sh
+
 .PHONY: clean
 clean:
 	forge clean

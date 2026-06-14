@@ -96,7 +96,9 @@ cd solidity && make audit-caps-selftest       # self-test for the cap gate
 cd solidity && make snapshot-gas-check        # GP.11.9 gas-benchmark gate
 cd solidity && make snapshot-gas              # regenerate gas baseline + runbook table
 cd solidity && make snapshot-gas-selftest     # self-tests for the GP.11.9 gate
-cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
+cd solidity && make testnet-acceptance-dryrun # F.3 in-memory dry-run
+cd solidity && make devnet                    # F.3 LIVE anvil deploy +
+                                              # verify vs deployed contracts
 
 # Keccak-linked cross-stack verification (Lean <-> EVM byte-equivalence).
 ./scripts/verify_keccak_crossstack.sh

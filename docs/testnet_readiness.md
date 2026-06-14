@@ -76,8 +76,23 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       suite against the testnet.
 
 ### 3.4 Acceptance
+- [x] **Local devnet end-to-end** — `make devnet`
+      (`solidity/scripts/local_devnet.sh`) spins up a LIVE anvil node,
+      BROADCAST-deploys the full suite, and verifies against the
+      *deployed* contracts (on-chain bytecode + a live `deploymentId()`
+      read).  Green locally; the live-node counterpart to the in-memory
+      `testnet-acceptance-dryrun`.  **Surfaced finding:** the F.3
+      `Deployer` is a CREATE3 *bundler* test-harness (43 065 B) that
+      exceeds the EIP-170 limit, so `make testnet-acceptance` against a
+      real RPC needs `--disable-code-size-limit` (or a non-bundling
+      deploy path) — but **every PRODUCTION contract is comfortably
+      under the limit** (`forge build --sizes`: Bridge 17 195 B / 7 381 B
+      margin, FaultProofGame 7 551 B, all others well under), so the
+      production contracts are genuinely deployable; only the test
+      bundler needs the accommodation.
 - [ ] `make testnet-acceptance` passes against the *deployed* contracts
-      (not just the local fork dry-run).
+      on a real RPC (not just the local devnet) — see the `Deployer`
+      bundler note above.
 - [ ] The F.1.x cross-stack equivalence + SVC step-VM + SC SMT corpora
       pass against the deployed step-VM / verifiers.
 - [ ] `knomosis-bench` throughput on the target hardware meets the
