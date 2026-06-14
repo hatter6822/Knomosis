@@ -612,8 +612,8 @@ work units.  Status:
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
-| FQ/GP.8 | Fair queuing (knomosis-host) | Track A complete; Tracks B–D future |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–10 complete) |
+| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B complete; C/D documented; GP.8.5 (v2 receipt-verified claim) = OQ-GP-8b |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Track A+B, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining) |
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
@@ -811,8 +811,13 @@ Plan: `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md`
 
 Track A complete: two-tier DRR fair scheduler in `knomosis-host`,
 signer-hint wire protocol (`PROTOCOL_VERSION 2`), persistent
-pipelined connections.  Tracks B–D (reimbursement, config, runbook)
-future work.
+pipelined connections.  Track B (v1 reimbursement claim) complete:
+`knomosis-l1-ingest::sequencer_claim::SequencerClaim` (capped,
+sequencer-only, `Zeroizing` pool key; `abi.md` §10.2.6); v2
+receipt-verified path = OQ-GP-8b.  Track D claim/fair-queuing ops in
+`gas_pool_runbook.md` §8 / §11.  Remaining: Track C config note + the
+`--epoch-duration-seconds`-absence test, and GP.10 final ratification
+(§15E touch, migration guide).
 
 ### Audit remediation (Workstream AR)
 
