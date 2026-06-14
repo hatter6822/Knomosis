@@ -25,6 +25,17 @@ Genesis-Plan-amendment rule** applies.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE.**  Workstream WG
+> shipped — the Ethereum integration is ratified in the canonical docs
+> as GENESIS_PLAN **§15D** ("Workstream E Amendment: Ethereum
+> Integration", §15D.1–§15D.8), with the companion `abi.md`
+> Ethereum/bridge ABI surface and `extraction_notes.md` TA-2.1 … TA-2.5
+> (CLAUDE.md roadmap: `E-A–G | Complete`).  The numbering decision
+> (WG.1.a / OQ-WG-1) was resolved by naming the chapter **§15D**
+> alongside the existing §15B / §15C amendments — not by renumbering.
+> This document is retained as the historical engineering record; the
+> "new chapter §15" wording below is superseded by the §15D landing.
+
   * **Workstream prefix:** `WG` (Workstream G).  Five sub-units:
     - **WG.1** GENESIS_PLAN amendment (new chapter §15).
     - **WG.2** README + CLAUDE.md status updates.

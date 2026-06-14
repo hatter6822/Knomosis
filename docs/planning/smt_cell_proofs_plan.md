@@ -25,6 +25,13 @@ submissions off-chain until the SMT path is shipped"
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE.**  Workstream SC
+> shipped — SC.1 (Lean SMT spec + per-cell proof scheme), SC.2 (Solidity
+> verifier), and SC.3 (cross-stack soundness + corpus) are all in `main`
+> (CLAUDE.md roadmap: `SC.1–3 | Complete`); headline theorem
+> `smtCellProof_sound_under_collision_free`.  The per-sub-unit markers
+> below are current.
+
   * **Workstream prefix:** `SC` (SMT Cells).  Three sub-units:
     - **SC.1** Lean SMT spec + per-cell proof scheme — **Complete**.
     - **SC.2** Solidity SMT verifier (gas-efficient) — **Complete**.

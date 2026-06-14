@@ -22,6 +22,16 @@ and `docs/planning/audit_remediation_plan.md` §4.4 / §15C.7.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE (EI.0–EI.8).**
+> Workstream EI shipped — `State.encode_injective` and the injectivity
+> ladder up to
+> `commitExtendedState_subcommits_extensional_eq_under_collision_free`
+> are in `main` (CLAUDE.md roadmap: `EI | Complete`), retiring the former
+> bytes-equality footnote and lifting AR.23 to its strongest form.  This
+> document is retained as the historical engineering record; the
+> per-sub-unit "status" notes below were accurate at drafting and are
+> superseded by the landed state.
+
   * **Workstream prefix:** `EI` (Encoder Injectivity).  Top-level
     sub-units `EI.1` … `EI.8`, each decomposed into sub-sub-units
     (e.g. `EI.1.a`, `EI.1.b`, …) sized for a single-day PR.

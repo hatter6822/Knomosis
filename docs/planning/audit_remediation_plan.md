@@ -72,6 +72,17 @@ custom axioms.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE.**  Workstream AR
+> shipped — every "Remediate" finding (M-1 … M-10 and the remediable
+> minor findings) is closed in `main` (CLAUDE.md roadmap: `AR | Complete`);
+> see the post-AR annotation in
+> `docs/audits/19-findings-and-followups.md`.  The **one** finding left
+> open is **m-16** (chain-level §7.6.4 / §7.6.5 accounting, triaged
+> "Defer"), now tracked by the CA workstream
+> (`chain_level_accounting_plan.md`).  This document is retained as the
+> historical engineering record; the provenance notes below predate the
+> landing and the later Workstream-GP work.
+
   * **Drafted on branch:** `claude/audit-findings-workstream-oyEAO`;
     refined on branch `claude/improve-audit-plan-sCDdC`
     (sub-unit decomposition + per-WU verification commands +

@@ -22,6 +22,18 @@ review, and landing.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): DRAFTED — NOT LANDED.**  The PA
+> parameter-governance substrate has **not** shipped (no parameter-law
+> modules exist in `LegalKernel/`).  The later Workstream-GP work shipped
+> the *budget* substrate (`Authority/ActorBudget.lean`,
+> `EpochBudgetState`) that PA's variable-cost-economics use-case would
+> build on, but parameter governance itself (`setParameters`, the
+> proposal / quorum machinery) remains open.  Eight design forks are
+> registered as OQ-PA-1 … OQ-PA-8 in `open_questions.md` (each with a
+> recommended "v1 simpler" default).  This document predates GP; verify
+> the action set (live max index 24) and bridge surface against current
+> code before implementing.
+
   * **Drafted on:** branch `claude/add-law-voting-0jBAh` (per
     audit, drafted but not landed in main).
   * **Workstream prefix:** `PA` (Parameters).  Adopts the

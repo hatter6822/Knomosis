@@ -20,6 +20,16 @@ non-goals, work-unit decomposition, and acceptance criteria.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): NOT STARTED.**  Phase 7 remains
+> the next greenfield frontier (CLAUDE.md roadmap: `7 | Not started`).
+> Context update: the variable-cost-action prerequisite is now satisfied
+> — Workstream GP shipped the budget substrate (`ActorBudget` /
+> `EpochBudgetState`).  The §3.1 action-index reservations (30+) remain
+> valid: GP consumed indices only through 24.  Recommended first
+> landings remain P7.A (Capabilities) + P7.F (Schema migration) per
+> OQ-P7-1.  Treat the per-sub-workstream design sketches below as intent;
+> re-derive action / state facts from current code at landing time.
+
   * **Workstream prefix:** `P7`.  Seven sub-workstreams:
     - **P7.A** Capabilities (object-capability authorisation).
     - **P7.B** Threshold signatures (FROST adaptor).

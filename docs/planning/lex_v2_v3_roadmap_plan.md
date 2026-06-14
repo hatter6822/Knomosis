@@ -22,6 +22,14 @@ acceptance criteria for each.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): NOT STARTED (forward roadmap).**
+> LX2 / LX3 are demand-driven future work; LX (M1–M3) is the shipped
+> baseline (`lex_implementation_plan.md`).  Open design forks: OQ-LX-1 …
+> OQ-LX-9 (`open_questions.md`), notably OQ-LX-8 (`Action.revokeKey`
+> kernel addition — the one LX3 item that would touch the TCB and trigger
+> the §13.6 two-reviewer rule).  This document is a roadmap, not an
+> implementation spec.
+
   * **Workstream prefix:** `LX2` (v2) and `LX3` (v3).
   * **Effort estimate:** v2 ≈ 8–12 calendar weeks for one
     full-time Lex engineer; v3 ≈ 16–24 calendar weeks (open-

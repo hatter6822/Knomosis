@@ -21,6 +21,16 @@ backed by the existing Phase-6 fraud-proof pipeline.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE.**  All seven Ethereum
+> workstreams (E-A … E-G) shipped (CLAUDE.md roadmap: `E-A–G | Complete`).
+> The Lean bridge surface, the Solidity mirror, the cross-stack corpus,
+> and the GENESIS_PLAN §15D ratification (Workstream G) are all in `main`.
+> This document is retained as the historical engineering record; it
+> predates the later Workstream-GP work (which extended `BridgeState`,
+> added the deposit-fee split, and grew the action set to index 24 — see
+> `unified_gas_pool_plan.md`), so its action-index tables and
+> `BridgeState` field lists reflect the **pre-GP** surface.
+
   * **Drafted on branch:** `claude/ethereum-kernel-integration-HMexY`.
   * **Phase prefix:** `E` (Ethereum) — workstreams labelled `A.1`,
     `B.2`, …, `G.5` to disambiguate from the Genesis-Plan

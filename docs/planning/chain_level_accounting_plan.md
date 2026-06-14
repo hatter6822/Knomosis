@@ -22,6 +22,40 @@ identities.  It does **not** touch the TCB.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): NOT STARTED — and the design
+> sketches below are STALE against the current code.**  CA closes audit
+> finding m-16 (the last open "Defer").  A 2026-06-14 grounding pass
+> against the shipped tree found the sketches in §2–§4 **do not match
+> reality** and must be re-designed before implementation:
+>
+>   * There is **no `L1EscrowLedger` / `EscrowEntry` type and no
+>     `bridgeEscrowBalance` function** — they appear only as prose in
+>     `Bridge/Accounting.lean` docstrings.  The real model is L2-only:
+>     `BridgeState = { consumed, pending, nextWdId, …AMM mirrors }`, with
+>     `totalDeposited` / `totalWithdrawn` folds over `consumed` /
+>     `pending` (both append-only in-kernel; L1 redemption is off-chain,
+>     and both are zero at genesis).  CA must *define*
+>     `bridgeEscrowBalance` (faithfully `totalDeposited − totalWithdrawn`,
+>     per resource), not assume an existing one.
+>   * The kernel's `Reachable` is `inductive Reachable (s0 : State) :
+>     State → Prop` — **not** the `ExtendedState → ExtendedState` shape
+>     sketched in §2.3.  `BridgeReachable` must follow the real shape.
+>   * The CA.3 `l1EscrowMatchesL2`-over-`entries` design **contradicts
+>     this plan's own §9** ("L1-side proof … is the Solidity contract's
+>     responsibility, validated by the cross-stack corpus") and the
+>     project's Lean=L2 / Solidity=L1 architecture; modelling fictional
+>     L1 entries is exactly the "false-secure" risk §7 flags.  The
+>     faithful CA deliverable is the L2-side accounting identity
+>     (`totalDeposited = totalWithdrawn + bridgeEscrowBalance` under
+>     solvency) plus a chain-level conservation theorem over
+>     `BridgeReachable`, with `BridgeAction ⊇ { deposit, depositWithFee,
+>     withdraw }` (the three bridge-state-mutating constructors —
+>     `Bridge/Admissible.lean:applyActionToBridgeState`).
+>
+> Treat §2–§4 as design *intent*, not an implementation spec.  All
+> bridge-surface facts must be re-derived from
+> `Bridge/{State,Accounting,Admissible}.lean` at implementation time.
+
   * **Workstream prefix:** `CA` (Chain Accounting).  Three
     sub-units:
     - **CA.1** `BridgeReachable` predicate + induction principle.

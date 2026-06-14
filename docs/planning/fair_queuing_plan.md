@@ -66,6 +66,17 @@ actual `runtime/knomosis-host` source):
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE (Track A of GP.8).**
+> Despite the "Planned.  Not started." line below, Workstream FQ has
+> shipped: Rung 0 (connection-keyed DRR) and Rung 1 (signer-hint,
+> two-tier, `PROTOCOL_VERSION 2`) both land in `knomosis-host` behind the
+> default-OFF `--scheduler drr` flag (CLAUDE.md roadmap: `FQ | Track A
+> complete`).  **This plan has been unified into
+> `GP.8_SEQUENCER_INTEGRATION_PLAN.md` as Track A — that document is the
+> canonical implementation surface.**  Tracks B–D (reimbursement /
+> configuration / operations) remain future work there.  This document
+> is retained as the historical engineering record.
+
 **Planned.**  Not started.  Workstream FQ adds per-actor fair
 scheduling to `runtime/knomosis-host` (the RH-C network adaptor) so
 that one actor's short-burst flood cannot delay other actors'

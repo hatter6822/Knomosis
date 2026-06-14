@@ -33,6 +33,14 @@ analysis.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): DRAFTED — NOT LANDED.**  This is
+> the PA *design* document; the *landing* plan is
+> `parameterized_laws_landing_plan.md`.  PA has not shipped (no
+> parameter-law modules in `LegalKernel/`).  Open design forks: OQ-PA-1 …
+> OQ-PA-8 (`open_questions.md`).  This document predates Workstream GP;
+> verify the action set (live max index 24) and bridge surface against
+> current code before implementing.
+
   * **Drafted on branch:** `claude/add-law-voting-0jBAh`.
   * **Phase prefix:** `PA` (Parameters) — work units labelled
     `PA.1` … `PA.10` to disambiguate from the Genesis-Plan

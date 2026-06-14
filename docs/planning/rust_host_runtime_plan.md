@@ -22,6 +22,11 @@ behind those interface contracts.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE.**  Workstream RH
+> shipped — all 11 crates (RH-H, RH-A.1 / A.2, RH-B … RH-G) are in `main`
+> (CLAUDE.md roadmap: `RH-H–G | Complete`).  The per-sub-stream status
+> markers below are current; this banner is a top-line confirmation.
+
   * **Workstream prefix:** `RH` (Rust Host).  Sub-stream status:
     - **RH-A** Cryptographic adaptors (E-A Rust).
       **Complete.**  See §RH-A.1 Closeout / §RH-A.2 Closeout

@@ -161,6 +161,22 @@ step, requires this plan's work to land).
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE.**  Workstream SVC
+> shipped — the cross-stack step-VM coherence theorems
+> (`stepVMHash_<variant>_kind`) and the observer
+> `HonestMove::TerminateOnSingleStep` wiring are in `main`; the current
+> `kernelBuildTag` is `"knomosis-step-vm-coherence"` (CLAUDE.md roadmap:
+> `SVC | Complete`).
+>
+> **Historical-accuracy note.**  This plan describes coverage of the
+> **19** action variants that existed when SVC landed.  The later
+> Workstream-GP work **extended the dispatcher to 25 variants (kinds
+> 0–24)** — `depositWithFee` (19), `topUpActionBudget` (20),
+> `topUpActionBudgetFor` (21), `claimBudgetRefund` (22), `ammSwap` (23),
+> `reclaimAmmReserves` (24) — under GP.3.3 / GP.9.1 / GP.11.8 / GP.11.10,
+> **not** under SVC.  The "19 variants" figures below are therefore
+> correct as-of-SVC; the live total is 25.
+
   * **Workstream prefix:** `SVC` (Step-VM Coherence).  Five
     sub-units:
     - **SVC.1** Cross-stack-coherence theorem extension to all
