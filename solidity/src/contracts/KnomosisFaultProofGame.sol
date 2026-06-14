@@ -452,9 +452,18 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         }
 
         g.status = finalStatus;
-        // Clear the active-game lock so a re-challenge can open
-        // a new game (per OQ7's re-challenge-window resolution).
-        activeGameForLogIndex[g.high.idx] = 0;
+        // Clear the active-game lock so a re-challenge can open a new
+        // game (per OQ7's re-challenge-window resolution).  MUST key on
+        // `g.disputedLogIndex` — the value the lock was SET under at
+        // `initiateChallenge` — NOT `g.high.idx`, which diverges from it
+        // the moment a `respondToMidpoint(disagree)` reassigns
+        // `g.high = g.pendingMidpoint` to a midpoint index.  Keying on
+        // `g.high.idx` would zero an unrelated slot and leave
+        // `activeGameForLogIndex[disputedLogIndex]` pinned to this
+        // finished game forever, permanently bricking re-challenge of
+        // that root (and, on a sequencer win, letting an invalid root
+        // finalise unchallengeably).
+        activeGameForLogIndex[g.disputedLogIndex] = 0;
 
         // If the challenger wins, slash the sequencer's state-root
         // bond.  The slashed bond is forwarded to THIS contract,
