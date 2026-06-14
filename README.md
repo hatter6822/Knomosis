@@ -134,6 +134,14 @@ python3 scripts/regenerate_codemaps.py
 # (genesis wiring → ETH + BOLD deposits → dual sequencer claim →
 #  log persist → replay round-trip):
 .lake/build/bin/knomosis gas-pool-demo
+
+# Deploy-readiness gates (security-review F-1 / F-2): both FAIL CLOSED
+# on the default build (exit 1) — the FNV-1a-64 hash + Lean-opaque
+# verifier fallbacks must never reach production.  They exit 0 once a
+# production BLAKE3/keccak hash and the secp256k1 verifier are
+# @[extern]-linked; `scripts/verify_secp256k1_link.sh` proves the flip.
+.lake/build/bin/knomosis hash-check    # exit 1 on the fallback hash
+.lake/build/bin/knomosis verify-check  # exit 1 on the fallback verifier
 ```
 
 ## Solidity and Rust mirrors

@@ -101,6 +101,16 @@ cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
 # Keccak-linked cross-stack verification (Lean <-> EVM byte-equivalence).
 ./scripts/verify_keccak_crossstack.sh
 
+# F-2 production secp256k1-verifier link verification: proves
+# `verify-check` flips fallback(exit 1) -> production(exit 0) when the
+# real adaptor is linked, and records/verifies the staticlib SHA-256.
+./scripts/verify_secp256k1_link.sh            # build + record + prove
+./scripts/verify_secp256k1_link.sh --check    # build + verify SHA-256 snapshot
+
+# Quantitative economic-incentive simulation (IC-1..IC-6 envelope +
+# self-asserting invariant checks; companion to docs/economic_incentive_analysis.md).
+python3 scripts/economic_simulation.py
+
 # Workstream RH (Rust host runtime) — see runtime/README.md.
 # Toolchain pin: runtime/rust-toolchain.toml (stable 1.83).
 cd runtime && cargo build --workspace --all-targets
@@ -225,7 +235,9 @@ knomosis/
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
-│   └── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
+│   ├── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
+│   ├── verify_secp256k1_link.sh -- F-2 production-verifier link proof + SHA-256
+│   └── economic_simulation.py -- IC-1..IC-6 quantitative incentive harness
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
 │   ├── ci-rust.yml            -- Rust workspace gates (runtime/**)
