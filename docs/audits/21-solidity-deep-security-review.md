@@ -27,7 +27,7 @@ optimizer (200 runs).
 
 | # | Contract | Title | Severity | Status |
 |---|----------|-------|----------|--------|
-| 1.1 | FaultProofGame | Unanchored attacker-controlled `low` interval endpoint | **Critical** | **Open — decision required** |
+| 1.1 | FaultProofGame | Unanchored attacker-controlled `low` interval endpoint | **Critical** | **Fixed** |
 | 1.2 | FaultProofGame | Active-game lock cleared under the wrong key (re-challenge brick) | **High** | **Fixed** |
 | 1.3 | FaultProofGame | Push-payment settlement DoS if winner/treasury rejects ETH | Medium | Open — recommended |
 | 1.4 | FaultProofGame | No constructor check `responseTimeout > stepInterval` | Low | Open — recommended |
@@ -39,11 +39,15 @@ optimizer (200 runs).
 **Headline.**  The contracts are maturely engineered and have clearly
 absorbed prior audit passes (pervasive, substantive "audit-2"/"audit-3"
 annotations; thorough reentrancy + CEI discipline; exact bond/fee
-conservation; fee-on-transfer rejection; tightly-scoped roles).  Two
-**real defects** were found and **fixed in this landing** (1.2, B.1).
-One **Critical** soundness issue (1.1) and one Medium robustness issue
-(1.3) require a design decision and are documented here with concrete
-remediation; they are the priority follow-ups.
+conservation; fee-on-transfer rejection; tightly-scoped roles).  **Three
+real defects were found and fixed in this landing** — the Critical
+unanchored-`low` soundness break (1.1), the High re-challenge-bricking
+lock-key bug (1.2), and the Medium SMT sibling-size soundness gap (B.1)
+— each with regression tests, including the first end-to-end
+adjudication-outcome tests (`SequencerWon` / `ChallengerWon`) the suite
+has ever had.  One Medium robustness issue (1.3, push-payment
+settlement) and lower-severity hardening items remain documented
+follow-ups.
 
 ---
 
@@ -137,26 +141,28 @@ the real `high.commit`, so the sequencer's terminal claim mismatches and
 The sequencer has no in-contract move to repudiate the fabricated
 initial `low`.
 
-**Why it is filed Open rather than auto-fixed.**  The remediation
-direction is clear — anchor `low` on-chain like `high` — but it changes
-the game's core challenge-initiation semantics and has a genuine design
-choice with different security/liveness trade-offs:
+**Remediation (landed — option A, the agreed-anchor floor).**
+`initiateChallenge` now looks up `roots(lowLogIndex)` (exactly as it
+already looks up the disputed/high root) and requires both
+`lowSubmittedAtBlock != 0` (`LowRootNotSubmitted`) and `lowCommit ==
+lowStateCommit` (`LowCommitMismatch`).  The `low` endpoint is therefore
+anchored to an agreed on-chain submitted root, so a fabricated pre-state
+is unconstructible — the exploit above reverts at challenge open.  A
+deployment that additionally wants the low root *finalised* (option B)
+layers that on at the submission level; binding via the hash chain
+(option C) was not chosen because the stored `prevLogEntryHash` is a
+log-entry hash, not the state commit the step VM consumes.
 
-  - **(A)** require `lowCommit == roots[lowLogIndex].stateCommit` and the
-    low root *exists* (submitted) — minimal anchor, mirrors `high`;
-  - **(B)** additionally require the low root be *finalised* (an
-    immutable agreed point) — strongest, but may be too strict if the
-    immediate predecessor is not yet finalised;
-  - **(C)** bind `low` via the hash chain
-    (`roots[disputedLogIndex].prevLogEntryHash` / the prior
-    `expectedNextHash`) rather than the state commit.
-
-It will also require updating any existing test that passes an arbitrary
-`lowCommit`.  Because this is a Critical change to the adjudication
-contract, the decision is surfaced to the maintainer rather than chosen
-unilaterally.  **Recommended:** (A) as the floor, escalating to (B) if
-the protocol's finalisation cadence permits.  A regression test
-producing a `SequencerWon` outcome (see §4) must land with the fix.
+Regression coverage landed with the fix:
+  - `test_initiateChallenge_rejects_unanchored_low_commit` — a
+    fabricated `lowCommit` reverts `LowCommitMismatch`;
+  - `test_initiateChallenge_rejects_unsubmitted_low_root` — a `low`
+    referencing an unsubmitted index reverts `LowRootNotSubmitted`;
+  - `test_terminate_single_step_honest_sequencer_wins` and
+    `test_terminate_single_step_invalid_root_challenger_wins` — the
+    first end-to-end `SequencerWon` / `ChallengerWon` adjudication tests
+    in the suite (closing the §4 coverage gap), exercising
+    `terminateOnSingleStep` against a correctly-anchored `low`.
 
 ### 1.3 — Push-payment settlement DoS if winner/treasury rejects ETH (Medium)
 
@@ -234,11 +240,19 @@ test drives `terminateOnSingleStep` or produces a `SequencerWon` /
 gated off under the FNV hash default (it runs under
 `scripts/verify_keccak_crossstack.sh`).  Both 1.1 and 1.2 would have
 been caught by an end-to-end "honest sequencer wins a single-step
-termination" test.  **Recommendation (gating the 1.1 fix):** add
-adjudication-outcome tests covering (a) honest sequencer wins a
-single-step termination against a *correctly anchored* `low`, (b) honest
-challenger wins against an invalid root, and (c) re-challenge succeeds
-after a prior game settles (the 1.2 regression).
+termination" test.
+
+**Partially remediated (this PR).**  The first adjudication-outcome
+tests now exist: `test_terminate_single_step_honest_sequencer_wins` (a)
+drives `terminateOnSingleStep` to a `SequencerWon` against a
+correctly-anchored `low` *and* asserts the 1.2 lock clears under
+`disputedLogIndex`, and
+`test_terminate_single_step_invalid_root_challenger_wins` (b) drives a
+`ChallengerWon` against an invalid published root.  Both execute the
+real step VM (reusing the verified Transfer recipe).  **Remaining
+follow-up:** a multi-round bisection-then-terminate path and an explicit
+"re-challenge succeeds after a prior game settles" test exercising the
+1.2 fix across a `disagree`-reassigned `high`.
 
 ---
 
@@ -271,9 +285,9 @@ after a prior game settles (the 1.2 regression).
 
 | Finding | Action | Lands in |
 |---------|--------|----------|
-| B.1 | Enforce 32-byte upper siblings in `SmtVerifier.recomputeRoot` | this PR |
-| 1.2 | Clear `activeGameForLogIndex[g.disputedLogIndex]` in `_settle` | this PR |
-| 1.1 | Anchor `lowCommit`; add `SequencerWon` regression test | follow-up (decision) |
+| B.1 | Enforce 32-byte upper siblings in `SmtVerifier.recomputeRoot` | **this PR** |
+| 1.2 | Clear `activeGameForLogIndex[g.disputedLogIndex]` in `_settle` | **this PR** |
+| 1.1 | Anchor `lowCommit` to the submitted root + 4 regression tests | **this PR** |
+| Coverage | End-to-end `SequencerWon` / `ChallengerWon` adjudication tests | **this PR** (with 1.1) |
 | 1.3 | Pull-payment settlement escrow | follow-up |
 | 1.4 / B.2 / 2.1 | Constructor guard / multisig roles / per-dispute slash | follow-up / deployment |
-| Coverage | End-to-end adjudication-outcome tests | follow-up (gates 1.1) |

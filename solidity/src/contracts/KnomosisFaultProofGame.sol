@@ -177,6 +177,16 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
     error BisectionStepTooFast();
     error GameAlreadyExists();
     error DepthCapExceeded();
+    /// @notice The `low` interval endpoint references a log index with
+    ///         no submitted state root, so it cannot be an agreed
+    ///         (on-chain anchored) pre-state.
+    error LowRootNotSubmitted();
+    /// @notice The supplied `lowCommit` does not equal the on-chain
+    ///         submitted state root at `lowLogIndex`.  The low endpoint
+    ///         MUST be anchored to an agreed root (mirroring `high`),
+    ///         else a dishonest challenger could fabricate a pre-state
+    ///         and slash an honest sequencer in the terminal step.
+    error LowCommitMismatch();
 
     /* ---------------------------------------------------------- */
     /* Constructor                                                */
@@ -263,6 +273,32 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         if (finalised) revert GameAlreadyEnded();
         if (challengerCommit == rootStateCommit)
             revert MidpointOutOfRange();  // no actual dispute
+
+        // Anchor the LOW endpoint to the on-chain submitted root at
+        // `lowLogIndex` — exactly as `high` is anchored to the disputed
+        // root above.  WITHOUT this, `lowCommit` is attacker-controlled:
+        // a dishonest challenger could open a single-step range with a
+        // FABRICATED pre-state so the honest sequencer's terminal
+        // `stepVM.executeStep(g.low.commit, …)` cannot reproduce the
+        // real `high.commit`, losing the sequencer its bond.  The
+        // bisection's soundness REQUIRES `low` be an agreed commit
+        // (FaultProof/Game.lean: "both parties have agreed on the
+        // commits at `low` and `high`").  We require `low` reference a
+        // submitted root and match its committed state (option A — the
+        // agreed-anchor floor; a deployment that additionally wants the
+        // low root *finalised* layers that on at the submission level).
+        (
+            /* lowSequencer */,
+            bytes32 lowStateCommit,
+            /* prevLogEntryHash */,
+            /* expectedNextHash */,
+            /* bond */,
+            uint64  lowSubmittedAtBlock,
+            /* finalised */,
+            /* disputed */
+        ) = sub.roots(lowLogIndex);
+        if (lowSubmittedAtBlock == 0) revert LowRootNotSubmitted();
+        if (lowCommit != lowStateCommit) revert LowCommitMismatch();
 
         // Cache the deployment ID from the state-root submission
         // contract (the canonical source).  Caller cannot spoof
