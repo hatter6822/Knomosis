@@ -90,6 +90,53 @@ contract SmtVerifierTest is Test {
         smt.recomputeRoot(0, zeroLeaf, short_);
     }
 
+    // ---- audit 21 / B.1: per-sibling SIZE discipline (soundness) ----
+
+    /// @notice CRITICAL SECURITY TEST (audit 21, B.1): an upper-level
+    ///         (non-leaf-adjacent) sibling that is NOT exactly 32 bytes
+    ///         must be rejected.  Canonical proofs always have 32-byte
+    ///         keccak-output siblings above the leaf; allowing an
+    ///         off-size operand reopens the `keccak256(sibling ‖
+    ///         current)` boundary the Lean `verifyProof_sound`
+    ///         `h_sibs_match` precondition closes.  `siblings[0]` is
+    ///         root-adjacent — squarely an upper level.
+    function test_recomputeRoot_revert_on_oversized_upper_sibling() public {
+        bytes[] memory siblings = smt.emptyProofSiblings();
+        // Make the root-adjacent sibling 33 bytes (off-size).
+        siblings[0] = abi.encodePacked(bytes32(0), bytes1(0x00));
+        bytes memory leaf = abi.encodePacked(bytes32(0));
+        vm.expectRevert(abi.encodeWithSelector(
+            SmtVerifier.SmtBadSiblingSize.selector, uint256(0), uint256(33)));
+        smt.recomputeRoot(0, leaf, siblings);
+    }
+
+    function test_recomputeRoot_revert_on_undersized_upper_sibling() public {
+        bytes[] memory siblings = smt.emptyProofSiblings();
+        // A mid-level (upper) sibling that is 31 bytes.
+        siblings[30] = new bytes(31);
+        bytes memory leaf = abi.encodePacked(bytes32(0));
+        vm.expectRevert(abi.encodeWithSelector(
+            SmtVerifier.SmtBadSiblingSize.selector, uint256(30), uint256(31)));
+        smt.recomputeRoot(0, leaf, siblings);
+    }
+
+    /// @notice The dense-pair case must STILL be accepted: the
+    ///         leaf-adjacent sibling (`siblings[63]`) is consumed at the
+    ///         leaf level and is legitimately variable-size (e.g. the
+    ///         ~56-byte encoding of the paired leaf).  The size check
+    ///         must NOT reject it — proving the B.1 fix doesn't
+    ///         over-restrict.
+    function test_recomputeRoot_accepts_variable_leaf_adjacent_sibling() public view {
+        bytes[] memory siblings = smt.emptyProofSiblings();
+        // A 56-byte leaf-adjacent sibling (the dense-pair shape).
+        siblings[63] = new bytes(56);
+        bytes memory leaf = abi.encodePacked(bytes32(0));
+        // Must NOT revert (returns some root deterministically).
+        bytes32 root = smt.recomputeRoot(0, leaf, siblings);
+        bytes32 root2 = smt.recomputeRoot(0, leaf, siblings);
+        assertEq(root, root2, "variable leaf-adjacent sibling is accepted + deterministic");
+    }
+
     /// @notice The all-empty proof for an empty-leaf at index 0
     ///         should recompute to the empty-tree top hash.  The
     ///         leaf is the 32-byte sentinel (defaultHash 0 =
