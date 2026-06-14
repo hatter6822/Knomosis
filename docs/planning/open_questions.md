@@ -1263,11 +1263,25 @@ ships this layout.
   * OQ-GP-7 — BOLD-circuit emergency closure operational policy.
   * OQ-GP-8 — Event-index compatibility and indexer rollout policy.
   * OQ-GP-8b — Receipt-verified sequencer reimbursement (GP.8.5 v2):
-    gate the v1 honour-system claim's `amount` on an L1 gas-receipt
-    verifier (the `l1FaultProofVerifier` trust-pattern) + a price
-    oracle, turning the cap-bounded honour system into a cryptographic
-    bound.  Deferred from v1 (see `abi.md` §10.2.6 and
-    `knomosis-l1-ingest/src/sequencer_claim.rs`).
+    **substantially shipped.**  The core gate now exists end-to-end —
+    Lean (`LegalKernel.Bridge.ReceiptVerifiedClaim`: the
+    `l1GasReceiptVerifier` opaque, the `gasReceiptReimbursement` wei
+    bound, the `SequencerReimbursementVerified` witness, the
+    `receiptVerifiedClaimAdmissible` gate, and the
+    `receiptVerifiedClaim_capped_and_backed` / `…_implies_gasPoolPolicy`
+    theorems) and Rust (`SequencerClaim::build_receipt_backed` +
+    `is_receipt_backed_by`).  An admitted v2 claim is bounded by
+    `min(cap, L1 wei cost)`, and v2 is a proven pure strengthening of v1
+    (see `abi.md` §10.2.6).  **Two follow-ons remain open:** (a) the
+    **BOLD-leg price oracle** — receipt-backing the BOLD leg from a
+    wei-denominated receipt needs a deployment-configured ETH→BOLD rate
+    (a second trust assumption), so v2 currently covers only the exact,
+    oracle-free ETH leg (resource 0); and (b) the
+    **independent-observer receipt-fetch binding** — the production
+    binding of `l1GasReceiptVerifier` to a watcher that fetches the L1
+    batch-publication transaction receipt and re-derives
+    `(gasUsed, gasPrice)`, so a third party (not just the claim builder)
+    can attest the backing.
   * OQ-GP-9 — Sequencer reimbursement cadence and batch sizing.
   * OQ-GP-10 — Bridge-actor automation failure-domain isolation.
   * OQ-GP-11 — Whether the L1 step-VM commit (`stepVMHash` /

@@ -766,8 +766,9 @@ reimburses itself from the gas pool (`gasPoolActor`, `ActorId 1`) by
 submitting a **reimbursement claim** — a single `transfer` of the leg
 from `gasPoolActor` to `sequencerActor` (`ActorId 2`), signed by the
 pool key.  The claim is built by
-`knomosis-l1-ingest::sequencer_claim::SequencerClaim::build` and admitted
-under the GP.7.4 `gasPoolPolicy` (see `abi.md` §10.2.6).
+`knomosis-l1-ingest::sequencer_claim::SequencerClaim::build` (v1
+honour-system) or `::build_receipt_backed` (v2 receipt-verified, §11.3)
+and admitted under the GP.7.4 `gasPoolPolicy` (see `abi.md` §10.2.6).
 
 ### 11.1 Provisioning (or claims fail closed)
 
@@ -801,11 +802,38 @@ vulnerability, but a real prerequisite.
     gas spent — not a proven receipt.  Size the cap so the worst-case
     over-claim per epoch is an acceptable loss; the dispute pipeline can
     challenge sustained over-claims.  Set the claimed `amount` from your
-    L1 submitter's actual gas accounting between claims.
+    L1 submitter's actual gas accounting between claims.  For a
+    *cryptographically bounded* ETH-leg claim, use the v2 receipt-backed
+    path (§11.3) instead — it caps the amount at the real L1 wei cost.
 
-### 11.3 Forward path (v2)
+### 11.3 Receipt-verified claims (v2, GP.8.5)
 
-The receipt-verified claim (gate `amount` on an L1 gas-receipt verifier
-+ price oracle) is **OQ-GP-8b** / GP.8.5 — deferred from v1.  Prioritise
-it before the pool holds material value (see
-`docs/economic_incentive_analysis.md` §4 / IC-6).
+Once the pool holds material value, switch ETH-leg claims from the v1
+honour system to the **receipt-verified** path (economic analysis §4 /
+IC-6).  Instead of `SequencerClaim::build`, the operator calls
+`SequencerClaim::build_receipt_backed(key, &receipt, requested, cap,
+nonce, deployment_id)`, where `receipt` is the
+`GasReceipt { batch_id, gas_used, gas_price, receipt_binding_hash }`
+read from the operator's **own** L1 batch-publication transaction
+receipt.  The builder double-clamps the amount to
+`min(requested, cap, gas_used * gas_price)`, so the claim can never
+exceed the wei actually paid on L1 — an over-spend is *unconstructible*,
+mirroring the Lean gate `receiptVerifiedClaimAdmissible` (whose headline
+`receiptVerifiedClaim_capped_and_backed` proves the `min(cap, wei cost)`
+bound).  Operationally:
+
+  1. After your L1 submitter lands a batch-publication tx, capture its
+     receipt's `gasUsed` and `effectiveGasPrice` (and the receipt's
+     keccak binding hash).
+  2. Build the claim with that `GasReceipt`; submit the (identical-shape)
+     `SignedAction` exactly as a v1 claim.
+  3. Retain the `GasReceipt` for audit so any independent observer can
+     re-run `is_receipt_backed_by` against the on-chain receipt.
+
+**Scope + remaining work (OQ-GP-8b).**  v2 covers the **ETH leg
+(resource 0)** only — the leg whose receipt cost is exactly wei.  The
+**BOLD leg** still uses the v1 honour-system-within-cap `build` pending a
+ratified ETH→BOLD price oracle.  The production binding of
+`l1GasReceiptVerifier` to a watcher that *independently* fetches the
+batch-publication receipt (so a third party, not only the claim builder,
+attests `(gasUsed, gasPrice)`) is the other open item.

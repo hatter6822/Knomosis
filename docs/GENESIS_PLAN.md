@@ -6629,16 +6629,65 @@ necessity — once `gasPoolAuthorityPolicy` is in force the pool cannot
 install or replace its own `LocalPolicy` via a signed
 `declareLocalPolicy`, so the genesis declaration MUST be structural).
 
+**Receipt-verified sequencer claim (GP.8.5 v2).**  The GP.7.4 path
+admits the sequencer's reimbursement claim under `gasPoolPolicy`'s
+per-action cap, but the *amount* in the v1 honour-system path
+(`SequencerClaim::build`) is the operator's estimate, not a proven
+spend.  GP.8.5 ships the receipt-verified strengthening in
+`LegalKernel/Bridge/ReceiptVerifiedClaim.lean`: the **kernel action is
+unchanged** (the same capped `gasPoolActor → sequencerActor` transfer),
+but the claimed amount is additionally bound to a concrete L1
+batch-publication gas receipt.  `gasReceiptReimbursement gasUsed
+gasPrice := gasUsed * gasPrice` is the exact EVM wei cost a receipt
+justifies; the propositional witness `SequencerReimbursementVerified
+amount` carries an L1 attestation (the new opaque, §15E.7) plus the
+bound `amount ≤ gasReceiptReimbursement …`; and the gate
+`receiptVerifiedClaimAdmissible mEth action` conjoins the canonical
+ETH-leg claim shape, the GP.7.2 cap, and that witness.  The headline
+`receiptVerifiedClaim_capped_and_backed` proves an admitted v2 claim is
+bounded by `min(cap, L1 wei cost)`, and
+`receiptVerifiedClaimAdmissible_implies_gasPoolPolicy` proves v2 is a
+*pure strengthening* of v1 (the gate can only ever narrow pool
+outflow).  It is scoped to the ETH leg (resource 0), where the wei
+bound is exact and oracle-free; the BOLD leg's ETH→BOLD price oracle is
+a documented follow-on (OQ-GP-8b).  Verification is off-chain: a claim
+is an L2 action (not an L1 transaction), so the binding is checked by
+the L1 watcher and any independent observer, not by an on-chain
+contract.  The Rust mirror is `SequencerClaim::build_receipt_backed` /
+`is_receipt_backed_by` (`knomosis-l1-ingest`).
+
 ### 15E.7 Opaques and axioms
 
-Workstream GP introduces no new opaque trust hooks and no new axioms.
-It extends existing typed state and policy surfaces only.
+Workstream GP through GP.7.x introduces no new opaque trust hooks and no
+new axioms; it extends existing typed state and policy surfaces only.
+
+**GP.8.5 adds exactly one new opaque** — `l1GasReceiptVerifier`
+(`receiptBindingHash batchId gasUsed gasPrice : Bool`) — the
+deployment-side L1 watcher's attestation that a batch-publication
+receipt with the given gas expenditure exists on L1.  It mirrors the
+Workstream-H `l1FaultProofVerifier` trust-pattern exactly: declared
+`opaque` (not `axiom`), so it does **not** appear in `#print axioms`
+output (every GP.8.5 theorem's axiom footprint stays ⊆ `{propext,
+Classical.choice, Quot.sound}`); fail-closed (no defining equation at
+the Lean level, so no witness is constructible without a deployment-time
+attestation); non-TCB (a bug there can only narrow what the pool pays
+out, never widen it or violate a kernel invariant); and cross-checkable
+across multiple independent observers.  No new axiom is introduced.
 
 ### 15E.8 Trust-assumption update
 
 The trust table in §1.4 is amended with an operational assumption:
 deployment operators set sane fee bounds and exchange-rate parameters.
 Cryptographic assumptions and TCB scope are unchanged.
+
+A deployment that enables the GP.8.5 receipt-verified claim path adds
+one further *non-TCB, off-chain* trust surface: the `l1GasReceiptVerifier`
+attestation (§15E.7).  As with the fault-proof verifier, it is an
+honest-observer assumption (one honest watcher produces a true
+attestation), it weakens no kernel guarantee, and it is mitigated by
+cross-checking across independent observers.  It is strictly *additive
+optionality*: a deployment that stays on the v1 honour-system claim
+introduces no such surface.
 
 The GP.5.5 BOLD safety hardening (§15D.8) adds one further *operational*
 trust surface on the L1 mirror only: two tightly-scoped immutable roles

@@ -1162,7 +1162,7 @@ like the budget and gas-pool configs (see `Runtime/RefundRateSidecar.lean`):
     `refund-rate error` rather than a silently-rejected refund.  The
     `knomosis-replay` auditor re-derives the same rate from the sidecar.
 
-### 10.2.6 Sequencer reimbursement claim (GP.8 Track B, v1)
+### 10.2.6 Sequencer reimbursement claim (GP.8 Track B)
 
 The sequencer funds its L1 state-root submissions from the gas pool
 (`gasPoolActor`, `ActorId 1`).  A **reimbursement claim** is a single
@@ -1199,11 +1199,41 @@ liveness trust already placed in the sequencer.
 and a registered, nonce-tracked `gasPoolActor` key, or claims fail
 closed (`InsufficientBudget` / nonce error); see `docs/gas_pool_runbook.md`.
 
-**Forward path (v2, GP.8.5 — deferred).**  Make `amount` provable via an
-L1 gas-receipt verifier (the `l1FaultProofVerifier` trust-pattern) plus
-a price oracle, gating admissibility on `amount ≤ priceOf(receipt)`.
-Tracked as **OQ-GP-8b**; out of scope for v1.  The v1 action shape is
-forward-compatible (v2 adds a gate, not a new action).
+**Receipt-verified path (v2, GP.8.5 — shipped).**  The v2 path makes
+`amount` provable by binding it to a concrete L1 batch-publication gas
+receipt.  The kernel **action is identical** to v1 (v2 adds an
+admissibility *gate*, not a new action — the v1 wire shape is
+forward-compatible); what v2 adds is a *receipt witness*:
+
+  * **Lean** — `LegalKernel.Bridge.ReceiptVerifiedClaim` introduces one
+    new `opaque l1GasReceiptVerifier` (the deployment-side L1 watcher's
+    attestation, mirroring the `l1FaultProofVerifier` trust-pattern;
+    adds no axiom), a `gasReceiptReimbursement gasUsed gasPrice :=
+    gasUsed * gasPrice` wei bound, the `SequencerReimbursementVerified`
+    propositional witness, and the gate
+    `receiptVerifiedClaimAdmissible`.  The headline theorem
+    `receiptVerifiedClaim_capped_and_backed` proves an admitted claim is
+    bounded by `min(cap, L1 wei cost)`;
+    `receiptVerifiedClaimAdmissible_implies_gasPoolPolicy` proves v2 is a
+    pure strengthening of v1 (it can only ever *narrow* pool outflow).
+  * **Rust** — `SequencerClaim::build_receipt_backed` double-clamps the
+    amount to `min(requested, cap, GasReceipt::reimbursement())` so an
+    over-spend is unconstructible; `is_receipt_backed_by` is the runtime
+    re-check (the mirror of the witness's `amount_backed`).
+
+**Trust + scope (v2).**  The receipt cost is wei (`gasUsed * gasPrice`),
+so v2 covers the **ETH leg (resource 0)** only — the leg whose bound is
+exact and oracle-free.  Receipt-backing the BOLD leg would require a
+deployment-configured ETH→BOLD price oracle (a *second* trust
+assumption); until that is ratified the BOLD leg stays on the v1
+honour-system-within-cap path.  Verification is **off-chain**: a
+reimbursement claim is an L2 action (not an L1 transaction), so there is
+no on-chain enforcement contract — the binding is checked by the L1
+watcher that constructs the `GasReceipt` and by any independent observer
+that re-runs `is_receipt_backed_by` against the L1 receipt it watched
+(exactly the cross-checkable-across-observers mitigation the
+fault-proof verifier uses).  **OQ-GP-8b** now tracks only the BOLD-leg
+price oracle and the independent-observer receipt-fetch binding.
 
 ### 10.3 Transport
 

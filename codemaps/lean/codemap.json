@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d4f3dfc6700fff0fd899e901dbe59c956963b32c0ded6a221b974afd1b2d13d7"
+    "source_digest": "cb9690cba89d41c920b57520a7dd6844b788e6701c865092151817f022f36f0f"
   },
   "summary": {
-    "module_count": 305,
-    "declaration_count": 5106
+    "module_count": 308,
+    "declaration_count": 5131
   },
   "modules": [
     {
@@ -510,13 +510,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 312,
+          "line": 318,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 325,
+          "line": 331,
           "called": [
             "LegalKernel"
           ]
@@ -11045,6 +11045,136 @@
       ]
     },
     {
+      "module": "LegalKernel.Bridge.ReceiptVerifiedClaim",
+      "path": "LegalKernel/Bridge/ReceiptVerifiedClaim.lean",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Bridge",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "opaque",
+          "name": "l1GasReceiptVerifier",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gasReceiptReimbursement",
+          "line": 98,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "SequencerReimbursementVerified",
+          "line": 126,
+          "called": [
+            "Amount",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "SequencerReimbursementVerified.of_receipt",
+          "line": 151,
+          "called": [
+            "Amount",
+            "SequencerReimbursementVerified",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "sequencerReimbursementVerified_backed",
+          "line": 170,
+          "called": [
+            "Amount",
+            "SequencerReimbursementVerified",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptVerifiedClaimAdmissible",
+          "line": 208,
+          "called": [
+            "Action",
+            "Amount",
+            "SequencerReimbursementVerified",
+            "gasPoolActor",
+            "maxDrainPerActionEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedClaim_capped_and_backed",
+          "line": 224,
+          "called": [
+            "Action",
+            "Amount",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptVerifiedClaimAdmissible",
+            "sequencerActor",
+            "sequencerReimbursementVerified_backed",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy",
+          "line": 244,
+          "called": [
+            "Action",
+            "Amount",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "gasPoolPolicy_permits_sequencer_transfer_eth",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "permits",
+            "receiptVerifiedClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedClaim_requires_backing",
+          "line": 261,
+          "called": [
+            "Amount",
+            "Bridge",
+            "LegalKernel",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptVerifiedClaimAdmissible",
+            "receiptVerifiedClaim_capped_and_backed",
+            "sequencerActor",
+            "transfer"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Bridge.State",
       "path": "LegalKernel/Bridge/State.lean",
       "declaration_count": 27,
@@ -11267,7 +11397,7 @@
     {
       "module": "LegalKernel.Bridge.VerifyAdaptor",
       "path": "LegalKernel/Bridge/VerifyAdaptor.lean",
-      "declaration_count": 17,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "namespace",
@@ -11327,8 +11457,33 @@
         },
         {
           "kind": "def",
+          "name": "verifyImplementationIdentifierFallback",
+          "line": 147,
+          "called": [
+            "fallbackVerifyAdaptorIdentifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "verifyImplementationIdentifier",
+          "line": 159,
+          "called": [
+            "verifyImplementationIdentifierFallback"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "isProductionVerify",
+          "line": 166,
+          "called": [
+            "fallbackVerifyAdaptorIdentifier",
+            "verifyImplementationIdentifier"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "isLowS",
-          "line": 162,
+          "line": 190,
           "called": [
             "secp256k1HalfOrder"
           ]
@@ -11336,7 +11491,7 @@
         {
           "kind": "instance",
           "name": "isLowSDecidable",
-          "line": 167,
+          "line": 195,
           "called": [
             "secp256k1HalfOrder"
           ]
@@ -11344,7 +11499,7 @@
         {
           "kind": "theorem",
           "name": "Verify_deterministic",
-          "line": 182,
+          "line": 210,
           "called": [
             "PublicKey",
             "Signature",
@@ -11354,7 +11509,7 @@
         {
           "kind": "theorem",
           "name": "secp256k1HalfOrder_eq",
-          "line": 189,
+          "line": 217,
           "called": [
             "secp256k1HalfOrder",
             "secp256k1Order"
@@ -11363,13 +11518,13 @@
         {
           "kind": "theorem",
           "name": "secp256k1OrderBytes_size",
-          "line": 193,
+          "line": 221,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "isLowS_zero",
-          "line": 196,
+          "line": 224,
           "called": [
             "isLowS",
             "secp256k1HalfOrder"
@@ -11378,7 +11533,7 @@
         {
           "kind": "theorem",
           "name": "isLowS_at_threshold",
-          "line": 203,
+          "line": 231,
           "called": [
             "isLowS",
             "secp256k1HalfOrder"
@@ -11387,7 +11542,7 @@
         {
           "kind": "theorem",
           "name": "isLowS_just_below_order",
-          "line": 211,
+          "line": 239,
           "called": [
             "LegalKernel.Bridge",
             "isLowS",
@@ -34572,6 +34727,94 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.ChainAccounting",
+      "path": "LegalKernel/Test/Bridge/ChainAccounting.lean",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.ChainAccountingTests",
+          "line": 32,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "bsDep",
+          "line": 35,
+          "called": [
+            "BridgeState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "bsDepWd",
+          "line": 40,
+          "called": [
+            "BridgeState",
+            "EthAddress.zero"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "bsFee",
+          "line": 45,
+          "called": [
+            "BridgeState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "es",
+          "line": 50,
+          "called": [
+            "BridgeState",
+            "ExtendedState",
+            "ExtendedState.empty"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 54,
+          "called": [
+            "BridgeAction.toAction_injective",
+            "BridgeReachable.trans",
+            "ExtendedState",
+            "LegalKernel.Test.Bridge.ChainAccountingTests",
+            "ResourceId",
+            "TestCase",
+            "TotalSupply",
+            "apply_bridge_admissible_with_base",
+            "assertEq",
+            "bridgeConserves_step",
+            "bridgeEscrowBalance",
+            "bridgeReachable_preserves",
+            "bridgeReachable_solvent",
+            "bridge_accounting_equation",
+            "bridge_chain_accounting_equation",
+            "bridge_chain_conserves",
+            "bsDep",
+            "bsDepWd",
+            "bsFee",
+            "depositWithFee_step_deposited",
+            "depositWithFee_step_supply",
+            "depositWithFee_step_withdrawn",
+            "deposit_step_deposited",
+            "deposit_step_supply",
+            "deposit_step_withdrawn",
+            "es",
+            "genesisExtended",
+            "totalDeposited",
+            "totalWithdrawn",
+            "withdraw_step_deposited",
+            "withdraw_step_supply",
+            "withdraw_step_withdrawn",
+            "withdrawalsMonotonic_step"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.AmmMath",
       "path": "LegalKernel/Test/Bridge/CrossCheck/AmmMath.lean",
       "declaration_count": 18,
@@ -41142,6 +41385,60 @@
             "testDeploymentId",
             "transfer",
             "transfer_other_sender_pool_nondecreasing"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.ReceiptVerifiedClaim",
+      "path": "LegalKernel/Test/Bridge/ReceiptVerifiedClaim.lean",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "ReceiptVerifiedClaimTests",
+          "line": 38,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 48,
+          "called": [
+            "Action",
+            "Amount",
+            "LegalKernel.Test.Bridge",
+            "ReceiptVerifiedClaimTests",
+            "SequencerReimbursementVerified.of_receipt",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "bridgeActor",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "mBold",
+            "mEth",
+            "mint",
+            "permits",
+            "receiptVerifiedClaimAdmissible",
+            "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy",
+            "receiptVerifiedClaim_capped_and_backed",
+            "receiptVerifiedClaim_requires_backing",
+            "sequencerActor",
+            "sequencerReimbursementVerified_backed",
+            "transfer"
           ]
         }
       ]
@@ -60686,7 +60983,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 38,
+      "declaration_count": 40,
       "declarations": [
         {
           "kind": "def",
@@ -60744,8 +61041,22 @@
         },
         {
           "kind": "def",
+          "name": "cmdHashCheck",
+          "line": 155,
+          "called": [
+            "isProductionHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cmdVerifyCheck",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "warnIfFallbackHash",
-          "line": 149,
+          "line": 193,
           "called": [
             "isProductionHash"
           ]
@@ -60753,7 +61064,7 @@
         {
           "kind": "def",
           "name": "cmdProcess",
-          "line": 158,
+          "line": 202,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60771,7 +61082,7 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 249,
+          "line": 293,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60789,7 +61100,7 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 288,
+          "line": 332,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60804,7 +61115,7 @@
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 324,
+          "line": 368,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60822,7 +61133,7 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 378,
+          "line": 422,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60841,13 +61152,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 434,
+          "line": 478,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 453,
+          "line": 497,
           "called": [
             "ActorId",
             "AuthorityPolicy",
@@ -60866,7 +61177,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 570,
+          "line": 614,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -60879,7 +61190,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 619,
+          "line": 663,
           "called": [
             "formatHashHex"
           ]
@@ -60887,7 +61198,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 634,
+          "line": 678,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -60897,19 +61208,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 656,
+          "line": 700,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 753,
+          "line": 804,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 762,
+          "line": 813,
           "called": [
             "hexCharToNibble"
           ]
@@ -60917,19 +61228,19 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 801,
+          "line": 852,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 812,
+          "line": 863,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 827,
+          "line": 878,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -60951,7 +61262,7 @@
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 886,
+          "line": 937,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60967,7 +61278,7 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 919,
+          "line": 970,
           "called": [
             "actionCost",
             "deploymentId",
@@ -60977,13 +61288,13 @@
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 968,
+          "line": 1019,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 979,
+          "line": 1030,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -60992,7 +61303,7 @@
         {
           "kind": "def",
           "name": "gasPoolConfig?",
-          "line": 995,
+          "line": 1046,
           "called": [
             "GlobalFlags",
             "maxDrainPerActionBold",
@@ -61002,7 +61313,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 1008,
+          "line": 1059,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -61012,7 +61323,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 1019,
+          "line": 1070,
           "called": [
             "AuthorityPolicy",
             "GlobalFlags",
@@ -61022,7 +61333,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 1024,
+          "line": 1075,
           "called": [
             "GlobalFlags"
           ]
@@ -61030,7 +61341,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 1031,
+          "line": 1082,
           "called": [
             "GlobalFlags"
           ]
@@ -61038,7 +61349,7 @@
         {
           "kind": "def",
           "name": "refundRateConfig",
-          "line": 1037,
+          "line": 1088,
           "called": [
             "GlobalFlags"
           ]
@@ -61046,7 +61357,7 @@
         {
           "kind": "def",
           "name": "refundRate",
-          "line": 1044,
+          "line": 1095,
           "called": [
             "GlobalFlags",
             "ResourceId"
@@ -61055,7 +61366,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 1055,
+          "line": 1106,
           "called": [
             "GlobalFlags"
           ]
@@ -61063,7 +61374,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 1071,
+          "line": 1122,
           "called": [
             "GlobalFlags",
             "actionCost",
@@ -61076,24 +61387,26 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 1095,
+          "line": 1146,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 1106,
+          "line": 1157,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
             "cmdExportTerminateBundle",
             "cmdExtractEvents",
+            "cmdHashCheck",
             "cmdHelp",
             "cmdInfo",
             "cmdProcess",
             "cmdReplay",
             "cmdReplayUpTo",
             "cmdSnapshot",
+            "cmdVerifyCheck",
             "cmdWithdrawalProof",
             "genesis",
             "parseGlobalFlags",
@@ -61231,7 +61544,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 212,
+          "line": 213,
           "called": [
             "runAll"
           ]

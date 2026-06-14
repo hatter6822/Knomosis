@@ -189,6 +189,7 @@ knomosis/
 │   │                             identity, bridge laws, withdrawal proofs,
 │   │                             gas-pool policy, pool-drain bound, AMM math,
 │   │                             AMM reserve policy, budget refund, accounting,
+│   │                             receipt-verified claim (GP.8.5 v2),
 │   │                             BridgeReachable + chain-level conservation (CA)
 │   ├── FaultProof/            -- Workstream H: state-commitment, bisection game,
 │   │                             convergence/honesty/settlement theorems, SMT
@@ -555,6 +556,7 @@ The Genesis Plan promises a small set of type-level guarantees
 | E-D | SMT verifier completeness + soundness | `verifyProof_complete`, `verifyProof_sound` | `Bridge/WithdrawalRoot.lean` |
 | GP.7.2 | Gas-pool outflow capped | `gasPoolPolicy_permits_transfer_iff` | `Bridge/GasPoolPolicy.lean` |
 | GP.7.3 | Per-resource pool drain bound | `pool_drain_bounded_by_action_count_per_resource` | `Bridge/PoolDrainBound.lean` |
+| GP.8.5 | Receipt-verified claim double bound | `receiptVerifiedClaim_capped_and_backed` | `Bridge/ReceiptVerifiedClaim.lean` |
 | GP.11.6 | AMM reserve outflow restricted | `ammReservePolicy_permits_iff` | `Bridge/AmmReservePolicy.lean` |
 | GP.11.8 | AMM state committed to bridge | `bridgeState_commit_includes_ammState` | `FaultProof/Commit.lean` |
 | GP.11.8 | v1.2 backward compatibility | `bridgeState_commit_extends_v1_2` | `FaultProof/Commit.lean` |
@@ -615,8 +617,8 @@ work units.  Status:
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
-| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B complete; C/D documented; GP.8.5 (v2 receipt-verified claim) = OQ-GP-8b |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Track A+B, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining) |
+| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B complete; C/D documented; GP.8.5 v2 receipt-verified claim core shipped (Lean + Rust); BOLD-leg oracle + observer receipt-fetch = OQ-GP-8b |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Track A+B, GP.8.5 v2 core, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining) |
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
@@ -701,6 +703,8 @@ full catalogue):
 - `encoding-injectivity` — EI.2–EI.8 injectivity ladder.
 - `bridge-gas-pool-policy` — GP.7.2 gas-pool policy characterisation.
 - `bridge-pool-drain-bound` — GP.7.3 inductive pool-drain bound.
+- `bridge-receipt-verified-claim` — GP.8.5 v2 receipt-verified
+  sequencer-reimbursement gate (the `min(cap, L1 wei cost)` bound).
 - `bridge-amm-reserve-policy` — GP.11.6 AMM reserve policy.
 - `crosscheck-amm-swap` — GP.11.7 tri-stack AMM fixture corpus.
 - `faultproof-amm-commit` — GP.11.8 AMM state-root commitment
@@ -784,6 +788,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.5.1–5.5 | Complete | Solidity: ETH+BOLD fee-split deposits, cap audit gate, step-VM kind 21, BOLD circuit breaker + Liquity auto-trigger + TVL cap |
 | GP.6.1–6.5 | Complete | Rust: GP-family encoder, budget admission gate, event-type registry, indexer budget/pool views, BOLD cross-stack corpus |
 | GP.7.0–7.4 | Complete | Bridge-policy characterisation, reserved actors, `gasPoolPolicy`, inductive drain bound, genesis ratification + CLI |
+| GP.8.5 | Core complete | Receipt-verified claim gate: Lean `ReceiptVerifiedClaim` (`l1GasReceiptVerifier` opaque, `SequencerReimbursementVerified` witness, `receiptVerifiedClaimAdmissible`, the `min(cap, wei)` double-bound + pure-strengthening theorems) + Rust `build_receipt_backed` / `is_receipt_backed_by`; ETH-leg only; BOLD oracle + observer receipt-fetch = OQ-GP-8b |
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
 | GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
@@ -815,9 +820,16 @@ Plan: `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md`
 Track A complete: two-tier DRR fair scheduler in `knomosis-host`,
 signer-hint wire protocol (`PROTOCOL_VERSION 2`), persistent
 pipelined connections.  Track B (v1 reimbursement claim) complete:
-`knomosis-l1-ingest::sequencer_claim::SequencerClaim` (capped,
-sequencer-only, `Zeroizing` pool key; `abi.md` §10.2.6); v2
-receipt-verified path = OQ-GP-8b.  Track D claim/fair-queuing ops in
+`knomosis-l1-ingest::sequencer_claim::SequencerClaim::build` (capped,
+sequencer-only, `Zeroizing` pool key; `abi.md` §10.2.6).  GP.8.5 v2
+receipt-verified claim core complete: `LegalKernel.Bridge.ReceiptVerifiedClaim`
+(the `l1GasReceiptVerifier` opaque + `SequencerReimbursementVerified`
+witness + `receiptVerifiedClaimAdmissible` gate; headline
+`receiptVerifiedClaim_capped_and_backed` = `min(cap, L1 wei cost)` bound;
+`…_implies_gasPoolPolicy` = pure strengthening of v1) mirrored by
+`SequencerClaim::build_receipt_backed` / `is_receipt_backed_by`.  ETH-leg
+only (wei-exact); BOLD-leg price oracle + independent-observer
+receipt-fetch binding = OQ-GP-8b.  Track D claim/fair-queuing ops in
 `gas_pool_runbook.md` §8 / §11.  Remaining: Track C config note + the
 `--epoch-duration-seconds`-absence test, and GP.10 final ratification
 (§15E touch, migration guide).
