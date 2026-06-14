@@ -180,12 +180,14 @@ contracts (§4.1) and the deployment-discipline items above.
 - [ ] **Adversarial-corpus expansion** (§4.2) — boundary/adversarial
       fixtures for all 25 action variants + the fund paths
       (companion: P2 test-expansion increment).
-- [~] **Fuzz the untrusted-input boundaries** (§4.3) — *started:* the
-      L1-log ABI decoder (`decode_event`) is proptest-fuzzed for
-      never-panics on arbitrary topics/data
-      (`knomosis-l1-ingest/tests/property.rs`). **Remaining:** the host
-      frame parser, the indexer state reconstruction, and the observer
-      game state machine (same never-panics property).
+- [~] **Fuzz the untrusted-input boundaries** (§4.3) — *largely covered:*
+      the host frame parser is **already** proptest-fuzzed
+      (`read_frame_never_panics_on_arbitrary_input` + truncation /
+      oversize properties, `knomosis-host/tests/property.rs`); the L1-log
+      ABI decoder (`decode_event`) is **now** fuzzed for never-panics
+      (`knomosis-l1-ingest/tests/property.rs`, this PR); the observer has
+      a chaos suite (RH-G). **Remaining:** the indexer state
+      reconstruction (same never-panics property).
 - [ ] **Economic-incentive analysis** (§4.5) —
       `docs/economic_incentive_analysis.md`.
 - [ ] **Testnet-readiness** — `docs/testnet_readiness.md`: exercise the
