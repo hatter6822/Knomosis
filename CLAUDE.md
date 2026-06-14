@@ -74,6 +74,10 @@ python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
 
 # Runtime smoke test.
 .lake/build/bin/knomosis info
+.lake/build/bin/knomosis hash-check   # F-1 deploy gate: exit 1 on the
+                                      # FNV-1a-64 fallback, 0 if a
+                                      # production hash (BLAKE3/keccak)
+                                      # is @[extern]-linked.
 .lake/build/bin/knomosis bootstrap /tmp/test.log
 .lake/build/bin/knomosis-replay /tmp/test.log
 .lake/build/bin/knomosis gas-pool-demo

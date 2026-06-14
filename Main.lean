@@ -142,6 +142,29 @@ def cmdInfo : IO UInt32 := do
     IO.println s!"  hash-grade:  fallback (FNV-1a-64 padded to 32, NOT FOR PRODUCTION)"
   pure 0
 
+/-- Subcommand: `knomosis hash-check`.  The **deployment gate** for
+    security-review finding F-1
+    (`docs/audits/20-production-security-review-and-external-audit-scope.md`).
+    Unlike `info` (which only reports) and `warnIfFallbackHash` (which
+    only warns), this *fails closed*: it exits `0` iff the binary is
+    linked against a production-grade hash (BLAKE3 / keccak via
+    `@[extern]`), and exits `1` if it is running the FNV-1a-64 fallback
+    (64-bit collision resistance — unsafe for the state-commitment
+    scheme, which a fault-proof adversary could forge with ~2³² work).
+    Deployment / release pipelines MUST gate on this; CI and dev builds
+    intentionally run the fallback and are expected to report non-zero. -/
+def cmdHashCheck : IO UInt32 := do
+  IO.println s!"hash:       {hashImplementationIdentifier ()}"
+  if isProductionHash then
+    IO.println "hash-grade: production — OK"
+    pure 0
+  else
+    IO.eprintln "FATAL: running the FNV-1a-64 fallback hash (64-bit \
+                 collision resistance); NOT FOR PRODUCTION.  Link the \
+                 BLAKE3 / keccak @[extern] binding before deploying \
+                 (security-review F-1)."
+    pure 1
+
 /-- Audit-3.1: emit a single-line stderr warning at the start of
     every chain-touching subcommand if the binary is running with
     the Lean fallback hash and the operator did not explicitly opt
@@ -659,6 +682,9 @@ def cmdHelp : IO UInt32 := do
   IO.println ""
   IO.println "Usage:"
   IO.println "  knomosis [GLOBAL_FLAGS] info"
+  IO.println "  knomosis hash-check"
+  IO.println "        (deployment gate: exit 0 iff a production-grade hash"
+  IO.println "         is linked; exit 1 on the FNV-1a-64 fallback — F-1)"
   IO.println "  knomosis [GLOBAL_FLAGS] process          LOG IN [OUT]"
   IO.println "  knomosis [GLOBAL_FLAGS] replay           LOG"
   IO.println "  knomosis [GLOBAL_FLAGS] bootstrap        LOG"
@@ -1138,6 +1164,7 @@ def main (args : List String) : IO UInt32 := do
   match flags.rest with
   | [] => cmdHelp
   | ["info"] => cmdInfo
+  | ["hash-check"] => cmdHashCheck
   | ["help"] => cmdHelp
   | ["gas-pool-demo"] => do
     -- GP.7.4 worked deployment: runs the unified-gas-pool example

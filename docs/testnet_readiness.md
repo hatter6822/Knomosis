@@ -60,9 +60,10 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       such that 3-of-N collusion exceeds reserve value (E-2/§5).
 
 ### 3.2 Trust-binding hardening (from the security review)
-- [ ] **F-1:** production binaries assert the strong BLAKE3/keccak hash
-      binding is active (`hashImplementationIdentifier` ≠ fallback) — the
-      FNV-1a-64 fallback (64-bit) must **never** run in production.
+- [ ] **F-1:** run `knomosis hash-check` in the deploy pipeline — the
+      gate is **implemented** (exit 1 on the FNV-1a-64 fallback, exit 0
+      on a production-grade hash) — so the 64-bit fallback can **never**
+      reach production.
 - [ ] **F-2:** cdylib artefacts (`knomosis-verify-secp256k1`,
       `knomosis-hash-keccak256`) SHA-256-pinned; verifier identifier
       asserted at startup.
