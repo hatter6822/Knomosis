@@ -71,7 +71,7 @@ topic:
 
 | Attribute | Value |
 |-----------|-------|
-| Project version | `v0.7.0` (Lean + Rust in lockstep) |
+| Project version | `v0.7.1` (Lean + Rust in lockstep) |
 | Build tag | `knomosis-step-vm-coherence` (`kernelBuildTag` in `LegalKernel.lean`) |
 | Lean toolchain | `leanprover/lean4:v4.29.1` (pinned in [`../lean-toolchain`](../lean-toolchain)) |
 | Rust toolchain | stable **1.83** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.83`) |
@@ -834,7 +834,7 @@ The Lean and Rust versions move **in lockstep to the same value in every PR**:
 | README banner | [`../README.md`](../README.md) — the version badge + the "at a glance" table |
 
 After a Rust bump, `Cargo.lock` regenerates automatically and **must be
-committed**. Current version: `v0.7.0` (Lean + Rust).
+committed**. Current version: `v0.7.1` (Lean + Rust).
 
 ## 15. Git & branch workflow
 
