@@ -58,3 +58,27 @@ extern LEAN_EXPORT lean_object *
 LEAN_EXPORT lean_object *knomosis_verify_identifier(lean_object *u) {
     return lp_knomosis_LegalKernel_Bridge_verifyImplementationIdentifierFallback(u);
 }
+
+/* knomosis_verify_ecdsa(pk, msg, sig) — default FAIL-CLOSED fallback for
+ * the @[extern] backing `LegalKernel.Authority.Crypto.Verify`
+ * (security-review F-2).  The opaque `Verify (pk msg sig : ByteArray) :
+ * Bool` has no Lean body to forward to, so this hand-written forwarder
+ * IS the fallback: it rejects EVERY signature (returns 0 = `false`), so
+ * a deployment that forgets to link the real secp256k1 adaptor cannot
+ * admit any signed action (fail-closed, never fail-open).  A production
+ * deployment swaps in `knomosis-verify-secp256k1`, whose
+ * `knomosis_verify_ecdsa` performs real ECDSA verification.
+ *
+ * Calling convention (matches the production adaptor's
+ * `knomosis_verify_ecdsa`): three OWNED `lean_object*` ByteArray args,
+ * returning Lean `Bool` as `uint8_t`.  The owned args MUST be released
+ * (`lean_dec`) by the callee — the @[extern] wrapper does not dec them
+ * after the call — so we dec all three before returning to avoid a
+ * leak. */
+LEAN_EXPORT uint8_t knomosis_verify_ecdsa(lean_object *pk, lean_object *msg,
+                                          lean_object *sig) {
+    lean_dec(pk);
+    lean_dec(msg);
+    lean_dec(sig);
+    return 0; /* reject all — fail closed */
+}

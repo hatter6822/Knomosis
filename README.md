@@ -141,7 +141,10 @@ python3 scripts/regenerate_codemaps.py
 # production BLAKE3/keccak hash and the secp256k1 verifier are
 # @[extern]-linked; `scripts/verify_secp256k1_link.sh` proves the flip.
 .lake/build/bin/knomosis hash-check    # exit 1 on the fallback hash
-.lake/build/bin/knomosis verify-check  # exit 1 on the fallback verifier
+.lake/build/bin/knomosis verify-check  # exit 1 on the fallback verifier;
+                                       # exit 0 only when the secp256k1
+                                       # adaptor is @[extern]-linked AND
+                                       # passes a functional self-test
 ```
 
 ## Solidity and Rust mirrors

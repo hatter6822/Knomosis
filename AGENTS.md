@@ -80,7 +80,11 @@ python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
                                       # is @[extern]-linked.
 .lake/build/bin/knomosis verify-check # F-2 deploy gate: exit 1 on the
                                       # Lean-opaque verifier fallback, 0
-                                      # if the secp256k1 cdylib is linked.
+                                      # if the secp256k1 adaptor is linked
+                                      # AND passes the functional
+                                      # self-test (Verify is @[extern]-
+                                      # routed; the gate calls it on a
+                                      # known-good secp256k1 vector).
 .lake/build/bin/knomosis bootstrap /tmp/test.log
 .lake/build/bin/knomosis-replay /tmp/test.log
 .lake/build/bin/knomosis gas-pool-demo
@@ -315,7 +319,10 @@ opaque declarations rather than axioms (so `#print axioms` stays at
 exactly `propext`, `Classical.choice`, `Quot.sound`):
 
 1. `Authority.Crypto.Verify` — the deployment-supplied signature
-   scheme is EUF-CMA secure.
+   scheme is EUF-CMA secure.  `@[extern "knomosis_verify_ecdsa"]`
+   routes the compiled runtime call to the secp256k1 adaptor (fail-
+   closed reject-all fallback for tests); the logical value stays
+   opaque, so the trust assumption is preserved.
 2. `Runtime.Hash.hashBytes` — the production hash function (BLAKE3
    via `@[extern]`; FNV-1a-64 fallback for tests) is
    collision-resistant.

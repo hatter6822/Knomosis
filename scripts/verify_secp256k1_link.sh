@@ -150,15 +150,20 @@ log "default verify-check exits 1 (fallback, fail-closed) — as required."
 
 # ------------------------------------------------------------------
 # 4. F-2(b): build knomosis with the production verifier linked and
-#    assert verify-check now exits 0.
+#    assert verify-check now exits 0.  Because `Authority.Crypto.Verify`
+#    is `@[extern "knomosis_verify_ecdsa"]`, verify-check's exit-0 path
+#    requires its FUNCTIONAL self-test to pass (it calls the linked
+#    Verify on a known-good secp256k1 vector + a tampered negative
+#    control) — so this proves the real Verify routes through the
+#    adaptor, not merely that an identifier string was linked.
 # ------------------------------------------------------------------
 log "building knomosis with the production secp256k1 verifier linked ..."
 rm -f "${ROOT}/.lake/build/bin/knomosis" 2>/dev/null || true
 KNOMOSIS_VERIFY_STATICLIB="${VERIFY_A}" lake build knomosis >/dev/null 2>&1
 if ! .lake/build/bin/knomosis verify-check; then
-    echo "verify_secp256k1: FATAL — production-linked verify-check exited non-zero." >&2
+    echo "verify_secp256k1: FATAL — production-linked verify-check exited non-zero (identifier or functional self-test failed)." >&2
     exit 1
 fi
-log "production-linked verify-check exits 0 (production verifier) — F-2(b) verified."
+log "production-linked verify-check exits 0 (production verifier + functional self-test) — F-2(b) verified."
 
 log "PASSED — secp256k1 verifier links; verify-check flips fallback(1) -> production(0)."

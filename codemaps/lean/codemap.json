@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "029a813a8f464b30a05c49b1a2101fc266648216b4e077cfbf600f7af16d92b1"
+    "source_digest": "3831213350fc792b9ad1ae90ff0af7c67cb97dbe74649cae61ff5720ee83b5c4"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5131
+    "declaration_count": 5135
   },
   "modules": [
     {
@@ -1219,7 +1219,7 @@
         {
           "kind": "opaque",
           "name": "Verify",
-          "line": 140,
+          "line": 157,
           "called": [
             "PublicKey",
             "Signature"
@@ -1228,19 +1228,19 @@
         {
           "kind": "abbrev",
           "name": "SigningInput",
-          "line": 162,
+          "line": 179,
           "called": []
         },
         {
           "kind": "def",
           "name": "signedActionDomain",
-          "line": 178,
+          "line": 195,
           "called": []
         },
         {
           "kind": "def",
           "name": "signedActionDomainBytes",
-          "line": 182,
+          "line": 199,
           "called": [
             "Authority",
             "LegalKernel"
@@ -60983,7 +60983,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 40,
+      "declaration_count": 44,
       "declarations": [
         {
           "kind": "def",
@@ -61049,14 +61049,44 @@
         },
         {
           "kind": "def",
-          "name": "cmdVerifyCheck",
-          "line": 175,
+          "name": "verifySelfTestPk",
+          "line": 169,
           "called": []
         },
         {
           "kind": "def",
+          "name": "verifySelfTestMsg",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "verifySelfTestMsgTampered",
+          "line": 178,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "verifySelfTestSig",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cmdVerifyCheck",
+          "line": 208,
+          "called": [
+            "Verify",
+            "verifySelfTestMsg",
+            "verifySelfTestMsgTampered",
+            "verifySelfTestPk",
+            "verifySelfTestSig"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "warnIfFallbackHash",
-          "line": 193,
+          "line": 237,
           "called": [
             "isProductionHash"
           ]
@@ -61064,7 +61094,7 @@
         {
           "kind": "def",
           "name": "cmdProcess",
-          "line": 202,
+          "line": 246,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -61082,7 +61112,7 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 293,
+          "line": 337,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -61100,7 +61130,7 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 332,
+          "line": 376,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -61115,7 +61145,7 @@
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 368,
+          "line": 412,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -61133,7 +61163,7 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 422,
+          "line": 466,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -61152,13 +61182,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 478,
+          "line": 522,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 497,
+          "line": 541,
           "called": [
             "ActorId",
             "AuthorityPolicy",
@@ -61177,7 +61207,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 614,
+          "line": 658,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -61190,7 +61220,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 663,
+          "line": 707,
           "called": [
             "formatHashHex"
           ]
@@ -61198,7 +61228,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 678,
+          "line": 722,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -61208,19 +61238,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 700,
+          "line": 744,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 804,
+          "line": 848,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 813,
+          "line": 857,
           "called": [
             "hexCharToNibble"
           ]
@@ -61228,19 +61258,19 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 852,
+          "line": 896,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 863,
+          "line": 907,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 878,
+          "line": 922,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -61262,7 +61292,7 @@
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 937,
+          "line": 981,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -61278,7 +61308,7 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 970,
+          "line": 1014,
           "called": [
             "actionCost",
             "deploymentId",
@@ -61288,13 +61318,13 @@
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 1019,
+          "line": 1063,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 1030,
+          "line": 1074,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -61303,7 +61333,7 @@
         {
           "kind": "def",
           "name": "gasPoolConfig?",
-          "line": 1046,
+          "line": 1090,
           "called": [
             "GlobalFlags",
             "maxDrainPerActionBold",
@@ -61313,7 +61343,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 1059,
+          "line": 1103,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -61323,7 +61353,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 1070,
+          "line": 1114,
           "called": [
             "AuthorityPolicy",
             "GlobalFlags",
@@ -61333,7 +61363,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 1075,
+          "line": 1119,
           "called": [
             "GlobalFlags"
           ]
@@ -61341,7 +61371,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 1082,
+          "line": 1126,
           "called": [
             "GlobalFlags"
           ]
@@ -61349,7 +61379,7 @@
         {
           "kind": "def",
           "name": "refundRateConfig",
-          "line": 1088,
+          "line": 1132,
           "called": [
             "GlobalFlags"
           ]
@@ -61357,7 +61387,7 @@
         {
           "kind": "def",
           "name": "refundRate",
-          "line": 1095,
+          "line": 1139,
           "called": [
             "GlobalFlags",
             "ResourceId"
@@ -61366,7 +61396,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 1106,
+          "line": 1150,
           "called": [
             "GlobalFlags"
           ]
@@ -61374,7 +61404,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 1122,
+          "line": 1166,
           "called": [
             "GlobalFlags",
             "actionCost",
@@ -61387,13 +61417,13 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 1146,
+          "line": 1190,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 1157,
+          "line": 1201,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
