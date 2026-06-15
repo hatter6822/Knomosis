@@ -239,14 +239,37 @@ impl SequencerClaim {
         Self::build(key, 0, amount, amount, nonce, deployment_id)
     }
 
-    /// Runtime mirror of the Lean witness's `amount_backed` field: does
-    /// this claim's amount fall within the wei cost the `receipt`
-    /// justifies (`amount ≤ gasUsed * gasPrice`)?  An observer / host
-    /// uses this to re-verify a submitted claim against the L1 receipt
-    /// it watched, independently of how the claim was constructed.
+    /// Runtime mirror of the Lean gate `receiptVerifiedClaimAdmissible`:
+    /// is this claim a *canonical ETH-leg* sequencer-reimbursement claim
+    /// whose amount is within the wei cost the `receipt` justifies?
+    ///
+    /// The Lean gate admits ONLY `transfer 0 gasPoolActor sequencerActor
+    /// amount` with `amount ≤ gasUsed * gasPrice`, so this check
+    /// validates the full **action shape** (resource `0`, sender
+    /// `GAS_POOL_ACTOR_ID`, receiver `SEQUENCER_ACTOR_ID`) BEFORE
+    /// comparing the amount.  Without the shape check an observer
+    /// re-verifying a submitted claim could misclassify a noncanonical
+    /// claim — a BOLD-leg (resource 1) transfer, a wrong-recipient or
+    /// wrong-sender transfer built through the v1 honour-system path, or
+    /// a non-transfer action — as "receipt-verified" merely because its
+    /// amount happened to fall under the receipt cost.  Returns `false`
+    /// for every such noncanonical claim regardless of amount.
     #[must_use]
     pub fn is_receipt_backed_by(&self, receipt: &GasReceipt) -> bool {
-        self.amount() <= receipt.reimbursement()
+        match self.action {
+            Action::Transfer {
+                r,
+                sender,
+                receiver,
+                amount,
+            } => {
+                r == 0
+                    && sender == GAS_POOL_ACTOR_ID
+                    && receiver == SEQUENCER_ACTOR_ID
+                    && amount <= receipt.reimbursement()
+            }
+            _ => false,
+        }
     }
 }
 
@@ -476,6 +499,78 @@ mod tests {
         // Exactly at the receipt cost is backed (boundary).
         let at_cost = SequencerClaim::build(&key, 0, 1_050_000, 10_000_000, 5, b"dep").unwrap();
         assert!(at_cost.is_receipt_backed_by(&receipt));
+    }
+
+    #[test]
+    fn is_receipt_backed_by_rejects_noncanonical_claim_shapes() {
+        // The Lean gate `receiptVerifiedClaimAdmissible` admits ONLY
+        // `transfer 0 gasPoolActor sequencerActor amount`.  An observer
+        // re-checking a submitted claim must NOT classify a noncanonical
+        // claim as receipt-verified even when its amount is within the
+        // receipt cost — otherwise a v1 honour-system / off-leg /
+        // victim-drain claim could be mis-accepted.
+        let receipt = test_receipt(21_000, 50); // reimbursement = 1_050_000
+        let small = 500u128; // well within the receipt cost
+        let mk = |action: Action| SequencerClaim {
+            action,
+            signer: GAS_POOL_ACTOR_ID,
+            nonce: 0,
+            sig: [0u8; SIGNATURE_LEN],
+        };
+        // BOLD leg (resource 1) — out of the wei-denominated v2 scope.
+        assert!(
+            !mk(Action::Transfer {
+                r: 1,
+                sender: GAS_POOL_ACTOR_ID,
+                receiver: SEQUENCER_ACTOR_ID,
+                amount: small,
+            })
+            .is_receipt_backed_by(&receipt),
+            "BOLD-leg claim must NOT be receipt-backed"
+        );
+        // Wrong recipient (not the sequencer).
+        assert!(
+            !mk(Action::Transfer {
+                r: 0,
+                sender: GAS_POOL_ACTOR_ID,
+                receiver: 9,
+                amount: small,
+            })
+            .is_receipt_backed_by(&receipt),
+            "wrong-recipient claim must NOT be receipt-backed"
+        );
+        // Wrong sender (the victim-drain shape — sender is not the pool).
+        assert!(
+            !mk(Action::Transfer {
+                r: 0,
+                sender: 9,
+                receiver: SEQUENCER_ACTOR_ID,
+                amount: small,
+            })
+            .is_receipt_backed_by(&receipt),
+            "wrong-sender claim must NOT be receipt-backed"
+        );
+        // A non-transfer action.
+        assert!(
+            !mk(Action::Mint {
+                r: 0,
+                to: SEQUENCER_ACTOR_ID,
+                amount: small,
+            })
+            .is_receipt_backed_by(&receipt),
+            "non-transfer action must NOT be receipt-backed"
+        );
+        // Positive control: the canonical ETH-leg claim within cost IS backed.
+        assert!(
+            mk(Action::Transfer {
+                r: 0,
+                sender: GAS_POOL_ACTOR_ID,
+                receiver: SEQUENCER_ACTOR_ID,
+                amount: small,
+            })
+            .is_receipt_backed_by(&receipt),
+            "canonical ETH-leg claim within cost MUST be receipt-backed"
+        );
     }
 
     #[test]
