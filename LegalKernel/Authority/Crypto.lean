@@ -133,11 +133,28 @@ true`). -/
     implementation (Ed25519 by default — see Genesis Plan §8.2 for
     algorithmic agility).
 
-    Declared `opaque` (with a placeholder body of `false`) rather than
-    `axiom` so the kernel's `#print axioms` audit continues to return
-    exactly the three Lean built-in axioms.  The placeholder body is
-    *never* used in deployment: the runtime adaptor wires the symbol
-    to a real implementation at link time. -/
+    Declared `opaque` rather than `axiom` so the kernel's `#print axioms`
+    audit continues to return exactly the three Lean built-in axioms
+    (an `@[extern]` annotation on an `opaque` provides the *compiled*
+    implementation without giving the logical value a body, so the
+    EUF-CMA trust assumption is preserved — the kernel still cannot
+    reduce `Verify pk msg sig`).
+
+    **Link contract (security-review F-2).**  `@[extern
+    "knomosis_verify_ecdsa"]` routes the COMPILED runtime call to the
+    deployment-supplied C-ABI symbol — exactly as `Runtime.Hash.hashBytes`
+    routes to `knomosis_hash_bytes`.  The default build links a
+    fail-closed fallback (`runtime/knomosis-verify-fallback.c`'s
+    `knomosis_verify_ecdsa`, which rejects every signature), so a
+    misconfigured deployment cannot silently admit forged actions; a
+    production deployment links the real `knomosis-verify-secp256k1`
+    adaptor (whose `knomosis_verify_ecdsa` performs ECDSA secp256k1
+    low-s verification).  `knomosis verify-check` (the F-2 deploy gate)
+    refuses to run on the fallback.  Without this `@[extern]` the Lean
+    runtime's `replayWith Verify` would reject every signature even
+    against a linked adaptor — the identifier could report `production`
+    while verification stayed non-functional. -/
+@[extern "knomosis_verify_ecdsa"]
 opaque Verify (pk : PublicKey) (msg : ByteArray) (sig : Signature) : Bool
 
 /-! ## Canonical signing input (§8.2 / §8.8 stub)

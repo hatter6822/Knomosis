@@ -85,6 +85,16 @@ trust.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE (M1–M3).**  Workstream
+> LX shipped — the Lex DSL macro / synthesiser, the 17 re-expressed
+> kernel laws, and the deployment-manifest + governance surface are all
+> in `main` (CLAUDE.md roadmap: `LX-M1–M3 | Complete`).  Forward Lex
+> evolution (v2 / v3) is tracked separately in
+> `lex_v2_v3_roadmap_plan.md`.  This document is retained as the
+> historical engineering record; the provenance notes below predate the
+> landing and the later Workstream-GP work (which added action indices
+> 19–24 to `Lex.IndexRegistry.txt`).
+
   * **Drafted on branch:** `claude/lex-implementation-planning-ZzOSx`.
   * **Phase prefix:** `LX` (Lex) — work units labelled `LX.1`
     … `LX.38` to disambiguate from the Genesis-Plan

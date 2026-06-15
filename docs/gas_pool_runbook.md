@@ -758,3 +758,82 @@ transaction gas, refunds netted).  At 30 gwei / $3 000 ETH:
 A full 3-of-N multisig firing therefore costs two non-final
 confirms plus one executing confirm — about **$21** total.  Gas
 cost is never a reason to delay firing it.
+
+## 11. Sequencer reimbursement claims (GP.8 Track B)
+
+The sequencer pays real L1 ETH/BOLD to submit state roots; it
+reimburses itself from the gas pool (`gasPoolActor`, `ActorId 1`) by
+submitting a **reimbursement claim** — a single `transfer` of the leg
+from `gasPoolActor` to `sequencerActor` (`ActorId 2`), signed by the
+pool key.  The claim is built by
+`knomosis-l1-ingest::sequencer_claim::SequencerClaim::build` (v1
+honour-system) or `::build_receipt_backed` (v2 receipt-verified, §11.3)
+and admitted under the GP.7.4 `gasPoolPolicy` (see `abi.md` §10.2.6).
+
+### 11.1 Provisioning (or claims fail closed)
+
+`gasPoolActor` is **not** budget-exempt (only `bridgeActor` is) and the
+production kernel always runs in bounded-budget mode (genesis default
+`.bounded 0 1 0` is deny-by-default).  Before the first claim:
+
+  * **Register the `gasPoolActor` key** (e.g. a `bridgeActor`-signed
+    `registerIdentity`, or at genesis) and hold it behind a KMS /
+    `Zeroizing` keystore — the constructor takes a `BridgeActorKey`.
+  * **Run with `freeTier ≥ 1` and `currentEpoch ≥ 1`** (Track C already
+    requires this for users; it extends to `gasPoolActor` itself).
+  * **Track the nonce** — advance it monotonically per claim
+    (`AdmissibleWith` requires `nonce = expectsNonce`).
+
+A mis-provisioned pool actor simply *cannot* claim (it fails with
+`InsufficientBudget` or a nonce error) — a fail-closed property, not a
+vulnerability, but a real prerequisite.
+
+### 11.2 Cadence, cap, and the honour-system bound
+
+  * **Cap.** Each claim is clamped to the leg's `maxDrainPerAction`
+    (`--gas-pool-{eth,bold}-cap`); the constructor makes over-cap
+    *unconstructible*.  Across `n` admitted claims the leg balance falls
+    by at most `n × cap` (proven: GP.7.3 `pool_drain_bounded_by_action_count`).
+  * **Cadence.** Claims are periodic and infrequent; keep claim
+    frequency within `gasPoolActor`'s per-epoch budget (`freeTier` + any
+    `topUpActionBudget`).  Claiming more often than the budget allows
+    fails closed.
+  * **Honour system (v1).** `amount` is the operator's *estimate* of L1
+    gas spent — not a proven receipt.  Size the cap so the worst-case
+    over-claim per epoch is an acceptable loss; the dispute pipeline can
+    challenge sustained over-claims.  Set the claimed `amount` from your
+    L1 submitter's actual gas accounting between claims.  For a
+    *cryptographically bounded* ETH-leg claim, use the v2 receipt-backed
+    path (§11.3) instead — it caps the amount at the real L1 wei cost.
+
+### 11.3 Receipt-verified claims (v2, GP.8.5)
+
+Once the pool holds material value, switch ETH-leg claims from the v1
+honour system to the **receipt-verified** path (economic analysis §4 /
+IC-6).  Instead of `SequencerClaim::build`, the operator calls
+`SequencerClaim::build_receipt_backed(key, &receipt, requested, cap,
+nonce, deployment_id)`, where `receipt` is the
+`GasReceipt { batch_id, gas_used, gas_price, receipt_binding_hash }`
+read from the operator's **own** L1 batch-publication transaction
+receipt.  The builder double-clamps the amount to
+`min(requested, cap, gas_used * gas_price)`, so the claim can never
+exceed the wei actually paid on L1 — an over-spend is *unconstructible*,
+mirroring the Lean gate `receiptVerifiedClaimAdmissible` (whose headline
+`receiptVerifiedClaim_capped_and_backed` proves the `min(cap, wei cost)`
+bound).  Operationally:
+
+  1. After your L1 submitter lands a batch-publication tx, capture its
+     receipt's `gasUsed` and `effectiveGasPrice` (and the receipt's
+     keccak binding hash).
+  2. Build the claim with that `GasReceipt`; submit the (identical-shape)
+     `SignedAction` exactly as a v1 claim.
+  3. Retain the `GasReceipt` for audit so any independent observer can
+     re-run `is_receipt_backed_by` against the on-chain receipt.
+
+**Scope + remaining work (OQ-GP-8b).**  v2 covers the **ETH leg
+(resource 0)** only — the leg whose receipt cost is exactly wei.  The
+**BOLD leg** still uses the v1 honour-system-within-cap `build` pending a
+ratified ETH→BOLD price oracle.  The production binding of
+`l1GasReceiptVerifier` to a watcher that *independently* fetches the
+batch-publication receipt (so a third party, not only the claim builder,
+attests `(gasUsed, gasPrice)`) is the other open item.

@@ -25,6 +25,17 @@ each actor's outgoing actions against that actor's declared policy.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE (Lean side).**
+> Workstream LP shipped — the `LocalTo` / `FreezePreserving` /
+> `RegistryPreserving` classification typeclasses, the `localPolicies`
+> field on `ExtendedState`, and the actor-scoped admissibility conjunct
+> are all in `main` (CLAUDE.md roadmap: `LP | Complete (Lean side)`).
+> This document is retained as the historical engineering record; the
+> provenance and forward-looking notes below predate both the LP
+> landing and the later Workstream-GP work, and are not a live to-do
+> list.  Open LP follow-ups are tracked as OQ-LP-1 … OQ-LP-6 in
+> `open_questions.md`.
+
   * **Drafted on branch:** `claude/add-law-voting-0jBAh`.
   * **Phase prefix:** `LP` (Local Policies) — work units labelled
     `LP.1` … `LP.14` to disambiguate from the Genesis-Plan

@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6babb01619680ab7cc1a44d1e3547063d6faa77c42c5133011cba29a8c4df19e"
+    "source_digest": "f9b7891eff8bf4a890c7e0b0213caff52952231535ef332c6f0fd1b38663972a"
   },
   "summary": {
     "module_count": 83,
-    "declaration_count": 1856
+    "declaration_count": 1876
   },
   "modules": [
     {
@@ -1806,7 +1806,7 @@
     {
       "module": "KnomosisFaultProofGame",
       "path": "solidity/src/contracts/KnomosisFaultProofGame.sol",
-      "declaration_count": 39,
+      "declaration_count": 44,
       "declarations": [
         {
           "kind": "interface",
@@ -1893,25 +1893,25 @@
         {
           "kind": "event",
           "name": "FaultProofGameOpened",
-          "line": 134,
+          "line": 140,
           "called": []
         },
         {
           "kind": "event",
           "name": "BisectionMidpointSubmitted",
-          "line": 141,
+          "line": 147,
           "called": []
         },
         {
           "kind": "event",
           "name": "BisectionResponseSubmitted",
-          "line": 148,
+          "line": 154,
           "called": []
         },
         {
           "kind": "event",
           "name": "FaultProofGameSettled",
-          "line": 154,
+          "line": 160,
           "called": [
             "GameStatus"
           ]
@@ -1919,92 +1919,117 @@
         {
           "kind": "error",
           "name": "ZeroAddress",
-          "line": 165,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "InsufficientBond",
-          "line": 166,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "WrongTurn",
-          "line": 167,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "TurnDeadlineExpired",
-          "line": 168,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "NoPendingMidpoint",
-          "line": 169,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "MidpointAlreadyPending",
-          "line": 170,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "MidpointOutOfRange",
           "line": 171,
           "called": []
         },
         {
           "kind": "error",
-          "name": "RangeNotSingleStep",
+          "name": "InsufficientBond",
           "line": 172,
           "called": []
         },
         {
           "kind": "error",
-          "name": "GameAlreadyEnded",
+          "name": "WrongTurn",
           "line": 173,
           "called": []
         },
         {
           "kind": "error",
-          "name": "NotResponsible",
+          "name": "TurnDeadlineExpired",
           "line": 174,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BondTransferFailed",
+          "name": "NoPendingMidpoint",
           "line": 175,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BisectionStepTooFast",
+          "name": "MidpointAlreadyPending",
           "line": 176,
           "called": []
         },
         {
           "kind": "error",
-          "name": "GameAlreadyExists",
+          "name": "MidpointOutOfRange",
           "line": 177,
           "called": []
         },
         {
           "kind": "error",
-          "name": "DepthCapExceeded",
+          "name": "RangeNotSingleStep",
           "line": 178,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "GameAlreadyEnded",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotResponsible",
+          "line": 180,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BondTransferFailed",
+          "line": 181,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BisectionStepTooFast",
+          "line": 182,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "GameAlreadyExists",
+          "line": 183,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DepthCapExceeded",
+          "line": 184,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "LowRootNotSubmitted",
+          "line": 188,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "LowCommitMismatch",
+          "line": 194,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InvalidTimeoutConfig",
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NothingToWithdraw",
+          "line": 202,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 184,
+          "line": 208,
           "called": [
+            "InvalidTimeoutConfig",
             "KnomosisStepVM",
             "ZeroAddress"
           ]
@@ -2012,7 +2037,7 @@
         {
           "kind": "function",
           "name": "initiateChallenge",
-          "line": 231,
+          "line": 265,
           "called": [
             "Claim",
             "FaultProofGameOpened",
@@ -2021,6 +2046,8 @@
             "GameAlreadyExists",
             "IStateRootSubmission",
             "InsufficientBond",
+            "LowCommitMismatch",
+            "LowRootNotSubmitted",
             "MidpointOutOfRange",
             "ZeroAddress"
           ]
@@ -2028,7 +2055,7 @@
         {
           "kind": "function",
           "name": "submitMidpoint",
-          "line": 308,
+          "line": 368,
           "called": [
             "BisectionMidpointSubmitted",
             "BisectionStepTooFast",
@@ -2044,7 +2071,7 @@
         {
           "kind": "function",
           "name": "respondToMidpoint",
-          "line": 343,
+          "line": 403,
           "called": [
             "BisectionResponseSubmitted",
             "BisectionStepTooFast",
@@ -2059,7 +2086,7 @@
         {
           "kind": "function",
           "name": "terminateOnSingleStep",
-          "line": 382,
+          "line": 442,
           "called": [
             "Game",
             "GameAlreadyEnded",
@@ -2072,7 +2099,7 @@
         {
           "kind": "function",
           "name": "claimTimeout",
-          "line": 422,
+          "line": 482,
           "called": [
             "Game",
             "GameAlreadyEnded",
@@ -2083,9 +2110,8 @@
         {
           "kind": "function",
           "name": "_settle",
-          "line": 439,
+          "line": 499,
           "called": [
-            "BondTransferFailed",
             "FaultProofGameSettled",
             "Game",
             "GameStatus",
@@ -2096,15 +2122,24 @@
           ]
         },
         {
+          "kind": "function",
+          "name": "withdraw",
+          "line": 639,
+          "called": [
+            "BondTransferFailed",
+            "NothingToWithdraw"
+          ]
+        },
+        {
           "kind": "receive",
           "name": "receive",
-          "line": 562,
+          "line": 653,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 568,
+          "line": 659,
           "called": []
         }
       ]
@@ -4209,7 +4244,7 @@
     {
       "module": "SmtVerifier",
       "path": "solidity/src/lib/SmtVerifier.sol",
-      "declaration_count": 7,
+      "declaration_count": 8,
       "declarations": [
         {
           "kind": "library",
@@ -4224,17 +4259,24 @@
           "called": []
         },
         {
+          "kind": "error",
+          "name": "SmtBadSiblingSize",
+          "line": 60,
+          "called": []
+        },
+        {
           "kind": "function",
           "name": "recomputeRoot",
-          "line": 61,
+          "line": 72,
           "called": [
-            "SmtBadProofShape"
+            "SmtBadProofShape",
+            "SmtBadSiblingSize"
           ]
         },
         {
           "kind": "function",
           "name": "verifyProof",
-          "line": 104,
+          "line": 128,
           "called": [
             "recomputeRoot"
           ]
@@ -4242,13 +4284,13 @@
         {
           "kind": "function",
           "name": "emptyHashAtLevel",
-          "line": 121,
+          "line": 145,
           "called": []
         },
         {
           "kind": "function",
           "name": "defaultHashTop",
-          "line": 134,
+          "line": 158,
           "called": [
             "emptyHashAtLevel"
           ]
@@ -4256,7 +4298,7 @@
         {
           "kind": "function",
           "name": "emptyProofSiblings",
-          "line": 147,
+          "line": 171,
           "called": [
             "emptyHashAtLevel"
           ]
@@ -12925,7 +12967,7 @@
     {
       "module": "KnomosisFaultProofGame.t",
       "path": "solidity/test/KnomosisFaultProofGame.t.sol",
-      "declaration_count": 35,
+      "declaration_count": 46,
       "declarations": [
         {
           "kind": "contract",
@@ -12999,8 +13041,20 @@
         },
         {
           "kind": "contract",
-          "name": "KnomosisFaultProofGameTest",
+          "name": "RevertingReceiver",
           "line": 94,
+          "called": []
+        },
+        {
+          "kind": "receive",
+          "name": "receive",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "KnomosisFaultProofGameTest",
+          "line": 103,
           "called": [
             "KnomosisFaultProofGame",
             "KnomosisStepVM",
@@ -13011,7 +13065,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 112,
+          "line": 126,
           "called": [
             "KnomosisFaultProofGame",
             "KnomosisStepVM",
@@ -13022,13 +13076,13 @@
         {
           "kind": "function",
           "name": "test_constructor_sets_immutables",
-          "line": 147,
+          "line": 165,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_treasury",
-          "line": 156,
+          "line": 174,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13036,7 +13090,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stepVM",
-          "line": 163,
+          "line": 181,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13044,7 +13098,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stateRootSubmission",
-          "line": 170,
+          "line": 188,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13052,7 +13106,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_eoa_stateRootSubmission",
-          "line": 184,
+          "line": 202,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13060,43 +13114,51 @@
         {
           "kind": "function",
           "name": "test_constants_max_bisection_depth_is_64",
-          "line": 191,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_initiateChallenge_returns_gameId",
-          "line": 197,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_initiateChallenge_marks_disputed_root",
           "line": 209,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_initiateChallenge_rejects_wrong_bond",
+          "name": "test_constructor_rejects_timeout_le_step_interval",
           "line": 217,
+          "called": [
+            "KnomosisFaultProofGame"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_returns_gameId",
+          "line": 234,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_marks_disputed_root",
+          "line": 246,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_wrong_bond",
+          "line": 254,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_no_dispute",
-          "line": 224,
+          "line": 261,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_duplicate_game",
-          "line": 232,
+          "line": 269,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_uses_canonical_sequencer",
-          "line": 251,
+          "line": 288,
           "called": [
             "sequencer"
           ]
@@ -13104,55 +13166,114 @@
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_missing_root",
-          "line": 262,
+          "line": 299,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_unanchored_low_commit",
+          "line": 316,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_initiateChallenge_rejects_unsubmitted_low_root",
+          "line": 332,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_inverted_range",
-          "line": 277,
+          "line": 348,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_equal_range",
-          "line": 289,
+          "line": 360,
           "called": []
         },
         {
           "kind": "function",
+          "name": "_encodeCbeNat",
+          "line": 374,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_makeCellProof",
+          "line": 384,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_terminate_single_step_honest_sequencer_wins",
+          "line": 412,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_terminate_single_step_invalid_root_challenger_wins",
+          "line": 472,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_claimTimeout_after_window_settles_against_sequencer",
-          "line": 301,
+          "line": 507,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_distributes_bonds_95_5_split",
-          "line": 315,
+          "line": 521,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_settlement_not_bricked_by_reverting_treasury",
+          "line": 562,
+          "called": [
+            "KnomosisFaultProofGame",
+            "RevertingReceiver"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_withdraw_nothing_credited_reverts",
+          "line": 595,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_slashSequencerBond_on_challenger_wins",
-          "line": 338,
+          "line": 601,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins",
-          "line": 357,
+          "line": 620,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_rejects_already_settled_game",
-          "line": 371,
+          "line": 634,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_sequencer_first_round",
-          "line": 386,
+          "line": 649,
           "called": [
             "sequencer"
           ]
@@ -13160,13 +13281,13 @@
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_wrong_caller",
-          "line": 396,
+          "line": 659,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_after_deadline",
-          "line": 406,
+          "line": 669,
           "called": [
             "sequencer"
           ]
@@ -13174,7 +13295,7 @@
         {
           "kind": "function",
           "name": "test_respondToMidpoint_rejects_without_pending",
-          "line": 416,
+          "line": 679,
           "called": []
         }
       ]
@@ -15371,7 +15492,7 @@
     {
       "module": "SmtVerifier.t",
       "path": "solidity/test/SmtVerifier.t.sol",
-      "declaration_count": 29,
+      "declaration_count": 32,
       "declarations": [
         {
           "kind": "contract",
@@ -15457,74 +15578,92 @@
         },
         {
           "kind": "function",
+          "name": "test_recomputeRoot_revert_on_oversized_upper_sibling",
+          "line": 102,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_revert_on_undersized_upper_sibling",
+          "line": 112,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_accepts_variable_leaf_adjacent_sibling",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "test_recomputeRoot_empty_proof_at_index_0_returns_top_default",
-          "line": 96,
+          "line": 143,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_empty_proof_at_arbitrary_index",
-          "line": 103,
+          "line": 150,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_populated_leaf_index_0",
-          "line": 114,
+          "line": 161,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_populated_leaf_index_1",
-          "line": 129,
+          "line": 176,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_verifyProof_returns_true_on_match",
-          "line": 144,
+          "line": 191,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_verifyProof_returns_false_on_wrong_root",
-          "line": 151,
+          "line": 198,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_verifyProof_returns_false_on_wrong_index",
-          "line": 158,
+          "line": 205,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_verifyProof_returns_false_on_wrong_leaf",
-          "line": 165,
+          "line": 212,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_verifyProof_returns_false_on_tampered_sibling",
-          "line": 173,
+          "line": 220,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_distinct_leaves_distinct_roots",
-          "line": 183,
+          "line": 230,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_distinct_indices_distinct_roots",
-          "line": 192,
+          "line": 239,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_deterministic",
-          "line": 200,
+          "line": 247,
           "called": [
             "_populatedSiblings"
           ]
@@ -15532,19 +15671,19 @@
         {
           "kind": "function",
           "name": "test_audit2_dense_pair_variable_size_leaf_adjacent_sibling",
-          "line": 215,
+          "line": 262,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit2_variable_size_leaf_with_default_siblings",
-          "line": 248,
+          "line": 295,
           "called": []
         },
         {
           "kind": "function",
           "name": "testFuzz_tampered_proof_rejected",
-          "line": 261,
+          "line": 308,
           "called": [
             "_populatedSiblings"
           ]
@@ -15552,7 +15691,7 @@
         {
           "kind": "function",
           "name": "_populatedSiblings",
-          "line": 281,
+          "line": 328,
           "called": []
         }
       ]

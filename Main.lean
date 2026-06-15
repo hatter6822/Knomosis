@@ -142,6 +142,94 @@ def cmdInfo : IO UInt32 := do
     IO.println s!"  hash-grade:  fallback (FNV-1a-64 padded to 32, NOT FOR PRODUCTION)"
   pure 0
 
+/-- Subcommand: `knomosis hash-check`.  The **deployment gate** for
+    security-review finding F-1
+    (`docs/audits/20-production-security-review-and-external-audit-scope.md`).
+    Unlike `info` (which only reports) and `warnIfFallbackHash` (which
+    only warns), this *fails closed*: it exits `0` iff the binary is
+    linked against a production-grade hash (BLAKE3 / keccak via
+    `@[extern]`), and exits `1` if it is running the FNV-1a-64 fallback
+    (64-bit collision resistance — unsafe for the state-commitment
+    scheme, which a fault-proof adversary could forge with ~2³² work).
+    Deployment / release pipelines MUST gate on this; CI and dev builds
+    intentionally run the fallback and are expected to report non-zero. -/
+def cmdHashCheck : IO UInt32 := do
+  IO.println s!"hash:       {hashImplementationIdentifier ()}"
+  if isProductionHash then
+    IO.println "hash-grade: production — OK"
+    pure 0
+  else
+    IO.eprintln "FATAL: running the FNV-1a-64 fallback hash (64-bit \
+                 collision resistance); NOT FOR PRODUCTION.  Link the \
+                 BLAKE3 / keccak @[extern] binding before deploying \
+                 (security-review F-1)."
+    pure 1
+
+/-- The compressed secp256k1 public key of the `verify-check` functional
+    self-test vector: the verifying key for secret key `0x01…01`. -/
+def verifySelfTestPk : ByteArray :=
+  ⟨#[0x03,0x1b,0x84,0xc5,0x56,0x7b,0x12,0x64,0x40,0x99,0x5d,0x3e,0xd5,0xaa,0xba,0x05,
+     0x65,0xd7,0x1e,0x18,0x34,0x60,0x48,0x19,0xff,0x9c,0x17,0xf5,0xe9,0xd5,0xdd,0x07,0x8f]⟩
+
+/-- The 32-byte pre-hashed message of the self-test vector (`0x00…01`). -/
+def verifySelfTestMsg : ByteArray := ⟨(Array.replicate 31 (0 : UInt8)).push 1⟩
+
+/-- A tampered message (`0x00…02`) — the self-test's negative control:
+    the good signature must NOT verify against it. -/
+def verifySelfTestMsgTampered : ByteArray := ⟨(Array.replicate 31 (0 : UInt8)).push 2⟩
+
+/-- The 64-byte low-s `(r, s)` signature of the self-test vector: signing
+    `verifySelfTestMsg` with secret key `0x01…01` (RFC 6979, low-s).  The
+    production `knomosis_verify_ecdsa` adaptor ACCEPTS `(pk, msg, sig)`;
+    the fail-closed fallback REJECTS it.  Hardcoded (not hex-decoded)
+    because `decodeHexString` is defined later in this module. -/
+def verifySelfTestSig : ByteArray :=
+  ⟨#[0xe2,0x5f,0x09,0xcf,0xcb,0x29,0xfb,0x4c,0x54,0xc2,0xb5,0xce,0xb4,0x82,0x99,0x9f,
+     0xe9,0x82,0x97,0x9a,0x13,0xb9,0x7d,0xd2,0xfc,0x26,0xba,0x45,0x2d,0x06,0x71,0xef,
+     0x2b,0x0a,0x5e,0x55,0x82,0x98,0x24,0xf7,0xe1,0xbb,0xa9,0x3e,0x70,0xad,0x7b,0x3d,
+     0x3a,0x0f,0xd2,0x2e,0xce,0x02,0xc0,0x28,0x54,0x08,0x88,0x6e,0x30,0xa6,0xcb,0x99]⟩
+
+/-- Subcommand: `knomosis verify-check`.  The signature-verifier
+    counterpart of `hash-check` (security-review F-2).  Exits `0` iff a
+    production-grade ECDSA-secp256k1 verifier is linked AND it actually
+    verifies; `1` if the Lean-opaque fallback is in effect or the linked
+    adaptor fails the functional self-test.
+
+    Two complementary checks (PR #126 review):
+
+      1. **Identifier** — `Bridge.isProductionVerify` confirms the linked
+         adaptor reports the production identifier (not the fallback).
+      2. **Functional self-test** — actually CALLS `Authority.Crypto.Verify`
+         (now `@[extern "knomosis_verify_ecdsa"]`) on a known-good
+         secp256k1 vector + a tampered-message negative control, proving
+         the real `Verify` path routes through the linked adaptor rather
+         than merely that an identifier string was linked.  The
+         fail-closed fallback rejects every signature, so the self-test's
+         `goodAccepted` is `false` under the fallback. -/
+def cmdVerifyCheck : IO UInt32 := do
+  IO.println s!"verify:       {Bridge.verifyImplementationIdentifier ()}"
+  let goodAccepted := Verify verifySelfTestPk verifySelfTestMsg verifySelfTestSig
+  let tamperedRejected :=
+    !(Verify verifySelfTestPk verifySelfTestMsgTampered verifySelfTestSig)
+  if Bridge.isProductionVerify then
+    if goodAccepted && tamperedRejected then
+      IO.println "verify-grade: production — OK (functional self-test passed)"
+      pure 0
+    else
+      IO.eprintln s!"FATAL: the verifier identifier reports production, but the \
+                     Verify functional self-test FAILED (good-vector accepted: \
+                     {goodAccepted}; tampered-vector rejected: {tamperedRejected}). \
+                     The linked knomosis_verify_ecdsa adaptor is not routing \
+                     correctly through Authority.Crypto.Verify (security-review F-2)."
+      pure 1
+  else
+    IO.eprintln "FATAL: no production signature verifier linked (the \
+                 Lean-opaque fallback rejects all signatures — \
+                 fail-closed but non-functional).  Link the \
+                 knomosis-verify-secp256k1 @[extern] binding before \
+                 deploying (security-review F-2)."
+    pure 1
+
 /-- Audit-3.1: emit a single-line stderr warning at the start of
     every chain-touching subcommand if the binary is running with
     the Lean fallback hash and the operator did not explicitly opt
@@ -659,6 +747,13 @@ def cmdHelp : IO UInt32 := do
   IO.println ""
   IO.println "Usage:"
   IO.println "  knomosis [GLOBAL_FLAGS] info"
+  IO.println "  knomosis hash-check"
+  IO.println "        (deployment gate: exit 0 iff a production-grade hash"
+  IO.println "         is linked; exit 1 on the FNV-1a-64 fallback — F-1)"
+  IO.println "  knomosis verify-check"
+  IO.println "        (deployment gate: exit 0 iff a production-grade"
+  IO.println "         signature verifier is linked; exit 1 on the"
+  IO.println "         Lean-opaque fallback — F-2)"
   IO.println "  knomosis [GLOBAL_FLAGS] process          LOG IN [OUT]"
   IO.println "  knomosis [GLOBAL_FLAGS] replay           LOG"
   IO.println "  knomosis [GLOBAL_FLAGS] bootstrap        LOG"
@@ -1138,6 +1233,8 @@ def main (args : List String) : IO UInt32 := do
   match flags.rest with
   | [] => cmdHelp
   | ["info"] => cmdInfo
+  | ["hash-check"] => cmdHashCheck
+  | ["verify-check"] => cmdVerifyCheck
   | ["help"] => cmdHelp
   | ["gas-pool-demo"] => do
     -- GP.7.4 worked deployment: runs the unified-gas-pool example

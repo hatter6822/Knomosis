@@ -72,6 +72,18 @@ custom axioms.
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE.**  Workstream AR
+> shipped — every "Remediate" finding (M-1 … M-10 and the remediable
+> minor findings) is closed in `main` (CLAUDE.md roadmap: `AR | Complete`);
+> see the post-AR annotation in
+> `docs/audits/19-findings-and-followups.md`.  The lone deferred finding
+> **m-16** (chain-level §7.6.4 / §7.6.5 accounting) is now **closed** by
+> Workstream CA (`chain_level_accounting_plan.md`;
+> `LegalKernel/Bridge/{Reachable,ChainAccounting}.lean`), so **every
+> finding is resolved**.  This document is retained as the
+> historical engineering record; the provenance notes below predate the
+> landing and the later Workstream-GP work.
+
   * **Drafted on branch:** `claude/audit-findings-workstream-oyEAO`;
     refined on branch `claude/improve-audit-plan-sCDdC`
     (sub-unit decomposition + per-WU verification commands +
@@ -5597,11 +5609,15 @@ record of the deferrals.
     documented design choice; see §2.2.
 
   * **m-16 (chain-level bridge supply accounting
-    theorems).**  Defer to Workstream G (Ethereum
-    documentation + amendment).  The per-step deltas and the
-    cross-stack corpus already ratify the property; the
-    inductive Lean theorem is a documentation-quality
-    improvement, not a soundness gap.
+    theorems).**  Originally deferred; the per-step deltas and the
+    cross-stack corpus already ratified the property, so the
+    inductive Lean theorem was a documentation-quality
+    improvement, not a soundness gap.  **Closed (2026-06-14) by
+    Workstream CA:** the inductive theorem now exists —
+    `bridge_chain_accounting_equation` (`Bridge/ChainAccounting.lean`)
+    proves the §7.6.4 escrow identity unconditionally along
+    `BridgeReachable` chains from genesis, with solvency
+    (`bridgeReachable_solvent`) proved rather than assumed.
 
   * **Two-reviewer mechanical enforcement.**  AR.20 lands a
     CODEOWNERS file as a request-for-review mechanism.  Full

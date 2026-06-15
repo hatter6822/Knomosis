@@ -70,9 +70,18 @@ PR descriptions can cite.
 The columns are *blocking horizon*: when a decision on the
 question becomes necessary for a workstream to proceed.
 
+> **Reconciliation note (2026-06-14).**  Several gating workstreams
+> have since landed (EI, RH, SC, SVC, WG, FQ Track A, GP through
+> GP.11.10).  The open questions whose blocking horizon was "before
+> <that workstream> lands" are therefore **resolved by landing** —
+> see each workstream's plan Status for the decision actually taken
+> (e.g. OQ-WG-1's §15 numbering resolved as **§15D**; OQ-DOC-4
+> resolved below).  This note avoids re-asserting each decision
+> here; the matrix rows are left for historical horizon context.
+
 | Horizon | Questions | Drive-by workstream |
 |---------|-----------|----------------------|
-| **NOW** (blocks an in-flight workstream) | OQ-DOC-4 | CL.1 (cleanup landing) |
+| **NOW** (was: blocked CL.1) | ~~OQ-DOC-4~~ → **RESOLVED** (synthesis doc annotated in place) | CL.1 (cleanup landing) |
 | **Before EI lands** | OQ-EI-1 (Std `toList_canonical` audit) | EI.1.b |
 | **Before RH lands** | OQ-X-1 (Rust toolchain), OQ-X-2 (corpus format), OQ-RH-2 (re-org alert depth) | RH-H, RH-B.1, RH-G.1 |
 | **Before RH-G ships** | OQ-RH-1 (cell-proof format default) | RH-G.4 (coordinated with SC.2) |
@@ -178,7 +187,7 @@ OQ-CA-1 (L1EscrowLedger type ownership)
 | OQ-DOC-1 | `kernelBuildTag` bump cadence | RESOLVED | (resolved) | (a) Bump per workstream landing |
 | OQ-DOC-2 | Single canonical "Headline theorems" location | RESOLVED | (resolved) | (a) CLAUDE.md canonical |
 | OQ-DOC-3 | `Test/Umbrella.lean` build-tag pin lift | RESOLVED | (resolved) | (a) Keep the pin |
-| OQ-DOC-4 | Audit synthesis doc post-AR refresh | OPEN | CL.1 landing | (a) Annotate in place |
+| OQ-DOC-4 | Audit synthesis doc post-AR refresh | RESOLVED | (resolved) | (a) Annotated in place |
 | OQ-EI-1 | EI.1.c necessity (Std `toList_canonical` audit) | NEW | Before EI.1.b | Audit Std first; ship EI.1.c only if Std lacks |
 | OQ-RH-1 | Witness-state vs SMT cell-proof format default in observer | NEW | RH-G.4 + SC.2 coordination | Pre-SC: witness-state; post-SC: SMT-path |
 | OQ-RH-2 | Deep L1 re-org operator-alert threshold | NEW | Before RH-B / RH-G land | (a) confirmationDepth = 12; halt on deeper |
@@ -944,7 +953,13 @@ or left as a historical record?
 trail.  This is the recommended approach in
 `cleanup_and_consolidation_plan.md` CL.1.
 
-**Status.**  OPEN until CL.1 lands.
+**Status.**  RESOLVED (2026-06-14).  Option (a) applied: the
+synthesis doc's "Open follow-ups" section
+(`docs/audits/19-findings-and-followups.md`) now carries a
+post-AR reconciliation header, strikes each AR-remediated finding
+with its AR sub-unit reference, and records that **m-16** (chain-level
+accounting) is now closed by Workstream CA — so all audit follow-ups
+are resolved.  See §10.
 
 ---
 
@@ -1045,7 +1060,15 @@ requires a `L1EscrowLedger` type.  May not exist yet.
 **Recommendation.**  (a).  Future deployments may swap
 `L1EscrowLedger` implementations independently.
 
-**Status.**  NEW; resolves at CA.3.a.
+**Status.**  RESOLVED (2026-06-14): **moot — neither option taken.**
+The CA grounding pass found there is no `L1EscrowLedger` (it existed
+only as docstring prose) and that modelling fictional L1 entries is the
+"false-secure" risk the plan itself flags.  CA shipped against the real
+L2-only model: escrow is the *derived* quantity `bridgeEscrowBalance es
+r := totalDeposited es r − totalWithdrawn es r` (`Bridge/Accounting.lean`),
+and the chain theorems live in `Bridge/ChainAccounting.lean`.  The L1
+side remains the Solidity contract's responsibility, validated by the
+cross-stack corpus.
 
 ### OQ-PA-9 — Parameter encoder injectivity timing
 
@@ -1178,6 +1201,19 @@ section.
 
 **Ratifying decision.**  CLAUDE.md "Current development status".
 
+### OQ-DOC-4 — `audits/19-findings-and-followups.md` post-AR refresh
+
+**Resolved as.**  (a) Annotate in place.  The synthesis doc's
+"Open follow-ups" section now carries a post-AR reconciliation
+header, strikes each AR-remediated major finding with its AR
+sub-unit reference, and records that **m-16** (chain-level
+accounting) is now closed by Workstream CA — all audit follow-ups
+are resolved.
+
+**Ratifying decision.**  `docs/audits/19-findings-and-followups.md`
+"Open follow-ups"; cross-referenced from
+`docs/planning/audit_remediation_plan.md` §15C.2.
+
 ### OQ-H-1 — SMT cell-proof depth
 
 **Resolved as.**  (a) Depth 256 uniform.
@@ -1226,6 +1262,36 @@ ships this layout.
   * OQ-GP-6 — Per-resource gas-pool drain-cap defaults.
   * OQ-GP-7 — BOLD-circuit emergency closure operational policy.
   * OQ-GP-8 — Event-index compatibility and indexer rollout policy.
+  * OQ-GP-8b — Receipt-verified sequencer reimbursement (GP.8.5 v2):
+    **substantially shipped.**  The core gate now exists end-to-end —
+    Lean (`LegalKernel.Bridge.ReceiptVerifiedClaim`: the
+    `l1GasReceiptVerifier` opaque, the `gasReceiptReimbursement` wei
+    bound, the `SequencerReimbursementVerified` witness, the
+    `receiptVerifiedClaimAdmissible` gate, and the
+    `receiptVerifiedClaim_capped_and_backed` / `…_implies_gasPoolPolicy`
+    theorems) and Rust (`SequencerClaim::build_receipt_backed` +
+    `is_receipt_backed_by`).  An admitted v2 claim is bounded by
+    `min(cap, L1 wei cost)`, and v2 is a proven pure strengthening of v1
+    (see `abi.md` §10.2.6).  **Two follow-ons remain open:** (a) the
+    **BOLD-leg price oracle** — receipt-backing the BOLD leg from a
+    wei-denominated receipt needs a deployment-configured ETH→BOLD rate
+    (a second trust assumption), so v2 currently covers only the exact,
+    oracle-free ETH leg (resource 0); and (b) the
+    **independent-observer receipt-fetch binding** — the production
+    binding of `l1GasReceiptVerifier` to a watcher that fetches the L1
+    batch-publication transaction receipt and re-derives
+    `(gasUsed, gasPrice)`, so a third party (not just the claim builder)
+    can attest the backing.  **No-reuse + enforcement now shipped** (PR
+    #126 review): `ConsumedReceipts` + `consumeReceipt` +
+    `SequencerReimbursementVerifiedFresh` + `consumeReceipt_blocks_reuse`
+    prove one receipt backs at most one claim (so the per-claim
+    `min(cap, cost)` bound lifts to a batch over distinct receipts), and
+    `receiptEnforcedClaimAdmissible` is the enforced gate (fresh receipt
+    REQUIRED) a v2 deployment composes into admission — with the Rust
+    `is_receipt_fresh_and_backed` mirror.  The remaining integration is
+    threading the receipt witness through a v2-enabled deployment's
+    runtime stepper (the enforced gate is the verified primitive; v2 is
+    deployment-optional, so it is composed, not forced globally).
   * OQ-GP-9 — Sequencer reimbursement cadence and batch sizing.
   * OQ-GP-10 — Bridge-actor automation failure-domain isolation.
   * OQ-GP-11 — Whether the L1 step-VM commit (`stepVMHash` /

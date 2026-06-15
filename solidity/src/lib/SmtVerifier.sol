@@ -49,6 +49,17 @@ library SmtVerifier {
     ///         not have exactly `SMT_HEIGHT` entries.
     error SmtBadProofShape(uint256 expected, uint256 actual);
 
+    /// @notice Reverts when an upper-level (non-leaf-adjacent) sibling
+    ///         is not exactly 32 bytes.  This enforces the size
+    ///         discipline the Lean soundness theorem
+    ///         `verifyProof_sound` (`WithdrawalRoot.lean`) requires as
+    ///         its `h_sibs_match` precondition: canonical proofs have
+    ///         32-byte keccak-output / default-hash siblings at every
+    ///         level above the leaf, so an off-size upper sibling is
+    ///         malformed.  `siblingArrayIndex` is the index into the
+    ///         root-to-leaf `siblings` array (0 = root-adjacent).
+    error SmtBadSiblingSize(uint256 siblingArrayIndex, uint256 actualSize);
+
     /// @notice Compute the SMT root from a leaf at index `idx` plus
     ///         a sibling path.  Returns the recomputed root.  Caller
     ///         compares to the asserted root.
@@ -82,13 +93,26 @@ library SmtVerifier {
             }
         }
 
-        // Level 1 → level SMT_HEIGHT: current is bytes32 (a keccak
-        // output); siblings can still be variable-length but in
-        // practice are 32-byte default-hash values for sparse
-        // populated trees.
+        // Level 1 → level SMT_HEIGHT: `current` is bytes32 (a keccak
+        // output) and every upper-level sibling MUST be exactly 32
+        // bytes.  Enforcing this supplies the Lean `verifyProof_sound`
+        // `h_sibs_match` precondition structurally: a canonical proof's
+        // siblings above the leaf are always 32-byte keccak-output /
+        // default-hash values, so an off-size upper sibling is
+        // malformed.  Without the check, the `keccak256(sibling ‖
+        // current)` packing (bit == 1) would have an attacker-movable
+        // operand boundary — the size-witness gap the Lean soundness
+        // docstring warns about.  The ONLY legitimately variable-size
+        // operand (the dense-pair leaf-adjacent sibling) is
+        // `siblings[SMT_HEIGHT-1]`, consumed at the leaf level above and
+        // therefore NOT covered by this loop.
         unchecked {
             for (uint256 i = 1; i < SMT_HEIGHT; ++i) {
-                bytes memory sibling = siblings[SMT_HEIGHT - 1 - i];
+                uint256 arrayIndex = SMT_HEIGHT - 1 - i;
+                bytes memory sibling = siblings[arrayIndex];
+                if (sibling.length != 32) {
+                    revert SmtBadSiblingSize(arrayIndex, sibling.length);
+                }
                 uint256 bit = (idx >> i) & 1;
                 if (bit == 1) {
                     current = keccak256(abi.encodePacked(sibling, current));

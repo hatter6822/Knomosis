@@ -74,6 +74,17 @@ python3 scripts/regenerate_codemaps.py  # regenerate codemaps (CI gate)
 
 # Runtime smoke test.
 .lake/build/bin/knomosis info
+.lake/build/bin/knomosis hash-check   # F-1 deploy gate: exit 1 on the
+                                      # FNV-1a-64 fallback, 0 if a
+                                      # production hash (BLAKE3/keccak)
+                                      # is @[extern]-linked.
+.lake/build/bin/knomosis verify-check # F-2 deploy gate: exit 1 on the
+                                      # Lean-opaque verifier fallback, 0
+                                      # if the secp256k1 adaptor is linked
+                                      # AND passes the functional
+                                      # self-test (Verify is @[extern]-
+                                      # routed; the gate calls it on a
+                                      # known-good secp256k1 vector).
 .lake/build/bin/knomosis bootstrap /tmp/test.log
 .lake/build/bin/knomosis-replay /tmp/test.log
 .lake/build/bin/knomosis gas-pool-demo
@@ -89,10 +100,22 @@ cd solidity && make audit-caps-selftest       # self-test for the cap gate
 cd solidity && make snapshot-gas-check        # GP.11.9 gas-benchmark gate
 cd solidity && make snapshot-gas              # regenerate gas baseline + runbook table
 cd solidity && make snapshot-gas-selftest     # self-tests for the GP.11.9 gate
-cd solidity && make testnet-acceptance-dryrun # F.3 local fork dry-run
+cd solidity && make testnet-acceptance-dryrun # F.3 in-memory dry-run
+cd solidity && make devnet                    # F.3 LIVE anvil deploy +
+                                              # verify vs deployed contracts
 
 # Keccak-linked cross-stack verification (Lean <-> EVM byte-equivalence).
 ./scripts/verify_keccak_crossstack.sh
+
+# F-2 production secp256k1-verifier link verification: proves
+# `verify-check` flips fallback(exit 1) -> production(exit 0) when the
+# real adaptor is linked, and records/verifies the staticlib SHA-256.
+./scripts/verify_secp256k1_link.sh            # build + record + prove
+./scripts/verify_secp256k1_link.sh --check    # build + verify SHA-256 snapshot
+
+# Quantitative economic-incentive simulation (IC-1..IC-6 envelope +
+# self-asserting invariant checks; companion to docs/economic_incentive_analysis.md).
+python3 scripts/economic_simulation.py
 
 # Workstream RH (Rust host runtime) — see runtime/README.md.
 # Toolchain pin: runtime/rust-toolchain.toml (stable 1.83).
@@ -178,10 +201,12 @@ knomosis/
 │   │                             RefundRateSidecar
 │   ├── Disputes/              -- §8.4 four-stage pipeline (Phase 6)
 │   ├── LocalPolicy/           -- Workstream LP classification typeclasses
-│   ├── Bridge/                -- Workstreams A–D + GP: crypto adaptors, identity,
-│   │                             bridge laws, withdrawal proofs, gas-pool policy,
-│   │                             pool-drain bound, AMM math, AMM reserve policy,
-│   │                             budget refund, accounting
+│   ├── Bridge/                -- Workstreams A–D + GP + CA: crypto adaptors,
+│   │                             identity, bridge laws, withdrawal proofs,
+│   │                             gas-pool policy, pool-drain bound, AMM math,
+│   │                             AMM reserve policy, budget refund, accounting,
+│   │                             receipt-verified claim (GP.8.5 v2),
+│   │                             BridgeReachable + chain-level conservation (CA)
 │   ├── FaultProof/            -- Workstream H: state-commitment, bisection game,
 │   │                             convergence/honesty/settlement theorems, SMT
 │   │                             cell proofs, step-VM coherence
@@ -216,7 +241,9 @@ knomosis/
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
-│   └── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
+│   ├── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
+│   ├── verify_secp256k1_link.sh -- F-2 production-verifier link proof + SHA-256
+│   └── economic_simulation.py -- IC-1..IC-6 quantitative incentive harness
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
 │   ├── ci-rust.yml            -- Rust workspace gates (runtime/**)
@@ -292,7 +319,10 @@ opaque declarations rather than axioms (so `#print axioms` stays at
 exactly `propext`, `Classical.choice`, `Quot.sound`):
 
 1. `Authority.Crypto.Verify` — the deployment-supplied signature
-   scheme is EUF-CMA secure.
+   scheme is EUF-CMA secure.  `@[extern "knomosis_verify_ecdsa"]`
+   routes the compiled runtime call to the secp256k1 adaptor (fail-
+   closed reject-all fallback for tests); the logical value stays
+   opaque, so the trust assumption is preserved.
 2. `Runtime.Hash.hashBytes` — the production hash function (BLAKE3
    via `@[extern]`; FNV-1a-64 fallback for tests) is
    collision-resistant.
@@ -547,11 +577,15 @@ The Genesis Plan promises a small set of type-level guarantees
 | E-D | SMT verifier completeness + soundness | `verifyProof_complete`, `verifyProof_sound` | `Bridge/WithdrawalRoot.lean` |
 | GP.7.2 | Gas-pool outflow capped | `gasPoolPolicy_permits_transfer_iff` | `Bridge/GasPoolPolicy.lean` |
 | GP.7.3 | Per-resource pool drain bound | `pool_drain_bounded_by_action_count_per_resource` | `Bridge/PoolDrainBound.lean` |
+| GP.8.5 | Receipt-verified claim double bound | `receiptVerifiedClaim_capped_and_backed` | `Bridge/ReceiptVerifiedClaim.lean` |
 | GP.11.6 | AMM reserve outflow restricted | `ammReservePolicy_permits_iff` | `Bridge/AmmReservePolicy.lean` |
 | GP.11.8 | AMM state committed to bridge | `bridgeState_commit_includes_ammState` | `FaultProof/Commit.lean` |
 | GP.11.8 | v1.2 backward compatibility | `bridgeState_commit_extends_v1_2` | `FaultProof/Commit.lean` |
 | GP.11.8 | Encoding factoring | `bridgeState_encode_factored` | `FaultProof/Commit.lean` |
 | GP.11.8 | AMM genesis suffix const | `bridgeState_amm_genesis_suffix_const` | `FaultProof/Commit.lean` |
+| CA | Chain bridge conservation | `bridge_chain_conserves` | `Bridge/ChainAccounting.lean` |
+| CA | Chain bridge solvency | `bridgeReachable_solvent` | `Bridge/ChainAccounting.lean` |
+| CA | §7.6.4 escrow identity (unconditional) | `bridge_chain_accounting_equation` | `Bridge/ChainAccounting.lean` |
 | H | Bisection convergence | `bisection_converges_after_enough_rounds` | `FaultProof/Convergence.lean` |
 | H | Honest challenger wins | `honest_challenger_wins_against_invalid_state_root` | `FaultProof/Settlement.lean` |
 | SC.1 | SMT cell-proof soundness | `smtCellProof_sound_under_collision_free` | `FaultProof/Smt.lean` |
@@ -604,9 +638,10 @@ work units.  Status:
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
-| FQ/GP.8 | Fair queuing (knomosis-host) | Track A complete; Tracks B–D future |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.9.1, GP.11.1–10 complete) |
-| AR | Audit remediation | Complete |
+| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B complete; C/D documented; GP.8.5 v2 receipt-verified claim core shipped (Lean + Rust); BOLD-leg oracle + observer receipt-fetch = OQ-GP-8b |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Track A+B, GP.8.5 v2 core, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining) |
+| AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
+| CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
 | 7 | Advanced capabilities | Not started |
 
@@ -669,7 +704,7 @@ at the current build tag:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 040 | ~150 | `lake test` |
+| Lean | ~3 050 | ~150 | `lake test` |
 | Rust | ~1 960 | across 11 crates | `cargo test --workspace` |
 | Solidity | ~867 passed | 58 forge suites | `cd solidity && forge test` |
 
@@ -689,11 +724,15 @@ full catalogue):
 - `encoding-injectivity` — EI.2–EI.8 injectivity ladder.
 - `bridge-gas-pool-policy` — GP.7.2 gas-pool policy characterisation.
 - `bridge-pool-drain-bound` — GP.7.3 inductive pool-drain bound.
+- `bridge-receipt-verified-claim` — GP.8.5 v2 receipt-verified
+  sequencer-reimbursement gate (the `min(cap, L1 wei cost)` bound).
 - `bridge-amm-reserve-policy` — GP.11.6 AMM reserve policy.
 - `crosscheck-amm-swap` — GP.11.7 tri-stack AMM fixture corpus.
 - `faultproof-amm-commit` — GP.11.8 AMM state-root commitment
   integration + GP.11.10 `ammDisabled` kill-switch mirror (28 cases).
 - `deployments-gas-pool-example` — GP.7.4 end-to-end genesis ratification.
+- `bridge-chain-accounting` — CA §7.6.4 / §7.6.5 chain conservation,
+  solvency, and the unconditional escrow identity (closes m-16).
 
 **Notable Rust crates by test count:**
 
@@ -770,6 +809,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.5.1–5.5 | Complete | Solidity: ETH+BOLD fee-split deposits, cap audit gate, step-VM kind 21, BOLD circuit breaker + Liquity auto-trigger + TVL cap |
 | GP.6.1–6.5 | Complete | Rust: GP-family encoder, budget admission gate, event-type registry, indexer budget/pool views, BOLD cross-stack corpus |
 | GP.7.0–7.4 | Complete | Bridge-policy characterisation, reserved actors, `gasPoolPolicy`, inductive drain bound, genesis ratification + CLI |
+| GP.8.5 | Core complete | Receipt-verified claim gate: Lean `ReceiptVerifiedClaim` (`l1GasReceiptVerifier` opaque, `SequencerReimbursementVerified` witness, `receiptVerifiedClaimAdmissible`, the `min(cap, wei)` double-bound + pure-strengthening theorems) + Rust `build_receipt_backed` / `is_receipt_backed_by`; ETH-leg only; BOLD oracle + observer receipt-fetch = OQ-GP-8b |
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
 | GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
@@ -800,8 +840,20 @@ Plan: `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md`
 
 Track A complete: two-tier DRR fair scheduler in `knomosis-host`,
 signer-hint wire protocol (`PROTOCOL_VERSION 2`), persistent
-pipelined connections.  Tracks B–D (reimbursement, config, runbook)
-future work.
+pipelined connections.  Track B (v1 reimbursement claim) complete:
+`knomosis-l1-ingest::sequencer_claim::SequencerClaim::build` (capped,
+sequencer-only, `Zeroizing` pool key; `abi.md` §10.2.6).  GP.8.5 v2
+receipt-verified claim core complete: `LegalKernel.Bridge.ReceiptVerifiedClaim`
+(the `l1GasReceiptVerifier` opaque + `SequencerReimbursementVerified`
+witness + `receiptVerifiedClaimAdmissible` gate; headline
+`receiptVerifiedClaim_capped_and_backed` = `min(cap, L1 wei cost)` bound;
+`…_implies_gasPoolPolicy` = pure strengthening of v1) mirrored by
+`SequencerClaim::build_receipt_backed` / `is_receipt_backed_by`.  ETH-leg
+only (wei-exact); BOLD-leg price oracle + independent-observer
+receipt-fetch binding = OQ-GP-8b.  Track D claim/fair-queuing ops in
+`gas_pool_runbook.md` §8 / §11.  Remaining: Track C config note + the
+`--epoch-duration-seconds`-absence test, and GP.10 final ratification
+(§15E touch, migration guide).
 
 ### Audit remediation (Workstream AR)
 
@@ -809,7 +861,23 @@ Plan: `docs/planning/audit_remediation_plan.md`
 
 Complete.  Key contributions: `signedActionDomain`, deployment-id
 threading, snapshot chain-anchor checks, `Action`/`Event` tag
-regression pins, `@[extern]` hash annotations, CODEOWNERS.
+regression pins, `@[extern]` hash annotations, CODEOWNERS.  The lone
+deferred finding (m-16, chain-level accounting) is now closed by
+Workstream CA below.
+
+### Chain-level bridge accounting (Workstream CA)
+
+Plan: `docs/planning/chain_level_accounting_plan.md`
+
+Complete.  Closes audit finding m-16 (GENESIS_PLAN §7.6.4 / §7.6.5).
+`Bridge/Reachable.lean` defines `BridgeReachable` (reachability over the
+production `apply_bridge_admissible_with` stepper, restricted to the
+bridge-state-mutating actions); `Bridge/ChainAccounting.lean` proves
+`bridge_chain_conserves` (`totalWithdrawn + TotalSupply =
+totalDeposited` from genesis), `bridgeReachable_solvent`, and the
+unconditional escrow identity `bridge_chain_accounting_equation`.  The
+escrow term `bridge_accounting_equation_balanced_iff` left abstract is
+now the concrete `bridgeEscrowBalance` (`Bridge/Accounting.lean`).
 
 ### Encoder injectivity (Workstream EI)
 

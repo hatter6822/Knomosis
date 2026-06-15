@@ -38,7 +38,7 @@
   <a href="https://github.com/hatter6822/Knomosis/actions/workflows/ci-solidity.yml">
     <img alt="Solidity CI" src="https://img.shields.io/github/actions/workflow/status/hatter6822/Knomosis/ci-solidity.yml?branch=main&label=Solidity%20CI" />
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.6.1-blue" />
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.7.0-blue" />
   <img alt="Lean" src="https://img.shields.io/badge/Lean-4.29.1-10b981" />
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-informational" />
 </p>
@@ -59,7 +59,7 @@ The canonical design specification is [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN
 
 | Attribute | Value |
 |---|---|
-| Version | `v0.6.1` |
+| Version | `v0.7.0` |
 | Lean toolchain | `v4.29.1` (pinned in `lean-toolchain`) |
 | Build tag | `knomosis-step-vm-coherence` |
 | TCB core | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` |
@@ -134,6 +134,17 @@ python3 scripts/regenerate_codemaps.py
 # (genesis wiring → ETH + BOLD deposits → dual sequencer claim →
 #  log persist → replay round-trip):
 .lake/build/bin/knomosis gas-pool-demo
+
+# Deploy-readiness gates (security-review F-1 / F-2): both FAIL CLOSED
+# on the default build (exit 1) — the FNV-1a-64 hash + Lean-opaque
+# verifier fallbacks must never reach production.  They exit 0 once a
+# production BLAKE3/keccak hash and the secp256k1 verifier are
+# @[extern]-linked; `scripts/verify_secp256k1_link.sh` proves the flip.
+.lake/build/bin/knomosis hash-check    # exit 1 on the fallback hash
+.lake/build/bin/knomosis verify-check  # exit 1 on the fallback verifier;
+                                       # exit 0 only when the secp256k1
+                                       # adaptor is @[extern]-linked AND
+                                       # passes a functional self-test
 ```
 
 ## Solidity and Rust mirrors

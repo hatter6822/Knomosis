@@ -629,32 +629,58 @@ All are deployment-level concerns, not kernel soundness.
 
 ## Open follow-ups (suggested priority order)
 
+> **Post-AR reconciliation note.**  The backlog below is the
+> *original* audit snapshot, preserved for the audit trail.  The
+> AR (Audit Remediation) workstream has since **closed every major
+> finding** listed here; each item is annotated inline with the AR
+> sub-unit that remediated it (canonical status:
+> `docs/planning/audit_remediation_plan.md` §15C.2).  **All audit
+> follow-ups are now closed**: the lone deferred finding **m-16**
+> (chain-level bridge accounting) was closed by Workstream **CA**
+> (`LegalKernel/Bridge/{Reachable,ChainAccounting}.lean`; headline
+> `bridge_chain_accounting_equation` proves the §7.6.4 escrow identity
+> unconditionally along bridge chains).  The "Remaining open follow-up"
+> section below is retained as the historical record.  This annotation
+> resolves OQ-DOC-4 in `docs/planning/open_questions.md`.
+
 Pulling from the major findings and the most actionable
 minor findings, the recommended follow-up backlog is:
 
-1. **[M-3] Map-backed sub-state encoder injectivity**
-   (Workstream H follow-up).  Promotes byte equality to
-   state equality across the fault-proof chain.
-2. **[M-1, M-5] DeploymentId default-empty cleanup.**
-   Either require explicit `deploymentId` at every entry
-   point or document the sentinel semantics.
-3. **[M-2] Bootstrap-from-snapshot chain-anchor check.**
-   Add an explicit chain-anchor verification when
-   restoring from a snapshot.
-4. **[M-8] Action-tag index regression tests.**  Pin every
-   constructor's tag to its specific integer value via
-   regression tests.
-5. **[M-6] Lex Diff parameter / proof-override
-   comparators.**  Extend to compare types / bodies, not
-   just names.
-6. **[M-7] `signedActionDomain` shared constant.**
-   Eliminate the duplication.
-7. **[M-9] `naming_audit` enforcement vs. CLAUDE.md
-   policy.**  Choose one; align the other.
-8. **[M-10] `MockCrypto` import-check audit tool.**  Or
-   correct the docstring.
+1. ~~**[M-3] Map-backed sub-state encoder injectivity.**~~
+   **Closed** by AR.4.1–AR.4.8 and the EI workstream:
+   `State.encode_injective` lifts to
+   `commitExtendedState_subcommits_extensional_eq_under_collision_free`.
+2. ~~**[M-1, M-5] DeploymentId default-empty cleanup.**~~
+   **Closed** by AR.2.1–AR.2.6 (explicit `deploymentId`
+   threading at every entry point + CLI wiring).
+3. ~~**[M-2] Bootstrap-from-snapshot chain-anchor check.**~~
+   **Closed** by AR.3.1 (anchor check + `.anchorMismatch`) +
+   AR.3.2 (AttestedSnapshot CLI gate).
+4. ~~**[M-8] Action-tag index regression tests.**~~
+   **Closed** by AR.5 (Action-tag pins); the sibling Event-tag
+   pins (m-7) landed under AR.6.
+5. ~~**[M-6] Lex Diff parameter / proof-override comparators.**~~
+   **Closed** by AR.7 (type/body comparison, not name-only).
+6. ~~**[M-7] `signedActionDomain` shared constant.**~~
+   **Closed** by AR.1 (single shared constant).
+7. ~~**[M-9] `naming_audit` enforcement vs. CLAUDE.md policy.**~~
+   **Closed** by AR.8 (`_v2` added to the forbidden-token set;
+   `UsdClearing` rename).
+8. ~~**[M-10] `MockCrypto` import-check audit tool.**~~
+   **Closed** by AR.9 — `mock_import_audit` now ships as a CI
+   gate (`lake exe mock_import_audit`).
 9. **[i-9] `proportionalDilute` guard comment** at the
-   load-bearing snapshot-read line.
+   load-bearing snapshot-read line. — Open (minor, optional;
+   non-TCB ergonomic guard, not a soundness item).
+
+**Remaining open follow-up.**
+
+  * **[m-16] Chain-level bridge accounting (§7.6.4 / §7.6.5).**
+    Promote the runtime / cross-stack-checked bridge supply
+    identities to inductive `BridgeReachable` theorems.  Triaged
+    "Defer" in AR §15C.2; tracked by the CA workstream
+    (`docs/planning/chain_level_accounting_plan.md`).  This is the
+    last open finding from the comprehensive audit.
 
 The auditor's recommendation is that none of these
 findings are urgent for a research-stage codebase, but

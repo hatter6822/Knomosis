@@ -102,6 +102,16 @@ without touching its specification, because both consume the same
 
 ## Status
 
+> **Reconciliation status (2026-06-14): COMPLETE (Lean + Rust).**
+> Workstream H shipped — the state-commitment scheme, the bisection game,
+> the convergence / honesty / settlement theorem chain, the SMT cell
+> proofs (SC.1–SC.3), step-VM coherence (SVC), and the off-chain observer
+> daemon (RH-G) are all in `main` (CLAUDE.md roadmap: `H | Complete`).
+> This document is retained as the historical engineering record; the
+> provenance notes below predate the landing and the later Workstream-GP
+> work (which extended the committed `BridgeState` and the step-VM kind
+> range to 24).
+
   * **Drafted on branch:** `claude/document-actor-scoped-policies-UJHAw`.
   * **Phase prefix:** `H` (Hardening; the next free letter after the
     Ethereum-integration A–G workstreams) — work units labelled

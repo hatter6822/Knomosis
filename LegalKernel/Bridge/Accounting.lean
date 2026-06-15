@@ -416,9 +416,10 @@ escrow split.  The load-bearing fact is therefore the pointwise
 identity `totalUserDeposited + totalPoolDeposited = totalDeposited`:
 the amended equation balances *exactly when* the legacy equation does.
 The full inductive promotion of the legacy equation (its
-`bridgeEscrowBalance` RHS) is the §7.6.4 / §7.6.5 follow-up documented
-above; GP.4.2 completes the LHS split and the per-action deltas it
-rests on. -/
+`bridgeEscrowBalance` RHS) is the §7.6.4 / §7.6.5 chain theorem
+(`bridge_chain_accounting_equation`, `Bridge/ChainAccounting.lean`,
+Workstream CA); GP.4.2 completes the LHS split and the per-action deltas
+it rests on. -/
 
 /-- Per-step distributivity for the `userAmountAt` fold (GP.4.2). -/
 private theorem listFold_userAmount_add_distrib
@@ -494,7 +495,8 @@ theorem totalUserDeposited_plus_pool_eq_totalDeposited
 /-- **GP.4.2 balanced accounting equation.**  Given the legacy bridge
     accounting equation `totalDeposited es r = rhs` (whose right-hand
     side is `totalWithdrawn es r + bridgeEscrowBalance es r`, promoted
-    inductively by the §7.6.4 / §7.6.5 follow-up), the amended split
+    inductively by the §7.6.4 / §7.6.5 chain theorem
+    `bridge_chain_accounting_equation`), the amended split
     equation `totalUserDeposited es r + totalPoolDeposited es r = rhs`
     holds with the *same* right-hand side.
 
@@ -514,9 +516,11 @@ theorem bridge_accounting_equation_balanced
 /-- **GP.4.2 balanced accounting equation (iff form).**  The amended
     split equation and the legacy single-term equation are *equivalent*
     for any right-hand side of the §15D shape `totalWithdrawn es r +
-    escrow` (the L1-escrow term left abstract as `escrow`, since it is
-    an L1 observable the kernel does not formalise — see the §7.6.4 /
-    §7.6.5 follow-up).  Stated with `totalWithdrawn` explicit so the
+    escrow`.  Workstream CA makes the `escrow` term concrete as
+    `bridgeEscrowBalance` (defined below) and proves it solvency-backed
+    and unconditional along bridge chains
+    (`bridge_chain_accounting_equation`, `Bridge/ChainAccounting.lean`).
+    Stated with `totalWithdrawn` explicit so the
     correspondence to the §15D equation
     `totalDeposited = totalWithdrawn + bridgeEscrowBalance` is visible:
     replacing the legacy LHS `totalDeposited` with the split LHS
@@ -529,6 +533,73 @@ theorem bridge_accounting_equation_balanced_iff
       totalWithdrawn es r + escrow) ↔
     (totalDeposited es r = totalWithdrawn es r + escrow) := by
   rw [totalUserDeposited_plus_pool_eq_totalDeposited]
+
+/-! ## CA — chain-level bridge accounting (§7.6.4 / §7.6.5)
+
+Workstream CA makes the previously-abstract `escrow` term concrete.
+The escrow held by the L1 bridge for resource `r` is exactly the L2
+funds that entered via deposits and have not yet left via withdrawals:
+`totalDeposited es r − totalWithdrawn es r` (truncated `Nat`
+subtraction).  With this definition the §15D / §7.6.4 accounting
+equation `totalDeposited = totalWithdrawn + bridgeEscrowBalance` holds
+*exactly when* the bridge is solvent at `r`
+(`totalWithdrawn ≤ totalDeposited`); `Bridge/Reachable.lean`'s
+`BridgeReachable` chains preserve solvency from genesis, so along any
+bridge transition sequence the equation holds unconditionally. -/
+
+/-- The L1 escrow balance backing resource `r`, as reflected on L2: the
+    deposits that have entered minus the withdrawals that have left.
+    This is the concrete realisation of the `escrow` term left abstract
+    by `bridge_accounting_equation_balanced_iff` — an L2-derived
+    quantity (the kernel models L2; the L1 contract holds the matching
+    funds, validated by the cross-stack corpus). -/
+def bridgeEscrowBalance (es : ExtendedState) (r : ResourceId) : Nat :=
+  totalDeposited es r - totalWithdrawn es r
+
+/-- The bridge is *solvent* at every resource: no more has been
+    withdrawn than deposited.  The precondition under which the
+    accounting equation holds with a non-truncating escrow term. -/
+def BridgeSolvent (es : ExtendedState) : Prop :=
+  ∀ r : ResourceId, totalWithdrawn es r ≤ totalDeposited es r
+
+/-- **§7.6.4 accounting equation (concrete escrow).**  Under solvency at
+    `r`, total deposits equal total withdrawals plus the escrow balance.
+    Makes `bridge_accounting_equation_balanced_iff`'s abstract `escrow`
+    concrete as `bridgeEscrowBalance`. -/
+theorem bridge_accounting_equation (es : ExtendedState) (r : ResourceId)
+    (h : totalWithdrawn es r ≤ totalDeposited es r) :
+    totalDeposited es r = totalWithdrawn es r + bridgeEscrowBalance es r := by
+  unfold bridgeEscrowBalance
+  omega
+
+/-- The split (GP.4.2) form of the §7.6.4 equation, under solvency: the
+    user-credit and pool-credit legs sum to withdrawals plus escrow.
+    Combines `bridge_accounting_equation` with the GP.4.2 split
+    `totalUserDeposited + totalPoolDeposited = totalDeposited`. -/
+theorem bridge_accounting_equation_split (es : ExtendedState) (r : ResourceId)
+    (h : totalWithdrawn es r ≤ totalDeposited es r) :
+    totalUserDeposited es r + totalPoolDeposited es r =
+      totalWithdrawn es r + bridgeEscrowBalance es r := by
+  rw [totalUserDeposited_plus_pool_eq_totalDeposited]
+  exact bridge_accounting_equation es r h
+
+/-- Genesis escrow is zero (empty bridge ledger). -/
+theorem bridgeEscrowBalance_genesis (r : ResourceId) :
+    bridgeEscrowBalance { base := genesisState, nonces := NonceState.empty,
+                          registry := KeyRegistry.empty,
+                          bridge := BridgeState.empty } r = 0 := by
+  unfold bridgeEscrowBalance
+  rw [totalDeposited_genesis, totalWithdrawn_genesis]
+
+/-- The genesis state is bridge-solvent (both sums are zero). -/
+theorem genesis_bridge_solvent :
+    BridgeSolvent { base := genesisState, nonces := NonceState.empty,
+                    registry := KeyRegistry.empty,
+                    bridge := BridgeState.empty } := by
+  intro r
+  rw [totalDeposited_genesis, totalWithdrawn_genesis]
+  -- both sides are 0; solvency `0 ≤ 0` holds
+  omega
 
 /-! ### Fresh-insert deltas for the GP.4.2 folds
 
@@ -633,27 +704,20 @@ theorem totalPoolDeposited_markConsumed
 
 /-! ## §7.6.4 / §7.6.5 — Step-level accounting equations
 
-The plan's headline `bridge_supply_account_general` (§7.6.4) and
-`bridge_supply_account` (§7.6.5) are stated over a
-`ReachableViaLaws`-style chain that closes under
-`apply_bridge_admissible_with`.  Lifting `ReachableViaLaws` from
-`State` to `ExtendedState` requires a custom inductive predicate;
-Phase-3 / Phase-4-prelude / Phase-6 do not currently expose such a
-predicate.
+These per-action deltas are the unit-step content of the chain-level
+identities.  Lifting them to a full inductive chain requires a
+reachability predicate over `ExtendedState` that closes under
+`apply_bridge_admissible_with`; `Bridge/Reachable.lean`'s
+`BridgeReachable` is exactly that predicate, and
+`Bridge/ChainAccounting.lean` performs the lift (Workstream CA):
+`bridge_chain_conserves` proves `totalWithdrawn + TotalSupply =
+totalDeposited` at every state bridge-reachable from genesis, yielding
+solvency (`bridgeReachable_solvent`) and the unconditional §7.6.4
+accounting equation (`bridge_chain_accounting_equation`).  This closes
+audit finding m-16.
 
-Workstream C ships the **per-action accounting deltas** here at
-the unit-step level; the full inductive chain over a custom
-`BridgeReachable` predicate is documented in
-`docs/planning/ethereum_integration_plan.md` §7.6 as a follow-up under the
-plan's existing "deferred" provisions for cross-stack
-verification.  At the per-action level, the accounting equation
-holds (per the deltas below); the chain closure is a structural
-induction that the runtime layer (Phase 5) discharges via its
-existing replay invariant.
-
-The per-step equations cover every action variant, so the
-accounting picture at the per-action level is complete; the
-inductive chain just lifts what is already proved here. -/
+The per-step equations below cover every action variant; the chain
+theorem composes them. -/
 
 /-! ### Per-action `(TotalSupply Δ, totalDeposited Δ, totalWithdrawn Δ)` table
 

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "84cacb5100724c77ccded86bc256ff6cda6bbeb6b358b8883c722f5bf948256e"
+    "source_digest": "1f82efbf3b301ddd63be2a18251c5b543918f274a846b49919b56d22687ae9b9"
   },
   "summary": {
-    "module_count": 303,
-    "declaration_count": 5063
+    "module_count": 308,
+    "declaration_count": 5149
   },
   "modules": [
     {
@@ -510,13 +510,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 306,
+          "line": 318,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelBuildTag",
-          "line": 319,
+          "line": 331,
           "called": [
             "LegalKernel"
           ]
@@ -1219,7 +1219,7 @@
         {
           "kind": "opaque",
           "name": "Verify",
-          "line": 140,
+          "line": 157,
           "called": [
             "PublicKey",
             "Signature"
@@ -1228,19 +1228,19 @@
         {
           "kind": "abbrev",
           "name": "SigningInput",
-          "line": 162,
+          "line": 179,
           "called": []
         },
         {
           "kind": "def",
           "name": "signedActionDomain",
-          "line": 178,
+          "line": 195,
           "called": []
         },
         {
           "kind": "def",
           "name": "signedActionDomainBytes",
-          "line": 182,
+          "line": 199,
           "called": [
             "Authority",
             "LegalKernel"
@@ -4103,7 +4103,7 @@
     {
       "module": "LegalKernel.Bridge.Accounting",
       "path": "LegalKernel/Bridge/Accounting.lean",
-      "declaration_count": 70,
+      "declaration_count": 76,
       "declarations": [
         {
           "kind": "namespace",
@@ -4434,7 +4434,7 @@
         {
           "kind": "theorem",
           "name": "listFold_userAmount_add_distrib",
-          "line": 423,
+          "line": 424,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -4445,7 +4445,7 @@
         {
           "kind": "theorem",
           "name": "listFold_poolAmount_add_distrib",
-          "line": 436,
+          "line": 437,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -4456,7 +4456,7 @@
         {
           "kind": "theorem",
           "name": "listFold_userPool_eq_amount",
-          "line": 454,
+          "line": 455,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -4473,7 +4473,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_plus_pool_eq_totalDeposited",
-          "line": 486,
+          "line": 487,
           "called": [
             "ExtendedState",
             "ResourceId",
@@ -4490,7 +4490,7 @@
         {
           "kind": "theorem",
           "name": "bridge_accounting_equation_balanced",
-          "line": 506,
+          "line": 508,
           "called": [
             "ExtendedState",
             "ResourceId",
@@ -4504,7 +4504,7 @@
         {
           "kind": "theorem",
           "name": "bridge_accounting_equation_balanced_iff",
-          "line": 525,
+          "line": 529,
           "called": [
             "ExtendedState",
             "ResourceId",
@@ -4518,9 +4518,90 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "bridgeEscrowBalance",
+          "line": 555,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "totalDeposited",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "BridgeSolvent",
+          "line": 561,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "totalDeposited",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridge_accounting_equation",
+          "line": 568,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "bridgeEscrowBalance",
+            "es",
+            "totalDeposited",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridge_accounting_equation_split",
+          "line": 578,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "bridgeEscrowBalance",
+            "bridge_accounting_equation",
+            "es",
+            "totalDeposited",
+            "totalPoolDeposited",
+            "totalUserDeposited",
+            "totalUserDeposited_plus_pool_eq_totalDeposited",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeEscrowBalance_genesis",
+          "line": 586,
+          "called": [
+            "KeyRegistry.empty",
+            "NonceState.empty",
+            "ResourceId",
+            "bridgeEscrowBalance",
+            "genesisState",
+            "totalDeposited_genesis",
+            "totalWithdrawn_genesis"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "genesis_bridge_solvent",
+          "line": 594,
+          "called": [
+            "BridgeSolvent",
+            "KeyRegistry.empty",
+            "NonceState.empty",
+            "genesisState",
+            "totalDeposited_genesis",
+            "totalWithdrawn_genesis"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "depositFold_eq_listSum",
-          "line": 546,
+          "line": 617,
           "called": [
             "DepositId",
             "DepositRecord"
@@ -4529,7 +4610,7 @@
         {
           "kind": "theorem",
           "name": "depositFold_insert_absent",
-          "line": 569,
+          "line": 640,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -4539,7 +4620,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_markConsumed",
-          "line": 604,
+          "line": 675,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -4554,7 +4635,7 @@
         {
           "kind": "theorem",
           "name": "totalPoolDeposited_markConsumed",
-          "line": 620,
+          "line": 691,
           "called": [
             "DepositId",
             "DepositRecord",
@@ -4569,7 +4650,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_transfer",
-          "line": 667,
+          "line": 731,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4589,7 +4670,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_freeze",
-          "line": 689,
+          "line": 753,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4609,7 +4690,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_replaceKey",
-          "line": 711,
+          "line": 775,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4628,7 +4709,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_registerIdentity",
-          "line": 733,
+          "line": 797,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4647,7 +4728,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_declareLocalPolicy",
-          "line": 762,
+          "line": 826,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4666,7 +4747,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_revokeLocalPolicy",
-          "line": 785,
+          "line": 849,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4685,7 +4766,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_deposit",
-          "line": 813,
+          "line": 877,
           "called": [
             "ActorId",
             "Amount",
@@ -4699,7 +4780,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_depositWithFee",
-          "line": 825,
+          "line": 889,
           "called": [
             "ActorId",
             "Amount",
@@ -4714,7 +4795,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_declareLocalPolicy",
-          "line": 838,
+          "line": 902,
           "called": [
             "BridgeState",
             "applyActionToBridgeState"
@@ -4723,7 +4804,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_revokeLocalPolicy",
-          "line": 846,
+          "line": 910,
           "called": [
             "BridgeState",
             "applyActionToBridgeState"
@@ -4732,7 +4813,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_withdraw",
-          "line": 854,
+          "line": 918,
           "called": [
             "ActorId",
             "Amount",
@@ -4747,7 +4828,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_faultProofChallenge",
-          "line": 871,
+          "line": 935,
           "called": [
             "BridgeState",
             "applyActionToBridgeState"
@@ -4756,7 +4837,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_faultProofResolution",
-          "line": 880,
+          "line": 944,
           "called": [
             "ActorId",
             "BridgeState",
@@ -4766,7 +4847,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_faultProofChallenge",
-          "line": 891,
+          "line": 955,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4785,7 +4866,7 @@
         {
           "kind": "theorem",
           "name": "accounting_delta_faultProofResolution",
-          "line": 914,
+          "line": 978,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4804,7 +4885,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_step_eq",
-          "line": 951,
+          "line": 1015,
           "called": [
             "ActorId",
             "Amount",
@@ -4823,7 +4904,7 @@
         {
           "kind": "theorem",
           "name": "totalPoolDeposited_step_eq",
-          "line": 970,
+          "line": 1034,
           "called": [
             "ActorId",
             "Amount",
@@ -4842,7 +4923,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_step_eq_deposit",
-          "line": 986,
+          "line": 1050,
           "called": [
             "ActorId",
             "Amount",
@@ -4860,7 +4941,7 @@
         {
           "kind": "theorem",
           "name": "totalPoolDeposited_step_eq_deposit",
-          "line": 1002,
+          "line": 1066,
           "called": [
             "ActorId",
             "Amount",
@@ -4879,7 +4960,7 @@
         {
           "kind": "theorem",
           "name": "accounting_userpool_delta_non_bridge",
-          "line": 1021,
+          "line": 1085,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4905,7 +4986,7 @@
         {
           "kind": "theorem",
           "name": "accounting_userpool_delta_withdraw",
-          "line": 1051,
+          "line": 1115,
           "called": [
             "AuthorityPolicy",
             "BridgeAdmissibleWith",
@@ -4929,7 +5010,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_credits_poolActor",
-          "line": 1120,
+          "line": 1184,
           "called": [
             "ActorId",
             "Amount",
@@ -4945,7 +5026,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_pool_credit_matches_ledger_delta",
-          "line": 1138,
+          "line": 1202,
           "called": [
             "ActorId",
             "Amount",
@@ -4965,7 +5046,7 @@
         {
           "kind": "theorem",
           "name": "pool_balance_eq_totalPoolDeposited_minus_payouts",
-          "line": 1176,
+          "line": 1240,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -4979,7 +5060,7 @@
         {
           "kind": "theorem",
           "name": "pool_balance_eq_totalPoolDeposited_minus_payouts_genesis",
-          "line": 1189,
+          "line": 1253,
           "called": [
             "ActorId",
             "ExtendedState.empty",
@@ -4994,7 +5075,7 @@
         {
           "kind": "theorem",
           "name": "not_mem_of_consumed_contains_false",
-          "line": 1221,
+          "line": 1285,
           "called": [
             "DepositId",
             "DepositRecord"
@@ -5003,7 +5084,7 @@
         {
           "kind": "theorem",
           "name": "totalUserDeposited_admissible_depositWithFee",
-          "line": 1235,
+          "line": 1299,
           "called": [
             "ActorId",
             "Amount",
@@ -5029,7 +5110,7 @@
         {
           "kind": "theorem",
           "name": "totalPoolDeposited_admissible_depositWithFee",
-          "line": 1258,
+          "line": 1322,
           "called": [
             "ActorId",
             "Amount",
@@ -5055,7 +5136,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_admissible_credits_poolActor",
-          "line": 1285,
+          "line": 1349,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -5081,7 +5162,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_admissible_pool_credit_matches_ledger",
-          "line": 1315,
+          "line": 1379,
           "called": [
             "ActorId",
             "Amount",
@@ -5106,7 +5187,7 @@
         {
           "kind": "theorem",
           "name": "pool_solvency_preserved_by_admitted_depositWithFee",
-          "line": 1350,
+          "line": 1414,
           "called": [
             "ActorId",
             "Amount",
@@ -5131,7 +5212,7 @@
         {
           "kind": "theorem",
           "name": "depositWithFee_budget_admitted_pool_credit_matches_ledger",
-          "line": 1389,
+          "line": 1453,
           "called": [
             "ActorId",
             "Amount",
@@ -7880,6 +7961,524 @@
       ]
     },
     {
+      "module": "LegalKernel.Bridge.ChainAccounting",
+      "path": "LegalKernel/Bridge/ChainAccounting.lean",
+      "declaration_count": 29,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Bridge",
+          "line": 36,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "deposit_step_base",
+          "line": 45,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "apply_bridge_admissible_with_base",
+            "es",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deposit_step_supply",
+          "line": 62,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "TotalSupply",
+            "apply_bridge_admissible_with",
+            "deposit_step_base",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "withdraw_step_base",
+          "line": 82,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "EthAddress",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "apply_bridge_admissible_with_base",
+            "es",
+            "sender",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "withdraw_step_supply",
+          "line": 99,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "EthAddress",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "TotalSupply",
+            "apply_bridge_admissible_with",
+            "es",
+            "sender",
+            "withdraw_step_base"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "totalSupply_after_depositWithFee",
+          "line": 127,
+          "called": [
+            "ActorId",
+            "Amount",
+            "DepositId",
+            "ResourceId",
+            "State",
+            "TotalSupply",
+            "getBalance",
+            "poolActor",
+            "setBalance",
+            "step_impl",
+            "totalSupply_setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "depositWithFee_step_base",
+          "line": 151,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "apply_bridge_admissible_with_base",
+            "es",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "depositWithFee_step_supply",
+          "line": 167,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "TotalSupply",
+            "apply_bridge_admissible_with",
+            "depositWithFee_step_base",
+            "es",
+            "totalSupply_after_depositWithFee"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pendingFold_eq_listSum",
+          "line": 202,
+          "called": [
+            "PendingWithdrawal",
+            "WithdrawalId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pendingFold_insert_absent",
+          "line": 224,
+          "called": [
+            "PendingWithdrawal",
+            "WithdrawalId",
+            "pendingFold_eq_listSum"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "WithdrawalsMonotonic",
+          "line": 261,
+          "called": [
+            "ExtendedState",
+            "WithdrawalId",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "nextWdId_not_mem_of_monotonic",
+          "line": 266,
+          "called": [
+            "ExtendedState",
+            "WithdrawalsMonotonic",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "withdraw_step_withdrawn",
+          "line": 275,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "EthAddress",
+            "ExtendedState",
+            "PendingWithdrawal.amountAt",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "WithdrawalsMonotonic",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "es",
+            "nextWdId_not_mem_of_monotonic",
+            "pendingFold_insert_absent",
+            "sender",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deposit_step_withdrawn",
+          "line": 301,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "es",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "depositWithFee_step_withdrawn",
+          "line": 322,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "es",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deposit_step_deposited",
+          "line": 352,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "es",
+            "totalDeposited",
+            "totalDeposited_unchanged_when_bridge_eq",
+            "totalPoolDeposited_step_eq_deposit",
+            "totalUserDeposited_plus_pool_eq_totalDeposited",
+            "totalUserDeposited_step_eq_deposit"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "depositWithFee_step_deposited",
+          "line": 381,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "DepositId",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "es",
+            "totalDeposited",
+            "totalDeposited_unchanged_when_bridge_eq",
+            "totalPoolDeposited_step_eq",
+            "totalUserDeposited_plus_pool_eq_totalDeposited",
+            "totalUserDeposited_step_eq"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "withdraw_step_deposited",
+          "line": 412,
+          "called": [
+            "ActorId",
+            "Amount",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "EthAddress",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "accounting_userpool_delta_withdraw",
+            "apply_bridge_admissible_with",
+            "es",
+            "sender",
+            "totalDeposited",
+            "totalUserDeposited_plus_pool_eq_totalDeposited"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "BridgeConserves",
+          "line": 435,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "TotalSupply",
+            "es",
+            "totalDeposited",
+            "totalWithdrawn"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "genesisExtended",
+          "line": 440,
+          "called": [
+            "ExtendedState",
+            "KeyRegistry.empty",
+            "NonceState.empty",
+            "genesisState"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "genesis_conserves",
+          "line": 445,
+          "called": [
+            "BridgeConserves",
+            "TotalSupply",
+            "genesisExtended",
+            "totalDeposited",
+            "totalDeposited_genesis",
+            "totalSupply_genesis_eq_zero",
+            "totalWithdrawn",
+            "totalWithdrawn_genesis"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "genesis_monotonic",
+          "line": 453,
+          "called": [
+            "WithdrawalsMonotonic",
+            "genesisExtended"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "withdrawalsMonotonic_step",
+          "line": 462,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAction",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "WithdrawalsMonotonic",
+            "applyActionToBridgeState",
+            "apply_bridge_admissible_with",
+            "deposit",
+            "depositWithFee",
+            "es",
+            "sender",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeConserves_step",
+          "line": 509,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAction",
+            "BridgeAdmissibleWith",
+            "BridgeConserves",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "WithdrawalsMonotonic",
+            "apply_bridge_admissible_with",
+            "deposit",
+            "depositWithFee",
+            "depositWithFee_step_deposited",
+            "depositWithFee_step_supply",
+            "depositWithFee_step_withdrawn",
+            "deposit_step_deposited",
+            "deposit_step_supply",
+            "deposit_step_withdrawn",
+            "es",
+            "sender",
+            "withdraw",
+            "withdraw_step_deposited",
+            "withdraw_step_supply",
+            "withdraw_step_withdrawn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeReachable_preserves",
+          "line": 542,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeConserves",
+            "BridgeReachable",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "WithdrawalsMonotonic",
+            "bridgeConserves_step",
+            "es",
+            "step",
+            "withdrawalsMonotonic_step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridge_chain_conserves",
+          "line": 556,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeConserves",
+            "BridgeReachable",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "bridgeReachable_preserves",
+            "genesisExtended",
+            "genesis_conserves",
+            "genesis_monotonic"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeReachable_solvent",
+          "line": 566,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeReachable",
+            "BridgeSolvent",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "bridge_chain_conserves",
+            "genesisExtended"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridge_chain_accounting_equation",
+          "line": 582,
+          "called": [
+            "AuthorityPolicy",
+            "Bridge",
+            "BridgeReachable",
+            "ExtendedState",
+            "LegalKernel",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "bridgeEscrowBalance",
+            "bridgeReachable_solvent",
+            "bridge_accounting_equation",
+            "genesisExtended",
+            "totalDeposited",
+            "totalWithdrawn"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Bridge.Eip712",
       "path": "LegalKernel/Bridge/Eip712.lean",
       "declaration_count": 36,
@@ -10335,6 +10934,427 @@
       ]
     },
     {
+      "module": "LegalKernel.Bridge.Reachable",
+      "path": "LegalKernel/Bridge/Reachable.lean",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Bridge",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "inductive",
+          "name": "BridgeAction",
+          "line": 56,
+          "called": [
+            "ActorId",
+            "Amount",
+            "DepositId",
+            "EthAddress",
+            "ResourceId",
+            "deposit",
+            "depositWithFee",
+            "poolActor",
+            "sender",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "BridgeAction.toAction",
+          "line": 73,
+          "called": [
+            "Action",
+            "BridgeAction",
+            "deposit",
+            "depositWithFee",
+            "poolActor",
+            "sender",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "BridgeAction.toAction_injective",
+          "line": 82,
+          "called": [
+            "BridgeAction",
+            "BridgeAction.toAction"
+          ]
+        },
+        {
+          "kind": "inductive",
+          "name": "BridgeReachable",
+          "line": 91,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAction",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "deploymentId",
+            "es",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "apply_bridge_admissible_with_base",
+          "line": 112,
+          "called": [
+            "Action.toTransition",
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_bridge_admissible_with",
+            "es",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "BridgeReachable.trans",
+          "line": 121,
+          "called": [
+            "AuthorityPolicy",
+            "Bridge",
+            "BridgeReachable",
+            "ExtendedState",
+            "LegalKernel",
+            "PublicKey",
+            "Signature",
+            "deploymentId",
+            "es",
+            "step"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Bridge.ReceiptVerifiedClaim",
+      "path": "LegalKernel/Bridge/ReceiptVerifiedClaim.lean",
+      "declaration_count": 25,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "Bridge",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "opaque",
+          "name": "l1GasReceiptVerifier",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gasReceiptReimbursement",
+          "line": 98,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "SequencerReimbursementVerified",
+          "line": 126,
+          "called": [
+            "Amount",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "SequencerReimbursementVerified.of_receipt",
+          "line": 151,
+          "called": [
+            "Amount",
+            "SequencerReimbursementVerified",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "sequencerReimbursementVerified_backed",
+          "line": 170,
+          "called": [
+            "Amount",
+            "SequencerReimbursementVerified",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptVerifiedClaimAdmissible",
+          "line": 208,
+          "called": [
+            "Action",
+            "Amount",
+            "SequencerReimbursementVerified",
+            "gasPoolActor",
+            "maxDrainPerActionEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedClaim_capped_and_backed",
+          "line": 224,
+          "called": [
+            "Action",
+            "Amount",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptVerifiedClaimAdmissible",
+            "sequencerActor",
+            "sequencerReimbursementVerified_backed",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy",
+          "line": 244,
+          "called": [
+            "Action",
+            "Amount",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "gasPoolPolicy_permits_sequencer_transfer_eth",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "permits",
+            "receiptVerifiedClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedClaim_requires_backing",
+          "line": 261,
+          "called": [
+            "Amount",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptVerifiedClaimAdmissible",
+            "receiptVerifiedClaim_capped_and_backed",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "abbrev",
+          "name": "ConsumedReceipts",
+          "line": 291,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "consumeReceipt",
+          "line": 294,
+          "called": [
+            "ConsumedReceipts"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "SequencerReimbursementVerifiedFresh",
+          "line": 301,
+          "called": [
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerified"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "consumeReceipt_blocks_reuse",
+          "line": 313,
+          "called": [
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerifiedFresh",
+            "consumeReceipt"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptEnforcedClaimAdmissible",
+          "line": 336,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerifiedFresh",
+            "gasPoolActor",
+            "maxDrainPerActionEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedClaimAdmissible_implies_base",
+          "line": 346,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "receiptVerifiedClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedClaimAdmissible_implies_gasPoolPolicy",
+          "line": 356,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "permits",
+            "receiptEnforcedClaimAdmissible",
+            "receiptEnforcedClaimAdmissible_implies_base",
+            "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedClaim_capped_backed_and_fresh",
+          "line": 371,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "isGasPoolEthClaim",
+          "line": 399,
+          "called": [
+            "Action",
+            "gasPoolActor",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptGatedAdmissible",
+          "line": 408,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissible_implies_base",
+          "line": 416,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "maxDrainPerActionEth",
+            "receiptGatedAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissible_requires_gate_for_claim",
+          "line": 429,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "receiptGatedAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissible_eq_base_off_claim",
+          "line": 440,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionEth",
+            "receiptGatedAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforced_second_claim_distinct_receipt",
+          "line": 457,
+          "called": [
+            "Action",
+            "Amount",
+            "Bridge",
+            "ConsumedReceipts",
+            "LegalKernel",
+            "consumeReceipt",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "receiptEnforcedClaim_capped_backed_and_fresh",
+            "sequencerActor",
+            "transfer"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Bridge.State",
       "path": "LegalKernel/Bridge/State.lean",
       "declaration_count": 27,
@@ -10557,7 +11577,7 @@
     {
       "module": "LegalKernel.Bridge.VerifyAdaptor",
       "path": "LegalKernel/Bridge/VerifyAdaptor.lean",
-      "declaration_count": 17,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "namespace",
@@ -10617,8 +11637,33 @@
         },
         {
           "kind": "def",
+          "name": "verifyImplementationIdentifierFallback",
+          "line": 147,
+          "called": [
+            "fallbackVerifyAdaptorIdentifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "verifyImplementationIdentifier",
+          "line": 159,
+          "called": [
+            "verifyImplementationIdentifierFallback"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "isProductionVerify",
+          "line": 166,
+          "called": [
+            "fallbackVerifyAdaptorIdentifier",
+            "verifyImplementationIdentifier"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "isLowS",
-          "line": 162,
+          "line": 190,
           "called": [
             "secp256k1HalfOrder"
           ]
@@ -10626,7 +11671,7 @@
         {
           "kind": "instance",
           "name": "isLowSDecidable",
-          "line": 167,
+          "line": 195,
           "called": [
             "secp256k1HalfOrder"
           ]
@@ -10634,7 +11679,7 @@
         {
           "kind": "theorem",
           "name": "Verify_deterministic",
-          "line": 182,
+          "line": 210,
           "called": [
             "PublicKey",
             "Signature",
@@ -10644,7 +11689,7 @@
         {
           "kind": "theorem",
           "name": "secp256k1HalfOrder_eq",
-          "line": 189,
+          "line": 217,
           "called": [
             "secp256k1HalfOrder",
             "secp256k1Order"
@@ -10653,13 +11698,13 @@
         {
           "kind": "theorem",
           "name": "secp256k1OrderBytes_size",
-          "line": 193,
+          "line": 221,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "isLowS_zero",
-          "line": 196,
+          "line": 224,
           "called": [
             "isLowS",
             "secp256k1HalfOrder"
@@ -10668,7 +11713,7 @@
         {
           "kind": "theorem",
           "name": "isLowS_at_threshold",
-          "line": 203,
+          "line": 231,
           "called": [
             "isLowS",
             "secp256k1HalfOrder"
@@ -10677,7 +11722,7 @@
         {
           "kind": "theorem",
           "name": "isLowS_just_below_order",
-          "line": 211,
+          "line": 239,
           "called": [
             "LegalKernel.Bridge",
             "isLowS",
@@ -33862,6 +34907,94 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.ChainAccounting",
+      "path": "LegalKernel/Test/Bridge/ChainAccounting.lean",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.ChainAccountingTests",
+          "line": 32,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "bsDep",
+          "line": 35,
+          "called": [
+            "BridgeState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "bsDepWd",
+          "line": 40,
+          "called": [
+            "BridgeState",
+            "EthAddress.zero"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "bsFee",
+          "line": 45,
+          "called": [
+            "BridgeState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "es",
+          "line": 50,
+          "called": [
+            "BridgeState",
+            "ExtendedState",
+            "ExtendedState.empty"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 54,
+          "called": [
+            "BridgeAction.toAction_injective",
+            "BridgeReachable.trans",
+            "ExtendedState",
+            "LegalKernel.Test.Bridge.ChainAccountingTests",
+            "ResourceId",
+            "TestCase",
+            "TotalSupply",
+            "apply_bridge_admissible_with_base",
+            "assertEq",
+            "bridgeConserves_step",
+            "bridgeEscrowBalance",
+            "bridgeReachable_preserves",
+            "bridgeReachable_solvent",
+            "bridge_accounting_equation",
+            "bridge_chain_accounting_equation",
+            "bridge_chain_conserves",
+            "bsDep",
+            "bsDepWd",
+            "bsFee",
+            "depositWithFee_step_deposited",
+            "depositWithFee_step_supply",
+            "depositWithFee_step_withdrawn",
+            "deposit_step_deposited",
+            "deposit_step_supply",
+            "deposit_step_withdrawn",
+            "es",
+            "genesisExtended",
+            "totalDeposited",
+            "totalWithdrawn",
+            "withdraw_step_deposited",
+            "withdraw_step_supply",
+            "withdraw_step_withdrawn",
+            "withdrawalsMonotonic_step"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.AmmMath",
       "path": "LegalKernel/Test/Bridge/CrossCheck/AmmMath.lean",
       "declaration_count": 18,
@@ -40432,6 +41565,74 @@
             "testDeploymentId",
             "transfer",
             "transfer_other_sender_pool_nondecreasing"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Bridge.ReceiptVerifiedClaim",
+      "path": "LegalKernel/Test/Bridge/ReceiptVerifiedClaim.lean",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "ReceiptVerifiedClaimTests",
+          "line": 38,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 48,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "LegalKernel.Test.Bridge",
+            "ReceiptVerifiedClaimTests",
+            "SequencerReimbursementVerified.of_receipt",
+            "SequencerReimbursementVerifiedFresh",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "bridgeActor",
+            "consumeReceipt",
+            "consumeReceipt_blocks_reuse",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "gasReceiptReimbursement",
+            "isGasPoolEthClaim",
+            "l1GasReceiptVerifier",
+            "mBold",
+            "mEth",
+            "mint",
+            "permits",
+            "receiptEnforcedClaimAdmissible",
+            "receiptEnforcedClaimAdmissible_implies_base",
+            "receiptEnforcedClaimAdmissible_implies_gasPoolPolicy",
+            "receiptEnforcedClaim_capped_backed_and_fresh",
+            "receiptEnforced_second_claim_distinct_receipt",
+            "receiptGatedAdmissible",
+            "receiptGatedAdmissible_eq_base_off_claim",
+            "receiptGatedAdmissible_implies_base",
+            "receiptGatedAdmissible_requires_gate_for_claim",
+            "receiptVerifiedClaimAdmissible",
+            "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy",
+            "receiptVerifiedClaim_capped_and_backed",
+            "receiptVerifiedClaim_requires_backing",
+            "sequencerActor",
+            "sequencerReimbursementVerified_backed",
+            "transfer"
           ]
         }
       ]
@@ -59976,7 +61177,7 @@
     {
       "module": "Main",
       "path": "Main.lean",
-      "declaration_count": 38,
+      "declaration_count": 44,
       "declarations": [
         {
           "kind": "def",
@@ -60034,8 +61235,52 @@
         },
         {
           "kind": "def",
+          "name": "cmdHashCheck",
+          "line": 155,
+          "called": [
+            "isProductionHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "verifySelfTestPk",
+          "line": 169,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "verifySelfTestMsg",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "verifySelfTestMsgTampered",
+          "line": 178,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "verifySelfTestSig",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cmdVerifyCheck",
+          "line": 208,
+          "called": [
+            "Verify",
+            "verifySelfTestMsg",
+            "verifySelfTestMsgTampered",
+            "verifySelfTestPk",
+            "verifySelfTestSig"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "warnIfFallbackHash",
-          "line": 149,
+          "line": 237,
           "called": [
             "isProductionHash"
           ]
@@ -60043,7 +61288,7 @@
         {
           "kind": "def",
           "name": "cmdProcess",
-          "line": 158,
+          "line": 246,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60061,7 +61306,7 @@
         {
           "kind": "def",
           "name": "cmdReplay",
-          "line": 249,
+          "line": 337,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60079,7 +61324,7 @@
         {
           "kind": "def",
           "name": "cmdBootstrap",
-          "line": 288,
+          "line": 376,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60094,7 +61339,7 @@
         {
           "kind": "def",
           "name": "cmdSnapshot",
-          "line": 324,
+          "line": 412,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60112,7 +61357,7 @@
         {
           "kind": "def",
           "name": "cmdReplayUpTo",
-          "line": 378,
+          "line": 466,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60131,13 +61376,13 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 434,
+          "line": 522,
           "called": []
         },
         {
           "kind": "def",
           "name": "cmdExportCellProofs",
-          "line": 453,
+          "line": 541,
           "called": [
             "ActorId",
             "AuthorityPolicy",
@@ -60156,7 +61401,7 @@
         {
           "kind": "def",
           "name": "cmdExportTerminateBundle",
-          "line": 570,
+          "line": 658,
           "called": [
             "ExtendedState",
             "demoGenesis",
@@ -60169,7 +61414,7 @@
         {
           "kind": "def",
           "name": "formatWithdrawalProof",
-          "line": 619,
+          "line": 707,
           "called": [
             "formatHashHex"
           ]
@@ -60177,7 +61422,7 @@
         {
           "kind": "def",
           "name": "cmdWithdrawalProof",
-          "line": 634,
+          "line": 722,
           "called": [
             "formatWithdrawalProof",
             "loadSnapshot",
@@ -60187,19 +61432,19 @@
         {
           "kind": "def",
           "name": "cmdHelp",
-          "line": 656,
+          "line": 744,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexCharToNibble",
-          "line": 753,
+          "line": 848,
           "called": []
         },
         {
           "kind": "def",
           "name": "decodeHexString",
-          "line": 762,
+          "line": 857,
           "called": [
             "hexCharToNibble"
           ]
@@ -60207,19 +61452,19 @@
         {
           "kind": "def",
           "name": "maxExtractFrameBytes",
-          "line": 801,
+          "line": 896,
           "called": []
         },
         {
           "kind": "def",
           "name": "readExactOrEof",
-          "line": 812,
+          "line": 907,
           "called": []
         },
         {
           "kind": "def",
           "name": "extractEventsLoop",
-          "line": 827,
+          "line": 922,
           "called": [
             "AuthorityPolicy",
             "ContentHash",
@@ -60241,7 +61486,7 @@
         {
           "kind": "def",
           "name": "cmdExtractEvents",
-          "line": 886,
+          "line": 981,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -60257,7 +61502,7 @@
         {
           "kind": "structure",
           "name": "GlobalFlags",
-          "line": 919,
+          "line": 1014,
           "called": [
             "actionCost",
             "deploymentId",
@@ -60267,13 +61512,13 @@
         {
           "kind": "namespace",
           "name": "GlobalFlags",
-          "line": 968,
+          "line": 1063,
           "called": []
         },
         {
           "kind": "def",
           "name": "budgetPolicy?",
-          "line": 979,
+          "line": 1074,
           "called": [
             "BudgetPolicy",
             "GlobalFlags"
@@ -60282,7 +61527,7 @@
         {
           "kind": "def",
           "name": "gasPoolConfig?",
-          "line": 995,
+          "line": 1090,
           "called": [
             "GlobalFlags",
             "maxDrainPerActionBold",
@@ -60292,7 +61537,7 @@
         {
           "kind": "def",
           "name": "genesis",
-          "line": 1008,
+          "line": 1103,
           "called": [
             "ExtendedState",
             "GlobalFlags",
@@ -60302,7 +61547,7 @@
         {
           "kind": "def",
           "name": "policy",
-          "line": 1019,
+          "line": 1114,
           "called": [
             "AuthorityPolicy",
             "GlobalFlags",
@@ -60312,7 +61557,7 @@
         {
           "kind": "def",
           "name": "hasUnknownBudgetMode",
-          "line": 1024,
+          "line": 1119,
           "called": [
             "GlobalFlags"
           ]
@@ -60320,7 +61565,7 @@
         {
           "kind": "def",
           "name": "epochLengthValue",
-          "line": 1031,
+          "line": 1126,
           "called": [
             "GlobalFlags"
           ]
@@ -60328,7 +61573,7 @@
         {
           "kind": "def",
           "name": "refundRateConfig",
-          "line": 1037,
+          "line": 1132,
           "called": [
             "GlobalFlags"
           ]
@@ -60336,7 +61581,7 @@
         {
           "kind": "def",
           "name": "refundRate",
-          "line": 1044,
+          "line": 1139,
           "called": [
             "GlobalFlags",
             "ResourceId"
@@ -60345,7 +61590,7 @@
         {
           "kind": "def",
           "name": "recordNatFlag",
-          "line": 1055,
+          "line": 1150,
           "called": [
             "GlobalFlags"
           ]
@@ -60353,7 +61598,7 @@
         {
           "kind": "def",
           "name": "parseGlobalFlags",
-          "line": 1071,
+          "line": 1166,
           "called": [
             "GlobalFlags",
             "actionCost",
@@ -60366,24 +61611,26 @@
         {
           "kind": "def",
           "name": "warnIfNoDeploymentId",
-          "line": 1095,
+          "line": 1190,
           "called": []
         },
         {
           "kind": "def",
           "name": "main",
-          "line": 1106,
+          "line": 1201,
           "called": [
             "cmdBootstrap",
             "cmdExportCellProofs",
             "cmdExportTerminateBundle",
             "cmdExtractEvents",
+            "cmdHashCheck",
             "cmdHelp",
             "cmdInfo",
             "cmdProcess",
             "cmdReplay",
             "cmdReplayUpTo",
             "cmdSnapshot",
+            "cmdVerifyCheck",
             "cmdWithdrawalProof",
             "genesis",
             "parseGlobalFlags",
@@ -60521,7 +61768,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 211,
+          "line": 213,
           "called": [
             "runAll"
           ]

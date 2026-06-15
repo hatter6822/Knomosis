@@ -16,6 +16,20 @@ between the workstreams, the recommended landing order, the
 total effort estimate, and the connection points to the open-
 questions registry.
 
+> **Reconciliation note (2026-06-14).**  This index has been
+> refreshed against the shipped tree.  Since the 2026-05-14 audit,
+> the following workstreams have **completed** and are reflected in
+> the catalogue's Status column: **EI**, **RH** (all 11 crates),
+> **SC**, **SVC**, **FQ** (Track A), **WG** (E-G, ratified as
+> GENESIS_PLAN §15D), **GP** through GP.11.10, and **CA** (closes
+> m-16, the last open audit finding; §7.6.4 / §7.6.5).  The genuinely
+> **open** work, in rough landing order, is: the **GP** tail (GP.8
+> Tracks B–D + remaining GP.9 / GP.10), **PA** (drafted, unlanded),
+> **Phase 7**
+> (not started; project recommends P7.F + P7.A first), and the
+> **LX2 / LX3** roadmap (demand-driven).  CLAUDE.md's roadmap table
+> is the canonical status; this index navigates the plans.
+
 ## Workstream catalogue
 
 Effort numbers are post-expansion (revised after each plan
@@ -25,16 +39,16 @@ counts in parentheses give the total granular landing surface.
 | Plan | Workstream | Sub-units (sub-sub-units) | Effort | Status | Dependencies |
 |------|-----------|----------------------------|--------|--------|--------------|
 | `encoder_injectivity_plan.md` | EI — map-backed sub-state encoder injectivity | 8 (~22) | ~10–14 days | **Complete.**  EI.0 – EI.8 all shipped; retires CLAUDE.md footnote 1; lifts `commitExtendedState_subcommits` from bytes-eq to extensional-eq. | independent (Lean-only) |
-| `rust_host_runtime_plan.md` | RH — Phase 5 + E-A + E-B + H.10.5 Rust | 8 sub-streams (~40) | ~14–18 wks | the largest workstream; interop deliverables | independent (Rust-only) |
-| `smt_cell_proofs_plan.md` | SC — cross-stack soundness for cell proofs | 3 (~15) | ~5–7 wks | closes the only documented soundness gap | independent of EI (uses same `CollisionFree hashBytes`) |
-| `ethereum_workstream_g_plan.md` | WG — E-G documentation amendment | 5 (~17) | ~13 days | the only "Not started" workstream | independent (documentation) |
-| `chain_level_accounting_plan.md` | CA — §7.6.4 / §7.6.5 inductive promotion | 3 (~13) | ~9 days | retires m-16, the only AR "Defer / n/a" finding | independent (Lean-only) |
+| `rust_host_runtime_plan.md` | RH — Phase 5 + E-A + E-B + H.10.5 Rust | 8 sub-streams (~40) | ~14–18 wks | **Complete.**  RH-H–G all shipped (11 crates: verify-secp256k1, hash-keccak256, l1-ingest, host, event-subscribe, storage, indexer, faultproof-observer, bench, cli-common, cross-stack).  CLAUDE.md roadmap: `RH-H–G | Complete`. | independent (Rust-only) |
+| `smt_cell_proofs_plan.md` | SC — cross-stack soundness for cell proofs | 3 (~15) | ~5–7 wks | **Complete.**  SC.1–SC.3 shipped (`smtCellProof_sound_under_collision_free`; tri-stack cell-proof corpus); closed the documented soundness gap. | independent of EI (uses same `CollisionFree hashBytes`) |
+| `ethereum_workstream_g_plan.md` | WG — E-G documentation amendment | 5 (~17) | ~13 days | **Complete.**  E-G ratified into the canonical docs: GENESIS_PLAN §15D (Workstream E Amendment: Ethereum Integration, §15D.1–§15D.8), `abi.md` Ethereum / bridge ABI surface, `extraction_notes.md` TA-2.1–TA-2.5, README + CLAUDE.md roadmap (`E-A–G | Complete`). | independent (documentation) |
+| `chain_level_accounting_plan.md` | CA — §7.6.4 / §7.6.5 inductive promotion | 3 (~13) | **Complete.**  Retired m-16, the last open AR finding: `Bridge/Reachable.lean` (`BridgeReachable`) + `Bridge/ChainAccounting.lean` (`bridge_chain_conserves`, `bridgeReachable_solvent`, `bridge_chain_accounting_equation`); concrete `bridgeEscrowBalance`. | independent (Lean-only) |
 | `parameterized_laws_landing_plan.md` | PA — land the drafted parameter substrate | 12 (~52) | ~5 wks | drafted in `parameterized_laws_plan.md` | benefits from EI; not strictly blocking |
 | `phase_7_plan.md` | P7 — advanced-capability portfolio | 7 sub-workstreams (~40) | 25+ wks (open-ended) | menu workstream; pick sub-workstreams per release | GP budget substrate is a prerequisite for variable-cost action pricing; otherwise varies per sub-workstream |
 | `unified_gas_pool_plan.md` | GP — unified gas pool + actor budgets | 12 phases (~80+) | ~20+ wks | active workstream — GP.0–7.4, GP.9.1, GP.11.1–11.10 complete (incl. the v1.4 AMM disaster-recovery quad-surface: 3-of-N multisig, `Action.reclaimAmmReserves` 24, `ammDisabled` state-root mirror); GP.8 Tracks B–D + remaining GP.9/GP.10 future | foundational for P7 variable-cost action economics |
 | `lex_v2_v3_roadmap_plan.md` | LX2 / LX3 — Lex v2 + v3 evolution | 13 (~40) | ~22 wks total | forward-roadmap; demand-driven | LX3.3 triggers kernel amendment |
 | `cleanup_and_consolidation_plan.md` | CL — documentation + visibility tidy-up | 5 (~21 with CL.2 itemization) | ~5 days | the project's "tidy-up" PR sequence | CL.4 depends on EI.8 |
-| `step_vm_coherence_plan.md` | SVC — L1 step-VM cross-stack coherence + observer terminate wiring | 5 (~25) | ~9 wks (~5–6 wks with 2 engineers) | gates `HonestMove::TerminateOnSingleStep` wiring in the off-chain fault-proof observer; retires `SubmitError::TerminateNotImplemented` | builds on SC (SMT cell proofs); RH-G's observer is the consumer |
+| `step_vm_coherence_plan.md` | SVC — L1 step-VM cross-stack coherence + observer terminate wiring | 5 (~25) | ~9 wks (~5–6 wks with 2 engineers) | **Complete.**  25-variant step-VM dispatcher byte-equivalence (`stepVMHash_<variant>_kind`, kinds 0–24); 278-entry cross-stack corpus; `HonestMove::TerminateOnSingleStep` wired in the observer.  Current `kernelBuildTag = "knomosis-step-vm-coherence"`. | builds on SC (SMT cell proofs); RH-G's observer is the consumer |
 | `fair_queuing_plan.md` | FQ — per-actor fair queuing / burst resistance | 2 rungs (28 WUs) | ~17 days | **Complete (Track A of GP.8).**  Rung 0 (connection-keyed DRR, no wire change) + Rung 1 (signer-hint, two-tier, `PROTOCOL_VERSION 2`) both ship in `knomosis-host` behind the default-OFF `--scheduler drr` flag.  **Unified into `GP.8_SEQUENCER_INTEGRATION_PLAN.md` as Track A — that document is the canonical implementation surface.** | builds on RH-C (`knomosis-host`, Complete); complements GP (kernel-side stock bound); liveness layer, no kernel touch |
 | `GP.8_SEQUENCER_INTEGRATION_PLAN.md` | GP.8 — sequencer integration (unifies FQ + GP §GP.8) | 4 tracks (~35 WUs) | ~21 days | **Track A complete; Tracks B–D planned.**  Track A = FQ inbound liveness (Rungs 0+1, shipped, incl. the FQ.13a `knomosis-l1-ingest` raw-TCP submitter); Tracks B–D = GP §GP.8 (reimbursement claim, configuration, operations) — incl. the subdivided GP.8.1a–c claim + the deferred v2 GP.8.5 — remain future work. | builds on RH-C + GP.6.2 + GP.7 + Workstream H (all Complete); supersedes `fair_queuing_plan.md` + `unified_gas_pool_plan.md` §GP.8 for the sequencer |
 | `open_questions.md` | (registry) | 30+ open questions | n/a | living design-decision document | referenced by every plan |
@@ -113,11 +127,11 @@ the headline deliverables:
 Tier 0 (small, parallel, immediate):
   CL.1 documentation drift                              (0.5 day)
   CL.5 LP open-questions registry                       (0.5 day)
-  WG.2 README + CLAUDE.md status                        (1 day, can wait for WG.1)
+  WG.2 README + CLAUDE.md status                        (DONE — E-G ratified)
 
 Tier 1 (medium, parallel, weeks):
-  CA chain-level accounting                             (5–8 days; closes m-16)
-  WG Workstream G documentation                         (8–14 days; closes "Not started")
+  CA chain-level accounting                             (5–8 days; closes m-16 — last open finding)
+  WG Workstream G documentation                         (DONE — GENESIS_PLAN §15D shipped)
   CL.2 stale comments                                   (2 days; parallel to others)
   CL.3 AR.18 visibility                                 (1 day)
 
@@ -169,7 +183,7 @@ that workstream.  When a sub-unit lands:
 | EI | footnote 1 retired; headline-theorem row added | §15B.1 / §15C.7 |
 | RH | "Phase 5 ... Rust-host WUs ... deferred" note retired; "Rust off-chain observer deferred" note retired; E-A / E-B Rust adaptor notes retired | §12 Phase 5 table; §15B (observer) |
 | SC | "Rust off-chain observer deferred" note partially retired (operator-mitigation portion); cell-proof headline row added | §15B (deferral note) |
-| WG | "E-G | Not started" → "Complete" | new §15 chapter |
+| WG | "E-G | Not started" → "Complete" (DONE) | new §15D chapter (DONE) |
 | CA | "Workstream E-C ... chain-level §7.6.4 / §7.6.5 follow-up" note retired; new headline rows | §7.6.4 / §7.6.5 / m-16 |
 | PA | new "PA | Complete" row in phase table | new §14 or §15.X chapter for parameter substrate |
 | LX2 | "Lex roadmap" v2 entry "Complete" | none direct |

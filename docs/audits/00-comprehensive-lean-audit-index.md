@@ -15,6 +15,20 @@ and ~10 cosmetic line-count off-by-ones.  All identified errors
 have been corrected in this revision.  The substantive findings
 in `19-findings-and-followups.md` are unchanged.
 
+> **Post-AR reconciliation note (2026-06-14).**  This audit is a
+> historical snapshot (2026-05-11).  Since then, Workstream **AR** (Audit
+> Remediation) has **closed every "Remediate" finding** (M-1 … M-10 and
+> the remediable minor findings) and Workstream **EI** closed M-3.  The
+> lone deferred finding **m-16** (chain-level §7.6.4 / §7.6.5 accounting)
+> is now **also closed**, by Workstream **CA**
+> (`LegalKernel/Bridge/{Reachable,ChainAccounting}.lean`; headline
+> `bridge_chain_accounting_equation`) — so **every audit finding is now
+> resolved**.  Per-finding closure
+> status is in `docs/planning/audit_remediation_plan.md` §15C.2, and
+> `19-findings-and-followups.md` carries the annotated "Open follow-ups"
+> list.  The per-area reports (01–18) are preserved verbatim as the
+> audit-time record.
+
 ## Methodology
 
 This audit was performed by line-by-line review of the source code,

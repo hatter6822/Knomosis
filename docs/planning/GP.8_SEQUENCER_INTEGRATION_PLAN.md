@@ -2130,18 +2130,31 @@ The unified sequencer integration is **Complete** when:
   * [x] abi.md §10.4.2 + roadmap updated; CLAUDE.md ≡ AGENTS.md; versions
         lockstepped (0.3.21); `PROTOCOL_VERSION == 2`.
 
-### Track B — Reimbursement claims
+### Track B — Reimbursement claims — **v1 implemented (2026-06-14)**
 
-  * [ ] GP.8.1a–c merged, each its own commit; `sequencer_claim.rs`
-        created.
-  * [ ] The claim constructor cannot emit an action `gasPoolPolicy` would
-        reject for shape; over-cap is unconstructible.
-  * [ ] End-to-end test (mock host) + negative (wrong-recipient) test
-        green.
-  * [ ] `docs/abi.md` documents the claim + the honour-system caveat +
-        the GP.8.5 forward reference.
-  * [ ] Pool key handled via `Zeroizing`; no key material in logs.
-  * [ ] GP.8.5 (v2) tracked as an open question; not implemented in v1.
+  * [x] `SequencerClaim::build` created in
+        `knomosis-l1-ingest/src/sequencer_claim.rs`.  **Home note:** the
+        plan originally placed `sequencer_claim.rs` in `knomosis-host`,
+        but the capability-aligned home is `l1-ingest` — it already holds
+        the k256 signer (`key.rs::BridgeActorKey`), the action encoder,
+        and the Lean-pinned `signing_input`; `knomosis-host` only
+        *admits* claims via the proven `gasPoolPolicy`.
+  * [x] Over-cap is unconstructible (amount clamped to the cap) and
+        wrong-recipient is unconstructible (recipient hard-wired to
+        `sequencerActor`).
+  * [x] Unit tests green (4): capped `gasPoolActor → sequencerActor`
+        shape, cap clamping, **cryptographic signature verification**
+        against the pool public key, and deterministic CBE encoding.
+        The kernel-side admission (the policy accepts and per-action /
+        per-trace bounds the claim) is already a proven Lean property
+        (`gasPoolPolicy_*`, GP.7.3); a full host-loop integration test
+        is an optional addition.
+  * [x] `docs/abi.md` §10.2.6 documents the claim + the honour-system
+        caveat + the GP.8.5 / OQ-GP-8b forward reference.
+  * [x] Pool key held via `BridgeActorKey` (`Zeroizing`); no key
+        material logged.
+  * [x] GP.8.5 (v2 receipt-verified) tracked as OQ-GP-8b
+        (`open_questions.md`); not implemented in v1.
 
 ### Track C — Configuration
 

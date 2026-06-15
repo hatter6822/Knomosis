@@ -244,6 +244,12 @@ import LegalKernel.Bridge.Ingest
 import LegalKernel.Bridge.State
 import LegalKernel.Bridge.Admissible
 import LegalKernel.Bridge.Accounting
+-- Workstream CA — chain-level bridge accounting (§7.6.4 / §7.6.5):
+-- `BridgeReachable` + `BridgeAction`, the substrate over which the
+-- per-action accounting deltas compose into the chain-level identities,
+-- and `ChainAccounting` (the conservation / solvency lift itself).
+import LegalKernel.Bridge.Reachable
+import LegalKernel.Bridge.ChainAccounting
 -- Workstream GP.7.2 — the canonical `gasPoolPolicy` LocalPolicy
 -- governing `gasPoolActor` outflow (capped `transfer`-to-sequencer
 -- only).  Non-TCB; consumed by the GP.7.3 pool-drain bound.
@@ -256,6 +262,12 @@ import LegalKernel.Bridge.AmmReservePolicy
 -- GP.7.2 gas-pool authority discipline, `gasPoolActor`'s ETH-leg
 -- balance cannot have decreased by more than `n × maxDrainPerActionEth`.
 import LegalKernel.Bridge.PoolDrainBound
+-- Workstream GP.8.5 (Track B v2) — the receipt-verified sequencer-
+-- reimbursement gate: an L1 gas-receipt witness binds the claimed
+-- amount to a real, verified L1 expenditure, so an admitted claim is
+-- bounded by `min(cap, L1 wei cost)` rather than the GP.7.2 cap alone.
+-- Non-TCB; introduces the `l1GasReceiptVerifier` opaque (axiom-clean).
+import LegalKernel.Bridge.ReceiptVerifiedClaim
 -- Workstream GP.9.1 — refund-on-exit accounting: the claimant retires
 -- their own purchased action budget for gas, paid out of `gasPoolActor`.
 -- Free-tier immunity + round-trip non-profitability + no double refund.

@@ -124,6 +124,25 @@ jobs:
       - name: lake test (run Tests.lean driver)
         run: lake test
 
+      - name: Deploy-gate fail-closed assertion (security-review F-1 / F-2)
+        # The default build links the FNV-1a-64 hash fallback and the
+        # Lean-opaque verifier fallback, so BOTH deploy gates MUST exit
+        # non-zero (fail-closed).  This guards the gates' core property:
+        # if a regression made `hash-check` / `verify-check` pass on the
+        # fallback build, a deployment could ship the non-production
+        # primitive silently.  (The production FLIP to exit 0 is proven
+        # by the ci-verify-secp256k1 workflow.)
+        run: |
+          if .lake/build/bin/knomosis hash-check; then
+            echo "::error::hash-check exited 0 on the fallback build; F-1 gate not fail-closed."
+            exit 1
+          fi
+          if .lake/build/bin/knomosis verify-check; then
+            echo "::error::verify-check exited 0 on the fallback build; F-2 gate not fail-closed."
+            exit 1
+          fi
+          echo "F-1 + F-2 deploy gates both fail closed on the fallback build (as required)."
+
       - name: lake exe count_sorries (Phase 1 WU 1.12)
         # Kernel-TCB sorry gate.  Non-zero exit blocks the merge.
         run: lake exe count_sorries

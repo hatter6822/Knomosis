@@ -21,16 +21,31 @@ debt the project's discipline says to keep at zero.
 
 ## Status
 
-  * **Workstream prefix:** `CL` (Cleanup).  Five sub-units:
+  * **Workstream prefix:** `CL` (Cleanup).  Five sub-units
+    (status as of the 2026-06-14 reconciliation — **3 of 5
+    complete**):
     - **CL.1** Documentation drift (README build tag,
       test-count consistency, synthesis-doc refresh).
+      **— COMPLETE.**  README build tag matches
+      `LegalKernel.lean` (`knomosis-step-vm-coherence`); README
+      uses a "run `lake test`" pointer rather than a pinned
+      count; synthesis-doc post-AR refresh shipped (OQ-DOC-4).
     - **CL.2** Stale code comments (the historical-context
-      cleanup catalogue).
+      cleanup catalogue).  **— OPEN.**  The 16 comment edits
+      have not landed (e.g. `LegalKernel/Events/Types.lean`
+      still reads "deferred to Phase 6").  ~2 engineer-days.
     - **CL.3** AR.18 mechanical visibility (the `private` /
       `protected` lift for `applyVerdictUnchecked`).
+      **— OPEN.**  `applyVerdictUnchecked` is still a plain
+      `def` in `LegalKernel/Disputes/Verdict.lean`.  ~1 day.
     - **CL.4** AR.23 partial → complete (depends on EI.8).
+      **— COMPLETE.**  `Test/Integration/SnapshotBootstrap.lean`
+      now asserts extensional equality via the EI.8.b lemma
+      `commitExtendedState_subcommits_extensional_eq_under_collision_free`.
     - **CL.5** LP minor / forward-roadmap items deferred
       enforcement (the §13.2 items not promoted to v2 roadmap).
+      **— COMPLETE.**  OQ-LP-1 – OQ-LP-6 are registered in
+      `docs/planning/open_questions.md`.
   * **Effort estimate:** 4–8 engineer-days total.  Each
     sub-unit is ≤ 1–2 days.
   * **Build-posture target:** all gates green.  CL is

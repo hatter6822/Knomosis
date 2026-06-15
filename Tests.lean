@@ -131,11 +131,13 @@ import LegalKernel.Test.Bridge.AmmMath
 import LegalKernel.Test.Bridge.GasPoolPolicy
 import LegalKernel.Test.Bridge.AmmReservePolicy
 import LegalKernel.Test.Bridge.PoolDrainBound
+import LegalKernel.Test.Bridge.ReceiptVerifiedClaim
 import LegalKernel.Test.Bridge.BudgetRefund
 import LegalKernel.Test.Bridge.Ingest
 import LegalKernel.Test.Bridge.State
 import LegalKernel.Test.Bridge.Admissible
 import LegalKernel.Test.Bridge.Accounting
+import LegalKernel.Test.Bridge.ChainAccounting
 import LegalKernel.Test.Bridge.WithdrawalRoot
 import LegalKernel.Test.Bridge.WithdrawalProof
 import LegalKernel.Test.Bridge.WithdrawalProofCLI
@@ -343,6 +345,8 @@ def main : IO UInt32 := do
                                     Bridge.AmmReservePolicyTests.tests)
   failed := failed + (← runAll "bridge-pool-drain-bound"
                                     Bridge.PoolDrainBoundTests.tests)
+  failed := failed + (← runAll "bridge-receipt-verified-claim"
+                                    Bridge.ReceiptVerifiedClaimTests.tests)
   failed := failed + (← runAll "bridge-budget-refund"
                                     Bridge.BudgetRefundTests.tests)
   failed := failed + (← runAll "bridge-ingest"
@@ -353,6 +357,8 @@ def main : IO UInt32 := do
                                     Bridge.AdmissibleTests.tests)
   failed := failed + (← runAll "bridge-accounting"
                                     Bridge.AccountingTests.tests)
+  failed := failed + (← runAll "bridge-chain-accounting"
+                                    Bridge.ChainAccountingTests.tests)
   failed := failed + (← runAll "bridge-withdrawal-root"
                                     Bridge.WithdrawalRootTests.tests)
   failed := failed + (← runAll "bridge-withdrawal-proof"
