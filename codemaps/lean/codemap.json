@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c764042409e9dc9d60f4a321fadf6a9f40f594ee40682142b4793c5a6b0facc8"
+    "source_digest": "1f82efbf3b301ddd63be2a18251c5b543918f274a846b49919b56d22687ae9b9"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5143
+    "declaration_count": 5149
   },
   "modules": [
     {
@@ -11047,7 +11047,7 @@
     {
       "module": "LegalKernel.Bridge.ReceiptVerifiedClaim",
       "path": "LegalKernel/Bridge/ReceiptVerifiedClaim.lean",
-      "declaration_count": 19,
+      "declaration_count": 25,
       "declarations": [
         {
           "kind": "namespace",
@@ -11258,14 +11258,96 @@
           "called": [
             "Action",
             "Amount",
-            "Bridge",
             "ConsumedReceipts",
-            "LegalKernel",
             "gasPoolActor",
             "gasReceiptReimbursement",
             "l1GasReceiptVerifier",
             "maxDrainPerActionEth",
             "receiptEnforcedClaimAdmissible",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "isGasPoolEthClaim",
+          "line": 399,
+          "called": [
+            "Action",
+            "gasPoolActor",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptGatedAdmissible",
+          "line": 408,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissible_implies_base",
+          "line": 416,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "maxDrainPerActionEth",
+            "receiptGatedAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissible_requires_gate_for_claim",
+          "line": 429,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "receiptGatedAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissible_eq_base_off_claim",
+          "line": 440,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionEth",
+            "receiptGatedAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforced_second_claim_distinct_receipt",
+          "line": 457,
+          "called": [
+            "Action",
+            "Amount",
+            "Bridge",
+            "ConsumedReceipts",
+            "LegalKernel",
+            "consumeReceipt",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "receiptEnforcedClaim_capped_backed_and_fresh",
             "sequencerActor",
             "transfer"
           ]
@@ -41529,6 +41611,7 @@
             "gasPoolActor",
             "gasPoolPolicy",
             "gasReceiptReimbursement",
+            "isGasPoolEthClaim",
             "l1GasReceiptVerifier",
             "mBold",
             "mEth",
@@ -41538,6 +41621,11 @@
             "receiptEnforcedClaimAdmissible_implies_base",
             "receiptEnforcedClaimAdmissible_implies_gasPoolPolicy",
             "receiptEnforcedClaim_capped_backed_and_fresh",
+            "receiptEnforced_second_claim_distinct_receipt",
+            "receiptGatedAdmissible",
+            "receiptGatedAdmissible_eq_base_off_claim",
+            "receiptGatedAdmissible_implies_base",
+            "receiptGatedAdmissible_requires_gate_for_claim",
             "receiptVerifiedClaimAdmissible",
             "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy",
             "receiptVerifiedClaim_capped_and_backed",

@@ -263,6 +263,58 @@ def tests : List TestCase :=
         let _ := @receiptEnforcedClaim_capped_backed_and_fresh
         pure ()
     }
+  , -- ## Admission path requiring the gate (c4) + no reuse across admissions (c2)
+    { name := "GP.8.5: receiptGatedAdmissible REQUIRES the gate for a gas-pool claim (proof term)"
+    , body := do
+        -- Under receipt-gated admission, a gas-pool ETH-leg claim is
+        -- admitted ONLY if the enforced gate holds — the formal closure
+        -- of "the v2 gate is unenforced".
+        let _proof :
+            ∀ (base : Prop) (consumed : ConsumedReceipts) (mEth amount : Amount),
+              receiptGatedAdmissible base consumed mEth
+                  (.transfer 0 gasPoolActor sequencerActor amount) →
+              receiptEnforcedClaimAdmissible consumed mEth
+                  (.transfer 0 gasPoolActor sequencerActor amount) :=
+          fun base consumed mEth amount h =>
+            receiptGatedAdmissible_requires_gate_for_claim consumed mEth ⟨amount, rfl⟩ h
+        pure ()
+    }
+  , { name := "GP.8.5: receiptGatedAdmissible defers to base off-claim (v1 unaffected, proof term)"
+    , body := do
+        -- A non-claim action's gated admission is EXACTLY the base, so
+        -- enabling v2 restricts only gas-pool claims.
+        let _proof :
+            ∀ (base : Prop) (consumed : ConsumedReceipts) (mEth : Amount) (action : Action),
+              ¬ isGasPoolEthClaim action →
+              (receiptGatedAdmissible base consumed mEth action ↔ base) :=
+          fun base consumed mEth action hnot =>
+            receiptGatedAdmissible_eq_base_off_claim consumed mEth hnot
+        pure ()
+    }
+  , { name := "GP.8.5: no receipt reuse across admissions — 2nd claim's receipt ≠ 1st (proof term)"
+    , body := do
+        let _proof :
+            ∀ (consumed : ConsumedReceipts) (mEth : Amount) (rbh₁ : ByteArray) (action : Action),
+              receiptEnforcedClaimAdmissible (consumeReceipt consumed rbh₁) mEth action →
+              ∃ amount rbh₂ b gu gp,
+                action = .transfer 0 gasPoolActor sequencerActor amount ∧
+                l1GasReceiptVerifier rbh₂ b gu gp = true ∧
+                amount ≤ gasReceiptReimbursement gu gp ∧
+                rbh₂ ≠ rbh₁ :=
+          fun consumed mEth rbh₁ _action h =>
+            receiptEnforced_second_claim_distinct_receipt consumed mEth rbh₁ h
+        pure ()
+    }
+  , { name := "GP.8.5: admission-composer + distinct-receipt API stable"
+    , body := do
+        let _ := @isGasPoolEthClaim
+        let _ := @receiptGatedAdmissible
+        let _ := @receiptGatedAdmissible_implies_base
+        let _ := @receiptGatedAdmissible_requires_gate_for_claim
+        let _ := @receiptGatedAdmissible_eq_base_off_claim
+        let _ := @receiptEnforced_second_claim_distinct_receipt
+        pure ()
+    }
   ]
 
 end ReceiptVerifiedClaimTests

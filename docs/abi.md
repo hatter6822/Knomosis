@@ -1223,11 +1223,17 @@ forward-compatible); what v2 adds is a *receipt witness*:
     freshness obligation; `consumeReceipt_blocks_reuse` proves a consumed
     receipt can never back a second claim (one L1 receipt → at most one
     reimbursement).  `receiptEnforcedClaimAdmissible` is the *enforced*
-    gate (canonical claim ∧ within cap ∧ fresh receipt) a v2 deployment
-    requires for gas-pool claims — composed into admission alongside
-    `gasPoolPolicy`, so a receiptless v1 claim is rejected;
-    `receiptEnforcedClaim_capped_backed_and_fresh` is its headline and
-    `…_implies_gasPoolPolicy` proves it only narrows outflow.
+    gate (canonical claim ∧ within cap ∧ fresh receipt), and
+    `receiptGatedAdmissible base consumed cap action` is the concrete
+    admission PATH that requires it: a v2 deployment admits an action iff
+    `base` holds AND, for a gas-pool claim, the enforced gate holds
+    (`receiptGatedAdmissible_requires_gate_for_claim`) — so a receiptless
+    v1 claim is REJECTED, while non-claim actions defer entirely to the
+    base (`…_eq_base_off_claim`; v1 deployments unaffected).
+    `receiptEnforced_second_claim_distinct_receipt` proves a second
+    admitted claim uses a DISTINCT receipt (the per-claim min(cap,cost)
+    bound lifts to the batch), and `…_implies_gasPoolPolicy` proves the
+    gate only narrows outflow.
   * **Rust** — `SequencerClaim::build_receipt_backed` double-clamps the
     amount to `min(requested, cap, GasReceipt::reimbursement())` so an
     over-spend is unconstructible; `is_receipt_backed_by` re-checks the

@@ -383,5 +383,95 @@ theorem receiptEnforcedClaim_capped_backed_and_fresh
          wf.backing.gasUsed, wf.backing.gasPrice, haction, hcap,
          wf.backing.l1_attestation, wf.backing.amount_backed, wf.fresh⟩
 
+/-! ## The admission path that REQUIRES the gate (PR #126 review c4)
+
+The theorems above characterise the enforced gate in isolation.
+`receiptGatedAdmissible` is the concrete admission predicate that
+*consumes* it: a v2-enabled deployment admits an action iff its base
+admissibility holds AND — when the action is a gas-pool ETH-leg claim —
+the enforced receipt gate holds.  It is parametric in the base
+admissibility `Prop` (so it composes with whatever a deployment already
+uses — `BridgeAdmissibleWith`, the GP.7.4 governance, …) and is a strict
+narrowing: a receiptless v1 honour-system claim, base-admissible but
+with no fresh receipt, is REJECTED, while non-claim actions defer
+entirely to the base (so v1 deployments are unaffected). -/
+
+/-- Is `action` the canonical ETH-leg gas-pool → sequencer claim? -/
+def isGasPoolEthClaim (action : Action) : Prop :=
+  ∃ amount, action = .transfer 0 gasPoolActor sequencerActor amount
+
+/-- **Receipt-gated admission (the path that requires the gate).**  A
+    v2 deployment admits `action` iff `baseAdmissible` holds AND, for a
+    gas-pool ETH-leg claim, the enforced receipt gate
+    (`receiptEnforcedClaimAdmissible`) holds.  Parametric in the base so
+    it composes with any existing admission; for non-claim actions the
+    gate conjunct is vacuous, so it equals the base. -/
+def receiptGatedAdmissible
+    (baseAdmissible : Prop) (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth : Amount) (action : Action) : Prop :=
+  baseAdmissible ∧
+    (isGasPoolEthClaim action →
+      receiptEnforcedClaimAdmissible consumed maxDrainPerActionEth action)
+
+/-- The composer only NARROWS: receipt-gated admission implies the base. -/
+theorem receiptGatedAdmissible_implies_base
+    {baseAdmissible : Prop} (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth : Amount) {action : Action}
+    (h : receiptGatedAdmissible baseAdmissible consumed maxDrainPerActionEth action) :
+    baseAdmissible := h.1
+
+/-- **The gate is REQUIRED for every gas-pool claim.**  Under
+    `receiptGatedAdmissible`, a gas-pool ETH-leg claim is admitted ONLY
+    if the enforced receipt gate holds — so a v1 honour-system claim
+    WITHOUT a fresh receipt cannot be admitted.  This is the formal
+    closure of the "v2 gate is unenforced" gap: a deployment using this
+    admission cannot accept the same gas-pool transfer without a receipt
+    witness. -/
+theorem receiptGatedAdmissible_requires_gate_for_claim
+    {baseAdmissible : Prop} (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth : Amount) {action : Action}
+    (hclaim : isGasPoolEthClaim action)
+    (h : receiptGatedAdmissible baseAdmissible consumed maxDrainPerActionEth action) :
+    receiptEnforcedClaimAdmissible consumed maxDrainPerActionEth action :=
+  h.2 hclaim
+
+/-- A non-claim action's receipt-gated admission is EXACTLY the base
+    (the gate conjunct is vacuous), so enabling v2 does not restrict any
+    non-gas-pool-claim action — v1 deployments are unaffected. -/
+theorem receiptGatedAdmissible_eq_base_off_claim
+    {baseAdmissible : Prop} (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth : Amount) {action : Action}
+    (hnot : ¬ isGasPoolEthClaim action) :
+    receiptGatedAdmissible baseAdmissible consumed maxDrainPerActionEth action ↔
+      baseAdmissible := by
+  unfold receiptGatedAdmissible
+  exact ⟨fun h => h.1, fun h => ⟨h, fun hc => absurd hc hnot⟩⟩
+
+/-- **No receipt reuse across admissions (PR #126 review c2).**  If a
+    first claim was admitted and its receipt `rbh₁` consumed, then any
+    SECOND enforced-admissible gas-pool claim (against the updated
+    consumed set) is backed by a receipt `rbh₂ ≠ rbh₁`.  So one L1
+    receipt backs at most one admitted reimbursement, and a batch of `n`
+    admitted claims draws on `n` DISTINCT receipts — lifting the
+    per-claim `min(cap, cost)` bound to the batch (a sequencer cannot
+    present one receipt to drain `n ×` the spend). -/
+theorem receiptEnforced_second_claim_distinct_receipt
+    (consumed : ConsumedReceipts) (maxDrainPerActionEth : Amount)
+    (rbh₁ : ByteArray) {action : Action}
+    (h : receiptEnforcedClaimAdmissible (consumeReceipt consumed rbh₁)
+          maxDrainPerActionEth action) :
+    ∃ amount rbh₂ batchId gasUsed gasPrice,
+      action = .transfer 0 gasPoolActor sequencerActor amount ∧
+      l1GasReceiptVerifier rbh₂ batchId gasUsed gasPrice = true ∧
+      amount ≤ gasReceiptReimbursement gasUsed gasPrice ∧
+      rbh₂ ≠ rbh₁ := by
+  obtain ⟨amount, rbh₂, batchId, gasUsed, gasPrice,
+          haction, _hcap, hattest, hbound, hfresh⟩ :=
+    receiptEnforcedClaim_capped_backed_and_fresh
+      (consumeReceipt consumed rbh₁) maxDrainPerActionEth h
+  refine ⟨amount, rbh₂, batchId, gasUsed, gasPrice, haction, hattest, hbound, ?_⟩
+  intro heq
+  exact hfresh (heq ▸ by simp [consumeReceipt])
+
 end Bridge
 end LegalKernel
