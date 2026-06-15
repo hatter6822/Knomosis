@@ -19,7 +19,7 @@ optimizer (200 runs).
 > false positives were dropped.  This is an **internal** review and does
 > **not** substitute for the independent external audit scoped in
 > Audit 20 — it sharpens that audit's starting point and remediates the
-> two unambiguous defects it surfaced.
+> five real defects it surfaced (1 Critical, 1 High, 3 Medium/Low).
 
 ---
 
@@ -303,3 +303,30 @@ follow-up:** a multi-round bisection-then-terminate path and an explicit
 | 1.3 | Pull-payment settlement escrow + brick-resistance test | **this PR** |
 | 1.4 | Constructor `responseTimeout > stepInterval` guard | **this PR** |
 | B.2 / 2.1 | Multisig roles / per-dispute slash | follow-up / deployment |
+
+## 7. Post-remediation verification
+
+A second, independent deep-audit pass re-verified the fixes end-to-end:
+
+- **All suites green at the final commit:** Solidity `forge test` 877
+  passed / 0 failed; Rust `cargo test --workspace` 1971 passed / 0
+  failed; Lean `lake test` ALL PASSED.
+- **Zero warnings:** `forge lint` reports no findings on any
+  PR-changed Solidity file (a stray `unsafe-typecast` introduced by a
+  test helper was annotated); Lean `lake build` emits no `warning:`
+  line; Rust `clippy -D warnings` + `fmt --check` clean.
+- **Discipline gates pass:** `count_sorries`, `tcb_audit`,
+  `stub_audit`, `naming_audit`, `deferral_audit`, `mock_import_audit`,
+  Lex lint/codegen, and the codemap regeneration gate.
+- **Cross-stack soundness re-checked:** every consumer of the
+  size-hardened `SmtVerifier.recomputeRoot` still passes (Bridge
+  withdrawal-proof cross-check included); the F-2 archive split was
+  re-verified not to regress the keccak cross-stack (a keccak-linked
+  `knomosis` exe now links cleanly — it could not before the split).
+- **Fix-completeness re-derived:** the 1.1 `roots()` tuple
+  destructuring extracts `stateCommit`/`submittedAtBlock` at the
+  correct positions; the multi-round bisection stays sound because
+  `respondToMidpoint(agree)` only advances `low` to an *agreed*
+  midpoint; `_settle` has no remaining un-try-caught external call
+  (settlement is unbrickable) and the pull-payment ledger is solvent
+  per game (credits == bonds held).

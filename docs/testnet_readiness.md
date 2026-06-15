@@ -108,11 +108,19 @@ and the SVC step-VM + SC SMT cross-stack corpora.
 
 ### 3.6 Pre-mainnet (beyond testnet)
 - [ ] Independent external audit complete (scope:
-      `docs/audits/20-…`); findings remediated.
-- [ ] Adversarial fuzzing of the untrusted-input boundaries (security
-      review §4.3) run to a coverage target.
-- [ ] v2 receipt-verified reimbursement (GP.8.5) if the pool will hold
-      material value (economic analysis §4 / IC-6).
+      `docs/audits/20-…`); findings remediated.  An **internal** deep
+      review (`docs/audits/21-…`) is done: it found + fixed 5 real
+      contract defects (1 Critical, 1 High, 3 Medium/Low).
+- [~] Adversarial fuzzing of the untrusted-input boundaries (security
+      review §4.3).  **Partial:** never-panics property fuzz now covers
+      the l1-ingest ABI decoder, the host frame reader, and the indexer
+      decoder + two-pass dispatch (all-tag + overflow amounts); the SMT
+      verifier has adversarial size-discipline tests.  **Remaining:** a
+      coverage-target sweep + cargo-fuzz on the network boundaries.
+- [x] v2 receipt-verified reimbursement (GP.8.5) — the gate is shipped
+      (`LegalKernel.Bridge.ReceiptVerifiedClaim` + the Rust mirror);
+      *enable* it before the pool holds material value (economic
+      analysis §4 / IC-6).
 - [ ] Decentralised sequencing path (OQ-H-2) evaluated.
 
 ## 4. Status & gaps
@@ -130,10 +138,15 @@ F.3 acceptance harness, and the two operator runbooks.  The system is
    guessed.
 3. **Monitoring/alerting + key-custody** procedures (§3.5) — currently
    the daemons exist but the *operational* wrapping does not.
-4. **Adversarial fuzzing** of the untrusted-input boundaries (queued P2
-   test-expansion increment).
+4. **Adversarial fuzzing** of the untrusted-input boundaries —
+   *in progress*: never-panics property fuzz on the l1-ingest decoder,
+   host frame reader, and indexer decoder + dispatch; SMT
+   size-discipline adversarial tests.  A coverage-target sweep +
+   cargo-fuzz on the network boundaries remain.
 5. The **independent external audit** (the §20 scope) — the gate to
-   *mainnet*, strongly advisable before a value-bearing testnet.
+   *mainnet*, strongly advisable before a value-bearing testnet.  The
+   internal deep review (§21) has remediated 5 contract defects ahead of
+   it.
 
 **Recommendation.**  A *shadow / no-value* testnet (the daemons + the
 F.3 acceptance suite against deployed contracts, with observers) can run
