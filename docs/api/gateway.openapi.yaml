@@ -231,11 +231,20 @@ paths:
       summary: Cursor-paginated event backfill.
       description: |
         Returns events with `seq` strictly greater than `since`, drawn from the
-        event-subscribe keep-history cache then the live tail (abi.md §11.3).
-        The complement of `GET /events/stream` for catch-up after a gap.
+        event-subscribe keep-history cache (abi.md §11.3). The complement of
+        `GET /events/stream` for catch-up after a gap.
 
-        If `since` predates the history window, responds 409 with the oldest
-        resumable seq (maps to the §11 `TRUNCATED` frame).
+        Paging is GROUP-COMPLETE: because one `seq` may carry several records
+        (§11.4), a page never ends mid-group — the server rounds up to the next
+        seq boundary at/after `limit`, so `nextCursor` is always a completed
+        seq and resuming from it neither skips a group's tail nor redelivers
+        its head. `limit` is therefore a soft lower bound. The scan is bounded
+        by the tip captured when the request starts (it does not block for
+        future live events); `hasMore: false` means "caught up to that tip".
+
+        `since=0` means "from the oldest retained" (NOT live-tail — that is the
+        SSE meaning). If `since` predates the history window, responds 409 with
+        the oldest resumable seq (maps to the §11 `TRUNCATED` frame).
       parameters:
         - $ref: '#/components/parameters/SinceCursor'
         - $ref: '#/components/parameters/Limit'
@@ -260,18 +269,30 @@ paths:
         A `text/event-stream` that proxies an event-subscribe SUBSCRIBE session
         (abi.md §11). Each event is emitted as an SSE record:
 
-            id: <seq>
+            id: <seq>.<index>
             event: <eventType>
             data: <JSON Event>
 
-        The SSE `id` is the Knomosis `seq`; on reconnect the browser's
-        `Last-Event-ID` header is translated to the §11 `resume_from`
-        (it takes precedence over the `since` query parameter). Heartbeat
-        comment lines (`:\n`) keep proxies from idling the connection.
+        The SSE `id` is the COMPOSITE `"<seq>.<index>"` (NOT a bare seq). A
+        single log frame can emit several events sharing one `seq` (abi.md
+        §11.4); per the WHATWG SSE spec the browser's last-event-ID buffer
+        advances only on an `id:` line, so a bare-seq id would lose a group's
+        tail on a mid-group reconnect. With the composite id, on reconnect the
+        browser's `Last-Event-ID` (e.g. `"104233.1"`) is honoured exactly:
+        the client receives every record after that `(seq, index)` in order,
+        with no loss and no duplication (records already delivered for that
+        seq are skipped). `Last-Event-ID` takes precedence over the `since`
+        query parameter; a bare seq or `since=S` resumes at `seq > S` (S's
+        whole group excluded). Heartbeat comment lines (`:\n`) carry no `id:`
+        (they must not move the resume cursor).
 
-        On cursor truncation (`TRUNCATED`) the server emits an
-        `event: error` record carrying `EventStreamError` (with the oldest
-        resumable seq) and closes. `since`/`Last-Event-ID` == 0 means live-tail.
+        On cursor truncation (`TRUNCATED`) the server emits an `event: error`
+        record carrying `EventStreamError` (`truncated`, with the oldest
+        resumable seq) and closes. A client whose resume point predates the
+        gateway's in-memory fan-out ring (but is still within upstream
+        history) receives `event: error` (`behind`, with the oldest ring seq)
+        steering it to the `GET /events` backfill; it then reconnects into the
+        now-covering ring. `since`/`Last-Event-ID` == 0 means live-tail.
       parameters:
         - $ref: '#/components/parameters/SinceCursor'
         - $ref: '#/components/parameters/LastEventId'
@@ -405,8 +426,17 @@ components:
       name: Last-Event-ID
       in: header
       required: false
-      description: SSE reconnect cursor; translated to the §11 `resume_from`. Takes precedence over `since`.
-      schema: { $ref: '#/components/schemas/Cursor' }
+      description: >-
+        SSE reconnect cursor. The gateway emits COMPOSITE event ids
+        `"<seq>.<index>"` (the within-seq record position, §11.4), so a
+        browser auto-reconnect replays that exact value here; a bare
+        `"<seq>"` (or `0`) is also accepted (seq-granular / live-tail).
+        Takes precedence over the `since` query parameter.
+      schema:
+        type: string
+        pattern: '^[0-9]+(\.[0-9]+)?$'
+        description: A bare seq `"<seq>"` or a composite `"<seq>.<index>"`.
+        examples: ["0", "104233", "104233.1"]
 
   headers:
     KnomosisSeq:
@@ -614,9 +644,20 @@ components:
 
     Event:
       type: object
-      required: [seq, type, payload]
+      required: [seq, index, type, payload]
       properties:
         seq: { $ref: '#/components/schemas/Cursor' }
+        index:
+          type: integer
+          minimum: 0
+          description: >-
+            0-based position of this record within its `seq` group. A single
+            log frame (one `seq`) can emit several events (abi.md §11.4, e.g.
+            a transfer's sender + receiver `balanceChanged`); `index` orders
+            them within the seq in `extractEvents` order. On the SSE stream
+            the record id is the composite `"<seq>.<index>"`, which lets a
+            mid-group reconnect resume exactly (it is also surfaced here so a
+            consumer can dedup on `(seq, index)` independently of transport).
         type:
           type: string
           description: Event-type name from the abi.md §11A.5 registry (tags 0..22).
@@ -632,10 +673,11 @@ components:
           description: Event-type-specific fields (big integers as strings).
       examples:
         - seq: "104233"
+          index: 0
           type: balanceChanged
-          actor: "0x00000000000000000000000000000000000000a1"
-          resource: USD
-          payload: { delta: "-50", balance: "950" }
+          actor: "161"
+          resource: "0"
+          payload: { resource: "0", actor: "161", oldValue: "1000", newValue: "950" }
     EventPage:
       type: object
       required: [events, nextCursor, hasMore]
@@ -651,10 +693,20 @@ components:
       properties:
         error:
           type: string
-          enum: [truncated, lag_exceeded, server_shutdown]
+          enum: [truncated, lag_exceeded, server_shutdown, behind, decode_error]
+          description: >-
+            `truncated` (resume predates upstream history), `lag_exceeded` /
+            `server_shutdown` (abi.md §11.2), `behind` (resume predates the
+            gateway's fan-out ring — catch up via `GET /events`, then
+            reconnect), or `decode_error` (a known-tag event payload failed to
+            decode — corruption; the gateway fails closed rather than skip or
+            mislabel it). All are followed by stream close.
         oldestSeq:
           type: [string, "null"]
           pattern: '^[0-9]+$'
+          description: >-
+            For `truncated`, the oldest resumable upstream seq; for `behind`,
+            the oldest seq currently in the gateway ring.
 
     Info:
       type: object
