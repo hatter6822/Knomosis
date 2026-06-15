@@ -1,0 +1,678 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+#
+# Knomosis Gateway API — OpenAPI 3.1 contract sketch (DRAFT).
+# North-side (consumer-facing) protocol for the proposed `knomosis-gateway`
+# service.  Rationale + ABI mappings: docs/planning/gateway_integration_plan.md.
+openapi: 3.1.0
+info:
+  title: Knomosis Gateway API
+  version: 0.1.0
+  summary: >-
+    HTTP/JSON + SSE gateway fronting the Knomosis binary host, event-subscribe,
+    and indexer surfaces for browser-facing consumers (first consumer: Licio BFF).
+  description: |
+    DRAFT contract sketch.  Defines the consumer-facing protocol for the
+    proposed `knomosis-gateway` service, which bridges Knomosis's binary
+    CBE-over-socket protocols (abi.md §10/§11/§11A) to HTTP/JSON + Server-Sent
+    Events so a TypeScript BFF (Licio's Hono layer) can consume them.
+
+    Cross-cutting conventions:
+      * Big integers as strings. All 64-bit-or-wider integers (amounts,
+        balances, budgets, nonces, sequence numbers) are serialized as DECIMAL
+        STRINGS to avoid IEEE-754 precision loss in JSON / JavaScript consumers.
+      * Verdict != HTTP status. The kernel admissibility verdict is orthogonal
+        to the transport status. A well-formed action the kernel declines
+        (e.g. `InsufficientBudget`) is HTTP 200 with `accepted: false`, NOT a
+        4xx. Transport / availability faults use 4xx/5xx. See abi.md §10.2.
+      * Eventual consistency. State reads are served from the `knomosis-indexer`
+        view (abi.md §11A), which lags the canonical log. The `X-Knomosis-Seq`
+        response header carries the cursor the response reflects; clients
+        reconcile reads against the event stream using it.
+      * Opaque forwarding. `POST /actions` forwards the client-signed CBE bytes
+        VERBATIM; the gateway never re-encodes them (the ECDSA signature is over
+        the canonical CBE encoding).
+  license:
+    name: GPL-3.0-or-later
+    url: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+  contact:
+    name: Knomosis
+    url: https://github.com/hatter6822/Knomosis
+
+servers:
+  - url: https://gateway.dev.example/v1
+    description: Development gateway (in-memory / devnet kernel behind it).
+  - url: https://gateway.example/v1
+    description: Production gateway.
+
+tags:
+  - name: actions
+    description: Submit signed actions for kernel admission (write path → knomosis-host, abi.md §10).
+  - name: state
+    description: Read balances / budgets / pools from the indexer view (abi.md §11A).
+  - name: events
+    description: Backfill and live-stream sequenced events (abi.md §11).
+  - name: system
+    description: Service metadata and health.
+
+# Default: every operation requires a server-to-server credential from the BFF.
+# Health endpoints override this with `security: []`.
+security:
+  - bearerAuth: []
+
+paths:
+  /actions:
+    post:
+      tags: [actions]
+      operationId: submitAction
+      summary: Submit a pre-signed action for kernel admission.
+      description: |
+        Forwards an opaque, client-signed `SignedAction` (canonical CBE bytes)
+        verbatim to `knomosis-host` (abi.md §10) and returns the kernel verdict.
+        The gateway MUST NOT re-encode the payload.
+
+        Verdict → status (abi.md §10.2):
+          * Ok            → 200, `{ accepted: true,  verdict: "Ok" }`
+          * NotAdmissible → 200, `{ accepted: false, verdict: "NotAdmissible", reason }`
+          * Busy          → 503 + `Retry-After`
+          * ParseError    → 400
+
+        Idempotency: re-submitting the same signed action is safe — the kernel's
+        nonce-consumption (`replay_impossible`) makes a replay a deterministic
+        `NotAdmissible`. Supply `Idempotency-Key` so the gateway can dedup
+        in-flight retries.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActionSubmission' }
+            examples:
+              transfer:
+                summary: Base64-wrapped CBE SignedAction.
+                value:
+                  encoding: cbe
+                  signedAction: "o2NhY3Rpb24..."
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              description: Raw canonical CBE `SignedAction` bytes (no wrapper).
+      responses:
+        '200':
+          description: The kernel processed the action and returned a verdict (Ok or NotAdmissible).
+          headers:
+            X-Knomosis-Seq: { $ref: '#/components/headers/KnomosisSeq' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerdictResponse' }
+              examples:
+                ok:
+                  summary: Admitted; L2 state advanced.
+                  value: { accepted: true, verdict: Ok, admissionStage: Finalized, seq: "104233" }
+                budget:
+                  summary: Well-formed but declined (GP budget gate).
+                  value: { accepted: false, verdict: NotAdmissible, reason: InsufficientBudget }
+        '400': { $ref: '#/components/responses/ParseError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '502': { $ref: '#/components/responses/UpstreamUnavailable' }
+        '503': { $ref: '#/components/responses/Busy' }
+        '504': { $ref: '#/components/responses/UpstreamTimeout' }
+
+  /actors/{actorId}/balances:
+    get:
+      tags: [state]
+      operationId: listBalances
+      summary: List all (resource, amount) balances for an actor.
+      description: |
+        Reads the eventually-consistent `knomosis-indexer` per-(actor, resource)
+        balance view (abi.md §11A.2). Unknown actors return an empty list
+        (balances default to zero in the kernel). Supports `ETag` /
+        `If-None-Match` revalidation keyed on the indexer cursor.
+      parameters:
+        - $ref: '#/components/parameters/ActorId'
+      responses:
+        '200':
+          description: Balance list at the indexer cursor in `X-Knomosis-Seq`.
+          headers:
+            X-Knomosis-Seq: { $ref: '#/components/headers/KnomosisSeq' }
+            ETag:
+              description: Weak validator derived from (actor, cursor).
+              schema: { type: string }
+            Cache-Control:
+              description: Short-lived; the indexer advances continuously.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BalanceList' }
+        '304': { description: Not modified (ETag matched `If-None-Match`). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
+
+  /actors/{actorId}/balances/{resource}:
+    get:
+      tags: [state]
+      operationId: getBalance
+      summary: Get one (actor, resource) balance.
+      description: |
+        Returns the indexed balance for a single resource. A resource the actor
+        has never held returns amount `"0"` (kernel `getD 0` semantics), not 404.
+      parameters:
+        - $ref: '#/components/parameters/ActorId'
+        - $ref: '#/components/parameters/Resource'
+      responses:
+        '200':
+          description: The (actor, resource) balance at the indexer cursor.
+          headers:
+            X-Knomosis-Seq: { $ref: '#/components/headers/KnomosisSeq' }
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Balance' }
+        '304': { description: Not modified. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
+
+  /actors/{actorId}/budget:
+    get:
+      tags: [state]
+      operationId: getBudget
+      summary: Get an actor's epoch budget view (Workstream GP).
+      description: Reads the indexer budget view (abi.md §11A.4) for the current epoch.
+      parameters:
+        - $ref: '#/components/parameters/ActorId'
+      responses:
+        '200':
+          description: The actor's budget view.
+          headers:
+            X-Knomosis-Seq: { $ref: '#/components/headers/KnomosisSeq' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BudgetView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
+
+  /pools/{poolId}:
+    get:
+      tags: [state]
+      operationId: getPool
+      summary: Get a gas-pool view (Workstream GP).
+      description: Reads the indexer gas-pool view (abi.md §11A.4).
+      parameters:
+        - $ref: '#/components/parameters/PoolId'
+      responses:
+        '200':
+          description: The pool view.
+          headers:
+            X-Knomosis-Seq: { $ref: '#/components/headers/KnomosisSeq' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PoolView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
+
+  /events:
+    get:
+      tags: [events]
+      operationId: listEvents
+      summary: Cursor-paginated event backfill.
+      description: |
+        Returns events with `seq` strictly greater than `since`, drawn from the
+        event-subscribe keep-history cache then the live tail (abi.md §11.3).
+        The complement of `GET /events/stream` for catch-up after a gap.
+
+        If `since` predates the history window, responds 409 with the oldest
+        resumable seq (maps to the §11 `TRUNCATED` frame).
+      parameters:
+        - $ref: '#/components/parameters/SinceCursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/EventTypeFilter'
+      responses:
+        '200':
+          description: A page of events plus the next cursor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/TruncatedCursor' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
+
+  /events/stream:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: Live event stream (Server-Sent Events).
+      description: |
+        A `text/event-stream` that proxies an event-subscribe SUBSCRIBE session
+        (abi.md §11). Each event is emitted as an SSE record:
+
+            id: <seq>
+            event: <eventType>
+            data: <JSON Event>
+
+        The SSE `id` is the Knomosis `seq`; on reconnect the browser's
+        `Last-Event-ID` header is translated to the §11 `resume_from`
+        (it takes precedence over the `since` query parameter). Heartbeat
+        comment lines (`:\n`) keep proxies from idling the connection.
+
+        On cursor truncation (`TRUNCATED`) the server emits an
+        `event: error` record carrying `EventStreamError` (with the oldest
+        resumable seq) and closes. `since`/`Last-Event-ID` == 0 means live-tail.
+      parameters:
+        - $ref: '#/components/parameters/SinceCursor'
+        - $ref: '#/components/parameters/LastEventId'
+        - $ref: '#/components/parameters/EventTypeFilter'
+      responses:
+        '200':
+          description: An open SSE stream.
+          headers:
+            Cache-Control:
+              description: Always `no-store` for streams.
+              schema: { type: string }
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE-framed records; see operation description.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/TruncatedCursor' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
+
+  /info:
+    get:
+      tags: [system]
+      operationId: getInfo
+      summary: Gateway + kernel metadata.
+      description: |
+        Surfaces the deployment id, the kernel's declared `Verdict::Ok`
+        admission stage (abi.md §10.2.1), the submit/events protocol versions,
+        and the current indexer cursor.
+      responses:
+        '200':
+          description: Service metadata.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Info' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /healthz:
+    get:
+      tags: [system]
+      operationId: healthz
+      summary: Liveness probe.
+      security: []
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            text/plain:
+              schema: { type: string, examples: ["ok"] }
+
+  /readyz:
+    get:
+      tags: [system]
+      operationId: readyz
+      summary: Readiness probe (upstreams reachable).
+      security: []
+      responses:
+        '200':
+          description: Gateway and all upstreams are reachable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+        '503':
+          description: One or more upstreams are unreachable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: >-
+        Service token presented by the Licio BFF (server-to-server). This is NOT
+        a user credential — end-user authN/session lives at the BFF edge.
+    mtls:
+      type: mutualTLS
+      description: Optional mutual TLS between the BFF and the gateway.
+
+  parameters:
+    ActorId:
+      name: actorId
+      in: path
+      required: true
+      description: Opaque actor identifier (e.g. a 0x-prefixed address or its mapped ActorId).
+      schema: { $ref: '#/components/schemas/ActorId' }
+    Resource:
+      name: resource
+      in: path
+      required: true
+      description: Resource identifier.
+      schema: { $ref: '#/components/schemas/Resource' }
+    PoolId:
+      name: poolId
+      in: path
+      required: true
+      description: Gas-pool identifier.
+      schema: { type: string, minLength: 1 }
+    SinceCursor:
+      name: since
+      in: query
+      required: false
+      description: Return events whose seq is strictly greater than this cursor. Default "0".
+      schema: { $ref: '#/components/schemas/Cursor' }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of events to return.
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+    EventTypeFilter:
+      name: type
+      in: query
+      required: false
+      description: Optional repeatable event-type filter (omit for all types).
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Client-chosen key (e.g. the action nonce) to dedup in-flight retries.
+      schema: { type: string, maxLength: 255 }
+    LastEventId:
+      name: Last-Event-ID
+      in: header
+      required: false
+      description: SSE reconnect cursor; translated to the §11 `resume_from`. Takes precedence over `since`.
+      schema: { $ref: '#/components/schemas/Cursor' }
+
+  headers:
+    KnomosisSeq:
+      description: Indexer cursor (seq) the response reflects, as a decimal string.
+      schema: { $ref: '#/components/schemas/Cursor' }
+    RetryAfter:
+      description: Seconds the client should wait before retrying.
+      schema: { type: integer, minimum: 0 }
+
+  responses:
+    ParseError:
+      description: Malformed request (maps to Verdict::ParseError / bad JSON / bad base64).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            parse:
+              value: { type: "https://knomosis/errors/parse-error", title: "Malformed action bytes", status: 400 }
+    Unauthorized:
+      description: Missing or invalid service credential.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Credential valid but not permitted for this operation.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Resource does not exist.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TruncatedCursor:
+      description: Requested cursor predates the keep-history window (maps to §11 TRUNCATED).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            truncated:
+              value:
+                type: "https://knomosis/errors/truncated-cursor"
+                title: "Cursor older than history window"
+                status: 409
+                oldestSeq: "98123"
+    PayloadTooLarge:
+      description: Submitted action exceeds the configured maximum frame size.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: Per-credential rate limit exceeded.
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Busy:
+      description: Host worker queue is full (maps to Verdict::Busy); retry with backoff.
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            busy:
+              value: { type: "https://knomosis/errors/busy", title: "Host busy", status: 503 }
+    UpstreamUnavailable:
+      description: The gateway could not reach an upstream (host / event-subscribe / indexer).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UpstreamTimeout:
+      description: An upstream did not respond within the configured deadline.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    BigInt:
+      type: string
+      pattern: '^[0-9]+$'
+      description: A non-negative integer (64-bit or wider) serialized as a decimal string.
+      examples: ["0", "1000000000000000000"]
+    Cursor:
+      type: string
+      pattern: '^[0-9]+$'
+      default: "0"
+      description: A monotonic event sequence number (seq) as a decimal string; "0" = beginning / live-tail.
+    ActorId:
+      type: string
+      minLength: 1
+      maxLength: 255
+      description: Opaque actor identifier (address or mapped ActorId).
+      examples: ["0x00000000000000000000000000000000000000a1"]
+    Resource:
+      type: string
+      minLength: 1
+      maxLength: 255
+      description: Resource identifier.
+      examples: ["USD"]
+
+    ActionSubmission:
+      type: object
+      additionalProperties: false
+      required: [signedAction]
+      properties:
+        signedAction:
+          type: string
+          contentEncoding: base64
+          contentMediaType: application/octet-stream
+          description: Canonical CBE SignedAction bytes, base64-encoded. Forwarded verbatim (never re-encoded).
+        encoding:
+          type: string
+          enum: [cbe]
+          default: cbe
+          description: Encoding of the decoded bytes; only `cbe` is defined.
+
+    VerdictResponse:
+      type: object
+      required: [accepted, verdict]
+      properties:
+        accepted:
+          type: boolean
+          description: True iff verdict == Ok.
+        verdict:
+          type: string
+          enum: [Ok, NotAdmissible, ParseError, Busy]
+          description: Kernel verdict (abi.md §10.2).
+        reason:
+          type: [string, "null"]
+          description: UTF-8 reason for NotAdmissible (e.g. InsufficientBudget); null otherwise.
+        admissionStage:
+          type: [string, "null"]
+          enum: [Received, LocallyAdmitted, Sequenced, Finalized, "null"]
+          description: Stage the kernel's Ok commits to (abi.md §10.2.1).
+        seq:
+          type: [string, "null"]
+          pattern: '^[0-9]+$'
+          description: Log seq the admitted action advanced to, if known.
+
+    Balance:
+      type: object
+      required: [resource, amount, seq]
+      properties:
+        resource: { $ref: '#/components/schemas/Resource' }
+        amount: { $ref: '#/components/schemas/BigInt' }
+        seq: { $ref: '#/components/schemas/Cursor' }
+    BalanceList:
+      type: object
+      required: [actorId, balances, seq]
+      properties:
+        actorId: { $ref: '#/components/schemas/ActorId' }
+        balances:
+          type: array
+          items: { $ref: '#/components/schemas/Balance' }
+        seq: { $ref: '#/components/schemas/Cursor' }
+
+    BudgetView:
+      type: object
+      required: [actorId, epoch, remaining, seq]
+      description: Per-actor epoch budget view (Workstream GP; abi.md §11A.4).
+      properties:
+        actorId: { $ref: '#/components/schemas/ActorId' }
+        epoch: { $ref: '#/components/schemas/BigInt' }
+        freeTier: { $ref: '#/components/schemas/BigInt' }
+        remaining: { $ref: '#/components/schemas/BigInt' }
+        actionCost: { $ref: '#/components/schemas/BigInt' }
+        gasBalance:
+          type: [string, "null"]
+          pattern: '^[0-9]+$'
+        seq: { $ref: '#/components/schemas/Cursor' }
+
+    PoolView:
+      type: object
+      required: [poolId, resource, balance, seq]
+      properties:
+        poolId: { type: string }
+        resource: { $ref: '#/components/schemas/Resource' }
+        balance: { $ref: '#/components/schemas/BigInt' }
+        seq: { $ref: '#/components/schemas/Cursor' }
+
+    Event:
+      type: object
+      required: [seq, type, payload]
+      properties:
+        seq: { $ref: '#/components/schemas/Cursor' }
+        type:
+          type: string
+          description: Event-type name from the abi.md §11A.5 registry (tags 0..22).
+          examples: ["balanceChanged"]
+        actor:
+          type: [string, "null"]
+          description: Subject actor, if the event has one.
+        resource:
+          type: [string, "null"]
+        payload:
+          type: object
+          additionalProperties: true
+          description: Event-type-specific fields (big integers as strings).
+      examples:
+        - seq: "104233"
+          type: balanceChanged
+          actor: "0x00000000000000000000000000000000000000a1"
+          resource: USD
+          payload: { delta: "-50", balance: "950" }
+    EventPage:
+      type: object
+      required: [events, nextCursor, hasMore]
+      properties:
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        nextCursor: { $ref: '#/components/schemas/Cursor' }
+        hasMore: { type: boolean }
+    EventStreamError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [truncated, lag_exceeded, server_shutdown]
+        oldestSeq:
+          type: [string, "null"]
+          pattern: '^[0-9]+$'
+
+    Info:
+      type: object
+      required: [deploymentId, okAdmissionStage, submitProtocolVersion, eventsProtocolVersion, indexerSeq]
+      properties:
+        deploymentId: { type: string }
+        okAdmissionStage:
+          type: string
+          enum: [Received, LocallyAdmitted, Sequenced, Finalized]
+        submitProtocolVersion: { type: integer, minimum: 1 }
+        eventsProtocolVersion: { type: integer, minimum: 1 }
+        indexerSeq: { $ref: '#/components/schemas/Cursor' }
+        kernel:
+          type: string
+          description: Kernel implementation behind the host (e.g. CommandKernel).
+    Readiness:
+      type: object
+      required: [ready, host, subscribe, indexer]
+      properties:
+        ready: { type: boolean }
+        host: { type: boolean }
+        subscribe: { type: boolean }
+        indexer: { type: boolean }
+
+    Problem:
+      type: object
+      description: RFC 9457 problem detail; extra members carry Knomosis context.
+      additionalProperties: true
+      properties:
+        type: { type: string, format: uri, default: "about:blank" }
+        title: { type: string }
+        status: { type: integer, minimum: 100, maximum: 599 }
+        detail: { type: [string, "null"] }
+        instance: { type: [string, "null"] }
+        knomosisReason:
+          type: [string, "null"]
+          description: Verdict reason string passed through when applicable.
+        oldestSeq:
+          type: [string, "null"]
+          pattern: '^[0-9]+$'
+          description: For truncated-cursor errors, the oldest resumable seq.
+        retryAfterMs:
+          type: [integer, "null"]
+          minimum: 0
