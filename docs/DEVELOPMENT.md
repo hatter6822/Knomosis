@@ -13,6 +13,31 @@ provision a working environment, the day-to-day build/test/audit loop for each
 language stack, the conventions every change must follow, and the path a change
 takes from local edit to merged pull request.
 
+## Contents
+
+1. [About this document](#1-about-this-document)
+2. [At a glance](#2-at-a-glance)
+3. [Repository topology](#3-repository-topology)
+4. [Prerequisites](#4-prerequisites)
+5. [Environment setup](#5-environment-setup)
+6. [The Lean inner development loop](#6-the-lean-inner-development-loop)
+7. [The Rust workflow](#7-the-rust-workflow-runtime)
+8. [The Solidity workflow](#8-the-solidity-workflow-solidity)
+9. [Python tooling](#9-python-tooling)
+10. [Cross-stack verification & deploy-readiness gates](#10-cross-stack-verification--deploy-readiness-gates)
+11. [Coding conventions](#11-coding-conventions)
+12. [Testing conventions](#12-testing-conventions)
+13. [Worked walkthroughs (adding code)](#13-worked-walkthroughs-adding-code)
+14. [Versioning & version bumps](#14-versioning--version-bumps)
+15. [Git & branch workflow](#15-git--branch-workflow)
+16. [Pull requests & code review](#16-pull-requests--code-review)
+17. [Continuous integration reference](#17-continuous-integration-reference)
+18. [Trust assumptions & security posture](#18-trust-assumptions--security-posture)
+19. [Troubleshooting & FAQ](#19-troubleshooting--faq)
+20. [Directory reference](#20-directory-reference)
+21. [Keeping documentation in sync](#21-keeping-documentation-in-sync-required-in-the-same-pr)
+22. [Further reading](#22-further-reading)
+
 ## 1. About this document
 
 Knomosis is a **proof-carrying state-transition kernel** written in Lean 4, with
@@ -325,12 +350,14 @@ python3 scripts/regenerate_codemaps.py   # regenerate navigation maps (CI gate)
 | `lex_codegen --check` | The committed cross-module artefacts (e.g. `Authority/Action.lean`) match what codegen would regenerate, byte-for-byte. | Editing a generated fence by hand, or forgetting to re-run `lake exe lex_codegen`. | — |
 | codemap gate | `codemaps/{lean,solidity,rust}/codemap.json` are in sync with tracked source. | A source change without a `regenerate_codemaps.py` re-run. | — |
 
-> **On allowlists.** The `stub_allowlist.txt` / `naming_allowlist.txt` /
-> `deferral_allowlist.txt` files hold rare, explicitly-reviewed exceptions; they
-> are empty (absent) by default, which is the desired state. Reach for an
-> allowlist entry only when the gate has a genuine false positive — and expect a
-> reviewer to question it. The correct fix is almost always to change the code,
-> not the allowlist (see [§11.7](#117-the-implement-the-improvement-rule)).
+> **On allowlists.** `stub_audit` and `naming_audit` each read an allowlist for
+> rare, explicitly-reviewed exceptions (`tools/stub_allowlist.txt` /
+> `tools/naming_allowlist.txt`); both are absent by default — and a missing file
+> is treated as an empty allowlist, which is the desired state. `deferral_audit`
+> has **no** allowlist at all, by design. Reach for an allowlist entry only when
+> a gate has a genuine false positive, and expect a reviewer to question it: the
+> correct fix is almost always to change the code, not the allowlist (see
+> [§11.7](#117-the-implement-the-improvement-rule)).
 
 ### 6.4 Recommended fast-feedback ordering
 
@@ -517,8 +544,10 @@ These are the rules every change is held to. The canonical statement lives in
 
 Only **two files** are trusted kernel core: `LegalKernel/Kernel.lean` and
 `LegalKernel/RBMapLemmas.lean`. Everything else is non-TCB,
-deployment-facing infrastructure. The TCB equals exactly *Lean core + Std core*
-— no Mathlib, no batteries, no external Lake package.
+deployment-facing infrastructure. Their only external dependency is *Lean core +
+Std core* (`Std.Data.TreeMap`) — no Mathlib, no batteries, no external Lake
+package — so the trusted base equals exactly the Lean core distribution plus
+those two files.
 
 - **Two-reviewer rule (absolute).** Any change to `Kernel.lean` or
   `RBMapLemmas.lean` requires **two** reviewers (Genesis Plan §13.6). Law
@@ -542,19 +571,32 @@ deployment-facing infrastructure. The TCB equals exactly *Lean core + Std core*
 
 ### 11.3 Naming discipline
 
-**Names describe content, never provenance.** Forbidden tokens in declaration
-names and filenames: `wu`, `phase`, `audit`, `finding`, `f02`, `claude_`,
-`session_`, `old`, `new`, `v2`, `legacy`, `tmp`, `todo`, `fixme`. Process markers
-belong in docstrings and commit messages — never in identifiers. The
-`naming_audit` gate enforces this; you can pre-check a staged diff with:
+**Names describe content, never provenance.** An identifier or filename must say
+*what* a declaration is, never *which process produced it*. The mechanical
+`naming_audit` gate (scanning `LegalKernel/` and `Tools/`) keys on **numbered or
+suffixed** process markers — representative entries from its `forbiddenTokens`
+list (canonical, append-only copy in `Tools/NamingAudit.lean`):
+
+- work-unit / phase / audit stamps: `wu1`…`wu9`, `phase0`…`phase7`,
+  `audit1`/`audit2`/`audit_`;
+- session / CI provenance prefixes: `session_`, `claude_`, `pr_`;
+- temporal / status suffixes: `_v2`…`_v5`, `_tmp`, `_todo`, `_fixme`, `_wip`,
+  `_draft`, `_legacy`;
+- grab-bag umbrellas: `miscellaneous`, `supplemental`, `auxiliary`, `assorted`;
+- deferral packagers: `missing_theorems`, `_round_trip_conditional`.
+
+Because it keys on these *specific* forms, a descriptive name that merely
+contains a word like "audit" is fine — which is exactly why the audit binaries
+themselves (`tcb_audit`, `naming_audit`) pass the gate. `CLAUDE.md` additionally
+ships a broad staged-diff heuristic you can run before committing; it
+deliberately over-matches (it will flag even a legitimately descriptive
+`audit`), so treat a hit as "look closer", not "certainly wrong":
 
 ```bash
 git diff --cached -U0 -- '*.lean' \
   | grep -E '^\+(def|theorem|structure|class|instance|abbrev|lemma|noncomputable)' \
   | grep -iE 'workstream|\bws[0-9]|\bwu[0-9]|\bphase[0-9_]|audit|\bf[0-9]{2}\b|\btmp\b|\btodo\b|\bfixme\b|claude_|session_|_v[2-5]\b'
 ```
-
-A non-empty result is a review-blocking violation.
 
 Other naming rules:
 
@@ -633,12 +675,13 @@ where applicable:
        , body := assertEq expected actual "transfer" } ]
    ```
 
-2. **Term-level API stability.** Ascribe a binding whose type *is* the theorem
-   signature, so elaboration fails if the signature changes:
+2. **Term-level API stability.** Inside a test body, ascribe a `let _proof`
+   binding whose type *is* the theorem signature, so elaboration fails if the
+   signature changes:
 
    ```lean
-   -- Fails to elaborate if `transfer_conserves` changes shape:
-   def _stability : ∀ …, … := @LegalKernel.Laws.transfer_conserves
+   -- Elaboration fails if `transfer_conserves` changes shape:
+   let _proof : ∀ …, … := @LegalKernel.Laws.transfer_conserves
    ```
 
 Key facts about the harness:
@@ -664,7 +707,8 @@ Key facts about the harness:
 ## 13. Worked walkthroughs (adding code)
 
 These are the common change shapes. Each ends in the same place: green local
-gates, one commit, a PR.
+gates, a focused commit, and a PR (pushing further commits updates the open PR
+rather than creating a new one).
 
 ### 13.1 Adding or changing a kernel law
 
@@ -835,9 +879,10 @@ Operational notes:
 
 ## 18. Trust assumptions & security posture
 
-Knomosis's guarantees are conditional on exactly **two** non-Lean assumptions,
-each isolated behind an `opaque` declaration (not an axiom), so `#print axioms`
-stays at `propext, Classical.choice, Quot.sound`:
+Knomosis's guarantees rest on a small, explicit set of non-Lean assumptions —
+each isolated behind an `opaque` declaration (**not** an axiom), so
+`#print axioms` on any kernel theorem stays at
+`propext, Classical.choice, Quot.sound`. The two headline assumptions:
 
 1. **`Authority.Crypto.Verify`** — the deployment-supplied signature scheme is
    EUF-CMA secure. `@[extern "knomosis_verify_ecdsa"]` routes the compiled call
