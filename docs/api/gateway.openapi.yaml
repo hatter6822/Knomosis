@@ -498,16 +498,19 @@ components:
       description: A monotonic event sequence number (seq) as a decimal string; "0" = beginning / live-tail.
     ActorId:
       type: string
-      minLength: 1
-      maxLength: 255
-      description: Opaque actor identifier (address or mapped ActorId).
-      examples: ["0x00000000000000000000000000000000000000a1"]
+      pattern: '^[0-9]+$'
+      description: >-
+        Indexer actor id (the §11A.2 keyspace u64) as a decimal string.
+        Resolution from an on-chain address to this id happens upstream
+        (l1-ingest address book); see OQ-GW-7.
+      examples: ["161"]
     Resource:
       type: string
-      minLength: 1
-      maxLength: 255
-      description: Resource identifier.
-      examples: ["USD"]
+      pattern: '^[0-9]+$'
+      description: >-
+        Resource id (the §11A.2 keyspace u64) as a decimal string.
+        Well-known: "0" = ETH, "1" = BOLD.
+      examples: ["0", "1"]
 
     ActionSubmission:
       type: object
@@ -546,7 +549,10 @@ components:
         seq:
           type: [string, "null"]
           pattern: '^[0-9]+$'
-          description: Log seq the admitted action advanced to, if known.
+          description: >-
+            Log seq the admitted action advanced to. NULL by default: the host
+            verdict frame (abi.md §10.1) does not return a seq today; populating
+            this needs a correlation mechanism or a host extension (OQ-GW-6).
 
     Balance:
       type: object
@@ -573,7 +579,14 @@ components:
         actorId: { $ref: '#/components/schemas/ActorId' }
         epoch: { $ref: '#/components/schemas/BigInt' }
         freeTier: { $ref: '#/components/schemas/BigInt' }
-        remaining: { $ref: '#/components/schemas/BigInt' }
+        remaining:
+          type: string
+          pattern: '^[0-9]+$'
+          description: >-
+            Indexer-computed `freeTier + grants_this_epoch − consumed_this_epoch`.
+            A CONSERVATIVE LOWER BOUND on the kernel's authoritative budget in
+            general (exact only when freeTier=0 or carryover ≤ freeTier; abi.md
+            §11A.4). Not to be presented as exact until the G6 read path lands.
         actionCost: { $ref: '#/components/schemas/BigInt' }
         gasBalance:
           type: [string, "null"]
@@ -582,11 +595,21 @@ components:
 
     PoolView:
       type: object
-      required: [poolId, resource, balance, seq]
+      required: [poolId, resource, balance, net, seq]
+      description: >-
+        Per-(pool-actor, resource) gas-pool ledger (abi.md §11A.4). `resource`
+        is "0" (ETH) or "1" (BOLD). `balance` is net of drains only when the
+        indexer runs with --gas-pool-actor (else gross inflows); `net` says which.
       properties:
-        poolId: { type: string }
+        poolId:
+          type: string
+          pattern: '^[0-9]+$'
+          description: Gas-pool actor id (the §11A.2 keyspace u64) as a decimal string.
         resource: { $ref: '#/components/schemas/Resource' }
         balance: { $ref: '#/components/schemas/BigInt' }
+        net:
+          type: boolean
+          description: True if net of drains (indexer has --gas-pool-actor); false if gross.
         seq: { $ref: '#/components/schemas/Cursor' }
 
     Event:
