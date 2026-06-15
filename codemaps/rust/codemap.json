@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d2e9a8f9ffb37d24dfbae01c5b058e76a0de21bff72f27bc49a8d3ce671299a0"
+    "source_digest": "73517d2c39e9247faf9e181ecee55de83753cef089779e11457d9a1f33eba91d"
   },
   "summary": {
     "module_count": 138,
-    "declaration_count": 4660
+    "declaration_count": 4661
   },
   "modules": [
     {
@@ -41385,7 +41385,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::sequencer_claim",
       "path": "runtime/knomosis-l1-ingest/src/sequencer_claim.rs",
-      "declaration_count": 34,
+      "declaration_count": 35,
       "declarations": [
         {
           "kind": "enum",
@@ -41537,9 +41537,13 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by",
-          "line": 247,
+          "line": 257,
           "called": [
+            "GAS_POOL_ACTOR_ID",
             "GasReceipt",
+            "SEQUENCER_ACTOR_ID",
+            "_",
+            "action",
             "amount",
             "reimbursement"
           ]
@@ -41547,19 +41551,19 @@
         {
           "kind": "struct",
           "name": "GasReceipt",
-          "line": 262,
+          "line": 285,
           "called": []
         },
         {
           "kind": "impl",
           "name": "GasReceipt",
-          "line": 274,
+          "line": 297,
           "called": []
         },
         {
           "kind": "fn",
           "name": "reimbursement",
-          "line": 282,
+          "line": 305,
           "called": [
             "Amount"
           ]
@@ -41567,7 +41571,7 @@
         {
           "kind": "fn",
           "name": "gas_receipt_reimbursement",
-          "line": 292,
+          "line": 315,
           "called": [
             "Amount"
           ]
@@ -41575,19 +41579,19 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 297,
+          "line": 320,
           "called": []
         },
         {
           "kind": "const",
           "name": "TEST_SCALAR",
-          "line": 304,
+          "line": 327,
           "called": []
         },
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 310,
+          "line": 333,
           "called": [
             "BridgeActorKey",
             "TEST_SCALAR"
@@ -41596,7 +41600,7 @@
         {
           "kind": "fn",
           "name": "claim_is_capped_gas_pool_to_sequencer_transfer",
-          "line": 315,
+          "line": 338,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -41612,7 +41616,7 @@
         {
           "kind": "fn",
           "name": "over_cap_request_is_clamped_to_cap",
-          "line": 336,
+          "line": 359,
           "called": [
             "SEQUENCER_ACTOR_ID",
             "_",
@@ -41626,7 +41630,7 @@
         {
           "kind": "fn",
           "name": "signature_verifies_against_the_pool_public_key",
-          "line": 349,
+          "line": 372,
           "called": [
             "action",
             "b",
@@ -41641,7 +41645,7 @@
         {
           "kind": "fn",
           "name": "build_is_deterministic_and_encodes",
-          "line": 366,
+          "line": 389,
           "called": [
             "b",
             "encode",
@@ -41653,7 +41657,7 @@
         {
           "kind": "fn",
           "name": "test_receipt",
-          "line": 378,
+          "line": 401,
           "called": [
             "GasReceipt"
           ]
@@ -41661,7 +41665,7 @@
         {
           "kind": "fn",
           "name": "reimbursement_is_gas_used_times_gas_price",
-          "line": 388,
+          "line": 411,
           "called": [
             "gas_receipt_reimbursement",
             "reimbursement",
@@ -41671,7 +41675,7 @@
         {
           "kind": "fn",
           "name": "reimbursement_saturates_instead_of_wrapping",
-          "line": 398,
+          "line": 421,
           "called": [
             "gas_receipt_reimbursement",
             "reimbursement",
@@ -41681,7 +41685,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_clamps_to_the_receipt_when_it_binds",
-          "line": 408,
+          "line": 431,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -41698,7 +41702,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_still_respects_the_cap_when_cap_binds",
-          "line": 440,
+          "line": 463,
           "called": [
             "amount",
             "b",
@@ -41711,7 +41715,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_passes_through_under_both_bounds",
-          "line": 453,
+          "line": 476,
           "called": [
             "amount",
             "b",
@@ -41724,7 +41728,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by_rejects_an_overspend",
-          "line": 464,
+          "line": 487,
           "called": [
             "amount",
             "b",
@@ -41736,8 +41740,26 @@
         },
         {
           "kind": "fn",
+          "name": "is_receipt_backed_by_rejects_noncanonical_claim_shapes",
+          "line": 504,
+          "called": [
+            "Action",
+            "GAS_POOL_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "SIGNATURE_LEN",
+            "SequencerClaim",
+            "action",
+            "amount",
+            "is_receipt_backed_by",
+            "nonce",
+            "signer",
+            "test_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "receipt_backed_signature_verifies",
-          "line": 481,
+          "line": 576,
           "called": [
             "action",
             "b",
