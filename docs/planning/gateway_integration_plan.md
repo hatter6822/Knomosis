@@ -27,10 +27,13 @@ The companion machine-readable contract is
 > `CLAUDE.md` / `README.md` / `GENESIS_PLAN.md` is amended. Promoting this
 > to a sanctioned workstream requires sign-off (see §11 G0, §14).
 
-There is currently **zero coupling** between the repositories: Knomosis's
-source has no reference to Licio, and Licio references "Knomosis topics"
-only behind a crypto feature flag that is OFF by default. This is
-greenfield integration design, not the repair of an existing seam.
+There is currently **zero code coupling** between the repositories:
+Knomosis has no reference to Licio, and a reconciliation against Licio's
+actual `apps/api` BFF (§1.4) confirms it has **no Knomosis client,
+package, or route** — the integration is a *dark feature* gated by a
+fail-closed `/v1/feature-flags` "crypto" flag that withholds Knomosis
+topics while off. This is greenfield integration design, not the repair
+of an existing seam.
 
 > **Correctness audit (this revision).** A grounding pass against `abi.md`
 > §10/§11/§11A corrected five first-draft assumptions, now reflected
@@ -84,6 +87,47 @@ stateless HTTP/JSON + SSE surface.
   the browser live at the Licio BFF edge.
 * **Not a public multi-tenant API (v1).** One trusted consumer; hardening
   for untrusted callers is explicitly scoped later (§8, OQ-GW-5).
+
+### §1.4 Reconciliation with Licio's actual BFF (WS-D … WS-I)
+
+Read directly from Licio's `apps/api` (Hono BFF), not its README. Findings
+that shape this plan:
+
+* **Structure.** A pnpm monorepo; the BFF is `apps/api` (entry `index.ts` →
+  `app.ts`), routes mounted under `/v1` (`routes/v1.ts`), organised by
+  workstreams WS-D (identity/auth) … WS-I (ranking). Packages: `db`,
+  `invariants`, `ranking`, `shared` — **no `knomosis`/crypto package**, and
+  no HTTP client/adapter in `lib/`. The integration is genuinely unbuilt.
+* **The gate is real and fail-closed.** A `/v1/feature-flags` endpoint
+  serves "fail-closed crypto/governance flags"; the crypto flag withholds
+  every Knomosis topic while off. So the gateway can be **dark-launched** —
+  deployed and validated end-to-end while Licio's flag stays off (§12).
+* **Identity is SIWE.** Sessions are WebAuthn + email-OTP + **Sign-In With
+  Ethereum**; `identity/crypto.ts` exposes an `accountRef`. Every user thus
+  already has an Ethereum address — the anchor for actor-id resolution
+  (resolves OQ-GW-7) and for client-side action signing (informs OQ-GW-3).
+* **The product is attention-ranking.** "Pay-to-rank" is an *additive*,
+  crypto-gated ranking signal layered on Licio's privacy-weighted attention
+  model (`ranking/` + `pwatt/`), not a separate app.
+* **Typed RPC.** The BFF exports a Hono RPC `AppType` and consumes typed
+  clients; the gateway's OpenAPI-generated TS client (G5.2) slots in as one
+  more typed dependency. (License: a GPL-3.0 client is compatible with
+  Licio's AGPL-3.0-or-later app.)
+
+**Integration mapping — the answer to OQ-GW-11.** No Knomosis routes exist
+to map onto today; the realistic, evidence-based seams are:
+
+| Licio seam (real) | Direction | Gateway endpoint | Knomosis ABI | Phase |
+|---|---|---|---|---|
+| Pay-to-rank / topic-gating consults Knomosis standing | **read** | `GET /v1/actors/{id}/balances/{resource}` · `/budget` · `/pools/{id}` | indexer §11A | **G1** |
+| Identity (SIWE `accountRef`) → Knomosis actor id | resolve | BFF maps address→id (gateway helper optional) | l1-ingest address book | G1 / G6 |
+| User "pays to rank" (stake/deposit) | **write** | `POST /v1/actions` (client-wallet-signed via SIWE) | host §10 | G2 |
+| Topic-event surfacing into Licio's event pipeline | **stream** | `GET /v1/events/stream` (type-filtered) | event-subscribe §11 | G3 |
+
+The decisive consequence: **Licio's first concrete consumer is read-only
+pay-to-rank/topic-gating** — exactly the G1 slice — so the existing
+sequencing (§12) is correct and now evidence-backed, and writes/streams
+(key custody, SSE) are genuinely deferrable.
 
 ## §2 Design principles
 
@@ -675,7 +719,12 @@ G7.1 (needs G1) ──────────────────► G7.3 (
   parallel from day one.
 * **First shippable slice:** G1 alone gives Licio a **read-only** integration
   (balances/budget/pools + health) — the fastest path to value, with no key
-  custody and no write risk. G3 adds live UI; G2 adds writes.
+  custody and no write risk. G3 adds live UI; G2 adds writes. The §1.4
+  reconciliation confirms read-only pay-to-rank/topic-gating is Licio's first
+  real consumer, so this ordering is evidence-backed.
+* **Dark launch:** Licio gates Knomosis behind a fail-closed
+  `/v1/feature-flags` crypto flag, so every phase can be deployed and
+  validated against Licio's BFF while the flag stays off — no big-bang cutover.
 * **Definition of done (per phase):** all sub-WU acceptance criteria met;
   `ci-gateway.yml` green; contract tests pass; docs updated in the same PR.
 
@@ -693,7 +742,7 @@ G7.1 (needs G1) ──────────────────► G7.3 (
 | R8 | Host queue saturation under load | Availability | Med | Pooling + bounded in-flight; `Busy`→`503`+`Retry-After` |
 | R9 | Spec/impl drift | Integration | Med | Contract-test CI gate (G5.1); spec is the source of truth |
 | R10 | Cross-instance idempotency gaps | Correctness (minor) | Low | Document best-effort; shared store optional (OQ-GW-4); kernel nonce still prevents double-apply |
-| R11 | Licio's real needs differ from its README | Rework | Med | Resolve OQ-GW-11 (reconcile against actual BFF routes) before G5.2 |
+| R11 | Licio's real needs differ from its README | Rework | Low (was Med) | RESOLVED via §1.4 reconciliation: read-first behind a fail-closed flag, dark-launchable. Re-check on any Licio BFF change |
 
 ## §14 Open questions
 
@@ -705,7 +754,11 @@ Format mirrors `docs/planning/open_questions.md`; promote there on sign-off.
 * **OQ-GW-2 — `NotAdmissible` status.** `200 {accepted:false}` vs `422`.
   *Rec:* `200` + body; revisit if a consumer needs error-channel semantics.
 * **OQ-GW-3 — Signing / key custody.** User-wallet vs custodial BFF-side
-  signer; determines where keys live and submit-payload provenance.
+  signer. *Informed by reconciliation (§1.4):* Licio already uses SIWE
+  (client-side Ethereum signatures), so **client/user-wallet signing** is the
+  natural fit — the BFF forwards pre-signed actions and the gateway holds no
+  keys (§8.2). Custodial signing stays a fallback for non-wallet
+  (email-OTP/WebAuthn) users.
 * **OQ-GW-4 — Cross-instance idempotency.** Per-instance cache vs a shared
   store (e.g. Licio's Redis). *Rec:* per-instance best-effort for v1; kernel
   nonce is the safety backstop.
@@ -716,8 +769,12 @@ Format mirrors `docs/planning/open_questions.md`; promote there on sign-off.
   vs gateway correlation via the event stream. *Rec:* stream correlation v1;
   measure demand before extending the host wire format.
 * **OQ-GW-7 — Address→id resolution.** Does the gateway resolve on-chain
-  addresses to `u64` actor ids (needs the l1-ingest address book) or does
-  the BFF pass ids? *Rec:* BFF passes ids v1; revisit if the BFF lacks them.
+  addresses to `u64` actor ids (needs the l1-ingest address book) or does the
+  BFF pass ids? *Informed by reconciliation (§1.4):* Licio's SIWE
+  `identity/crypto.ts::accountRef` already holds each user's Ethereum address,
+  so the BFF can supply it. *Rec:* ids remain the canonical key; offer an
+  optional gateway address→id helper (backed by the l1-ingest address book) so
+  the BFF need not duplicate the mapping.
 * **OQ-GW-8 — HTTP library.** Hand-rolled HTTP/1.1 (dep-minimal, audit
   parity) vs a small vetted sync crate. *Rec:* prototype both for the narrow
   surface; default to hand-rolled if effort is comparable.
@@ -726,11 +783,13 @@ Format mirrors `docs/planning/open_questions.md`; promote there on sign-off.
   query server when host separation is required.
 * **OQ-GW-10 — Metrics surface.** Log-based vs a `/metrics` endpoint. *Rec:*
   both behind config; default log-based, opt-in `/metrics`.
-* **OQ-GW-11 — Licio contract surface.** Which concrete operations does the
-  "pay-to-rank firewall" need (submit a stake/rank action? read a topic's
-  standing? subscribe to topic events?), and how do they map to Knomosis
-  `Action`/`Event` tags? Requires reconciling against Licio's actual BFF
-  routes, not its README. *Blocks:* G5.2.
+* **OQ-GW-11 — Licio contract surface. RESOLVED (§1.4).** Reconciled against
+  Licio's `apps/api` BFF: there are **no Knomosis routes yet**; the integration
+  is a dark feature behind the fail-closed `/v1/feature-flags` crypto flag.
+  Concrete seams: read-side pay-to-rank/topic-gating (G1), SIWE→actor-id
+  resolution (OQ-GW-7), optional stake submission via `POST /actions` with
+  client-wallet signing (G2), optional topic-event surfacing via SSE (G3). No
+  residual blocker on G5.2 beyond the typed-client codegen itself.
 
 ## §15 References
 
@@ -749,7 +808,15 @@ Format mirrors `docs/planning/open_questions.md`; promote there on sign-off.
 
 ## §16 Revision history
 
-* **v0.2 (this revision).** End-to-end refinement. Correctness audit
+* **v0.3 (this revision).** Reconciled OQ-GW-11 against Licio's actual
+  `apps/api` Hono BFF (read from source, not the README): added §1.4 with the
+  monorepo structure, the fail-closed `/v1/feature-flags` crypto gate, SIWE
+  identity, and the concrete read-first integration mapping. Resolved
+  OQ-GW-11; refined OQ-GW-3 (SIWE ⇒ client-wallet signing) and OQ-GW-7 (SIWE
+  address anchor + optional gateway resolver); downgraded risk R11; added
+  dark-launch sequencing (§12). No spec shape changes — the reconciliation
+  confirms the existing schemas.
+* **v0.2.** End-to-end refinement. Correctness audit
   against `abi.md` corrected: (a) verdict frame returns no `seq`; (b)
   actor/resource are `u64` ids, balances `u128`; (c) budget `remaining` is a
   conservative lower bound; (d) pools are per-(pool-actor, resource∈
