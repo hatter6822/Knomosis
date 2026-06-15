@@ -1281,7 +1281,17 @@ ships this layout.
     binding of `l1GasReceiptVerifier` to a watcher that fetches the L1
     batch-publication transaction receipt and re-derives
     `(gasUsed, gasPrice)`, so a third party (not just the claim builder)
-    can attest the backing.
+    can attest the backing.  **No-reuse + enforcement now shipped** (PR
+    #126 review): `ConsumedReceipts` + `consumeReceipt` +
+    `SequencerReimbursementVerifiedFresh` + `consumeReceipt_blocks_reuse`
+    prove one receipt backs at most one claim (so the per-claim
+    `min(cap, cost)` bound lifts to a batch over distinct receipts), and
+    `receiptEnforcedClaimAdmissible` is the enforced gate (fresh receipt
+    REQUIRED) a v2 deployment composes into admission — with the Rust
+    `is_receipt_fresh_and_backed` mirror.  The remaining integration is
+    threading the receipt witness through a v2-enabled deployment's
+    runtime stepper (the enforced gate is the verified primitive; v2 is
+    deployment-optional, so it is composed, not forced globally).
   * OQ-GP-9 — Sequencer reimbursement cadence and batch sizing.
   * OQ-GP-10 — Bridge-actor automation failure-domain isolation.
   * OQ-GP-11 — Whether the L1 step-VM commit (`stepVMHash` /

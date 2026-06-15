@@ -185,6 +185,84 @@ def tests : List TestCase :=
         let _ := @receiptVerifiedClaim_requires_backing
         pure ()
     }
+  , -- ## Receipt consumption — no reuse (PR #126 review c2)
+    { name := "GP.8.5: consumeReceipt prepends the binding hash (length grows)"
+    , body := do
+        let rbh : ByteArray := ⟨#[0xAB, 0xCD]⟩
+        assertEq (expected := 0) (actual := ([] : ConsumedReceipts).length)
+          "empty before consume"
+        assertEq (expected := 1) (actual := (consumeReceipt [] rbh).length)
+          "one entry after consume"
+        assertEq (expected := 2) (actual := (consumeReceipt (consumeReceipt [] rbh) rbh).length)
+          "two entries after two consumes"
+    }
+  , { name := "GP.8.5: consumeReceipt_blocks_reuse — fresh witness ⇒ hash ≠ consumed (proof term)"
+    , body := do
+        -- A fresh witness against `consumeReceipt consumed rbh` cannot
+        -- have binding hash `rbh` — the per-receipt no-reuse guarantee.
+        let _proof :
+            ∀ (consumed : ConsumedReceipts) (rbh : ByteArray) (amount : Amount)
+              (w : SequencerReimbursementVerifiedFresh (consumeReceipt consumed rbh) amount),
+              w.backing.receiptBindingHash ≠ rbh :=
+          fun consumed rbh _amount w => consumeReceipt_blocks_reuse consumed rbh w
+        pure ()
+    }
+  , { name := "GP.8.5: a fresh-backed claim builds an enforced-admissible witness (proof term)"
+    , body := do
+        -- GIVEN a hypothetical attestation + a fresh receipt, the
+        -- enforced gate is satisfiable (the construction elaborates).
+        let _proof :
+            ∀ (consumed : ConsumedReceipts) (cap : Amount) (rbh : ByteArray)
+              (b gu gp : Nat),
+              l1GasReceiptVerifier rbh b gu gp = true →
+              gu * gp ≤ cap →
+              rbh ∉ consumed →
+              receiptEnforcedClaimAdmissible consumed cap
+                (.transfer 0 gasPoolActor sequencerActor (gu * gp)) :=
+          fun _consumed _cap rbh b gu gp ha hcap hfresh =>
+            ⟨gu * gp, rfl, hcap,
+              ⟨{ backing := SequencerReimbursementVerified.of_receipt
+                   (gu * gp) rbh b gu gp ha (Nat.le_refl _)
+               , fresh := hfresh }⟩⟩
+        pure ()
+    }
+  , -- ## Enforcement — strictly stronger than the base gate (c4)
+    { name := "GP.8.5: enforced ⇒ base ⇒ gasPoolPolicy (proof term)"
+    , body := do
+        let _proof :
+            ∀ (consumed : ConsumedReceipts) (mEth mBold : Amount) (action : Action),
+              receiptEnforcedClaimAdmissible consumed mEth action →
+              (gasPoolPolicy mEth mBold).permits gasPoolActor action :=
+          fun consumed mEth mBold _action h =>
+            receiptEnforcedClaimAdmissible_implies_gasPoolPolicy consumed mEth mBold h
+        pure ()
+    }
+  , { name := "GP.8.5: enforced headline = capped ∧ backed ∧ fresh (proof term)"
+    , body := do
+        let _proof :
+            ∀ (consumed : ConsumedReceipts) (mEth : Amount) (action : Action),
+              receiptEnforcedClaimAdmissible consumed mEth action →
+              ∃ amount rbh b gu gp,
+                action = .transfer 0 gasPoolActor sequencerActor amount ∧
+                amount ≤ mEth ∧
+                l1GasReceiptVerifier rbh b gu gp = true ∧
+                amount ≤ gasReceiptReimbursement gu gp ∧
+                rbh ∉ consumed :=
+          fun consumed mEth _action h =>
+            receiptEnforcedClaim_capped_backed_and_fresh consumed mEth h
+        pure ()
+    }
+  , { name := "GP.8.5: consumption + enforcement API stable"
+    , body := do
+        let _ := @consumeReceipt
+        let _ := @SequencerReimbursementVerifiedFresh.backing
+        let _ := @consumeReceipt_blocks_reuse
+        let _ := @receiptEnforcedClaimAdmissible
+        let _ := @receiptEnforcedClaimAdmissible_implies_base
+        let _ := @receiptEnforcedClaimAdmissible_implies_gasPoolPolicy
+        let _ := @receiptEnforcedClaim_capped_backed_and_fresh
+        pure ()
+    }
   ]
 
 end ReceiptVerifiedClaimTests

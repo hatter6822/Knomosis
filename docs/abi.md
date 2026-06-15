@@ -1213,13 +1213,28 @@ forward-compatible); what v2 adds is a *receipt witness*:
     propositional witness, and the gate
     `receiptVerifiedClaimAdmissible`.  The headline theorem
     `receiptVerifiedClaim_capped_and_backed` proves an admitted claim is
-    bounded by `min(cap, L1 wei cost)`;
+    bounded — **per claim** — by `min(cap, L1 wei cost)`;
     `receiptVerifiedClaimAdmissible_implies_gasPoolPolicy` proves v2 is a
     pure strengthening of v1 (it can only ever *narrow* pool outflow).
+  * **Consumption + enforcement** (per-batch bound + no reuse).  The
+    per-claim bound only lifts to a BATCH if each claim consumes a
+    DISTINCT receipt, so `ConsumedReceipts` + `consumeReceipt` track spent
+    binding hashes and `SequencerReimbursementVerifiedFresh` carries a
+    freshness obligation; `consumeReceipt_blocks_reuse` proves a consumed
+    receipt can never back a second claim (one L1 receipt → at most one
+    reimbursement).  `receiptEnforcedClaimAdmissible` is the *enforced*
+    gate (canonical claim ∧ within cap ∧ fresh receipt) a v2 deployment
+    requires for gas-pool claims — composed into admission alongside
+    `gasPoolPolicy`, so a receiptless v1 claim is rejected;
+    `receiptEnforcedClaim_capped_backed_and_fresh` is its headline and
+    `…_implies_gasPoolPolicy` proves it only narrows outflow.
   * **Rust** — `SequencerClaim::build_receipt_backed` double-clamps the
     amount to `min(requested, cap, GasReceipt::reimbursement())` so an
-    over-spend is unconstructible; `is_receipt_backed_by` is the runtime
-    re-check (the mirror of the witness's `amount_backed`).
+    over-spend is unconstructible; `is_receipt_backed_by` re-checks the
+    canonical claim shape + the amount bound (the mirror of the witness's
+    `amount_backed`), and `is_receipt_fresh_and_backed(receipt, consumed)`
+    additionally rejects a reused receipt (the mirror of the enforced
+    fresh gate).
 
 **Trust + scope (v2).**  The receipt cost is wei (`gasUsed * gasPrice`),
 so v2 covers the **ETH leg (resource 0)** only — the leg whose bound is

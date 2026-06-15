@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3831213350fc792b9ad1ae90ff0af7c67cb97dbe74649cae61ff5720ee83b5c4"
+    "source_digest": "c764042409e9dc9d60f4a321fadf6a9f40f594ee40682142b4793c5a6b0facc8"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5135
+    "declaration_count": 5143
   },
   "modules": [
     {
@@ -11047,7 +11047,7 @@
     {
       "module": "LegalKernel.Bridge.ReceiptVerifiedClaim",
       "path": "LegalKernel/Bridge/ReceiptVerifiedClaim.lean",
-      "declaration_count": 11,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
@@ -11160,14 +11160,112 @@
           "line": 261,
           "called": [
             "Amount",
-            "Bridge",
-            "LegalKernel",
             "gasPoolActor",
             "gasReceiptReimbursement",
             "l1GasReceiptVerifier",
             "maxDrainPerActionEth",
             "receiptVerifiedClaimAdmissible",
             "receiptVerifiedClaim_capped_and_backed",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "abbrev",
+          "name": "ConsumedReceipts",
+          "line": 291,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "consumeReceipt",
+          "line": 294,
+          "called": [
+            "ConsumedReceipts"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "SequencerReimbursementVerifiedFresh",
+          "line": 301,
+          "called": [
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerified"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "consumeReceipt_blocks_reuse",
+          "line": 313,
+          "called": [
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerifiedFresh",
+            "consumeReceipt"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptEnforcedClaimAdmissible",
+          "line": 336,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerifiedFresh",
+            "gasPoolActor",
+            "maxDrainPerActionEth",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedClaimAdmissible_implies_base",
+          "line": 346,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "receiptVerifiedClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedClaimAdmissible_implies_gasPoolPolicy",
+          "line": 356,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "permits",
+            "receiptEnforcedClaimAdmissible",
+            "receiptEnforcedClaimAdmissible_implies_base",
+            "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedClaim_capped_backed_and_fresh",
+          "line": 371,
+          "called": [
+            "Action",
+            "Amount",
+            "Bridge",
+            "ConsumedReceipts",
+            "LegalKernel",
+            "gasPoolActor",
+            "gasReceiptReimbursement",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
             "sequencerActor",
             "transfer"
           ]
@@ -41417,13 +41515,17 @@
           "called": [
             "Action",
             "Amount",
+            "ConsumedReceipts",
             "LegalKernel.Test.Bridge",
             "ReceiptVerifiedClaimTests",
             "SequencerReimbursementVerified.of_receipt",
+            "SequencerReimbursementVerifiedFresh",
             "TestCase",
             "assert",
             "assertEq",
             "bridgeActor",
+            "consumeReceipt",
+            "consumeReceipt_blocks_reuse",
             "gasPoolActor",
             "gasPoolPolicy",
             "gasReceiptReimbursement",
@@ -41432,6 +41534,10 @@
             "mEth",
             "mint",
             "permits",
+            "receiptEnforcedClaimAdmissible",
+            "receiptEnforcedClaimAdmissible_implies_base",
+            "receiptEnforcedClaimAdmissible_implies_gasPoolPolicy",
+            "receiptEnforcedClaim_capped_backed_and_fresh",
             "receiptVerifiedClaimAdmissible",
             "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy",
             "receiptVerifiedClaim_capped_and_backed",

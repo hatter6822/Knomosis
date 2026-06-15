@@ -275,5 +275,113 @@ theorem receiptVerifiedClaim_requires_backing
   subst haction
   exact hbackq
 
+/-! ## Receipt consumption — no cross-claim reuse (PR #126 review)
+
+`receiptVerifiedClaim_capped_and_backed` bounds EACH claim by its
+receipt's wei cost.  Over a BATCH of claims that only yields the intended
+`Σᵢ min(cap, costᵢ)` bound if each claim consumes a DISTINCT receipt —
+otherwise a sequencer could present one L1 receipt to back `N` claims and
+drain up to `N ×` the real spend.  This section adds receipt consumption:
+a binding hash, once consumed, can never back another claim.  It is the
+per-receipt analogue of the deposit/withdraw `consumed`-map replay
+protection (`Bridge/Admissible.lean`). -/
+
+/-- The L1 gas-receipt binding hashes already consumed by an admitted v2
+    claim.  A deployment threads this through its admission so each
+    receipt backs at most one reimbursement. -/
+abbrev ConsumedReceipts := List ByteArray
+
+/-- Mark a receipt's binding hash consumed. -/
+def consumeReceipt (consumed : ConsumedReceipts) (rbh : ByteArray) :
+    ConsumedReceipts := rbh :: consumed
+
+/-- A receipt-verified claim that consumes a **fresh** receipt: the
+    backing witness's binding hash is not already in `consumed`.  Bundles
+    the backing (attestation + amount bound) with the freshness
+    obligation, so a claim cannot reuse a receipt a prior claim spent. -/
+structure SequencerReimbursementVerifiedFresh
+    (consumed : ConsumedReceipts) (amount : Amount) where
+  /-- The backing witness (L1 attestation + the `amount ≤ cost` bound). -/
+  backing : SequencerReimbursementVerified amount
+  /-- The receipt has NOT been consumed by a prior claim. -/
+  fresh : backing.receiptBindingHash ∉ consumed
+
+/-- **A consumed receipt can never back a fresh claim.**  After
+    `consumeReceipt consumed rbh`, every `SequencerReimbursementVerifiedFresh`
+    witness over the updated set has a binding hash ≠ `rbh` — so the same
+    L1 receipt cannot be presented twice.  This is the per-receipt
+    replay-protection guarantee (cf. `deposit_replay_blocked_by_consumed`). -/
+theorem consumeReceipt_blocks_reuse
+    (consumed : ConsumedReceipts) (rbh : ByteArray) {amount : Amount}
+    (w : SequencerReimbursementVerifiedFresh (consumeReceipt consumed rbh) amount) :
+    w.backing.receiptBindingHash ≠ rbh := by
+  intro h
+  apply w.fresh
+  simp only [consumeReceipt, h, List.mem_cons, true_or]
+
+/-! ## Enforced admission — closing the "unenforced gate" gap (PR #126 review)
+
+`receiptVerifiedClaimAdmissible` is a standalone PROOF surface.  A
+v2-enabled deployment ENFORCES it by REQUIRING a fresh-receipt witness
+for every gas-pool → sequencer claim, composed into its admission
+alongside `gasPoolPolicy` (intersection, as with `gasPoolAuthorityPolicy`
+in GP.7.4).  `receiptEnforcedClaimAdmissible` is that composite: a v1
+honour-system claim WITHOUT a receipt fails it, so it is not admitted
+under a v2 deployment.  `…_implies_gasPoolPolicy` shows it only ever
+NARROWS the admitted set (the gate can never widen pool outflow). -/
+
+/-- The ENFORCED v2 admission predicate: the canonical ETH-leg claim,
+    within cap, backed by a FRESH receipt (not previously consumed).  A
+    deployment requires this for gas-pool claims; a receiptless v1 claim
+    is rejected, and a receipt cannot be reused (`consumeReceipt_blocks_reuse`). -/
+def receiptEnforcedClaimAdmissible
+    (consumed : ConsumedReceipts) (maxDrainPerActionEth : Amount)
+    (action : Action) : Prop :=
+  ∃ amount,
+    action = .transfer 0 gasPoolActor sequencerActor amount ∧
+    amount ≤ maxDrainPerActionEth ∧
+    Nonempty (SequencerReimbursementVerifiedFresh consumed amount)
+
+/-- The enforced gate is strictly stronger than the base gate (it adds
+    the freshness obligation), so it implies `receiptVerifiedClaimAdmissible`. -/
+theorem receiptEnforcedClaimAdmissible_implies_base
+    (consumed : ConsumedReceipts) (maxDrainPerActionEth : Amount) {action : Action}
+    (h : receiptEnforcedClaimAdmissible consumed maxDrainPerActionEth action) :
+    receiptVerifiedClaimAdmissible maxDrainPerActionEth action := by
+  obtain ⟨amount, haction, hcap, ⟨wf⟩⟩ := h
+  exact ⟨amount, haction, hcap, ⟨wf.backing⟩⟩
+
+/-- The enforced gate only NARROWS pool outflow: every enforced-admissible
+    claim is GP.7.2-admissible (it can never admit a claim `gasPoolPolicy`
+    rejects). -/
+theorem receiptEnforcedClaimAdmissible_implies_gasPoolPolicy
+    (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) {action : Action}
+    (h : receiptEnforcedClaimAdmissible consumed maxDrainPerActionEth action) :
+    (gasPoolPolicy maxDrainPerActionEth maxDrainPerActionBold).permits
+      gasPoolActor action :=
+  receiptVerifiedClaimAdmissible_implies_gasPoolPolicy
+    maxDrainPerActionEth maxDrainPerActionBold
+    (receiptEnforcedClaimAdmissible_implies_base consumed maxDrainPerActionEth h)
+
+/-- **Enforced headline (capped, backed, AND fresh).**  An
+    enforced-admissible claim is within the cap, backed wei-for-wei by an
+    L1-attested expenditure, AND consumes a receipt that was not already
+    spent — so a batch of enforced claims draws on DISTINCT receipts and
+    the per-claim `min(cap, cost)` bound lifts to the batch. -/
+theorem receiptEnforcedClaim_capped_backed_and_fresh
+    (consumed : ConsumedReceipts) (maxDrainPerActionEth : Amount) {action : Action}
+    (h : receiptEnforcedClaimAdmissible consumed maxDrainPerActionEth action) :
+    ∃ amount rbh batchId gasUsed gasPrice,
+      action = .transfer 0 gasPoolActor sequencerActor amount ∧
+      amount ≤ maxDrainPerActionEth ∧
+      l1GasReceiptVerifier rbh batchId gasUsed gasPrice = true ∧
+      amount ≤ gasReceiptReimbursement gasUsed gasPrice ∧
+      rbh ∉ consumed := by
+  obtain ⟨amount, haction, hcap, ⟨wf⟩⟩ := h
+  exact ⟨amount, wf.backing.receiptBindingHash, wf.backing.batchId,
+         wf.backing.gasUsed, wf.backing.gasPrice, haction, hcap,
+         wf.backing.l1_attestation, wf.backing.amount_backed, wf.fresh⟩
+
 end Bridge
 end LegalKernel

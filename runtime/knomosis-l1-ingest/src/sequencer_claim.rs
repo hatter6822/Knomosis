@@ -271,6 +271,23 @@ impl SequencerClaim {
             _ => false,
         }
     }
+
+    /// The ENFORCED re-check (PR #126 review): is this claim BOTH
+    /// canonically receipt-backed (shape + amount — [`is_receipt_backed_by`])
+    /// AND backed by a FRESH receipt whose binding hash has not already
+    /// been consumed by a prior claim?  Mirrors the Lean
+    /// `SequencerReimbursementVerifiedFresh` / `receiptEnforcedClaimAdmissible`.
+    ///
+    /// An observer or host enforcing v2 threads the set of already-spent
+    /// receipt binding hashes through `consumed`; a receipt that backed a
+    /// prior claim is rejected here, so one L1 receipt backs AT MOST one
+    /// reimbursement.  Without this freshness check the per-claim
+    /// `min(cap, cost)` bound would NOT lift to a batch — a sequencer
+    /// could present one receipt to back N claims and drain N× the spend.
+    #[must_use]
+    pub fn is_receipt_fresh_and_backed(&self, receipt: &GasReceipt, consumed: &[[u8; 32]]) -> bool {
+        self.is_receipt_backed_by(receipt) && !consumed.contains(&receipt.receipt_binding_hash)
+    }
 }
 
 /// A concrete L1 batch-publication gas receipt: the off-chain witness
@@ -571,6 +588,31 @@ mod tests {
             .is_receipt_backed_by(&receipt),
             "canonical ETH-leg claim within cost MUST be receipt-backed"
         );
+    }
+
+    #[test]
+    fn is_receipt_fresh_and_backed_rejects_consumed_receipts() {
+        // PR #126 review c2: a receipt that backed a prior claim cannot
+        // back a second — the runtime mirror of consumeReceipt_blocks_reuse.
+        let key = test_key();
+        let receipt = test_receipt(21_000, 50); // reimbursement = 1_050_000
+        let claim = SequencerClaim::build_receipt_backed(&key, &receipt, 500, 1_000_000, 1, b"dep")
+            .unwrap();
+        // Fresh (nothing consumed) → backed.
+        assert!(claim.is_receipt_fresh_and_backed(&receipt, &[]));
+        // After this receipt's binding hash is consumed → NOT fresh → rejected.
+        let consumed = [receipt.receipt_binding_hash];
+        assert!(
+            !claim.is_receipt_fresh_and_backed(&receipt, &consumed),
+            "a consumed receipt must NOT back a second claim"
+        );
+        // A DIFFERENT consumed hash does not block a fresh receipt.
+        let other = [[0x00u8; 32]];
+        assert!(claim.is_receipt_fresh_and_backed(&receipt, &other));
+        // An overspend is rejected even when the receipt is fresh
+        // (shape/amount check still applies).
+        let overspend = SequencerClaim::build(&key, 0, 2_000_000, 10_000_000, 2, b"dep").unwrap();
+        assert!(!overspend.is_receipt_fresh_and_backed(&receipt, &[]));
     }
 
     #[test]
