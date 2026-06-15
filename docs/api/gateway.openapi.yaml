@@ -231,11 +231,20 @@ paths:
       summary: Cursor-paginated event backfill.
       description: |
         Returns events with `seq` strictly greater than `since`, drawn from the
-        event-subscribe keep-history cache then the live tail (abi.md §11.3).
-        The complement of `GET /events/stream` for catch-up after a gap.
+        event-subscribe keep-history cache (abi.md §11.3). The complement of
+        `GET /events/stream` for catch-up after a gap.
 
-        If `since` predates the history window, responds 409 with the oldest
-        resumable seq (maps to the §11 `TRUNCATED` frame).
+        Paging is GROUP-COMPLETE: because one `seq` may carry several records
+        (§11.4), a page never ends mid-group — the server rounds up to the next
+        seq boundary at/after `limit`, so `nextCursor` is always a completed
+        seq and resuming from it neither skips a group's tail nor redelivers
+        its head. `limit` is therefore a soft lower bound. The scan is bounded
+        by the tip captured when the request starts (it does not block for
+        future live events); `hasMore: false` means "caught up to that tip".
+
+        `since=0` means "from the oldest retained" (NOT live-tail — that is the
+        SSE meaning). If `since` predates the history window, responds 409 with
+        the oldest resumable seq (maps to the §11 `TRUNCATED` frame).
       parameters:
         - $ref: '#/components/parameters/SinceCursor'
         - $ref: '#/components/parameters/Limit'
@@ -417,8 +426,17 @@ components:
       name: Last-Event-ID
       in: header
       required: false
-      description: SSE reconnect cursor; translated to the §11 `resume_from`. Takes precedence over `since`.
-      schema: { $ref: '#/components/schemas/Cursor' }
+      description: >-
+        SSE reconnect cursor. The gateway emits COMPOSITE event ids
+        `"<seq>.<index>"` (the within-seq record position, §11.4), so a
+        browser auto-reconnect replays that exact value here; a bare
+        `"<seq>"` (or `0`) is also accepted (seq-granular / live-tail).
+        Takes precedence over the `since` query parameter.
+      schema:
+        type: string
+        pattern: '^[0-9]+(\.[0-9]+)?$'
+        description: A bare seq `"<seq>"` or a composite `"<seq>.<index>"`.
+        examples: ["0", "104233", "104233.1"]
 
   headers:
     KnomosisSeq:
@@ -675,12 +693,14 @@ components:
       properties:
         error:
           type: string
-          enum: [truncated, lag_exceeded, server_shutdown, behind]
+          enum: [truncated, lag_exceeded, server_shutdown, behind, decode_error]
           description: >-
             `truncated` (resume predates upstream history), `lag_exceeded` /
-            `server_shutdown` (abi.md §11.2), or `behind` (resume predates the
+            `server_shutdown` (abi.md §11.2), `behind` (resume predates the
             gateway's fan-out ring — catch up via `GET /events`, then
-            reconnect). All are followed by stream close.
+            reconnect), or `decode_error` (a known-tag event payload failed to
+            decode — corruption; the gateway fails closed rather than skip or
+            mislabel it). All are followed by stream close.
         oldestSeq:
           type: [string, "null"]
           pattern: '^[0-9]+$'

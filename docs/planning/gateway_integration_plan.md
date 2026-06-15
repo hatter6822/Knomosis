@@ -36,7 +36,8 @@ fail-closed `/v1/feature-flags` "crypto" flag that withholds Knomosis
 topics while off. This is greenfield integration design, not the repair
 of an existing seam.
 
-> **Correctness audit (this revision, v0.4).** A second grounding pass —
+> **Correctness audit (v0.4; event-streaming hardened in v0.5 after the
+> #129 review — see §16).** A second grounding pass —
 > this time against the *actual Rust crate surfaces* (`knomosis-host`,
 > `knomosis-storage`, `knomosis-indexer`, `knomosis-event-subscribe`,
 > `knomosis-cli-common`), not just `abi.md` — corrected or sharpened five
@@ -368,9 +369,12 @@ hand-rolls its own acceptor (§G1.0).
   open one upstream `SUBSCRIBE` per browser client —
   `knomosis-event-subscribe` enforces a subscriber-capacity cap (§11.7) and
   bounded-lag eviction (§11.6), so N browsers ⇒ N upstream subscribers would
-  exhaust it. Instead **multiplex**: a *small, fixed* number of upstream
-  live-tail subscriptions feed an in-gateway bounded ring buffer; each
-  browser SSE stream is a cursor into the ring (§3.5, §6). A client whose
+  exhaust it. Instead **multiplex**: a *single* upstream live-tail
+  subscription (default; `--upstream-subscriptions`) feeds an in-gateway
+  bounded ring buffer, and each browser SSE stream is a cursor into the ring
+  (§3.5, §6). One sub suffices because every subscriber to the §11 broadcast
+  receives every event, so a second would double-ingest unless the mux dedups
+  on `(seq, index)` (G3.4b, finding #6). A client whose
   resume point predates the ring is steered to the `GET /events` backfill
   path (§3.5 step 2) rather than rewinding the *shared* upstream — keeping
   upstream subscriber count O(1) in the number of browsers. This is the
@@ -428,24 +432,26 @@ order). Lifecycle:
      already read seq `S` via REST does not want `S` re-streamed). The
      internal `(seq, index)` lower bound is therefore `(since, +∞)`, never
      `(since, −1)` (which would wrongly re-include the group).
-2. Register the client as a cursor into the fan-out ring (§3.3):
+2. Register the client as a cursor into the fan-out ring (§3.3). The live
+   stream is served *only* from the shared ring — it holds **no** per-client
+   upstream `SUBSCRIBE` — so it distinguishes exactly two cases (it cannot
+   itself observe an upstream `TRUNCATED`; finding #7):
    * **resume point within the ring window** → serve directly from the
      ring starting just after `(resume_seq, resume_index)`.
-   * **older than the ring window but within upstream history** → the
-     client is *behind the live ring*. v1 steers it to catch up via the
-     `GET /events` backfill (emit `event: error` with
-     `{error:"behind", oldestRingSeq}`; the client backfills to a recent
-     seq, then reconnects into the now-covering ring). This keeps upstream
-     subscriber count O(1) and avoids a merge seam. (A seamless dedicated
-     catch-up subscription that drains `[resume, ringOldest)` then hands
-     off to the ring is a documented future optimization — OQ-GW-12.)
-     Recovery from `behind`/`truncated` (switch to backfill, then reconnect)
+   * **older than the ring's oldest retained seq** → the client is *behind
+     the live ring*. The stream emits `event: error{behind, oldestSeq}`
+     (`oldestSeq` = the ring's oldest) and closes; the client catches up via
+     the `GET /events` backfill (a recent seq) and reconnects into the
+     now-covering ring. This keeps upstream subscriber count O(1) and avoids
+     a merge seam. **Whether the resume point predates *upstream* history
+     (the real `truncated`/409) is decided by `GET /events`** — which is the
+     only path that opens a per-request upstream `SUBSCRIBE` — not by the
+     stream. (A seamless dedicated catch-up subscription that drains
+     `[resume, ringOldest)` then hands off to the ring is a documented future
+     optimization — OQ-GW-12.) Recovery (switch to backfill, then reconnect)
      is a *client*-side responsibility — a raw browser `EventSource` would
      merely retry the same cursor and loop, so the generated TS client
      (G5.2) encapsulates it.
-   * **older than upstream history** (the upstream answers `TRUNCATED`,
-     §11.3) → emit `event: error` (`{error:"truncated", oldestSeq}`) and
-     close.
 3. Stream records as `id: <seq>.<index>\nevent: <type>\ndata: <json>\n\n`.
    Events sharing a seq (within-frame, §11.4) are emitted as consecutive
    records, each with its own `<index>`, so the browser's last-event-ID
@@ -613,12 +619,21 @@ frame equal-seq case needs care (§6.1).
   (§6.1). For the *REST* backfill the cursor is the bare `seq` (`since`).
 * **`Last-Event-ID` → resume**, taking precedence over `since`;
   `0`/absent ⇒ live-tail.
-* **`TRUNCATED` → 409 (REST) / `event: error` (SSE)** carrying `oldestSeq`
-  (§11.3); the client restarts from `oldestSeq`.
+* **`TRUNCATED` → 409 (REST `/events` only)** carrying `oldestSeq` (§11.3);
+  the client restarts from `oldestSeq`. Only the REST backfill opens a
+  per-request upstream `SUBSCRIBE`, so only it can observe `TRUNCATED`; the
+  live SSE stream — served from the shared ring with **no** per-client
+  upstream sub — never emits `truncated` (a resume older than the ring is
+  always `behind`, see below and finding #7).
 * **`LAG_EXCEEDED` / `SERVER_SHUTDOWN`** (§11.2) → SSE `event: error`
   (`lag_exceeded` / `server_shutdown`) then close.
+* **`decode_error`** (a known-tag payload fails to decode — corruption,
+  §6.2 / G3.2b) → SSE `event: error` (`decode_error`) / REST problem, then
+  close; fail-closed, never a silent skip.
 * **Behind-the-ring** (gateway-internal, §3.5 step 2) → SSE `event: error`
-  (`behind`, `oldestRingSeq`) steering the client to `GET /events`.
+  (`behind`, `oldestSeq` = the oldest seq the gateway ring still holds)
+  steering the client to `GET /events` (which then surfaces a real
+  `truncated`/409 if the point predates upstream history).
 
 ### §6.1 Within-frame equal seqs (the correctness centre)
 
@@ -855,7 +870,7 @@ separate hosts.
 | `--host-pool-size` | `8` | persistent host connections (one in-flight each) |
 | `--host-max-inflight` | = pool size | cap concurrent host checkouts (≤ host `--max-queue-depth`) |
 | `--subscribe-addr` (`KNX_GW_SUBSCRIBE_ADDR`) | `127.0.0.1:7655` | event-subscribe upstream |
-| `--upstream-subscriptions` | `2` | shared live-tail subs feeding the ring (O(1) in clients) |
+| `--upstream-subscriptions` | `1` | shared live-tail subs feeding the ring (O(1) in clients); `>1` requires `(seq,index)` dedup in the mux (G3.4b, finding #6) |
 | `--indexer-db` (`KNX_GW_INDEXER_DB`) | — | indexer SQLite path (opened read-only) |
 | `--free-tier` / `--action-cost` / `--epoch-length` | `0`/`0`/`0` | budget-view rendering (must match the deployment policy) |
 | `--gas-pool-actor` | off | sets the pool-view `net` flag (must match the indexer's) |
@@ -1079,9 +1094,16 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     `runtime/knomosis-storage/`). *Deliverable:* a new
     `SqliteStorage::open_read_only(path, &options)` that opens an **existing**
     database (never `SQLITE_OPEN_CREATE`) and **without running migrations**,
-    then **verifies** the on-disk `_meta.schema_version ≥ 2` and that
-    `c/identifier` matches — failing with a typed error rather than silently
-    reading a foreign / unmigrated DB.
+    then **verifies** the on-disk `_meta.schema_version` is in the gateway's
+    explicit **supported set** (currently exactly `{2}`) — **not** a `≥ 2`
+    lower bound — and that `c/identifier` matches, failing with a typed error
+    otherwise. A lower bound would let a v2-built gateway silently read a
+    future v3+ indexer DB whose table *semantics* may have changed (the
+    storage migration runner itself treats `> target_schema_version()` as a
+    mismatch), returning wrong balances/budgets (finding #9); so the gateway
+    rejects an unrecognised-newer schema and is bumped deliberately when it
+    learns a new version. (Reading an *unmigrated* / foreign DB is refused the
+    same way.)
     *Open-flag decision (resolve in this WU, do not pre-assume):* **prefer a
     pure `SQLITE_OPEN_READ_ONLY` connection** — it refuses writes
     *structurally* at the OS/SQLite layer (the strongest isolation, §8.9),
@@ -1207,39 +1229,76 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     bytes→`0x`-hex, `outcome` name). A *decode failure on a known tag*
     (truncated/over-long payload — not an unknown tag, which G3.2a forwards)
     is a corruption signal and **fails closed**: drop the SSE stream with
-    `event: error` / fail the REST page, never silently skip the record (no
-    silent gaps, §2 principle 7). *Acceptance:* a unit test per tag asserts
-    the exact JSON shape; round-trips a decoded `Event`; a truncated
-    known-tag payload fails closed (does not panic — §3.2).
+    `event: error` carrying the dedicated `decode_error` value (added to
+    `EventStreamError.error`, §15B) / fail the REST page with a problem,
+    never silently skip the record and never mislabel it as
+    `server_shutdown`/`lag_exceeded` (no silent gaps, §2 principle 7).
+    *Acceptance:* a unit test per tag asserts the exact JSON shape;
+    round-trips a decoded `Event`; a truncated known-tag payload yields a
+    `decode_error` close (does not panic — §3.2).
   * **G3.2c — Cross-stack pin** · S · deps: G3.2b. `tests/
     cross_stack_events.rs`: decode real `knomosis extract-events` output
     and assert the gateway JSON matches the Lean reference for tags
     `0..=22` (reuse the `.cxsf` corpus pattern). *Acceptance:* CI gate
     green; a deliberate field-rename breaks it.
-* **G3.3 — `GET /events` backfill** · S · deps: G3.1, G3.2.
-  *Deliverable:* `events/backfill.rs` — `since`/`limit`/`type`; opens a
-  short-lived upstream subscription at `resume_from = since`, drains up to
-  `limit`, returns `{events, nextCursor, hasMore}`; `409`+`oldestSeq` on
-  `TRUNCATED`; type filter applied gateway-side. *Acceptance:* paginates a
-  mock history; truncation → 409; the steered "behind" SSE client (§3.5)
-  catches up through this path end-to-end.
+* **G3.3 — `GET /events` backfill** · M · deps: G3.1, G3.2.
+  `events/backfill.rs` builds a *bounded page* API over the *unbounded*
+  `SUBSCRIBE` stream — which needs three things the naïve "open a sub, drain
+  to `limit`" misses (findings #2, #5):
+  * **Capture a `tip` first.** At request start, read the current tip seq
+    (the ring's newest, falling back to the indexer `c/cursor`); the drain
+    stops when it reaches `tip` (→ `hasMore=false`) so it **never blocks
+    waiting for live events** the subscription would otherwise hand back.
+  * **`since` semantics.** `since=S` (`S ≥ 1`) ⇒ `resume_from = S` (events
+    with `seq > S` from the keep-history cache, up to `tip`). `since=0` means
+    "from the oldest retained" — because §11.3 reserves `resume_from = 0` for
+    *live-tail*, the gateway instead resumes from the oldest cached seq and
+    returns `409`+`oldestSeq` if genuine from-genesis history was truncated
+    (the realistic caller passes a concrete recent `since`, e.g. the
+    behind-ring cursor). Any `TRUNCATED` (`since < oldest_cached`) → `409`.
+  * **Group-complete pages.** A page never ends mid seq-group: the drain
+    rounds up to the next seq boundary at-or-after `limit` (a group is
+    bounded by `HARD_MAX_EVENT_COUNT`, §11.10), so `nextCursor` is always a
+    *completed-group* seq — resuming from it neither skips a group's tail nor
+    redelivers its head (finding #2). `limit` is thus a soft lower bound on
+    page size. Type filter applied gateway-side.
+  *Acceptance:* paginates a mock history with multi-event seq-groups
+  **without splitting a group across pages**; reaches `hasMore=false` at the
+  captured tip without hanging; `since < oldest` → 409; the steered "behind"
+  SSE client (§3.5) catches up end-to-end. *(Upsized S→M: a bounded page over
+  an unbounded stream is more than a drain.)*
 * **G3.4 — SSE fan-out (the complex sub-system)** · L · deps: G3.1, G3.2.
   The §6.1 composite-id correctness lives here; each sub-WU is property-
   tested against an oracle stream.
   * **G3.4a — Ring buffer + cursor registry** · M. `events/fanout/ring.rs`:
     a bounded ring of recent **`(seq, index, type, json)`** records (not
     bare seqs — the intra-seq index is load-bearing, §6.1); per-client
-    cursor as `(seq, index)`; oldest-retained tracking. *Acceptance:*
-    property tests for ordering, gap-freeness, and **seq-group integrity**
-    (no record of a group is dropped while a later group is retained)
-    against an oracle; a client cursor advances exactly one record at a
-    time.
+    cursor as `(seq, index)`; oldest-retained tracking; and a
+    **last-complete-group watermark** = the highest seq `S` for which a
+    record with `seq > S` has been ingested (so group `S` is provably whole —
+    a group is only known complete once the *next* seq begins, §11.4). The
+    watermark, not the newest seq, is the safe resubscribe point (G3.4b,
+    finding #4). *Acceptance:* property tests for ordering, gap-freeness,
+    **seq-group integrity** (no record of a group is dropped while a later
+    group is retained), and **watermark correctness** (it never advances into
+    a still-open group) against an oracle; a client cursor advances exactly
+    one record at a time.
   * **G3.4b — Upstream multiplexing** · M · deps: G3.4a, G3.1.
-    `events/fanout/mux.rs`: a *fixed* `--upstream-subscriptions` pool of
-    shared live-tail subs feeds the ring; reference-counted; resubscribe on
-    drop with the ring's newest seq. *Acceptance:* N SSE clients ⇒ O(1)
-    upstream subscribers (asserted by counting upstream connects under a
-    concurrency test), independent of N.
+    `events/fanout/mux.rs`: a **single** shared live-tail subscription
+    (`--upstream-subscriptions` default **1**, finding #6) feeds the ring;
+    **resubscribe-on-drop from the last-complete-group watermark** (G3.4a) —
+    **not** the newest seq, which (if the socket dropped mid-group) would ask
+    for `seq > S` and skip that group's unseen tail for every downstream
+    client (finding #4, P1). Resuming from the watermark re-delivers the open
+    group's already-ingested head, so the mux **de-duplicates on
+    `(seq, index)`** on re-insert. `--upstream-subscriptions > 1` (operator
+    opt-in for redundancy) is correct *only* with that same `(seq, index)`
+    dedup, since every subscriber to the §11 broadcast receives every event
+    (a naïve 2 would double-ingest — finding #6). *Acceptance:* N SSE clients
+    ⇒ O(1) upstream subscribers (asserted by counting upstream connects),
+    independent of N; an upstream drop **mid seq-group** loses no record for
+    any downstream client (the headline #4 chaos test); no event is delivered
+    twice across a resubscribe (dedup test).
   * **G3.4c — Per-client dispatch + eviction** · M · deps: G3.4a.
     `events/fanout/dispatch.rs`: one handler thread per stream (bounded by
     `--max-streams`); emits `id: <seq>.<index>` records (composite, §6.1) +
@@ -1253,7 +1312,9 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     ring cursor just after `(resume_seq, resume_index)` (the intra-seq skip
     is the cursor comparison `(seq,index) > (resume_seq, resume_index)` —
     **no upstream re-read**, §6.1); for a **behind-ring** point emit
-    `event: error{behind, oldestRingSeq}` (steer to backfill); for
+    `event: error{behind, oldestSeq}` (the oldest ring seq; steer to
+    backfill — never an SSE `truncated`, which only `GET /events` can
+    determine, finding #7); for
     **older-than-upstream** emit `truncated`. *Acceptance:* the
     mid-seq-group disconnect/resume case redelivers **exactly** the unseen
     records (no loss, no dup) against the oracle — the headline correctness
@@ -1544,12 +1605,24 @@ The plan owns rationale; the YAML owns shapes; this ledger is the staging
 area that keeps them consistent (§16). Deltas this revision *commits* to the
 spec (applied alongside this doc):
 
-* **`Event.index`** — add an integer `index` (0-based intra-seq record
-  position) to the `Event` schema; required for the §6.1 composite-id
-  correctness and consumer-side dedup.
-* **`streamEvents` description** — the SSE `id` is `"<seq>.<index>"`
-  (composite), and `Last-Event-ID` resumes with an intra-seq skip; the
-  `event: error` set gains `behind` (steer-to-backfill).
+* **`Event.index`** — an integer `index` (0-based intra-seq record position)
+  on the `Event` schema; required for the §6.1 composite-id correctness and
+  consumer-side dedup.
+* **`streamEvents` description** — the SSE `id` is the composite
+  `"<seq>.<index>"`, stating the *observable* exact-resume contract (no
+  loss / no dup), the `behind` steer-to-backfill, and `since=S` = `seq > S`.
+* **`LastEventId` parameter schema** — widened from `Cursor` (`^[0-9]+$`,
+  which would reject the composite header the stream emits) to
+  `^[0-9]+(\.[0-9]+)?$`, accepting both the composite and a bare seq /`0`
+  (review finding #1).
+* **`EventStreamError.error`** — enum is `[truncated, lag_exceeded,
+  server_shutdown, behind, decode_error]`; `behind` (steer-to-backfill) and
+  `decode_error` (fail-closed on a corrupt known-tag payload, finding #8)
+  are both committed, and `oldestSeq` documents its `behind` meaning.
+* **`listEvents` description** — group-complete paging (so the bare-seq
+  `nextCursor` can never split a seq-group, finding #2), tip-bounded scan
+  (no blocking for live events, finding #5), and `since=0` = oldest-retained
+  (not live-tail).
 
 Deltas *staged for the phase that introduces them* (not yet applied, to keep
 the DRAFT spec minimal):
@@ -1558,15 +1631,33 @@ the DRAFT spec minimal):
   `BudgetView`/`PoolView` — lands with **G6.4**.
 * **`Info` config echo** (`freeTier`, `actionCost`, `gasPoolActor`,
   `indexerSchemaVersion`) so drift is observable — lands with **G1.8**.
-* **`EventStreamError.error`** add `behind` — lands with **G3.4d** (the SSE
-  description delta above anticipates it).
 
 Each staged delta is applied in the WU's PR and recorded in the
 `docs/api/CHANGELOG` (G5.3).
 
 ## §16 Revision history
 
-* **v0.4 (this revision).** Grounded the plan against the *actual Rust
+* **v0.5 (this revision).** Addressed an automated PR review of #129 (nine
+  findings, all valid, against the §11.4 equal-seq invariant and the §11.3
+  `SUBSCRIBE` semantics) — every fix sharpened the event-streaming
+  correctness the v0.4 design under-specified, with no architecture change.
+  *Spec/plan consistency:* widened the `Last-Event-ID` schema to the
+  composite `^[0-9]+(\.[0-9]+)?$` (#1); unified the SSE error field on
+  `oldestSeq` (#3); added an `decode_error` `EventStreamError` value for a
+  corrupt known-tag payload (#8). *Event-streaming design:* `GET /events`
+  now uses **group-complete paging** + a **tip-bounded** scan + explicit
+  `since=0` semantics (so a page can't split a seq-group and the drain
+  can't hang on the unbounded `SUBSCRIBE`, #2/#5); the **mux resubscribes
+  from a last-complete-group watermark** with `(seq,index)` dedup instead of
+  the newest seq (closing a P1 mid-group data-loss path, #4); the default
+  **`--upstream-subscriptions` is `1`** (a second sub double-ingests absent
+  dedup, #6); and the live SSE stream emits only `behind` for an
+  older-than-ring resume — `truncated`/409 is decided solely by `GET /events`
+  (the only per-request upstream sub, #7). *Reads:* G1.6a now validates the
+  **exact supported `schema_version`** set, not a `≥ 2` lower bound, so a
+  v2-built gateway won't silently misread a future v3 DB (#9). YAML kept in
+  lockstep (§15B). No endpoint added or removed.
+* **v0.4.** Grounded the plan against the *actual Rust
   crate surfaces* and corrected five load-bearing assumptions (see the
   Status "Correctness audit"): (1) added **G1.6a** — there is no read-only
   SQLite open, so the gateway needs a new `knomosis-storage` open path
