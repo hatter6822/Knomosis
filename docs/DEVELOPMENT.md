@@ -134,8 +134,14 @@ docstring; it is intentionally **not** duplicated across documents.
 
 ## 4. Prerequisites
 
-Knomosis targets **Linux** and **macOS** (x86-64 and arm64). The setup script
-is written for both; CI runs on `ubuntu-latest`.
+Knomosis develops on **Linux** and **macOS** (x86-64 and arm64); CI runs on
+`ubuntu-latest`. The one-command `scripts/setup.sh`, however, fetches
+**Linux-only** toolchain artefacts (it builds `…-linux…` archive names and the
+`solc-static-linux` binary, with no Darwin branch), so it does **not** run on
+macOS. macOS contributors provision per stack manually: `elan` + the Lean
+toolchain are macOS-native (see
+[§5.5](#55-per-stack-manual-setup-when-you-skip-setupsh)), Foundry installs via
+`foundryup`, and `solc 0.8.20` via a macOS build or package manager.
 
 **You must have, before running setup:**
 
@@ -151,8 +157,12 @@ is written for both; CI runs on `ubuntu-latest`.
   from `runtime/rust-toolchain.toml`.
 
 **Disk / network.** A full three-stack setup downloads the Lean toolchain
-(~hundreds of MB extracted), Foundry, solc, and the Rust crate cache. All
-downloads are SHA-256-pinned; an outbound network policy must permit
+(~hundreds of MB extracted), Foundry, solc, and the Rust crate cache. The
+toolchain binaries `setup.sh` fetches — Lean, `elan`, Foundry, and `solc` — are
+each **SHA-256-pinned**; the vendored Solidity libraries (OpenZeppelin v5.0.2,
+forge-std v1.9.4) are **version-pinned** git tarballs fetched by
+`solidity/scripts/vendor-deps.sh` *without* a checksum, and Cargo verifies
+crates against `Cargo.lock`. An outbound network policy must permit
 `github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`,
 `index.crates.io`, and `static.crates.io` (see
 [§5.7](#57-remote--claude-code-on-the-web-environments)).
@@ -378,14 +388,17 @@ The Rust workspace materialises Knomosis's deployment-supplied substrates
 design deep-dive is [`../runtime/README.md`](../runtime/README.md) and
 [`planning/rust_host_runtime_plan.md`](planning/rust_host_runtime_plan.md).
 
-Run all four gates from `runtime/` before pushing any Rust change — they mirror
-`.github/workflows/ci-rust.yml` exactly:
+Run these gates from `runtime/` before pushing any Rust change — they mirror
+`.github/workflows/ci-rust.yml`:
 
 ```bash
 cd runtime
 cargo fmt --all -- --check                              # style gate (run first)
 cargo build --workspace --all-targets --locked          # compile gate
 cargo test --workspace --locked                          # ~1 960 tests, 11 crates
+# Cross-stack fixture drift — CI runs this between test and clippy; required
+# whenever you touch the GP.6.1 fee-split encoder or its generator:
+cargo run --example gen_fee_split_fixtures --locked -- --check tests/cross-stack/l1_ingest_fee_split.cxsf
 cargo clippy --workspace --all-targets --locked -- -D warnings   # every lint is an error
 ```
 
@@ -430,10 +443,15 @@ make snapshot-gas               # regenerate the gas baseline + runbook table
 make testnet-acceptance-dryrun  # in-memory deploy dry-run
 ```
 
-`solidity/foundry.toml` pins `solc 0.8.20`, `evm_version = shanghai`,
-`via_ir = true` (required: a few functions are stack-too-deep without it), and
-`optimizer_runs = 200`. CI's `forge` job uses `FOUNDRY_PROFILE=ci` so fuzz tests
-run at 1000 iterations instead of the local default.
+`solidity/foundry.toml` pins the solc **binary path**
+(`solc = "/usr/local/bin/solc"`), `evm_version = shanghai`, `via_ir = true`
+(required: a few functions are stack-too-deep without it), and
+`optimizer_runs = 200`. The 0.8.20 compiler version is enforced by `setup.sh`
+and CI installing exactly that binary at that path — `foundry.toml` carries no
+`solc_version` constraint, so a different compiler placed at
+`/usr/local/bin/solc` would be used silently. CI's `forge` job uses
+`FOUNDRY_PROFILE=ci` so fuzz tests run at 1000 iterations instead of the local
+default of 256.
 
 **Immutability discipline (enforced by tests).** Every contract is deployed
 immutably — no proxy, no `initialize`, no generic admin role, no `pause()`.
@@ -518,9 +536,17 @@ production silently:
 ```
 
 Both **must exit non-zero on the default build** — `ci.yml` asserts exactly this
-fail-closed property. They flip to exit 0 only when a production BLAKE3/keccak
-hash and the secp256k1 adaptor are `@[extern]`-linked (and, for `verify-check`, a
-functional self-test on a known secp256k1 vector passes).
+fail-closed property. The two gates differ in strength:
+
+- **`hash-check` (F-1)** is an **identifier check**: it exits 0 as soon as the
+  linked hash reports a non-fallback identifier (`isProductionHash`). It does
+  **not** itself run a functional hash test or prove the implementation is
+  genuinely BLAKE3/keccak — linking the real adaptor is what changes that
+  identifier. (The byte-equivalence of the linked hash is proven separately by
+  the keccak cross-stack workflow, §10.1.)
+- **`verify-check` (F-2)** is stronger: it exits 0 only when the secp256k1
+  adaptor is linked **and** passes a functional self-test — it calls `Verify`
+  on a known-good secp256k1 vector plus a tampered-message negative control.
 
 ### 10.4 Runtime smoke tests
 
@@ -565,9 +591,10 @@ those two files.
 - **No custom `axiom` declarations.** The kernel may use only Lean's built-ins:
   `propext`, `Classical.choice`, `Quot.sound`. `#print axioms` on any kernel
   theorem must return a subset of those three. Non-Lean assumptions are exposed
-  as `opaque` declarations (`Verify`, `hashBytes`, `l1FaultProofVerifier`), never
-  as axioms, so the axiom set stays pristine. Adding an `axiom` is a Genesis-Plan
-  amendment and triggers the two-reviewer gate.
+  as `opaque` declarations (`Verify`, `hashBytes`, `l1FaultProofVerifier`,
+  `l1GasReceiptVerifier`), never as axioms, so the axiom set stays pristine.
+  Adding an `axiom` is a Genesis-Plan amendment and triggers the two-reviewer
+  gate.
 
 ### 11.3 Naming discipline
 
@@ -891,9 +918,13 @@ each isolated behind an `opaque` declaration (**not** an axiom), so
 2. **`Runtime.Hash.hashBytes`** — the production hash function (BLAKE3 via
    `@[extern]`; FNV-1a-64 fallback for tests) is collision-resistant.
 
-A third opaque, `l1FaultProofVerifier`, follows the same pattern for the
-fault-proof layer. Kernel theorems and replay guarantees are *conditional* on
-these assumptions — and on nothing else.
+Two further deployment-supplied opaques follow the same pattern for the L1
+attestation surface: `l1FaultProofVerifier`
+(`LegalKernel/FaultProof/Witness.lean`) backs the fault-proof game's truth
+oracle, and `l1GasReceiptVerifier` (`LegalKernel/Bridge/ReceiptVerifiedClaim.lean`)
+backs receipt-verified sequencer claims. `#print axioms` confirms each
+`opaque` is a definitional black box, not an axiom. Kernel theorems and replay
+guarantees are *conditional* on these assumptions — and on nothing else.
 
 **Reporting a kernel-soundness bug.** A logic bug in the kernel (e.g. a
 counterexample to `impl_noop_if_not_pre`, or a state advance bypassing the `if`
