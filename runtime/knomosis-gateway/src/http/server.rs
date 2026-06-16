@@ -19,12 +19,14 @@
 //! constrained by `tiny_http`'s API (a documented G4.x follow-up); the
 //! graceful-drain shutdown lands in G4.4.
 
+use std::io::Read;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use crate::config::Config;
-use crate::dispatch::dispatch;
-use crate::http::router::{route, RouteOutcome};
+use crate::dispatch::{dispatch, RequestPayload};
+use crate::http::router::{route, Route, RouteOutcome};
+use crate::problem::Problem;
 use crate::state::AppState;
 
 /// Errors from running the gateway HTTP server.
@@ -170,35 +172,81 @@ fn worker_loop(server: &tiny_http::Server, state: &AppState) {
 /// operations, and a write failure — the client hung up before the
 /// response was flushed — is logged at `debug` and dropped, since there
 /// is nothing else to do.
-pub fn handle_request(request: tiny_http::Request, state: &AppState) {
+pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
     let method = method_token(request.method());
-    // Split the request target into path + query at the first `?`
-    // (`split_once` is total and panic-free; an absent `?` yields the
-    // whole target as the path and an empty query).  The router consumes
-    // the query string for parameter selectors (e.g. `?resource=`).
-    let url = request.url();
-    let (path, query) = url.split_once('?').unwrap_or((url, ""));
-    // The raw `Authorization` + `If-None-Match` header values, if present
-    // (case-insensitive field match per RFC 7230).  Borrow `request`;
-    // consumed below.
-    let auth_header = header_value(&request, "Authorization");
-    let if_none_match = header_value(&request, "If-None-Match");
-    let outcome = if let Some(denied) = crate::auth::gate(&state.auth, path, auth_header) {
-        // Denied by the auth gate (401 / 403) — answer without routing.
-        denied
-    } else if let Some(limited) =
-        crate::auth::rate_limit_check(&state.rate_limiter, path, auth_header)
-    {
-        // Admitted by auth but over the per-credential rate cap (429).
-        limited
-    } else {
-        // Authorized (or an exempt path) and within budget — route,
-        // dispatch, then apply any `If-None-Match` conditional (a
-        // matching weak ETag → 304).
-        let outcome = dispatch(&route(method, path, query), state);
-        crate::http::apply_conditional(outcome, if_none_match)
+    // Extract everything that borrows `request` as OWNED values up front,
+    // so the submit-body read below can take `&mut request` without a
+    // borrow conflict.  (`split_once` is total + panic-free; an absent
+    // `?` yields the whole target as the path and an empty query.)
+    let (routed, path, content_type, auth_header, if_none_match) = {
+        let url = request.url();
+        let (path, query) = url.split_once('?').unwrap_or((url, ""));
+        (
+            route(method, path, query),
+            path.to_string(),
+            header_value(&request, "Content-Type").map(str::to_string),
+            header_value(&request, "Authorization").map(str::to_string),
+            header_value(&request, "If-None-Match").map(str::to_string),
+        )
     };
+
+    let outcome =
+        if let Some(denied) = crate::auth::gate(&state.auth, &path, auth_header.as_deref()) {
+            // Denied by the auth gate (401 / 403) — answer without routing.
+            denied
+        } else if let Some(limited) =
+            crate::auth::rate_limit_check(&state.rate_limiter, &path, auth_header.as_deref())
+        {
+            // Admitted by auth but over the per-credential rate cap (429).
+            limited
+        } else {
+            // Authorized (or an exempt path) and within budget.  Read the
+            // submit body (only for `POST /v1/actions`) bounded by the cap,
+            // dispatch, then apply any `If-None-Match` conditional (a
+            // matching weak ETag → 304; a no-op for a POST response).
+            match read_submit_body(&mut request, &routed, state.config.max_frame_size) {
+                Err(too_large) => too_large,
+                Ok(body) => {
+                    let payload = RequestPayload {
+                        content_type: content_type.as_deref(),
+                        body: &body,
+                    };
+                    let outcome = dispatch(&routed, state, &payload);
+                    crate::http::apply_conditional(outcome, if_none_match.as_deref())
+                }
+            }
+        };
     respond(request, &outcome);
+}
+
+/// Read the request body for a submit route, bounded by `max` bytes.
+///
+/// A non-submit route has no body (`Ok(empty)`).  For
+/// [`Route::SubmitAction`] the body is read **bounded**: at most `max + 1`
+/// bytes are taken, so a body over the cap is detected *while reading*
+/// (no unbounded allocation) and returned as a `413`.  A read error (the
+/// client hung up mid-body) yields the partial body — the submit handler
+/// then rejects an empty / malformed action.
+fn read_submit_body(
+    request: &mut tiny_http::Request,
+    routed: &Route,
+    max: usize,
+) -> Result<Vec<u8>, RouteOutcome> {
+    if !matches!(routed, Route::SubmitAction) {
+        return Ok(Vec::new());
+    }
+    let cap = u64::try_from(max).unwrap_or(u64::MAX).saturating_add(1);
+    let mut body = Vec::new();
+    let mut limited = request.as_reader().take(cap);
+    // A read error is non-fatal here: keep whatever arrived; the handler
+    // rejects an empty / malformed action downstream.
+    let _ = limited.read_to_end(&mut body);
+    if body.len() > max {
+        return Err(Problem::new("payload-too-large", "Payload Too Large", 413)
+            .with_detail(format!("request body exceeds the {max}-byte limit"))
+            .into_outcome());
+    }
+    Ok(body)
 }
 
 /// Convert a [`RouteOutcome`] into a `tiny_http` response and write it.

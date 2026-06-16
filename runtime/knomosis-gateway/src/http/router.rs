@@ -66,6 +66,9 @@ pub enum Route {
         /// The actor id from the path.
         actor: u64,
     },
+    /// `POST /v1/actions` — submit a client-signed `SignedAction` to the
+    /// host (the dispatcher reads the request body + `Content-Type`).
+    SubmitAction,
     /// `GET /v1/pools/{pool}?resource={0|1}` — one gas-pool resource
     /// view (a single `PoolView`).  `resource` defaults to `0` (ETH)
     /// when the query parameter is absent.
@@ -203,6 +206,7 @@ pub fn route(method: &str, path: &str, query: &str) -> Route {
         "/healthz" => get_only(method, Route::Health),
         "/readyz" => get_only(method, Route::Ready),
         "/v1/info" => get_only(method, Route::Info),
+        "/v1/actions" => post_only(method, Route::SubmitAction),
         _ => route_v1_actors(method, path)
             .or_else(|| route_v1_pools(method, path, query))
             .unwrap_or_else(|| Route::NotFound {
@@ -319,6 +323,16 @@ fn get_only(method: &str, route: Route) -> Route {
         route
     } else {
         Route::MethodNotAllowed { allow: "GET" }
+    }
+}
+
+/// Return `route` for `POST`; otherwise [`Route::MethodNotAllowed`] with
+/// an `Allow: POST` hint.  Used by the write endpoints (`/v1/actions`).
+fn post_only(method: &str, route: Route) -> Route {
+    if method == "POST" {
+        route
+    } else {
+        Route::MethodNotAllowed { allow: "POST" }
     }
 }
 
@@ -507,6 +521,16 @@ mod tests {
             route("GET", "/v1/pools/161/0", ""),
             Route::NotFound { .. }
         ));
+    }
+
+    #[test]
+    fn submit_action_route() {
+        assert_eq!(r("POST", "/v1/actions"), Route::SubmitAction);
+        // A non-POST method on the submit path → 405 + Allow: POST.
+        assert_eq!(
+            r("GET", "/v1/actions"),
+            Route::MethodNotAllowed { allow: "POST" }
+        );
     }
 
     #[test]

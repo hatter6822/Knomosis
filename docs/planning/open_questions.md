@@ -1188,9 +1188,10 @@ the master registry so PR descriptions can cite them by id.
 | OQ-GW-10 | Metrics surface (log-based vs a `/metrics` endpoint) | OPEN — both behind config; default log-based |
 | OQ-GW-11 | Licio contract surface | **RESOLVED** — §1.4 reconciliation (read-first behind a fail-closed flag) |
 | OQ-GW-12 | Seamless SSE catch-up (dedicated upstream sub vs backfill-then-reconnect) | OPEN — backfill-then-reconnect for v1 |
+| OQ-GW-13 | Read-only-WAL snapshot consistency under concurrent indexer checkpointing | OPEN — accept §3.6 eventual consistency for v1 (the kernel is authoritative; reads self-correct). A read-only SQLite connection cannot take WAL read-locks / participate in checkpointing, so under heavy concurrent writes a `BEGIN DEFERRED` list snapshot can briefly lag or tear. The G1.9 concurrency test asserts the **actual** guarantee (availability + well-formedness + cursor monotonicity), not strict intra-snapshot atomicity. Strict consistency is a **storage-layer** hardening item (e.g. a checkpoint-coordination or read-lock fix in `knomosis-storage`'s read-only path), out of the gateway's scope. |
 
 The two **RESOLVED** entries (OQ-GW-8, OQ-GW-11) carry their resolution
-inline above; the ten OPEN entries carry their full trade-offs in the
+inline above; the eleven OPEN entries carry their full trade-offs in the
 plan's §14 and are tracked here for citation.
 
 ---

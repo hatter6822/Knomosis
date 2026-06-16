@@ -107,6 +107,18 @@ pub const REQUEST_DEADLINE_MS_ENV: &str = "KNX_GW_REQUEST_DEADLINE_MS";
 /// Default end-to-end submit deadline in milliseconds (§9.2 / G2.1b).
 pub const DEFAULT_REQUEST_DEADLINE_MS: u64 = 5000;
 
+/// Environment variable mirroring `--max-frame-size`.
+pub const MAX_FRAME_SIZE_ENV: &str = "KNX_GW_MAX_FRAME_SIZE";
+
+/// Default `POST /v1/actions` body cap (1 MiB) — the host's default
+/// frame size (`knomosis_host::frame::DEFAULT_MAX_FRAME_SIZE`).
+pub const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
+
+/// Hard ceiling on `--max-frame-size` (16 MiB) — the host's hard frame
+/// cap (`knomosis_host::frame::HARD_MAX_FRAME_SIZE`); a larger body could
+/// never be framed anyway.
+pub const MAX_FRAME_SIZE_CEILING: usize = 16 * 1024 * 1024;
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -175,6 +187,10 @@ OPTIONS:
     --request-deadline-ms <N>
                        Per-operation host connect/read/write timeout (ms)
                        (env KNX_GW_REQUEST_DEADLINE_MS) [default: 5000]
+    --max-frame-size <N>
+                       POST /v1/actions body cap in bytes; a larger body
+                       is rejected 413 (ceiling 16 MiB)
+                       (env KNX_GW_MAX_FRAME_SIZE) [default: 1048576]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -338,6 +354,10 @@ pub struct Config {
     /// G2.1b): the per-operation connect / write / read timeout for a host
     /// round-trip.  Default [`DEFAULT_REQUEST_DEADLINE_MS`].
     pub request_deadline_ms: u64,
+    /// `POST /v1/actions` request-body cap in bytes (`--max-frame-size`,
+    /// G2.2): a larger body is rejected with `413` while reading.  Always
+    /// in `1..=MAX_FRAME_SIZE_CEILING`.  Default [`DEFAULT_MAX_FRAME_SIZE`].
+    pub max_frame_size: usize,
 }
 
 impl Config {
@@ -432,6 +452,7 @@ impl Config {
             }
             Some(n) => n,
         };
+        let max_frame_size = resolve_max_frame_size(raw.max_frame_size)?;
 
         Ok(Self {
             listen,
@@ -450,7 +471,33 @@ impl Config {
             host_pool_size,
             host_max_inflight,
             request_deadline_ms,
+            max_frame_size,
         })
+    }
+}
+
+/// Resolve `--max-frame-size`: CLI value > env var > the default,
+/// validating the `1..=MAX_FRAME_SIZE_CEILING` range.
+fn resolve_max_frame_size(cli_raw: Option<String>) -> Result<usize, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(MAX_FRAME_SIZE_ENV).ok()) {
+        None => Ok(DEFAULT_MAX_FRAME_SIZE),
+        Some(raw) => {
+            let n = raw
+                .parse::<usize>()
+                .map_err(|e| ConfigError::InvalidValue {
+                    flag: "--max-frame-size".to_string(),
+                    value: raw.clone(),
+                    reason: e.to_string(),
+                })?;
+            if n == 0 || n > MAX_FRAME_SIZE_CEILING {
+                return Err(ConfigError::InvalidValue {
+                    flag: "--max-frame-size".to_string(),
+                    value: raw,
+                    reason: format!("must be in 1..={MAX_FRAME_SIZE_CEILING}"),
+                });
+            }
+            Ok(n)
+        }
     }
 }
 
@@ -572,6 +619,7 @@ struct RawArgs {
     host_pool_size: Option<String>,
     host_max_inflight: Option<String>,
     request_deadline_ms: Option<String>,
+    max_frame_size: Option<String>,
 }
 
 impl RawArgs {
@@ -627,6 +675,9 @@ impl RawArgs {
                 "--request-deadline-ms" => {
                     raw.request_deadline_ms =
                         Some(take_value(args, &mut i, "--request-deadline-ms")?);
+                }
+                "--max-frame-size" => {
+                    raw.max_frame_size = Some(take_value(args, &mut i, "--max-frame-size")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -992,6 +1043,7 @@ mod tests {
             super::HOST_POOL_SIZE_ENV,
             super::HOST_MAX_INFLIGHT_ENV,
             super::REQUEST_DEADLINE_MS_ENV,
+            super::MAX_FRAME_SIZE_ENV,
         ] {
             std::env::remove_var(var);
         }
@@ -999,6 +1051,17 @@ mod tests {
         assert_eq!(cfg.host_pool_size, super::DEFAULT_HOST_POOL_SIZE);
         assert_eq!(cfg.host_max_inflight, super::DEFAULT_HOST_POOL_SIZE); // defaults to pool size
         assert_eq!(cfg.request_deadline_ms, super::DEFAULT_REQUEST_DEADLINE_MS);
+        assert_eq!(cfg.max_frame_size, super::DEFAULT_MAX_FRAME_SIZE);
+        // `--max-frame-size` is range-checked (0 and over-ceiling rejected).
+        assert!(matches!(
+            Config::parse(&argv(&["--max-frame-size", "0"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+        let over = (super::MAX_FRAME_SIZE_CEILING + 1).to_string();
+        assert!(matches!(
+            Config::parse(&argv(&["--max-frame-size", &over])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
         // `--host-max-inflight` is clamped down to the pool size.
         let cfg = Config::parse(&argv(&[
             "--host-pool-size",

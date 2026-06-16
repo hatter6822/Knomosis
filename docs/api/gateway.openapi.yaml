@@ -121,6 +121,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '502': { $ref: '#/components/responses/UpstreamUnavailable' }
         '503': { $ref: '#/components/responses/Busy' }
@@ -544,6 +545,16 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    UnsupportedMediaType:
+      description: >-
+        The submit Content-Type is neither application/octet-stream (raw CBE
+        bytes) nor application/json (a base64 ActionSubmission).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            unsupported:
+              value: { type: "https://knomosis/errors/unsupported-media-type", title: "Unsupported Media Type", status: 415 }
     RateLimited:
       description: Per-credential rate limit exceeded.
       headers:

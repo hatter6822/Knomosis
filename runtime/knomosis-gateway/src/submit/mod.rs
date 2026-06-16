@@ -17,5 +17,8 @@
 //! connection pool ([`pool`]); the `POST /v1/actions` intake + verdict
 //! mapping (G2.2) builds on them.
 
+pub mod base64;
 pub mod client;
+pub mod handler;
 pub mod pool;
+pub mod verdict_map;

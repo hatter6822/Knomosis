@@ -92,6 +92,7 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             host_pool_size: 8,
             host_max_inflight: 8,
             request_deadline_ms: 5000,
+            max_frame_size: 1024 * 1024,
         })
         .expect("load token file"),
     )

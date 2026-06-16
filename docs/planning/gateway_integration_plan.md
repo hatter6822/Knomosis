@@ -42,13 +42,15 @@ The companion machine-readable contract is
 > probes), **G1.4** (the fail-closed `subtle::ConstantTimeEq` bearer
 > auth gate, applied before routing), and **G1.9** (the read-path
 > integration harness — the read endpoints end-to-end behind auth, with
-> `ETag`/`If-None-Match`→`304` and a snapshot-consistency chaos case) are
+> `ETag`/`If-None-Match`→`304` and a concurrent-write chaos case) are
 > complete: **the first shippable read-only slice is done.** **G1.3**
 > read-path hardening (per-credential token-bucket rate limiting → `429`
 > + `Retry-After`, and a fail-fast world-readable-token-file permission
-> check) has also landed. Next: the submit (**G2**) + events (**G3**)
-> tracks (each carries its own remaining §9.2 governors — request-body
-> size, deadlines, SSE keepalive).
+> check) and the **submit path G2.1a/G2.1b/G2.2** (`POST /v1/actions` —
+> the host wire codec, the bounded persistent connection pool, and the
+> content-negotiated intake + §5 verdict mapping, end-to-end over a
+> `MockHost`) have also landed. Next: **G2.3+** submit backpressure /
+> idempotency and the events (**G3**) track.
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1332,11 +1334,19 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   (incl. the `net` flag flipping with the configured `--gas-pool-actor`);
   the `ETag` + `If-None-Match` → `304` revalidation (a stale validator
   still `200`s); the fail-closed auth gate (401 no-credential, 403
-  wrong-token, 401-not-404 on an unknown path); and a
-  **snapshot-consistency chaos case** — a concurrent writer atomically
-  maintains `balance(7,1) == balance(7,0)+1`, and 300 hammered list reads
-  each observe a consistent snapshot satisfying it (a torn read would
-  break the invariant).  *Acceptance met:* the `ci-gateway` / `ci-rust`
+  wrong-token, 401-not-404 on an unknown path); and a **concurrent-write
+  chaos case** — a concurrent indexer writer advances both balances + the
+  cursor while 300 hammered list reads each stay available (`200`),
+  well-formed (both resources, valid amounts — no corruption / dropped
+  rows), and cursor-monotonic (`seq` never goes backward).  The
+  indexer-backed reads are **eventually-consistent** (§3.6 — a read-only
+  SQLite connection cannot participate in WAL checkpointing, so a
+  `BEGIN DEFERRED` snapshot can momentarily lag the writer; the kernel,
+  not the indexer view, is authoritative), so the test asserts the
+  read endpoint's actual concurrency guarantee rather than strict
+  intra-snapshot atomicity (a read-only-WAL storage-layer hardening item
+  tracked as `OQ-GW-13` in `open_questions.md`, outside the gateway).
+  *Acceptance met:* the `ci-gateway` / `ci-rust`
   Rust gates (`cargo test`/`clippy -D warnings`/`fmt`) are green; the
   read endpoints are end-to-end functional behind auth, the contract is
   Redocly-valid, and `ETag`/`304` closes the last G1.6b/G1.7 deferral.
@@ -1388,16 +1398,35 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     multiple-in-flight-per-connection mode (§10.5) behind a flag, for
     throughput. *Not on the critical path; default off.* *Acceptance:*
     in-order response correlation holds under load; off by default.
-* **G2.2 — `POST /actions` + verdict mapping** · M · deps: G2.1, G1.4,
-  G1.5. *Deliverable:* `http` intake (`application/json`+base64 — the
-  `base64` decoder is a small hand-roll *or* a vetted `base64` crate,
-  decided here, since `application/octet-stream` is the zero-dependency
-  canonical path; any other `Content-Type` → `415`) → opaque forward →
-  `submit/verdict_map.rs` (§5 status mapping; reason pass-through;
-  `admissionStage` from `/info`). *Acceptance:* the full verdict matrix
-  (incl. the `BudgetGate*` reasons and the unknown-byte fail-closed) maps to
-  §5 (integration vs MockHost); a wrong `Content-Type` → `415`; the signed
-  bytes reach the host **byte-identical** (a forwarding-fidelity test).
+* **G2.2 — `POST /v1/actions` + verdict mapping** · M · deps: G2.1, G1.4,
+  G1.5 · **DONE.** *Deliverable:* `submit/handler.rs` content-negotiates
+  the request body to opaque CBE bytes — `application/octet-stream` (the
+  **canonical, zero-dependency** path: the body *is* the bytes) or
+  `application/json` (an `ActionSubmission` whose base64 `signedAction`
+  is decoded by the hand-rolled, strict, dependency-free
+  `submit/base64.rs` — chosen over a crate since octet-stream is the
+  canonical path); any other `Content-Type` → `415`, malformed JSON /
+  base64 / encoding → `400`, an empty action → `400`.  The bytes are
+  forwarded **verbatim** to the host pool (no key custody), and
+  `submit/verdict_map.rs` maps the result per the **§5 table**: `Ok` →
+  `200 {accepted:true, …, admissionStage}` (from config), `NotAdmissible`
+  → `200 {accepted:false, reason}` (reason pass-through), `ParseError` →
+  `400`, `Busy` / pool-`Saturated` → `503` + `Retry-After`,
+  `PayloadTooLarge` → `413`, connect / I/O / bad-response → `502`.  The
+  IO shell reads the POST body **bounded** by `--max-frame-size`
+  (enforced while reading → `413`), threading it to the dispatcher as a
+  `RequestPayload`; the submit route is `POST`-only (`Allow: POST`) and
+  auth/rate-limited like every non-exempt route.  *Acceptance met:*
+  unit tests for the full verdict matrix + every `SubmitError` (→ §5),
+  base64 (RFC 4648 vectors + round-trip + strict rejects), and content
+  negotiation (octet-stream / json+base64 / 415 / 400); end-to-end
+  integration tests over a `MockHost` for the octet-stream `Ok`
+  round-trip, the json+base64 `NotAdmissible` (reason pass-through), the
+  no-host `503`, the `415`, and the auth-required `401`.  The signed
+  bytes reach the host byte-identical (the G2.1a `request_frame_round_trips`
+  test).  Contract gains a `415` (`UnsupportedMediaType`) on the submit
+  endpoint.  *New config:* `--max-frame-size` (1 MiB default, 16 MiB
+  ceiling).
 * **G2.3 — Backpressure + limits** · S · deps: G2.2.
   *Deliverable:* `Busy`→`503`+`Retry-After`; deadline→`504`; conn-fail→
   `502`; `413` size cap (enforced while reading); bounded in-flight to

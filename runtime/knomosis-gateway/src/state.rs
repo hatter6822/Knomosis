@@ -25,6 +25,7 @@ use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
 use crate::auth::Auth;
 use crate::config::Config;
 use crate::rate_limit::RateLimiter;
+use crate::submit::pool::HostPool;
 
 /// Errors building the shared application state at startup.
 #[derive(Debug, thiserror::Error)]
@@ -82,6 +83,10 @@ pub struct AppState {
     /// The per-credential request-rate limiter (G1.3).  Disabled when
     /// `--rate-limit-rps` is `0`.
     pub rate_limiter: RateLimiter,
+    /// The bounded host-connection pool for the submit path (G2.1b),
+    /// present iff `--host-addr` was configured.  `None` makes
+    /// `POST /v1/actions` answer `503` (submit disabled).
+    pub host_pool: Option<HostPool>,
 }
 
 impl AppState {
@@ -117,11 +122,21 @@ impl AppState {
             })?,
         };
         let rate_limiter = RateLimiter::new(config.rate_limit_rps);
+        // The submit pool exists iff a host upstream is configured.
+        let host_pool = config.host_addr.map(|addr| {
+            HostPool::new(
+                addr,
+                config.host_pool_size,
+                config.host_max_inflight,
+                std::time::Duration::from_millis(config.request_deadline_ms),
+            )
+        });
         Ok(Self {
             config,
             reads,
             auth,
             rate_limiter,
+            host_pool,
         })
     }
 }
@@ -149,6 +164,7 @@ mod tests {
             host_pool_size: 8,
             host_max_inflight: 8,
             request_deadline_ms: 5000,
+            max_frame_size: 1024 * 1024,
         }
     }
 

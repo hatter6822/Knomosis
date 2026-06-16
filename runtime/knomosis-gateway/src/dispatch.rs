@@ -14,22 +14,48 @@
 //! Only `/healthz` (liveness) is state-free; `/readyz` and `/v1/info`
 //! read [`AppState`] (the readiness probes + the indexer cursor /
 //! config echo, G1.8), as do the reads over the read-only indexer
-//! handle (G1.6b / G1.7).  The auth gate attaches here in G1.4.
+//! handle (G1.6b / G1.7) and `POST /v1/actions` over the host pool
+//! (G2.2, which also consumes the [`RequestPayload`] body).  The auth +
+//! rate-limit gates run in the IO shell *before* dispatch (G1.4 / G1.3).
 
 use crate::http::{Route, RouteOutcome};
 use crate::problem::Problem;
 use crate::state::AppState;
+
+/// The request payload a dispatched route may consume: the body bytes and
+/// their declared `Content-Type`.  Empty for body-less methods (every
+/// read; `EMPTY` is the shared no-body value).  Only `POST /v1/actions`
+/// reads it (G2.2).
+#[derive(Clone, Copy)]
+pub struct RequestPayload<'a> {
+    /// The request `Content-Type` header value, if present.
+    pub content_type: Option<&'a str>,
+    /// The request body bytes.
+    pub body: &'a [u8],
+}
+
+impl RequestPayload<'_> {
+    /// The empty payload (no body, no content type) — used by every
+    /// body-less route and the dispatch unit tests.
+    pub const EMPTY: RequestPayload<'static> = RequestPayload {
+        content_type: None,
+        body: &[],
+    };
+}
 
 /// Dispatch a routed request to its response.
 ///
 /// Total over [`Route`]: every variant maps to a concrete outcome, so
 /// adding a route forces a dispatch arm (the compiler enforces it).
 #[must_use]
-pub fn dispatch(route: &Route, state: &AppState) -> RouteOutcome {
+pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> RouteOutcome {
     match route {
         Route::Health => RouteOutcome::text(200, "ok\n"),
         Route::Ready => crate::system::readyz(state),
         Route::Info => crate::system::info_view(state),
+        Route::SubmitAction => {
+            crate::submit::handler::handle(state, payload.content_type, payload.body)
+        }
         Route::ActorBalances { actor } => with_reads(state, |reads| {
             crate::reads::balances::actor_balances(reads, *actor)
         }),
@@ -78,10 +104,17 @@ fn with_reads(
 
 #[cfg(test)]
 mod tests {
-    use super::dispatch;
+    use super::{dispatch as dispatch_inner, RequestPayload};
     use crate::config::Config;
-    use crate::http::Route;
+    use crate::http::{Route, RouteOutcome};
     use crate::state::AppState;
+
+    /// Dispatch with an empty request body (the body-less common case the
+    /// read / system routes use); the submit body path is covered in the
+    /// integration tests.
+    fn dispatch(route: &Route, state: &AppState) -> RouteOutcome {
+        dispatch_inner(route, state, &RequestPayload::EMPTY)
+    }
 
     fn state() -> AppState {
         AppState::new(Config {
@@ -101,6 +134,7 @@ mod tests {
             host_pool_size: 8,
             host_max_inflight: 8,
             request_deadline_ms: 5000,
+            max_frame_size: 1024 * 1024,
         })
         .expect("no DB to open")
     }
@@ -235,6 +269,7 @@ mod tests {
             host_pool_size: 8,
             host_max_inflight: 8,
             request_deadline_ms: 5000,
+            max_frame_size: 1024 * 1024,
         })
         .expect("open read-only state");
 
