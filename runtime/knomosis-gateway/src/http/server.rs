@@ -85,6 +85,15 @@ fn respond(request: tiny_http::Request, outcome: &RouteOutcome) {
     {
         response = response.with_header(header);
     }
+    // Response-specific headers (e.g. `Allow` on 405, `Retry-After` on
+    // 429/503, `X-Knomosis-Seq` / `ETag` on reads).  A malformed
+    // name/value is skipped rather than panicking; our names/values are
+    // controlled, so this never drops a header in practice.
+    for (name, value) in &outcome.headers {
+        if let Ok(header) = tiny_http::Header::from_bytes(name.as_bytes(), value.as_bytes()) {
+            response = response.with_header(header);
+        }
+    }
     if let Err(e) = request.respond(response) {
         tracing::debug!(error = %e, "client closed connection before the response was written");
     }

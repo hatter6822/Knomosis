@@ -1044,7 +1044,15 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   build/test/clippy/fmt` green under `ci-rust.yml`'s `--workspace` run for
   the new crate.
 * **G1.2 — Sync HTTP/TLS foundation** · M · deps: G1.0, G1.1. Broken into:
-  * **G1.2a — Request parser** · S. `http/request.rs`: request line +
+  * **G1.2a — Request parser** · S · **RESHAPED by the G1.0 crate choice.**
+    With `tiny_http` (the vetted sync server, G1.0) the request-line /
+    header parsing and the smuggling-adjacent edge cases below are the
+    *crate's* responsibility, not hand-rolled gateway code; the
+    gateway-side remainder is (i) the `max_frame_size` body-size cap on the
+    body-consuming endpoints (lands with G2.2's `POST /v1/actions`) and
+    (ii) a documented audit of `tiny_http`'s parser posture in the security
+    review (G4.5). The original hand-rolled spec is retained below as the
+    contract the chosen crate must satisfy — `http/request.rs`: request line +
     header parsing with hard limits (max request-line length → 414, max
     header bytes/count → 431, `Content-Length` required for bodies else
     411/400), `application/json` + `application/octet-stream` body intake
@@ -1056,14 +1064,23 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     smuggling-shaped inputs all map to the right 4xx; the parser **never
     panics** (the `clippy::restriction` panic-lints of §3.2 are denied on
     this module) and never unbounded-buffers.
-  * **G1.2b — Router + method dispatch** · S. `http/router.rs`: path +
-    method table for §4; 404 unknown path, 405 + `Allow` for wrong method,
-    `/v1` prefix. *Acceptance:* table-driven tests cover every route + the
-    negative cases.
-  * **G1.2c — Response writer + problem plumbing** · S. `http/response.rs`:
-    status line, headers, `application/json` + `application/problem+json`,
-    keep-alive vs close, `X-Knomosis-Seq`/`ETag`/`Retry-After` headers.
-    *Acceptance:* golden-byte tests for representative responses.
+  * **G1.2b — Router + method dispatch** · S · **DONE.** `http/router.rs`:
+    the pure `route(method, path)` core (returns a `RouteOutcome` of
+    {status, content-type, body, ordered headers}, free of any `tiny_http`
+    type, so it is unit-testable without a listener); 404 (problem+json)
+    for an unknown path, 405 + `Allow` for a known path hit with the wrong
+    method, the `/v1` prefix. The `/v1` resource paths attach to this table
+    as their WUs land (G1.6b / G1.7 / G2 / G3). *Acceptance met:*
+    table-driven unit tests cover the routes + the 404 / 405 negative cases.
+  * **G1.2c — Response writer + problem plumbing** · S · **DONE (core).**
+    With `tiny_http` the status line / keep-alive-vs-close framing is the
+    crate's; the gateway-side response model is the `RouteOutcome`
+    {status, content-type, body, ordered headers} plus the IO shell that
+    applies them (`http/server.rs::respond`), covering `application/json`
+    and `application/problem+json` and arbitrary response headers (the
+    `Allow` on a 405 is the first user). The per-response cache / consistency
+    headers (`X-Knomosis-Seq` / `ETag` / `Retry-After`) attach at the
+    endpoints that own them (G1.6b reads, G2.3 backpressure).
   * **G1.2d — Acceptor + TLS + governors** · S. `http/server.rs`: acceptor
     thread(s) + bounded handler pool; TLS via
     `knomosis_host::tls::TlsConfigBuilder::load_pem_files`;
@@ -1092,12 +1109,17 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   non-health request → 401; wrong token → 403; timing-safe compare
   unit-tested (no early-return on length/first-mismatch); token never
   logged.
-* **G1.5 — Problem responder + error taxonomy** · S · deps: G1.2.
-  *Deliverable:* `problem.rs` — one RFC 9457 `Problem` type; stable `type`
-  URIs; request-id `instance`; `knomosisReason`/`oldestSeq`/`retryAfterMs`
-  extension members matching the spec. *Acceptance:* every error path emits
-  a typed `Problem` whose JSON validates against the spec's `Problem`
-  schema (contract test).
+* **G1.5 — Problem responder + error taxonomy** · S · deps: G1.2 · **DONE
+  (core).** `problem.rs` — one RFC 9457 `Problem` type with a stable `type`
+  URI under `https://knomosis/errors/…`, an optional request-id `instance`,
+  and the `knomosisReason` / `oldestSeq` (decimal string) / `retryAfterMs`
+  (number) extension members (camelCase keys, omitted when absent);
+  `not_found` / `method_not_allowed` constructors + the generic
+  `Problem::new`; `into_outcome` is panic-free (a serde-infallible shape
+  with a hand-written fallback body). The remaining taxonomy entries
+  (parse-error, busy, upstream, decode-error) attach with the endpoints
+  that raise them (G2 / G3); the spec-schema contract test lands with the
+  G5.1 gate.
 * **G1.6 — Read: balances** · M · deps: G1.2, G1.3. Broken into:
   * **G1.6a — `knomosis-storage` read-only open** · S · deps: — (lands in
     `runtime/knomosis-storage/`) · **DONE** (resolution note at the end of this

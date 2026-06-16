@@ -395,6 +395,8 @@ name = "knomosis-gateway"
 version = "0.8.4"
 dependencies = [
  "knomosis-cli-common",
+ "serde",
+ "serde_json",
  "thiserror",
  "tiny_http",
  "tracing",

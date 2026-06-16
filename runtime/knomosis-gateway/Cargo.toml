@@ -47,6 +47,11 @@ tiny_http = { workspace = true }
 thiserror = { workspace = true }
 # Structured logging.
 tracing = { workspace = true }
+# JSON (de)serialization for response bodies — the RFC 9457 problem
+# responder and the typed `/v1` schemas.  `serde` derive + `serde_json`
+# are workspace-pinned (alloc feature).
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 # `tiny_http` is also a dev-dependency so the integration smoke test

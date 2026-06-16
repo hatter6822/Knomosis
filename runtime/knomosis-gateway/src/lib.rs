@@ -58,6 +58,7 @@ pub const GATEWAY_IDENTIFIER: &str = "knomosis-gateway/v1";
 
 pub mod config;
 pub mod http;
+pub mod problem;
 
 #[cfg(test)]
 mod tests {
