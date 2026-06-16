@@ -650,7 +650,7 @@ work units.  Status:
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
 | FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim core shipped (Lean + Rust); BOLD-leg oracle + observer receipt-fetch = OQ-GP-8b |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Track A+B, GP.8.5 v2 core, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining) |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Tracks A–C, GP.8.5 v2 core, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining — gated on OQ-GP-8b + the two-reviewer pass, see `unified_gas_pool_plan.md` §GP.10) |
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
