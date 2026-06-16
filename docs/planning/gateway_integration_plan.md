@@ -75,7 +75,13 @@ The companion machine-readable contract is
 > `last_evicted` frontier, `records_after` / `position` cursor queries,
 > and the last-complete-group watermark; `proptest`-verified against an
 > oracle for ordering / gap-freeness / seq-group integrity / watermark
-> correctness). Next: **G3.4b** (upstream multiplexing) → **G3.4c**
+> correctness) and **G3.4b** (the single-subscription `events/fanout/mux.rs`
+> — one shared live-tail subscription feeds the ring, resubscribing on a
+> drop from the watermark, **not** the newest seq, so a mid-group drop loses
+> no record; the ring dedups the re-delivered head, the `IndexCounter`
+> re-derives exact indices, and a known-tag decode failure fails closed;
+> a real-TCP-mock chaos suite verifies the finding-#4 recovery + O(1)
+> upstream subscribers under concurrent readers). Next: **G3.4c**
 > (per-client dispatch + eviction) → **G3.4d** (resume semantics) →
 > **G3.5** (`/v1/events/stream` wiring) + the remaining G4 hardening (TLS,
 > graceful drain).
@@ -1607,7 +1613,7 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   *(Upsized S→M: a bounded page over an unbounded stream is more than a
   drain.)*
 * **G3.4 — SSE fan-out (the complex sub-system)** · L · deps: G3.1, G3.2 ·
-  **in progress (G3.4a DONE).**
+  **in progress (G3.4a + G3.4b DONE).**
   The §6.1 composite-id correctness lives here; each sub-WU is property-
   tested against an oracle stream.
   * **G3.4a — Ring buffer + cursor registry** · M · **DONE.**
@@ -1633,22 +1639,30 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     watermark correctness (never advances into the open group); a client
     cursor advances exactly one record at a time; `position` matches the
     oracle's evict-frontier classification.
-  * **G3.4b — Upstream multiplexing** · M · deps: G3.4a, G3.1.
-    `events/fanout/mux.rs`: a **single** shared live-tail subscription
-    (`--upstream-subscriptions` default **1**, finding #6) feeds the ring;
-    **resubscribe-on-drop from the last-complete-group watermark** (G3.4a) —
-    **not** the newest seq, which (if the socket dropped mid-group) would ask
-    for `seq > S` and skip that group's unseen tail for every downstream
-    client (finding #4, P1). Resuming from the watermark re-delivers the open
-    group's already-ingested head, so the mux **de-duplicates on
-    `(seq, index)`** on re-insert. `--upstream-subscriptions > 1` (operator
-    opt-in for redundancy) is correct *only* with that same `(seq, index)`
-    dedup, since every subscriber to the §11 broadcast receives every event
-    (a naïve 2 would double-ingest — finding #6). *Acceptance:* N SSE clients
-    ⇒ O(1) upstream subscribers (asserted by counting upstream connects),
-    independent of N; an upstream drop **mid seq-group** loses no record for
-    any downstream client (the headline #4 chaos test); no event is delivered
-    twice across a resubscribe (dedup test).
+  * **G3.4b — Upstream multiplexing** · M · deps: G3.4a, G3.1 · **DONE.**
+    `events/fanout/mux.rs`: a **single** shared live-tail `Mux` (the
+    `FanoutState`-shared `Arc<Mutex<EventRing>>` seam between the mux writer
+    and the client readers) feeds the ring;
+    **resubscribe-on-interruption from the last-complete-group watermark**
+    (G3.4a) — **not** the newest seq, which (if the socket dropped mid-group)
+    would ask for `seq > S` and skip that group's unseen tail for every
+    downstream client (finding #4, P1). Resuming from the watermark
+    re-delivers the open group's already-ingested head, which the ring's
+    strictly-increasing `push` **de-duplicates** on `(seq, index)`; the mux's
+    per-subscription `IndexCounter` re-derives the *same* indices so the
+    dedup is exact. Before any group has completed (no watermark yet) it
+    resumes from the oldest-seen seq minus one (replay the open group from
+    its start); a `TRUNCATED` resumes from the oldest available instead (the
+    ring then classifies a spanning client `Behind` → backfill). A known-tag
+    decode failure is **fail-closed**: the mux records the fault on
+    `FanoutState` and stops (no silent skip, §2 principle 7). *Acceptance
+    (DONE):* 7 tests over a real-TCP mock upstream — the headline #4 chaos
+    case (a drop **mid seq-group** recovers the unseen tail with no loss and
+    no dup, resubscribing from the watermark fallback), the
+    completed-group-watermark resubscribe, the **O(1) upstream subscribers
+    under 32 concurrent ring readers** (asserted by counting upstream
+    accepts), live-tail ingest, the `IndexCounter` / `render_record` units,
+    and the fail-closed decode-fault stop.
   * **G3.4c — Per-client dispatch + eviction** · M · deps: G3.4a.
     `events/fanout/dispatch.rs`: one handler thread per stream (bounded by
     `--max-streams`); emits `id: <seq>.<index>` records (composite, §6.1) +
