@@ -6669,7 +6669,15 @@ Rust mirror is `SequencerClaim::build_receipt_backed{,_bold}` /
 receipt-fetch binding** (`knomosis-l1-ingest::receipt_verifier`) lets a
 third party re-derive the receipt from L1 via `eth_getTransactionReceipt`
 and a canonical binding hash — confirming the backing without trusting
-the claim builder.
+the claim builder.  The binding is hardened against the obvious observer-
+side attacks: it attests only after the receipt is `confirmation_depth`
+blocks deep (re-org safety, the watcher's `head − confirmation_depth`
+rule); the canonical hash is keyed on the **immutable tx identity alone**
+(not the caller-supplied `batch_id`, so one receipt cannot back several
+claims by varying the batch id); the BOLD rate is taken from a
+batch-keyed `RateOracle` (the `l1EthBoldRateOracle` binding), not a
+caller-supplied value; and quantity fields are parsed fail-closed
+(`0x`-required, EIP-658 `status == 1`).
 
 ### 15E.7 Opaques and axioms
 

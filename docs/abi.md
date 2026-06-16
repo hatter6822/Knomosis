@@ -1260,21 +1260,33 @@ forward-compatible); what v2 adds is a *receipt witness*:
   * **Independent-observer receipt-fetch binding (OQ-GP-8b).**
     `knomosis-l1-ingest::receipt_verifier` is the production binding of
     `l1GasReceiptVerifier`.  The **canonical receipt binding hash** is
-    `keccak256(DOMAIN ‖ tx_hash[32] ‖ batch_id_be[8] ‖ gas_used_be[16] ‖
-    gas_price_be[16])` with `DOMAIN = "knomosis/v1/gas-receipt-binding"`
-    (the 32-byte handle `ConsumedReceipts` de-duplicates on);
+    `keccak256(DOMAIN ‖ tx_hash[32])` with
+    `DOMAIN = "knomosis/v1/gas-receipt-binding"` — keyed on the **immutable
+    tx identity alone** (the 32-byte handle `ConsumedReceipts` de-duplicates
+    on).  It deliberately omits the caller-supplied `batch_id` (folding it in
+    would let one real receipt mint distinct handles under different batch
+    ids and back several claims) and the re-org-variable gas values.
     `derive_gas_receipt` re-derives the `GasReceipt` from a fetched
-    `eth_getTransactionReceipt` (status-gated strictly to EIP-658
-    `status == 1`; a reverted/non-spec tx backs nothing); a `ReceiptSource`
-    trait fetches it (live impl over `JsonRpcL1Source`);
+    `eth_getTransactionReceipt`, **status-gated** strictly to EIP-658
+    `status == 1` (a reverted/non-spec tx backs nothing) and **parsed
+    fail-closed** (quantity fields require the `0x` prefix — a non-prefixed
+    `"21000"` is rejected, not read as `0x21000`).  A `ReceiptSource` trait
+    fetches it (live impl over `JsonRpcL1Source`).  The verifiers take a
+    **`confirmed_head`** and attest `Backed` only when the receipt's
+    `block_number <= confirmed_head` (re-org safety — the watcher's
+    `head − confirmation_depth` rule; a shallower receipt → `Unconfirmed`).
     `fetch_and_derive_gas_receipt` hands a caller the canonical-hash
-    `GasReceipt` for its consumed set; and `verify_{eth,bold}_claim_independently`
+    `GasReceipt` for its consumed set; `verify_{eth,bold}_claim_independently`
     (backing) / `verify_{eth,bold}_claim_independently_fresh` (backing +
     no-reuse, returning `Reused` when the canonical hash is already consumed)
     let a third party attest the backing against L1 reality.  **The no-reuse
     check keys on the canonical re-derived hash, never a sequencer-asserted
     one** — otherwise one L1 receipt could back N claims via N fabricated
-    hashes (the observer-side analogue of `consumeReceipt_blocks_reuse`).
+    hashes (the observer-side analogue of `consumeReceipt_blocks_reuse`).  The
+    **BOLD** verifiers take a `RateOracle` (the production binding of
+    `l1EthBoldRateOracle`) and back a claim only against the rate the oracle
+    attests **for that exact batch** (→ `RateUnavailable` if none), never a
+    caller-supplied rate.
 
 **Trust + scope (v2).**  **Both legs are receipt-verified** (OQ-GP-8b
 closed).  The **ETH leg (resource 0)** is exact and oracle-free (wei cost

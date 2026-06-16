@@ -887,15 +887,24 @@ never over-reimburses.  This adds a **second** off-chain trust assumption
 gas verifier — a stale/low rate can only *under*-reimburse.  For
 **independent verification**, run the
 `knomosis-l1-ingest::receipt_verifier` binding:
-`verify_eth_claim_independently(source, claim, tx_hash, batch_id)` (or
-`verify_bold_claim_independently(…, rate)`) fetches the receipt via
-`eth_getTransactionReceipt`, re-derives the `GasReceipt` (canonical
-binding hash), and confirms the backing **without trusting the operator's
-asserted receipt** — the production binding of `l1GasReceiptVerifier`.
-To also enforce **no-reuse**, thread your spent-receipt set through the
-`…_fresh` variants (`verify_{eth,bold}_claim_independently_fresh(…, consumed)`),
-which return `Reused` when the receipt's canonical hash is already
-consumed; **key that set on the canonical re-derived hash**
-(`fetch_and_derive_gas_receipt` returns it), never on a sequencer-asserted
-one — otherwise one L1 receipt could back several claims.  Run ≥1 such
-observer alongside the watchtower.
+`verify_eth_claim_independently(source, claim, tx_hash, batch_id, confirmed_head)`
+(or `verify_bold_claim_independently(source, oracle, …)`) fetches the
+receipt via `eth_getTransactionReceipt`, re-derives the `GasReceipt`
+(canonical binding hash), and confirms the backing **without trusting the
+operator's asserted receipt** — the production binding of
+`l1GasReceiptVerifier`.  Three operator obligations:
+
+  * **Confirmation depth.**  Pass `confirmed_head = head − confirmation_depth`
+    (the same depth your watcher uses); the verifier returns `Unconfirmed`
+    for a receipt whose block is shallower, so a claim is never attested
+    against a still-reorgable tx.
+  * **BOLD rate oracle.**  The BOLD verifiers take a `RateOracle`; implement
+    it over your price feed so the rate is attested **for the exact batch**
+    (`RateUnavailable` if none) — never trust a passed-in rate.
+  * **No-reuse.**  Thread your spent-receipt set through the `…_fresh`
+    variants (which return `Reused` when the receipt's canonical hash is
+    already consumed); **key that set on the canonical re-derived hash**
+    (`fetch_and_derive_gas_receipt` returns it), never on a sequencer-asserted
+    one — otherwise one L1 receipt could back several claims.
+
+Run ≥1 such observer alongside the watchtower.
