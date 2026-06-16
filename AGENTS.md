@@ -663,7 +663,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; **submit track complete**: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2/G2.3/G2.4/G2.5 complete, only optional G2.1c pipelining deferred; G3 next — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; submit track complete; events track begun: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2/G2.3/G2.4/G2.5/G3.1 complete (G2.1c pipelining deferred); G3.2+ next — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -837,7 +837,10 @@ treated as ambiguous-delivery and not retried) + G2.4 (the
 retry does no second host round-trip) + G2.5 (the submit test surface)
 are complete — **the read-only slice is shipped + hardened and the submit
 track is complete** (only the optional G2.1c pipelining is deferred).
-Next: the events (G3) track + the remaining G4 hardening.
+The events (G3) track has begun with G3.1 (the resilient
+`UpstreamSubscription` event-subscribe client — reconnect/backoff,
+gap-surfacing, staleness watchdog).  Next: G3.2 (event decode → JSON) →
+G3.3 (`/v1/events` backfill) → G3.4 (SSE fan-out) + G4 hardening.
 Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; auth is
 fail-closed (no token file ⇒ every non-exempt request denied) + the token
 file must not be world-readable; the submit path forwards client-signed

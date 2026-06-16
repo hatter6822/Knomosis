@@ -54,8 +54,11 @@ The companion machine-readable contract is
 > **G2.4** (the `Idempotency-Key` replay cache — bounded, TTL'd,
 > LRU-evicted), and **G2.5** (the submit test surface) have also landed:
 > **the submit track is complete** (only the optional G2.1c pipelining is
-> deferred). Next: the events (**G3**) track + the remaining G4
-> hardening (TLS, graceful drain).
+> deferred). The events (**G3**) track has begun with **G3.1** (the
+> resilient `UpstreamSubscription` event-subscribe client — reconnect /
+> backoff / gap-surfacing / staleness watchdog). Next: **G3.2** (event
+> decode → JSON) → **G3.3** (`/v1/events` backfill) → **G3.4** (the SSE
+> fan-out) + the remaining G4 hardening (TLS, graceful drain).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1481,15 +1484,24 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
 
 ### G3 — Events: backfill + SSE
 
-* **G3.1 — event-subscribe client orchestration** · S · deps: G1.1.
-  *Deliverable:* `events/subscribe.rs` — wrap
-  `knomosis_indexer::client::SubscribeClient::{connect, read_frame}` with
-  reconnect/backoff, terminal-frame handling (`Truncated`/`LagExceeded`/
-  `ServerShutdown`/`InvalidRequest` → typed gateway events), and a liveness
-  check (the upstream read has no idle timeout by default — add a keepalive
-  / staleness watchdog). *Acceptance:* drives a mock server through every
-  frame kind; reconnects with the right `resume_from` after each terminal
-  frame. *(Reuse shrinks this from M→S vs v0.3 — audit finding 3.)*
+* **G3.1 — event-subscribe client orchestration** · S · deps: G1.1 ·
+  **DONE.**  `events/subscribe.rs` — an `UpstreamSubscription` wrapping
+  `knomosis_indexer::client::SubscribeClient` with a `recv()` that yields
+  one typed `StreamItem` per call (the consumer drives the loop):
+  `Event{seq,payload}` (advancing the resume cursor), `Gap{oldest}` (a
+  `Truncated` → events were **lost**; surfaced, never silently skipped,
+  §2 principle 7; resumes from the oldest available), `Reconnecting{reason}`
+  (a connection drop / `ServerShutdown` / `LagExceeded` / staleness
+  timeout / connect failure — transparently recovered, resuming from the
+  maintained cursor with exponential backoff reset on success), and
+  `Rejected` (`InvalidRequest` — terminal).  The **staleness watchdog**
+  is an optional read timeout that *reconnects* on a timeout (never
+  continues a possibly mid-frame stream → can't desync).  *Acceptance
+  met:* a non-blocking, stop-guarded mock server drives every frame kind;
+  the handshake `resume_from` is asserted to be `0` (live tail) initially
+  and the last-delivered seq after a drop / `LagExceeded`, and the oldest
+  seq after a `Truncated`; connect-failure surfaces as a `Reconnecting`
+  item.
 * **G3.2 — Event decode → JSON** · M · deps: G3.1. Broken into:
   * **G3.2a — Classify + forward-unknown** · S. `events/decode.rs`:
     `event_type::classify` → type name; tags ≥23 → `type:"unknown"` +

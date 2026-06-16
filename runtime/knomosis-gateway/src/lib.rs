@@ -63,6 +63,7 @@ pub const GATEWAY_IDENTIFIER: &str = "knomosis-gateway/v1";
 pub mod auth;
 pub mod config;
 pub mod dispatch;
+pub mod events;
 pub mod http;
 pub mod problem;
 pub mod rate_limit;
