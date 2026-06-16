@@ -30,6 +30,9 @@ on:
     paths:
       - 'runtime/knomosis-hash-keccak256/**'
       - 'runtime/knomosis-hash-fallback.c'
+      - 'runtime/Cargo.toml'
+      - 'runtime/Cargo.lock'
+      - 'runtime/rust-toolchain.toml'
       - 'LegalKernel/Runtime/Hash.lean'
       - 'Main.lean'
       - 'lakefile.lean'
@@ -42,6 +45,9 @@ on:
     paths:
       - 'runtime/knomosis-hash-keccak256/**'
       - 'runtime/knomosis-hash-fallback.c'
+      - 'runtime/Cargo.toml'
+      - 'runtime/Cargo.lock'
+      - 'runtime/rust-toolchain.toml'
       - 'LegalKernel/Runtime/Hash.lean'
       - 'Main.lean'
       - 'lakefile.lean'
