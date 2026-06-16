@@ -65,6 +65,7 @@ pub mod config;
 pub mod dispatch;
 pub mod events;
 pub mod http;
+pub mod observability;
 pub mod problem;
 pub mod rate_limit;
 pub mod reads;

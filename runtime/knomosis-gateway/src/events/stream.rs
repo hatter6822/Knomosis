@@ -27,9 +27,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::events::fanout::dispatch::{run_stream, write_stream_error, StreamConfig};
+use crate::events::fanout::dispatch::{run_stream, write_stream_error, StreamConfig, StreamEnd};
 use crate::events::fanout::resume::{classify_resume, parse_resume, ResumeAction};
 use crate::events::fanout::FanoutState;
+use crate::observability::REQUEST_ID_HEADER;
 use crate::problem::Problem;
 use crate::state::AppState;
 
@@ -46,6 +47,7 @@ pub fn serve(
     since: Option<u64>,
     types: Vec<String>,
     last_event_id: Option<String>,
+    request_id: &str,
 ) {
     let Some(fanout) = &state.fanout else {
         respond_problem(
@@ -56,6 +58,7 @@ pub fn serve(
             "event streaming is disabled: the gateway was started without \
              --event-subscribe-addr",
             None,
+            request_id,
         );
         return;
     };
@@ -73,6 +76,7 @@ pub fn serve(
             503,
             "the gateway is at its configured SSE stream capacity; retry shortly",
             Some(1000),
+            request_id,
         );
         return;
     }
@@ -83,20 +87,23 @@ pub fn serve(
     let active = Arc::clone(&state.active_streams);
     let shutdown = Arc::clone(&state.shutdown);
     let sse = state.config.sse;
+    let request_id = request_id.to_string();
     let mut writer = request.into_writer();
     let spawned = std::thread::Builder::new()
         .name("knx-gw-sse".to_string())
         .spawn(move || {
-            run_one_stream(
-                &mut writer,
-                &fanout,
+            let request = StreamRequest {
+                fanout: &fanout,
                 since,
-                &types,
-                last_event_id.as_deref(),
-                &sse,
-                &shutdown,
-            );
+                types: &types,
+                last_event_id: last_event_id.as_deref(),
+                sse: &sse,
+                shutdown: &shutdown,
+                request_id: &request_id,
+            };
+            let end = run_one_stream(&mut writer, &request);
             active.fetch_sub(1, Ordering::SeqCst);
+            tracing::info!(request_id, ?end, "sse stream closed");
         });
     if spawned.is_err() {
         // The thread could not be spawned: release the reserved slot. The
@@ -107,63 +114,81 @@ pub fn serve(
     }
 }
 
+/// The per-stream inputs (bundled to keep [`run_one_stream`] within the
+/// argument-count budget): the shared ring, the resume request, the SSE
+/// tunables, the shutdown flag, and the correlation id.
+struct StreamRequest<'a> {
+    fanout: &'a FanoutState,
+    since: Option<u64>,
+    types: &'a [String],
+    last_event_id: Option<&'a str>,
+    sse: &'a crate::config::SseConfig,
+    shutdown: &'a AtomicBool,
+    request_id: &'a str,
+}
+
 /// Write the SSE response head, classify the resume point, then either
 /// stream live records or emit the terminal `behind` / `truncated` error.
-fn run_one_stream<W: Write>(
-    writer: &mut W,
-    fanout: &FanoutState,
-    since: Option<u64>,
-    types: &[String],
-    last_event_id: Option<&str>,
-    sse: &crate::config::SseConfig,
-    shutdown: &AtomicBool,
-) {
-    if write_sse_head(writer).is_err() {
-        return; // the client hung up before we could respond
+fn run_one_stream<W: Write>(writer: &mut W, request: &StreamRequest) -> StreamEnd {
+    if write_sse_head(writer, request.request_id).is_err() {
+        return StreamEnd::Disconnected; // the client hung up before we could respond
     }
-    let point = parse_resume(last_event_id, since);
+    let point = parse_resume(request.last_event_id, request.since);
     // `upstream_oldest = None`: the SSE path steers a behind-ring cursor to
     // the backfill (`behind`), never an SSE `truncated` (finding #7).
     let action = {
-        let ring = fanout.ring();
+        let ring = request.fanout.ring();
         classify_resume(&ring, point, None)
     };
     match action {
         ResumeAction::Stream(cursor) => {
             let config = StreamConfig {
-                max_client_lag: sse.max_client_lag,
-                heartbeat: Duration::from_secs(sse.heartbeat_secs),
+                max_client_lag: request.sse.max_client_lag,
+                heartbeat: Duration::from_secs(request.sse.heartbeat_secs),
                 poll: STREAM_POLL,
             };
-            let _ = run_stream(writer, fanout, cursor, types, &config, shutdown);
+            run_stream(
+                writer,
+                request.fanout,
+                cursor,
+                request.types,
+                &config,
+                request.shutdown,
+            )
         }
         ResumeAction::Behind { oldest_seq } => {
             let _ = write_stream_error(writer, "behind", Some(oldest_seq));
+            StreamEnd::Evicted
         }
         ResumeAction::Truncated => {
             let _ = write_stream_error(writer, "truncated", None);
+            StreamEnd::Evicted
         }
     }
 }
 
 /// Write the raw HTTP/1.1 SSE response head over the hijacked socket: a
-/// `200` with `text/event-stream`, `Cache-Control: no-store`, and
-/// `X-Accel-Buffering: no` (defeats intermediary buffering).  No
-/// `Content-Length` — the body streams until the connection closes.
-fn write_sse_head<W: Write>(writer: &mut W) -> std::io::Result<()> {
-    writer.write_all(
-        b"HTTP/1.1 200 OK\r\n\
-          Content-Type: text/event-stream\r\n\
-          Cache-Control: no-store\r\n\
-          Connection: keep-alive\r\n\
-          X-Accel-Buffering: no\r\n\
-          \r\n",
+/// `200` with `text/event-stream`, `Cache-Control: no-store`,
+/// `X-Accel-Buffering: no` (defeats intermediary buffering), and the
+/// `X-Request-Id` correlation token.  No `Content-Length` — the body streams
+/// until the connection closes.
+fn write_sse_head<W: Write>(writer: &mut W, request_id: &str) -> std::io::Result<()> {
+    write!(
+        writer,
+        "HTTP/1.1 200 OK\r\n\
+         Content-Type: text/event-stream\r\n\
+         Cache-Control: no-store\r\n\
+         Connection: keep-alive\r\n\
+         X-Accel-Buffering: no\r\n\
+         X-Request-Id: {request_id}\r\n\
+         \r\n"
     )?;
     writer.flush()
 }
 
 /// Answer a non-stream error (`503`) with a normal `application/problem+json`
-/// response (no hijack), optionally carrying a `Retry-After`.
+/// response (no hijack), carrying the `X-Request-Id` correlation token and
+/// optionally a `Retry-After`.
 fn respond_problem(
     request: tiny_http::Request,
     type_suffix: &str,
@@ -171,8 +196,11 @@ fn respond_problem(
     status: u16,
     detail: &str,
     retry_after_ms: Option<u64>,
+    request_id: &str,
 ) {
-    let mut problem = Problem::new(type_suffix, title, status).with_detail(detail.to_string());
+    let mut problem = Problem::new(type_suffix, title, status)
+        .with_detail(detail.to_string())
+        .with_instance(request_id.to_string());
     if let Some(ms) = retry_after_ms {
         problem = problem.with_retry_after_ms(ms);
     }
@@ -181,6 +209,11 @@ fn respond_problem(
         tiny_http::Response::from_string(outcome.body).with_status_code(outcome.status);
     if let Ok(header) =
         tiny_http::Header::from_bytes(b"Content-Type".as_ref(), outcome.content_type.as_bytes())
+    {
+        response = response.with_header(header);
+    }
+    if let Ok(header) =
+        tiny_http::Header::from_bytes(REQUEST_ID_HEADER.as_bytes(), request_id.as_bytes())
     {
         response = response.with_header(header);
     }

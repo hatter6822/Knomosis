@@ -986,3 +986,23 @@ fn event_stream_without_upstream_is_503() {
     assert_eq!(r.header("Content-Type"), Some("application/problem+json"));
     assert!(r.body.contains("events-unavailable"));
 }
+
+#[test]
+fn responses_carry_a_request_id_and_problem_instance() {
+    let h = start_harness();
+    // A 200 read carries the X-Request-Id correlation header (§G4.3).
+    let ok = get(h.addr, "/v1/actors/7/balances");
+    assert_eq!(ok.status, 200);
+    let ok_id = ok.header("X-Request-Id").expect("X-Request-Id on the 200");
+    assert!(ok_id.starts_with("req-"), "id {ok_id} has the req- prefix");
+
+    // A 404 problem carries the header AND the RFC 9457 `instance` member
+    // (the same correlation token), so a client error maps to a server log.
+    let nf = get(h.addr, "/v1/nope");
+    assert_eq!(nf.status, 404);
+    let nf_id = nf.header("X-Request-Id").expect("X-Request-Id on the 404");
+    assert_eq!(nf.json()["instance"], nf_id);
+
+    // Distinct requests get distinct ids.
+    assert_ne!(ok_id, nf_id);
+}

@@ -83,6 +83,10 @@ tempfile = { workspace = true }
 # against an oracle stream.  Dev-only; the same workspace-pinned crate the
 # host / indexer / event-subscribe property suites use.
 proptest = { workspace = true }
+# `tracing-subscriber` lets the G4.3 redaction test capture the structured
+# request log into a buffer and assert no secret (bearer token) appears.
+# Dev-only; the same workspace-pinned crate `knomosis-cli-common` uses.
+tracing-subscriber = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

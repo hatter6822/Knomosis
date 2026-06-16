@@ -188,6 +188,8 @@ fn worker_loop(server: &tiny_http::Server, state: &AppState) {
 /// response was flushed — is logged at `debug` and dropped, since there
 /// is nothing else to do.
 pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
+    let request_id = crate::observability::next_request_id();
+    let start = std::time::Instant::now();
     let method = method_token(request.method());
     // Extract everything that borrows `request` as OWNED values up front,
     // so the submit-body read below can take `&mut request` without a
@@ -207,32 +209,38 @@ pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
         )
     };
 
-    // The auth + rate gates run before routing for every path.  If they
-    // deny, answer without routing (and without hijacking an SSE stream).
-    if let Some(denied) = crate::auth::gate(&state.auth, &path, auth_header.as_deref()) {
-        respond(request, &denied);
-        return;
-    }
-    if let Some(limited) =
-        crate::auth::rate_limit_check(&state.rate_limiter, &path, auth_header.as_deref())
-    {
-        respond(request, &limited);
-        return;
-    }
+    // The auth gate runs before routing (auth first; the per-credential rate
+    // cap only if authenticated).  `Some(outcome)` is a denial (401/403/429).
+    let gate_outcome =
+        crate::auth::gate(&state.auth, &path, auth_header.as_deref()).or_else(|| {
+            crate::auth::rate_limit_check(&state.rate_limiter, &path, auth_header.as_deref())
+        });
 
     // The live SSE stream takes over the connection (G3.5): it does not
-    // produce a `RouteOutcome`, so it is handled here, not via dispatch.
-    if let Route::EventStream { since, types } = &routed {
-        crate::events::stream::serve(request, state, *since, types.clone(), last_event_id);
-        return;
+    // produce a `RouteOutcome`, so it is handled here, not via dispatch —
+    // but only once the gates have passed (a denied stream gets a normal
+    // 401/429 below, never a hijack).
+    if gate_outcome.is_none() {
+        if let Route::EventStream { since, types } = &routed {
+            crate::events::stream::serve(
+                request,
+                state,
+                *since,
+                types.clone(),
+                last_event_id,
+                &request_id,
+            );
+            return;
+        }
     }
 
     // Authorized (or an exempt path) and within budget.  Read the submit
     // body (only for `POST /v1/actions`) bounded by the cap, dispatch, then
     // apply any `If-None-Match` conditional (a matching weak ETag → 304; a
     // no-op for a POST response).
-    let outcome = {
-        match read_submit_body(&mut request, &routed, state.config.max_frame_size) {
+    let outcome = match gate_outcome {
+        Some(denied) => denied,
+        None => match read_submit_body(&mut request, &routed, state.config.max_frame_size) {
             Err(too_large) => too_large,
             Ok(body) => {
                 let payload = RequestPayload {
@@ -243,9 +251,58 @@ pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
                 let outcome = dispatch(&routed, state, &payload);
                 crate::http::apply_conditional(outcome, if_none_match.as_deref())
             }
-        }
+        },
     };
+    let outcome = finalize(outcome, &request_id);
+    log_request(method, &path, outcome.status, start.elapsed(), &request_id);
     respond(request, &outcome);
+}
+
+/// Stamp the per-request correlation id onto the outcome (§G4.3): an
+/// `X-Request-Id` header on every response, plus — for an RFC 9457 problem
+/// body — the `instance` member, injected via a safe `serde_json`
+/// round-trip (problem responses are infrequent, so the round-trip cost is
+/// negligible; a malformed body is left untouched).
+fn finalize(mut outcome: RouteOutcome, request_id: &str) -> RouteOutcome {
+    outcome.headers.push((
+        crate::observability::REQUEST_ID_HEADER,
+        request_id.to_string(),
+    ));
+    if outcome.content_type == "application/problem+json" {
+        if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&outcome.body) {
+            if let Some(object) = value.as_object_mut() {
+                object
+                    .entry("instance")
+                    .or_insert_with(|| serde_json::Value::String(request_id.to_string()));
+                if let Ok(rendered) = serde_json::to_string(&value) {
+                    outcome.body = rendered;
+                }
+            }
+        }
+    }
+    outcome
+}
+
+/// Emit the single structured per-request log line — the §G4.3 log-based
+/// metrics surface (an aggregator derives per-endpoint status / latency
+/// from it).  Records only the method, path, status, latency, and id;
+/// **never** the `Authorization` header / token, an `Idempotency-Key`, or a
+/// body (§8.1).
+fn log_request(
+    method: &str,
+    path: &str,
+    status: u16,
+    latency: std::time::Duration,
+    request_id: &str,
+) {
+    tracing::info!(
+        request_id,
+        method,
+        path,
+        status,
+        latency_us = u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
+        "request"
+    );
 }
 
 /// Read the request body for a submit route, bounded by `max` bytes.
@@ -334,7 +391,11 @@ fn method_token(method: &tiny_http::Method) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::method_token;
+    use super::{finalize, log_request, method_token};
+    use crate::http::RouteOutcome;
+    use crate::problem::Problem;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     #[test]
     fn method_token_maps_common_verbs() {
@@ -345,5 +406,88 @@ mod tests {
         // token (the router answers it as 405 + `Allow`).
         assert_eq!(method_token(&tiny_http::Method::Trace), "OTHER");
         assert_eq!(method_token(&tiny_http::Method::Connect), "OTHER");
+    }
+
+    #[test]
+    fn finalize_stamps_request_id_header_and_problem_instance() {
+        // A problem body gains the X-Request-Id header AND the RFC 9457
+        // `instance` member.
+        let problem = Problem::not_found("/v1/nope").into_outcome();
+        let out = finalize(problem, "req-test-1");
+        assert!(out
+            .headers
+            .iter()
+            .any(|(n, v)| *n == "X-Request-Id" && v == "req-test-1"));
+        let v: serde_json::Value = serde_json::from_str(&out.body).unwrap();
+        assert_eq!(v["instance"], "req-test-1");
+
+        // A non-problem (JSON) body gains only the header — no body rewrite.
+        let json = RouteOutcome::json(200, r#"{"ok":true}"#.to_string());
+        let out = finalize(json, "req-test-2");
+        assert!(out
+            .headers
+            .iter()
+            .any(|(n, v)| *n == "X-Request-Id" && v == "req-test-2"));
+        assert_eq!(out.body, r#"{"ok":true}"#); // unchanged
+    }
+
+    /// A buffer-backed `MakeWriter` so the redaction test can capture the
+    /// structured request log line.
+    #[derive(Clone)]
+    struct BufWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for BufWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for BufWriter {
+        type Writer = BufWriter;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    #[test]
+    fn request_log_records_only_safe_fields_no_secret() {
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(BufWriter(Arc::clone(&buf)))
+            .with_max_level(tracing::Level::INFO)
+            .without_time()
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            log_request(
+                "GET",
+                "/v1/actors/7/balances",
+                200,
+                Duration::from_micros(123),
+                "req-abc-1",
+            );
+        });
+        let out = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        // The safe fields are all present.
+        assert!(out.contains("request"));
+        assert!(out.contains("GET"));
+        assert!(out.contains("/v1/actors/7/balances"));
+        assert!(out.contains("status=200"));
+        assert!(out.contains("req-abc-1"));
+        assert!(out.contains("123")); // latency_us
+                                      // A bearer token / Authorization value could never appear: the
+                                      // structured request log takes no such argument (§8.1).  These
+                                      // guards catch a future regression that adds one.
+        assert!(
+            !out.contains("Bearer"),
+            "no bearer token in the request log"
+        );
+        assert!(
+            !out.contains("Authorization"),
+            "no Authorization header in the request log"
+        );
     }
 }

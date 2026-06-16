@@ -95,8 +95,13 @@ The companion machine-readable contract is
 > per-client dispatch on its own thread; the single mux is started in
 > `serve`; `Last-Event-ID`/`since` resume + `Cache-Control: no-store`; an
 > end-to-end test streams composite-id records to a real socket client).
-> **The events (G3) track is complete (G3.1–G3.5).** Next: the G4 hardening
-> (TLS/mTLS, observability, graceful drain, the runbook) + the deferred
+> **The events (G3) track is complete (G3.1–G3.5).** The **G4 hardening**
+> track is underway: **G4.1** (rate limiting — shipped early as G1.3) and
+> **G4.3** (observability — a per-request `X-Request-Id` correlation id
+> propagated to the header / `problem.instance` / a structured log line, the
+> log-based metrics surface, with a redaction-tested no-secret guarantee).
+> Next: **G4.4** (graceful shutdown), **G4.2** (TLS/mTLS), **G4.5** (dep
+> audit), **G4.6** (load/soak/chaos), **G4.7** (the runbook) + the deferred
 > additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
 
 There is currently **zero code coupling** between the repositories:
@@ -1748,19 +1753,35 @@ cross-stack corpus pin remains deferred.
 
 ### G4 — Hardening + runbook
 
-* **G4.1 — Rate limiting** · S · deps: G2, G3. `ratelimit.rs`: per-
-  credential token bucket → `429`+`Retry-After`; bounded bucket map.
-  *Acceptance:* limit enforced; headers correct; bucket map bounded.
+* **G4.1 — Rate limiting** · S · deps: G2, G3 · **DONE (shipped early as
+  G1.3).** `rate_limit.rs`: a per-credential token bucket → `429` +
+  `Retry-After`, with a bounded bucket map; applied in the IO shell before
+  routing.  *Acceptance (DONE):* the limit is enforced (the
+  `rate_limit_returns_429_with_retry_after` integration test), the
+  `Retry-After` header + `retryAfterMs` extension are present, and the map
+  is bounded.
 * **G4.2 — TLS/mTLS hardening** · S · deps: G1.2d. mTLS client-cert verify
   (`--mtls-client-ca`); cipher/proto floor (TLS 1.3 default); cert-rotation
   note. *Acceptance:* mTLS round-trip; weak-proto / unknown-client-cert
   rejected.
-* **G4.3 — Observability** · M · deps: G1–G3. `observability.rs`: `tracing`
-  spans + per-request id (propagated to `problem.instance` and logs);
-  upstream-latency + per-endpoint-status counters/histograms; **secret
-  redaction** (token, key, bodies). *Acceptance:* metrics exposed (per
-  OQ-GW-10 decision); log-correlation by request id verified; a token never
-  appears in logs (redaction test).
+* **G4.3 — Observability** · M · deps: G1–G3 · **DONE.**
+  `observability.rs`: a process-unique per-request correlation id
+  (`next_request_id` → `req-<nonce>-<seq>`) propagated to (1) the
+  `X-Request-Id` response header on **every** response (incl. the SSE head +
+  the stream `503`s), (2) the RFC 9457 `problem.instance` member on every
+  problem body (injected via a safe `serde_json` round-trip in `finalize`),
+  and (3) a single structured per-request log line (`request_id`, `method`,
+  `path`, `status`, `latency_us`) emitted at completion — the **log-based
+  metrics** surface (the OQ-GW-10 default; a `/metrics` endpoint is the
+  deferred alternative).  **Secret redaction (§8.1):** the request log
+  records only the method / path / status / latency / id — never the
+  `Authorization` header / token, an `Idempotency-Key`, or a body.
+  *Acceptance (DONE):* `finalize` stamps the header + `instance` (unit); an
+  end-to-end test confirms `X-Request-Id` on a `200` + the matching
+  `instance` on a `404`; and a **log-capture redaction test** (a buffered
+  `tracing-subscriber`) asserts the structured line carries the safe fields
+  and **no bearer token / `Authorization`**.  The metrics-*endpoint* surface
+  stays deferred behind OQ-GW-10.
 * **G4.4 — Resource governors + graceful shutdown** · S · deps: G1–G3.
   `shutdown.rs`: SIGTERM/SIGINT (signal-hook or self-pipe) → stop flag →
   drain submits, emit SSE `server_shutdown`, close pools, exit

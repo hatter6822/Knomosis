@@ -407,6 +407,7 @@ dependencies = [
  "thiserror",
  "tiny_http",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
