@@ -32,10 +32,11 @@
 //!     `/budget`, and `GET /v1/pools/{pool}?resource=` — over the G1.6a
 //!     read-only `SqliteStorage` handle (G1.6b / G1.7).
 //!
-//! The request parser + limits, the full routing table (405 + `Allow`),
-//! the RFC 9457 problem responder, and the bounded acceptor are in
-//! place; AuthN (G1.4), the submit path (G2), and the SSE fan-out (G3)
-//! land next.
+//! The routing table (405 + `Allow`), the RFC 9457 problem responder,
+//! the bounded acceptor, the fail-closed bearer auth gate (G1.4), and
+//! `ETag` / `If-None-Match` → `304` revalidation (G1.9) are in place —
+//! **the read-only slice is shippable.**  The submit path (G2) and the
+//! SSE fan-out (G3), plus the remaining governors (G1.3), land next.
 //!
 //! ## Constraints (inherited from `runtime/`)
 //!

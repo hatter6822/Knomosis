@@ -149,6 +149,44 @@ impl RouteOutcome {
     }
 }
 
+/// Apply an `If-None-Match` conditional to a computed [`RouteOutcome`]:
+/// when the request carried an `If-None-Match` that matches the
+/// response's weak `ETag` (or `*`), collapse a `200` into a `304 Not
+/// Modified` with an empty body, preserving the `ETag` for revalidation
+/// (RFC 9110 §13.1.2 / §15.4.5).  A non-`200` outcome, a response with no
+/// `ETag`, or an absent / non-matching `If-None-Match` is returned
+/// unchanged.
+#[must_use]
+pub fn apply_conditional(outcome: RouteOutcome, if_none_match: Option<&str>) -> RouteOutcome {
+    let Some(inm) = if_none_match else {
+        return outcome;
+    };
+    if outcome.status != 200 {
+        return outcome;
+    }
+    let Some((_, etag)) = outcome
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("etag"))
+    else {
+        return outcome;
+    };
+    let etag = etag.clone();
+    // Weak comparison (RFC 9110 §8.8.3.2): the client echoes the exact
+    // ETag it received; `*` matches any current representation.
+    let trimmed = inm.trim();
+    if trimmed == "*" || trimmed == etag {
+        RouteOutcome {
+            status: 304,
+            content_type: outcome.content_type,
+            body: String::new(),
+            headers: vec![("ETag", etag)],
+        }
+    } else {
+        outcome
+    }
+}
+
 /// Route a request by `method` (canonical uppercase token, e.g.
 /// `"GET"`), `path` (request target with any query string stripped),
 /// and `query` (the raw query string after `?`, or `""`) to a [`Route`].
@@ -286,7 +324,7 @@ fn get_only(method: &str, route: Route) -> Route {
 
 #[cfg(test)]
 mod tests {
-    use super::{query_param, route, Route};
+    use super::{apply_conditional, query_param, route, Route, RouteOutcome};
 
     /// Route with an empty query string (the common case in these
     /// tests; the pool tests that exercise `?resource=` call `route`
@@ -481,5 +519,37 @@ mod tests {
         assert_eq!(query_param("resource", "resource"), None);
         // The first occurrence wins.
         assert_eq!(query_param("resource=1&resource=2", "resource"), Some("1"));
+    }
+
+    #[test]
+    fn conditional_collapses_matching_etag_to_304() {
+        let outcome = RouteOutcome::json(200, "{}".to_string()).with_header("ETag", "W/\"7-42\"");
+        // A matching If-None-Match → 304, empty body, ETag preserved.
+        let r = apply_conditional(outcome.clone(), Some("W/\"7-42\""));
+        assert_eq!(r.status, 304);
+        assert!(r.body.is_empty());
+        assert!(r
+            .headers
+            .iter()
+            .any(|(n, v)| *n == "ETag" && v == "W/\"7-42\""));
+        // `*` matches any current representation.
+        assert_eq!(apply_conditional(outcome.clone(), Some("*")).status, 304);
+        // A non-matching validator leaves the 200 intact.
+        assert_eq!(
+            apply_conditional(outcome.clone(), Some("W/\"7-99\"")).status,
+            200
+        );
+        // An absent If-None-Match is unchanged.
+        assert_eq!(apply_conditional(outcome, None).status, 200);
+    }
+
+    #[test]
+    fn conditional_ignores_non_200_and_etagless() {
+        // A non-200 outcome is never collapsed, even with `*`.
+        let not_found = RouteOutcome::problem(404, "{}".to_string());
+        assert_eq!(apply_conditional(not_found, Some("*")).status, 404);
+        // A 200 carrying no ETag is returned unchanged.
+        let no_etag = RouteOutcome::json(200, "{}".to_string());
+        assert_eq!(apply_conditional(no_etag, Some("anything")).status, 200);
     }
 }

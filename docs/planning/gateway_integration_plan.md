@@ -39,10 +39,13 @@ The companion machine-readable contract is
 > `docs/planning/open_questions.md`. **G1.8** (the `/v1/info` typed schema
 > — deployment id, admission stage, wire protocol versions, indexer
 > cursor + schema version, budget/pool echo — and `/readyz` upstream
-> probes) and **G1.4** (the fail-closed `subtle::ConstantTimeEq` bearer
-> auth gate, applied before routing) are also complete. Next on the
-> critical path: the first shippable read-only slice (**G1.9** —
-> read-path integration tests over the now-authed read endpoints).
+> probes), **G1.4** (the fail-closed `subtle::ConstantTimeEq` bearer
+> auth gate, applied before routing), and **G1.9** (the read-path
+> integration harness — the read endpoints end-to-end behind auth, with
+> `ETag`/`If-None-Match`→`304` and a snapshot-consistency chaos case) are
+> complete: **the first shippable read-only slice is done.** Next: the
+> remaining G1 hardening (**G1.3** governors / body-size / timeouts) and
+> the submit (**G2**) + events (**G3**) tracks.
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1290,11 +1293,30 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   live cursor + schema version; both reconfirmed over the read-only
   handle.  *Deferred to G1.3:* a configurable probe timeout (the 2s
   default is a const for now).
-* **G1.9 — Read-path tests** · S · deps: G1.6, G1.7.
-  *Deliverable:* `tests/integration.rs` (seeded read-only SQLite) +
-  contract tests for the read endpoints + `If-None-Match`/304 +
-  snapshot-consistency chaos case. *Acceptance:* `ci-gateway`/`ci-rust`
-  gates green. **First shippable slice (read-only Licio integration).**
+* **G1.9 — Read-path tests** · S · deps: G1.6, G1.7 · **DONE — first
+  shippable read-only slice.** *Deliverable:* `tests/integration.rs` — a
+  `Harness` that seeds an indexer SQLite DB (balances, budget, pool,
+  cursor) with a live writer, opens it **read-only** through
+  `AppState`, and serves it over a real `tiny_http` listener + 4-thread
+  handler pool; a `Content-Length`-framed HTTP client drives the full
+  pipeline (auth gate → route → dispatch → read).  Covers: the `Balance`
+  / `BalanceList` / `BudgetView` / `PoolView` contract shapes over HTTP
+  (incl. the `net` flag flipping with the configured `--gas-pool-actor`);
+  the `ETag` + `If-None-Match` → `304` revalidation (a stale validator
+  still `200`s); the fail-closed auth gate (401 no-credential, 403
+  wrong-token, 401-not-404 on an unknown path); and a
+  **snapshot-consistency chaos case** — a concurrent writer atomically
+  maintains `balance(7,1) == balance(7,0)+1`, and 300 hammered list reads
+  each observe a consistent snapshot satisfying it (a torn read would
+  break the invariant).  *Acceptance met:* the `ci-gateway` / `ci-rust`
+  Rust gates (`cargo test`/`clippy -D warnings`/`fmt`) are green; the
+  read endpoints are end-to-end functional behind auth, the contract is
+  Redocly-valid, and `ETag`/`304` closes the last G1.6b/G1.7 deferral.
+  As implemented, ETag generation lives in `reads::balances`
+  (weak `W/"<actor>[-<resource>]-<seq>"`) and the `200`→`304` collapse in
+  `http::apply_conditional` (driven by the `If-None-Match` header the IO
+  shell threads in).  **This is the shippable read-only slice for the
+  Licio integration.**
 
 ### G2 — Submit path
 

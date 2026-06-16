@@ -178,18 +178,19 @@ pub fn handle_request(request: tiny_http::Request, state: &AppState) {
     // the query string for parameter selectors (e.g. `?resource=`).
     let url = request.url();
     let (path, query) = url.split_once('?').unwrap_or((url, ""));
-    // The raw `Authorization` header value, if present (case-insensitive
-    // field match per RFC 7230).  Borrows `request`; consumed below.
-    let auth_header = request
-        .headers()
-        .iter()
-        .find(|h| h.field.equiv("Authorization"))
-        .map(|h| h.value.as_str());
-    let outcome = match crate::auth::gate(&state.auth, path, auth_header) {
+    // The raw `Authorization` + `If-None-Match` header values, if present
+    // (case-insensitive field match per RFC 7230).  Borrow `request`;
+    // consumed below.
+    let auth_header = header_value(&request, "Authorization");
+    let if_none_match = header_value(&request, "If-None-Match");
+    let outcome = if let Some(denied) = crate::auth::gate(&state.auth, path, auth_header) {
         // Denied by the auth gate (401 / 403) — answer without routing.
-        Some(denied) => denied,
-        // Authorized (or an exempt path) — route + dispatch.
-        None => dispatch(&route(method, path, query), state),
+        denied
+    } else {
+        // Authorized (or an exempt path) — route, dispatch, then apply
+        // any `If-None-Match` conditional (a matching weak ETag → 304).
+        let outcome = dispatch(&route(method, path, query), state);
+        crate::http::apply_conditional(outcome, if_none_match)
     };
     respond(request, &outcome);
 }
@@ -219,6 +220,16 @@ fn respond(request: tiny_http::Request, outcome: &RouteOutcome) {
     if let Err(e) = request.respond(response) {
         tracing::debug!(error = %e, "client closed connection before the response was written");
     }
+}
+
+/// The value of the first request header whose field name matches `name`
+/// (case-insensitively, per RFC 7230 §3.2), or `None` if absent.
+fn header_value<'r>(request: &'r tiny_http::Request, name: &'static str) -> Option<&'r str> {
+    request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv(name))
+        .map(|h| h.value.as_str())
 }
 
 /// Map a `tiny_http::Method` to the canonical uppercase token the

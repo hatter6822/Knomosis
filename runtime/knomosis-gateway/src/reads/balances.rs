@@ -60,7 +60,7 @@ pub fn actor_balance(reads: &ReadState, actor: u64, resource: u64) -> RouteOutco
         amount: amount.to_string(),
         seq: seq.to_string(),
     };
-    json_with_seq(&dto, seq)
+    json_with_seq(&dto, seq).with_header("ETag", balance_etag(actor, Some(resource), seq))
 }
 
 /// `GET /v1/actors/{actor}/balances` — all balances for an actor,
@@ -117,7 +117,20 @@ pub fn actor_balances(reads: &ReadState, actor: u64) -> RouteOutcome {
         balances,
         seq: seq_str,
     };
-    json_with_seq(&dto, seq)
+    json_with_seq(&dto, seq).with_header("ETag", balance_etag(actor, None, seq))
+}
+
+/// A **weak** ETag validating an actor's balance view at a cursor, keyed
+/// on `(actor[, resource], seq)`.  Weak (`W/`) because the cursor
+/// advances on *any* indexer update, so the validator may conservatively
+/// report "changed" even when this actor's balance did not — acceptable
+/// for the contract's revalidation semantics (a missed `304`, never a
+/// stale `304`).
+fn balance_etag(actor: u64, resource: Option<u64>, seq: u64) -> String {
+    match resource {
+        Some(r) => format!("W/\"{actor}-{r}-{seq}\""),
+        None => format!("W/\"{actor}-{seq}\""),
+    }
 }
 
 /// Serialize `dto` to JSON and attach the `X-Knomosis-Seq` header.
@@ -238,6 +251,24 @@ mod tests {
         assert_eq!(v["actorId"], "12345");
         assert_eq!(v["balances"].as_array().unwrap().len(), 0);
         assert_eq!(v["seq"], "42");
+        drop(writer);
+    }
+
+    #[test]
+    fn balance_responses_carry_weak_etag() {
+        let (_dir, writer, reads) = seeded();
+        // Single balance: weak ETag keyed on (actor, resource, seq).
+        let single = actor_balance(&reads, 7, 0);
+        assert!(single
+            .headers
+            .iter()
+            .any(|(n, v)| *n == "ETag" && v == "W/\"7-0-42\""));
+        // List: weak ETag keyed on (actor, seq).
+        let list = actor_balances(&reads, 7);
+        assert!(list
+            .headers
+            .iter()
+            .any(|(n, v)| *n == "ETag" && v == "W/\"7-42\""));
         drop(writer);
     }
 }
