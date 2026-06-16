@@ -41,6 +41,9 @@ knomosis-cli-common = { workspace = true }
 # indexer's SQLite database via `SqliteStorage::open_read_only` (the
 # G1.6a path — pure SQLITE_OPEN_READ_ONLY).
 knomosis-storage = { path = "../knomosis-storage" }
+# The indexer's typed read views (BalanceView) + key/cursor codecs the
+# gateway renders to the JSON contract.
+knomosis-indexer = { path = "../knomosis-indexer" }
 # The synchronous HTTP/1.1 server (G1.0 / OQ-GW-8 decision: a vetted
 # sync crate, no tokio).  `default-features = false` keeps TLS out (its
 # `ssl-rustls` feature predates the workspace's rustls 0.23; HTTPS is
@@ -62,6 +65,9 @@ serde_json = { workspace = true }
 # (`tests/smoke.rs`) can drive a real listener directly (mirrors the
 # storage crate's `rusqlite` dev/normal split).
 tiny_http = { workspace = true }
+# `tempfile` provides the isolated on-disk SQLite database the reads
+# unit tests seed and open read-only.
+tempfile = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

@@ -24,15 +24,38 @@ use crate::state::AppState;
 /// Total over [`Route`]: every variant maps to a concrete outcome, so
 /// adding a route forces a dispatch arm (the compiler enforces it).
 #[must_use]
-pub fn dispatch(route: &Route, _state: &AppState) -> RouteOutcome {
+pub fn dispatch(route: &Route, state: &AppState) -> RouteOutcome {
     match route {
         Route::Health => RouteOutcome::text(200, "ok\n"),
         Route::Ready => RouteOutcome::text(200, "ready\n"),
         Route::Info => RouteOutcome::json(200, info_body()),
+        Route::ActorBalances { actor } => with_reads(state, |reads| {
+            crate::reads::balances::actor_balances(reads, *actor)
+        }),
+        Route::ActorBalance { actor, resource } => with_reads(state, |reads| {
+            crate::reads::balances::actor_balance(reads, *actor, *resource)
+        }),
         Route::MethodNotAllowed { allow } => Problem::method_not_allowed()
             .into_outcome()
             .with_header("Allow", *allow),
+        Route::BadRequest { detail } => Problem::new("bad-request", "Bad Request", 400)
+            .with_detail(detail.clone())
+            .into_outcome(),
         Route::NotFound { path } => Problem::not_found(path).into_outcome(),
+    }
+}
+
+/// Run `f` against the read backend, or answer `503` if reads are
+/// disabled (the gateway was started without `--indexer-db`).
+fn with_reads(
+    state: &AppState,
+    f: impl FnOnce(&crate::state::ReadState) -> RouteOutcome,
+) -> RouteOutcome {
+    match &state.reads {
+        Some(reads) => f(reads),
+        None => Problem::new("reads-unavailable", "Reads Unavailable", 503)
+            .with_detail("reads are disabled: the gateway was started without --indexer-db")
+            .into_outcome(),
     }
 }
 
@@ -101,5 +124,34 @@ mod tests {
         assert_eq!(o.status, 404);
         assert_eq!(o.content_type, "application/problem+json");
         assert!(o.body.contains("/v1/x"));
+    }
+
+    #[test]
+    fn read_route_without_indexer_db_is_503() {
+        // `state()` configures no --indexer-db, so reads are disabled.
+        let o = dispatch(&Route::ActorBalances { actor: 7 }, &state());
+        assert_eq!(o.status, 503);
+        assert_eq!(o.content_type, "application/problem+json");
+        let o = dispatch(
+            &Route::ActorBalance {
+                actor: 7,
+                resource: 0,
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 503);
+    }
+
+    #[test]
+    fn bad_request_is_problem_json_400() {
+        let o = dispatch(
+            &Route::BadRequest {
+                detail: "invalid actor id".to_string(),
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 400);
+        assert_eq!(o.content_type, "application/problem+json");
+        assert!(o.body.contains("invalid actor id"));
     }
 }

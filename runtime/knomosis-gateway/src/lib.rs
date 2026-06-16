@@ -60,6 +60,7 @@ pub mod config;
 pub mod dispatch;
 pub mod http;
 pub mod problem;
+pub mod reads;
 pub mod state;
 
 #[cfg(test)]

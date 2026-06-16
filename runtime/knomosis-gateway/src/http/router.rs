@@ -43,6 +43,24 @@ pub enum Route {
         /// The unmatched request path.
         path: String,
     },
+    /// `GET /v1/actors/{actor}/balances` — all balances for an actor.
+    ActorBalances {
+        /// The actor id from the path.
+        actor: u64,
+    },
+    /// `GET /v1/actors/{actor}/balances/{resource}` — one balance.
+    ActorBalance {
+        /// The actor id from the path.
+        actor: u64,
+        /// The resource id from the path.
+        resource: u64,
+    },
+    /// A structurally-matched path with a malformed parameter (e.g. a
+    /// non-numeric id).  Carries the problem `detail`.
+    BadRequest {
+        /// The problem detail describing the malformed parameter.
+        detail: String,
+    },
 }
 
 /// The outcome of dispatching a [`Route`]: an HTTP status, a
@@ -123,8 +141,43 @@ pub fn route(method: &str, path: &str) -> Route {
         "/healthz" => get_only(method, Route::Health),
         "/readyz" => get_only(method, Route::Ready),
         "/v1/info" => get_only(method, Route::Info),
-        _ => Route::NotFound {
+        _ => route_v1_balances(method, path).unwrap_or_else(|| Route::NotFound {
             path: path.to_string(),
+        }),
+    }
+}
+
+/// Parse the `/v1/actors/{actor}/balances[/{resource}]` family.
+/// Returns `None` if the path is not in this family (→ 404); a matched
+/// shape with a non-permitted method yields [`Route::MethodNotAllowed`]
+/// and a malformed id yields [`Route::BadRequest`].
+fn route_v1_balances(method: &str, path: &str) -> Option<Route> {
+    let rest = path.strip_prefix("/v1/actors/")?;
+    let mut segs = rest.split('/').filter(|s| !s.is_empty());
+    let actor_str = segs.next()?;
+    if segs.next()? != "balances" {
+        return None;
+    }
+    let resource_str = segs.next();
+    if segs.next().is_some() {
+        // A trailing extra segment is not part of this route family.
+        return None;
+    }
+    if method != "GET" {
+        return Some(Route::MethodNotAllowed { allow: "GET" });
+    }
+    let Ok(actor) = actor_str.parse::<u64>() else {
+        return Some(Route::BadRequest {
+            detail: format!("invalid actor id {actor_str:?}"),
+        });
+    };
+    match resource_str {
+        None => Some(Route::ActorBalances { actor }),
+        Some(resource_str) => match resource_str.parse::<u64>() {
+            Ok(resource) => Some(Route::ActorBalance { actor, resource }),
+            Err(_) => Some(Route::BadRequest {
+                detail: format!("invalid resource id {resource_str:?}"),
+            }),
         },
     }
 }
@@ -171,5 +224,63 @@ mod tests {
         // An unknown path takes precedence as NotFound regardless of
         // method (there is no path to disallow a method on).
         assert!(matches!(route("POST", "/nope"), Route::NotFound { .. }));
+    }
+
+    #[test]
+    fn actor_balances_list_route() {
+        assert_eq!(
+            route("GET", "/v1/actors/7/balances"),
+            Route::ActorBalances { actor: 7 }
+        );
+        // A trailing slash normalises to the list route.
+        assert_eq!(
+            route("GET", "/v1/actors/7/balances/"),
+            Route::ActorBalances { actor: 7 }
+        );
+    }
+
+    #[test]
+    fn actor_balance_single_route() {
+        assert_eq!(
+            route("GET", "/v1/actors/7/balances/0"),
+            Route::ActorBalance {
+                actor: 7,
+                resource: 0
+            }
+        );
+    }
+
+    #[test]
+    fn malformed_id_is_bad_request() {
+        assert!(matches!(
+            route("GET", "/v1/actors/abc/balances"),
+            Route::BadRequest { .. }
+        ));
+        assert!(matches!(
+            route("GET", "/v1/actors/7/balances/xyz"),
+            Route::BadRequest { .. }
+        ));
+    }
+
+    #[test]
+    fn non_get_balances_is_method_not_allowed() {
+        assert_eq!(
+            route("POST", "/v1/actors/7/balances"),
+            Route::MethodNotAllowed { allow: "GET" }
+        );
+    }
+
+    #[test]
+    fn unrelated_or_overlong_actors_path_is_not_found() {
+        // Right prefix, wrong shape → 404 (not this route family).
+        assert!(matches!(
+            route("GET", "/v1/actors/7/nonsense"),
+            Route::NotFound { .. }
+        ));
+        // A trailing extra segment → 404.
+        assert!(matches!(
+            route("GET", "/v1/actors/7/balances/0/extra"),
+            Route::NotFound { .. }
+        ));
     }
 }

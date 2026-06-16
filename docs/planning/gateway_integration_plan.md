@@ -1182,16 +1182,23 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     agnostic to the indexer's key conventions.  Covered by 12 `knomosis-storage`
     tests + the `knomosis-indexer/tests/read_only_views.rs` acceptance suite (3
     tests); workspace clippy `-D warnings` + the full 2011-test suite stay green.
-  * **G1.6b — Balances endpoints** · S · deps: G1.6a. *Deliverable:*
-    `reads/store.rs` (open + snapshot helper) + `reads/balances.rs`:
-    `GET /actors/{id}/balances` (via `BalanceView::scan_all` filtered to
-    the actor, over one `StorageSnapshot` together with `c/cursor`) and
-    `…/balances/{resource}` (via `BalanceView::get`); `X-Knomosis-Seq` from
-    `cursor::read_cursor`; weak `ETag` from `(actor, cursor)` +
-    `If-None-Match`→304; absent cell → `"0"`. *Acceptance:* values
-    byte-match `knomosis-indexer query` on a seeded DB; unknown actor →
-    empty list / `"0"`; the list + its seq come from one snapshot (no torn
-    read under a concurrent writer — chaos-tested).
+  * **G1.6b — Balances endpoints** · S · deps: G1.6a · **DONE (ETag/304
+    deferred).** Landed on the parse → dispatch → write architecture: a
+    typed `Route` (`ActorBalances{actor}` / `ActorBalance{actor,resource}`
+    / `BadRequest`), the read-only `SqliteStorage` handle in `AppState`
+    (G1.6b/1), and `reads/balances.rs`. `GET /v1/actors/{id}/balances`
+    scans the `b/` keyspace + reads `c/cursor` under ONE `StorageSnapshot`
+    (torn-read-free, §3.6), filters to the actor, and renders the
+    `BalanceList` schema; `…/balances/{resource}` uses `BalanceView::get` +
+    `cursor::read_cursor` and renders `Balance`; both attach
+    `X-Knomosis-Seq`, an absent cell is `"0"`, a malformed id is `400`, and
+    a gateway started without `--indexer-db` answers `503`. Corrupt
+    balance/cursor cells fail closed (`500`). *Acceptance met:*
+    contract-shape + actor-filtering + snapshot-seq + empty-list +
+    absent-cell unit tests over a seeded read-only DB. **Deferred:** the
+    weak `ETag` + `If-None-Match`→`304` (needs request-header access
+    threaded into the dispatcher — a small follow-up) and the live-writer
+    chaos test.
 * **G1.7 — Read: budget + pools** · M · deps: G1.6.
   *Deliverable:* `reads/budget.rs` — `GET /actors/{id}/budget` via
   `BudgetReadView::remaining_this_epoch(actor, free_tier)` (combining the
