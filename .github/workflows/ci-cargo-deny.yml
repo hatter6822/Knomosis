@@ -1,0 +1,96 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# Cargo dependency supply-chain audit (Workstream GW §G4.5).
+#
+# Runs `cargo deny check` over the `runtime/` Cargo workspace against the
+# policy in `runtime/deny.toml`:
+#
+#   * advisories — every RUSTSEC advisory (incl. yanked) is a hard failure;
+#   * licenses   — a verified allow-list (see
+#                  `docs/audits/gateway_dependency_audit.md`);
+#   * bans       — wildcard version requirements denied;
+#   * sources    — only the canonical crates.io registry permitted.
+#
+# Scoped to dependency-graph changes (any member `Cargo.toml`, the
+# workspace `Cargo.lock`, the policy file, or this workflow) so it does not
+# add CI time to source-only PRs.
+#
+# Third-party-action pinning (per CLAUDE.md / Genesis Plan §13.6): the two
+# actions are pinned to the SAME commit SHAs already vetted in
+# `ci-rust.yml`.  `cargo-deny` itself is installed from crates.io with
+# `--locked` (no unpinned binary download).
+
+name: cargo-deny
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'runtime/**/Cargo.toml'
+      - 'runtime/Cargo.toml'
+      - 'runtime/Cargo.lock'
+      - 'runtime/deny.toml'
+      - '.github/workflows/ci-cargo-deny.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'runtime/**/Cargo.toml'
+      - 'runtime/Cargo.toml'
+      - 'runtime/Cargo.lock'
+      - 'runtime/deny.toml'
+      - '.github/workflows/ci-cargo-deny.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+defaults:
+  run:
+    working-directory: runtime
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: '0'
+
+jobs:
+  cargo-deny:
+    name: cargo deny check (advisories + licenses + bans + sources)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (SHA vetted in ci-rust.yml).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Rust toolchain (per rust-toolchain.toml)
+        shell: bash
+        run: |
+          rustup show
+          cargo --version
+
+      - name: Cache cargo artifacts
+        # Swatinem/rust-cache v2.7.7 (SHA vetted in ci-rust.yml).  Caches
+        # the registry + the built `cargo-deny` binary across runs.
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: runtime
+          shared-key: gw-cargo-deny
+          cache-all-crates: true
+
+      - name: Install cargo-deny
+        # From crates.io with `--locked` (the `deny.toml` uses the
+        # `version = 2` schema, cargo-deny >= 0.14).
+        run: cargo install cargo-deny --locked --version "^0.16"
+
+      - name: cargo deny check
+        run: cargo deny --manifest-path Cargo.toml check

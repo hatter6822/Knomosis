@@ -104,9 +104,12 @@ The companion machine-readable contract is
 > sets the shared shutdown flag; `serve` drains the handler pool under a
 > deadline via `tiny_http::unblock`, and the mux + every live SSE stream
 > stop on the flag, the streams emitting a clean `server_shutdown` close
-> with no mid-record truncation).  Next: **G4.2** (TLS/mTLS), **G4.5** (dep
-> audit), **G4.6** (load/soak/chaos), **G4.7** (the runbook) + the deferred
-> additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
+> with no mid-record truncation), and **G4.5** (the dep audit — the repo's
+> first `runtime/deny.toml` cargo-deny policy with a locally-verified licence
+> allow-list, a dedicated `ci-cargo-deny.yml`, and the supply-chain review
+> doc `docs/audits/gateway_dependency_audit.md`).  Next: **G4.2** (TLS/mTLS),
+> **G4.6** (load/soak/chaos), **G4.7** (the runbook) + the deferred additive
+> pins (G2.1c pipelining, G3.2c cross-stack corpus).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1804,12 +1807,27 @@ cross-stack corpus pin remains deferred.
   (the unblock-N drain over real workers) and `shutdown_emits_server_shutdown_and_closes`
   (the no-truncation clean close).  Adds the plan-sanctioned `signal-hook`
   dependency (`default-features = false`).
-* **G4.5 — Security review + dep audit** · S · deps: G1–G4. Threat-model
-  pass; introduce `runtime/deny.toml` (`cargo-deny`: advisories, licenses,
-  bans) — none exists yet — and wire `cargo audit`/`cargo deny` into
-  `ci-gateway.yml`; justify the new `base64`/HTTP/`signal-hook` deps.
-  *Acceptance:* no advisories; license/ban policy passes; review sign-off
-  recorded in `docs/audits/`.
+* **G4.5 — Security review + dep audit** · S · deps: G1–G4 · **DONE.**
+  Introduces `runtime/deny.toml` (the first `cargo-deny` policy in the repo:
+  `[advisories]` deny-all + yanked, a strict `[licenses]` allow-list,
+  `[bans]` wildcard-deny with `allow-wildcard-paths` for the internal `path`
+  crates, `[sources]` crates.io-only) and wires it into a dedicated
+  `.github/workflows/ci-cargo-deny.yml` (scoped to dependency-graph changes;
+  installs `cargo-deny --locked` and reuses the vetted action SHAs).  The
+  **licence allow-list is verified locally** against the resolved tree via
+  `cargo metadata` — every expression is satisfiable by
+  `{MIT, Apache-2.0, ISC, BSD-3-Clause, Unicode-3.0, GPL-3.0-or-later}` (the
+  three mandatory single-/conjunctive entries are `subtle`'s `BSD-3-Clause`,
+  `ring`'s `ISC`, and `unicode-ident`'s `Unicode-3.0`).  The review sign-off,
+  the full dependency inventory, the per-new-dep justifications (`tiny_http`,
+  `subtle`, `signal-hook`; dev: `tempfile`, `proptest`, `tracing-subscriber`),
+  and the gateway threat-model notes are recorded in
+  `docs/audits/gateway_dependency_audit.md`.  *Acceptance:* licence/ban/source
+  policy verified (licences against `cargo metadata`; the advisory-DB pass
+  runs in CI, which cannot be evaluated offline); review sign-off recorded.
+  *(Note: the audit replaced the planned `base64` dep — the gateway
+  hand-rolls a dependency-free RFC 4648 codec — so only HTTP / `signal-hook`
+  needed justifying.)*
 * **G4.6 — Load/soak/chaos** · M · deps: G1–G3. A `knomosis-gateway`-bench
   (mirroring `knomosis-bench`) for submit throughput + concurrent-SSE
   fan-out; `tests/chaos.rs` (upstream kill/restart incl. indexer-writer-
