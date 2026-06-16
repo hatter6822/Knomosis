@@ -57,8 +57,10 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const GATEWAY_IDENTIFIER: &str = "knomosis-gateway/v1";
 
 pub mod config;
+pub mod dispatch;
 pub mod http;
 pub mod problem;
+pub mod state;
 
 #[cfg(test)]
 mod tests {

@@ -26,9 +26,10 @@ fn one_shot_get(path: &str) -> String {
         .expect("listener bound to a TCP address");
 
     let server_thread = Arc::clone(&server);
+    let state = test_state();
     let handle = thread::spawn(move || {
         if let Ok(request) = server_thread.recv() {
-            knomosis_gateway::http::handle_request(request);
+            knomosis_gateway::http::handle_request(request, &state);
         }
     });
 
@@ -40,6 +41,17 @@ fn one_shot_get(path: &str) -> String {
 
     handle.join().expect("server thread joined");
     response
+}
+
+/// A minimal shared `AppState` for the smoke tests: a loopback config
+/// with no read backend configured.
+fn test_state() -> Arc<knomosis_gateway::state::AppState> {
+    Arc::new(knomosis_gateway::state::AppState::new(
+        knomosis_gateway::config::Config {
+            listen: "127.0.0.1:0".parse().expect("loopback addr"),
+            handler_threads: 1,
+        },
+    ))
 }
 
 #[test]
@@ -89,7 +101,8 @@ fn handler_pool_serves_concurrent_requests() {
         .to_ip()
         .expect("listener bound to a TCP address");
     // A pool of 4 workers; fire 12 concurrent clients at it.
-    let _workers = knomosis_gateway::http::spawn_handler_pool(&server, 4).expect("spawn pool");
+    let _workers =
+        knomosis_gateway::http::spawn_handler_pool(&server, 4, &test_state()).expect("spawn pool");
 
     let mut clients = Vec::new();
     for _ in 0..12 {
