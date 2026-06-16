@@ -399,6 +399,7 @@ dependencies = [
  "knomosis-host",
  "knomosis-indexer",
  "knomosis-storage",
+ "proptest",
  "serde",
  "serde_json",
  "subtle",

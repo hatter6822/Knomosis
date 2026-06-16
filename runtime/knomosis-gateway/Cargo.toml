@@ -78,6 +78,11 @@ tiny_http = { workspace = true }
 # `tempfile` provides the isolated on-disk SQLite database the reads
 # unit tests seed and open read-only.
 tempfile = { workspace = true }
+# `proptest` powers the property tests over the SSE fan-out ring (G3.4):
+# ordering, gap-freeness, seq-group integrity, and watermark correctness
+# against an oracle stream.  Dev-only; the same workspace-pinned crate the
+# host / indexer / event-subscribe property suites use.
+proptest = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

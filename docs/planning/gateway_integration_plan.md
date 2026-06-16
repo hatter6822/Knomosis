@@ -69,9 +69,16 @@ The companion machine-readable contract is
 > `since < oldest` → `409`+`oldestSeq`, the soft-`limit` group-complete
 > rounding, the gateway-side `type` filter, and the fail-closed decode
 > path; wired end-to-end through the auth → route(query) → dispatch →
-> drain pipeline). Next: **G3.4** (the SSE fan-out) → **G3.5**
-> (`/v1/events/stream` wiring) + the remaining G4 hardening (TLS, graceful
-> drain).
+> drain pipeline). The **G3.4** SSE fan-out (the complex sub-system) is
+> underway with **G3.4a** (the bounded `events/fanout/ring.rs` — the
+> shared `(seq, index)`-keyed record ring + dedup/order guard, the
+> `last_evicted` frontier, `records_after` / `position` cursor queries,
+> and the last-complete-group watermark; `proptest`-verified against an
+> oracle for ordering / gap-freeness / seq-group integrity / watermark
+> correctness). Next: **G3.4b** (upstream multiplexing) → **G3.4c**
+> (per-client dispatch + eviction) → **G3.4d** (resume semantics) →
+> **G3.5** (`/v1/events/stream` wiring) + the remaining G4 hardening (TLS,
+> graceful drain).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1599,22 +1606,33 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   query `400`).  The live SSE "behind" catch-up is G3.4/G3.5.
   *(Upsized S→M: a bounded page over an unbounded stream is more than a
   drain.)*
-* **G3.4 — SSE fan-out (the complex sub-system)** · L · deps: G3.1, G3.2.
+* **G3.4 — SSE fan-out (the complex sub-system)** · L · deps: G3.1, G3.2 ·
+  **in progress (G3.4a DONE).**
   The §6.1 composite-id correctness lives here; each sub-WU is property-
   tested against an oracle stream.
-  * **G3.4a — Ring buffer + cursor registry** · M. `events/fanout/ring.rs`:
-    a bounded ring of recent **`(seq, index, type, json)`** records (not
-    bare seqs — the intra-seq index is load-bearing, §6.1); per-client
-    cursor as `(seq, index)`; oldest-retained tracking; and a
-    **last-complete-group watermark** = the highest seq `S` for which a
-    record with `seq > S` has been ingested (so group `S` is provably whole —
-    a group is only known complete once the *next* seq begins, §11.4). The
+  * **G3.4a — Ring buffer + cursor registry** · M · **DONE.**
+    `events/fanout/ring.rs`: a bounded FIFO ring of recent
+    **`EventRecord{seq, index, event_type, data}`** records (not bare
+    seqs — the intra-seq index is load-bearing, §6.1; `data` is the §6.2
+    `EventJson` serialized once + shared via `Arc`), with the `(seq, index)`
+    `Cursor` (derived lexicographic `Ord`), `push` dedup/order guard (a
+    not-strictly-newer cursor is dropped — the resubscribe-replay dedup),
+    oldest/newest tracking, a `last_evicted` frontier, `records_after`
+    (the gap-free suffix / intra-seq skip), a `position` classifier
+    (`AtTail` / `InWindow` / `Behind{oldestSeq}`), and the
+    **last-complete-group watermark** = the highest seq strictly below the
+    newest ingested seq (so the watermarked group is provably whole — a
+    group is only known complete once the *next* seq begins, §11.4). The
     watermark, not the newest seq, is the safe resubscribe point (G3.4b,
-    finding #4). *Acceptance:* property tests for ordering, gap-freeness,
-    **seq-group integrity** (no record of a group is dropped while a later
-    group is retained), and **watermark correctness** (it never advances into
-    a still-open group) against an oracle; a client cursor advances exactly
-    one record at a time.
+    finding #4). *Acceptance (DONE):* 5 unit tests (dedup/order, watermark
+    progression, the strict-suffix `records_after` incl. the intra-seq
+    skip, the three `position` tiers incl. the post-eviction
+    saw-the-evicted-record case, resubscribe-replay dedup) + 3 `proptest`
+    oracle properties — ordering / gap-freeness / seq-group integrity (the
+    retained set is exactly the oracle's deduped contiguous suffix) and
+    watermark correctness (never advances into the open group); a client
+    cursor advances exactly one record at a time; `position` matches the
+    oracle's evict-frontier classification.
   * **G3.4b — Upstream multiplexing** · M · deps: G3.4a, G3.1.
     `events/fanout/mux.rs`: a **single** shared live-tail subscription
     (`--upstream-subscriptions` default **1**, finding #6) feeds the ring;
