@@ -45,6 +45,13 @@ pub enum ServeError {
         /// The OS thread-spawn diagnostic.
         reason: String,
     },
+    /// Building the shared application state failed (e.g. the read-only
+    /// indexer database could not be opened).
+    #[error("failed to initialise gateway state: {reason}")]
+    State {
+        /// The state-layer diagnostic.
+        reason: String,
+    },
 }
 
 /// Run the gateway HTTP server, blocking the calling thread.
@@ -74,7 +81,10 @@ pub fn serve(config: &Config) -> Result<(), ServeError> {
         handler_threads = config.handler_threads,
         "knomosis-gateway listening"
     );
-    let state = Arc::new(AppState::new(config.clone()));
+    let state = AppState::new(config.clone()).map_err(|e| ServeError::State {
+        reason: e.to_string(),
+    })?;
+    let state = Arc::new(state);
     let handles = spawn_handler_pool(&server, config.handler_threads, &state)?;
     // Block until a worker exits.  Under normal operation the workers
     // loop forever on `recv`; graceful shutdown is G4.4.

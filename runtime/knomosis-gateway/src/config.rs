@@ -17,6 +17,7 @@
 //! offending knob) this module's shape anticipates.
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 /// Default HTTP listen address — loopback-safe per §9.2 (the gateway
 /// sits behind the BFF / an L7 edge; it is not bound to `0.0.0.0` by
@@ -42,6 +43,10 @@ pub const MAX_HANDLER_THREADS: usize = 4096;
 /// takes precedence over the environment.
 pub const HANDLER_THREADS_ENV: &str = "KNX_GW_HANDLER_THREADS";
 
+/// Environment variable mirroring `--indexer-db`.  The CLI flag takes
+/// precedence over the environment.
+pub const INDEXER_DB_ENV: &str = "KNX_GW_INDEXER_DB";
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -56,6 +61,10 @@ OPTIONS:
                        Bounded request-handler pool size; caps
                        concurrent request processing
                        (env KNX_GW_HANDLER_THREADS) [default: 16]
+    --indexer-db <PATH>
+                       Path to the knomosis-indexer SQLite database,
+                       opened READ-ONLY for balance/budget/pool reads
+                       (env KNX_GW_INDEXER_DB) [default: reads disabled]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -103,6 +112,10 @@ pub struct Config {
     /// worker threads each blocking on `Server::recv`, capping
     /// concurrent request processing.  Always in `1..=MAX_HANDLER_THREADS`.
     pub handler_threads: usize,
+    /// Path to the indexer SQLite database, opened READ-ONLY for the
+    /// balance / budget / pool reads (G1.6b).  `None` disables the read
+    /// endpoints (they answer `503`); set via `--indexer-db`.
+    pub indexer_db: Option<PathBuf>,
 }
 
 impl Config {
@@ -121,6 +134,7 @@ impl Config {
     pub fn parse(args: &[String]) -> Result<Self, ConfigError> {
         let mut listen_raw: Option<String> = None;
         let mut handler_threads_raw: Option<String> = None;
+        let mut indexer_db_raw: Option<String> = None;
         let mut i = 1;
         while let Some(arg) = args.get(i) {
             match arg.as_str() {
@@ -138,6 +152,13 @@ impl Config {
                         flag: "--handler-threads".to_string(),
                     })?;
                     handler_threads_raw = Some(value.clone());
+                    i += 1;
+                }
+                "--indexer-db" => {
+                    let value = args.get(i + 1).ok_or_else(|| ConfigError::MissingValue {
+                        flag: "--indexer-db".to_string(),
+                    })?;
+                    indexer_db_raw = Some(value.clone());
                     i += 1;
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
@@ -179,9 +200,14 @@ impl Config {
                 }
             };
 
+        let indexer_db = indexer_db_raw
+            .or_else(|| std::env::var(INDEXER_DB_ENV).ok())
+            .map(PathBuf::from);
+
         Ok(Self {
             listen,
             handler_threads,
+            indexer_db,
         })
     }
 }
@@ -297,5 +323,17 @@ mod tests {
             Config::parse(&argv(&["--handler-threads", "lots"])),
             Err(ConfigError::InvalidValue { .. })
         ));
+    }
+
+    /// `--indexer-db` is parsed to a path; absent → `None`.
+    #[test]
+    fn indexer_db_optional() {
+        std::env::remove_var(super::INDEXER_DB_ENV);
+        assert_eq!(Config::parse(&argv(&[])).unwrap().indexer_db, None);
+        let cfg = Config::parse(&argv(&["--indexer-db", "/var/lib/knomosis/index.db"])).unwrap();
+        assert_eq!(
+            cfg.indexer_db,
+            Some(std::path::PathBuf::from("/var/lib/knomosis/index.db"))
+        );
     }
 }

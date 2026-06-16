@@ -37,6 +37,10 @@ path = "src/main.rs"
 [dependencies]
 # Shared CLI / logging helpers (exit-code discipline + `tracing` init).
 knomosis-cli-common = { workspace = true }
+# The read-only indexer storage handle: the G1.6b reads open the
+# indexer's SQLite database via `SqliteStorage::open_read_only` (the
+# G1.6a path — pure SQLITE_OPEN_READ_ONLY).
+knomosis-storage = { path = "../knomosis-storage" }
 # The synchronous HTTP/1.1 server (G1.0 / OQ-GW-8 decision: a vetted
 # sync crate, no tokio).  `default-features = false` keeps TLS out (its
 # `ssl-rustls` feature predates the workspace's rustls 0.23; HTTPS is

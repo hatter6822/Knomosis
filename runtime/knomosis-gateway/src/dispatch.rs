@@ -59,7 +59,9 @@ mod tests {
         AppState::new(Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
             handler_threads: 1,
+            indexer_db: None,
         })
+        .expect("no DB to open")
     }
 
     #[test]

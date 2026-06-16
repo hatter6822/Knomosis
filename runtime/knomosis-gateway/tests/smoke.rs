@@ -46,12 +46,14 @@ fn one_shot_get(path: &str) -> String {
 /// A minimal shared `AppState` for the smoke tests: a loopback config
 /// with no read backend configured.
 fn test_state() -> Arc<knomosis_gateway::state::AppState> {
-    Arc::new(knomosis_gateway::state::AppState::new(
-        knomosis_gateway::config::Config {
+    Arc::new(
+        knomosis_gateway::state::AppState::new(knomosis_gateway::config::Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
             handler_threads: 1,
-        },
-    ))
+            indexer_db: None,
+        })
+        .expect("no DB to open"),
+    )
 }
 
 #[test]
