@@ -47,6 +47,19 @@
 //! the builder (from its observed receipt) and any independent observer
 //! (from the fetched receipt) compute the same hash — and a fabricated
 //! receipt cannot reuse a real receipt's hash.
+//!
+//! ## No-reuse on the observer path
+//!
+//! The canonical hash is what the consumed set de-duplicates on, so the
+//! `_fresh` verifiers ([`verify_eth_claim_independently_fresh`] /
+//! [`verify_bold_claim_independently_fresh`]) reject a [`ClaimBackingOutcome::Reused`]
+//! receipt — the observer-side analogue of the Lean `consumeReceipt_blocks_reuse`.
+//! **The no-reuse check uses the canonical hash re-derived from L1, never a
+//! sequencer-asserted one** — otherwise a dishonest operator could present
+//! distinct fabricated hashes for one real receipt to back N claims and drain
+//! the pool by N× the real spend.  [`fetch_and_derive_gas_receipt`] is the
+//! composable primitive that hands a caller the canonical-hash [`GasReceipt`]
+//! to record in its consumed set.
 
 use crate::sequencer_claim::{EthBoldRate, GasReceipt, SequencerClaim};
 
@@ -150,11 +163,18 @@ pub trait ReceiptSource {
 /// The outcome of an independent backing check.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClaimBackingOutcome {
-    /// The claim is a canonical reimbursement claim and its amount is within
-    /// the independently-derived receipt cost — backed.
+    /// The claim is a canonical reimbursement claim, its amount is within the
+    /// independently-derived receipt cost, and (for the fresh check) the
+    /// receipt has not been consumed before — backed.
     Backed,
     /// The claim's shape or amount is not justified by the on-chain receipt.
     NotBacked,
+    /// The claim IS backed by the receipt, but that receipt's canonical
+    /// binding hash has already been consumed by a prior admitted claim —
+    /// admitting it would let one L1 receipt back two reimbursements, so the
+    /// no-reuse rule rejects it (the observer-side analogue of the Lean
+    /// `consumeReceipt_blocks_reuse`).  Only produced by the `_fresh` checks.
+    Reused,
     /// No receipt exists on L1 for the given transaction hash.
     ReceiptNotFound,
     /// The L1 transaction reverted; it backs no reimbursement.
@@ -169,13 +189,40 @@ impl ClaimBackingOutcome {
     }
 }
 
-/// **Independently verify an ETH-leg claim** against the on-chain receipt.
+/// Fetch the L1 receipt for `tx_hash` and re-derive the canonical
+/// [`GasReceipt`] for `batch_id`.  `Ok(None)` if the chain has no receipt
+/// for the hash OR the transaction reverted (both back nothing).
 ///
-/// Fetches the receipt for `tx_hash` via `source`, re-derives the canonical
-/// [`GasReceipt`] for `batch_id` (never trusting the claim), and reports
-/// whether `claim` is canonically receipt-backed
-/// ([`SequencerClaim::is_receipt_backed_by`]).  This is the production
-/// binding of the Lean `l1GasReceiptVerifier` opaque for the ETH leg.
+/// This is the composable primitive a watchtower uses: the returned
+/// [`GasReceipt`] carries the **canonical** binding hash (re-derived from L1
+/// by [`canonical_receipt_binding_hash`]), which the caller checks for
+/// backing/freshness ([`SequencerClaim::is_receipt_backed_by`] /
+/// [`SequencerClaim::is_receipt_fresh_and_backed`]) and records in its
+/// consumed set.
+///
+/// **Security invariant.**  The consumed set MUST be keyed by THIS hash
+/// (re-derived from L1), never by a sequencer-asserted one — otherwise a
+/// dishonest operator could present distinct fabricated binding hashes for
+/// one real L1 receipt to evade the no-reuse rule and drain the pool by
+/// N× the real spend.
+///
+/// # Errors
+///
+/// Propagates [`ReceiptFetchError`] from the source.
+pub fn fetch_and_derive_gas_receipt<S: ReceiptSource>(
+    source: &S,
+    tx_hash: &[u8; 32],
+    batch_id: u64,
+) -> Result<Option<GasReceipt>, ReceiptFetchError> {
+    Ok(source
+        .fetch_receipt(tx_hash)?
+        .and_then(|raw| derive_gas_receipt(&raw, batch_id)))
+}
+
+/// **Independently verify an ETH-leg claim is backed** against the on-chain
+/// receipt (backing only — no freshness).  Convenience wrapper over
+/// [`verify_eth_claim_independently_fresh`] with an empty consumed set, so it
+/// never returns [`ClaimBackingOutcome::Reused`].
 ///
 /// # Errors
 ///
@@ -186,28 +233,57 @@ pub fn verify_eth_claim_independently<S: ReceiptSource>(
     tx_hash: &[u8; 32],
     batch_id: u64,
 ) -> Result<ClaimBackingOutcome, ReceiptFetchError> {
+    verify_eth_claim_independently_fresh(source, claim, tx_hash, batch_id, &[])
+}
+
+/// **Independently verify an ETH-leg claim is backed AND fresh.**
+///
+/// Fetches the receipt for `tx_hash` via `source`, re-derives the canonical
+/// [`GasReceipt`] for `batch_id` (never trusting the claim), and reports
+/// [`ClaimBackingOutcome`]: `ReceiptNotFound` (no L1 receipt),
+/// `TransactionFailed` (the tx reverted), `NotBacked` (wrong shape or over
+/// the cost), `Reused` (backed, but the receipt's canonical binding hash is
+/// already in `consumed`), or `Backed` (canonically backed and fresh).  This
+/// is the production binding of the Lean `l1GasReceiptVerifier` opaque plus
+/// the `receiptEnforcedClaimAdmissible` freshness gate for the ETH leg — the
+/// no-reuse check uses the **canonical re-derived** hash, never the claim's.
+///
+/// # Errors
+///
+/// Propagates [`ReceiptFetchError`] from the source.
+pub fn verify_eth_claim_independently_fresh<S: ReceiptSource>(
+    source: &S,
+    claim: &SequencerClaim,
+    tx_hash: &[u8; 32],
+    batch_id: u64,
+    consumed: &[[u8; 32]],
+) -> Result<ClaimBackingOutcome, ReceiptFetchError> {
     let Some(raw) = source.fetch_receipt(tx_hash)? else {
         return Ok(ClaimBackingOutcome::ReceiptNotFound);
     };
     let Some(gas_receipt) = derive_gas_receipt(&raw, batch_id) else {
         return Ok(ClaimBackingOutcome::TransactionFailed);
     };
-    Ok(if claim.is_receipt_backed_by(&gas_receipt) {
-        ClaimBackingOutcome::Backed
-    } else {
-        ClaimBackingOutcome::NotBacked
-    })
+    if !claim.is_receipt_backed_by(&gas_receipt) {
+        return Ok(ClaimBackingOutcome::NotBacked);
+    }
+    // Backed — the no-reuse check is against the CANONICAL (re-derived) hash.
+    if consumed.contains(&gas_receipt.receipt_binding_hash) {
+        return Ok(ClaimBackingOutcome::Reused);
+    }
+    Ok(ClaimBackingOutcome::Backed)
 }
 
-/// **Independently verify a BOLD-leg claim** against the on-chain receipt
-/// and an attested ETH→BOLD `rate`.
+/// **Independently verify a BOLD-leg claim is backed** against the on-chain
+/// receipt and an attested ETH→BOLD `rate` (backing only — no freshness).
+/// Convenience wrapper over [`verify_bold_claim_independently_fresh`] with an
+/// empty consumed set.
 ///
-/// Like [`verify_eth_claim_independently`] but converts the re-derived wei
-/// cost to BOLD base units at `rate` and checks
-/// [`SequencerClaim::is_bold_receipt_backed_by`].  The rate is the
-/// observer's own attested price (the second OQ-GP-8b trust assumption); a
-/// watchtower supplies it from its independent oracle, exactly as the
-/// builder does — the binding here covers the *gas* re-derivation.
+/// The `rate` is the observer's own attested price (the second OQ-GP-8b trust
+/// assumption); a watchtower supplies it from its independent oracle — the
+/// binding here covers the *gas* re-derivation, and the verdict is relative
+/// to the observer's rate (cross-check across oracles, per GENESIS_PLAN
+/// §15E.7).
 ///
 /// # Errors
 ///
@@ -219,17 +295,39 @@ pub fn verify_bold_claim_independently<S: ReceiptSource>(
     batch_id: u64,
     rate: &EthBoldRate,
 ) -> Result<ClaimBackingOutcome, ReceiptFetchError> {
+    verify_bold_claim_independently_fresh(source, claim, tx_hash, batch_id, rate, &[])
+}
+
+/// **Independently verify a BOLD-leg claim is backed AND fresh.**  The BOLD
+/// analogue of [`verify_eth_claim_independently_fresh`]: converts the
+/// re-derived wei cost to BOLD at `rate` ([`SequencerClaim::is_bold_receipt_backed_by`])
+/// and applies the same no-reuse check on the canonical hash (the consumed
+/// set spans both legs).
+///
+/// # Errors
+///
+/// Propagates [`ReceiptFetchError`] from the source.
+pub fn verify_bold_claim_independently_fresh<S: ReceiptSource>(
+    source: &S,
+    claim: &SequencerClaim,
+    tx_hash: &[u8; 32],
+    batch_id: u64,
+    rate: &EthBoldRate,
+    consumed: &[[u8; 32]],
+) -> Result<ClaimBackingOutcome, ReceiptFetchError> {
     let Some(raw) = source.fetch_receipt(tx_hash)? else {
         return Ok(ClaimBackingOutcome::ReceiptNotFound);
     };
     let Some(gas_receipt) = derive_gas_receipt(&raw, batch_id) else {
         return Ok(ClaimBackingOutcome::TransactionFailed);
     };
-    Ok(if claim.is_bold_receipt_backed_by(&gas_receipt, rate) {
-        ClaimBackingOutcome::Backed
-    } else {
-        ClaimBackingOutcome::NotBacked
-    })
+    if !claim.is_bold_receipt_backed_by(&gas_receipt, rate) {
+        return Ok(ClaimBackingOutcome::NotBacked);
+    }
+    if consumed.contains(&gas_receipt.receipt_binding_hash) {
+        return Ok(ClaimBackingOutcome::Reused);
+    }
+    Ok(ClaimBackingOutcome::Backed)
 }
 
 /// Parse the subset of an `eth_getTransactionReceipt` JSON result this
@@ -253,8 +351,10 @@ pub fn parse_eth_receipt(
         .ok_or_else(|| ReceiptFetchError::Malformed("transactionHash not a 32-byte hex".into()))?;
     let gas_used = parse_hex_u128(get_str(obj, "gasUsed")?)?;
     let effective_gas_price = parse_hex_u128(get_str(obj, "effectiveGasPrice")?)?;
-    // `status` is "0x1" (success) / "0x0" (revert) on post-Byzantium chains.
-    let status_ok = parse_hex_u128(get_str(obj, "status")?)? != 0;
+    // EIP-658: `status` is exactly "0x1" (success) or "0x0" (revert).  Match
+    // `== 1` strictly (not `!= 0`) so a non-spec status backs nothing
+    // (fail-closed) rather than being treated as success.
+    let status_ok = parse_hex_u128(get_str(obj, "status")?)? == 1;
     Ok(Some(EthTxReceipt {
         transaction_hash,
         gas_used,
@@ -431,9 +531,10 @@ mod tests {
     fn independent_eth_verify_rejects_overspend_and_fabrication() {
         let tx = [0xAA; 32];
         let source = MockReceiptSource::default().with(ok_receipt(tx, 21_000, 50));
-        // Over the real (independently-derived) cost → NotBacked, even if the
-        // operator claimed a higher receipt — the verifier ignores the claim's
-        // assertion and uses L1 reality.
+        // Over the real (independently-derived) cost → NotBacked.  The
+        // verifier derives the cost from the L1 receipt, NOT from the claim
+        // (which carries only an amount), so an operator cannot inflate the
+        // bound by asserting a richer receipt.
         assert_eq!(
             verify_eth_claim_independently(&source, &eth_claim(2_000_000), &tx, 7).unwrap(),
             ClaimBackingOutcome::NotBacked
@@ -533,8 +634,139 @@ mod tests {
                 .unwrap()
                 .status_ok
         );
+        // Strict EIP-658: a NON-SPEC status (not exactly 0x1) is NOT success
+        // (fail-closed) — backs nothing.
+        let mut obj2 = v.as_object().unwrap().clone();
+        obj2.insert("status".into(), serde_json::Value::String("0x2".into()));
+        assert!(
+            !parse_eth_receipt(&serde_json::Value::Object(obj2))
+                .unwrap()
+                .unwrap()
+                .status_ok,
+            "a non-spec status (0x2) must not be treated as success"
+        );
         // Missing field → Malformed.
         let bad = serde_json::json!({ "gasUsed": "0x1" });
         assert!(parse_eth_receipt(&bad).is_err());
+    }
+
+    #[test]
+    fn fresh_verify_rejects_a_reused_receipt() {
+        // OQ-GP-8b no-reuse on the observer path: a receipt that backed a
+        // prior claim cannot back another — keyed on the CANONICAL hash.
+        let tx = [0xAA; 32];
+        let source = MockReceiptSource::default().with(ok_receipt(tx, 21_000, 50));
+        let claim = eth_claim(1_000_000);
+        let canon = canonical_receipt_binding_hash(&tx, 7, 21_000, 50);
+        // Fresh (nothing consumed) → Backed.
+        assert_eq!(
+            verify_eth_claim_independently_fresh(&source, &claim, &tx, 7, &[]).unwrap(),
+            ClaimBackingOutcome::Backed
+        );
+        // After the CANONICAL hash is consumed → Reused.
+        assert_eq!(
+            verify_eth_claim_independently_fresh(&source, &claim, &tx, 7, &[canon]).unwrap(),
+            ClaimBackingOutcome::Reused
+        );
+        // A DIFFERENT consumed hash does NOT block: the observer keys on the
+        // canonical re-derived hash, so a sequencer-fabricated hash is
+        // irrelevant to the no-reuse decision (the security invariant).
+        assert_eq!(
+            verify_eth_claim_independently_fresh(&source, &claim, &tx, 7, &[[0xFF; 32]]).unwrap(),
+            ClaimBackingOutcome::Backed
+        );
+        // An over-cost claim is NotBacked even when fresh (backing precedes
+        // the freshness check).
+        assert_eq!(
+            verify_eth_claim_independently_fresh(&source, &eth_claim(2_000_000), &tx, 7, &[])
+                .unwrap(),
+            ClaimBackingOutcome::NotBacked
+        );
+        // The backing-only wrapper never reports Reused.
+        assert_eq!(
+            verify_eth_claim_independently(&source, &claim, &tx, 7).unwrap(),
+            ClaimBackingOutcome::Backed
+        );
+    }
+
+    #[test]
+    fn fresh_bold_verify_rejects_a_reused_receipt() {
+        let tx = [0xAA; 32];
+        let source = MockReceiptSource::default().with(ok_receipt(tx, 21_000, 50));
+        let rate = EthBoldRate {
+            rate_num: 2,
+            rate_den: 1,
+            rate_binding_hash: [0xCD; 32],
+        };
+        let claim = mk_claim(Action::Transfer {
+            r: 1,
+            sender: GAS_POOL_ACTOR_ID,
+            receiver: SEQUENCER_ACTOR_ID,
+            amount: 2_000_000,
+        });
+        let canon = canonical_receipt_binding_hash(&tx, 7, 21_000, 50);
+        assert_eq!(
+            verify_bold_claim_independently_fresh(&source, &claim, &tx, 7, &rate, &[]).unwrap(),
+            ClaimBackingOutcome::Backed
+        );
+        assert_eq!(
+            verify_bold_claim_independently_fresh(&source, &claim, &tx, 7, &rate, &[canon])
+                .unwrap(),
+            ClaimBackingOutcome::Reused
+        );
+    }
+
+    #[test]
+    fn fetch_and_derive_exposes_the_canonical_receipt() {
+        let tx = [0xAA; 32];
+        let source = MockReceiptSource::default().with(ok_receipt(tx, 21_000, 50));
+        let gr = fetch_and_derive_gas_receipt(&source, &tx, 7)
+            .unwrap()
+            .expect("present");
+        assert_eq!(
+            gr.receipt_binding_hash,
+            canonical_receipt_binding_hash(&tx, 7, 21_000, 50)
+        );
+        assert_eq!(gr.reimbursement(), 1_050_000);
+        // Missing tx → None.
+        assert!(fetch_and_derive_gas_receipt(&source, &[0xCC; 32], 7)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn builder_and_observer_agree_on_the_canonical_hash() {
+        // The agreement point: a builder deriving the canonical GasReceipt
+        // from its own observed receipt, and an observer re-deriving from the
+        // fetched receipt, compute the SAME binding hash — so a shared
+        // consumed set de-dups one L1 receipt to one reimbursement.
+        let tx = [0xAA; 32];
+        let raw = ok_receipt(tx, 21_000, 50);
+        let source = MockReceiptSource::default().with(raw.clone());
+        let builder_gr = derive_gas_receipt(&raw, 7).unwrap(); // builder side
+        let observer_gr = fetch_and_derive_gas_receipt(&source, &tx, 7)
+            .unwrap()
+            .unwrap(); // observer side
+        assert_eq!(
+            builder_gr.receipt_binding_hash, observer_gr.receipt_binding_hash,
+            "builder and observer must agree on the canonical binding hash"
+        );
+        // A within-cost claim verifies Backed; consuming the canonical hash
+        // then drives the no-reuse rejection.
+        let claim = eth_claim(500);
+        assert!(verify_eth_claim_independently(&source, &claim, &tx, 7)
+            .unwrap()
+            .is_backed());
+        assert_eq!(
+            verify_eth_claim_independently_fresh(
+                &source,
+                &claim,
+                &tx,
+                7,
+                &[builder_gr.receipt_binding_hash]
+            )
+            .unwrap(),
+            ClaimBackingOutcome::Reused
+        );
     }
 }

@@ -424,6 +424,20 @@ def tests : List TestCase :=
           fun _cap h => by obtain ⟨_a, ha, _, _⟩ := h; simp at ha
         pure ()
     }
+  , { name := "GP.8.5-bold: a wrong-recipient BOLD transfer is NOT admissible (proof term)"
+    , body := do
+        -- A resource-1 transfer to someone OTHER than sequencerActor cannot
+        -- match the BOLD gate's canonical shape (recipient discrimination).
+        let _proof :
+            ∀ (cap amount : Amount),
+              ¬ receiptVerifiedBoldClaimAdmissible cap
+                  (.transfer 1 gasPoolActor bridgeActor amount) :=
+          fun _cap _amount h => by
+            obtain ⟨_a, ha, _, _⟩ := h
+            rw [Action.transfer.injEq] at ha
+            exact absurd ha.2.2.1 (by decide)
+        pure ()
+    }
   , { name := "GP.8.5-bold: consumeReceipt_blocks_reuse_bold — fresh ⇒ hash ≠ consumed (proof term)"
     , body := do
         let _proof :
