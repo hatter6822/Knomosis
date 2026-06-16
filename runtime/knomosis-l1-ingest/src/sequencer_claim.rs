@@ -63,12 +63,18 @@
 //! [`SequencerClaim::is_receipt_backed_by`] as the runtime mirror of
 //! the Lean witness's `amount_backed` field.
 //!
-//! **Unit scope.**  The receipt cost is wei (`gasUsed * gasPrice`), so
-//! `build_receipt_backed` produces only ETH-leg (resource `0`) claims —
-//! exactly the leg the Lean gate covers.  Receipt-backing the BOLD leg
-//! would need a deployment-configured ETH→BOLD price oracle (a second
-//! trust assumption); until that is ratified the BOLD leg stays on the
-//! v1 honour-system-within-cap `build`.  Tracked as **OQ-GP-8b**.
+//! **Both legs (OQ-GP-8b).**  The gas receipt cost is wei
+//! (`gasUsed * gasPrice`), so the **ETH leg** (resource `0`,
+//! [`SequencerClaim::build_receipt_backed`]) is exact and oracle-free.
+//! The **BOLD leg** (resource `1`, [`SequencerClaim::build_receipt_backed_bold`])
+//! converts that wei cost to BOLD base units via an attested ETH→BOLD
+//! [`EthBoldRate`] — a second trust assumption (the price oracle), mirroring
+//! the Lean `l1EthBoldRateOracle` / `boldReceiptReimbursement`.  Both
+//! builders double-clamp to `min(cap, receipt cost)` and expose a
+//! shape-checked observer re-check ([`SequencerClaim::is_receipt_backed_by`] /
+//! [`SequencerClaim::is_bold_receipt_backed_by`]).  The independent-observer
+//! receipt-fetch binding (re-deriving the receipt from L1, not trusting the
+//! builder) lives in [`crate::receipt_verifier`].
 //!
 //! ## Key handling
 //!
@@ -288,6 +294,89 @@ impl SequencerClaim {
     pub fn is_receipt_fresh_and_backed(&self, receipt: &GasReceipt, consumed: &[[u8; 32]]) -> bool {
         self.is_receipt_backed_by(receipt) && !consumed.contains(&receipt.receipt_binding_hash)
     }
+
+    /// Build and sign a **receipt-verified BOLD-leg** (resource `1`,
+    /// GP.8.5 v2 / OQ-GP-8b) reimbursement claim, backed by a concrete L1
+    /// [`GasReceipt`] AND an attested ETH→BOLD [`EthBoldRate`].
+    ///
+    /// The wei receipt cost is converted to BOLD base units at the
+    /// attested rate (`gasUsed * gasPrice * rate_num / rate_den`, floored),
+    /// and the amount is **double-clamped** to `min(requested_amount, cap,
+    /// receipt.bold_reimbursement(rate))` — so it can never exceed EITHER
+    /// the GP.7.2 per-action BOLD cap OR the BOLD value of the wei the
+    /// sequencer actually paid on L1.  The Rust mirror of the Lean gate
+    /// `receiptVerifiedBoldClaimAdmissible` / `boldReceiptReimbursement`:
+    /// by construction an over-claim is *unconstructible* via this API.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ClaimError::Encode`] if the signing input cannot be
+    /// encoded, or [`ClaimError::Key`] if signing fails.
+    pub fn build_receipt_backed_bold(
+        key: &BridgeActorKey,
+        receipt: &GasReceipt,
+        rate: &EthBoldRate,
+        requested_amount: Amount,
+        cap: Amount,
+        nonce: u128,
+        deployment_id: &[u8],
+    ) -> Result<Self, ClaimError> {
+        // Triple-clamp: within the per-action BOLD cap AND within the
+        // rate-converted L1 wei cost.
+        let amount = requested_amount
+            .min(cap)
+            .min(receipt.bold_reimbursement(rate));
+        // BOLD leg (resource 1).
+        Self::build(key, 1, amount, amount, nonce, deployment_id)
+    }
+
+    /// Runtime mirror of the Lean gate `receiptVerifiedBoldClaimAdmissible`:
+    /// is this claim a *canonical BOLD-leg* (resource `1`) sequencer-
+    /// reimbursement claim whose amount is within the BOLD value the
+    /// `receipt` justifies at `rate`?
+    ///
+    /// Validates the full **action shape** (resource `1`, sender
+    /// `GAS_POOL_ACTOR_ID`, receiver `SEQUENCER_ACTOR_ID`) before comparing
+    /// the amount against `receipt.bold_reimbursement(rate)`.  Returns
+    /// `false` for every noncanonical claim regardless of amount — an
+    /// ETH-leg (resource `0`) transfer, a wrong-recipient / wrong-sender
+    /// transfer, or a non-transfer action — so an observer cannot
+    /// misclassify a v1 honour-system or off-leg claim as BOLD-receipt-
+    /// verified.
+    #[must_use]
+    pub fn is_bold_receipt_backed_by(&self, receipt: &GasReceipt, rate: &EthBoldRate) -> bool {
+        match self.action {
+            Action::Transfer {
+                r,
+                sender,
+                receiver,
+                amount,
+            } => {
+                r == 1
+                    && sender == GAS_POOL_ACTOR_ID
+                    && receiver == SEQUENCER_ACTOR_ID
+                    && amount <= receipt.bold_reimbursement(rate)
+            }
+            _ => false,
+        }
+    }
+
+    /// The ENFORCED BOLD re-check: is this claim BOTH canonically
+    /// BOLD-receipt-backed ([`is_bold_receipt_backed_by`]) AND backed by a
+    /// FRESH receipt (binding hash not already consumed)?  The BOLD
+    /// analogue of [`is_receipt_fresh_and_backed`] — the consumed set is
+    /// shared across legs, so one L1 batch receipt backs at most one
+    /// reimbursement whether ETH or BOLD.
+    #[must_use]
+    pub fn is_bold_receipt_fresh_and_backed(
+        &self,
+        receipt: &GasReceipt,
+        rate: &EthBoldRate,
+        consumed: &[[u8; 32]],
+    ) -> bool {
+        self.is_bold_receipt_backed_by(receipt, rate)
+            && !consumed.contains(&receipt.receipt_binding_hash)
+    }
 }
 
 /// A concrete L1 batch-publication gas receipt: the off-chain witness
@@ -323,6 +412,55 @@ impl GasReceipt {
     pub fn reimbursement(&self) -> Amount {
         self.gas_used.saturating_mul(self.gas_price)
     }
+
+    /// The maximum BOLD reimbursement (BOLD base units) this receipt
+    /// justifies at the attested `rate`: the wei cost converted via
+    /// `rate.rate_num / rate.rate_den` BOLD-per-wei and rounded DOWN — the
+    /// Rust mirror of the Lean `boldReceiptReimbursement`.  Fail-closed on
+    /// a zero denominator (returns `0`).
+    #[must_use]
+    pub fn bold_reimbursement(&self, rate: &EthBoldRate) -> Amount {
+        bold_receipt_reimbursement(self.gas_used, self.gas_price, rate.rate_num, rate.rate_den)
+    }
+}
+
+/// An attested ETH→BOLD exchange rate (the OQ-GP-8b price oracle's output):
+/// the rational `rate_num / rate_den` BOLD base units per ETH wei, bound to
+/// its `rate_binding_hash`.  Mirrors the Lean `SequencerReimbursementVerifiedBold`
+/// witness's `(rateNum, rateDen, rateBindingHash)` triple; the deployment-side
+/// oracle attests it for a given batch.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EthBoldRate {
+    /// Rate numerator — BOLD base units.
+    pub rate_num: u128,
+    /// Rate denominator — ETH wei.
+    pub rate_den: u128,
+    /// The 32-byte binding hash of the rate quotation (the handle the
+    /// deployment-side oracle attests).
+    pub rate_binding_hash: [u8; 32],
+}
+
+/// The maximum BOLD reimbursement (BOLD base units) a verified wei
+/// expenditure justifies at rate `rate_num / rate_den`:
+/// `⌊gas_used * gas_price * rate_num / rate_den⌋` — the Rust mirror of the
+/// Lean `boldReceiptReimbursement`.  Uses **saturating** products so a
+/// pathological receipt/rate caps at `Amount::MAX` (which the per-action
+/// `cap` then bounds further) rather than wrapping, and **floor** division
+/// so the result never exceeds the real-valued conversion (never
+/// over-reimburses).  A zero denominator returns `0` (fail-closed, mirroring
+/// the Lean `_ / 0 = 0`).
+#[must_use]
+pub fn bold_receipt_reimbursement(
+    gas_used: u128,
+    gas_price: u128,
+    rate_num: u128,
+    rate_den: u128,
+) -> Amount {
+    if rate_den == 0 {
+        return 0;
+    }
+    let wei = gas_used.saturating_mul(gas_price);
+    wei.saturating_mul(rate_num) / rate_den
 }
 
 /// The maximum reimbursement (wei) a verified L1 gas expenditure
@@ -631,6 +769,178 @@ mod tests {
         assert!(
             vk.verify_prehash(&prehash, &sig).is_ok(),
             "receipt-backed claim signature must verify"
+        );
+    }
+
+    // ===== GP.8.5 / OQ-GP-8b: BOLD leg + ETH→BOLD price oracle =====
+
+    /// A rate of `num / den` BOLD base units per ETH wei.
+    fn test_rate(num: u128, den: u128) -> EthBoldRate {
+        EthBoldRate {
+            rate_num: num,
+            rate_den: den,
+            rate_binding_hash: [0xCD; 32],
+        }
+    }
+
+    #[test]
+    fn bold_reimbursement_converts_wei_via_rate() {
+        // 21000 gas @ 50 wei = 1.05e6 wei; at 3000 BOLD/wei (den 1) = 3.15e9.
+        assert_eq!(
+            bold_receipt_reimbursement(21_000, 50, 3000, 1),
+            3_150_000_000
+        );
+        assert_eq!(
+            test_receipt(21_000, 50).bold_reimbursement(&test_rate(3000, 1)),
+            3_150_000_000
+        );
+    }
+
+    #[test]
+    fn bold_reimbursement_floors_and_fail_closes() {
+        // Floor: 10 wei * 1 / 3 = 3 (not 4) — never over-reimburses.
+        assert_eq!(bold_receipt_reimbursement(10, 1, 1, 3), 3);
+        assert_eq!(bold_receipt_reimbursement(2, 1, 1, 3), 0);
+        // Zero corners.
+        assert_eq!(bold_receipt_reimbursement(0, 50, 3000, 1), 0);
+        assert_eq!(bold_receipt_reimbursement(21_000, 0, 3000, 1), 0);
+        assert_eq!(bold_receipt_reimbursement(21_000, 50, 0, 1), 0);
+        // den = 0 is fail-closed (mirrors Lean `_ / 0 = 0`).
+        assert_eq!(bold_receipt_reimbursement(21_000, 50, 3000, 0), 0);
+        // Saturating product never wraps.
+        assert_eq!(bold_receipt_reimbursement(u128::MAX, 2, 1, 1), u128::MAX);
+    }
+
+    #[test]
+    fn bold_receipt_backed_clamps_to_the_converted_cost() {
+        // converted cost (1_050_000 * 2 = 2_100_000) < cap: the RECEIPT
+        // binds — the BOLD v2 teeth over v1's cap-only.
+        let key = test_key();
+        let receipt = test_receipt(21_000, 50);
+        let rate = test_rate(2, 1); // 2 BOLD per wei
+        let claim = SequencerClaim::build_receipt_backed_bold(
+            &key,
+            &receipt,
+            &rate,
+            9_999_999_999,
+            10_000_000_000,
+            1,
+            b"dep",
+        )
+        .unwrap();
+        assert_eq!(
+            claim.amount(),
+            2_100_000,
+            "clamps to the converted BOLD cost"
+        );
+        assert!(claim.is_bold_receipt_backed_by(&receipt, &rate));
+        // Shape: BOLD-leg (resource 1) gas-pool → sequencer transfer.
+        match claim.action {
+            Action::Transfer {
+                r,
+                sender,
+                receiver,
+                amount,
+            } => {
+                assert_eq!(r, 1, "receipt-backed-bold claims are BOLD-leg");
+                assert_eq!(sender, GAS_POOL_ACTOR_ID);
+                assert_eq!(receiver, SEQUENCER_ACTOR_ID);
+                assert_eq!(amount, 2_100_000);
+            }
+            _ => panic!("claim must be a Transfer"),
+        }
+    }
+
+    #[test]
+    fn bold_receipt_backed_still_respects_the_cap() {
+        // cap (1000) < converted cost: the GP.7.2 BOLD CAP still binds.
+        let key = test_key();
+        let receipt = test_receipt(21_000, 50);
+        let rate = test_rate(2, 1);
+        let claim = SequencerClaim::build_receipt_backed_bold(
+            &key, &receipt, &rate, 9_999_999, 1000, 2, b"dep",
+        )
+        .unwrap();
+        assert_eq!(claim.amount(), 1000, "amount clamps to the BOLD cap");
+        assert!(claim.is_bold_receipt_backed_by(&receipt, &rate));
+    }
+
+    #[test]
+    fn is_bold_receipt_backed_by_rejects_noncanonical_claim_shapes() {
+        // The Lean gate `receiptVerifiedBoldClaimAdmissible` admits ONLY
+        // `transfer 1 gasPoolActor sequencerActor amount`.  Leg
+        // discrimination + recipient/sender checks must hold.
+        let receipt = test_receipt(21_000, 50);
+        let rate = test_rate(2, 1); // converted cost = 2_100_000
+        let small = 500u128;
+        let mk = |action: Action| SequencerClaim {
+            action,
+            signer: GAS_POOL_ACTOR_ID,
+            nonce: 0,
+            sig: [0u8; SIGNATURE_LEN],
+        };
+        // ETH leg (resource 0) — must NOT be BOLD-receipt-backed.
+        assert!(
+            !mk(Action::Transfer {
+                r: 0,
+                sender: GAS_POOL_ACTOR_ID,
+                receiver: SEQUENCER_ACTOR_ID,
+                amount: small,
+            })
+            .is_bold_receipt_backed_by(&receipt, &rate),
+            "ETH-leg claim must NOT be BOLD-receipt-backed"
+        );
+        // Wrong recipient.
+        assert!(
+            !mk(Action::Transfer {
+                r: 1,
+                sender: GAS_POOL_ACTOR_ID,
+                receiver: 9,
+                amount: small,
+            })
+            .is_bold_receipt_backed_by(&receipt, &rate),
+            "wrong-recipient claim must NOT be BOLD-receipt-backed"
+        );
+        // Over the converted cost.
+        assert!(
+            !mk(Action::Transfer {
+                r: 1,
+                sender: GAS_POOL_ACTOR_ID,
+                receiver: SEQUENCER_ACTOR_ID,
+                amount: 2_100_001,
+            })
+            .is_bold_receipt_backed_by(&receipt, &rate),
+            "over-converted-cost claim must NOT be BOLD-receipt-backed"
+        );
+        // Positive control: canonical BOLD-leg claim within cost IS backed.
+        assert!(
+            mk(Action::Transfer {
+                r: 1,
+                sender: GAS_POOL_ACTOR_ID,
+                receiver: SEQUENCER_ACTOR_ID,
+                amount: small,
+            })
+            .is_bold_receipt_backed_by(&receipt, &rate),
+            "canonical BOLD-leg claim within cost MUST be BOLD-receipt-backed"
+        );
+    }
+
+    #[test]
+    fn is_bold_receipt_fresh_and_backed_rejects_consumed_receipts() {
+        // The consumed set is shared across legs: a receipt that backed a
+        // prior (ETH or BOLD) claim cannot back a BOLD claim.
+        let key = test_key();
+        let receipt = test_receipt(21_000, 50);
+        let rate = test_rate(2, 1);
+        let claim = SequencerClaim::build_receipt_backed_bold(
+            &key, &receipt, &rate, 500, 1_000_000, 1, b"dep",
+        )
+        .unwrap();
+        assert!(claim.is_bold_receipt_fresh_and_backed(&receipt, &rate, &[]));
+        let consumed = [receipt.receipt_binding_hash];
+        assert!(
+            !claim.is_bold_receipt_fresh_and_backed(&receipt, &rate, &consumed),
+            "a consumed receipt must NOT back a second (BOLD) claim"
         );
     }
 }
