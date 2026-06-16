@@ -11,9 +11,10 @@
 //! ([`crate::http::router`]) and the IO shell ([`crate::http::server`])
 //! — the *dispatch* step of the parse → dispatch → write pipeline.
 //!
-//! The static endpoints (`/healthz`, `/readyz`, `/v1/info`) ignore the
-//! state; the stateful endpoints attach here as they land (the reads
-//! over the read-only indexer handle in G1.6b, the auth gate in G1.4).
+//! Only `/healthz` (liveness) is state-free; `/readyz` and `/v1/info`
+//! read [`AppState`] (the readiness probes + the indexer cursor /
+//! config echo, G1.8), as do the reads over the read-only indexer
+//! handle (G1.6b / G1.7).  The auth gate attaches here in G1.4.
 
 use crate::http::{Route, RouteOutcome};
 use crate::problem::Problem;
@@ -27,8 +28,8 @@ use crate::state::AppState;
 pub fn dispatch(route: &Route, state: &AppState) -> RouteOutcome {
     match route {
         Route::Health => RouteOutcome::text(200, "ok\n"),
-        Route::Ready => RouteOutcome::text(200, "ready\n"),
-        Route::Info => RouteOutcome::json(200, info_body()),
+        Route::Ready => crate::system::readyz(state),
+        Route::Info => crate::system::info_view(state),
         Route::ActorBalances { actor } => with_reads(state, |reads| {
             crate::reads::balances::actor_balances(reads, *actor)
         }),
@@ -75,21 +76,9 @@ fn with_reads(
     }
 }
 
-/// The `/v1/info` stub body.  Hand-serialized over constant-shaped
-/// string fields; the typed `Info` schema (deployment id, admission
-/// stage, protocol versions, indexer cursor, budget/pool echo) lands in
-/// G1.8.  The values are crate constants, so no escaping is required.
-fn info_body() -> String {
-    format!(
-        "{{\"identifier\":\"{}\",\"version\":\"{}\",\"status\":\"scaffold\"}}\n",
-        crate::GATEWAY_IDENTIFIER,
-        crate::VERSION
-    )
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{dispatch, info_body};
+    use super::dispatch;
     use crate::config::Config;
     use crate::http::Route;
     use crate::state::AppState;
@@ -102,6 +91,10 @@ mod tests {
             free_tier: 0,
             action_cost: 0,
             gas_pool_actor: None,
+            deployment_id: String::new(),
+            ok_admission_stage: crate::config::AdmissionStage::Finalized,
+            host_addr: None,
+            event_subscribe_addr: None,
         })
         .expect("no DB to open")
     }
@@ -116,12 +109,25 @@ mod tests {
     }
 
     #[test]
-    fn info_is_json_with_identity() {
+    fn info_dispatches_to_typed_view() {
+        // Dispatch routes `/v1/info` to the typed `system::info_view`
+        // (the field-level rendering is covered in `system`'s tests).
         let o = dispatch(&Route::Info, &state());
         assert_eq!(o.status, 200);
         assert_eq!(o.content_type, "application/json");
-        assert!(o.body.contains("knomosis-gateway/v1"));
-        assert!(info_body().contains(crate::VERSION));
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["okAdmissionStage"], "Finalized");
+        assert_eq!(v["submitProtocolVersion"], knomosis_host::PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn ready_dispatches_to_readiness_probe() {
+        // With no upstreams configured, readiness is satisfied (200).
+        let o = dispatch(&Route::Ready, &state());
+        assert_eq!(o.status, 200);
+        assert_eq!(o.content_type, "application/json");
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["ready"], true);
     }
 
     #[test]
@@ -213,6 +219,10 @@ mod tests {
             free_tier: 0,
             action_cost: 0,
             gas_pool_actor: Some(161),
+            deployment_id: String::new(),
+            ok_admission_stage: crate::config::AdmissionStage::Finalized,
+            host_addr: None,
+            event_subscribe_addr: None,
         })
         .expect("open read-only state");
 

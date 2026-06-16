@@ -663,7 +663,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (G0.1–G0.3/G1.0/G1.1/G1.2/G1.6a/G1.6b/G1.7 complete; G1.8 next — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (G0.1–G0.3/G1.0/G1.1/G1.2/G1.6a/G1.6b/G1.7/G1.8 complete; G1.9 + G1.4 next — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -818,8 +818,10 @@ G1.0 (HTTP-layer spike), G1.1 (crate scaffold — `/healthz` over
 foundation + routing surface), and the read endpoints G1.6b (balances)
 + G1.7 (budget + pools — `GET /v1/actors/{id}/budget` and
 `GET /v1/pools/{pool}?resource={0|1}`, with a `--gas-pool-actor` `net`
-echo) are complete.  Next: G1.8 (`/v1/info` typed schema + `/readyz`
-upstream probes) → the first shippable read-only slice (G1.9).
+echo), and G1.8 (the typed `/v1/info` — admission stage + wire protocol
+versions + indexer cursor/schema + budget-policy echo — and `/readyz`
+indexer + upstream TCP probes) are complete.  Next: the first shippable
+read-only slice (G1.9 — read-path integration tests) + auth (G1.4).
 Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; the submit
 path forwards client-signed `SignedAction` bytes opaquely (no key
 custody); the SSE fan-out multiplexes one upstream subscription.

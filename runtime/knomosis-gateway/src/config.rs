@@ -7,14 +7,16 @@
 
 //! Gateway CLI / environment configuration.
 //!
-//! **Surface (G1.1 + G1.2d):** the HTTP listen address (`--listen` /
-//! `KNX_GW_LISTEN`) and the bounded handler-pool size
-//! (`--handler-threads` / `KNX_GW_HANDLER_THREADS`).  The full §9.2
-//! flag surface — auth token file, host/event-subscribe/indexer
-//! upstreams, budget-policy echo, the remaining governors, TLS,
-//! timeouts, rate limits — lands in **G1.3**, whose validation
-//! discipline (fail-fast with a typed `OperatorAction` error naming the
-//! offending knob) this module's shape anticipates.
+//! **Surface (through G1.8):** the HTTP listen address (`--listen`) +
+//! bounded handler-pool size (`--handler-threads`); the read backend
+//! (`--indexer-db`); the budget-policy echo (`--free-tier` /
+//! `--action-cost` / `--gas-pool-actor`, G1.7); and the `/v1/info` +
+//! `/readyz` metadata (`--deployment-id`, `--ok-admission-stage`,
+//! `--host-addr`, `--event-subscribe-addr`, G1.8).  The remaining §9.2
+//! surface — the auth token file (G1.4), TLS (G4.2), and the governors
+//! (request-body size, connection / rate / timeout limits) — lands in
+//! **G1.3 / G1.4**, following this module's fail-fast discipline (a
+//! typed [`ConfigError`] naming the offending knob).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -56,6 +58,18 @@ pub const ACTION_COST_ENV: &str = "KNX_GW_ACTION_COST";
 /// Environment variable mirroring `--gas-pool-actor`.
 pub const GAS_POOL_ACTOR_ENV: &str = "KNX_GW_GAS_POOL_ACTOR";
 
+/// Environment variable mirroring `--deployment-id`.
+pub const DEPLOYMENT_ID_ENV: &str = "KNX_GW_DEPLOYMENT_ID";
+
+/// Environment variable mirroring `--ok-admission-stage`.
+pub const OK_ADMISSION_STAGE_ENV: &str = "KNX_GW_OK_ADMISSION_STAGE";
+
+/// Environment variable mirroring `--host-addr`.
+pub const HOST_ADDR_ENV: &str = "KNX_GW_HOST_ADDR";
+
+/// Environment variable mirroring `--event-subscribe-addr`.
+pub const EVENT_SUBSCRIBE_ADDR_ENV: &str = "KNX_GW_EVENT_SUBSCRIBE_ADDR";
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -86,6 +100,19 @@ OPTIONS:
                        reported net of drains (net=true); any other id
                        is gross inflows (net=false)
                        (env KNX_GW_GAS_POOL_ACTOR) [default: unset]
+    --deployment-id <ID>
+                       Deployment identifier echoed in /v1/info
+                       (env KNX_GW_DEPLOYMENT_ID) [default: empty]
+    --ok-admission-stage <STAGE>
+                       Kernel Verdict::Ok admission stage echoed in
+                       /v1/info; one of Received|LocallyAdmitted|
+                       Sequenced|Finalized
+                       (env KNX_GW_OK_ADMISSION_STAGE) [default: Finalized]
+    --host-addr <ADDR> Binary host upstream address, probed by /readyz
+                       (env KNX_GW_HOST_ADDR) [default: unset]
+    --event-subscribe-addr <ADDR>
+                       Event-subscribe upstream address, probed by /readyz
+                       (env KNX_GW_EVENT_SUBSCRIBE_ADDR) [default: unset]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -124,6 +151,53 @@ pub enum ConfigError {
     UnknownArgument(String),
 }
 
+/// The kernel's declared `Verdict::Ok` admission stage (abi.md §10.2.1),
+/// echoed in `/v1/info`.  The gateway cannot introspect the host's
+/// configured stage over the wire (that is a G6-era host metadata
+/// operation), so it is an operator-supplied config echo defaulting to
+/// the strongest stage (`Finalized`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AdmissionStage {
+    /// Received by the sequencer (weakest assurance).
+    Received,
+    /// Locally admitted — passed the kernel's admission gate.
+    LocallyAdmitted,
+    /// Sequenced into the L2 ordering.
+    Sequenced,
+    /// Finalized on L1 (strongest assurance).
+    Finalized,
+}
+
+impl AdmissionStage {
+    /// The contract wire token (the OpenAPI `Info.okAdmissionStage`
+    /// enum value).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AdmissionStage::Received => "Received",
+            AdmissionStage::LocallyAdmitted => "LocallyAdmitted",
+            AdmissionStage::Sequenced => "Sequenced",
+            AdmissionStage::Finalized => "Finalized",
+        }
+    }
+}
+
+impl std::str::FromStr for AdmissionStage {
+    type Err = ();
+
+    /// Parse a contract wire token; any other string is rejected (the
+    /// caller maps the unit error to a typed [`ConfigError::InvalidValue`]).
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Received" => Ok(AdmissionStage::Received),
+            "LocallyAdmitted" => Ok(AdmissionStage::LocallyAdmitted),
+            "Sequenced" => Ok(AdmissionStage::Sequenced),
+            "Finalized" => Ok(AdmissionStage::Finalized),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Validated gateway configuration.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
@@ -154,6 +228,23 @@ pub struct Config {
     /// §9.2, exactly as for the budget echo).  `None` (the default)
     /// reports every pool view as `net = false`.
     pub gas_pool_actor: Option<u64>,
+    /// The deployment identifier echoed in `/v1/info` (`--deployment-id`).
+    /// Operator-supplied metadata; defaults to the empty string.
+    pub deployment_id: String,
+    /// The kernel's declared `Verdict::Ok` admission stage echoed in
+    /// `/v1/info` (`--ok-admission-stage`).  An operator config echo
+    /// (the gateway cannot introspect the host's stage), defaulting to
+    /// [`AdmissionStage::Finalized`].
+    pub ok_admission_stage: AdmissionStage,
+    /// The binary host upstream address (`--host-addr`), probed by
+    /// `/readyz` (a bare TCP connect) and used by the submit path (G2).
+    /// `None` (the default) means "not configured": `/readyz` treats the
+    /// host as not-blocking and the submit path is unavailable.
+    pub host_addr: Option<SocketAddr>,
+    /// The event-subscribe upstream address (`--event-subscribe-addr`),
+    /// probed by `/readyz` and used by the SSE fan-out (G3).  `None`
+    /// (the default) means "not configured" (not-blocking in `/readyz`).
+    pub event_subscribe_addr: Option<SocketAddr>,
 }
 
 impl Config {
@@ -197,6 +288,19 @@ impl Config {
         let gas_pool_actor =
             parse_optional_u64_flag("--gas-pool-actor", raw.gas_pool_actor, GAS_POOL_ACTOR_ENV)?;
 
+        let deployment_id = raw
+            .deployment_id
+            .or_else(|| std::env::var(DEPLOYMENT_ID_ENV).ok())
+            .unwrap_or_default();
+        let ok_admission_stage = resolve_admission_stage(raw.ok_admission_stage)?;
+        let host_addr =
+            parse_optional_socket_addr_flag("--host-addr", raw.host_addr, HOST_ADDR_ENV)?;
+        let event_subscribe_addr = parse_optional_socket_addr_flag(
+            "--event-subscribe-addr",
+            raw.event_subscribe_addr,
+            EVENT_SUBSCRIBE_ADDR_ENV,
+        )?;
+
         Ok(Self {
             listen,
             handler_threads,
@@ -204,7 +308,47 @@ impl Config {
             free_tier,
             action_cost,
             gas_pool_actor,
+            deployment_id,
+            ok_admission_stage,
+            host_addr,
+            event_subscribe_addr,
         })
+    }
+}
+
+/// Resolve `--ok-admission-stage`: CLI value > env var > the default
+/// [`AdmissionStage::Finalized`].  An unrecognised stage is a typed
+/// [`ConfigError::InvalidValue`].
+fn resolve_admission_stage(cli_raw: Option<String>) -> Result<AdmissionStage, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(OK_ADMISSION_STAGE_ENV).ok()) {
+        None => Ok(AdmissionStage::Finalized),
+        Some(raw) => raw
+            .parse::<AdmissionStage>()
+            .map_err(|()| ConfigError::InvalidValue {
+                flag: "--ok-admission-stage".to_string(),
+                value: raw,
+                reason: "expected one of Received|LocallyAdmitted|Sequenced|Finalized".to_string(),
+            }),
+    }
+}
+
+/// Resolve an OPTIONAL `SocketAddr` flag: CLI value > env var > `None`.
+/// A present-but-malformed address is a hard [`ConfigError::InvalidValue`].
+fn parse_optional_socket_addr_flag(
+    flag: &str,
+    cli_raw: Option<String>,
+    env_var: &str,
+) -> Result<Option<SocketAddr>, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(env_var).ok()) {
+        None => Ok(None),
+        Some(raw) => raw
+            .parse::<SocketAddr>()
+            .map(Some)
+            .map_err(|e| ConfigError::InvalidValue {
+                flag: flag.to_string(),
+                value: raw,
+                reason: e.to_string(),
+            }),
     }
 }
 
@@ -221,6 +365,10 @@ struct RawArgs {
     free_tier: Option<String>,
     action_cost: Option<String>,
     gas_pool_actor: Option<String>,
+    deployment_id: Option<String>,
+    ok_admission_stage: Option<String>,
+    host_addr: Option<String>,
+    event_subscribe_addr: Option<String>,
 }
 
 impl RawArgs {
@@ -245,6 +393,18 @@ impl RawArgs {
                 }
                 "--gas-pool-actor" => {
                     raw.gas_pool_actor = Some(take_value(args, &mut i, "--gas-pool-actor")?);
+                }
+                "--deployment-id" => {
+                    raw.deployment_id = Some(take_value(args, &mut i, "--deployment-id")?);
+                }
+                "--ok-admission-stage" => {
+                    raw.ok_admission_stage =
+                        Some(take_value(args, &mut i, "--ok-admission-stage")?);
+                }
+                "--host-addr" => raw.host_addr = Some(take_value(args, &mut i, "--host-addr")?),
+                "--event-subscribe-addr" => {
+                    raw.event_subscribe_addr =
+                        Some(take_value(args, &mut i, "--event-subscribe-addr")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -494,5 +654,69 @@ mod tests {
             Config::parse(&argv(&["--gas-pool-actor", "pool"])),
             Err(ConfigError::InvalidValue { .. })
         ));
+    }
+
+    /// `--deployment-id` defaults to empty and is overridable.
+    #[test]
+    fn deployment_id_default_and_override() {
+        std::env::remove_var(super::DEPLOYMENT_ID_ENV);
+        assert_eq!(Config::parse(&argv(&[])).unwrap().deployment_id, "");
+        let cfg = Config::parse(&argv(&["--deployment-id", "knx-devnet-1"])).unwrap();
+        assert_eq!(cfg.deployment_id, "knx-devnet-1");
+    }
+
+    /// `--ok-admission-stage` defaults to `Finalized`, parses every
+    /// contract token, and rejects an unknown stage.
+    #[test]
+    fn ok_admission_stage_default_parse_and_reject() {
+        use super::AdmissionStage;
+        std::env::remove_var(super::OK_ADMISSION_STAGE_ENV);
+        assert_eq!(
+            Config::parse(&argv(&[])).unwrap().ok_admission_stage,
+            AdmissionStage::Finalized
+        );
+        let cfg = Config::parse(&argv(&["--ok-admission-stage", "Sequenced"])).unwrap();
+        assert_eq!(cfg.ok_admission_stage, AdmissionStage::Sequenced);
+        assert!(matches!(
+            Config::parse(&argv(&["--ok-admission-stage", "Pending"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// `--host-addr` / `--event-subscribe-addr` are optional `SocketAddr`s;
+    /// a malformed address is rejected.
+    #[test]
+    fn upstream_addrs_optional_and_validated() {
+        std::env::remove_var(super::HOST_ADDR_ENV);
+        std::env::remove_var(super::EVENT_SUBSCRIBE_ADDR_ENV);
+        let cfg = Config::parse(&argv(&[])).unwrap();
+        assert_eq!(cfg.host_addr, None);
+        assert_eq!(cfg.event_subscribe_addr, None);
+        let cfg = Config::parse(&argv(&[
+            "--host-addr",
+            "127.0.0.1:9101",
+            "--event-subscribe-addr",
+            "127.0.0.1:9102",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.host_addr.unwrap().to_string(), "127.0.0.1:9101");
+        assert_eq!(
+            cfg.event_subscribe_addr.unwrap().to_string(),
+            "127.0.0.1:9102"
+        );
+        assert!(matches!(
+            Config::parse(&argv(&["--host-addr", "not-an-addr"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// `AdmissionStage::as_str` round-trips through `FromStr` for every
+    /// variant (the `/v1/info` wire tokens match the config tokens).
+    #[test]
+    fn admission_stage_str_roundtrip() {
+        use super::AdmissionStage::{Finalized, LocallyAdmitted, Received, Sequenced};
+        for stage in [Received, LocallyAdmitted, Sequenced, Finalized] {
+            assert_eq!(stage.as_str().parse::<super::AdmissionStage>(), Ok(stage));
+        }
     }
 }

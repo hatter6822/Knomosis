@@ -36,9 +36,12 @@ The companion machine-readable contract is
 > `GET /v1/pools/{pool}?resource={0|1}`, over the G1.6a `open_read_only`
 > path). The `GW` roadmap row + a Workstream-GW reference are added to
 > `CLAUDE.md` / `AGENTS.md`, and the `OQ-GW-*` set is registered in
-> `docs/planning/open_questions.md`. Next on the critical path: **G1.8**
-> (`/v1/info` typed schema + `/readyz` upstream probes) → the first
-> shippable read-only slice (**G1.9**), with auth (**G1.4**) folded in.
+> `docs/planning/open_questions.md`. **G1.8** (the `/v1/info` typed schema
+> — deployment id, admission stage, wire protocol versions, indexer
+> cursor + schema version, budget/pool echo — and `/readyz` upstream
+> probes) is also complete. Next on the critical path: the first
+> shippable read-only slice (**G1.9** — read-path integration tests),
+> with auth (**G1.4**) folded in.
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1241,17 +1244,33 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   root-cause fix already made the budget read DEFERRED). **Deferred:**
   the weak `ETag`/`If-None-Match` → `304` (shared with G1.6b; needs
   request-header threading, a small follow-up).
-* **G1.8 — `/info`, `/readyz`** · S · deps: G1.2, G1.6a.
-  *Deliverable:* `info.rs` — `/info` (deployment id; the kernel's declared
-  `ok_admission_stage` from **config**, default `Finalized` — a host
-  metadata wire op is a G6-era extension, so no submit-track dependency;
-  submit/events protocol versions; indexer seq + schema version; the echoed
-  budget/pool config so drift is observable); `/readyz` probes all
-  upstreams — host + event-subscribe via a bare TCP-connect liveness check
-  (no frame, so no G2.1/G3.1 dependency) and the indexer via DB-openable +
-  writer-live (G1.6a). *Acceptance:* `/readyz` flips 503 when any upstream
-  is down or the indexer writer is dead; `/info` reports the configured
-  stage + the live indexer cursor.
+* **G1.8 — `/info`, `/readyz`** · S · deps: G1.2, G1.6a · **DONE.**
+  *Deliverable:* `system.rs` — `/v1/info` reports the deployment id +
+  `okAdmissionStage` from **config** (a typed `AdmissionStage`, default
+  `Finalized` — a host metadata wire op is a G6-era extension, so no
+  submit-track dependency), the host + event-subscribe wire
+  `PROTOCOL_VERSION` constants (referenced directly — a single source of
+  truth, no hardcoded drift), the live indexer cursor + on-disk schema
+  version (`null` when reads are disabled), and the echoed `budgetPolicy`
+  (`freeTier` / `actionCost` / `gasPoolActor`) so a gateway/indexer config
+  drift is observable.  `/readyz` probes the indexer (a fresh cursor read
+  over the read-only handle) and the host / event-subscribe addresses
+  (a bare TCP connect within a 2s deadline, no frame → no G2.1/G3.1
+  dependency); it answers `200` iff every **configured** probe is
+  satisfied, else `503`, with the `Readiness` body in both cases.  An
+  **unconfigured** upstream is treated as not-blocking, so a read-only
+  deployment (only `--indexer-db`) gates on the indexer alone; the new
+  `--host-addr` / `--event-subscribe-addr` echoes activate the
+  submit/SSE probes (and seed the G2/G3 clients).  The contract gains the
+  enriched `Info` (`indexerSchemaVersion` + `BudgetPolicyEcho`) and
+  path-level root-server overrides reconciling `/healthz` + `/readyz`
+  (served at the process root, not under the `/v1` basePath).
+  *Acceptance met:* a live-listener probe shows `host` flipping
+  true→false (and `ready`/status 200→503) on a dead address; `/info`
+  reports the configured stage, the real protocol constants, and the
+  live cursor + schema version; both reconfirmed over the read-only
+  handle.  *Deferred to G1.3:* a configurable probe timeout (the 2s
+  default is a const for now).
 * **G1.9 — Read-path tests** · S · deps: G1.6, G1.7.
   *Deliverable:* `tests/integration.rs` (seeded read-only SQLite) +
   contract tests for the read endpoints + `If-None-Match`/304 +

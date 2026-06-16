@@ -54,6 +54,10 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             free_tier: 0,
             action_cost: 0,
             gas_pool_actor: None,
+            deployment_id: String::new(),
+            ok_admission_stage: knomosis_gateway::config::AdmissionStage::Finalized,
+            host_addr: None,
+            event_subscribe_addr: None,
         })
         .expect("no DB to open"),
     )
@@ -80,9 +84,31 @@ fn info_returns_json() {
         response.contains("application/json"),
         "expected a JSON content type, got: {response:?}"
     );
+    // The typed `Info` schema (G1.8): the default admission stage + the
+    // host wire protocol version are present end-to-end over the socket.
     assert!(
-        response.contains("knomosis-gateway/v1"),
-        "expected the gateway identifier, got: {response:?}"
+        response.contains("\"okAdmissionStage\":\"Finalized\""),
+        "expected the typed Info body, got: {response:?}"
+    );
+    assert!(
+        response.contains("\"submitProtocolVersion\":2"),
+        "expected the host protocol version, got: {response:?}"
+    );
+}
+
+#[test]
+fn readyz_returns_json_ready() {
+    // No upstreams configured in the smoke `test_state` → readiness is
+    // satisfied; `/readyz` answers 200 with the `Readiness` body.
+    let response = one_shot_get("/readyz");
+    assert!(response.starts_with("HTTP/1.1 200"), "got: {response:?}");
+    assert!(
+        response.contains("application/json"),
+        "expected a JSON content type, got: {response:?}"
+    );
+    assert!(
+        response.contains("\"ready\":true"),
+        "expected ready=true, got: {response:?}"
     );
 }
 

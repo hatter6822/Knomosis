@@ -22,17 +22,20 @@
 //! `docs/audits/gateway_http_spike.md`) serving:
 //!
 //!   * `GET /healthz` — liveness (always 200 while the process runs).
-//!   * `GET /readyz`  — readiness (200 **stub**; G1.8 probes the host,
-//!     event-subscribe, and the indexer DB/writer-liveness).
-//!   * `GET /v1/info` — deployment metadata (200 **stub**; G1.8 fills
-//!     in the kernel admission stage, protocol versions, indexer
-//!     cursor, and the echoed budget/pool config).
+//!   * `GET /readyz`  — readiness: probes the indexer (a fresh cursor
+//!     read) and the host / event-subscribe upstreams (a TCP connect),
+//!     `200` iff all configured probes pass else `503` (G1.8).
+//!   * `GET /v1/info` — deployment metadata: deployment id + admission
+//!     stage (config echo), the host / event-subscribe wire protocol
+//!     versions, and the live indexer cursor (G1.8).
+//!   * the read endpoints — `GET /v1/actors/{id}/balances[/{resource}]`,
+//!     `/budget`, and `GET /v1/pools/{pool}?resource=` — over the G1.6a
+//!     read-only `SqliteStorage` handle (G1.6b / G1.7).
 //!
-//! The request parser + limits, the full routing table (405 + `Allow`,
-//! the `/v1` resource surface), the RFC 9457 problem responder,
-//! AuthN, the bounded acceptor + governors, the read endpoints (over
-//! `knomosis_storage::sqlite::SqliteStorage::open_read_only`, the
-//! G1.6a path), the submit path, and the SSE fan-out land in G1.2–G3.
+//! The request parser + limits, the full routing table (405 + `Allow`),
+//! the RFC 9457 problem responder, and the bounded acceptor are in
+//! place; AuthN (G1.4), the submit path (G2), and the SSE fan-out (G3)
+//! land next.
 //!
 //! ## Constraints (inherited from `runtime/`)
 //!
@@ -62,6 +65,7 @@ pub mod http;
 pub mod problem;
 pub mod reads;
 pub mod state;
+pub mod system;
 
 #[cfg(test)]
 mod tests {

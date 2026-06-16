@@ -339,7 +339,8 @@ paths:
       description: |
         Surfaces the deployment id, the kernel's declared `Verdict::Ok`
         admission stage (abi.md §10.2.1), the submit/events protocol versions,
-        and the current indexer cursor.
+        the current indexer cursor + on-disk schema version, and the echoed
+        budget/pool config (so a gateway/indexer config drift is observable).
       responses:
         '200':
           description: Service metadata.
@@ -349,6 +350,14 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /healthz:
+    # The liveness/readiness probes are served at the process ROOT, not
+    # under the /v1 API basePath (the universal orchestrator convention),
+    # so they override the global /v1 server with the bare root URLs.
+    servers:
+      - url: https://gateway.dev.example
+        description: Development gateway root (probes are not under /v1).
+      - url: https://gateway.example
+        description: Production gateway root.
     get:
       tags: [system]
       operationId: healthz
@@ -362,6 +371,11 @@ paths:
               schema: { type: string, examples: ["ok"] }
 
   /readyz:
+    servers:
+      - url: https://gateway.dev.example
+        description: Development gateway root (probes are not under /v1).
+      - url: https://gateway.example
+        description: Production gateway root.
     get:
       tags: [system]
       operationId: readyz
@@ -750,7 +764,9 @@ components:
 
     Info:
       type: object
-      required: [deploymentId, okAdmissionStage, submitProtocolVersion, eventsProtocolVersion, indexerSeq]
+      required:
+        [deploymentId, okAdmissionStage, submitProtocolVersion, eventsProtocolVersion,
+         indexerSeq, indexerSchemaVersion, budgetPolicy]
       properties:
         deploymentId: { type: string }
         okAdmissionStage:
@@ -759,9 +775,31 @@ components:
         submitProtocolVersion: { type: integer, minimum: 1 }
         eventsProtocolVersion: { type: integer, minimum: 1 }
         indexerSeq: { $ref: '#/components/schemas/Cursor' }
+        indexerSchemaVersion:
+          type: [integer, "null"]
+          minimum: 1
+          description: >-
+            The on-disk indexer schema version, or null when reads are
+            disabled (no --indexer-db).
+        budgetPolicy: { $ref: '#/components/schemas/BudgetPolicyEcho' }
         kernel:
           type: string
           description: Kernel implementation behind the host (e.g. CommandKernel).
+    BudgetPolicyEcho:
+      type: object
+      required: [freeTier, actionCost, gasPoolActor]
+      description: >-
+        The gateway's echoed budget / gas-pool configuration. These are
+        operator obligations the gateway cannot self-verify (§9.2);
+        surfacing them here makes a gateway/indexer config drift
+        observable. `gasPoolActor` is null when --gas-pool-actor is unset.
+      properties:
+        freeTier: { $ref: '#/components/schemas/BigInt' }
+        actionCost: { $ref: '#/components/schemas/BigInt' }
+        gasPoolActor:
+          type: [string, "null"]
+          pattern: '^[0-9]+$'
+          description: The configured gas-pool actor id, or null if unset.
     Readiness:
       type: object
       required: [ready, host, subscribe, indexer]

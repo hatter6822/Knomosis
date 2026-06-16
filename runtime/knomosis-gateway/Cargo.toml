@@ -44,6 +44,12 @@ knomosis-storage = { path = "../knomosis-storage" }
 # The indexer's typed read views (BalanceView) + key/cursor codecs the
 # gateway renders to the JSON contract.
 knomosis-indexer = { path = "../knomosis-indexer" }
+# The host + event-subscribe crates supply the wire `PROTOCOL_VERSION`
+# constants `/v1/info` reports (a single source of truth — no hardcoded
+# version drift).  Both are featherweight (cli-common + thiserror only)
+# and become the submit (G2) / SSE (G3) clients.
+knomosis-host = { path = "../knomosis-host" }
+knomosis-event-subscribe = { path = "../knomosis-event-subscribe" }
 # The synchronous HTTP/1.1 server (G1.0 / OQ-GW-8 decision: a vetted
 # sync crate, no tokio).  `default-features = false` keeps TLS out (its
 # `ssl-rustls` feature predates the workspace's rustls 0.23; HTTPS is

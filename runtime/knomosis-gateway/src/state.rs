@@ -110,6 +110,10 @@ mod tests {
             free_tier: 0,
             action_cost: 0,
             gas_pool_actor: None,
+            deployment_id: String::new(),
+            ok_admission_stage: crate::config::AdmissionStage::Finalized,
+            host_addr: None,
+            event_subscribe_addr: None,
         }
     }
 

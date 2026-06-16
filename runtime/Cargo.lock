@@ -395,6 +395,8 @@ name = "knomosis-gateway"
 version = "0.8.4"
 dependencies = [
  "knomosis-cli-common",
+ "knomosis-event-subscribe",
+ "knomosis-host",
  "knomosis-indexer",
  "knomosis-storage",
  "serde",
