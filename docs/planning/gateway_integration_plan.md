@@ -1349,12 +1349,21 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
 ### G2 — Submit path
 
 * **G2.1 — Host client + connection pool** · M · deps: G1.2. Broken into:
-  * **G2.1a — Frame codec + response parser** · S. `submit/client.rs`:
-    request framing via `knomosis_host::frame::encode_frame` (v1, no signer
-    hint); a response-frame reader mirroring `VerdictResponse::encode`
-    (`Verdict::from_byte` + 4-byte BE reason len + bytes; unknown byte →
-    typed error → `502`). *Acceptance:* round-trips every verdict byte +
-    reason against golden bytes; unknown byte fails closed.
+  * **G2.1a — Frame codec + response parser** · S · **DONE.**
+    `submit/client.rs`: `encode_request_frame` frames the client-signed
+    payload via `knomosis_host::frame::encode_frame` (v1, no signer hint;
+    forwarded opaquely — no key custody); `parse_verdict_response`
+    (complete buffer) + `read_verdict_response<R: Read>` (streaming, for
+    the G2.1b pool) decode `[verdict][4-byte BE reason len M][M bytes]`
+    via `Verdict::from_byte`, **failing closed** with a typed
+    `ResponseError` on a short buffer, an unrecognised verdict byte, an
+    over-`MAX_REASON_LEN` (64 KiB) reason, or non-UTF-8 (G2.2 maps these
+    to `502`).  *Acceptance met:* round-trips every verdict × reason
+    against golden bytes from the host's own `VerdictResponse::encode`;
+    the unknown byte / truncation / over-long / non-UTF-8 cases fail
+    closed; the request frame round-trips through the host's `read_frame`
+    (byte-identical payload); the streaming reader leaves trailing bytes
+    unconsumed.
   * **G2.1b — Bounded persistent pool** · S · deps: G2.1a. `submit/pool.rs`:
     `--host-pool-size` persistent connections, one in-flight each;
     checkout/return; reconnect-on-drop; connect/read/write deadlines;

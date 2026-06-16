@@ -68,6 +68,7 @@ pub mod problem;
 pub mod rate_limit;
 pub mod reads;
 pub mod state;
+pub mod submit;
 pub mod system;
 
 #[cfg(test)]
