@@ -104,6 +104,9 @@ fn map_error(err: &SubmitError) -> RouteOutcome {
         SubmitError::Connect(detail) => {
             upstream_unavailable(&format!("host connect failed: {detail}"))
         }
+        SubmitError::Timeout => Problem::new("upstream-timeout", "Gateway Timeout", 504)
+            .with_detail("the host did not complete the round-trip within the deadline")
+            .into_outcome(),
         SubmitError::Io(detail) => upstream_unavailable(&format!("host I/O failed: {detail}")),
         SubmitError::Response(detail) => {
             upstream_unavailable(&format!("invalid host response: {detail}"))
@@ -214,5 +217,12 @@ mod tests {
             let (status, _, _) = ok(Err(e));
             assert_eq!(status, 502);
         }
+    }
+
+    #[test]
+    fn timeout_is_504() {
+        let o = super::map_submit_result(Err(SubmitError::Timeout), "Finalized");
+        assert_eq!(o.status, 504);
+        assert_eq!(o.content_type, "application/problem+json");
     }
 }

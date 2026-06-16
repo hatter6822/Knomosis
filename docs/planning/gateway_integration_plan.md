@@ -49,8 +49,10 @@ The companion machine-readable contract is
 > check) and the **submit path G2.1a/G2.1b/G2.2** (`POST /v1/actions` —
 > the host wire codec, the bounded persistent connection pool, and the
 > content-negotiated intake + §5 verdict mapping, end-to-end over a
-> `MockHost`) have also landed. Next: **G2.3+** submit backpressure /
-> idempotency and the events (**G3**) track.
+> `MockHost`) plus **G2.3** (the full backpressure matrix — deadline →
+> `504`, `Busy`/saturated → `503`+`Retry-After`, `413` body cap) have
+> also landed. Next: **G2.4** (idempotency cache) and the events
+> (**G3**) track.
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1427,11 +1429,24 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   test).  Contract gains a `415` (`UnsupportedMediaType`) on the submit
   endpoint.  *New config:* `--max-frame-size` (1 MiB default, 16 MiB
   ceiling).
-* **G2.3 — Backpressure + limits** · S · deps: G2.2.
-  *Deliverable:* `Busy`→`503`+`Retry-After`; deadline→`504`; conn-fail→
-  `502`; `413` size cap (enforced while reading); bounded in-flight to
-  host. *Acceptance:* each condition produces the mapped status + correct
-  headers under test.
+* **G2.3 — Backpressure + limits** · S · deps: G2.2 · **DONE.**  The full
+  §5 backpressure matrix is now mapped + tested: host `Busy` and
+  pool-`Saturated` → `503` + `Retry-After` (G2.1b/G2.2); **deadline →
+  `504`** (new this WU — a `connect` / `write` / `read` timeout is
+  distinguished from a connection failure via `is_timeout` and mapped to
+  a new `SubmitError::Timeout` → `504 Gateway Timeout`; the codec gains a
+  `ResponseError::ReadTimeout` so a read deadline is not mistaken for a
+  truncation); connect-fail → `502` (G2.1b); the `413` body cap enforced
+  **while reading** via `--max-frame-size` (G2.2); and the in-flight cap
+  → `503` (G2.1b).  **No double-submit refinement:** a *write* timeout is
+  treated as **ambiguous delivery** (the host may have received part of
+  the frame) and is therefore **not** retried — only a connection
+  failure (the action provably never arrived) retries on a fresh
+  connection.  *Acceptance met:* a `MockHost` that delays its response
+  past the deadline yields `Err(Timeout)` (permit released);
+  `verdict_map` maps `Timeout` → `504`; an over-`--max-frame-size` POST
+  body yields `413` end-to-end; the `Busy` / saturated / connect-fail
+  paths keep their mapped statuses + headers under test.
 * **G2.4 — Idempotency cache** · S · deps: G2.2.
   *Deliverable:* `submit/idempotency.rs` — bounded TTL `Idempotency-Key`→
   response cache (off when ttl=0); LRU eviction; key is opaque/client-

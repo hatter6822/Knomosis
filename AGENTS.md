@@ -663,7 +663,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; submit path functional: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2 complete; G2.3 + G3 next — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; submit path functional + backpressure-complete: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2/G2.3 complete; G2.4 + G3 next — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -830,9 +830,12 @@ hardening — per-credential token-bucket rate limiting → `429` +
 check), and the **submit path** G2.1a (host wire codec) + G2.1b (bounded
 persistent connection pool, no-double-submit) + G2.2 (`POST /v1/actions`
 — content-negotiated octet-stream / json+base64 intake → opaque forward
-→ §5 verdict mapping) are complete — **the read-only slice is shipped +
-hardened and the submit path is functional.**  Next: G2.3 (submit
-backpressure / idempotency) + the events (G3) track.
+→ §5 verdict mapping) + G2.3 (the backpressure matrix — deadline→`504`,
+`Busy`/saturated→`503`+`Retry-After`, `413` body cap; a write-timeout is
+treated as ambiguous-delivery and not retried) are complete — **the
+read-only slice is shipped + hardened and the submit path is functional +
+backpressure-complete.**  Next: G2.4 (idempotency cache) + the events
+(G3) track.
 Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; auth is
 fail-closed (no token file ⇒ every non-exempt request denied) + the token
 file must not be world-readable; the submit path forwards client-signed

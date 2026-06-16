@@ -548,6 +548,23 @@ fn submit_unsupported_content_type_is_415() {
 }
 
 #[test]
+fn submit_oversize_body_is_413() {
+    let mock = MockHost::start(Verdict::Ok, "");
+    let h = start_harness_full(0, Some(mock.addr));
+    // One byte over the 1 MiB --max-frame-size cap → 413, enforced while
+    // reading (the body is bounded before the host is ever contacted).
+    let big = vec![0u8; 1024 * 1024 + 1];
+    let resp = http_post(
+        h.addr,
+        "/v1/actions",
+        "application/octet-stream",
+        &big,
+        Some(TOKEN),
+    );
+    assert_eq!(resp.status, 413);
+}
+
+#[test]
 fn submit_requires_auth() {
     let mock = MockHost::start(Verdict::Ok, "");
     let h = start_harness_full(0, Some(mock.addr));

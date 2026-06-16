@@ -74,6 +74,11 @@ pub enum ResponseError {
     /// The reason bytes are not valid UTF-8.
     #[error("verdict reason is not valid UTF-8")]
     InvalidReasonUtf8,
+    /// The host did not send (the rest of) the response within the read
+    /// deadline — distinct from a connection that closed early, so the
+    /// pool can map it to `504` rather than `502`.
+    #[error("verdict response read timed out")]
+    ReadTimeout,
 }
 
 /// Frame a client-signed `SignedAction` payload (CBE bytes) into a host
@@ -155,13 +160,21 @@ fn decode_reason_len(header: &[u8]) -> Result<usize, ResponseError> {
     Ok(len)
 }
 
-/// `read_exact`, mapping an early EOF to [`ResponseError::Truncated`].
+/// `read_exact`, mapping a read deadline to [`ResponseError::ReadTimeout`]
+/// and any other early EOF / I/O failure to [`ResponseError::Truncated`].
 fn read_exact_or_truncated<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<(), ResponseError> {
-    reader
-        .read_exact(buf)
-        .map_err(|e| ResponseError::Truncated {
-            reason: e.to_string(),
-        })
+    reader.read_exact(buf).map_err(|e| {
+        if matches!(
+            e.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ) {
+            ResponseError::ReadTimeout
+        } else {
+            ResponseError::Truncated {
+                reason: e.to_string(),
+            }
+        }
+    })
 }
 
 #[cfg(test)]

@@ -51,6 +51,9 @@ pub enum SubmitError {
     /// A new host connection could not be established (→ `502`).
     #[error("host connect failed: {0}")]
     Connect(String),
+    /// A connect / write / read operation exceeded the deadline (→ `504`).
+    #[error("host round-trip timed out")]
+    Timeout,
     /// An I/O error during the request/response round-trip (→ `502`).
     #[error("host I/O failed: {0}")]
     Io(String),
@@ -154,28 +157,41 @@ impl HostPool {
 
     /// One round-trip over `conn`: write the frame, then read the verdict.
     fn round_trip(&self, mut conn: TcpStream, frame: &[u8]) -> Attempt {
-        // Write phase.  A failure here means the action did NOT reach the
-        // host (broken/stale connection) — the connection is dropped and
-        // the attempt is retryable.
-        if conn.write_all(frame).and_then(|()| conn.flush()).is_err() {
+        // Write phase.  A *connection* failure (reset / broken pipe) means
+        // the action did NOT reach the host → drop the connection and
+        // retry on a fresh one.  A write *timeout*, by contrast, is
+        // **ambiguous delivery** (the host may have received part of the
+        // frame), so it is NOT retried — it surfaces as a 504.
+        if let Err(e) = conn.write_all(frame).and_then(|()| conn.flush()) {
+            if is_timeout(&e) {
+                return Attempt::Failed(SubmitError::Timeout);
+            }
             return Attempt::Retryable;
         }
         // Read phase.  The action HAS reached the host; a failure here is
-        // NOT retryable (it may have been processed).  The connection is
-        // dropped on any error.
+        // NOT retryable (it may have been processed).  A read deadline is
+        // a 504; any other failure is a 502.  The connection is dropped on
+        // any error.
         match read_verdict_response(&mut conn) {
             Ok(verdict) => {
                 self.return_conn(conn);
                 Attempt::Done(verdict)
             }
+            Err(ResponseError::ReadTimeout) => Attempt::Failed(SubmitError::Timeout),
             Err(err) => Attempt::Failed(SubmitError::Response(err)),
         }
     }
 
-    /// Open a fresh connection with the configured deadlines.
+    /// Open a fresh connection with the configured deadlines.  A connect
+    /// *timeout* is a `504`; any other connect failure is a `502`.
     fn connect(&self) -> Result<TcpStream, SubmitError> {
-        let stream = TcpStream::connect_timeout(&self.addr, self.deadline)
-            .map_err(|e| SubmitError::Connect(e.to_string()))?;
+        let stream = TcpStream::connect_timeout(&self.addr, self.deadline).map_err(|e| {
+            if is_timeout(&e) {
+                SubmitError::Timeout
+            } else {
+                SubmitError::Connect(e.to_string())
+            }
+        })?;
         stream.set_read_timeout(Some(self.deadline)).ok();
         stream.set_write_timeout(Some(self.deadline)).ok();
         // Request/response is latency-sensitive and small; disable Nagle.
@@ -216,6 +232,15 @@ impl HostPool {
             Some(Permit { pool: self })
         }
     }
+}
+
+/// Whether an I/O error represents a deadline being exceeded (a
+/// `connect_timeout` / `set_read_timeout` / `set_write_timeout` firing).
+fn is_timeout(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    )
 }
 
 /// The outcome of one round-trip attempt (internal).
@@ -376,6 +401,18 @@ mod tests {
         let v = pool.submit(b"a").expect("verdict");
         assert_eq!(v.verdict, Verdict::NotAdmissible);
         assert_eq!(v.reason, "InsufficientBudget");
+    }
+
+    #[test]
+    fn read_deadline_maps_to_timeout() {
+        // The host accepts + reads the frame but delays its response past
+        // the pool's read deadline → a 504-class `Timeout` (not retried,
+        // not a 502).
+        let host = MockHost::start(Verdict::Ok, "", Duration::from_millis(400));
+        let pool = HostPool::new(host.addr, 2, 2, Duration::from_millis(100));
+        let r = pool.submit(b"action");
+        assert!(matches!(r, Err(SubmitError::Timeout)), "got {r:?}");
+        assert_eq!(pool.in_flight(), 0, "the permit is released on timeout");
     }
 
     #[test]
