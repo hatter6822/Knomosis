@@ -186,9 +186,15 @@ pub fn handle_request(request: tiny_http::Request, state: &AppState) {
     let outcome = if let Some(denied) = crate::auth::gate(&state.auth, path, auth_header) {
         // Denied by the auth gate (401 / 403) — answer without routing.
         denied
+    } else if let Some(limited) =
+        crate::auth::rate_limit_check(&state.rate_limiter, path, auth_header)
+    {
+        // Admitted by auth but over the per-credential rate cap (429).
+        limited
     } else {
-        // Authorized (or an exempt path) — route, dispatch, then apply
-        // any `If-None-Match` conditional (a matching weak ETag → 304).
+        // Authorized (or an exempt path) and within budget — route,
+        // dispatch, then apply any `If-None-Match` conditional (a
+        // matching weak ETag → 304).
         let outcome = dispatch(&route(method, path, query), state);
         crate::http::apply_conditional(outcome, if_none_match)
     };

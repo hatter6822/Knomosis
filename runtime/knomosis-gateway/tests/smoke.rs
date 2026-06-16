@@ -68,6 +68,12 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
     let dir = tempfile::tempdir().expect("tempdir");
     let token_path = dir.path().join("tokens");
     std::fs::write(&token_path, TEST_TOKEN).expect("write token file");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600))
+            .expect("chmod token file");
+    }
     Arc::new(
         knomosis_gateway::state::AppState::new(knomosis_gateway::config::Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
@@ -75,12 +81,14 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             indexer_db: None,
             free_tier: 0,
             action_cost: 0,
+            epoch_length: 0,
             gas_pool_actor: None,
             deployment_id: String::new(),
             ok_admission_stage: knomosis_gateway::config::AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
             auth_token_file: Some(token_path),
+            rate_limit_rps: 0,
         })
         .expect("load token file"),
     )

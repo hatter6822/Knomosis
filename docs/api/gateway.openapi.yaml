@@ -792,7 +792,7 @@ components:
           description: Kernel implementation behind the host (e.g. CommandKernel).
     BudgetPolicyEcho:
       type: object
-      required: [freeTier, actionCost, gasPoolActor]
+      required: [freeTier, actionCost, epochLength, gasPoolActor]
       description: >-
         The gateway's echoed budget / gas-pool configuration. These are
         operator obligations the gateway cannot self-verify (§9.2);
@@ -801,6 +801,7 @@ components:
       properties:
         freeTier: { $ref: '#/components/schemas/BigInt' }
         actionCost: { $ref: '#/components/schemas/BigInt' }
+        epochLength: { $ref: '#/components/schemas/BigInt' }
         gasPoolActor:
           type: [string, "null"]
           pattern: '^[0-9]+$'

@@ -58,13 +58,26 @@ impl Drop for Harness {
     }
 }
 
-/// Seed the indexer DB (balances, budget, pool, cursor) and start the
-/// gateway over it (read-only) with a 4-thread handler pool.
+/// Start the gateway with rate limiting disabled (the common case for
+/// the read-path assertions).
 fn start_harness() -> Harness {
+    start_harness_rps(0)
+}
+
+/// Seed the indexer DB (balances, budget, pool, cursor) and start the
+/// gateway over it (read-only) with a 4-thread handler pool and the given
+/// per-credential rate cap (`0` = disabled).
+fn start_harness_rps(rate_limit_rps: u32) -> Harness {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("index.db");
     let token_path = dir.path().join("tokens");
     std::fs::write(&token_path, TOKEN).expect("write token file");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600))
+            .expect("chmod token file");
+    }
 
     let writer = SqliteStorage::open(&db_path).expect("open writer");
     // Balances: actor 7 holds resources 0 (1000) and 1 (250); actor 9 a
@@ -98,12 +111,14 @@ fn start_harness() -> Harness {
         indexer_db: Some(db_path),
         free_tier: 50,
         action_cost: 5,
+        epoch_length: 0,
         gas_pool_actor: Some(161),
         deployment_id: "knx-integration".to_string(),
         ok_admission_stage: AdmissionStage::Finalized,
         host_addr: None,
         event_subscribe_addr: None,
         auth_token_file: Some(token_path),
+        rate_limit_rps,
     };
     let state = Arc::new(AppState::new(config).expect("open read-only state + load tokens"));
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
@@ -358,4 +373,34 @@ fn concurrent_writer_does_not_tear_balance_list() {
 
     stop.store(true, Ordering::Relaxed);
     writer_thread.join().unwrap();
+}
+
+#[test]
+fn rate_limit_returns_429_with_retry_after() {
+    // A 1-rps cap: the first authed read is admitted, but a rapid burst
+    // exhausts the credential's bucket and yields a 429 with Retry-After.
+    let h = start_harness_rps(1);
+    let first = get(h.addr, "/v1/actors/7/balances");
+    assert_eq!(first.status, 200);
+
+    // Hammer until a 429 appears (the burst is one token at 1 rps).
+    let mut saw_429 = false;
+    for _ in 0..10 {
+        let r = get(h.addr, "/v1/actors/7/balances");
+        if r.status == 429 {
+            assert_eq!(r.header("Content-Type"), Some("application/problem+json"));
+            assert!(r.header("Retry-After").is_some(), "expected a Retry-After");
+            assert!(
+                r.body.contains("retryAfterMs"),
+                "expected the retry extension"
+            );
+            saw_429 = true;
+            break;
+        }
+    }
+    assert!(saw_429, "a rapid burst over a 1-rps cap must yield a 429");
+
+    // The exempt probes are never rate-limited.
+    let ready = http_get(h.addr, "/readyz", None, None);
+    assert_eq!(ready.status, 200);
 }

@@ -90,12 +90,14 @@ mod tests {
             indexer_db: None,
             free_tier: 0,
             action_cost: 0,
+            epoch_length: 0,
             gas_pool_actor: None,
             deployment_id: String::new(),
             ok_admission_stage: crate::config::AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
             auth_token_file: None,
+            rate_limit_rps: 0,
         })
         .expect("no DB to open")
     }
@@ -219,12 +221,14 @@ mod tests {
             indexer_db: Some(path.clone()),
             free_tier: 0,
             action_cost: 0,
+            epoch_length: 0,
             gas_pool_actor: Some(161),
             deployment_id: String::new(),
             ok_admission_stage: crate::config::AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
             auth_token_file: None,
+            rate_limit_rps: 0,
         })
         .expect("open read-only state");
 

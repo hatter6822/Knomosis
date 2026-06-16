@@ -43,9 +43,12 @@ The companion machine-readable contract is
 > auth gate, applied before routing), and **G1.9** (the read-path
 > integration harness — the read endpoints end-to-end behind auth, with
 > `ETag`/`If-None-Match`→`304` and a snapshot-consistency chaos case) are
-> complete: **the first shippable read-only slice is done.** Next: the
-> remaining G1 hardening (**G1.3** governors / body-size / timeouts) and
-> the submit (**G2**) + events (**G3**) tracks.
+> complete: **the first shippable read-only slice is done.** **G1.3**
+> read-path hardening (per-credential token-bucket rate limiting → `429`
+> + `Retry-After`, and a fail-fast world-readable-token-file permission
+> check) has also landed. Next: the submit (**G2**) + events (**G3**)
+> tracks (each carries its own remaining §9.2 governors — request-body
+> size, deadlines, SSE keepalive).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1110,13 +1113,38 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     and heartbeat support — the substrate G3.5 builds on. *Acceptance:* a
     unit stream emits records a reader sees incrementally (not buffered to
     EOF); write-deadline drop tested; the anti-buffering headers present.
-* **G1.3 — Config + wiring** · S · deps: G1.1.
-  *Deliverable:* `config.rs` — the full §9.2 flag/env surface with
-  validation and typed errors; secrets via file with permission checks;
-  the budget-echo (`--free-tier`/`--action-cost`/`--epoch-length`) and
-  `--gas-pool-actor` knobs. *Acceptance:* invalid config fails fast with a
-  typed `OperatorAction` error; `--help` documents every knob; a unit test
-  per validation rule.
+* **G1.3 — Config + wiring** · S · deps: G1.1 · **DONE (read-path
+  hardening + config surface; the submit/SSE governors land with their
+  G2/G3 tracks).** *Deliverable:* `config.rs` — the read-path §9.2
+  flag/env surface, each fail-fast validated into a typed
+  [`ConfigError`] (the `OperatorAction` exit class): listen +
+  handler-pool, the read backend, the budget echo
+  (`--free-tier`/`--action-cost`/`--epoch-length`), `--gas-pool-actor`,
+  the `/v1/info` + `/readyz` metadata, `--auth-token-file`, and
+  `--rate-limit-rps`; every knob is in `--help` with a unit test per
+  rule.  **Hardening governors landed:**
+    1. **Per-credential rate limiting** (`rate_limit.rs`): a token-bucket
+       `RateLimiter` (capacity = `--rate-limit-rps`, refill = rps/sec),
+       keyed on a *hash* of the validated bearer credential, applied in
+       the IO shell **after** the auth gate.  An exhausted bucket is a
+       `429` with `Retry-After` (whole seconds) + the `retryAfterMs`
+       extension.  Per-credential (not global) so one noisy credential
+       cannot starve the others; the bucket map is bounded by the number
+       of configured tokens (only authenticated requests reach it).
+       `--rate-limit-rps 0` disables it; exempt probes are never
+       throttled.
+    2. **Secret-file permission check** (`auth.rs`): on Unix the
+       `--auth-token-file` is refused at load if accessible by "other"
+       (`mode & 0o007 != 0`) — a world-readable service credential is a
+       misconfiguration, caught fail-fast at startup
+       (`AuthLoadError::InsecurePermissions`).
+  *Acceptance met:* the rate-limiter unit suite (burst→throttle,
+  per-credential isolation, refill-after-wait, disabled) + an end-to-end
+  integration test (a 1-rps cap yields a `429` with `Retry-After` over a
+  real socket, while the exempt probes stay open); the world-readable
+  token file is rejected; the `429` + `Retry-After` the contract already
+  documents on the read endpoints is now real.  *Deferred to G4.x:*
+  per-connection read/idle timeouts (constrained by `tiny_http`'s API).
 * **G1.4 — AuthN middleware** · S · deps: G1.2 · **DONE (bearer; mTLS
   deferred to G4.2).** *Deliverable:* `auth.rs` — a **fail-closed**
   bearer-token gate.  `Auth::load` reads the `--auth-token-file` (one

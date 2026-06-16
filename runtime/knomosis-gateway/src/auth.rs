@@ -30,6 +30,7 @@ use subtle::{Choice, ConstantTimeEq};
 
 use crate::http::RouteOutcome;
 use crate::problem::Problem;
+use crate::rate_limit::RateLimiter;
 
 /// Errors loading the bearer-token file.
 #[derive(Debug, thiserror::Error)]
@@ -41,6 +42,18 @@ pub enum AuthLoadError {
         path: String,
         /// The I/O diagnostic.
         reason: String,
+    },
+    /// On Unix, the token file is accessible by "other" (it must not be
+    /// world-readable / -writable — a secret-hygiene requirement, §8.1).
+    #[error(
+        "auth token file {path} is world-accessible (mode {mode:o}); \
+         it must not be readable or writable by 'other' (use e.g. chmod 600)"
+    )]
+    InsecurePermissions {
+        /// The configured token-file path.
+        path: String,
+        /// The offending file mode (low 9 permission bits).
+        mode: u32,
     },
 }
 
@@ -94,6 +107,9 @@ impl Auth {
     ///
     /// [`AuthLoadError::Read`] if the file cannot be read.
     pub fn load(path: &Path) -> Result<Self, AuthLoadError> {
+        // Secret hygiene: refuse a world-accessible token file before
+        // reading it (a no-op on non-Unix targets).
+        check_token_file_permissions(path)?;
         let contents = std::fs::read_to_string(path).map_err(|e| AuthLoadError::Read {
             path: path.display().to_string(),
             reason: e.to_string(),
@@ -123,18 +139,10 @@ impl Auth {
     /// and checks **every** configured token without an early return.
     #[must_use]
     pub fn authorize(&self, header: Option<&str>) -> AuthOutcome {
-        let Some(raw) = header else {
+        let Some(token) = bearer_token(header) else {
             return AuthOutcome::MissingCredential;
         };
-        // Split "Bearer <token>" on the first space; the scheme is
-        // case-insensitive (RFC 7235 §2.1).
-        let Some((scheme, token)) = raw.split_once(' ') else {
-            return AuthOutcome::MissingCredential;
-        };
-        if !scheme.eq_ignore_ascii_case("bearer") {
-            return AuthOutcome::MissingCredential;
-        }
-        let presented = token.trim().as_bytes();
+        let presented = token.as_bytes();
         // OR the per-token constant-time equality bits; no early return on
         // the first match, so neither the matching token's identity nor
         // its position leaks through timing.
@@ -148,6 +156,27 @@ impl Auth {
             AuthOutcome::InvalidCredential
         }
     }
+}
+
+/// Extract the bearer token from an `Authorization` header value
+/// (`Bearer <token>`; the scheme is case-insensitive per RFC 7235 §2.1),
+/// trimmed of surrounding whitespace.  `None` when the header is absent
+/// or is not a bearer credential.
+#[must_use]
+pub fn bearer_token(header: Option<&str>) -> Option<&str> {
+    let (scheme, token) = header?.split_once(' ')?;
+    scheme.eq_ignore_ascii_case("bearer").then(|| token.trim())
+}
+
+/// A stable in-process key identifying a credential, for per-credential
+/// rate limiting.  Hashing the token keeps token *values* out of the
+/// limiter's bucket map; equal tokens map to equal keys.
+#[must_use]
+pub fn credential_key(token: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    token.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Whether `path` is exempt from authentication (the liveness / readiness
@@ -187,22 +216,97 @@ pub fn gate(auth: &Auth, path: &str, header: Option<&str>) -> Option<RouteOutcom
     }
 }
 
+/// The per-credential rate-limit gate, applied **after** [`gate`] admits
+/// a request: `None` when the request may proceed, or `Some(429)` (with a
+/// `Retry-After` header + `retryAfterMs` extension) when the credential's
+/// token bucket is exhausted.  Exempt paths (`/healthz`, `/readyz`) and a
+/// disabled limiter are never throttled.
+#[must_use]
+pub fn rate_limit_check(
+    limiter: &RateLimiter,
+    path: &str,
+    header: Option<&str>,
+) -> Option<RouteOutcome> {
+    if is_exempt_path(path) || limiter.is_disabled() {
+        return None;
+    }
+    // The token is present on the authorized path (`gate` ran first).
+    let token = bearer_token(header)?;
+    match limiter.check(credential_key(token)) {
+        Ok(()) => None,
+        Err(retry_after) => Some(rate_limited(retry_after)),
+    }
+}
+
+/// Build a `429 Too Many Requests` outcome with a `Retry-After` header
+/// (whole seconds, RFC 9110 §10.2.3) and the `retryAfterMs` problem
+/// extension (millisecond precision).
+fn rate_limited(retry_after: std::time::Duration) -> RouteOutcome {
+    let retry_ms = u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX);
+    // `Retry-After` is whole seconds; round a sub-second hint up to 1.
+    let retry_secs = retry_after.as_secs().max(1);
+    Problem::new("rate-limited", "Too Many Requests", 429)
+        .with_detail("per-credential request rate exceeded")
+        .with_retry_after_ms(retry_ms)
+        .into_outcome()
+        .with_header("Retry-After", retry_secs.to_string())
+}
+
+/// Refuse a token file accessible by "other" (any of the low three mode
+/// bits set) — a world-readable secret is a misconfiguration.  Group
+/// access is left to the operator (service-group deployments).
+#[cfg(unix)]
+fn check_token_file_permissions(path: &Path) -> Result<(), AuthLoadError> {
+    use std::os::unix::fs::PermissionsExt;
+    let meta = std::fs::metadata(path).map_err(|e| AuthLoadError::Read {
+        path: path.display().to_string(),
+        reason: e.to_string(),
+    })?;
+    let mode = meta.permissions().mode();
+    if mode & 0o007 != 0 {
+        return Err(AuthLoadError::InsecurePermissions {
+            path: path.display().to_string(),
+            mode: mode & 0o777,
+        });
+    }
+    Ok(())
+}
+
+/// Non-Unix targets have no POSIX permission model — nothing to check.
+#[cfg(not(unix))]
+fn check_token_file_permissions(_path: &Path) -> Result<(), AuthLoadError> {
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{gate, Auth, AuthOutcome};
+    use super::{gate, rate_limit_check, Auth, AuthLoadError, AuthOutcome};
+    use crate::rate_limit::RateLimiter;
+    use std::path::{Path, PathBuf};
+
+    /// Write a token file with secret-safe (owner-only) permissions, so
+    /// the load-time permission check accepts it.
+    fn write_secure(dir: &Path, content: &str) -> PathBuf {
+        let path = dir.join("tokens");
+        std::fs::write(&path, content).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        path
+    }
 
     fn auth_with(tokens: &[&str]) -> Auth {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tokens");
-        std::fs::write(&path, tokens.join("\n")).unwrap();
+        let path = write_secure(dir.path(), &tokens.join("\n"));
         Auth::load(&path).unwrap()
     }
 
     #[test]
     fn load_parses_lines_skipping_blanks_and_comments() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tokens");
-        std::fs::write(&path, "  tok-a  \n\n# a comment\ntok-b\n").unwrap();
+        let path = write_secure(dir.path(), "  tok-a  \n\n# a comment\ntok-b\n");
         let auth = Auth::load(&path).unwrap();
         assert_eq!(auth.token_count(), 2);
         assert_eq!(
@@ -213,6 +317,48 @@ mod tests {
             auth.authorize(Some("Bearer tok-b")),
             AuthOutcome::Authorized
         );
+    }
+
+    /// On Unix, a world-readable token file is refused at load.
+    #[cfg(unix)]
+    #[test]
+    fn world_readable_token_file_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tokens");
+        std::fs::write(&path, "secret").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(matches!(
+            Auth::load(&path),
+            Err(AuthLoadError::InsecurePermissions { .. })
+        ));
+        // The owner-only file loads fine.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(Auth::load(&path).is_ok());
+    }
+
+    #[test]
+    fn rate_limit_check_throttles_per_credential() {
+        // The rate-limit gate runs after auth, so it consults only the
+        // limiter + the (already-validated) credential, not `Auth`.
+        let limiter = RateLimiter::new(1); // 1 rps, 1-token burst
+        let cred = Some("Bearer tok");
+        // First authed request admitted; the second (same credential,
+        // same instant) is throttled with a 429.
+        assert!(rate_limit_check(&limiter, "/v1/info", cred).is_none());
+        let throttled = rate_limit_check(&limiter, "/v1/info", cred).expect("429");
+        assert_eq!(throttled.status, 429);
+        assert!(throttled
+            .headers
+            .iter()
+            .any(|(n, _)| n.eq_ignore_ascii_case("Retry-After")));
+        // Exempt paths are never throttled.
+        assert!(rate_limit_check(&limiter, "/healthz", None).is_none());
+        // A disabled limiter never throttles.
+        let off = RateLimiter::new(0);
+        for _ in 0..100 {
+            assert!(rate_limit_check(&off, "/v1/info", cred).is_none());
+        }
     }
 
     #[test]

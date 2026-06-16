@@ -74,6 +74,8 @@ struct BudgetPolicyEcho {
     free_tier: String,
     #[serde(rename = "actionCost")]
     action_cost: String,
+    #[serde(rename = "epochLength")]
+    epoch_length: String,
     #[serde(rename = "gasPoolActor")]
     gas_pool_actor: Option<String>,
 }
@@ -109,6 +111,7 @@ pub fn info_view(state: &AppState) -> RouteOutcome {
         budget_policy: BudgetPolicyEcho {
             free_tier: state.config.free_tier.to_string(),
             action_cost: state.config.action_cost.to_string(),
+            epoch_length: state.config.epoch_length.to_string(),
             gas_pool_actor: state.config.gas_pool_actor.map(|a| a.to_string()),
         },
     };
@@ -195,12 +198,14 @@ mod tests {
             indexer_db: None,
             free_tier: 0,
             action_cost: 0,
+            epoch_length: 0,
             gas_pool_actor: None,
             deployment_id: String::new(),
             ok_admission_stage: AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
             auth_token_file: None,
+            rate_limit_rps: 0,
         }
     }
 
@@ -223,6 +228,7 @@ mod tests {
         cfg.ok_admission_stage = AdmissionStage::Sequenced;
         cfg.free_tier = 1000;
         cfg.action_cost = 5;
+        cfg.epoch_length = 7200;
         cfg.gas_pool_actor = Some(161);
         let state = AppState::new(cfg).expect("open state");
 
@@ -247,6 +253,7 @@ mod tests {
         // The budget/pool config echo (drift observability).
         assert_eq!(v["budgetPolicy"]["freeTier"], "1000");
         assert_eq!(v["budgetPolicy"]["actionCost"], "5");
+        assert_eq!(v["budgetPolicy"]["epochLength"], "7200");
         assert_eq!(v["budgetPolicy"]["gasPoolActor"], "161");
         drop(writer);
     }

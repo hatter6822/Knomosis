@@ -65,6 +65,7 @@ pub mod config;
 pub mod dispatch;
 pub mod http;
 pub mod problem;
+pub mod rate_limit;
 pub mod reads;
 pub mod state;
 pub mod system;

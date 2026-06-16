@@ -663,7 +663,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped: G0.1–G0.3/G1.0/G1.1/G1.2/G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9 complete; G1.3 + G2/G3 next — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9 complete; G2/G3 next — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -822,16 +822,18 @@ echo), G1.8 (the typed `/v1/info` — admission stage + wire protocol
 versions + indexer cursor/schema + budget-policy echo — and `/readyz`
 indexer + upstream TCP probes), G1.4 (the fail-closed
 `subtle::ConstantTimeEq` bearer-token gate, applied before routing;
-`/healthz` + `/readyz` exempt), and G1.9 (the read-path integration
+`/healthz` + `/readyz` exempt), G1.9 (the read-path integration
 harness — read endpoints end-to-end behind auth, `ETag`/`304`
-revalidation, a snapshot-consistency chaos case) are complete — **the
-first shippable read-only slice is done.**  Next: the remaining G1
-hardening (G1.3 governors / body-size / timeouts) and the submit (G2)
-+ events (G3) tracks.
+revalidation, a snapshot-consistency chaos case), and G1.3 (read-path
+hardening — per-credential token-bucket rate limiting → `429` +
+`Retry-After`, and a fail-fast world-readable-token-file permission
+check) are complete — **the first shippable read-only slice is done and
+hardened.**  Next: the submit (G2) + events (G3) tracks.
 Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; auth is
-fail-closed (no token file ⇒ every non-exempt request denied); the submit
-path forwards client-signed `SignedAction` bytes opaquely (no key
-custody); the SSE fan-out multiplexes one upstream subscription.
+fail-closed (no token file ⇒ every non-exempt request denied) + the token
+file must not be world-readable; the submit path forwards client-signed
+`SignedAction` bytes opaquely (no key custody); the SSE fan-out
+multiplexes one upstream subscription.
 
 ### Rust host runtime (Workstream RH)
 

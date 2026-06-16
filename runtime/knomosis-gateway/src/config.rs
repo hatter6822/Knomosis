@@ -7,16 +7,19 @@
 
 //! Gateway CLI / environment configuration.
 //!
-//! **Surface (through G1.8):** the HTTP listen address (`--listen`) +
-//! bounded handler-pool size (`--handler-threads`); the read backend
-//! (`--indexer-db`); the budget-policy echo (`--free-tier` /
-//! `--action-cost` / `--gas-pool-actor`, G1.7); and the `/v1/info` +
-//! `/readyz` metadata (`--deployment-id`, `--ok-admission-stage`,
-//! `--host-addr`, `--event-subscribe-addr`, G1.8).  The remaining §9.2
-//! surface — the auth token file (G1.4), TLS (G4.2), and the governors
-//! (request-body size, connection / rate / timeout limits) — lands in
-//! **G1.3 / G1.4**, following this module's fail-fast discipline (a
-//! typed [`ConfigError`] naming the offending knob).
+//! **Surface (the read-only slice, through G1.3):** the HTTP listen
+//! address (`--listen`) + bounded handler-pool size
+//! (`--handler-threads`); the read backend (`--indexer-db`); the
+//! budget-policy echo (`--free-tier` / `--action-cost` /
+//! `--epoch-length` / `--gas-pool-actor`); the `/v1/info` + `/readyz`
+//! metadata (`--deployment-id`, `--ok-admission-stage`, `--host-addr`,
+//! `--event-subscribe-addr`); the fail-closed auth token file
+//! (`--auth-token-file`, G1.4); and the per-credential rate cap
+//! (`--rate-limit-rps`, G1.3).  The remaining §9.2 surface — TLS (G4.2)
+//! and the submit/SSE governors (request-body size, deadlines, SSE
+//! keepalive) — lands with its G2 / G3 / G4 track, following this
+//! module's fail-fast discipline (a typed [`ConfigError`] naming the
+//! offending knob).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -55,6 +58,9 @@ pub const FREE_TIER_ENV: &str = "KNX_GW_FREE_TIER";
 /// Environment variable mirroring `--action-cost`.
 pub const ACTION_COST_ENV: &str = "KNX_GW_ACTION_COST";
 
+/// Environment variable mirroring `--epoch-length`.
+pub const EPOCH_LENGTH_ENV: &str = "KNX_GW_EPOCH_LENGTH";
+
 /// Environment variable mirroring `--gas-pool-actor`.
 pub const GAS_POOL_ACTOR_ENV: &str = "KNX_GW_GAS_POOL_ACTOR";
 
@@ -74,6 +80,13 @@ pub const EVENT_SUBSCRIBE_ADDR_ENV: &str = "KNX_GW_EVENT_SUBSCRIBE_ADDR";
 /// *path* comes from the flag / env; the token *values* live in the file
 /// (never in argv / an env value), per §9.2.
 pub const AUTH_TOKEN_FILE_ENV: &str = "KNX_GW_AUTH_TOKEN_FILE";
+
+/// Environment variable mirroring `--rate-limit-rps`.
+pub const RATE_LIMIT_RPS_ENV: &str = "KNX_GW_RATE_LIMIT_RPS";
+
+/// Default per-credential request-rate cap (requests/second).  A
+/// conservative default (§9.2); tune it up for a high-throughput BFF.
+pub const DEFAULT_RATE_LIMIT_RPS: u32 = 100;
 
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
@@ -98,6 +111,9 @@ OPTIONS:
                        (env KNX_GW_FREE_TIER) [default: 0]
     --action-cost <N>  Per-action budget cost echoed in the budget view
                        (env KNX_GW_ACTION_COST) [default: 0]
+    --epoch-length <N> Budget-epoch length echoed in /v1/info; MUST match
+                       the indexer's --epoch-length
+                       (env KNX_GW_EPOCH_LENGTH) [default: 0]
     --gas-pool-actor <ID>
                        Gas-pool actor id (GP.6.4) whose pool view the
                        indexer drains; MUST match the indexer's
@@ -122,13 +138,20 @@ OPTIONS:
                        File of bearer service tokens (one per line) for
                        the fail-closed auth gate; when unset, every
                        non-exempt request is denied (/healthz + /readyz
-                       stay open)
+                       stay open).  MUST NOT be readable by 'other'
+                       (the gateway refuses a world-accessible token file)
                        (env KNX_GW_AUTH_TOKEN_FILE) [default: unset]
+    --rate-limit-rps <N>
+                       Per-credential request-rate cap (requests/second);
+                       an exhausted token bucket returns 429.  0 disables
+                       rate limiting
+                       (env KNX_GW_RATE_LIMIT_RPS) [default: 100]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
-NOTE: this is the G1.1 scaffold; the full configuration surface
-(auth, upstreams, governors, TLS) lands in G1.3.
+NOTE: this is the read-only-slice surface; the submit/SSE governors
+(request-body size, deadlines, SSE keepalive) and TLS land with the
+G2 / G3 / G4 tracks.
 ";
 
 /// Errors from parsing the gateway's CLI / environment configuration.
@@ -230,6 +253,11 @@ pub struct Config {
     /// Per-action budget cost, echoed in the `BudgetView` (G1.7).
     /// Default `0`.
     pub action_cost: u128,
+    /// The budget-epoch length (`--epoch-length`), echoed in `/v1/info`'s
+    /// budget-policy block so an operator can diff it against the
+    /// indexer's `--epoch-length` (drift observability; the gateway does
+    /// not itself reset epochs — the indexer does).  Default `0`.
+    pub epoch_length: u64,
     /// The gas-pool actor id whose pool view the indexer drains
     /// (GP.6.4); `Some(id)` makes `GET /v1/pools/{id}` report `net =
     /// true` (net of drains) and every other pool id `net = false`
@@ -262,6 +290,12 @@ pub struct Config {
     /// (`/healthz` + `/readyz` stay open).  The token *values* are never
     /// read from argv / an env value, only from this file (§8.1 / §9.2).
     pub auth_token_file: Option<PathBuf>,
+    /// Per-credential request-rate cap in requests/second
+    /// (`--rate-limit-rps`).  A token bucket of this capacity, refilling
+    /// at this rate, governs each authenticated credential; an exhausted
+    /// bucket is a `429`.  `0` disables rate limiting.  Default
+    /// [`DEFAULT_RATE_LIMIT_RPS`].
+    pub rate_limit_rps: u32,
 }
 
 impl Config {
@@ -302,6 +336,7 @@ impl Config {
 
         let free_tier = parse_u128_flag("--free-tier", raw.free_tier, FREE_TIER_ENV)?;
         let action_cost = parse_u128_flag("--action-cost", raw.action_cost, ACTION_COST_ENV)?;
+        let epoch_length = parse_u64_flag("--epoch-length", raw.epoch_length, EPOCH_LENGTH_ENV)?;
         let gas_pool_actor =
             parse_optional_u64_flag("--gas-pool-actor", raw.gas_pool_actor, GAS_POOL_ACTOR_ENV)?;
 
@@ -321,6 +356,7 @@ impl Config {
             .auth_token_file
             .or_else(|| std::env::var(AUTH_TOKEN_FILE_ENV).ok())
             .map(PathBuf::from);
+        let rate_limit_rps = resolve_rate_limit_rps(raw.rate_limit_rps)?;
 
         Ok(Self {
             listen,
@@ -328,13 +364,29 @@ impl Config {
             indexer_db,
             free_tier,
             action_cost,
+            epoch_length,
             gas_pool_actor,
             deployment_id,
             ok_admission_stage,
             host_addr,
             event_subscribe_addr,
             auth_token_file,
+            rate_limit_rps,
         })
+    }
+}
+
+/// Resolve `--rate-limit-rps`: CLI value > env var > the default
+/// [`DEFAULT_RATE_LIMIT_RPS`].  A non-numeric value is a typed
+/// [`ConfigError::InvalidValue`]; `0` is valid (disables the limiter).
+fn resolve_rate_limit_rps(cli_raw: Option<String>) -> Result<u32, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(RATE_LIMIT_RPS_ENV).ok()) {
+        None => Ok(DEFAULT_RATE_LIMIT_RPS),
+        Some(raw) => raw.parse::<u32>().map_err(|e| ConfigError::InvalidValue {
+            flag: "--rate-limit-rps".to_string(),
+            value: raw,
+            reason: e.to_string(),
+        }),
     }
 }
 
@@ -386,12 +438,14 @@ struct RawArgs {
     indexer_db: Option<String>,
     free_tier: Option<String>,
     action_cost: Option<String>,
+    epoch_length: Option<String>,
     gas_pool_actor: Option<String>,
     deployment_id: Option<String>,
     ok_admission_stage: Option<String>,
     host_addr: Option<String>,
     event_subscribe_addr: Option<String>,
     auth_token_file: Option<String>,
+    rate_limit_rps: Option<String>,
 }
 
 impl RawArgs {
@@ -414,6 +468,9 @@ impl RawArgs {
                 "--action-cost" => {
                     raw.action_cost = Some(take_value(args, &mut i, "--action-cost")?);
                 }
+                "--epoch-length" => {
+                    raw.epoch_length = Some(take_value(args, &mut i, "--epoch-length")?);
+                }
                 "--gas-pool-actor" => {
                     raw.gas_pool_actor = Some(take_value(args, &mut i, "--gas-pool-actor")?);
                 }
@@ -431,6 +488,9 @@ impl RawArgs {
                 }
                 "--auth-token-file" => {
                     raw.auth_token_file = Some(take_value(args, &mut i, "--auth-token-file")?);
+                }
+                "--rate-limit-rps" => {
+                    raw.rate_limit_rps = Some(take_value(args, &mut i, "--rate-limit-rps")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -486,6 +546,19 @@ fn parse_u128_flag(
     match cli_raw.or_else(|| std::env::var(env_var).ok()) {
         None => Ok(0),
         Some(raw) => raw.parse::<u128>().map_err(|e| ConfigError::InvalidValue {
+            flag: flag.to_string(),
+            value: raw,
+            reason: e.to_string(),
+        }),
+    }
+}
+
+/// Resolve a `u64` flag: CLI value > env var > `0`.  Returns a typed
+/// [`ConfigError::InvalidValue`] on a non-numeric value.
+fn parse_u64_flag(flag: &str, cli_raw: Option<String>, env_var: &str) -> Result<u64, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(env_var).ok()) {
+        None => Ok(0),
+        Some(raw) => raw.parse::<u64>().map_err(|e| ConfigError::InvalidValue {
             flag: flag.to_string(),
             value: raw,
             reason: e.to_string(),
@@ -640,17 +713,29 @@ mod tests {
         );
     }
 
-    /// `--free-tier` / `--action-cost` default to 0 and parse as `u128`.
+    /// `--free-tier` / `--action-cost` / `--epoch-length` default to 0
+    /// and parse as integers.
     #[test]
     fn budget_knobs_default_and_parse() {
         std::env::remove_var(super::FREE_TIER_ENV);
         std::env::remove_var(super::ACTION_COST_ENV);
+        std::env::remove_var(super::EPOCH_LENGTH_ENV);
         let cfg = Config::parse(&argv(&[])).unwrap();
         assert_eq!(cfg.free_tier, 0);
         assert_eq!(cfg.action_cost, 0);
-        let cfg = Config::parse(&argv(&["--free-tier", "1000", "--action-cost", "5"])).unwrap();
+        assert_eq!(cfg.epoch_length, 0);
+        let cfg = Config::parse(&argv(&[
+            "--free-tier",
+            "1000",
+            "--action-cost",
+            "5",
+            "--epoch-length",
+            "7200",
+        ]))
+        .unwrap();
         assert_eq!(cfg.free_tier, 1000);
         assert_eq!(cfg.action_cost, 5);
+        assert_eq!(cfg.epoch_length, 7200);
     }
 
     /// A non-numeric budget knob → `InvalidValue`.
@@ -732,6 +817,33 @@ mod tests {
         );
         assert!(matches!(
             Config::parse(&argv(&["--host-addr", "not-an-addr"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// `--rate-limit-rps` defaults to [`super::DEFAULT_RATE_LIMIT_RPS`],
+    /// accepts `0` (disabled), and rejects a non-numeric value.
+    #[test]
+    fn rate_limit_rps_default_parse_and_reject() {
+        std::env::remove_var(super::RATE_LIMIT_RPS_ENV);
+        assert_eq!(
+            Config::parse(&argv(&[])).unwrap().rate_limit_rps,
+            super::DEFAULT_RATE_LIMIT_RPS
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--rate-limit-rps", "0"]))
+                .unwrap()
+                .rate_limit_rps,
+            0
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--rate-limit-rps", "250"]))
+                .unwrap()
+                .rate_limit_rps,
+            250
+        );
+        assert!(matches!(
+            Config::parse(&argv(&["--rate-limit-rps", "fast"])),
             Err(ConfigError::InvalidValue { .. })
         ));
     }

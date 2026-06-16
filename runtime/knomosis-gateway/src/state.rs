@@ -24,6 +24,7 @@ use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
 
 use crate::auth::Auth;
 use crate::config::Config;
+use crate::rate_limit::RateLimiter;
 
 /// Errors building the shared application state at startup.
 #[derive(Debug, thiserror::Error)]
@@ -78,6 +79,9 @@ pub struct AppState {
     /// `--auth-token-file` is configured — **fail-closed**: every
     /// non-exempt request is then denied.
     pub auth: Auth,
+    /// The per-credential request-rate limiter (G1.3).  Disabled when
+    /// `--rate-limit-rps` is `0`.
+    pub rate_limiter: RateLimiter,
 }
 
 impl AppState {
@@ -112,10 +116,12 @@ impl AppState {
                 reason: e.to_string(),
             })?,
         };
+        let rate_limiter = RateLimiter::new(config.rate_limit_rps);
         Ok(Self {
             config,
             reads,
             auth,
+            rate_limiter,
         })
     }
 }
@@ -132,12 +138,14 @@ mod tests {
             indexer_db,
             free_tier: 0,
             action_cost: 0,
+            epoch_length: 0,
             gas_pool_actor: None,
             deployment_id: String::new(),
             ok_admission_stage: crate::config::AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
             auth_token_file: None,
+            rate_limit_rps: 0,
         }
     }
 

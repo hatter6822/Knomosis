@@ -100,6 +100,15 @@ impl Problem {
         self
     }
 
+    /// Attach the `retryAfterMs` extension (the suggested wait before
+    /// retrying) — emitted on `429` / `503` backpressure responses
+    /// alongside the HTTP `Retry-After` header.
+    #[must_use]
+    pub fn with_retry_after_ms(mut self, retry_after_ms: u64) -> Self {
+        self.retry_after_ms = Some(retry_after_ms);
+        self
+    }
+
     /// `404 Not Found` for an unrouted path.
     #[must_use]
     pub fn not_found(path: &str) -> Self {
