@@ -99,8 +99,12 @@ The companion machine-readable contract is
 > track is underway: **G4.1** (rate limiting — shipped early as G1.3) and
 > **G4.3** (observability — a per-request `X-Request-Id` correlation id
 > propagated to the header / `problem.instance` / a structured log line, the
-> log-based metrics surface, with a redaction-tested no-secret guarantee).
-> Next: **G4.4** (graceful shutdown), **G4.2** (TLS/mTLS), **G4.5** (dep
+> log-based metrics surface, with a redaction-tested no-secret guarantee),
+> and **G4.4** (graceful shutdown — a `signal_hook` SIGTERM/SIGINT trigger
+> sets the shared shutdown flag; `serve` drains the handler pool under a
+> deadline via `tiny_http::unblock`, and the mux + every live SSE stream
+> stop on the flag, the streams emitting a clean `server_shutdown` close
+> with no mid-record truncation).  Next: **G4.2** (TLS/mTLS), **G4.5** (dep
 > audit), **G4.6** (load/soak/chaos), **G4.7** (the runbook) + the deferred
 > additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
 
@@ -1782,13 +1786,24 @@ cross-stack corpus pin remains deferred.
   `tracing-subscriber`) asserts the structured line carries the safe fields
   and **no bearer token / `Authorization`**.  The metrics-*endpoint* surface
   stays deferred behind OQ-GW-10.
-* **G4.4 — Resource governors + graceful shutdown** · S · deps: G1–G3.
-  `shutdown.rs`: SIGTERM/SIGINT (signal-hook or self-pipe) → stop flag →
-  drain submits, emit SSE `server_shutdown`, close pools, exit
-  `Success`. Confirm all caps (streams/conns/ring/idempotency/in-flight)
-  are enforced. *Acceptance:* shutdown drains in-flight submits and closes
-  streams cleanly (no truncated mid-record SSE); a stuck stream cannot
-  block shutdown past a deadline.
+* **G4.4 — Resource governors + graceful shutdown** · S · deps: G1–G3 ·
+  **DONE.** `http/server.rs`: `register_shutdown_signals` registers a
+  SIGTERM/SIGINT trigger (`signal_hook::flag::register` — a safe
+  `sigaction` wrapper, since the crate forbids `unsafe`) that sets the
+  shared `AppState::shutdown` flag; `serve` then blocks until it is set and
+  `drain_handlers` wakes each blocked worker (`tiny_http::unblock` — one
+  `recv` per call, so `n_workers` calls drain them all) to finish its
+  in-flight request and exit, joining them under `DRAIN_DEADLINE` (so a
+  stuck worker cannot hang shutdown).  The mux + every live SSE stream
+  observe the same flag: the mux stops, and `run_stream` emits a clean
+  `event: error{server_shutdown}` close — the flag is checked at the loop
+  top, **between whole records**, so a record is never truncated mid-write.
+  Detached SSE-stream threads cannot block the drain (they are not joined),
+  and the stream-count / ring / idempotency / in-flight caps remain
+  enforced.  *Acceptance (DONE):* `drain_handlers_wakes_and_joins_every_worker`
+  (the unblock-N drain over real workers) and `shutdown_emits_server_shutdown_and_closes`
+  (the no-truncation clean close).  Adds the plan-sanctioned `signal-hook`
+  dependency (`default-features = false`).
 * **G4.5 — Security review + dep audit** · S · deps: G1–G4. Threat-model
   pass; introduce `runtime/deny.toml` (`cargo-deny`: advisories, licenses,
   bans) — none exists yet — and wire `cargo audit`/`cargo deny` into

@@ -663,7 +663,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; submit track complete; events track underway: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2/G2.3/G2.4/G2.5/events track complete (G3.1/G3.2/G3.3 + the full G3.4 SSE fan-out (ring/mux/dispatch/resume) + G3.5 `/v1/events/stream` wiring); G4 hardening underway (G4.1 rate-limit (early via G1.3) + G4.3 observability complete; G4.4 graceful shutdown / G4.2 TLS / G4.5 dep-audit / G4.6 load / G4.7 runbook next); G2.1c pipelining + G3.2c cross-stack pin deferred — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; submit track complete; events track underway: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2/G2.3/G2.4/G2.5/events track complete (G3.1/G3.2/G3.3 + the full G3.4 SSE fan-out (ring/mux/dispatch/resume) + G3.5 `/v1/events/stream` wiring); G4 hardening underway (G4.1 rate-limit (early via G1.3) + G4.3 observability + G4.4 graceful shutdown complete; G4.2 TLS / G4.5 dep-audit / G4.6 load / G4.7 runbook next); G2.1c pipelining + G3.2c cross-stack pin deferred — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -876,8 +876,12 @@ shipped early as G1.3) and G4.3 (`observability.rs` — a per-request
 `X-Request-Id` correlation id propagated to the response header, the RFC
 9457 `problem.instance`, and a structured per-request log line (the
 log-based metrics surface, OQ-GW-10), redaction-tested to never log a
-bearer token).  Next: G4.4 (graceful shutdown), G4.2 (TLS/mTLS), G4.5 (dep
-audit), G4.6 (load/soak/chaos), G4.7 (the runbook).
+bearer token) and G4.4 (graceful shutdown — a `signal_hook` SIGTERM/SIGINT
+trigger sets the shared shutdown flag; `serve` drains the handler pool
+under a deadline, and the mux + every live SSE stream stop on the flag, the
+streams emitting a clean `server_shutdown` close with no mid-record
+truncation).  Next: G4.2 (TLS/mTLS), G4.5 (dep audit), G4.6
+(load/soak/chaos), G4.7 (the runbook).
 Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; auth is
 fail-closed (no token file ⇒ every non-exempt request denied) + the token
 file must not be world-readable; the submit path forwards client-signed

@@ -93,7 +93,11 @@ pub fn run_stream<W: Write>(
     let mut cursor = start;
     let mut last_write = Instant::now();
     loop {
+        // Graceful shutdown (§G4.4): emit a clean `server_shutdown` close so
+        // the client reconnects elsewhere.  Checked at the loop top — between
+        // whole records — so a record is never truncated mid-write.
         if shutdown.load(Ordering::Relaxed) {
+            let _ = write_stream_error(sink, "server_shutdown", None);
             return StreamEnd::ShuttingDown;
         }
         // A fail-closed decode fault compromises every stream (§2 principle 7).
@@ -268,8 +272,11 @@ mod tests {
         assert!(out.contains("id: 5.0\nevent: balanceChanged\ndata: {"));
         assert!(out.contains("id: 5.1\nevent: nonceAdvanced\ndata: {"));
         assert!(out.contains("id: 6.0\nevent: balanceChanged\ndata: {"));
-        // Three records, each blank-line terminated.
-        assert_eq!(out.matches("\n\n").count(), 3);
+        // Exactly three composite-id records (the `capture` helper stops the
+        // stream via the shutdown flag, which appends a clean
+        // `server_shutdown` close — counting `id:` lines ignores it).
+        assert_eq!(out.matches("id: ").count(), 3);
+        assert!(out.contains("\"error\":\"server_shutdown\""));
     }
 
     #[test]
@@ -289,7 +296,9 @@ mod tests {
         });
         assert!(out.contains("id: 5.1\nevent: nonceAdvanced"));
         assert!(!out.contains("balanceChanged"));
-        assert_eq!(out.matches("\n\n").count(), 1);
+        // Exactly one record (the filtered nonceAdvanced); the trailing
+        // `server_shutdown` close carries no `id:`.
+        assert_eq!(out.matches("id: ").count(), 1);
     }
 
     #[test]
@@ -359,6 +368,30 @@ mod tests {
         assert!(String::from_utf8(sink)
             .unwrap()
             .contains("event: error\ndata: {\"error\":\"decode_error\"}"));
+    }
+
+    #[test]
+    fn shutdown_emits_server_shutdown_and_closes() {
+        // Graceful shutdown (§G4.4): the flag is observed at the loop top
+        // (between whole records), so the stream emits a clean
+        // `server_shutdown` close — never a truncated mid-record.
+        let state = FanoutState::new(64);
+        state.ring().push(rec(5, 0, "balanceChanged"));
+        let mut sink: Vec<u8> = Vec::new();
+        let shutdown = Arc::new(AtomicBool::new(true)); // already draining
+        let end = run_stream(
+            &mut sink,
+            &state,
+            Cursor::ORIGIN,
+            &[],
+            &brisk(64),
+            &shutdown,
+        );
+        assert_eq!(end, StreamEnd::ShuttingDown);
+        let out = String::from_utf8(sink).unwrap();
+        assert!(out.contains("event: error\ndata: {\"error\":\"server_shutdown\"}"));
+        // No record was written (shutdown took precedence); no truncation.
+        assert!(!out.contains("id: 5.0"));
     }
 
     #[test]

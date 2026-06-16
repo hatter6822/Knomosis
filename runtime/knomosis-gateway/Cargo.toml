@@ -64,6 +64,10 @@ thiserror = { workspace = true }
 subtle = { workspace = true }
 # Structured logging.
 tracing = { workspace = true }
+# SIGTERM/SIGINT graceful-shutdown trigger (G4.4): a safe `sigaction`
+# wrapper (the crate forbids `unsafe`) that sets the shared shutdown
+# `AtomicBool` on a signal via `signal_hook::flag::register`.
+signal-hook = { workspace = true }
 # JSON (de)serialization for response bodies — the RFC 9457 problem
 # responder and the typed `/v1` schemas.  `serde` derive + `serde_json`
 # are workspace-pinned (alloc feature).

@@ -119,6 +119,12 @@ publish = false
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+# `signal-hook` provides the gateway's SIGTERM/SIGINT graceful-shutdown
+# trigger (§G4.4).  A safe wrapper over `sigaction` (the gateway forbids
+# `unsafe`, so a hand-rolled handler is not an option); `default-features
+# = false` drops the channel/iterator helpers we do not use, keeping just
+# the atomic-flag registration (`signal_hook::flag::register`).
+signal-hook = { version = "0.3", default-features = false }
 
 # RH-A cryptographic adaptor dependencies.  Pinned to minor versions
 # per the plan §7 risk register: silent major-version bumps in audited

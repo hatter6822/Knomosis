@@ -14,20 +14,32 @@
 //! concurrency governor (it caps the number of requests processed in
 //! parallel).  Each request is parsed ([`crate::http::route`]),
 //! dispatched against the shared [`AppState`]
-//! ([`crate::dispatch::dispatch`]), and written back.  The request-body
-//! size limit lands with G2.2; per-connection read/idle timeouts are
-//! constrained by `tiny_http`'s API (a documented G4.x follow-up); the
-//! graceful-drain shutdown lands in G4.4.
+//! ([`crate::dispatch::dispatch`]), and written back.  Per-connection
+//! read/idle timeouts are constrained by `tiny_http`'s API (a documented
+//! G4.x follow-up).  **Graceful shutdown (G4.4):** `serve` registers a
+//! SIGTERM/SIGINT trigger, then blocks until the shared shutdown flag is
+//! set (by a signal, or — in tests — directly) and drains the handler pool
+//! under a deadline; the mux + live SSE streams observe the same flag and
+//! stop cleanly (the streams emit a `server_shutdown` close).
 
 use std::io::Read;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use crate::config::Config;
 use crate::dispatch::{dispatch, RequestPayload};
 use crate::http::router::{route, Route, RouteOutcome};
 use crate::problem::Problem;
 use crate::state::AppState;
+
+/// How often `serve` polls the shutdown flag while awaiting a signal.
+const SHUTDOWN_POLL: Duration = Duration::from_millis(200);
+
+/// The overall deadline for draining handler workers on shutdown — bounds
+/// how long a stuck in-flight request can delay exit (§G4.4).
+const DRAIN_DEADLINE: Duration = Duration::from_secs(10);
 
 /// Errors from running the gateway HTTP server.
 #[derive(Debug, thiserror::Error)]
@@ -58,11 +70,12 @@ pub enum ServeError {
 
 /// Run the gateway HTTP server, blocking the calling thread.
 ///
-/// Builds the shared [`AppState`], binds the listener, then spawns a
-/// bounded pool of `config.handler_threads` worker threads (the
-/// concurrency governor — [`spawn_handler_pool`]) and blocks until a
-/// worker exits.  Under normal operation the workers loop forever; this
-/// only *returns* on a bind/spawn failure.  Graceful shutdown is G4.4.
+/// Builds the shared [`AppState`], binds the listener, spawns the SSE
+/// fan-out multiplexer (if configured) and a bounded pool of
+/// `config.handler_threads` worker threads (the concurrency governor —
+/// [`spawn_handler_pool`]), registers the SIGTERM/SIGINT shutdown trigger,
+/// then blocks until the shutdown flag is set and drains the pool under
+/// [`DRAIN_DEADLINE`] (G4.4), returning `Ok(())` on a clean exit.
 ///
 /// # Errors
 ///
@@ -104,8 +117,8 @@ pub fn serve(config: &Config) -> Result<(), ServeError> {
     // Start the single SSE fan-out multiplexer (G3.4b) iff an
     // event-subscribe upstream is configured: one shared live-tail
     // subscription feeds the ring every `/v1/events/stream` client reads.
-    // The thread runs for the process lifetime (graceful drain is G4.4);
-    // its handle is detached.
+    // The thread is detached; it observes the shared shutdown flag and
+    // stops on drain (G4.4).
     if let (Some(fanout), Some(addr)) = (&state.fanout, config.event_subscribe_addr) {
         let mux = crate::events::fanout::mux::Mux::new(
             addr,
@@ -117,14 +130,64 @@ pub fn serve(config: &Config) -> Result<(), ServeError> {
         tracing::info!(%addr, "SSE fan-out multiplexer started");
     }
     let handles = spawn_handler_pool(&server, config.handler_threads, &state)?;
-    // Block until a worker exits.  Under normal operation the workers
-    // loop forever on `recv`; graceful shutdown is G4.4.
-    for handle in handles {
-        if handle.join().is_err() {
-            tracing::error!("a gateway handler thread panicked");
-        }
+    // Register the graceful-shutdown trigger: SIGTERM / SIGINT set the
+    // shared shutdown flag (G4.4), which the mux + every live SSE stream
+    // also observe.
+    register_shutdown_signals(&state.shutdown);
+    // Block until shutdown is signalled, then drain.
+    while !state.shutdown.load(Ordering::Relaxed) {
+        std::thread::sleep(SHUTDOWN_POLL);
+    }
+    tracing::info!("shutdown signalled; draining in-flight requests + SSE streams");
+    if drain_handlers(&server, handles, config.handler_threads, DRAIN_DEADLINE) {
+        tracing::info!("gateway drained cleanly; exiting");
+    } else {
+        tracing::warn!(
+            deadline_secs = DRAIN_DEADLINE.as_secs(),
+            "drain deadline exceeded; exiting with handler workers still active"
+        );
     }
     Ok(())
+}
+
+/// Register the SIGTERM / SIGINT graceful-shutdown trigger: each signal
+/// sets the shared `shutdown` flag (a safe `signal_hook::flag::register` —
+/// the crate forbids `unsafe`, so a hand-rolled `sigaction` is out).  A
+/// registration failure is logged, not fatal: the gateway still runs, just
+/// without signal-driven drain (a `SIGKILL` still stops it).
+fn register_shutdown_signals(shutdown: &Arc<std::sync::atomic::AtomicBool>) {
+    for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
+        if let Err(error) = signal_hook::flag::register(signal, Arc::clone(shutdown)) {
+            tracing::warn!(signal, %error, "failed to register a shutdown signal handler");
+        }
+    }
+}
+
+/// Drain the handler pool on shutdown: wake each blocked worker (`tiny_http`
+/// unblocks one `recv` per call, so `n_workers` calls wake them all) so it
+/// finishes its in-flight request and exits, then join them under an overall
+/// `deadline` so a stuck worker cannot hang shutdown.  Returns whether every
+/// worker joined within the deadline (the un-joined remainder, if any, is
+/// reclaimed at process exit).
+fn drain_handlers(
+    server: &Arc<tiny_http::Server>,
+    handles: Vec<JoinHandle<()>>,
+    n_workers: usize,
+    deadline: std::time::Duration,
+) -> bool {
+    for _ in 0..n_workers {
+        server.unblock();
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for handle in handles {
+            if handle.join().is_err() {
+                tracing::error!("a gateway handler thread panicked during drain");
+            }
+        }
+        let _ = tx.send(());
+    });
+    rx.recv_timeout(deadline).is_ok()
 }
 
 /// Spawn a bounded pool of `threads` request-handler workers, each
@@ -391,11 +454,33 @@ fn method_token(method: &tiny_http::Method) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{finalize, log_request, method_token};
+    use super::{drain_handlers, finalize, log_request, method_token};
     use crate::http::RouteOutcome;
     use crate::problem::Problem;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+
+    #[test]
+    fn drain_handlers_wakes_and_joins_every_worker() {
+        // Graceful drain (§G4.4): `n` workers block on `recv`; `drain_handlers`
+        // unblocks each (tiny_http wakes one `recv` per `unblock`) so they
+        // all exit and join within the deadline.
+        let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
+        let n = 4;
+        let mut handles = Vec::new();
+        for _ in 0..n {
+            let s = Arc::clone(&server);
+            // Mirrors `worker_loop` without the `AppState` dependency: block
+            // on `recv` until unblocked (→ `Err`), then exit.
+            handles.push(std::thread::spawn(move || while s.recv().is_ok() {}));
+        }
+        // Let the workers reach their blocking `recv`.
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(
+            drain_handlers(&server, handles, n, Duration::from_secs(2)),
+            "unblock-N woke and joined every worker within the deadline"
+        );
+    }
 
     #[test]
     fn method_token_maps_common_verbs() {
