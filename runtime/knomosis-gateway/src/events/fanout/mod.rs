@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use self::ring::EventRing;
 
+pub mod dispatch;
 pub mod mux;
 pub mod ring;
 

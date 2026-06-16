@@ -81,10 +81,14 @@ The companion machine-readable contract is
 > no record; the ring dedups the re-delivered head, the `IndexCounter`
 > re-derives exact indices, and a known-tag decode failure fails closed;
 > a real-TCP-mock chaos suite verifies the finding-#4 recovery + O(1)
-> upstream subscribers under concurrent readers). Next: **G3.4c**
-> (per-client dispatch + eviction) → **G3.4d** (resume semantics) →
-> **G3.5** (`/v1/events/stream` wiring) + the remaining G4 hardening (TLS,
-> graceful drain).
+> upstream subscribers under concurrent readers) and **G3.4c** (the
+> per-client `events/fanout/dispatch.rs::run_stream` — replay-then-live-tail
+> emitting composite `id: <seq>.<index>` records + no-`id:` heartbeats,
+> type-filtered, with `lag_exceeded` / `decode_error` eviction; a
+> real-socket test confirms a slow client is evicted without stalling a
+> fast one). Next: **G3.4d** (resume semantics) → **G3.5**
+> (`/v1/events/stream` wiring) + the remaining G4 hardening (TLS, graceful
+> drain).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1613,7 +1617,7 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   *(Upsized S→M: a bounded page over an unbounded stream is more than a
   drain.)*
 * **G3.4 — SSE fan-out (the complex sub-system)** · L · deps: G3.1, G3.2 ·
-  **in progress (G3.4a + G3.4b DONE).**
+  **in progress (G3.4a + G3.4b + G3.4c DONE; G3.4d next).**
   The §6.1 composite-id correctness lives here; each sub-WU is property-
   tested against an oracle stream.
   * **G3.4a — Ring buffer + cursor registry** · M · **DONE.**
@@ -1663,13 +1667,26 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     under 32 concurrent ring readers** (asserted by counting upstream
     accepts), live-tail ingest, the `IndexCounter` / `render_record` units,
     and the fail-closed decode-fault stop.
-  * **G3.4c — Per-client dispatch + eviction** · M · deps: G3.4a.
-    `events/fanout/dispatch.rs`: one handler thread per stream (bounded by
-    `--max-streams`); emits `id: <seq>.<index>` records (composite, §6.1) +
-    heartbeats; type-filtered; per-record write deadline; drops clients
-    past `--max-client-lag` with `event: error` (`lag_exceeded`).
-    *Acceptance:* slow-client eviction does not stall fast clients (chaos
-    test); a heartbeat carries no `id:` (resume cursor unmoved).
+  * **G3.4c — Per-client dispatch + eviction** · M · deps: G3.4a · **DONE.**
+    `events/fanout/dispatch.rs`: `run_stream` drives one stream (one thread
+    per client, owned by the G3.5 HTTP handler) — replay the ring after the
+    client cursor then live-tail, emitting `id: <seq>.<index>` records
+    (composite, §6.1) + `:\n` **heartbeats that carry no `id:`** (the resume
+    cursor is unmoved); type-filtered (the cursor advances over *every*
+    record so a filter never re-examines a skipped one, but only matching
+    records carry a resume `id:`); the per-record write deadline is the
+    caller's socket `set_write_timeout` (a timed-out write → `Disconnected`).
+    Drops a client more than `--max-client-lag` records behind the ring — or
+    whose cursor the ring already evicted (`CursorPosition::Behind`) — with
+    `event: error` `lag_exceeded` (§11.2); a fail-closed `FanoutState` decode
+    fault closes every stream with `decode_error` (§2 principle 7). Generic
+    over the `Write` sink so the SSE formatting is unit-testable.
+    *Acceptance (DONE):* 7 tests — backlog replay as composite-id records,
+    the type filter, `lag_exceeded` eviction (both the count-lag and the
+    `Behind`-cursor paths), the `decode_error` close, the
+    `behind`+`oldestSeq` error format, and the **headline real-socket
+    concurrency case: a slow (non-reading) client is evicted without
+    stalling a fast client's full delivery**.
   * **G3.4d — Resume semantics + intra-seq skip** · M · deps: G3.4a/b.
     `events/fanout/resume.rs`: decompose `Last-Event-ID = "<seq>.<index>"`
     (or bare `since`, §3.5 step 1); for an **in-window** point position the
