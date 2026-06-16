@@ -146,6 +146,9 @@ mod tests {
             event_subscribe_addr: None,
             auth_token_file: None,
             rate_limit_rps: 0,
+            host_pool_size: 8,
+            host_max_inflight: 8,
+            request_deadline_ms: 5000,
         }
     }
 

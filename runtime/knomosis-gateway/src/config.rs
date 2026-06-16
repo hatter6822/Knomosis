@@ -88,6 +88,25 @@ pub const RATE_LIMIT_RPS_ENV: &str = "KNX_GW_RATE_LIMIT_RPS";
 /// conservative default (§9.2); tune it up for a high-throughput BFF.
 pub const DEFAULT_RATE_LIMIT_RPS: u32 = 100;
 
+/// Environment variable mirroring `--host-pool-size`.
+pub const HOST_POOL_SIZE_ENV: &str = "KNX_GW_HOST_POOL_SIZE";
+
+/// Default number of persistent host connections (§9.2 / G2.1b).
+pub const DEFAULT_HOST_POOL_SIZE: usize = 8;
+
+/// Ceiling on `--host-pool-size` (rejects a fat-finger that would
+/// exhaust the fd table; far above any single-host deployment).
+pub const MAX_HOST_POOL_SIZE: usize = 4096;
+
+/// Environment variable mirroring `--host-max-inflight`.
+pub const HOST_MAX_INFLIGHT_ENV: &str = "KNX_GW_HOST_MAX_INFLIGHT";
+
+/// Environment variable mirroring `--request-deadline-ms`.
+pub const REQUEST_DEADLINE_MS_ENV: &str = "KNX_GW_REQUEST_DEADLINE_MS";
+
+/// Default end-to-end submit deadline in milliseconds (§9.2 / G2.1b).
+pub const DEFAULT_REQUEST_DEADLINE_MS: u64 = 5000;
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -146,6 +165,16 @@ OPTIONS:
                        an exhausted token bucket returns 429.  0 disables
                        rate limiting
                        (env KNX_GW_RATE_LIMIT_RPS) [default: 100]
+    --host-pool-size <N>
+                       Persistent host connections for the submit pool
+                       (env KNX_GW_HOST_POOL_SIZE) [default: 8]
+    --host-max-inflight <N>
+                       Cap on concurrent in-flight host checkouts (clamped
+                       to the pool size); over-cap submits return 503
+                       (env KNX_GW_HOST_MAX_INFLIGHT) [default: pool size]
+    --request-deadline-ms <N>
+                       Per-operation host connect/read/write timeout (ms)
+                       (env KNX_GW_REQUEST_DEADLINE_MS) [default: 5000]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -296,6 +325,19 @@ pub struct Config {
     /// bucket is a `429`.  `0` disables rate limiting.  Default
     /// [`DEFAULT_RATE_LIMIT_RPS`].
     pub rate_limit_rps: u32,
+    /// Number of persistent host connections in the submit pool
+    /// (`--host-pool-size`, G2.1b).  Always in
+    /// `1..=MAX_HOST_POOL_SIZE`.  Default [`DEFAULT_HOST_POOL_SIZE`].
+    pub host_pool_size: usize,
+    /// Cap on concurrent in-flight host checkouts (`--host-max-inflight`);
+    /// a request over the cap is a `503`.  Defaults to `host_pool_size`
+    /// and is clamped to it (more in-flight than connections is
+    /// meaningless — one in-flight per connection).
+    pub host_max_inflight: usize,
+    /// End-to-end submit deadline in milliseconds (`--request-deadline-ms`,
+    /// G2.1b): the per-operation connect / write / read timeout for a host
+    /// round-trip.  Default [`DEFAULT_REQUEST_DEADLINE_MS`].
+    pub request_deadline_ms: u64,
 }
 
 impl Config {
@@ -357,6 +399,39 @@ impl Config {
             .or_else(|| std::env::var(AUTH_TOKEN_FILE_ENV).ok())
             .map(PathBuf::from);
         let rate_limit_rps = resolve_rate_limit_rps(raw.rate_limit_rps)?;
+        let host_pool_size = resolve_host_pool_size(raw.host_pool_size)?;
+        // `--host-max-inflight` defaults to (and is clamped to) the pool
+        // size — one in-flight request per persistent connection.
+        let host_max_inflight = match parse_optional_usize_flag(
+            "--host-max-inflight",
+            raw.host_max_inflight,
+            HOST_MAX_INFLIGHT_ENV,
+        )? {
+            None => host_pool_size,
+            Some(0) => {
+                return Err(ConfigError::InvalidValue {
+                    flag: "--host-max-inflight".to_string(),
+                    value: "0".to_string(),
+                    reason: "must be at least 1".to_string(),
+                })
+            }
+            Some(n) => n.min(host_pool_size),
+        };
+        let request_deadline_ms = match parse_optional_u64_flag(
+            "--request-deadline-ms",
+            raw.request_deadline_ms,
+            REQUEST_DEADLINE_MS_ENV,
+        )? {
+            None => DEFAULT_REQUEST_DEADLINE_MS,
+            Some(0) => {
+                return Err(ConfigError::InvalidValue {
+                    flag: "--request-deadline-ms".to_string(),
+                    value: "0".to_string(),
+                    reason: "must be at least 1 (a zero deadline never completes)".to_string(),
+                })
+            }
+            Some(n) => n,
+        };
 
         Ok(Self {
             listen,
@@ -372,7 +447,55 @@ impl Config {
             event_subscribe_addr,
             auth_token_file,
             rate_limit_rps,
+            host_pool_size,
+            host_max_inflight,
+            request_deadline_ms,
         })
+    }
+}
+
+/// Resolve `--host-pool-size`: CLI value > env var > the default,
+/// validating the `1..=MAX_HOST_POOL_SIZE` range.
+fn resolve_host_pool_size(cli_raw: Option<String>) -> Result<usize, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(HOST_POOL_SIZE_ENV).ok()) {
+        None => Ok(DEFAULT_HOST_POOL_SIZE),
+        Some(raw) => {
+            let n = raw
+                .parse::<usize>()
+                .map_err(|e| ConfigError::InvalidValue {
+                    flag: "--host-pool-size".to_string(),
+                    value: raw.clone(),
+                    reason: e.to_string(),
+                })?;
+            if n == 0 || n > MAX_HOST_POOL_SIZE {
+                return Err(ConfigError::InvalidValue {
+                    flag: "--host-pool-size".to_string(),
+                    value: raw,
+                    reason: format!("must be in 1..={MAX_HOST_POOL_SIZE}"),
+                });
+            }
+            Ok(n)
+        }
+    }
+}
+
+/// Resolve an OPTIONAL `usize` flag: CLI value > env var > `None`.  A
+/// present-but-non-numeric value is a hard [`ConfigError::InvalidValue`].
+fn parse_optional_usize_flag(
+    flag: &str,
+    cli_raw: Option<String>,
+    env_var: &str,
+) -> Result<Option<usize>, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(env_var).ok()) {
+        None => Ok(None),
+        Some(raw) => raw
+            .parse::<usize>()
+            .map(Some)
+            .map_err(|e| ConfigError::InvalidValue {
+                flag: flag.to_string(),
+                value: raw,
+                reason: e.to_string(),
+            }),
     }
 }
 
@@ -446,6 +569,9 @@ struct RawArgs {
     event_subscribe_addr: Option<String>,
     auth_token_file: Option<String>,
     rate_limit_rps: Option<String>,
+    host_pool_size: Option<String>,
+    host_max_inflight: Option<String>,
+    request_deadline_ms: Option<String>,
 }
 
 impl RawArgs {
@@ -491,6 +617,16 @@ impl RawArgs {
                 }
                 "--rate-limit-rps" => {
                     raw.rate_limit_rps = Some(take_value(args, &mut i, "--rate-limit-rps")?);
+                }
+                "--host-pool-size" => {
+                    raw.host_pool_size = Some(take_value(args, &mut i, "--host-pool-size")?);
+                }
+                "--host-max-inflight" => {
+                    raw.host_max_inflight = Some(take_value(args, &mut i, "--host-max-inflight")?);
+                }
+                "--request-deadline-ms" => {
+                    raw.request_deadline_ms =
+                        Some(take_value(args, &mut i, "--request-deadline-ms")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -844,6 +980,46 @@ mod tests {
         );
         assert!(matches!(
             Config::parse(&argv(&["--rate-limit-rps", "fast"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// The submit-pool knobs default sensibly, clamp `--host-max-inflight`
+    /// to the pool size, and reject out-of-range / zero values.
+    #[test]
+    fn host_pool_knobs() {
+        for var in [
+            super::HOST_POOL_SIZE_ENV,
+            super::HOST_MAX_INFLIGHT_ENV,
+            super::REQUEST_DEADLINE_MS_ENV,
+        ] {
+            std::env::remove_var(var);
+        }
+        let cfg = Config::parse(&argv(&[])).unwrap();
+        assert_eq!(cfg.host_pool_size, super::DEFAULT_HOST_POOL_SIZE);
+        assert_eq!(cfg.host_max_inflight, super::DEFAULT_HOST_POOL_SIZE); // defaults to pool size
+        assert_eq!(cfg.request_deadline_ms, super::DEFAULT_REQUEST_DEADLINE_MS);
+        // `--host-max-inflight` is clamped down to the pool size.
+        let cfg = Config::parse(&argv(&[
+            "--host-pool-size",
+            "4",
+            "--host-max-inflight",
+            "100",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.host_pool_size, 4);
+        assert_eq!(cfg.host_max_inflight, 4);
+        // Zero / out-of-range are rejected.
+        assert!(matches!(
+            Config::parse(&argv(&["--host-pool-size", "0"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+        assert!(matches!(
+            Config::parse(&argv(&["--host-max-inflight", "0"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+        assert!(matches!(
+            Config::parse(&argv(&["--request-deadline-ms", "0"])),
             Err(ConfigError::InvalidValue { .. })
         ));
     }

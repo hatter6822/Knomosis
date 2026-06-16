@@ -1364,12 +1364,26 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     closed; the request frame round-trips through the host's `read_frame`
     (byte-identical payload); the streaming reader leaves trailing bytes
     unconsumed.
-  * **G2.1b — Bounded persistent pool** · S · deps: G2.1a. `submit/pool.rs`:
-    `--host-pool-size` persistent connections, one in-flight each;
-    checkout/return; reconnect-on-drop; connect/read/write deadlines;
-    `--host-max-inflight` cap → `503`. *Acceptance:* round-trips against a
-    MockHost; pool reuse + reconnect-on-drop + saturation→503 tested; no fd
-    leak under churn (soak).
+  * **G2.1b — Bounded persistent pool** · S · deps: G2.1a · **DONE.**
+    `submit/pool.rs` — a `HostPool` of `--host-pool-size` persistent
+    connections (one in-flight each): `submit` reuses an idle connection
+    (or opens one with the `--request-deadline-ms` connect/read/write
+    timeouts + `TCP_NODELAY`), frames the payload (G2.1a), and reads the
+    verdict.  A lock-free optimistic-increment admission gate caps
+    concurrency at `--host-max-inflight` (clamped to the pool size); an
+    over-cap submit is `Saturated` → `503`.  **Reconnect-on-drop:** a
+    connection is returned to the idle set only after a successful
+    round-trip; any errored connection is dropped (fd closed), so the
+    next checkout reconnects (no fd leak).  **No double-submit
+    (correctness):** a submit is non-idempotent, so the pool retries on a
+    fresh connection **only** when the **write** failed (a stale idle
+    connection the host had closed — the action never reached it); a
+    failure *after* a successful write is surfaced as-is, never retried.
+    *Acceptance met:* a `MockHost` (persistent, optionally slow) backs
+    tests for round-trip + reason pass-through, single-connection reuse
+    (one accept across 5 submits), `max_inflight=1` saturation → 503,
+    connect-failure mapping (permit released), and reconnect after the
+    host drops an idle connection (two accepts, no double-submit).
   * **G2.1c — (deferred) pipelining** · S · deps: G2.1b. Optional
     multiple-in-flight-per-connection mode (§10.5) behind a flag, for
     throughput. *Not on the critical path; default off.* *Acceptance:*

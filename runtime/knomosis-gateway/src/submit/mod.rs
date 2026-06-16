@@ -13,8 +13,9 @@
 //! CBE bytes **opaquely** — it never holds or applies a signing key, so
 //! the kernel's opaque-`Verify` / EUF-CMA trust model is preserved.
 //!
-//! G2.1a ships the wire codec ([`client`]); the bounded persistent
-//! connection pool (G2.1b) and the `POST /v1/actions` intake + verdict
-//! mapping (G2.2) build on it.
+//! G2.1a ships the wire codec ([`client`]); G2.1b the bounded persistent
+//! connection pool ([`pool`]); the `POST /v1/actions` intake + verdict
+//! mapping (G2.2) builds on them.
 
 pub mod client;
+pub mod pool;
