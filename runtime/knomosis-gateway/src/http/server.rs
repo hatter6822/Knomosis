@@ -178,7 +178,7 @@ pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
     // so the submit-body read below can take `&mut request` without a
     // borrow conflict.  (`split_once` is total + panic-free; an absent
     // `?` yields the whole target as the path and an empty query.)
-    let (routed, path, content_type, auth_header, if_none_match) = {
+    let (routed, path, content_type, auth_header, if_none_match, idempotency_key) = {
         let url = request.url();
         let (path, query) = url.split_once('?').unwrap_or((url, ""));
         (
@@ -187,6 +187,7 @@ pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
             header_value(&request, "Content-Type").map(str::to_string),
             header_value(&request, "Authorization").map(str::to_string),
             header_value(&request, "If-None-Match").map(str::to_string),
+            header_value(&request, "Idempotency-Key").map(str::to_string),
         )
     };
 
@@ -210,6 +211,7 @@ pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
                     let payload = RequestPayload {
                         content_type: content_type.as_deref(),
                         body: &body,
+                        idempotency_key: idempotency_key.as_deref(),
                     };
                     let outcome = dispatch(&routed, state, &payload);
                     crate::http::apply_conditional(outcome, if_none_match.as_deref())

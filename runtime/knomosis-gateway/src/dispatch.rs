@@ -32,6 +32,8 @@ pub struct RequestPayload<'a> {
     pub content_type: Option<&'a str>,
     /// The request body bytes.
     pub body: &'a [u8],
+    /// The request `Idempotency-Key` header value, if present (G2.4).
+    pub idempotency_key: Option<&'a str>,
 }
 
 impl RequestPayload<'_> {
@@ -40,6 +42,7 @@ impl RequestPayload<'_> {
     pub const EMPTY: RequestPayload<'static> = RequestPayload {
         content_type: None,
         body: &[],
+        idempotency_key: None,
     };
 }
 
@@ -53,9 +56,7 @@ pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> Ro
         Route::Health => RouteOutcome::text(200, "ok\n"),
         Route::Ready => crate::system::readyz(state),
         Route::Info => crate::system::info_view(state),
-        Route::SubmitAction => {
-            crate::submit::handler::handle(state, payload.content_type, payload.body)
-        }
+        Route::SubmitAction => crate::submit::handler::handle(state, payload),
         Route::ActorBalances { actor } => with_reads(state, |reads| {
             crate::reads::balances::actor_balances(reads, *actor)
         }),
@@ -135,6 +136,7 @@ mod tests {
             host_max_inflight: 8,
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
+            idempotency_ttl_secs: 0,
         })
         .expect("no DB to open")
     }
@@ -270,6 +272,7 @@ mod tests {
             host_max_inflight: 8,
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
+            idempotency_ttl_secs: 0,
         })
         .expect("open read-only state");
 

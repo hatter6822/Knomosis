@@ -119,6 +119,17 @@ pub const DEFAULT_MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// never be framed anyway.
 pub const MAX_FRAME_SIZE_CEILING: usize = 16 * 1024 * 1024;
 
+/// Environment variable mirroring `--idempotency-ttl-secs`.
+pub const IDEMPOTENCY_TTL_SECS_ENV: &str = "KNX_GW_IDEMPOTENCY_TTL_SECS";
+
+/// Default `Idempotency-Key` response-cache TTL in seconds (§9.2); `0`
+/// disables the cache.
+pub const DEFAULT_IDEMPOTENCY_TTL_SECS: u64 = 120;
+
+/// Maximum retained idempotency entries (LRU-evicted at capacity) — a
+/// fixed bound on the cache's memory; not separately configurable.
+pub const IDEMPOTENCY_MAX_ENTRIES: usize = 8192;
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -191,6 +202,11 @@ OPTIONS:
                        POST /v1/actions body cap in bytes; a larger body
                        is rejected 413 (ceiling 16 MiB)
                        (env KNX_GW_MAX_FRAME_SIZE) [default: 1048576]
+    --idempotency-ttl-secs <N>
+                       Idempotency-Key response-cache TTL in seconds; a
+                       duplicate key within the TTL returns the cached
+                       response.  0 disables the cache
+                       (env KNX_GW_IDEMPOTENCY_TTL_SECS) [default: 120]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -358,6 +374,10 @@ pub struct Config {
     /// G2.2): a larger body is rejected with `413` while reading.  Always
     /// in `1..=MAX_FRAME_SIZE_CEILING`.  Default [`DEFAULT_MAX_FRAME_SIZE`].
     pub max_frame_size: usize,
+    /// `Idempotency-Key` response-cache TTL in seconds
+    /// (`--idempotency-ttl-secs`, G2.4); `0` disables the cache.  Default
+    /// [`DEFAULT_IDEMPOTENCY_TTL_SECS`].
+    pub idempotency_ttl_secs: u64,
 }
 
 impl Config {
@@ -453,6 +473,14 @@ impl Config {
             Some(n) => n,
         };
         let max_frame_size = resolve_max_frame_size(raw.max_frame_size)?;
+        // `--idempotency-ttl-secs` defaults to 120; `0` is valid (disables
+        // the cache).
+        let idempotency_ttl_secs = parse_optional_u64_flag(
+            "--idempotency-ttl-secs",
+            raw.idempotency_ttl_secs,
+            IDEMPOTENCY_TTL_SECS_ENV,
+        )?
+        .unwrap_or(DEFAULT_IDEMPOTENCY_TTL_SECS);
 
         Ok(Self {
             listen,
@@ -472,6 +500,7 @@ impl Config {
             host_max_inflight,
             request_deadline_ms,
             max_frame_size,
+            idempotency_ttl_secs,
         })
     }
 }
@@ -620,6 +649,7 @@ struct RawArgs {
     host_max_inflight: Option<String>,
     request_deadline_ms: Option<String>,
     max_frame_size: Option<String>,
+    idempotency_ttl_secs: Option<String>,
 }
 
 impl RawArgs {
@@ -678,6 +708,10 @@ impl RawArgs {
                 }
                 "--max-frame-size" => {
                     raw.max_frame_size = Some(take_value(args, &mut i, "--max-frame-size")?);
+                }
+                "--idempotency-ttl-secs" => {
+                    raw.idempotency_ttl_secs =
+                        Some(take_value(args, &mut i, "--idempotency-ttl-secs")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -1083,6 +1117,27 @@ mod tests {
         ));
         assert!(matches!(
             Config::parse(&argv(&["--request-deadline-ms", "0"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// `--idempotency-ttl-secs` defaults to 120, accepts `0` (disabled),
+    /// and rejects a non-numeric value.
+    #[test]
+    fn idempotency_ttl_default_and_parse() {
+        std::env::remove_var(super::IDEMPOTENCY_TTL_SECS_ENV);
+        assert_eq!(
+            Config::parse(&argv(&[])).unwrap().idempotency_ttl_secs,
+            super::DEFAULT_IDEMPOTENCY_TTL_SECS
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--idempotency-ttl-secs", "0"]))
+                .unwrap()
+                .idempotency_ttl_secs,
+            0
+        );
+        assert!(matches!(
+            Config::parse(&argv(&["--idempotency-ttl-secs", "soon"])),
             Err(ConfigError::InvalidValue { .. })
         ));
     }

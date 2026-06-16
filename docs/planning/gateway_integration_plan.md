@@ -49,10 +49,13 @@ The companion machine-readable contract is
 > check) and the **submit path G2.1a/G2.1b/G2.2** (`POST /v1/actions` —
 > the host wire codec, the bounded persistent connection pool, and the
 > content-negotiated intake + §5 verdict mapping, end-to-end over a
-> `MockHost`) plus **G2.3** (the full backpressure matrix — deadline →
-> `504`, `Busy`/saturated → `503`+`Retry-After`, `413` body cap) have
-> also landed. Next: **G2.4** (idempotency cache) and the events
-> (**G3**) track.
+> `MockHost`), **G2.3** (the full backpressure matrix — deadline →
+> `504`, `Busy`/saturated → `503`+`Retry-After`, `413` body cap),
+> **G2.4** (the `Idempotency-Key` replay cache — bounded, TTL'd,
+> LRU-evicted), and **G2.5** (the submit test surface) have also landed:
+> **the submit track is complete** (only the optional G2.1c pipelining is
+> deferred). Next: the events (**G3**) track + the remaining G4
+> hardening (TLS, graceful drain).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1447,15 +1450,34 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   `verdict_map` maps `Timeout` → `504`; an over-`--max-frame-size` POST
   body yields `413` end-to-end; the `Busy` / saturated / connect-fail
   paths keep their mapped statuses + headers under test.
-* **G2.4 — Idempotency cache** · S · deps: G2.2.
-  *Deliverable:* `submit/idempotency.rs` — bounded TTL `Idempotency-Key`→
-  response cache (off when ttl=0); LRU eviction; key is opaque/client-
-  supplied. *Acceptance:* duplicate key within TTL returns the cached
-  response (not a second host round-trip); eviction + disable paths tested;
-  cache is bounded (no unbounded growth under unique keys).
-* **G2.5 — Submit tests** · S · deps: G2.2.
-  *Deliverable:* integration + contract + idempotency + forwarding-fidelity
-  tests. *Acceptance:* gates green.
+* **G2.4 — Idempotency cache** · S · deps: G2.2 · **DONE.**
+  `submit/idempotency.rs` — a bounded, TTL'd `IdempotencyCache` keyed on
+  the client-supplied `Idempotency-Key` header.  The handler checks it
+  **before** the host round-trip (a hit returns the cached original
+  response, doing **no** re-submit — so a client retry of a processed
+  action never trips the kernel's nonce into a *different* verdict) and
+  caches the result **after** (only a *definitive* outcome — status
+  `200..500`; transient `5xx` are not cached so the client may retry and
+  actually reach the host).  `--idempotency-ttl-secs` (default `120`; `0`
+  disables); the map is bounded at `IDEMPOTENCY_MAX_ENTRIES` (8192) with
+  least-recently-used eviction + opportunistic expired-entry sweeping, so
+  a stream of unique keys cannot grow it without bound; thread-safe
+  (poison-recovering `Mutex`).  *Acceptance met:* unit tests for
+  hit/miss, the disabled (`ttl=0`) path, transient-`5xx`-not-cached, TTL
+  expiry (sub-second via the `Duration` constructor), LRU eviction, and
+  the unique-key bound; an end-to-end integration test proves a duplicate
+  key returns the byte-identical cached response with the `MockHost`
+  serving exactly **one** frame (a different key does a second round-trip).
+  The contract documents the optional `Idempotency-Key` request header on
+  the submit endpoint.
+* **G2.5 — Submit tests** · S · deps: G2.2 · **DONE (folded into
+  G2.1a–G2.4).**  The submit surface is covered by the unit suites
+  (codec golden bytes incl. forwarding fidelity, pool round-trip / reuse
+  / saturation / reconnect / read-timeout, base64, verdict matrix +
+  every `SubmitError`, content negotiation, idempotency) and the
+  end-to-end `MockHost` integration tests (octet-stream `Ok`, json+base64
+  `NotAdmissible`, no-host `503`, `415`, `413`, auth-`401`, idempotency
+  replay).  The `ci-gateway` / `ci-rust` gates are green.
 
 ### G3 — Events: backfill + SSE
 

@@ -21,6 +21,7 @@
 
 use serde::Deserialize;
 
+use crate::dispatch::RequestPayload;
 use crate::http::RouteOutcome;
 use crate::problem::Problem;
 use crate::state::AppState;
@@ -41,24 +42,43 @@ struct ActionSubmission {
 
 /// Handle `POST /v1/actions`.
 #[must_use]
-pub fn handle(state: &AppState, content_type: Option<&str>, body: &[u8]) -> RouteOutcome {
+pub fn handle(state: &AppState, request: &RequestPayload) -> RouteOutcome {
+    // Idempotency replay (G2.4): a duplicate `Idempotency-Key` within the
+    // TTL returns the cached original response with NO second host
+    // round-trip — so a client retry never re-submits a processed action
+    // (which the kernel nonce would otherwise decline with a *different*
+    // verdict).
+    if let Some(key) = request.idempotency_key {
+        if let Some(cached) = state.idempotency.get(key) {
+            return cached;
+        }
+    }
+
     // The submit path is available only when a host upstream is configured.
     let Some(pool) = &state.host_pool else {
         return Problem::new("submit-unavailable", "Submit Unavailable", 503)
             .with_detail("the submit path is disabled: the gateway was started without --host-addr")
             .into_outcome();
     };
-    let payload = match decode_body(content_type, body) {
-        Ok(payload) => payload,
+    let action = match decode_body(request.content_type, request.body) {
+        Ok(action) => action,
         Err(problem) => return problem,
     };
-    if payload.is_empty() {
+    if action.is_empty() {
         return Problem::new("parse-error", "Empty action", 400)
             .with_detail("the submitted SignedAction is empty")
             .into_outcome();
     }
-    let result = pool.submit(&payload);
-    verdict_map::map_submit_result(result, state.config.ok_admission_stage.as_str())
+    let result = pool.submit(&action);
+    let outcome = verdict_map::map_submit_result(result, state.config.ok_admission_stage.as_str());
+
+    // Cache a *definitive* outcome under the idempotency key (a no-op when
+    // the cache is disabled, the key is absent, or the outcome is a
+    // transient 5xx — see `idempotency::is_cacheable`).
+    if let Some(key) = request.idempotency_key {
+        state.idempotency.put(key, &outcome);
+    }
+    outcome
 }
 
 /// Content-negotiate the request body into opaque CBE bytes, or an error

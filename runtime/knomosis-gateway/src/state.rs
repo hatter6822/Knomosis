@@ -23,8 +23,9 @@
 use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
 
 use crate::auth::Auth;
-use crate::config::Config;
+use crate::config::{Config, IDEMPOTENCY_MAX_ENTRIES};
 use crate::rate_limit::RateLimiter;
+use crate::submit::idempotency::IdempotencyCache;
 use crate::submit::pool::HostPool;
 
 /// Errors building the shared application state at startup.
@@ -87,6 +88,9 @@ pub struct AppState {
     /// present iff `--host-addr` was configured.  `None` makes
     /// `POST /v1/actions` answer `503` (submit disabled).
     pub host_pool: Option<HostPool>,
+    /// The `Idempotency-Key` response cache (G2.4); disabled when
+    /// `--idempotency-ttl-secs` is `0`.
+    pub idempotency: IdempotencyCache,
 }
 
 impl AppState {
@@ -131,12 +135,15 @@ impl AppState {
                 std::time::Duration::from_millis(config.request_deadline_ms),
             )
         });
+        let idempotency =
+            IdempotencyCache::new(config.idempotency_ttl_secs, IDEMPOTENCY_MAX_ENTRIES);
         Ok(Self {
             config,
             reads,
             auth,
             rate_limiter,
             host_pool,
+            idempotency,
         })
     }
 }
@@ -165,6 +172,7 @@ mod tests {
             host_max_inflight: 8,
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
+            idempotency_ttl_secs: 0,
         }
     }
 

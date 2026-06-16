@@ -5,21 +5,24 @@
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
-//! G1.9 read-path integration tests: the read endpoints served end-to-end
-//! over a real `tiny_http` listener + handler pool, against a seeded
-//! **read-only** indexer SQLite database, through the full pipeline
-//! (auth gate → route → dispatch → read).  This is the first shippable
-//! read-only slice.
+//! Gateway integration tests: the read **and** submit paths served
+//! end-to-end over a real `tiny_http` listener + handler pool, against a
+//! seeded read-only indexer SQLite database (reads) and a `MockHost`
+//! (submit), through the full pipeline (auth → rate-limit → route →
+//! dispatch → read / host round-trip).
 //!
 //! Covers: the `Balance` / `BalanceList` / `BudgetView` / `PoolView`
 //! contract shapes over HTTP; `ETag` + `If-None-Match` → `304`; the
-//! fail-closed auth gate (401 / 403) on a read; and a
-//! snapshot-consistency chaos case (a concurrent writer cannot make the
-//! balance list tear).
+//! fail-closed auth gate (401 / 403) + rate-limit (429) on reads; a
+//! concurrent-write chaos case (reads stay available, well-formed, and
+//! cursor-monotonic — §3.6 eventual consistency); `POST /v1/actions`
+//! (octet-stream / json+base64 intake, §5 verdict mapping, 503/415/413
+//! backpressure); and the `Idempotency-Key` replay cache (a duplicate key
+//! returns the cached response with no second host round-trip).
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -132,6 +135,7 @@ fn start_harness_full(rate_limit_rps: u32, host_addr: Option<SocketAddr>) -> Har
         host_max_inflight: 8,
         request_deadline_ms: 5000,
         max_frame_size: 1024 * 1024,
+        idempotency_ttl_secs: 60,
     };
     let state = Arc::new(AppState::new(config).expect("open read-only state + load tokens"));
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
@@ -201,6 +205,31 @@ fn http_post(
     body: &[u8],
     token: Option<&str>,
 ) -> Resp {
+    http_post_full(addr, path, content_type, body, token, None)
+}
+
+/// `POST path` with an `Idempotency-Key` header.
+fn http_post_idem(
+    addr: SocketAddr,
+    path: &str,
+    content_type: &str,
+    body: &[u8],
+    token: Option<&str>,
+    idem: &str,
+) -> Resp {
+    http_post_full(addr, path, content_type, body, token, Some(idem))
+}
+
+/// The shared POST core: `Content-Type` + body + optional bearer token +
+/// optional `Idempotency-Key`.
+fn http_post_full(
+    addr: SocketAddr,
+    path: &str,
+    content_type: &str,
+    body: &[u8],
+    token: Option<&str>,
+    idem: Option<&str>,
+) -> Resp {
     let mut stream = TcpStream::connect(addr).expect("connect");
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(10)))
@@ -212,6 +241,9 @@ fn http_post(
     );
     if let Some(t) = token {
         head.push_str(&format!("Authorization: Bearer {t}\r\n"));
+    }
+    if let Some(k) = idem {
+        head.push_str(&format!("Idempotency-Key: {k}\r\n"));
     }
     head.push_str("\r\n");
     let mut bytes = head.into_bytes();
@@ -427,9 +459,11 @@ fn concurrent_writer_keeps_reads_well_formed_and_monotonic() {
 }
 
 /// A minimal submit-host stand-in: serves every framed request on every
-/// connection with a fixed verdict, until dropped.
+/// connection with a fixed verdict (counting the frames it serves), until
+/// dropped.
 struct MockHost {
     addr: SocketAddr,
+    served: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
@@ -439,8 +473,10 @@ impl MockHost {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let addr = listener.local_addr().unwrap();
+        let served = Arc::new(AtomicUsize::new(0));
         let stop = Arc::new(AtomicBool::new(false));
         let halt = Arc::clone(&stop);
+        let frames = Arc::clone(&served);
         let handle = thread::spawn(move || {
             let mut conns = Vec::new();
             while !halt.load(Ordering::Relaxed) {
@@ -450,9 +486,11 @@ impl MockHost {
                         stream
                             .set_read_timeout(Some(Duration::from_millis(200)))
                             .ok();
+                        let conn_frames = Arc::clone(&frames);
                         conns.push(thread::spawn(move || loop {
                             match read_frame(&mut stream, DEFAULT_MAX_FRAME_SIZE) {
                                 Ok(_payload) => {
+                                    conn_frames.fetch_add(1, Ordering::Relaxed);
                                     let resp =
                                         VerdictResponse::with_reason(verdict, reason).encode();
                                     if stream
@@ -476,6 +514,7 @@ impl MockHost {
         });
         Self {
             addr,
+            served,
             stop,
             handle: Some(handle),
         }
@@ -577,6 +616,38 @@ fn submit_requires_auth() {
         None,
     );
     assert_eq!(resp.status, 401);
+}
+
+#[test]
+fn idempotency_key_replays_cached_response_without_resubmit() {
+    let mock = MockHost::start(Verdict::Ok, "");
+    let h = start_harness_full(0, Some(mock.addr)); // ttl=60 (enabled)
+    let ct = "application/octet-stream";
+
+    // First submit with Idempotency-Key "abc" reaches the host.
+    let r1 = http_post_idem(h.addr, "/v1/actions", ct, b"action", Some(TOKEN), "abc");
+    assert_eq!(r1.status, 200);
+    assert_eq!(r1.json()["accepted"], true);
+    assert_eq!(mock.served.load(Ordering::Relaxed), 1);
+
+    // A duplicate key returns the byte-identical CACHED response with NO
+    // second host round-trip (the served-frame count stays 1).
+    let r2 = http_post_idem(h.addr, "/v1/actions", ct, b"action", Some(TOKEN), "abc");
+    assert_eq!(r2.status, 200);
+    assert_eq!(
+        r2.body, r1.body,
+        "duplicate key returns the cached response"
+    );
+    assert_eq!(
+        mock.served.load(Ordering::Relaxed),
+        1,
+        "the cached retry did NOT re-submit"
+    );
+
+    // A DIFFERENT key is a fresh request → a second host round-trip.
+    let r3 = http_post_idem(h.addr, "/v1/actions", ct, b"action", Some(TOKEN), "xyz");
+    assert_eq!(r3.status, 200);
+    assert_eq!(mock.served.load(Ordering::Relaxed), 2);
 }
 
 #[test]

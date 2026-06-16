@@ -20,5 +20,6 @@
 pub mod base64;
 pub mod client;
 pub mod handler;
+pub mod idempotency;
 pub mod pool;
 pub mod verdict_map;
