@@ -378,7 +378,7 @@ $ file .lake/build/bin/knomosis
 
 $ .lake/build/bin/knomosis info
 knomosis: legal-kernel runtime
-  build tag: knomosis-step-vm-coherence
+  version:   0.8.4
   proof-carrying state-transition kernel (see CLAUDE.md for milestone status)
   hash:        fnv1a64-padded-32
   hash-grade:  fallback (FNV-1a-64 padded to 32, NOT FOR PRODUCTION)

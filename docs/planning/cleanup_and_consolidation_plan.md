@@ -26,9 +26,9 @@ debt the project's discipline says to keep at zero.
     complete**):
     - **CL.1** Documentation drift (README build tag,
       test-count consistency, synthesis-doc refresh).
-      **— COMPLETE.**  README build tag matches
-      `LegalKernel.lean` (`knomosis-step-vm-coherence`); README
-      uses a "run `lake test`" pointer rather than a pinned
+      **— COMPLETE.**  README version matches
+      `LegalKernel.lean` (`kernelVersion`, mirroring `lakefile.lean`);
+      README uses a "run `lake test`" pointer rather than a pinned
       count; synthesis-doc post-AR refresh shipped (OQ-DOC-4).
     - **CL.2** Stale code comments (the historical-context
       cleanup catalogue).  **— OPEN.**  The 16 comment edits

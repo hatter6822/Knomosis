@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "cbf00f0d934c908cc0d91d9d54e7da7fa87c148f940ff70398e15853eaa59d69"
+    "source_digest": "060190691c22e96a8e979d4f2e6f7902df215bcda5529532259e0dea30146f07"
   },
   "summary": {
     "module_count": 308,
@@ -515,8 +515,8 @@
         },
         {
           "kind": "def",
-          "name": "kernelBuildTag",
-          "line": 331,
+          "name": "kernelVersion",
+          "line": 334,
           "called": [
             "LegalKernel"
           ]
@@ -55891,9 +55891,7 @@
           "called": [
             "LegalKernel.Test.Umbrella",
             "TestCase",
-            "assert",
-            "assertEq",
-            "kernelBuildTag"
+            "assert"
           ]
         }
       ]
@@ -58051,7 +58049,6 @@
             "Lex.Test.ExampleLex",
             "TestCase",
             "assert",
-            "assertEq",
             "emptyState"
           ]
         }
@@ -58148,14 +58145,13 @@
           "name": "milestoneGateTests",
           "line": 259,
           "called": [
-            "TestCase",
-            "assertEq"
+            "TestCase"
           ]
         },
         {
           "kind": "def",
           "name": "auditSelfTransferRegression",
-          "line": 331,
+          "line": 325,
           "called": [
             "ActorId",
             "Amount",
@@ -58171,7 +58167,7 @@
         {
           "kind": "def",
           "name": "auditTransferRejectsZero",
-          "line": 352,
+          "line": 346,
           "called": [
             "ActorId",
             "ResourceId",
@@ -58185,7 +58181,7 @@
         {
           "kind": "def",
           "name": "auditProportionalDiluteRejectsEmpty",
-          "line": 367,
+          "line": 361,
           "called": [
             "ActorId",
             "ResourceId",
@@ -58198,7 +58194,7 @@
         {
           "kind": "def",
           "name": "auditDistributeOthersMultiActor",
-          "line": 382,
+          "line": 376,
           "called": [
             "ActorId",
             "Amount",
@@ -58214,7 +58210,7 @@
         {
           "kind": "def",
           "name": "auditBurnTruncates",
-          "line": 410,
+          "line": 404,
           "called": [
             "ActorId",
             "ResourceId",
@@ -58228,7 +58224,7 @@
         {
           "kind": "def",
           "name": "auditMintRejectsZero",
-          "line": 425,
+          "line": 419,
           "called": [
             "ActorId",
             "ResourceId",
@@ -58241,7 +58237,7 @@
         {
           "kind": "def",
           "name": "auditRewardRejectsZero",
-          "line": 443,
+          "line": 437,
           "called": [
             "ActorId",
             "ResourceId",
@@ -58254,7 +58250,7 @@
         {
           "kind": "def",
           "name": "auditWithdrawRejectsInsufficient",
-          "line": 457,
+          "line": 451,
           "called": [
             "ActorId",
             "ResourceId",
@@ -58269,7 +58265,7 @@
         {
           "kind": "def",
           "name": "auditDepositAcceptsZero",
-          "line": 480,
+          "line": 474,
           "called": [
             "ActorId",
             "ResourceId",
@@ -58282,7 +58278,7 @@
         {
           "kind": "def",
           "name": "auditMathTests",
-          "line": 497,
+          "line": 491,
           "called": [
             "TestCase",
             "auditBurnTruncates",
@@ -58299,7 +58295,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 509,
+          "line": 503,
           "called": [
             "Lex.Test.M2",
             "TestCase",

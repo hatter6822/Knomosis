@@ -525,7 +525,7 @@ better code is correct.
 
   | Surface        | Bump location                                    |
   |----------------|--------------------------------------------------|
-  | Lean kernel    | `lakefile.lean` `version` field                  |
+  | Lean kernel    | `lakefile.lean` `version` + `LegalKernel.lean` `kernelVersion` |
   | Rust workspace | `runtime/Cargo.toml` `[workspace.package] version` |
   | Solidity       | `solidity/foundry.toml` (if `version` present)   |
   | README banner  | `README.md` top-of-file `**Version:** vX.Y.Z`    |
@@ -545,6 +545,8 @@ better code is correct.
   -- lakefile.lean
   package knomosis where
     version := v!"0.5.6"     -- <-- bump this in lockstep
+  -- LegalKernel.lean  (mirrors lakefile.lean; surfaced by `knomosis info`)
+  def kernelVersion : String := "0.5.6"
   ```
   `Cargo.lock` is regenerated automatically and must be committed.
 
@@ -704,15 +706,18 @@ every match.
 
 ## Current development status
 
-**Build tag** (`kernelBuildTag` in `LegalKernel.lean`):
-`"knomosis-step-vm-coherence"` (SVC).  `Test/Umbrella.lean`,
-`Lex/Test/M2.lean`, and `Lex/Test/ExampleLex.lean` all pin this
-value in regression tests, so any phase / milestone bump must
-update the constant and every pinning test in the same PR.
+**Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
+the `lakefile.lean` `version` field (currently `0.8.4`) — the single
+project-wide build identifier, surfaced by `knomosis info` and the
+test driver.  It is bumped in lockstep with `lakefile.lean`,
+`runtime/Cargo.toml`, and the `README.md` banner per the
+"Patch-version bumps" table; there is no separate milestone tag and
+no value-pinning regression test (the former `kernelBuildTag` was
+removed as redundant once every PR bumps the version).
 
 **Test counts.**  `lake test` is the canonical Lean query; `cargo
 test --workspace` is the Rust canonical query.  Approximate counts
-at the current build tag:
+at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|

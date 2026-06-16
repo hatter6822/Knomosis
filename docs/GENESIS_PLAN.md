@@ -2721,7 +2721,7 @@ and this document.
   Quot.sound]` — i.e. zero custom axioms.  `Std.Data.TreeMap` from
   Lean core replaces the original draft's `Std.Data.RBMap`; see §4.2
   for the rationale and §8.3 for the migrated lemma library.  The
-  non-TCB `kernelBuildTag` constant lives in the umbrella
+  non-TCB `kernelVersion` constant lives in the umbrella
   `LegalKernel.lean`, *not* in `Kernel.lean`, so the WU 1.11 TCB
   audit tool can enumerate the trusted core in isolation.
 - WU 0.3: `LegalKernel/Laws/Transfer.lean` ships the §4.11 transfer

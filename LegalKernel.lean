@@ -318,17 +318,20 @@ import LegalKernel.Encoding.GameState
 
 namespace LegalKernel
 
-/-- A non-TCB build identification string.  Lets non-kernel callers
-    (the `knomosis` placeholder runtime, the test driver) confirm at link
-    time that the kernel module compiled, without exercising any
-    actual transition.  Bumped by hand whenever the §4.12 surface
-    changes or a Phase boundary is crossed; mirror in §13.8
-    release-cutting runbook.
+/-- The project-wide version string, mirroring the `version` field in
+    `lakefile.lean`.  Lets non-kernel callers (the `knomosis` runtime,
+    the test driver) confirm at link time that the kernel module
+    compiled and report which build is running, without exercising any
+    actual transition.  Bumped in lockstep with `lakefile.lean`,
+    `runtime/Cargo.toml`, and the `README.md` banner on every release
+    per the "Patch-version bumps" table in `CLAUDE.md`, so the version
+    is the single build identifier.  (The former hand-curated
+    `kernelBuildTag` milestone string — and its value-pinning regression
+    tests — were removed as redundant once every PR bumps the version.)
 
     Lives outside `LegalKernel.Kernel` so that the trusted-core file
-    contains only the §4.12 listing — the WU-1.11 TCB audit tool can
-    therefore enumerate `Kernel.lean` without seeing convenience
-    constants. -/
-def kernelBuildTag : String := "knomosis-step-vm-coherence"
+    contains only the §4.12 listing — the TCB audit tool can therefore
+    enumerate `Kernel.lean` without seeing convenience constants. -/
+def kernelVersion : String := "0.8.4"
 
 end LegalKernel
