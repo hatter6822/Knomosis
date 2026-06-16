@@ -6698,8 +6698,13 @@ independent observers.  No new axiom is introduced.
      batch (OQ-GP-8b).  Used **only** by the BOLD-leg gate; a deployment
      that reimburses only the ETH leg never links it.  Its mitigation is
      identical to the gas verifier's (cross-check across independent
-     oracles), and the floored conversion means a stale/low rate can only
-     *under*-reimburse, never over-reimburse.
+     oracles).  The floored conversion never rounds *up*, so the bound
+     never exceeds the attested-rate conversion of the real wei cost (a
+     stale/low rate under-reimburses); a *dishonest high* rate is bounded
+     not by the floor but by the per-action BOLD cap
+     (`maxDrainPerActionBold`) — the admitted amount is
+     `min(cap, conversion)`, so the cap is the structural backstop and the
+     oracle honesty is the residual (cross-checkable) trust.
 
 ### 15E.8 Trust-assumption update
 

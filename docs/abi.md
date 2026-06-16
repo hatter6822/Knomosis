@@ -1264,11 +1264,17 @@ forward-compatible); what v2 adds is a *receipt witness*:
     gas_price_be[16])` with `DOMAIN = "knomosis/v1/gas-receipt-binding"`
     (the 32-byte handle `ConsumedReceipts` de-duplicates on);
     `derive_gas_receipt` re-derives the `GasReceipt` from a fetched
-    `eth_getTransactionReceipt` (status-gated — a reverted tx backs
-    nothing); a `ReceiptSource` trait fetches it (live impl over
-    `JsonRpcL1Source`); and `verify_{eth,bold}_claim_independently` lets a
-    third party (not the claim builder) attest the backing against L1
-    reality.
+    `eth_getTransactionReceipt` (status-gated strictly to EIP-658
+    `status == 1`; a reverted/non-spec tx backs nothing); a `ReceiptSource`
+    trait fetches it (live impl over `JsonRpcL1Source`);
+    `fetch_and_derive_gas_receipt` hands a caller the canonical-hash
+    `GasReceipt` for its consumed set; and `verify_{eth,bold}_claim_independently`
+    (backing) / `verify_{eth,bold}_claim_independently_fresh` (backing +
+    no-reuse, returning `Reused` when the canonical hash is already consumed)
+    let a third party attest the backing against L1 reality.  **The no-reuse
+    check keys on the canonical re-derived hash, never a sequencer-asserted
+    one** — otherwise one L1 receipt could back N claims via N fabricated
+    hashes (the observer-side analogue of `consumeReceipt_blocks_reuse`).
 
 **Trust + scope (v2).**  **Both legs are receipt-verified** (OQ-GP-8b
 closed).  The **ETH leg (resource 0)** is exact and oracle-free (wei cost

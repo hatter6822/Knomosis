@@ -892,4 +892,10 @@ gas verifier — a stale/low rate can only *under*-reimburse.  For
 `eth_getTransactionReceipt`, re-derives the `GasReceipt` (canonical
 binding hash), and confirms the backing **without trusting the operator's
 asserted receipt** — the production binding of `l1GasReceiptVerifier`.
-Run ≥1 such observer alongside the watchtower.
+To also enforce **no-reuse**, thread your spent-receipt set through the
+`…_fresh` variants (`verify_{eth,bold}_claim_independently_fresh(…, consumed)`),
+which return `Reused` when the receipt's canonical hash is already
+consumed; **key that set on the canonical re-derived hash**
+(`fetch_and_derive_gas_receipt` returns it), never on a sequencer-asserted
+one — otherwise one L1 receipt could back several claims.  Run ≥1 such
+observer alongside the watchtower.
