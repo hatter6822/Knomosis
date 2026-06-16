@@ -1271,8 +1271,11 @@ forward-compatible); what v2 adds is a *receipt witness*:
     `status == 1` (a reverted/non-spec tx backs nothing) and **parsed
     fail-closed** (quantity fields require the `0x` prefix — a non-prefixed
     `"21000"` is rejected, not read as `0x21000`).  A `ReceiptSource` trait
-    fetches it (live impl over `JsonRpcL1Source`).  The verifiers take a
-    **`confirmed_head`** and attest `Backed` only when the receipt's
+    fetches it (live impl over `JsonRpcL1Source`, which additionally rejects
+    a receipt whose `transactionHash` ≠ the requested tx — proxy/cache
+    defence).  The verifiers take a **`confirmed_head`**, check it **before**
+    any terminal verdict (a still-reorgable failed tx is `Unconfirmed`, not a
+    terminal `TransactionFailed`), and attest `Backed` only when the receipt's
     `block_number <= confirmed_head` (re-org safety — the watcher's
     `head − confirmation_depth` rule; a shallower receipt → `Unconfirmed`).
     `fetch_and_derive_gas_receipt` hands a caller the canonical-hash

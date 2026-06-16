@@ -324,13 +324,16 @@ pub fn verify_eth_claim_independently_fresh<S: ReceiptSource>(
     let Some(raw) = source.fetch_receipt(tx_hash)? else {
         return Ok(ClaimBackingOutcome::ReceiptNotFound);
     };
+    // Re-org safety FIRST: a still-reorgable receipt yields no terminal
+    // verdict — even a current `status == 0` failure can be replaced by a
+    // re-org, so `TransactionFailed` is reported only once the receipt is
+    // confirmation-depth deep.
+    if raw.block_number > confirmed_head {
+        return Ok(ClaimBackingOutcome::Unconfirmed);
+    }
     let Some(gas_receipt) = derive_gas_receipt(&raw, batch_id) else {
         return Ok(ClaimBackingOutcome::TransactionFailed);
     };
-    if raw.block_number > confirmed_head {
-        // Re-org safety: a shallower receipt may still disappear.
-        return Ok(ClaimBackingOutcome::Unconfirmed);
-    }
     if !claim.is_receipt_backed_by(&gas_receipt) {
         return Ok(ClaimBackingOutcome::NotBacked);
     }
@@ -397,12 +400,14 @@ pub fn verify_bold_claim_independently_fresh<S: ReceiptSource, O: RateOracle>(
     let Some(raw) = source.fetch_receipt(tx_hash)? else {
         return Ok(ClaimBackingOutcome::ReceiptNotFound);
     };
-    let Some(gas_receipt) = derive_gas_receipt(&raw, batch_id) else {
-        return Ok(ClaimBackingOutcome::TransactionFailed);
-    };
+    // Re-org safety FIRST (as on the ETH leg): no terminal verdict for a
+    // still-reorgable receipt.
     if raw.block_number > confirmed_head {
         return Ok(ClaimBackingOutcome::Unconfirmed);
     }
+    let Some(gas_receipt) = derive_gas_receipt(&raw, batch_id) else {
+        return Ok(ClaimBackingOutcome::TransactionFailed);
+    };
     // The rate must be oracle-attested for THIS batch (the Lean
     // l1EthBoldRateOracle binding), never a caller-supplied rate.
     let Some(rate) = oracle.attested_rate(batch_id)? else {
@@ -495,6 +500,25 @@ fn decode_hex32(s: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
+/// [`parse_eth_receipt`] **plus** the requested-tx check: a parsed receipt is
+/// rejected unless its `transactionHash` equals `expected_tx_hash`.  Defends
+/// against a JSON-RPC proxy/cache that returns a receipt for a *different*
+/// transaction than requested — without this, an unrelated high-cost receipt
+/// could be treated as backing the claim instead of failing closed.
+fn parse_eth_receipt_for(
+    value: &serde_json::Value,
+    expected_tx_hash: &[u8; 32],
+) -> Result<Option<EthTxReceipt>, ReceiptFetchError> {
+    match parse_eth_receipt(value)? {
+        Some(receipt) if &receipt.transaction_hash != expected_tx_hash => {
+            Err(ReceiptFetchError::Malformed(
+                "receipt is for a different transaction than requested".into(),
+            ))
+        }
+        other => Ok(other),
+    }
+}
+
 /// Live [`ReceiptSource`] over a JSON-RPC endpoint: `fetch_receipt` issues
 /// `eth_getTransactionReceipt` and parses the result.  This is the
 /// production transport an independent observer uses.
@@ -511,7 +535,8 @@ impl ReceiptSource for crate::source::json_rpc::JsonRpcL1Source {
         let result = self
             .rpc("eth_getTransactionReceipt", params)
             .map_err(|e| ReceiptFetchError::Source(e.to_string()))?;
-        parse_eth_receipt(&result)
+        // Reject a receipt for a different tx than requested (proxy/cache defence).
+        parse_eth_receipt_for(&result, tx_hash)
     }
 }
 
@@ -765,6 +790,61 @@ mod tests {
             verify_eth_claim_independently(&source, &eth_claim(1), &other, 7, CONFIRMED).unwrap(),
             ClaimBackingOutcome::TransactionFailed
         );
+    }
+
+    #[test]
+    fn unconfirmed_failed_receipt_is_not_terminal() {
+        // Review fix: a still-reorgable receipt must NOT yield a terminal
+        // TransactionFailed — a re-org could replace the failure with a valid
+        // tx, and a caller treating TransactionFailed as terminal would then
+        // deny a later-valid reimbursement.  Confirmation is checked first.
+        let tx = [0xAA; 32];
+        let mut reverted = ok_receipt(tx, 21_000, 50); // block 100, status 0
+        reverted.status_ok = false;
+        let source = MockReceiptSource::default().with(reverted);
+        let claim = eth_claim(1);
+        // Unconfirmed head → Unconfirmed (not TransactionFailed): keep retrying.
+        assert_eq!(
+            verify_eth_claim_independently(&source, &claim, &tx, 7, UNCONFIRMED_HEAD).unwrap(),
+            ClaimBackingOutcome::Unconfirmed
+        );
+        // Once confirmation-depth deep, the failure IS terminal.
+        assert_eq!(
+            verify_eth_claim_independently(&source, &claim, &tx, 7, CONFIRMED).unwrap(),
+            ClaimBackingOutcome::TransactionFailed
+        );
+        // The BOLD leg has the same ordering.
+        let oracle = MockRateOracle::default().with(7, rate(2, 1));
+        assert_eq!(
+            verify_bold_claim_independently(&source, &oracle, &claim, &tx, 7, UNCONFIRMED_HEAD)
+                .unwrap(),
+            ClaimBackingOutcome::Unconfirmed
+        );
+    }
+
+    #[test]
+    fn parse_eth_receipt_for_rejects_mismatched_tx() {
+        // Review fix: a proxy/cache that returns a receipt for a DIFFERENT tx
+        // than requested must fail closed, not back the claim with an
+        // unrelated (possibly higher-cost) receipt.
+        let v: serde_json::Value = serde_json::json!({
+            "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "blockNumber": "0x64",
+            "gasUsed": "0x5208",
+            "effectiveGasPrice": "0x32",
+            "status": "0x1"
+        });
+        // Requested hash matches the receipt → Ok(Some).
+        assert!(parse_eth_receipt_for(&v, &[0xAA; 32]).unwrap().is_some());
+        // Requested a DIFFERENT tx → Malformed (the RPC returned the wrong one).
+        assert!(
+            parse_eth_receipt_for(&v, &[0xBB; 32]).is_err(),
+            "a receipt for a different tx must be rejected"
+        );
+        // null → Ok(None) regardless of the requested hash.
+        assert!(parse_eth_receipt_for(&serde_json::Value::Null, &[0xBB; 32])
+            .unwrap()
+            .is_none());
     }
 
     #[test]
