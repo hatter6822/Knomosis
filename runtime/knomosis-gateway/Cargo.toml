@@ -58,6 +58,10 @@ tiny_http = { workspace = true }
 # Typed errors with `Display` / `From` impls — same discipline as the
 # sibling crates.
 thiserror = { workspace = true }
+# Constant-time byte comparison for the G1.4 bearer-token auth gate
+# (no early-return timing leak on the secret token value).  Same crate
+# the secp256k1 verifier uses; `default-features = false` keeps it no_std.
+subtle = { workspace = true }
 # Structured logging.
 tracing = { workspace = true }
 # JSON (de)serialization for response bodies — the RFC 9457 problem

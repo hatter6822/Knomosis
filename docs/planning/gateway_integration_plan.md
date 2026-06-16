@@ -39,9 +39,10 @@ The companion machine-readable contract is
 > `docs/planning/open_questions.md`. **G1.8** (the `/v1/info` typed schema
 > — deployment id, admission stage, wire protocol versions, indexer
 > cursor + schema version, budget/pool echo — and `/readyz` upstream
-> probes) is also complete. Next on the critical path: the first
-> shippable read-only slice (**G1.9** — read-path integration tests),
-> with auth (**G1.4**) folded in.
+> probes) and **G1.4** (the fail-closed `subtle::ConstantTimeEq` bearer
+> auth gate, applied before routing) are also complete. Next on the
+> critical path: the first shippable read-only slice (**G1.9** —
+> read-path integration tests over the now-authed read endpoints).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -881,10 +882,10 @@ separate hosts.
 | `--listen` (`KNX_GW_LISTEN`) | `127.0.0.1:8080` | HTTP listen addr (loopback-safe default) |
 | `--tls-listen` / `--tls-cert` / `--tls-key` | off | HTTPS listener (rustls, TLS 1.3 min) |
 | `--mtls-client-ca` | off | require + verify client certs (G4.2) |
-| `--host-addr` (`KNX_GW_HOST_ADDR`) | `127.0.0.1:7654` | knomosis-host upstream (loopback plaintext) |
+| `--host-addr` (`KNX_GW_HOST_ADDR`) | unset (G1.8) | knomosis-host upstream (loopback plaintext); probed by `/readyz` when set — the `127.0.0.1:7654` default + submit client land with G2 |
 | `--host-pool-size` | `8` | persistent host connections (one in-flight each) |
 | `--host-max-inflight` | = pool size | cap concurrent host checkouts (≤ host `--max-queue-depth`) |
-| `--subscribe-addr` (`KNX_GW_SUBSCRIBE_ADDR`) | `127.0.0.1:7655` | event-subscribe upstream |
+| `--event-subscribe-addr` (`KNX_GW_EVENT_SUBSCRIBE_ADDR`) | unset (G1.8) | event-subscribe upstream; probed by `/readyz` when set — the `127.0.0.1:7655` default + SSE client land with G3 |
 | `--upstream-subscriptions` | `1` | shared live-tail subs feeding the ring (O(1) in clients); `>1` requires `(seq,index)` dedup in the mux (G3.4b, finding #6) |
 | `--indexer-db` (`KNX_GW_INDEXER_DB`) | — | indexer SQLite path (opened read-only) |
 | `--free-tier` / `--action-cost` / `--epoch-length` | `0`/`0`/`0` | budget-view rendering (must match the deployment policy) |
@@ -1113,13 +1114,31 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   `--gas-pool-actor` knobs. *Acceptance:* invalid config fails fast with a
   typed `OperatorAction` error; `--help` documents every knob; a unit test
   per validation rule.
-* **G1.4 — AuthN middleware** · S · deps: G1.2.
-  *Deliverable:* `auth.rs` — bearer via `subtle::ConstantTimeEq` (multiple
-  tokens from the file supported), optional mTLS hook; `security:[]`
-  exemption for `/healthz`/`/readyz`. *Acceptance:* unauthenticated
-  non-health request → 401; wrong token → 403; timing-safe compare
-  unit-tested (no early-return on length/first-mismatch); token never
-  logged.
+* **G1.4 — AuthN middleware** · S · deps: G1.2 · **DONE (bearer; mTLS
+  deferred to G4.2).** *Deliverable:* `auth.rs` — a **fail-closed**
+  bearer-token gate.  `Auth::load` reads the `--auth-token-file` (one
+  token per line; blank + `#`-comment lines skipped; multiple tokens
+  supported); `authorize` compares the presented `Bearer` token against
+  **every** configured token with `subtle::ConstantTimeEq`, OR-ing the
+  match bits with **no early return** (no timing leak of the matching
+  token's value or position).  The gate runs in the IO shell **before
+  routing**, so an unauthenticated caller cannot enumerate paths (an
+  unknown path is `401`, not `404`); exemption is **path-based**
+  (`/healthz` + `/readyz`, the contract's `security: []` operations).
+  **Fail-closed:** no `--auth-token-file` → empty token set → every
+  non-exempt request denied.  *Status mapping:* missing / non-`Bearer`
+  credential → `401` (+ `WWW-Authenticate: Bearer`); well-formed but
+  non-matching token → `403`.  Tokens are loaded into memory once at
+  startup ([`AppState::new`], fail-fast on a read error), held only as
+  bytes, and `Auth`'s `Debug` impl redacts the values (prints the count)
+  so a credential never reaches a log line.  The contract gains a `403`
+  on every authed endpoint.  *Acceptance met:* unit tests for the
+  constant-time compare (correct authorizes; wrong / prefix / non-Bearer
+  rejected; any-of-N tokens; case-insensitive scheme), the fail-closed
+  empty set, and the gate's exempt-path + 401/403 mapping; smoke tests
+  for the authed happy path, the 401 bearer challenge, and the 403
+  wrong-token over a real socket.  *Deferred:* the optional mTLS hook
+  (rides on TLS termination — G4.2).
 * **G1.5 — Problem responder + error taxonomy** · S · deps: G1.2 · **DONE
   (core).** `problem.rs` — one RFC 9457 `Problem` type with a stable `type`
   URI under `https://knomosis/errors/…`, an optional request-id `instance`,

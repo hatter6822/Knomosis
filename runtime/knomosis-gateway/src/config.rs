@@ -70,6 +70,11 @@ pub const HOST_ADDR_ENV: &str = "KNX_GW_HOST_ADDR";
 /// Environment variable mirroring `--event-subscribe-addr`.
 pub const EVENT_SUBSCRIBE_ADDR_ENV: &str = "KNX_GW_EVENT_SUBSCRIBE_ADDR";
 
+/// Environment variable mirroring `--auth-token-file`.  Only the file
+/// *path* comes from the flag / env; the token *values* live in the file
+/// (never in argv / an env value), per §9.2.
+pub const AUTH_TOKEN_FILE_ENV: &str = "KNX_GW_AUTH_TOKEN_FILE";
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -113,6 +118,12 @@ OPTIONS:
     --event-subscribe-addr <ADDR>
                        Event-subscribe upstream address, probed by /readyz
                        (env KNX_GW_EVENT_SUBSCRIBE_ADDR) [default: unset]
+    --auth-token-file <PATH>
+                       File of bearer service tokens (one per line) for
+                       the fail-closed auth gate; when unset, every
+                       non-exempt request is denied (/healthz + /readyz
+                       stay open)
+                       (env KNX_GW_AUTH_TOKEN_FILE) [default: unset]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -245,6 +256,12 @@ pub struct Config {
     /// probed by `/readyz` and used by the SSE fan-out (G3).  `None`
     /// (the default) means "not configured" (not-blocking in `/readyz`).
     pub event_subscribe_addr: Option<SocketAddr>,
+    /// Path to the bearer-token file (`--auth-token-file`), one service
+    /// token per line.  `None` (the default) configures **no** tokens,
+    /// which is **fail-closed**: every non-exempt request is then denied
+    /// (`/healthz` + `/readyz` stay open).  The token *values* are never
+    /// read from argv / an env value, only from this file (§8.1 / §9.2).
+    pub auth_token_file: Option<PathBuf>,
 }
 
 impl Config {
@@ -300,6 +317,10 @@ impl Config {
             raw.event_subscribe_addr,
             EVENT_SUBSCRIBE_ADDR_ENV,
         )?;
+        let auth_token_file = raw
+            .auth_token_file
+            .or_else(|| std::env::var(AUTH_TOKEN_FILE_ENV).ok())
+            .map(PathBuf::from);
 
         Ok(Self {
             listen,
@@ -312,6 +333,7 @@ impl Config {
             ok_admission_stage,
             host_addr,
             event_subscribe_addr,
+            auth_token_file,
         })
     }
 }
@@ -369,6 +391,7 @@ struct RawArgs {
     ok_admission_stage: Option<String>,
     host_addr: Option<String>,
     event_subscribe_addr: Option<String>,
+    auth_token_file: Option<String>,
 }
 
 impl RawArgs {
@@ -405,6 +428,9 @@ impl RawArgs {
                 "--event-subscribe-addr" => {
                     raw.event_subscribe_addr =
                         Some(take_value(args, &mut i, "--event-subscribe-addr")?);
+                }
+                "--auth-token-file" => {
+                    raw.auth_token_file = Some(take_value(args, &mut i, "--auth-token-file")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -708,6 +734,18 @@ mod tests {
             Config::parse(&argv(&["--host-addr", "not-an-addr"])),
             Err(ConfigError::InvalidValue { .. })
         ));
+    }
+
+    /// `--auth-token-file` is an optional path; absent → `None`.
+    #[test]
+    fn auth_token_file_optional() {
+        std::env::remove_var(super::AUTH_TOKEN_FILE_ENV);
+        assert_eq!(Config::parse(&argv(&[])).unwrap().auth_token_file, None);
+        let cfg = Config::parse(&argv(&["--auth-token-file", "/etc/knomosis/tokens"])).unwrap();
+        assert_eq!(
+            cfg.auth_token_file,
+            Some(std::path::PathBuf::from("/etc/knomosis/tokens"))
+        );
     }
 
     /// `AdmissionStage::as_str` round-trips through `FromStr` for every

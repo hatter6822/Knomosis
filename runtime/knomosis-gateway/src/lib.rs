@@ -59,6 +59,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// deployed gateway's lineage.
 pub const GATEWAY_IDENTIFIER: &str = "knomosis-gateway/v1";
 
+pub mod auth;
 pub mod config;
 pub mod dispatch;
 pub mod http;

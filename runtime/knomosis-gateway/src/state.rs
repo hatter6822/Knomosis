@@ -10,8 +10,8 @@
 //! An `Arc<AppState>` is built once at startup ([`crate::http::serve`])
 //! and shared **immutably** across every worker thread in the handler
 //! pool.  It is the seam through which stateful handlers reach
-//! configuration and the read-only indexer storage handle (G1.6b); the
-//! auth token set (G1.4) attaches here next.
+//! configuration, the read-only indexer storage handle (G1.6b), and the
+//! accepted bearer-token set (G1.4).
 //!
 //! Holding only `Send + Sync` data behind an `Arc` keeps the handler
 //! path lock-free at the gateway level: every worker reads the same
@@ -22,6 +22,7 @@
 
 use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
 
+use crate::auth::Auth;
 use crate::config::Config;
 
 /// Errors building the shared application state at startup.
@@ -34,6 +35,12 @@ pub enum StateError {
         /// The configured database path.
         path: String,
         /// The storage-layer diagnostic.
+        reason: String,
+    },
+    /// The bearer-token file (`--auth-token-file`) could not be loaded.
+    #[error("failed to load the auth token file: {reason}")]
+    AuthLoad {
+        /// The auth-layer diagnostic (the path, never a token value).
         reason: String,
     },
 }
@@ -55,9 +62,9 @@ pub struct ReadState {
 /// Process-wide state shared (immutably) across all handler threads.
 ///
 /// Construction is centralised in [`AppState::new`] so the fallible
-/// setup — opening the read-only indexer database (and, in G1.4,
-/// loading the auth token file) — has a single home that `serve` /
-/// `main` surface as a startup error rather than a per-request fault.
+/// setup — opening the read-only indexer database + loading the auth
+/// token file — has a single home that `serve` / `main` surface as a
+/// startup error rather than a per-request fault.
 #[derive(Debug)]
 pub struct AppState {
     /// The validated gateway configuration.  Handlers read deployment
@@ -67,20 +74,26 @@ pub struct AppState {
     /// The read backend, present iff `--indexer-db` was configured.
     /// When `None`, the read endpoints answer `503` (reads disabled).
     pub reads: Option<ReadState>,
+    /// The accepted bearer-token set (G1.4).  Empty when no
+    /// `--auth-token-file` is configured — **fail-closed**: every
+    /// non-exempt request is then denied.
+    pub auth: Auth,
 }
 
 impl AppState {
     /// Build the shared state from the validated configuration.
     ///
     /// If `config.indexer_db` is set, opens that database READ-ONLY
-    /// (the G1.6a path); a failure to open is surfaced as
-    /// [`StateError::IndexerOpen`] so `serve` / `main` fail fast at
-    /// startup rather than per-request.
+    /// (the G1.6a path); if `config.auth_token_file` is set, loads the
+    /// bearer-token set (else fail-closed [`Auth::empty`]).  A failure in
+    /// either is surfaced as a [`StateError`] so `serve` / `main` fail
+    /// fast at startup rather than per-request.
     ///
     /// # Errors
     ///
     /// Returns [`StateError::IndexerOpen`] if the configured indexer
-    /// database cannot be opened read-only.
+    /// database cannot be opened read-only, or [`StateError::AuthLoad`]
+    /// if the configured token file cannot be read.
     pub fn new(config: Config) -> Result<Self, StateError> {
         let reads = match &config.indexer_db {
             None => None,
@@ -93,7 +106,17 @@ impl AppState {
                 Some(ReadState { storage })
             }
         };
-        Ok(Self { config, reads })
+        let auth = match &config.auth_token_file {
+            None => Auth::empty(),
+            Some(path) => Auth::load(path).map_err(|e| StateError::AuthLoad {
+                reason: e.to_string(),
+            })?,
+        };
+        Ok(Self {
+            config,
+            reads,
+            auth,
+        })
     }
 }
 
@@ -114,6 +137,7 @@ mod tests {
             ok_admission_stage: crate::config::AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
+            auth_token_file: None,
         }
     }
 

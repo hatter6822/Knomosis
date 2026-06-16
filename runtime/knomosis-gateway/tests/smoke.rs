@@ -15,10 +15,22 @@ use std::net::TcpStream;
 use std::sync::Arc;
 use std::thread;
 
-/// Bind an ephemeral listener, serve exactly one request with the
-/// crate's real handler in a background thread, and return the raw
-/// HTTP response the client reads back for `GET <path>`.
+/// The bearer token the smoke `test_state` accepts.  Authenticated
+/// requests present `Authorization: Bearer {TEST_TOKEN}`.
+const TEST_TOKEN: &str = "smoke-token";
+
+/// `GET <path>` with a valid bearer credential — the authenticated
+/// happy path for a protected endpoint.
 fn one_shot_get(path: &str) -> String {
+    fetch(path, Some(TEST_TOKEN))
+}
+
+/// Bind an ephemeral listener, serve exactly one request with the
+/// crate's real handler in a background thread, and return the raw HTTP
+/// response for `GET <path>`.  When `token` is `Some`, an
+/// `Authorization: Bearer` header is sent; when `None`, the request is
+/// unauthenticated (exercises the fail-closed auth gate).
+fn fetch(path: &str, token: Option<&str>) -> String {
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind ephemeral port"));
     let addr = server
         .server_addr()
@@ -34,7 +46,12 @@ fn one_shot_get(path: &str) -> String {
     });
 
     let mut stream = TcpStream::connect(addr).expect("connect to gateway");
-    let request = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    let auth_line = match token {
+        Some(t) => format!("Authorization: Bearer {t}\r\n"),
+        None => String::new(),
+    };
+    let request =
+        format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n{auth_line}Connection: close\r\n\r\n");
     stream.write_all(request.as_bytes()).expect("write request");
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read response");
@@ -44,8 +61,13 @@ fn one_shot_get(path: &str) -> String {
 }
 
 /// A minimal shared `AppState` for the smoke tests: a loopback config
-/// with no read backend configured.
+/// with no read backend, and a single accepted bearer token
+/// ([`TEST_TOKEN`]).  The token file is loaded into memory by
+/// `AppState::new`, so the tempdir can drop immediately afterwards.
 fn test_state() -> Arc<knomosis_gateway::state::AppState> {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let token_path = dir.path().join("tokens");
+    std::fs::write(&token_path, TEST_TOKEN).expect("write token file");
     Arc::new(
         knomosis_gateway::state::AppState::new(knomosis_gateway::config::Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
@@ -58,9 +80,11 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             ok_admission_stage: knomosis_gateway::config::AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
+            auth_token_file: Some(token_path),
         })
-        .expect("no DB to open"),
+        .expect("load token file"),
     )
+    // `dir` drops here: the token bytes are already loaded into `Auth`.
 }
 
 #[test]
@@ -100,7 +124,8 @@ fn info_returns_json() {
 fn readyz_returns_json_ready() {
     // No upstreams configured in the smoke `test_state` → readiness is
     // satisfied; `/readyz` answers 200 with the `Readiness` body.
-    let response = one_shot_get("/readyz");
+    // `/readyz` is auth-exempt, so no credential is sent.
+    let response = fetch("/readyz", None);
     assert!(response.starts_with("HTTP/1.1 200"), "got: {response:?}");
     assert!(
         response.contains("application/json"),
@@ -109,6 +134,35 @@ fn readyz_returns_json_ready() {
     assert!(
         response.contains("\"ready\":true"),
         "expected ready=true, got: {response:?}"
+    );
+}
+
+#[test]
+fn protected_endpoint_without_token_is_401() {
+    // /v1/info is not auth-exempt; with no credential the fail-closed
+    // gate answers 401 (with a bearer challenge) before routing.
+    let response = fetch("/v1/info", None);
+    assert!(response.starts_with("HTTP/1.1 401"), "got: {response:?}");
+    assert!(
+        response.contains("application/problem+json"),
+        "expected a problem body, got: {response:?}"
+    );
+    assert!(
+        response
+            .to_ascii_lowercase()
+            .contains("www-authenticate: bearer"),
+        "expected a bearer challenge header, got: {response:?}"
+    );
+}
+
+#[test]
+fn protected_endpoint_with_wrong_token_is_403() {
+    // A well-formed but non-matching bearer token → 403.
+    let response = fetch("/v1/info", Some("not-the-smoke-token"));
+    assert!(response.starts_with("HTTP/1.1 403"), "got: {response:?}");
+    assert!(
+        response.contains("application/problem+json"),
+        "expected a problem body, got: {response:?}"
     );
 }
 

@@ -84,6 +84,20 @@ pub fn serve(config: &Config) -> Result<(), ServeError> {
     let state = AppState::new(config.clone()).map_err(|e| ServeError::State {
         reason: e.to_string(),
     })?;
+    // Fail-closed auth is loud: if no tokens are configured every
+    // non-exempt request is rejected, so warn the operator at startup
+    // (the token count, never a token value, §8.1).
+    if state.auth.token_count() == 0 {
+        tracing::warn!(
+            "no --auth-token-file configured: the bearer auth gate is fail-closed, so \
+             every request except /healthz and /readyz will be rejected (401/403)"
+        );
+    } else {
+        tracing::info!(
+            auth_tokens = state.auth.token_count(),
+            "bearer auth gate enabled"
+        );
+    }
     let state = Arc::new(state);
     let handles = spawn_handler_pool(&server, config.handler_threads, &state)?;
     // Block until a worker exits.  Under normal operation the workers
@@ -146,8 +160,13 @@ fn worker_loop(server: &tiny_http::Server, state: &AppState) {
 
 /// Parse, dispatch, and write the response for one request.
 ///
+/// The **auth gate** ([`crate::auth::gate`]) runs *before* routing: a
+/// non-exempt path with no / a wrong credential is answered `401` / `403`
+/// without ever routing, so an unauthenticated caller cannot enumerate
+/// paths (only `/healthz` + `/readyz` are exempt).
+///
 /// **Panic-free by construction** (the §3.2 `panic = "abort"`
-/// constraint): the method/path extraction uses only checked
+/// constraint): the method/path/header extraction uses only checked
 /// operations, and a write failure — the client hung up before the
 /// response was flushed — is logged at `debug` and dropped, since there
 /// is nothing else to do.
@@ -159,8 +178,19 @@ pub fn handle_request(request: tiny_http::Request, state: &AppState) {
     // the query string for parameter selectors (e.g. `?resource=`).
     let url = request.url();
     let (path, query) = url.split_once('?').unwrap_or((url, ""));
-    let routed = route(method, path, query);
-    let outcome = dispatch(&routed, state);
+    // The raw `Authorization` header value, if present (case-insensitive
+    // field match per RFC 7230).  Borrows `request`; consumed below.
+    let auth_header = request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Authorization"))
+        .map(|h| h.value.as_str());
+    let outcome = match crate::auth::gate(&state.auth, path, auth_header) {
+        // Denied by the auth gate (401 / 403) — answer without routing.
+        Some(denied) => denied,
+        // Authorized (or an exempt path) — route + dispatch.
+        None => dispatch(&route(method, path, query), state),
+    };
     respond(request, &outcome);
 }
 

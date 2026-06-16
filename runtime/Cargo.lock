@@ -401,6 +401,7 @@ dependencies = [
  "knomosis-storage",
  "serde",
  "serde_json",
+ "subtle",
  "tempfile",
  "thiserror",
  "tiny_http",

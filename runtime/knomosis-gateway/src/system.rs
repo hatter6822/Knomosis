@@ -200,6 +200,7 @@ mod tests {
             ok_admission_stage: AdmissionStage::Finalized,
             host_addr: None,
             event_subscribe_addr: None,
+            auth_token_file: None,
         }
     }
 
