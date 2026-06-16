@@ -160,9 +160,12 @@ with the GP.8.5 v2 receipt-verified core
 shipped (§6.3 — the action-clock budget-epoch config note in
 `docs/gas_pool_runbook.md` §8.1 plus the `--epoch-duration-seconds`-absence
 regression test); Track D operations are documented in
-`docs/gas_pool_runbook.md` §8 / §11.  Remaining: OQ-GP-8b (the BOLD-leg
-price oracle + independent-observer receipt-fetch) and GP.10 final
-ratification.  The prerequisites for every track were met:
+`docs/gas_pool_runbook.md` §8 / §11.  **OQ-GP-8b is now closed** — GP.8.5
+v2 is receipt-verified on both legs (the BOLD-leg `l1EthBoldRateOracle` +
+the `receiptGatedAdmissibleUnified` composer) with the independent-observer
+receipt-fetch binding (`knomosis-l1-ingest::receipt_verifier`).  Remaining:
+GP.10 final ratification (the two-reviewer pass).  The prerequisites for
+every track were met:
 
   * **RH-C (`knomosis-host`) — Complete.**  Track A (FQ) extends it.
   * **GP.6.2 (`knomosis-host` budget admission gate) — Complete.**

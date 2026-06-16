@@ -6648,31 +6648,58 @@ ETH-leg claim shape, the GP.7.2 cap, and that witness.  The headline
 bounded by `min(cap, L1 wei cost)`, and
 `receiptVerifiedClaimAdmissible_implies_gasPoolPolicy` proves v2 is a
 *pure strengthening* of v1 (the gate can only ever narrow pool
-outflow).  It is scoped to the ETH leg (resource 0), where the wei
-bound is exact and oracle-free; the BOLD leg's ETH→BOLD price oracle is
-a documented follow-on (OQ-GP-8b).  Verification is off-chain: a claim
-is an L2 action (not an L1 transaction), so the binding is checked by
-the L1 watcher and any independent observer, not by an on-chain
-contract.  The Rust mirror is `SequencerClaim::build_receipt_backed` /
-`is_receipt_backed_by` (`knomosis-l1-ingest`).
+outflow).  The ETH leg (resource 0) is exact and oracle-free.  The
+**BOLD leg (resource 1) is also receipt-verified** (closing OQ-GP-8b):
+`boldReceiptReimbursement gasUsed gasPrice rateNum rateDen :=
+⌊gasUsed * gasPrice * rateNum / rateDen⌋` converts the wei cost to BOLD
+base units at an attested ETH→BOLD rate (the second opaque, §15E.7),
+floored so it never over-reimburses; `SequencerReimbursementVerifiedBold`
+carries the gas attestation, the rate attestation, and the bound, and
+`receiptVerifiedBoldClaim_capped_and_backed` /
+`…Bold…_implies_gasPoolPolicy` mirror the ETH guarantees.  A single
+receipt-consumption set (`ConsumedReceipts`) is shared across both legs
+(one batch receipt backs at most one reimbursement), and
+`receiptGatedAdmissibleUnified` is the composer that requires the
+matching leg's gate for *every* gas-pool claim — so a v2 deployment
+receipt-gates both legs.  Verification is off-chain: a claim is an L2
+action (not an L1 transaction), so the binding is checked by the L1
+watcher and any independent observer, not by an on-chain contract.  The
+Rust mirror is `SequencerClaim::build_receipt_backed{,_bold}` /
+`is_{,bold_}receipt_backed_by`, and the **independent-observer
+receipt-fetch binding** (`knomosis-l1-ingest::receipt_verifier`) lets a
+third party re-derive the receipt from L1 via `eth_getTransactionReceipt`
+and a canonical binding hash — confirming the backing without trusting
+the claim builder.
 
 ### 15E.7 Opaques and axioms
 
 Workstream GP through GP.7.x introduces no new opaque trust hooks and no
 new axioms; it extends existing typed state and policy surfaces only.
 
-**GP.8.5 adds exactly one new opaque** — `l1GasReceiptVerifier`
-(`receiptBindingHash batchId gasUsed gasPrice : Bool`) — the
-deployment-side L1 watcher's attestation that a batch-publication
-receipt with the given gas expenditure exists on L1.  It mirrors the
-Workstream-H `l1FaultProofVerifier` trust-pattern exactly: declared
-`opaque` (not `axiom`), so it does **not** appear in `#print axioms`
-output (every GP.8.5 theorem's axiom footprint stays ⊆ `{propext,
-Classical.choice, Quot.sound}`); fail-closed (no defining equation at
-the Lean level, so no witness is constructible without a deployment-time
-attestation); non-TCB (a bug there can only narrow what the pool pays
-out, never widen it or violate a kernel invariant); and cross-checkable
-across multiple independent observers.  No new axiom is introduced.
+**GP.8.5 adds two new opaques**, both following the Workstream-H
+`l1FaultProofVerifier` trust-pattern exactly — declared `opaque` (not
+`axiom`), so neither appears in `#print axioms` output (every GP.8.5
+theorem's axiom footprint stays ⊆ `{propext, Classical.choice,
+Quot.sound}`); fail-closed (no defining equation at the Lean level, so
+no witness is constructible without a deployment-time attestation);
+non-TCB (a bug there can only narrow what the pool pays out, never widen
+it or violate a kernel invariant); and cross-checkable across multiple
+independent observers.  No new axiom is introduced.
+
+  1. `l1GasReceiptVerifier`
+     (`receiptBindingHash batchId gasUsed gasPrice : Bool`) — the
+     deployment-side L1 watcher's attestation that a batch-publication
+     receipt with the given gas expenditure exists on L1.  Used by both
+     legs (the gas cost is wei regardless of leg).
+  2. `l1EthBoldRateOracle`
+     (`rateBindingHash batchId rateNum rateDen : Bool`) — the
+     deployment-side price oracle's attestation that `rateNum/rateDen`
+     (BOLD base units per ETH wei) is the ETH→BOLD exchange rate for the
+     batch (OQ-GP-8b).  Used **only** by the BOLD-leg gate; a deployment
+     that reimburses only the ETH leg never links it.  Its mitigation is
+     identical to the gas verifier's (cross-check across independent
+     oracles), and the floored conversion means a stale/low rate can only
+     *under*-reimburse, never over-reimburse.
 
 ### 15E.8 Trust-assumption update
 
@@ -6681,13 +6708,17 @@ deployment operators set sane fee bounds and exchange-rate parameters.
 Cryptographic assumptions and TCB scope are unchanged.
 
 A deployment that enables the GP.8.5 receipt-verified claim path adds
-one further *non-TCB, off-chain* trust surface: the `l1GasReceiptVerifier`
-attestation (§15E.7).  As with the fault-proof verifier, it is an
-honest-observer assumption (one honest watcher produces a true
-attestation), it weakens no kernel guarantee, and it is mitigated by
-cross-checking across independent observers.  It is strictly *additive
-optionality*: a deployment that stays on the v1 honour-system claim
-introduces no such surface.
+one (ETH leg) or two (BOLD leg) further *non-TCB, off-chain* trust
+surfaces: the `l1GasReceiptVerifier` attestation, and — only if the
+BOLD leg is receipt-verified — the `l1EthBoldRateOracle` attestation
+(§15E.7).  As with the fault-proof verifier, each is an honest-observer
+assumption (one honest watcher / oracle produces a true attestation), it
+weakens no kernel guarantee, and it is mitigated by cross-checking across
+independent observers (the `knomosis-l1-ingest::receipt_verifier`
+independent-fetch binding is the reference implementation).  Both are
+strictly *additive optionality*: a deployment that stays on the v1
+honour-system claim introduces no such surface, and one that
+receipt-verifies only the ETH leg never links the rate oracle.
 
 The GP.5.5 BOLD safety hardening (§15D.8) adds one further *operational*
 trust surface on the L1 mirror only: two tightly-scoped immutable roles

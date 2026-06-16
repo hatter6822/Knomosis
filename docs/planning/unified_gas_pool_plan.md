@@ -6520,29 +6520,30 @@ escrowed against the identity.  Independent workstream
 > precise, not vague.**  GP.10 is the workstream-*closing* pass (two
 > reviewers per GP.10.1 / GP.10.5), so it must land only when Workstream GP
 > is genuinely complete.  The *mechanical* deliverables are already in
-> place — §15E exists in `docs/GENESIS_PLAN.md` (GP.0.1; §15E.1–§15E.11),
-> the GP event/action surface (indices 19–23) is documented in
-> `docs/abi.md` (GP.10.3), `docs/gas_pool_migration_guide.md` ships
-> (GP.10.4), and the audit binaries are green on the shipped tree
-> (`docs/audits/21` §7).  Two real gates remain before the closing vote:
+> place — §15E exists in `docs/GENESIS_PLAN.md` (GP.0.1; §15E.1–§15E.11,
+> updated for the OQ-GP-8b BOLD oracle), the GP event/action surface
+> (indices 19–23) is documented in `docs/abi.md` (GP.10.3),
+> `docs/gas_pool_migration_guide.md` ships (GP.10.4), and the audit
+> binaries are green on the shipped tree (`docs/audits/21` §7).
+> **OQ-GP-8b is now closed** — GP.8.5 v2 is receipt-verified on **both
+> legs** (the BOLD-leg ETH→BOLD oracle + the unified composer) with the
+> independent-observer receipt-fetch binding
+> (`knomosis-l1-ingest::receipt_verifier`), so the receipt-verified path
+> no longer gates ratification.  **One gate remains** before the closing
+> vote:
 >
->   1. **OQ-GP-8b (the open forward item).**  The GP.8.5 v2 receipt-verified
->      claim ships **ETH-leg only**; the BOLD-leg price oracle + the
->      independent-observer receipt-fetch binding are open
->      (`docs/planning/open_questions.md` OQ-GP-8b).  Flipping GP to
->      "Complete" while the BOLD reimbursement leg is honour-system-only
->      would overstate completion.
->   2. **The build-tag reconciliation (GP.10.2 / GP.10.6 are stale here).**
->      Those WUs specify bumping `kernelBuildTag` to `"knomosis-gas-pool-amm"`,
->      but they predate the **SVC** milestone, which set
->      `kernelBuildTag = "knomosis-step-vm-coherence"` *after* the GP.11
->      work landed.  The ratification PR must therefore decide the final tag
->      relative to the current SVC tag (not blindly apply the pre-SVC
->      instruction) and update every regression pin in lockstep
->      (`Test/Umbrella.lean`, `Lex/Test/M2.lean`, `Lex/Test/ExampleLex.lean`).
+>   * **The build-tag reconciliation + the two-reviewer pass (GP.10.2 /
+>     GP.10.5 / GP.10.6 are stale here).**  Those WUs specify bumping
+>     `kernelBuildTag` to `"knomosis-gas-pool-amm"`, but they predate the
+>     **SVC** milestone, which set `kernelBuildTag =
+>     "knomosis-step-vm-coherence"` *after* the GP.11 work landed.  The
+>     ratification PR must decide the final tag relative to the current SVC
+>     tag (not blindly apply the pre-SVC instruction) and update every
+>     regression pin in lockstep (`Test/Umbrella.lean`, `Lex/Test/M2.lean`,
+>     `Lex/Test/ExampleLex.lean`), then carry the two-reviewer sign-off.
 >
-> Net: the remaining GP.10 work is the OQ-GP-8b closure + the two-reviewer
-> ratification vote (+ the tag decision), **not** new GP feature code.
+> Net: the remaining GP.10 work is the two-reviewer ratification vote (+
+> the tag decision), **not** new GP feature code.
 
 #### WU GP.10.1: Genesis-Plan amendment §15E final
 

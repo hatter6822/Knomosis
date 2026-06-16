@@ -872,13 +872,24 @@ bound).  Operationally:
      keccak binding hash).
   2. Build the claim with that `GasReceipt`; submit the (identical-shape)
      `SignedAction` exactly as a v1 claim.
-  3. Retain the `GasReceipt` for audit so any independent observer can
-     re-run `is_receipt_backed_by` against the on-chain receipt.
+  3. Retain the batch-publication **tx hash** + **`batch_id`** so any
+     independent observer can re-derive the `GasReceipt` from L1 and
+     re-check the claim — see the independent-observer binding below.
 
-**Scope + remaining work (OQ-GP-8b).**  v2 covers the **ETH leg
-(resource 0)** only — the leg whose receipt cost is exactly wei.  The
-**BOLD leg** still uses the v1 honour-system-within-cap `build` pending a
-ratified ETH→BOLD price oracle.  The production binding of
-`l1GasReceiptVerifier` to a watcher that *independently* fetches the
-batch-publication receipt (so a third party, not only the claim builder,
-attests `(gasUsed, gasPrice)`) is the other open item.
+**Both legs + independent observer (OQ-GP-8b, closed).**  v2 now covers
+**both legs**.  For the **BOLD leg (resource 1)**, call
+`SequencerClaim::build_receipt_backed_bold(key, &receipt, &rate, …)` with
+an attested `EthBoldRate { rate_num, rate_den, rate_binding_hash }` (BOLD
+base units per ETH wei, from your price oracle): the builder clamps to
+`min(cap, ⌊gas_used * gas_price * rate_num / rate_den⌋)`, floored so it
+never over-reimburses.  This adds a **second** off-chain trust assumption
+(the rate oracle, GENESIS_PLAN §15E.7); size and cross-check it like the
+gas verifier — a stale/low rate can only *under*-reimburse.  For
+**independent verification**, run the
+`knomosis-l1-ingest::receipt_verifier` binding:
+`verify_eth_claim_independently(source, claim, tx_hash, batch_id)` (or
+`verify_bold_claim_independently(…, rate)`) fetches the receipt via
+`eth_getTransactionReceipt`, re-derives the `GasReceipt` (canonical
+binding hash), and confirms the backing **without trusting the operator's
+asserted receipt** — the production binding of `l1GasReceiptVerifier`.
+Run ≥1 such observer alongside the watchtower.

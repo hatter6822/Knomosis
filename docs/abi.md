@@ -1241,20 +1241,49 @@ forward-compatible); what v2 adds is a *receipt witness*:
     `amount_backed`), and `is_receipt_fresh_and_backed(receipt, consumed)`
     additionally rejects a reused receipt (the mirror of the enforced
     fresh gate).
+  * **BOLD leg (OQ-GP-8b).**  `boldReceiptReimbursement gasUsed gasPrice
+    rateNum rateDen := ⌊gasUsed * gasPrice * rateNum / rateDen⌋` converts
+    the wei cost to BOLD base units at an attested ETH→BOLD rate (the
+    second opaque `l1EthBoldRateOracle`), floored so it never
+    over-reimburses (`rateDen = 0 ⇒ 0`, fail-closed).
+    `SequencerReimbursementVerifiedBold` carries the gas attestation, the
+    rate attestation, and the bound; `receiptVerifiedBoldClaimAdmissible`
+    is the resource-1 gate with the BOLD analogue of every ETH theorem
+    (`receiptVerifiedBoldClaim_capped_and_backed`,
+    `…Bold…_implies_gasPoolPolicy`, fresh/enforced).  The shared
+    `ConsumedReceipts` set spans both legs, and
+    `receiptGatedAdmissibleUnified` requires the matching leg's enforced
+    gate for EVERY gas-pool claim (the ETH-only `receiptGatedAdmissible`
+    left BOLD claims ungated).  Rust mirror: `build_receipt_backed_bold` /
+    `is_bold_receipt_backed_by` / `bold_receipt_reimbursement` + the
+    `EthBoldRate` struct.
+  * **Independent-observer receipt-fetch binding (OQ-GP-8b).**
+    `knomosis-l1-ingest::receipt_verifier` is the production binding of
+    `l1GasReceiptVerifier`.  The **canonical receipt binding hash** is
+    `keccak256(DOMAIN ‖ tx_hash[32] ‖ batch_id_be[8] ‖ gas_used_be[16] ‖
+    gas_price_be[16])` with `DOMAIN = "knomosis/v1/gas-receipt-binding"`
+    (the 32-byte handle `ConsumedReceipts` de-duplicates on);
+    `derive_gas_receipt` re-derives the `GasReceipt` from a fetched
+    `eth_getTransactionReceipt` (status-gated — a reverted tx backs
+    nothing); a `ReceiptSource` trait fetches it (live impl over
+    `JsonRpcL1Source`); and `verify_{eth,bold}_claim_independently` lets a
+    third party (not the claim builder) attest the backing against L1
+    reality.
 
-**Trust + scope (v2).**  The receipt cost is wei (`gasUsed * gasPrice`),
-so v2 covers the **ETH leg (resource 0)** only — the leg whose bound is
-exact and oracle-free.  Receipt-backing the BOLD leg would require a
-deployment-configured ETH→BOLD price oracle (a *second* trust
-assumption); until that is ratified the BOLD leg stays on the v1
-honour-system-within-cap path.  Verification is **off-chain**: a
-reimbursement claim is an L2 action (not an L1 transaction), so there is
-no on-chain enforcement contract — the binding is checked by the L1
-watcher that constructs the `GasReceipt` and by any independent observer
-that re-runs `is_receipt_backed_by` against the L1 receipt it watched
-(exactly the cross-checkable-across-observers mitigation the
-fault-proof verifier uses).  **OQ-GP-8b** now tracks only the BOLD-leg
-price oracle and the independent-observer receipt-fetch binding.
+**Trust + scope (v2).**  **Both legs are receipt-verified** (OQ-GP-8b
+closed).  The **ETH leg (resource 0)** is exact and oracle-free (wei cost
+= `gasUsed * gasPrice`); the **BOLD leg (resource 1)** converts that wei
+cost at the attested ETH→BOLD rate (the second opaque
+`l1EthBoldRateOracle`), floored so a stale/low rate can only
+*under*-reimburse.  Both opaques are non-TCB, fail-closed, and
+cross-checkable across independent observers (GENESIS_PLAN §15E.7).
+Verification is **off-chain**: a reimbursement claim is an L2 action (not
+an L1 transaction), so there is no on-chain enforcement contract — the
+binding is checked by the L1 watcher that constructs the `GasReceipt` and
+by any independent observer that re-derives it from L1 (via the canonical
+binding hash above) and re-runs `is_{,bold_}receipt_backed_by`
+(`receipt_verifier`), exactly the cross-checkable-across-observers
+mitigation the fault-proof verifier uses.
 
 ### 10.3 Transport
 

@@ -149,7 +149,12 @@ Two IC conditions are governed outside the Solidity constructors:
   (`--free-tier` / `--epoch-length`, `docs/gas_pool_runbook.md` §8.1).  Size
   so the honest reimbursement clears but the worst-case per-epoch over-claim
   is an acceptable loss; **enable the v2 receipt-verified path (GP.8.5)
-  before the pool holds material value.**
+  before the pool holds material value.**  v2 covers **both legs**: the ETH
+  leg is wei-exact (oracle-free), and the BOLD leg converts the wei cost at
+  an attested **ETH→BOLD rate oracle** (`l1EthBoldRateOracle`, GENESIS_PLAN
+  §15E.7) — a *second* off-chain trust assumption that a BOLD-receipt-verified
+  deployment must provision and cross-check (run ≥1 independent
+  `receipt_verifier` observer); a stale/low rate only under-reimburses.
 
 ## 8. Operational (non-parameter) prerequisites
 
