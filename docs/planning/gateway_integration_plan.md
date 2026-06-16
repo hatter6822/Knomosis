@@ -81,14 +81,17 @@ The companion machine-readable contract is
 > no record; the ring dedups the re-delivered head, the `IndexCounter`
 > re-derives exact indices, and a known-tag decode failure fails closed;
 > a real-TCP-mock chaos suite verifies the finding-#4 recovery + O(1)
-> upstream subscribers under concurrent readers) and **G3.4c** (the
+> upstream subscribers under concurrent readers), **G3.4c** (the
 > per-client `events/fanout/dispatch.rs::run_stream` — replay-then-live-tail
 > emitting composite `id: <seq>.<index>` records + no-`id:` heartbeats,
 > type-filtered, with `lag_exceeded` / `decode_error` eviction; a
 > real-socket test confirms a slow client is evicted without stalling a
-> fast one). Next: **G3.4d** (resume semantics) → **G3.5**
-> (`/v1/events/stream` wiring) + the remaining G4 hardening (TLS, graceful
-> drain).
+> fast one), and **G3.4d** (the `events/fanout/resume.rs` resume classifier
+> — `Last-Event-ID`/`since` decomposition + the intra-seq-skip
+> in-window/behind/truncated tiers; the headline test proves a mid-seq-group
+> resume redelivers *exactly* the unseen records). **G3.4 (the SSE fan-out)
+> is complete.** Next: **G3.5** (`/v1/events/stream` HTTP wiring) + the
+> remaining G4 hardening (TLS, graceful drain).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1617,7 +1620,7 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   *(Upsized S→M: a bounded page over an unbounded stream is more than a
   drain.)*
 * **G3.4 — SSE fan-out (the complex sub-system)** · L · deps: G3.1, G3.2 ·
-  **in progress (G3.4a + G3.4b + G3.4c DONE; G3.4d next).**
+  **DONE (G3.4a–d).**
   The §6.1 composite-id correctness lives here; each sub-WU is property-
   tested against an oracle stream.
   * **G3.4a — Ring buffer + cursor registry** · M · **DONE.**
@@ -1687,21 +1690,27 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     `behind`+`oldestSeq` error format, and the **headline real-socket
     concurrency case: a slow (non-reading) client is evicted without
     stalling a fast client's full delivery**.
-  * **G3.4d — Resume semantics + intra-seq skip** · M · deps: G3.4a/b.
-    `events/fanout/resume.rs`: decompose `Last-Event-ID = "<seq>.<index>"`
-    (or bare `since`, §3.5 step 1); for an **in-window** point position the
-    ring cursor just after `(resume_seq, resume_index)` (the intra-seq skip
-    is the cursor comparison `(seq,index) > (resume_seq, resume_index)` —
-    **no upstream re-read**, §6.1); for a **behind-ring** point emit
-    `event: error{behind, oldestSeq}` (the oldest ring seq; steer to
-    backfill — never an SSE `truncated`, which only `GET /events` can
-    determine, finding #7); for
-    **older-than-upstream** emit `truncated`. *Acceptance:* the
-    mid-seq-group disconnect/resume case redelivers **exactly** the unseen
-    records (no loss, no dup) against the oracle — the headline correctness
-    test; each resume tier (in-window / behind / truncated) behaves
-    correctly; upstream-subscription count is unchanged by a resume (the
-    O(1) invariant of G3.4b holds across reconnects).
+  * **G3.4d — Resume semantics + intra-seq skip** · M · deps: G3.4a/b ·
+    **DONE.** `events/fanout/resume.rs`: `parse_resume` decomposes
+    `Last-Event-ID = "<seq>.<index>"` (precedence) or the bare `since` (§3.5
+    step 1; a bare seq excludes its *whole* group as the cursor
+    `(S, u32::MAX)`; a malformed id falls through to `since`); `classify_resume`
+    then maps the point against the ring to a `ResumeAction`:
+    `Stream(cursor)` for an **in-window / caught-up / live-tail** point —
+    the intra-seq skip is exactly `EventRing::records_after`'s
+    `(seq, index) > (resume_seq, resume_index)` (no upstream re-read, §6.1);
+    `Behind{oldest_seq}` for a **behind-ring** point (steer to `GET /events`,
+    never an SSE `truncated` — finding #7); and `Truncated` only when the
+    caller supplies a known upstream-oldest floor proving even the backfill
+    cannot serve the point. *Acceptance (DONE):* 11 unit tests — the
+    headline **mid-seq-group resume redelivers exactly the unseen records**
+    (no loss, no dup), the bare-seq whole-group exclusion, live-tail /
+    caught-up streaming, the `Last-Event-ID`-over-`since` precedence + the
+    malformed-id fall-through, each resume tier (in-window / behind /
+    truncated) over a small evicting ring, and the purity witness
+    (`classify_resume` takes only `&EventRing`, so a resume cannot open an
+    upstream subscription — the G3.4b O(1) invariant holds across
+    reconnects).
 * **G3.5 — `GET /events/stream` wiring + tests** · S · deps: G3.4.
   *Deliverable:* `events/stream.rs` atop `http/sse.rs` + the fan-out;
   `Cache-Control: no-store`; auth; `Last-Event-ID`/`since` precedence.

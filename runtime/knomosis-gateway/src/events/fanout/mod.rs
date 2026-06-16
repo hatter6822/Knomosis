@@ -22,6 +22,7 @@ use self::ring::EventRing;
 
 pub mod dispatch;
 pub mod mux;
+pub mod resume;
 pub mod ring;
 
 /// The shared fan-out state: the bounded record ring (the mux writes it; the
