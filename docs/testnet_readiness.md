@@ -66,8 +66,14 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       reach production.
 - [ ] **F-2:** verifier-identifier assert — **done** (run
       `knomosis verify-check` in the deploy pipeline; exit 1 on the
-      Lean-opaque fallback). **Remaining:** SHA-256-pin the cdylib
-      artefacts (`knomosis-verify-secp256k1`, `knomosis-hash-keccak256`).
+      Lean-opaque fallback). Cdylib **SHA-256 artefact pin — done for
+      both** adaptors: `scripts/verify_secp256k1_link.sh`
+      (`knomosis-verify-secp256k1`) and `scripts/verify_keccak_link.sh`
+      (`knomosis-hash-keccak256`) record / `--check` the staticlib
+      SHA-256 and prove the fallback→production flip (CI:
+      `ci-verify-secp256k1.yml`, `ci-hash-keccak256-link.yml`).
+      **Remaining:** run the `--check` pin in the deploy pipeline as a
+      required step.
 
 ### 3.3 Liveness / watchtower (the IC-3 assumption)
 - [ ] ≥1 **independent** `knomosis-faultproof-observer` running and

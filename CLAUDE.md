@@ -113,6 +113,14 @@ cd solidity && make devnet                    # F.3 LIVE anvil deploy +
 ./scripts/verify_secp256k1_link.sh            # build + record + prove
 ./scripts/verify_secp256k1_link.sh --check    # build + verify SHA-256 snapshot
 
+# F-1/F-2 production keccak256-hash link verification: proves
+# `hash-check` flips fallback(exit 1) -> production(exit 0) when the real
+# keccak adaptor is linked, and records/verifies the staticlib SHA-256
+# (the hash-adaptor peer of the secp256k1 verifier pin above; together
+# they pin BOTH FFI cdylibs named in the F-2 residual).
+./scripts/verify_keccak_link.sh               # build + record + prove
+./scripts/verify_keccak_link.sh --check       # build + verify SHA-256 snapshot
+
 # Quantitative economic-incentive simulation (IC-1..IC-6 envelope +
 # self-asserting invariant checks; companion to docs/economic_incentive_analysis.md).
 python3 scripts/economic_simulation.py
@@ -243,12 +251,15 @@ knomosis/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
 │   ├── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
 │   ├── verify_secp256k1_link.sh -- F-2 production-verifier link proof + SHA-256
+│   ├── verify_keccak_link.sh  -- F-1/F-2 production keccak256-hash link proof + SHA-256
 │   └── economic_simulation.py -- IC-1..IC-6 quantitative incentive harness
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
 │   ├── ci-rust.yml            -- Rust workspace gates (runtime/**)
 │   ├── ci-solidity.yml        -- Solidity cap gate + forge gates (solidity/**)
-│   └── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
+│   ├── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
+│   ├── ci-verify-secp256k1.yml -- F-2 secp256k1-verifier production-link proof
+│   └── ci-hash-keccak256-link.yml -- F-1/F-2 keccak256-hash production-link + SHA-256 pin
 ├── README.md                  -- project entry point
 ├── CLAUDE.md                  -- this file
 └── docs/

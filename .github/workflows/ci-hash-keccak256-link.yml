@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+#
+# Production keccak256-hash link verification (security-review F-1 / F-2).
+#
+# The default `lake build` links the FNV-1a-64 hash fallback, so
+# `knomosis hash-check` fails closed (exit 1) — the F-1/F-2 fail-closed
+# property is asserted in the main `ci.yml` job.  THIS workflow proves
+# the other half: that linking the REAL keccak256 adaptor flips
+# `hash-check` to exit 0 with the production identifier (so the gate
+# genuinely distinguishes production from fallback, not vacuously), and
+# records / re-verifies the staticlib SHA-256 (F-2a artefact pin — the
+# keccak peer of the verifier pin proved by ci-verify-secp256k1).
+#
+# This is the artefact-integrity + identifier-flip half; the Lean<->EVM
+# byte-equivalence half lives in `ci-keccak-crossstack.yml`.  All
+# orchestration lives in `scripts/verify_keccak_link.sh`; this workflow
+# just provisions lean + rust and runs it (no foundry/solc needed).
+
+name: CI (Keccak256 Hash Link)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'runtime/knomosis-hash-keccak256/**'
+      - 'runtime/knomosis-hash-fallback.c'
+      - 'LegalKernel/Runtime/Hash.lean'
+      - 'Main.lean'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'scripts/verify_keccak_link.sh'
+      - '.github/workflows/ci-hash-keccak256-link.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'runtime/knomosis-hash-keccak256/**'
+      - 'runtime/knomosis-hash-fallback.c'
+      - 'LegalKernel/Runtime/Hash.lean'
+      - 'Main.lean'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'scripts/verify_keccak_link.sh'
+      - '.github/workflows/ci-hash-keccak256-link.yml'
+  schedule:
+    # Nightly at 07:00 UTC — backstop for link / symbol drift originating
+    # outside the path-filtered PR surface (offset from the keccak
+    # cross-stack nightly at 06:00 and the secp256k1-link nightly at 06:30
+    # to spread runner load).
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+# Cancel in-progress runs of the same workflow on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# `contents: read` for actions/checkout; `actions: write` for the narrow
+# rust-cache save scope (NOT a repo-write permission).
+permissions:
+  contents: read
+  actions: write
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  verify-keccak256-link:
+    name: keccak256 hash production-link (F-1/F-2)
+    runs-on: ubuntu-latest
+    # Budget: one Rust staticlib build (--features lean-ffi --release) plus
+    # two Lean `knomosis` exe links (default + production-linked).
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (same SHA pinned across the CI suite).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Lean toolchain
+        # leanprover/lean-action v1.5.0.  Installs elan + lean + lake from
+        # `lean-toolchain`; we drive every Lean invocation from the verify
+        # script (it must control KNOMOSIS_KECCAK_STATICLIB at link time).
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9
+        with:
+          build: false
+          test: false
+          lint: false
+
+      - name: Install Rust toolchain (per rust-toolchain.toml)
+        shell: bash
+        working-directory: runtime
+        run: |
+          rustup show active-toolchain || true
+          rustup show
+          cargo --version
+          rustc --version
+
+      - name: Cache cargo artifacts
+        # Swatinem/rust-cache v2.7.7 (same SHA pinned by ci-rust.yml).  The
+        # keccak staticlib is built into an isolated, rm-rf'd target dir by
+        # the script (FFI shim rebuilt each run), so only dependency
+        # downloads are accelerated here.
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: runtime
+          shared-key: hash-keccak256-link
+
+      - name: Verify the production keccak256 link flips hash-check (F-1/F-2)
+        # Builds the real keccak256 adaptor staticlib, records its SHA-256
+        # (F-2a), asserts the default build's hash-check exits 1
+        # (fail-closed baseline), links the adaptor and asserts hash-check
+        # exits 0 (F-1b).  A green run proves the gate distinguishes
+        # production from fallback.
+        shell: bash
+        run: ./scripts/verify_keccak_link.sh
