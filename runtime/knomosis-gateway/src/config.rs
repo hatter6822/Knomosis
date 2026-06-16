@@ -7,13 +7,14 @@
 
 //! Gateway CLI / environment configuration.
 //!
-//! **Scaffold surface (G1.1):** only the HTTP listen address
-//! (`--listen` / `KNX_GW_LISTEN`).  The full §9.2 flag surface — auth
-//! token file, host/event-subscribe/indexer upstreams, budget-policy
-//! echo, governors, TLS, timeouts, rate limits — lands in **G1.3**,
-//! whose validation discipline (fail-fast with a typed
-//! `OperatorAction` error naming the offending knob) this module's
-//! shape anticipates.
+//! **Surface (G1.1 + G1.2d):** the HTTP listen address (`--listen` /
+//! `KNX_GW_LISTEN`) and the bounded handler-pool size
+//! (`--handler-threads` / `KNX_GW_HANDLER_THREADS`).  The full §9.2
+//! flag surface — auth token file, host/event-subscribe/indexer
+//! upstreams, budget-policy echo, the remaining governors, TLS,
+//! timeouts, rate limits — lands in **G1.3**, whose validation
+//! discipline (fail-fast with a typed `OperatorAction` error naming the
+//! offending knob) this module's shape anticipates.
 
 use std::net::SocketAddr;
 
@@ -26,6 +27,21 @@ pub const DEFAULT_LISTEN: &str = "127.0.0.1:8080";
 /// takes precedence over the environment.
 pub const LISTEN_ENV: &str = "KNX_GW_LISTEN";
 
+/// Default size of the bounded request-handler thread pool (G1.2d).
+/// The gateway is a synchronous server: this many worker threads each
+/// block on `tiny_http::Server::recv`, so the pool caps concurrent
+/// request *processing* — the practical resource governor.
+pub const DEFAULT_HANDLER_THREADS: usize = 16;
+
+/// Sanity ceiling on `--handler-threads` (far above any reasonable
+/// single-host deployment; rejects a fat-finger that would exhaust
+/// the thread table).
+pub const MAX_HANDLER_THREADS: usize = 4096;
+
+/// Environment variable mirroring `--handler-threads`.  The CLI flag
+/// takes precedence over the environment.
+pub const HANDLER_THREADS_ENV: &str = "KNX_GW_HANDLER_THREADS";
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -36,6 +52,10 @@ USAGE:
 OPTIONS:
     --listen <ADDR>    HTTP listen address (env KNX_GW_LISTEN)
                        [default: 127.0.0.1:8080]
+    --handler-threads <N>
+                       Bounded request-handler pool size; caps
+                       concurrent request processing
+                       (env KNX_GW_HANDLER_THREADS) [default: 16]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -79,6 +99,10 @@ pub enum ConfigError {
 pub struct Config {
     /// HTTP listen address.
     pub listen: SocketAddr,
+    /// Bounded request-handler thread-pool size (G1.2d): the number of
+    /// worker threads each blocking on `Server::recv`, capping
+    /// concurrent request processing.  Always in `1..=MAX_HANDLER_THREADS`.
+    pub handler_threads: usize,
 }
 
 impl Config {
@@ -96,6 +120,7 @@ impl Config {
     /// `OperatorAction`.
     pub fn parse(args: &[String]) -> Result<Self, ConfigError> {
         let mut listen_raw: Option<String> = None;
+        let mut handler_threads_raw: Option<String> = None;
         let mut i = 1;
         while let Some(arg) = args.get(i) {
             match arg.as_str() {
@@ -106,6 +131,13 @@ impl Config {
                         flag: "--listen".to_string(),
                     })?;
                     listen_raw = Some(value.clone());
+                    i += 1;
+                }
+                "--handler-threads" => {
+                    let value = args.get(i + 1).ok_or_else(|| ConfigError::MissingValue {
+                        flag: "--handler-threads".to_string(),
+                    })?;
+                    handler_threads_raw = Some(value.clone());
                     i += 1;
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
@@ -125,7 +157,32 @@ impl Config {
                 reason: e.to_string(),
             })?;
 
-        Ok(Self { listen })
+        let handler_threads =
+            match handler_threads_raw.or_else(|| std::env::var(HANDLER_THREADS_ENV).ok()) {
+                None => DEFAULT_HANDLER_THREADS,
+                Some(raw) => {
+                    let n = raw
+                        .parse::<usize>()
+                        .map_err(|e| ConfigError::InvalidValue {
+                            flag: "--handler-threads".to_string(),
+                            value: raw.clone(),
+                            reason: e.to_string(),
+                        })?;
+                    if n == 0 || n > MAX_HANDLER_THREADS {
+                        return Err(ConfigError::InvalidValue {
+                            flag: "--handler-threads".to_string(),
+                            value: raw,
+                            reason: format!("must be in 1..={MAX_HANDLER_THREADS}"),
+                        });
+                    }
+                    n
+                }
+            };
+
+        Ok(Self {
+            listen,
+            handler_threads,
+        })
     }
 }
 
@@ -200,6 +257,45 @@ mod tests {
         assert!(matches!(
             Config::parse(&argv(&["--nope"])),
             Err(ConfigError::UnknownArgument(_))
+        ));
+    }
+
+    /// `--handler-threads` defaults to [`super::DEFAULT_HANDLER_THREADS`]
+    /// and is overridable on the CLI.
+    #[test]
+    fn handler_threads_default_and_override() {
+        std::env::remove_var(super::HANDLER_THREADS_ENV);
+        let cfg = Config::parse(&argv(&[])).unwrap();
+        assert_eq!(cfg.handler_threads, super::DEFAULT_HANDLER_THREADS);
+        let cfg = Config::parse(&argv(&["--handler-threads", "4"])).unwrap();
+        assert_eq!(cfg.handler_threads, 4);
+    }
+
+    /// `--handler-threads 0` is rejected (the pool must be non-empty).
+    #[test]
+    fn handler_threads_zero_rejected() {
+        assert!(matches!(
+            Config::parse(&argv(&["--handler-threads", "0"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// `--handler-threads` above the ceiling is rejected.
+    #[test]
+    fn handler_threads_above_ceiling_rejected() {
+        let too_many = (super::MAX_HANDLER_THREADS + 1).to_string();
+        assert!(matches!(
+            Config::parse(&argv(&["--handler-threads", &too_many])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// A non-numeric `--handler-threads` value is rejected.
+    #[test]
+    fn handler_threads_non_numeric_rejected() {
+        assert!(matches!(
+            Config::parse(&argv(&["--handler-threads", "lots"])),
+            Err(ConfigError::InvalidValue { .. })
         ));
     }
 }

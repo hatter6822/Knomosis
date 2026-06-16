@@ -1081,13 +1081,18 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     `Allow` on a 405 is the first user). The per-response cache / consistency
     headers (`X-Knomosis-Seq` / `ETag` / `Retry-After`) attach at the
     endpoints that own them (G1.6b reads, G2.3 backpressure).
-  * **G1.2d — Acceptor + TLS + governors** · S. `http/server.rs`: acceptor
-    thread(s) + bounded handler pool; TLS via
-    `knomosis_host::tls::TlsConfigBuilder::load_pem_files`;
-    `--max-connections` cap → `503`/close; per-connection read/idle
-    timeouts. Reuse `knomosis_host::listener` if G1.0 recommended it.
-    *Acceptance:* `/healthz` 200 over HTTP **and** TLS; max-conn cap
-    enforced; integration test over an ephemeral port for both transports.
+  * **G1.2d — Acceptor + governors** · S · **DONE (pool); TLS + conn-cap
+    deferred.** `http/server.rs`: a **bounded pool of `--handler-threads`
+    workers** (`spawn_handler_pool`), each blocking on
+    `tiny_http::Server::recv` — the concurrency governor that caps
+    in-parallel request processing; `--handler-threads` is config-validated
+    (`1..=4096`, default 16). The `tiny_http` accept loop is the crate's, so
+    a hard `--max-connections` cap and per-connection read/idle timeouts are
+    constrained by its API and become an `http`-layer follow-up (G4.x);
+    **TLS** termination moves to **G4.2** per the G1.0 decision (the default
+    listener is loopback plaintext). *Acceptance met:* `/healthz` 200 over
+    HTTP; the bounded pool serves 12 concurrent clients across 4 threads
+    (`tests/smoke.rs::handler_pool_serves_concurrent_requests`).
   * **G1.2e — Streaming response primitive** · S. `http/sse.rs`: a
     flush-after-each-write `text/event-stream` body with no `Content-
     Length`, `Cache-Control: no-store` + `X-Accel-Buffering: no` (defeat

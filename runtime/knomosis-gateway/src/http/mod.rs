@@ -17,4 +17,4 @@ mod router;
 mod server;
 
 pub use router::{route, RouteOutcome};
-pub use server::{handle_request, serve, ServeError};
+pub use server::{handle_request, serve, spawn_handler_pool, ServeError};
