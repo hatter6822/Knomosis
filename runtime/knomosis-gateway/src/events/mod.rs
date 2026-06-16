@@ -11,8 +11,10 @@
 //! Server-Sent-Events stream (`GET /v1/events/stream`).
 //!
 //! G3.1 ships the resilient upstream client ([`subscribe`]); G3.2 the
-//! event decode → JSON renderer ([`decode`]); the bounded backfill page
-//! (G3.3) and the SSE fan-out (G3.4) build on them.
+//! event decode → JSON renderer ([`decode`]); G3.3 the bounded,
+//! group-complete backfill page ([`backfill`]); the SSE fan-out (G3.4)
+//! builds on them.
 
+pub mod backfill;
 pub mod decode;
 pub mod subscribe;

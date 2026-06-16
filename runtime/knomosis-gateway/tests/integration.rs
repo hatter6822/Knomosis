@@ -34,7 +34,10 @@ use knomosis_host::frame::{read_frame, DEFAULT_MAX_FRAME_SIZE};
 use knomosis_host::verdict::{Verdict, VerdictResponse};
 use knomosis_indexer::balance::balance_key;
 use knomosis_indexer::budget_view::CURRENT_EPOCH_KEY;
+use knomosis_indexer::client::KIND_EVENT;
 use knomosis_indexer::cursor::CURSOR_KEY;
+use knomosis_indexer::decoder::encode_event;
+use knomosis_indexer::event::Event;
 use knomosis_storage::sqlite::SqliteStorage;
 use knomosis_storage::storage::Storage;
 
@@ -80,6 +83,23 @@ fn start_harness_rps(rate_limit_rps: u32) -> Harness {
 /// per-credential rate cap (`0` = disabled), and an optional submit host
 /// upstream (`--host-addr`).
 fn start_harness_full(rate_limit_rps: u32, host_addr: Option<SocketAddr>) -> Harness {
+    start_harness_cfg(rate_limit_rps, host_addr, None)
+}
+
+/// Start the gateway with an event-subscribe upstream wired (`G3.3`
+/// backfill), no submit host, rate limiting disabled.  The seeded cursor
+/// (`42`) is the backfill tip.
+fn start_harness_events(event_subscribe_addr: SocketAddr) -> Harness {
+    start_harness_cfg(0, None, Some(event_subscribe_addr))
+}
+
+/// The full harness builder: a seeded read-only indexer + a 4-thread pool,
+/// with optional submit-host and event-subscribe upstreams.
+fn start_harness_cfg(
+    rate_limit_rps: u32,
+    host_addr: Option<SocketAddr>,
+    event_subscribe_addr: Option<SocketAddr>,
+) -> Harness {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("index.db");
     let token_path = dir.path().join("tokens");
@@ -128,7 +148,7 @@ fn start_harness_full(rate_limit_rps: u32, host_addr: Option<SocketAddr>) -> Har
         deployment_id: "knx-integration".to_string(),
         ok_admission_stage: AdmissionStage::Finalized,
         host_addr,
-        event_subscribe_addr: None,
+        event_subscribe_addr,
         auth_token_file: Some(token_path),
         rate_limit_rps,
         host_pool_size: 8,
@@ -678,4 +698,123 @@ fn rate_limit_returns_429_with_retry_after() {
     // The exempt probes are never rate-limited.
     let ready = http_get(h.addr, "/readyz", None, None);
     assert_eq!(ready.status, 200);
+}
+
+/// Encode one event-subscribe `EVENT` frame:
+/// `[KIND_EVENT, seq(8 BE), len(4 BE), payload]` carrying a real CBE
+/// `BalanceChanged`.
+fn event_frame(seq: u64, actor: u64) -> Vec<u8> {
+    let payload = encode_event(&Event::BalanceChanged {
+        resource: 0,
+        actor,
+        old_value: 1000,
+        new_value: 900,
+    });
+    let mut v = vec![KIND_EVENT];
+    v.extend_from_slice(&seq.to_be_bytes());
+    v.extend_from_slice(&u32::try_from(payload.len()).unwrap().to_be_bytes());
+    v.extend_from_slice(&payload);
+    v
+}
+
+/// A minimal event-subscribe stand-in: on each connection it reads the
+/// 9-byte handshake, writes the scripted frames, then closes.  The gateway
+/// backfill stops on the first `seq > tip` (no idle wait needed), so a
+/// single connection suffices.
+struct MockEventSubscribe {
+    addr: SocketAddr,
+    stop: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl MockEventSubscribe {
+    fn start(frames: Vec<Vec<u8>>) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let halt = Arc::clone(&stop);
+        let handle = thread::spawn(move || {
+            while !halt.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream.set_nonblocking(false).unwrap();
+                        let mut handshake = [0u8; 9];
+                        if stream.read_exact(&mut handshake).is_err() {
+                            continue;
+                        }
+                        for frame in &frames {
+                            if stream.write_all(frame).is_err() {
+                                break;
+                            }
+                        }
+                        // Drop the stream → EOF (the gateway has already
+                        // stopped on the beyond-tip frame).
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        Self {
+            addr,
+            stop,
+            handle: Some(handle),
+        }
+    }
+}
+
+impl Drop for MockEventSubscribe {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+    }
+}
+
+#[test]
+fn events_backfill_endpoint_serves_a_group_complete_page() {
+    // The seeded cursor (42) is the tip.  The upstream serves seq 41, 42,
+    // then 43 (> tip) — so the backfill stops at the tip with the page
+    // [41, 42], hasMore = false, nextCursor = 42, end-to-end through the
+    // full auth → route(query) → dispatch → drain → EventPage pipeline.
+    let mock = MockEventSubscribe::start(vec![
+        event_frame(41, 7),
+        event_frame(42, 9),
+        event_frame(43, 1), // beyond the tip → stop
+    ]);
+    let h = start_harness_events(mock.addr);
+
+    let r = get(h.addr, "/v1/events?since=40&limit=100");
+    assert_eq!(r.status, 200);
+    assert_eq!(r.header("Content-Type"), Some("application/json"));
+    let v = r.json();
+    assert_eq!(v["nextCursor"], "42");
+    assert_eq!(v["hasMore"], false);
+    let events = v["events"].as_array().unwrap();
+    assert_eq!(events.len(), 2, "seq 43 (> tip 42) is excluded");
+    assert_eq!(events[0]["seq"], "41");
+    assert_eq!(events[0]["type"], "balanceChanged");
+    assert_eq!(events[0]["actor"], "7");
+    assert_eq!(events[1]["seq"], "42");
+    assert_eq!(events[1]["actor"], "9");
+}
+
+#[test]
+fn events_backfill_requires_auth_and_validates_query() {
+    let mock = MockEventSubscribe::start(vec![event_frame(43, 1)]);
+    let h = start_harness_events(mock.addr);
+
+    // Unauthenticated → 401 (the auth gate covers /v1/events before
+    // routing); the upstream is never touched.
+    let unauth = http_get(h.addr, "/v1/events", None, None);
+    assert_eq!(unauth.status, 401);
+
+    // A malformed limit → 400 (validated in the pure router layer).
+    let bad = get(h.addr, "/v1/events?limit=0");
+    assert_eq!(bad.status, 400);
+    assert_eq!(bad.header("Content-Type"), Some("application/problem+json"));
 }

@@ -62,9 +62,16 @@ The companion machine-readable contract is
 > bytes→`0x`-hex, `outcome` name, forward-unknown for tags ≥23, and a
 > fail-closed `Corrupt` on a known-tag decode failure; G3.2c's cross-stack
 > corpus pin is deferred to land alongside the first endpoint that surfaces
-> the JSON). Next: **G3.3** (`/v1/events` backfill) → **G3.4** (the SSE
-> fan-out) → **G3.5** (`/v1/events/stream` wiring) + the remaining G4
-> hardening (TLS, graceful drain).
+> the JSON), and **G3.3** (`GET /v1/events` — the bounded, group-complete
+> backfill page over the unbounded `SUBSCRIBE` stream:
+> `events/backfill.rs`, tip-bounded by the indexer cursor, `since=0`
+> "from oldest" following the upstream `TRUNCATED`, a concrete
+> `since < oldest` → `409`+`oldestSeq`, the soft-`limit` group-complete
+> rounding, the gateway-side `type` filter, and the fail-closed decode
+> path; wired end-to-end through the auth → route(query) → dispatch →
+> drain pipeline). Next: **G3.4** (the SSE fan-out) → **G3.5**
+> (`/v1/events/stream` wiring) + the remaining G4 hardening (TLS, graceful
+> drain).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1546,32 +1553,52 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     belt-and-braces gate landed alongside G3.3/G3.5 (the first endpoints to
     surface the rendered JSON to a client). *Acceptance:* CI gate green;
     a deliberate field-rename breaks it.
-* **G3.3 — `GET /events` backfill** · M · deps: G3.1, G3.2.
+* **G3.3 — `GET /events` backfill** · M · deps: G3.1, G3.2 · **DONE.**
   `events/backfill.rs` builds a *bounded page* API over the *unbounded*
-  `SUBSCRIBE` stream — which needs three things the naïve "open a sub, drain
-  to `limit`" misses (findings #2, #5):
-  * **Capture a `tip` first.** At request start, read the current tip seq
-    (the ring's newest, falling back to the indexer `c/cursor`); the drain
-    stops when it reaches `tip` (→ `hasMore=false`) so it **never blocks
-    waiting for live events** the subscription would otherwise hand back.
+  `SUBSCRIBE` stream (`backfill(addr, tip, max_frame, idle_timeout, req)
+  → Result<EventPage, BackfillError>`), addressing the three things the
+  naïve "open a sub, drain to `limit`" misses (findings #2, #5):
+  * **Capture a `tip` first.** The dispatcher reads the indexer `c/cursor`
+    (the tip; there is no wire query for the event-subscribe ring's newest
+    seq, so the cursor is the source) and passes it to the drain, which
+    stops on the first `seq > tip` (→ `hasMore=false`) so it **never blocks
+    waiting for live events** the subscription would otherwise hand back. A
+    short read-idle timeout (`UpstreamSubscription`'s staleness watchdog,
+    `StaleTimeout`) is the belt-and-braces caught-up fallback when the
+    upstream cache sits exactly at the tip (it goes silent rather than
+    sending a frame). A cursor read failure / no indexer degrades to a
+    live-tail-bounded drain (not a page failure).
   * **`since` semantics.** `since=S` (`S ≥ 1`) ⇒ `resume_from = S` (events
-    with `seq > S` from the keep-history cache, up to `tip`). `since=0` means
-    "from the oldest retained" — because §11.3 reserves `resume_from = 0` for
-    *live-tail*, the gateway instead resumes from the oldest cached seq and
-    returns `409`+`oldestSeq` if genuine from-genesis history was truncated
-    (the realistic caller passes a concrete recent `since`, e.g. the
-    behind-ring cursor). Any `TRUNCATED` (`since < oldest_cached`) → `409`.
+    with `seq > S` from the keep-history cache, up to `tip`); a `TRUNCATED`
+    for a *concrete* `since` is the `409`+`oldestSeq`. `since=0` means "from
+    the oldest retained" — because §11.3 reserves `resume_from = 0` for
+    *live-tail*, the drain resumes from `1` and **transparently follows the
+    upstream's `TRUNCATED` to the oldest cached seq** (the `Gap` →
+    resume-from-oldest path), so it does **not** 409.  *(Resolution: the
+    plan's earlier "any `TRUNCATED` → 409" is superseded by the committed
+    OpenAPI contract, which makes `since=0` adapt to the oldest retained and
+    reserves 409 for a concrete cursor below the window. The contract is the
+    source of truth.)*
   * **Group-complete pages.** A page never ends mid seq-group: the drain
-    rounds up to the next seq boundary at-or-after `limit` (a group is
-    bounded by `HARD_MAX_EVENT_COUNT`, §11.10), so `nextCursor` is always a
+    rounds up to the next seq boundary at-or-after `limit` (the per-group
+    `index` counts over the *full*, pre-filter group, so the SSE composite
+    resume id stays consistent), so `nextCursor` is always a
     *completed-group* seq — resuming from it neither skips a group's tail nor
     redelivers its head (finding #2). `limit` is thus a soft lower bound on
-    page size. Type filter applied gateway-side.
-  *Acceptance:* paginates a mock history with multi-event seq-groups
-  **without splitting a group across pages**; reaches `hasMore=false` at the
-  captured tip without hanging; `since < oldest` → 409; the steered "behind"
-  SSE client (§3.5) catches up end-to-end. *(Upsized S→M: a bounded page over
-  an unbounded stream is more than a drain.)*
+    page size. The repeatable `type` filter is applied gateway-side.
+  *Acceptance (DONE):* 11 `backfill` unit tests over a real-TCP mock
+  upstream — paginates multi-event seq-groups **without splitting a group
+  across pages**; reaches `hasMore=false` at the captured tip without
+  hanging; the `since=0` truncation-follow; a concrete `since < oldest` →
+  `Truncated`; the type filter preserves the full-group index; a
+  known-tag decode failure fails closed; an unreachable upstream errors
+  (no hang).  5 router-parse tests (`since`/`limit`/repeatable `type` +
+  the `1..=1000` validation), a dispatch 503-no-upstream test, and two
+  end-to-end HTTP integration tests (a group-complete page through the
+  full auth → route(query) → dispatch → drain pipeline; the auth `401` +
+  query `400`).  The live SSE "behind" catch-up is G3.4/G3.5.
+  *(Upsized S→M: a bounded page over an unbounded stream is more than a
+  drain.)*
 * **G3.4 — SSE fan-out (the complex sub-system)** · L · deps: G3.1, G3.2.
   The §6.1 composite-id correctness lives here; each sub-WU is property-
   tested against an oracle stream.

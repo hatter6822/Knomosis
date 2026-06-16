@@ -18,9 +18,21 @@
 //! (G2.2, which also consumes the [`RequestPayload`] body).  The auth +
 //! rate-limit gates run in the IO shell *before* dispatch (G1.4 / G1.3).
 
+use std::time::Duration;
+
+use knomosis_indexer::cursor::read_cursor;
+
+use crate::events::backfill::{self, BackfillError, BackfillRequest};
 use crate::http::{Route, RouteOutcome};
 use crate::problem::Problem;
 use crate::state::AppState;
+
+/// The per-read staleness timeout the backfill drain uses to detect
+/// "caught up to the live tail" (the event-subscribe server goes silent
+/// at its tail rather than sending a frame, §11.3).  Generous relative to
+/// an in-memory cache replay (frames arrive back-to-back) yet bounded so a
+/// fully-caught-up request returns promptly.
+const BACKFILL_IDLE_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// The request payload a dispatched route may consume: the body bytes and
 /// their declared `Content-Type`.  Empty for body-less methods (every
@@ -79,6 +91,11 @@ pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> Ro
                 crate::reads::pools::pool_view(reads, *pool, *resource, net)
             })
         }
+        Route::Events {
+            since,
+            limit,
+            types,
+        } => events_backfill(state, *since, *limit, types),
         Route::MethodNotAllowed { allow } => Problem::method_not_allowed()
             .into_outcome()
             .with_header("Allow", *allow),
@@ -86,6 +103,62 @@ pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> Ro
             .with_detail(detail.clone())
             .into_outcome(),
         Route::NotFound { path } => Problem::not_found(path).into_outcome(),
+    }
+}
+
+/// `GET /v1/events` — drain a bounded backfill page from the
+/// event-subscribe upstream (G3.3).  Requires `--event-subscribe-addr`
+/// (else `503`); the scan is bounded by the indexer cursor (the "tip")
+/// when an indexer is configured + readable, else it drains to the live
+/// tail.  There is no wire query for the event-subscribe ring's newest
+/// seq, so the indexer cursor is the tip source (plan §G3.3); a cursor
+/// read failure degrades to a live-tail-bounded drain rather than failing
+/// the page.
+fn events_backfill(state: &AppState, since: u64, limit: usize, types: &[String]) -> RouteOutcome {
+    let Some(addr) = state.config.event_subscribe_addr else {
+        return Problem::new("events-unavailable", "Events Unavailable", 503)
+            .with_detail(
+                "event backfill is disabled: the gateway was started without \
+                 --event-subscribe-addr",
+            )
+            .into_outcome();
+    };
+    let tip = state
+        .reads
+        .as_ref()
+        .and_then(|reads| read_cursor(&reads.storage).ok());
+    let request = BackfillRequest {
+        since,
+        limit,
+        types: types.to_vec(),
+    };
+    match backfill::backfill(
+        addr,
+        tip,
+        state.config.max_frame_size,
+        BACKFILL_IDLE_TIMEOUT,
+        &request,
+    ) {
+        Ok(page) => RouteOutcome::json(200, page.to_json()),
+        Err(BackfillError::Truncated { oldest_seq }) => {
+            Problem::new("truncated-cursor", "Cursor older than history window", 409)
+                .with_oldest_seq(oldest_seq)
+                .with_detail(format!(
+                    "the requested cursor predates the retained history; \
+                     resume from {oldest_seq}"
+                ))
+                .into_outcome()
+        }
+        Err(BackfillError::Render { detail }) => {
+            Problem::new("event-decode-failed", "Event Decode Failed", 503)
+                .with_detail(detail)
+                .into_outcome()
+        }
+        Err(BackfillError::Upstream { reason }) => {
+            Problem::new("upstream-unavailable", "Upstream Unavailable", 503)
+                .with_detail(reason)
+                .into_outcome()
+        }
     }
 }
 
@@ -217,6 +290,25 @@ mod tests {
             &state(),
         );
         assert_eq!(o.status, 503);
+    }
+
+    #[test]
+    fn events_route_without_upstream_is_503() {
+        // `state()` configures no --event-subscribe-addr, so backfill is
+        // disabled and answers a 503 events-unavailable problem (without
+        // ever opening a socket).
+        let o = dispatch(
+            &Route::Events {
+                since: 0,
+                limit: 100,
+                types: vec![],
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 503);
+        assert_eq!(o.content_type, "application/problem+json");
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["type"], "https://knomosis/errors/events-unavailable");
     }
 
     #[test]

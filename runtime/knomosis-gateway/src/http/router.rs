@@ -16,11 +16,12 @@
 //! shell's ([`super::server`]).  This three-way split — *parse →
 //! dispatch → write* — is the seam every later endpoint extends.
 //!
-//! **Surface (G1.2b → G1.7).**  The operational endpoints plus the 405 +
-//! `Allow` discipline and the `/v1` prefix, and the read routes —
-//! balances (G1.6b), budget + pools (G1.7).  The remaining `/v1`
-//! resource routes (actions / events) attach to the [`Route`] enum as
-//! their work units land (G2 / G3).
+//! **Surface (G1.2b → G3.3).**  The operational endpoints plus the 405 +
+//! `Allow` discipline and the `/v1` prefix, the read routes — balances
+//! (G1.6b), budget + pools (G1.7) — `POST /v1/actions` (G2), and the
+//! `GET /v1/events` backfill with its `since` / `limit` / repeatable
+//! `type` query parameters (G3.3).  The live SSE stream
+//! (`GET /v1/events/stream`) attaches as G3.5 lands.
 //!
 //! [`route`] takes the request's `query` string (the part after `?`, or
 //! `""`) alongside the method + path, so query-parameter selectors —
@@ -79,6 +80,20 @@ pub enum Route {
         /// maps it to `get_pool_eth` / `get_pool_bold` and rejects any
         /// other value as a `400`.
         resource: u64,
+    },
+    /// `GET /v1/events?since={cursor}&limit={n}&type={t}...` — a
+    /// cursor-paginated backfill page over the event-subscribe history
+    /// (§11.3).  The query parameters are parsed + validated here (the
+    /// pure layer); the dispatcher drains the upstream.
+    Events {
+        /// Return events with `seq` strictly greater than this; `0` =
+        /// "from the oldest retained".  Defaults to `0` when absent.
+        since: u64,
+        /// Soft lower bound on the page size, clamped to `1..=1000`;
+        /// defaults to `100`.
+        limit: usize,
+        /// Optional repeatable event-type-name filter (empty = all types).
+        types: Vec<String>,
     },
     /// A structurally-matched path with a malformed parameter (e.g. a
     /// non-numeric id).  Carries the problem `detail`.
@@ -207,6 +222,7 @@ pub fn route(method: &str, path: &str, query: &str) -> Route {
         "/readyz" => get_only(method, Route::Ready),
         "/v1/info" => get_only(method, Route::Info),
         "/v1/actions" => post_only(method, Route::SubmitAction),
+        "/v1/events" => route_v1_events(method, query),
         _ => route_v1_actors(method, path)
             .or_else(|| route_v1_pools(method, path, query))
             .unwrap_or_else(|| Route::NotFound {
@@ -302,16 +318,66 @@ fn route_v1_pools(method: &str, path: &str, query: &str) -> Option<Route> {
     Some(Route::Pool { pool, resource })
 }
 
+/// Parse `GET /v1/events?since={cursor}&limit={n}&type={t}...` — the
+/// cursor-paginated backfill.  `since` defaults to `0` ("from the oldest
+/// retained"); `limit` defaults to `100` and is range-checked to the
+/// contract's `1..=1000`; `type` is repeatable (the event-type-name
+/// filter).  A malformed `since` / `limit` yields [`Route::BadRequest`];
+/// a non-`GET` method yields [`Route::MethodNotAllowed`].
+fn route_v1_events(method: &str, query: &str) -> Route {
+    if method != "GET" {
+        return Route::MethodNotAllowed { allow: "GET" };
+    }
+    let since_raw = query_param(query, "since").unwrap_or("0");
+    let Ok(since) = since_raw.parse::<u64>() else {
+        return Route::BadRequest {
+            detail: format!("invalid since cursor {since_raw:?}"),
+        };
+    };
+    let limit_raw = query_param(query, "limit").unwrap_or("100");
+    let Ok(limit) = limit_raw.parse::<usize>() else {
+        return Route::BadRequest {
+            detail: format!("invalid limit {limit_raw:?}"),
+        };
+    };
+    if !(1..=1000).contains(&limit) {
+        return Route::BadRequest {
+            detail: format!("limit {limit} out of range 1..=1000"),
+        };
+    }
+    Route::Events {
+        since,
+        limit,
+        types: query_param_all(query, "type"),
+    }
+}
+
 /// Extract the first value of query parameter `key` from a raw query
 /// string (`a=1&b=2`), or `None` if the key is absent.  Performs no
 /// percent-decoding: the only query parameters this gateway reads are
-/// short numeric selectors (`?resource=0`), for which percent-encoding
-/// does not arise; a future parameter that needs decoding adds it here.
+/// short numeric selectors (`?resource=0`) and event-type names
+/// (`?type=balanceChanged`, drawn from a fixed `[A-Za-z]` registry), for
+/// which percent-encoding does not arise; a future parameter that needs
+/// decoding adds it here.
 fn query_param<'q>(query: &'q str, key: &str) -> Option<&'q str> {
     query.split('&').find_map(|pair| {
         let (k, v) = pair.split_once('=')?;
         (k == key).then_some(v)
     })
+}
+
+/// Collect **every** value of a repeatable query parameter `key` (e.g.
+/// `?type=a&type=b` → `["a", "b"]`), in query order.  Empty values and
+/// bare keys (no `=`) are skipped.  No percent-decoding (see
+/// [`query_param`]).
+fn query_param_all(query: &str, key: &str) -> Vec<String> {
+    query
+        .split('&')
+        .filter_map(|pair| {
+            let (k, v) = pair.split_once('=')?;
+            (k == key && !v.is_empty()).then(|| v.to_string())
+        })
+        .collect()
 }
 
 /// Return `route` for `GET`; otherwise [`Route::MethodNotAllowed`] with
@@ -338,7 +404,7 @@ fn post_only(method: &str, route: Route) -> Route {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_conditional, query_param, route, Route, RouteOutcome};
+    use super::{apply_conditional, query_param, query_param_all, route, Route, RouteOutcome};
 
     /// Route with an empty query string (the common case in these
     /// tests; the pool tests that exercise `?resource=` call `route`
@@ -531,6 +597,89 @@ mod tests {
             r("GET", "/v1/actions"),
             Route::MethodNotAllowed { allow: "POST" }
         );
+    }
+
+    #[test]
+    fn events_route_defaults() {
+        // No query → since 0 ("from oldest"), limit 100, no type filter.
+        assert_eq!(
+            route("GET", "/v1/events", ""),
+            Route::Events {
+                since: 0,
+                limit: 100,
+                types: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn events_route_parses_since_limit_and_types() {
+        assert_eq!(
+            route("GET", "/v1/events", "since=104233&limit=50"),
+            Route::Events {
+                since: 104_233,
+                limit: 50,
+                types: vec![],
+            }
+        );
+        // `type` is repeatable, collected in query order.
+        assert_eq!(
+            route(
+                "GET",
+                "/v1/events",
+                "type=balanceChanged&since=7&type=nonceAdvanced"
+            ),
+            Route::Events {
+                since: 7,
+                limit: 100,
+                types: vec!["balanceChanged".to_string(), "nonceAdvanced".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn events_route_validates_since_and_limit() {
+        // Non-numeric since → 400.
+        assert!(matches!(
+            route("GET", "/v1/events", "since=abc"),
+            Route::BadRequest { .. }
+        ));
+        // Non-numeric limit → 400.
+        assert!(matches!(
+            route("GET", "/v1/events", "limit=lots"),
+            Route::BadRequest { .. }
+        ));
+        // Zero / over-max limit → 400 (the contract's 1..=1000).
+        assert!(matches!(
+            route("GET", "/v1/events", "limit=0"),
+            Route::BadRequest { .. }
+        ));
+        assert!(matches!(
+            route("GET", "/v1/events", "limit=1001"),
+            Route::BadRequest { .. }
+        ));
+    }
+
+    #[test]
+    fn events_route_method_discipline() {
+        assert_eq!(
+            route("POST", "/v1/events", ""),
+            Route::MethodNotAllowed { allow: "GET" }
+        );
+    }
+
+    #[test]
+    fn query_param_all_collects_repeats() {
+        assert_eq!(
+            query_param_all("type=a&type=b&x=1", "type"),
+            vec!["a".to_string(), "b".to_string()]
+        );
+        // Empty values + bare keys are skipped.
+        assert_eq!(
+            query_param_all("type=&type=c", "type"),
+            vec!["c".to_string()]
+        );
+        assert!(query_param_all("x=1", "type").is_empty());
     }
 
     #[test]

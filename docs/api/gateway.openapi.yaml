@@ -277,6 +277,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EventPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/TruncatedCursor' }
         '429': { $ref: '#/components/responses/RateLimited' }

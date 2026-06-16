@@ -109,6 +109,16 @@ impl Problem {
         self
     }
 
+    /// Attach the `oldestSeq` extension (the oldest still-resumable
+    /// sequence number) — emitted on the `409` truncated-cursor response
+    /// (§6) so a behind-window backfill client knows where to re-resume.
+    /// A decimal string per the bigint-as-string rule.
+    #[must_use]
+    pub fn with_oldest_seq(mut self, oldest_seq: u64) -> Self {
+        self.oldest_seq = Some(oldest_seq.to_string());
+        self
+    }
+
     /// `404 Not Found` for an unrouted path.
     #[must_use]
     pub fn not_found(path: &str) -> Self {
