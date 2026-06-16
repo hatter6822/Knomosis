@@ -107,6 +107,9 @@ mod tests {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
             handler_threads: 1,
             indexer_db,
+            free_tier: 0,
+            action_cost: 0,
+            gas_pool_actor: None,
         }
     }
 

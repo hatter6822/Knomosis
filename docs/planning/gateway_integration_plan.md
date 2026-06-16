@@ -29,13 +29,16 @@ The companion machine-readable contract is
 > decision → the vetted sync crate `tiny_http`, recorded in
 > `docs/audits/gateway_http_spike.md`), **G1.1** (the `knomosis-gateway`
 > crate scaffold — lib+bin serving `/healthz` over `tiny_http`, a workspace
-> member), and **G1.6a** (the `knomosis-storage` read-only open path). The
-> `GW` roadmap row + a Workstream-GW reference are added to `CLAUDE.md` /
-> `AGENTS.md`, and the `OQ-GW-*` set is registered in
-> `docs/planning/open_questions.md`. Next on the critical path: **G1.2**
-> (the sync HTTP request foundation on `tiny_http`) → the read endpoints
-> (**G1.6b** / **G1.7**, over the G1.6a `open_read_only` path) → the first
-> shippable read-only slice (**G1.9**).
+> member), **G1.6a** (the `knomosis-storage` read-only open path), the
+> sync HTTP request foundation + routing surface (**G1.2**, the *parse →
+> dispatch → write* split), and the read endpoints **G1.6b** (balances)
+> and **G1.7** (budget + pools — `GET /v1/actors/{id}/budget` and
+> `GET /v1/pools/{pool}?resource={0|1}`, over the G1.6a `open_read_only`
+> path). The `GW` roadmap row + a Workstream-GW reference are added to
+> `CLAUDE.md` / `AGENTS.md`, and the `OQ-GW-*` set is registered in
+> `docs/planning/open_questions.md`. Next on the critical path: **G1.8**
+> (`/v1/info` typed schema + `/readyz` upstream probes) → the first
+> shippable read-only slice (**G1.9**), with auth (**G1.4**) folded in.
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1199,16 +1202,45 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     weak `ETag` + `If-None-Match`→`304` (needs request-header access
     threaded into the dispatcher — a small follow-up) and the live-writer
     chaos test.
-* **G1.7 — Read: budget + pools** · M · deps: G1.6.
-  *Deliverable:* `reads/budget.rs` — `GET /actors/{id}/budget` via
-  `BudgetReadView::remaining_this_epoch(actor, free_tier)` (combining the
-  config `freeTier`/`actionCost`, the indexer grants/consumed tables, and
-  `c/current_epoch`) with the lower-bound label; `reads/pools.rs` —
-  `GET /pools/{poolId}` via `get_pool_eth`/`get_pool_bold` with the `net`
-  flag from `--gas-pool-actor`. *Acceptance:* match `query-budget` /
-  `query-pool-{eth,bold}`; the budget caveat is documented in the response
-  schema; verify `BudgetReadView`'s internal read is deferred/read-only-
-  compatible over the G1.6a handle (else fall back to `query_only`).
+* **G1.7 — Read: budget + pools** · M · deps: G1.6 · **DONE.**
+  *Deliverable:* `reads/budget.rs` — `GET /v1/actors/{id}/budget` —
+  reads `c/current_epoch` + the per-epoch grants/consumed counters +
+  `c/cursor` under ONE `BEGIN DEFERRED` `combined_read_transaction`
+  (torn-read-free, §3.6) and renders `BudgetView` with
+  `remaining = freeTier + grants − consumed` (saturating), the config
+  `freeTier`/`actionCost` echo, and the documented lower-bound caveat
+  (`gasBalance: null` pending the G6 authoritative read).  `reads/pools.rs`
+  — `GET /v1/pools/{pool}?resource={0|1}` — reads the selected
+  `get_pool_eth`/`get_pool_bold` cell + cursor under the same combined-read
+  transaction and renders a single `PoolView`.
+  *Design decisions (resolving two contract under-specifications):*
+    1. **Resource selector.** The committed contract fixes
+       `GET /pools/{poolId}` → a *single* `PoolView` with one `resource`
+       field, but a pool actor holds both ETH (0) and BOLD (1) and the path
+       carries no selector.  Resolved with an **optional `?resource=` query
+       parameter** (default `0` = ETH; `1` = BOLD; any other value → 400),
+       which keeps the committed path + single-`PoolView` response exactly
+       as written and adds a standard selector.  The router now threads the
+       request's query string (`route(method, path, query)`); a
+       `query_param` helper parses it in the pure layer.
+    2. **`net` flag.** The indexer drains (tag 18) ONLY its configured
+       `--gas-pool-actor`, and does **not** persist that choice in the DB,
+       so the gateway sources it from its own `--gas-pool-actor` echo
+       (`KNX_GW_GAS_POOL_ACTOR`) and sets `net = (configured == poolId)`.
+       The gateway/indexer config match is an operator obligation (§9.2),
+       documented identically to the `--free-tier` budget echo.
+  *Acceptance met:* budget contract-shape + free-tier-only-unknown-actor +
+  consumed-saturation unit tests; pool ETH/BOLD/absent-zero/unsupported-
+  resource (400) unit tests + a dispatch test asserting the config→`net`
+  wiring over a seeded read-only DB; the OpenAPI contract gains the
+  `PoolResource` query param, a shared `BadRequest` (400) response across
+  the read surface, and the refined `net` description, and re-passes the
+  Redocly `minimal` gate.  Both reads confirmed deferred/read-only-
+  compatible over the G1.6a pure `SQLITE_OPEN_READ_ONLY` handle (no
+  `query_only` fallback needed — the G1.6a `combined_read_transaction`
+  root-cause fix already made the budget read DEFERRED). **Deferred:**
+  the weak `ETag`/`If-None-Match` → `304` (shared with G1.6b; needs
+  request-header threading, a small follow-up).
 * **G1.8 — `/info`, `/readyz`** · S · deps: G1.2, G1.6a.
   *Deliverable:* `info.rs` — `/info` (deployment id; the kernel's declared
   `ok_admission_stage` from **config**, default `Finalized` — a host

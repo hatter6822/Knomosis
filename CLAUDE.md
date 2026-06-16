@@ -663,7 +663,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (G0.1/G0.2/G0.3/G1.0/G1.1/G1.6a complete; G1.2 next — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (G0.1–G0.3/G1.0/G1.1/G1.2/G1.6a/G1.6b/G1.7 complete; G1.8 next — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -813,10 +813,13 @@ event-subscribe (§11), and indexer SQLite (§11A) surfaces for a
 browser-facing BFF, built on the vetted sync crate `tiny_http`
 (G1.0).  **In progress:** G0.1–G0.3 (contract + OpenAPI-lint gate),
 G1.0 (HTTP-layer spike), G1.1 (crate scaffold — `/healthz` over
-`tiny_http`), and G1.6a (the `knomosis-storage` read-only open path
-+ the DEFERRED budget-read fix) are complete.  Next: G1.2 (the HTTP
-request foundation) → the read endpoints (G1.6b/G1.7, over the G1.6a
-`open_read_only` path) → the first shippable read-only slice (G1.9).
+`tiny_http`), G1.6a (the `knomosis-storage` read-only open path
++ the DEFERRED budget-read fix), G1.2 (the parse→dispatch→write HTTP
+foundation + routing surface), and the read endpoints G1.6b (balances)
++ G1.7 (budget + pools — `GET /v1/actors/{id}/budget` and
+`GET /v1/pools/{pool}?resource={0|1}`, with a `--gas-pool-actor` `net`
+echo) are complete.  Next: G1.8 (`/v1/info` typed schema + `/readyz`
+upstream probes) → the first shippable read-only slice (G1.9).
 Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; the submit
 path forwards client-signed `SignedAction` bytes opaquely (no key
 custody); the SSE fan-out multiplexes one upstream subscription.

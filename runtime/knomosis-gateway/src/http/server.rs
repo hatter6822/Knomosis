@@ -153,10 +153,13 @@ fn worker_loop(server: &tiny_http::Server, state: &AppState) {
 /// is nothing else to do.
 pub fn handle_request(request: tiny_http::Request, state: &AppState) {
     let method = method_token(request.method());
-    // Strip any query string; `split` always yields at least one item,
-    // but `unwrap_or` keeps this provably panic-free regardless.
-    let path = request.url().split('?').next().unwrap_or("");
-    let routed = route(method, path);
+    // Split the request target into path + query at the first `?`
+    // (`split_once` is total and panic-free; an absent `?` yields the
+    // whole target as the path and an empty query).  The router consumes
+    // the query string for parameter selectors (e.g. `?resource=`).
+    let url = request.url();
+    let (path, query) = url.split_once('?').unwrap_or((url, ""));
+    let routed = route(method, path, query);
     let outcome = dispatch(&routed, state);
     respond(request, &outcome);
 }

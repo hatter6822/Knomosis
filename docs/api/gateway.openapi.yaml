@@ -153,6 +153,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/BalanceList' }
         '304': { description: Not modified (ETag matched `If-None-Match`). }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/UpstreamUnavailable' }
@@ -178,6 +179,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Balance' }
         '304': { description: Not modified. }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/UpstreamUnavailable' }
@@ -198,6 +200,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BudgetView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -207,18 +210,32 @@ paths:
     get:
       tags: [state]
       operationId: getPool
-      summary: Get a gas-pool view (Workstream GP).
-      description: Reads the indexer gas-pool view (abi.md §11A.4).
+      summary: Get a gas-pool resource view (Workstream GP).
+      description: |
+        Reads the indexer gas-pool ledger (abi.md §11A.4) for a single
+        (pool actor, resource). The `resource` query parameter selects the
+        ledger (`0` = ETH, `1` = BOLD); it defaults to `0` when omitted. A
+        pool actor with no recorded inflows returns balance `"0"` (not 404),
+        matching the balance endpoints.
+
+        The `net` field is `true` only when this `poolId` is the gateway's
+        configured `--gas-pool-actor` (the one actor whose pool the indexer
+        nets of drains); every other pool reports gross inflows
+        (`net = false`). The gateway's `--gas-pool-actor` MUST match the
+        indexer's — the indexer does not persist it, so the gateway cannot
+        self-verify the match (an operator obligation, §9.2).
       parameters:
         - $ref: '#/components/parameters/PoolId'
+        - $ref: '#/components/parameters/PoolResource'
       responses:
         '200':
-          description: The pool view.
+          description: The pool resource view.
           headers:
             X-Knomosis-Seq: { $ref: '#/components/headers/KnomosisSeq' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PoolView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -394,6 +411,17 @@ components:
       required: true
       description: Gas-pool identifier.
       schema: { type: string, minLength: 1 }
+    PoolResource:
+      name: resource
+      in: query
+      required: false
+      description: >-
+        Which pool ledger to read: "0" (ETH) or "1" (BOLD). Defaults to
+        "0" when omitted. Any other value is a 400.
+      schema:
+        type: string
+        enum: ["0", "1"]
+        default: "0"
     SinceCursor:
       name: since
       in: query
@@ -455,6 +483,16 @@ components:
           examples:
             parse:
               value: { type: "https://knomosis/errors/parse-error", title: "Malformed action bytes", status: 400 }
+    BadRequest:
+      description: >-
+        A malformed path or query parameter (e.g. a non-numeric actor /
+        resource / pool id, or a pool resource selector outside {0, 1}).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            badRequest:
+              value: { type: "https://knomosis/errors/bad-request", title: "Bad Request", status: 400 }
     Unauthorized:
       description: Missing or invalid service credential.
       content:
@@ -628,8 +666,8 @@ components:
       required: [poolId, resource, balance, net, seq]
       description: >-
         Per-(pool-actor, resource) gas-pool ledger (abi.md §11A.4). `resource`
-        is "0" (ETH) or "1" (BOLD). `balance` is net of drains only when the
-        indexer runs with --gas-pool-actor (else gross inflows); `net` says which.
+        is "0" (ETH) or "1" (BOLD). `balance` is net of drains when this pool
+        is the configured gas-pool actor, else gross inflows; `net` says which.
       properties:
         poolId:
           type: string
@@ -639,7 +677,9 @@ components:
         balance: { $ref: '#/components/schemas/BigInt' }
         net:
           type: boolean
-          description: True if net of drains (indexer has --gas-pool-actor); false if gross.
+          description: >-
+            True when poolId is the gateway's configured --gas-pool-actor (so
+            the balance is net of drains); false for any other pool (gross).
         seq: { $ref: '#/components/schemas/Cursor' }
 
     Event:

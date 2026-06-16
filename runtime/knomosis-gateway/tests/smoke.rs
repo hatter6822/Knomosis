@@ -51,6 +51,9 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
             handler_threads: 1,
             indexer_db: None,
+            free_tier: 0,
+            action_cost: 0,
+            gas_pool_actor: None,
         })
         .expect("no DB to open"),
     )

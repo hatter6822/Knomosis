@@ -13,7 +13,7 @@
 //! cursor the values reflect.
 
 use knomosis_indexer::balance::{parse_balance_key, BalanceView, BALANCE_KEY_PREFIX};
-use knomosis_indexer::cursor::{read_cursor, CURSOR_KEY, CURSOR_VALUE_LEN};
+use knomosis_indexer::cursor::{read_cursor, CURSOR_KEY};
 use knomosis_storage::storage::Storage;
 use serde::Serialize;
 
@@ -84,7 +84,7 @@ pub fn actor_balances(reads: &ReadState, actor: u64) -> RouteOutcome {
     };
     drop(snap); // release the read lock promptly
 
-    let Some(seq) = decode_cursor(cursor_cell.as_deref()) else {
+    let Some(seq) = crate::reads::decode_control_u64(cursor_cell.as_deref()) else {
         return read_failed("corrupt cursor cell", "cursor value is not 8 bytes");
     };
     let seq_str = seq.to_string();
@@ -141,18 +141,6 @@ fn read_failed(title: &str, detail: &str) -> RouteOutcome {
 fn decode_amount(value: &[u8]) -> Option<u128> {
     let bytes: [u8; 16] = value.try_into().ok()?;
     Some(u128::from_be_bytes(bytes))
-}
-
-/// Decode the cursor cell: absent → `Some(0)` (a fresh database); an
-/// 8-byte BE `u64` → `Some(v)`; the wrong length → `None` (corruption).
-fn decode_cursor(cell: Option<&[u8]>) -> Option<u64> {
-    match cell {
-        None => Some(0),
-        Some(bytes) => {
-            let arr: [u8; CURSOR_VALUE_LEN] = bytes.try_into().ok()?;
-            Some(u64::from_be_bytes(arr))
-        }
-    }
 }
 
 #[cfg(test)]

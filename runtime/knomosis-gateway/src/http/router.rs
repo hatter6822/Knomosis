@@ -16,10 +16,16 @@
 //! shell's ([`super::server`]).  This three-way split — *parse →
 //! dispatch → write* — is the seam every later endpoint extends.
 //!
-//! **Surface (G1.2b).**  The operational endpoints plus the 405 + `Allow`
-//! discipline and the `/v1` prefix.  The `/v1` resource routes
-//! (balances / budget / pools / actions / events) attach to the
-//! [`Route`] enum as their work units land (G1.6b / G1.7 / G2 / G3).
+//! **Surface (G1.2b → G1.7).**  The operational endpoints plus the 405 +
+//! `Allow` discipline and the `/v1` prefix, and the read routes —
+//! balances (G1.6b), budget + pools (G1.7).  The remaining `/v1`
+//! resource routes (actions / events) attach to the [`Route`] enum as
+//! their work units land (G2 / G3).
+//!
+//! [`route`] takes the request's `query` string (the part after `?`, or
+//! `""`) alongside the method + path, so query-parameter selectors —
+//! currently `GET /v1/pools/{id}?resource={0|1}` — are parsed in this
+//! pure, testable layer rather than in the IO shell.
 
 /// A typed description of a routed request — *what* was requested,
 /// independent of *how* it is answered (that is [`crate::dispatch`]).
@@ -53,6 +59,22 @@ pub enum Route {
         /// The actor id from the path.
         actor: u64,
         /// The resource id from the path.
+        resource: u64,
+    },
+    /// `GET /v1/actors/{actor}/budget` — the actor's epoch budget view.
+    ActorBudget {
+        /// The actor id from the path.
+        actor: u64,
+    },
+    /// `GET /v1/pools/{pool}?resource={0|1}` — one gas-pool resource
+    /// view (a single `PoolView`).  `resource` defaults to `0` (ETH)
+    /// when the query parameter is absent.
+    Pool {
+        /// The gas-pool actor id from the path.
+        pool: u64,
+        /// The selected resource (`0` = ETH, `1` = BOLD); the dispatcher
+        /// maps it to `get_pool_eth` / `get_pool_bold` and rejects any
+        /// other value as a `400`.
         resource: u64,
     },
     /// A structurally-matched path with a malformed parameter (e.g. a
@@ -128,58 +150,126 @@ impl RouteOutcome {
 }
 
 /// Route a request by `method` (canonical uppercase token, e.g.
-/// `"GET"`) and `path` (request target with any query string already
-/// stripped) to a [`Route`].
+/// `"GET"`), `path` (request target with any query string stripped),
+/// and `query` (the raw query string after `?`, or `""`) to a [`Route`].
 ///
 /// Surface:
 ///   * `GET /healthz` / `/readyz` / `/v1/info` → the respective route.
+///   * `GET /v1/actors/{id}/{balances|budget}[/{resource}]` → the reads.
+///   * `GET /v1/pools/{id}?resource={0|1}` → [`Route::Pool`].
 ///   * a known path with a non-permitted method → [`Route::MethodNotAllowed`].
 ///   * an unknown path → [`Route::NotFound`].
 #[must_use]
-pub fn route(method: &str, path: &str) -> Route {
+pub fn route(method: &str, path: &str, query: &str) -> Route {
     match path {
         "/healthz" => get_only(method, Route::Health),
         "/readyz" => get_only(method, Route::Ready),
         "/v1/info" => get_only(method, Route::Info),
-        _ => route_v1_balances(method, path).unwrap_or_else(|| Route::NotFound {
-            path: path.to_string(),
-        }),
+        _ => route_v1_actors(method, path)
+            .or_else(|| route_v1_pools(method, path, query))
+            .unwrap_or_else(|| Route::NotFound {
+                path: path.to_string(),
+            }),
     }
 }
 
-/// Parse the `/v1/actors/{actor}/balances[/{resource}]` family.
+/// Parse the `/v1/actors/{actor}/{balances|budget}[/{resource}]` family.
 /// Returns `None` if the path is not in this family (→ 404); a matched
 /// shape with a non-permitted method yields [`Route::MethodNotAllowed`]
 /// and a malformed id yields [`Route::BadRequest`].
-fn route_v1_balances(method: &str, path: &str) -> Option<Route> {
+fn route_v1_actors(method: &str, path: &str) -> Option<Route> {
     let rest = path.strip_prefix("/v1/actors/")?;
     let mut segs = rest.split('/').filter(|s| !s.is_empty());
     let actor_str = segs.next()?;
-    if segs.next()? != "balances" {
-        return None;
-    }
+    let sub = segs.next()?;
     let resource_str = segs.next();
     if segs.next().is_some() {
         // A trailing extra segment is not part of this route family.
         return None;
     }
+    match sub {
+        "balances" => {
+            if method != "GET" {
+                return Some(Route::MethodNotAllowed { allow: "GET" });
+            }
+            let Ok(actor) = actor_str.parse::<u64>() else {
+                return Some(Route::BadRequest {
+                    detail: format!("invalid actor id {actor_str:?}"),
+                });
+            };
+            match resource_str {
+                None => Some(Route::ActorBalances { actor }),
+                Some(resource_str) => match resource_str.parse::<u64>() {
+                    Ok(resource) => Some(Route::ActorBalance { actor, resource }),
+                    Err(_) => Some(Route::BadRequest {
+                        detail: format!("invalid resource id {resource_str:?}"),
+                    }),
+                },
+            }
+        }
+        "budget" => {
+            // `/budget` takes no further path segment.
+            if resource_str.is_some() {
+                return None;
+            }
+            if method != "GET" {
+                return Some(Route::MethodNotAllowed { allow: "GET" });
+            }
+            let Ok(actor) = actor_str.parse::<u64>() else {
+                return Some(Route::BadRequest {
+                    detail: format!("invalid actor id {actor_str:?}"),
+                });
+            };
+            Some(Route::ActorBudget { actor })
+        }
+        _ => None,
+    }
+}
+
+/// Parse the `/v1/pools/{pool}` family with its optional `?resource=`
+/// selector.  Returns `None` if the path is not in this family (→ 404);
+/// a matched shape with a non-permitted method yields
+/// [`Route::MethodNotAllowed`], and a malformed pool id or `resource`
+/// value yields [`Route::BadRequest`].  The `resource` parameter
+/// defaults to `0` (ETH) when absent; the dispatcher enforces the
+/// `{0, 1}` domain.
+fn route_v1_pools(method: &str, path: &str, query: &str) -> Option<Route> {
+    let rest = path.strip_prefix("/v1/pools/")?;
+    let mut segs = rest.split('/').filter(|s| !s.is_empty());
+    let pool_str = segs.next()?;
+    if segs.next().is_some() {
+        // `/pools/{id}` takes no further path segment (the resource is a
+        // query parameter, not a path segment).
+        return None;
+    }
     if method != "GET" {
         return Some(Route::MethodNotAllowed { allow: "GET" });
     }
-    let Ok(actor) = actor_str.parse::<u64>() else {
+    let Ok(pool) = pool_str.parse::<u64>() else {
         return Some(Route::BadRequest {
-            detail: format!("invalid actor id {actor_str:?}"),
+            detail: format!("invalid pool id {pool_str:?}"),
         });
     };
-    match resource_str {
-        None => Some(Route::ActorBalances { actor }),
-        Some(resource_str) => match resource_str.parse::<u64>() {
-            Ok(resource) => Some(Route::ActorBalance { actor, resource }),
-            Err(_) => Some(Route::BadRequest {
-                detail: format!("invalid resource id {resource_str:?}"),
-            }),
-        },
-    }
+    // `?resource=` selects ETH (0) or BOLD (1); absent → 0.
+    let resource_raw = query_param(query, "resource").unwrap_or("0");
+    let Ok(resource) = resource_raw.parse::<u64>() else {
+        return Some(Route::BadRequest {
+            detail: format!("invalid resource selector {resource_raw:?}"),
+        });
+    };
+    Some(Route::Pool { pool, resource })
+}
+
+/// Extract the first value of query parameter `key` from a raw query
+/// string (`a=1&b=2`), or `None` if the key is absent.  Performs no
+/// percent-decoding: the only query parameters this gateway reads are
+/// short numeric selectors (`?resource=0`), for which percent-encoding
+/// does not arise; a future parameter that needs decoding adds it here.
+fn query_param<'q>(query: &'q str, key: &str) -> Option<&'q str> {
+    query.split('&').find_map(|pair| {
+        let (k, v) = pair.split_once('=')?;
+        (k == key).then_some(v)
+    })
 }
 
 /// Return `route` for `GET`; otherwise [`Route::MethodNotAllowed`] with
@@ -196,19 +286,26 @@ fn get_only(method: &str, route: Route) -> Route {
 
 #[cfg(test)]
 mod tests {
-    use super::{route, Route};
+    use super::{query_param, route, Route};
+
+    /// Route with an empty query string (the common case in these
+    /// tests; the pool tests that exercise `?resource=` call `route`
+    /// with an explicit query directly).
+    fn r(method: &str, path: &str) -> Route {
+        route(method, path, "")
+    }
 
     #[test]
     fn static_get_routes() {
-        assert_eq!(route("GET", "/healthz"), Route::Health);
-        assert_eq!(route("GET", "/readyz"), Route::Ready);
-        assert_eq!(route("GET", "/v1/info"), Route::Info);
+        assert_eq!(r("GET", "/healthz"), Route::Health);
+        assert_eq!(r("GET", "/readyz"), Route::Ready);
+        assert_eq!(r("GET", "/v1/info"), Route::Info);
     }
 
     #[test]
     fn unknown_path_is_not_found_with_path() {
         assert_eq!(
-            route("GET", "/v1/balances"),
+            r("GET", "/v1/balances"),
             Route::NotFound {
                 path: "/v1/balances".to_string()
             }
@@ -218,23 +315,23 @@ mod tests {
     #[test]
     fn non_get_on_known_path_is_method_not_allowed() {
         assert_eq!(
-            route("POST", "/healthz"),
+            r("POST", "/healthz"),
             Route::MethodNotAllowed { allow: "GET" }
         );
         // An unknown path takes precedence as NotFound regardless of
         // method (there is no path to disallow a method on).
-        assert!(matches!(route("POST", "/nope"), Route::NotFound { .. }));
+        assert!(matches!(r("POST", "/nope"), Route::NotFound { .. }));
     }
 
     #[test]
     fn actor_balances_list_route() {
         assert_eq!(
-            route("GET", "/v1/actors/7/balances"),
+            r("GET", "/v1/actors/7/balances"),
             Route::ActorBalances { actor: 7 }
         );
         // A trailing slash normalises to the list route.
         assert_eq!(
-            route("GET", "/v1/actors/7/balances/"),
+            r("GET", "/v1/actors/7/balances/"),
             Route::ActorBalances { actor: 7 }
         );
     }
@@ -242,7 +339,7 @@ mod tests {
     #[test]
     fn actor_balance_single_route() {
         assert_eq!(
-            route("GET", "/v1/actors/7/balances/0"),
+            r("GET", "/v1/actors/7/balances/0"),
             Route::ActorBalance {
                 actor: 7,
                 resource: 0
@@ -253,11 +350,11 @@ mod tests {
     #[test]
     fn malformed_id_is_bad_request() {
         assert!(matches!(
-            route("GET", "/v1/actors/abc/balances"),
+            r("GET", "/v1/actors/abc/balances"),
             Route::BadRequest { .. }
         ));
         assert!(matches!(
-            route("GET", "/v1/actors/7/balances/xyz"),
+            r("GET", "/v1/actors/7/balances/xyz"),
             Route::BadRequest { .. }
         ));
     }
@@ -265,7 +362,7 @@ mod tests {
     #[test]
     fn non_get_balances_is_method_not_allowed() {
         assert_eq!(
-            route("POST", "/v1/actors/7/balances"),
+            r("POST", "/v1/actors/7/balances"),
             Route::MethodNotAllowed { allow: "GET" }
         );
     }
@@ -274,13 +371,115 @@ mod tests {
     fn unrelated_or_overlong_actors_path_is_not_found() {
         // Right prefix, wrong shape → 404 (not this route family).
         assert!(matches!(
-            route("GET", "/v1/actors/7/nonsense"),
+            r("GET", "/v1/actors/7/nonsense"),
             Route::NotFound { .. }
         ));
         // A trailing extra segment → 404.
         assert!(matches!(
-            route("GET", "/v1/actors/7/balances/0/extra"),
+            r("GET", "/v1/actors/7/balances/0/extra"),
             Route::NotFound { .. }
         ));
+    }
+
+    #[test]
+    fn actor_budget_route() {
+        assert_eq!(
+            r("GET", "/v1/actors/7/budget"),
+            Route::ActorBudget { actor: 7 }
+        );
+        // `/budget` takes no sub-segment.
+        assert!(matches!(
+            r("GET", "/v1/actors/7/budget/extra"),
+            Route::NotFound { .. }
+        ));
+        // A malformed actor id on `/budget` → 400.
+        assert!(matches!(
+            r("GET", "/v1/actors/abc/budget"),
+            Route::BadRequest { .. }
+        ));
+        // An unknown sub-resource → 404.
+        assert!(matches!(
+            r("GET", "/v1/actors/7/widgets"),
+            Route::NotFound { .. }
+        ));
+    }
+
+    #[test]
+    fn pool_route_defaults_to_eth() {
+        // No `?resource=` → ETH (resource 0).
+        assert_eq!(
+            route("GET", "/v1/pools/161", ""),
+            Route::Pool {
+                pool: 161,
+                resource: 0
+            }
+        );
+    }
+
+    #[test]
+    fn pool_route_resource_selector() {
+        assert_eq!(
+            route("GET", "/v1/pools/161", "resource=0"),
+            Route::Pool {
+                pool: 161,
+                resource: 0
+            }
+        );
+        assert_eq!(
+            route("GET", "/v1/pools/161", "resource=1"),
+            Route::Pool {
+                pool: 161,
+                resource: 1
+            }
+        );
+        // The selector is found among other query parameters.
+        assert_eq!(
+            route("GET", "/v1/pools/161", "foo=bar&resource=1"),
+            Route::Pool {
+                pool: 161,
+                resource: 1
+            }
+        );
+    }
+
+    #[test]
+    fn pool_route_malformed_id_or_selector_is_bad_request() {
+        // A non-numeric pool id → 400.
+        assert!(matches!(
+            route("GET", "/v1/pools/abc", ""),
+            Route::BadRequest { .. }
+        ));
+        // A non-numeric `?resource=` → 400.
+        assert!(matches!(
+            route("GET", "/v1/pools/161", "resource=eth"),
+            Route::BadRequest { .. }
+        ));
+    }
+
+    #[test]
+    fn pool_route_method_and_shape() {
+        // Non-GET on a well-formed pool path → 405 + Allow.
+        assert_eq!(
+            route("POST", "/v1/pools/161", ""),
+            Route::MethodNotAllowed { allow: "GET" }
+        );
+        // A trailing path segment (the resource is a query param, not a
+        // path segment) → 404.
+        assert!(matches!(
+            route("GET", "/v1/pools/161/0", ""),
+            Route::NotFound { .. }
+        ));
+    }
+
+    #[test]
+    fn query_param_extraction() {
+        assert_eq!(query_param("resource=1", "resource"), Some("1"));
+        assert_eq!(query_param("a=1&resource=2&b=3", "resource"), Some("2"));
+        assert_eq!(query_param("a=1&b=2", "resource"), None);
+        assert_eq!(query_param("", "resource"), None);
+        // A bare key with no `=` is not a value-bearing match.
+        assert_eq!(query_param("resource", "resource"), None);
+        // The first occurrence wins.
+        assert_eq!(query_param("resource=1&resource=2", "resource"), Some("1"));
     }
 }
