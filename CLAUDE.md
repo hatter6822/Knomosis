@@ -131,6 +131,12 @@ cd runtime && cargo build --workspace --all-targets
 cd runtime && cargo test --workspace
 cd runtime && cargo clippy --workspace --all-targets -- -D warnings
 cd runtime && cargo fmt --all -- --check
+
+# Workstream GW (gateway) — synchronous HTTP/JSON + SSE service
+# (runtime/knomosis-gateway/; contract docs/api/gateway.openapi.yaml).
+# Its Rust gates ride the --workspace commands above; run/test directly:
+cd runtime && cargo run -p knomosis-gateway -- --help
+cd runtime && cargo test -p knomosis-gateway
 ```
 
 `lakefile.lean` is the source of truth for every build target,
@@ -657,6 +663,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (G0.1/G0.2/G0.3/G1.0/G1.1/G1.6a complete; G1.2 next — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -793,6 +800,26 @@ Each workstream's detailed plan, design rationale, and per-WU
 completion narrative live in the relevant `docs/planning/` document
 and in git history (`git log --grep="WU"` / `git log --grep="audit"`).
 This section is a concise index pointing to source and documentation.
+
+### Knomosis Gateway (Workstream GW)
+
+Plan: `docs/planning/gateway_integration_plan.md` · Contract:
+`docs/api/gateway.openapi.yaml` · HTTP-layer decision:
+`docs/audits/gateway_http_spike.md`.
+
+A synchronous (no-`tokio`) HTTP/JSON + Server-Sent-Events service
+(`runtime/knomosis-gateway/`) that fronts the binary host (§10),
+event-subscribe (§11), and indexer SQLite (§11A) surfaces for a
+browser-facing BFF, built on the vetted sync crate `tiny_http`
+(G1.0).  **In progress:** G0.1–G0.3 (contract + OpenAPI-lint gate),
+G1.0 (HTTP-layer spike), G1.1 (crate scaffold — `/healthz` over
+`tiny_http`), and G1.6a (the `knomosis-storage` read-only open path
++ the DEFERRED budget-read fix) are complete.  Next: G1.2 (the HTTP
+request foundation) → the read endpoints (G1.6b/G1.7, over the G1.6a
+`open_read_only` path) → the first shippable read-only slice (G1.9).
+Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; the submit
+path forwards client-signed `SignedAction` bytes opaquely (no key
+custody); the SSE fan-out multiplexes one upstream subscription.
 
 ### Rust host runtime (Workstream RH)
 

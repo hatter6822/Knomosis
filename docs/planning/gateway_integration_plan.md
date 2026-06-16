@@ -22,11 +22,20 @@ The companion machine-readable contract is
 
 ## Status
 
-> **DRAFT — not started, not ratified.** Contract sketch + engineering
-> plan only. No `knomosis-gateway` crate exists; no roadmap table in
-> `CLAUDE.md` / `README.md` / `GENESIS_PLAN.md` is amended. Promoting this
-> to a sanctioned workstream requires sign-off (see §11 G0, §14, and the
-> promotion checklist in §15A).
+> **SANCTIONED — in progress.** Promoted from DRAFT and under active
+> implementation along the §12 critical path. Landed so far: **G0.1**
+> (OpenAPI sketch), **G0.2** (this plan), **G0.3** (the `ci-gateway.yml`
+> OpenAPI-lint gate + `docs/api/redocly.yaml`), **G1.0** (the HTTP-layer
+> decision → the vetted sync crate `tiny_http`, recorded in
+> `docs/audits/gateway_http_spike.md`), **G1.1** (the `knomosis-gateway`
+> crate scaffold — lib+bin serving `/healthz` over `tiny_http`, a workspace
+> member), and **G1.6a** (the `knomosis-storage` read-only open path). The
+> `GW` roadmap row + a Workstream-GW reference are added to `CLAUDE.md` /
+> `AGENTS.md`, and the `OQ-GW-*` set is registered in
+> `docs/planning/open_questions.md`. Next on the critical path: **G1.2**
+> (the sync HTTP request foundation on `tiny_http`) → the read endpoints
+> (**G1.6b** / **G1.7**, over the G1.6a `open_read_only` path) → the first
+> shippable read-only slice (**G1.9**).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's

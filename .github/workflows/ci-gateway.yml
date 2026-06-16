@@ -1,0 +1,86 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# Gateway CI (Workstream GW, WU G0.3).
+#
+# This workflow carries ONLY the gateway-specific gates.  The
+# `knomosis-gateway` crate's Rust gates (build / test / clippy / fmt)
+# are already covered for free by `ci-rust.yml`'s
+# `cargo {build,test,clippy,fmt} --workspace` run, which triggers on
+# any `runtime/**` change (the gateway crate lives under `runtime/`).
+# Duplicating those here would only burn CI minutes — see
+# `docs/planning/gateway_integration_plan.md` §10 / G0.3.
+#
+# What remains gateway-specific is the OpenAPI contract gate: the
+# consumer-facing protocol (`docs/api/gateway.openapi.yaml`) is the
+# single source of truth for the BFF, so a structural break in it must
+# fail CI.  This workflow lints the spec with Redocly against the
+# lenient (structural) ruleset in `docs/api/redocly.yaml`.
+#
+# Third-party action pinning.  Per CLAUDE.md / Genesis Plan §13.6,
+# every third-party GitHub Action is pinned to a full-length commit
+# SHA, with the human-readable tag recorded in a comment.  The Redocly
+# CLI is an npm tool (immutable per published version) run via `npx`;
+# it is pinned to a major version here and tightened to an exact
+# version once the first CI run confirms the working release.
+
+name: CI (Gateway)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # The OpenAPI contract + its lint config.
+      - 'docs/api/**'
+      # The gateway crate (a spec change usually rides with a code
+      # change; trigger on both so the gate cannot be skipped).
+      - 'runtime/knomosis-gateway/**'
+      # CI definition itself.
+      - '.github/workflows/ci-gateway.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/api/**'
+      - 'runtime/knomosis-gateway/**'
+      - '.github/workflows/ci-gateway.yml'
+
+# Cancel in-progress runs of the same workflow on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only token: the only step fetches the tree via checkout.
+permissions:
+  contents: read
+
+jobs:
+  openapi-lint:
+    name: OpenAPI 3.1 structural lint (Redocly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (SHA pinned, matches ci-rust.yml).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Show Node toolchain (pre-installed on ubuntu-latest)
+        shell: bash
+        run: |
+          node --version
+          npm --version
+
+      - name: Lint the gateway OpenAPI contract
+        # `@redocly/cli` is pinned to major version 1 (npm versions are
+        # immutable; tighten to an exact version once CI confirms the
+        # working release).  `--config` selects the lenient structural
+        # ruleset (`docs/api/redocly.yaml`, extends `minimal`).
+        shell: bash
+        run: |
+          npx --yes @redocly/cli@1 lint \
+            --config docs/api/redocly.yaml \
+            docs/api/gateway.openapi.yaml

@@ -1,0 +1,77 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# `knomosis-gateway` — Workstream GW.  HTTP/JSON + SSE gateway that
+# fronts the Knomosis binary host (§10), event-subscribe (§11), and
+# indexer SQLite (§11A) surfaces for browser-facing consumers.  See
+# `docs/planning/gateway_integration_plan.md` for the plan and
+# `docs/api/gateway.openapi.yaml` for the contract.
+#
+# Current landing: G1.1 crate scaffold — lib+bin skeleton serving
+# `/healthz` (+ `/readyz`/`/v1/info` stubs) over the vetted synchronous
+# HTTP crate `tiny_http` (the G1.0 decision; see
+# `docs/audits/gateway_http_spike.md`).  The HTTP request parser,
+# routing table, problem responder, governors, reads, submit, and SSE
+# fan-out land in G1.2–G3.
+
+[package]
+name = "knomosis-gateway"
+description = "HTTP/JSON + SSE gateway fronting the Knomosis host, event-subscribe, and indexer surfaces for browser-facing consumers (Workstream GW)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "knomosis-gateway"
+path = "src/main.rs"
+
+[dependencies]
+# Shared CLI / logging helpers (exit-code discipline + `tracing` init).
+knomosis-cli-common = { workspace = true }
+# The synchronous HTTP/1.1 server (G1.0 / OQ-GW-8 decision: a vetted
+# sync crate, no tokio).  `default-features = false` keeps TLS out (its
+# `ssl-rustls` feature predates the workspace's rustls 0.23; HTTPS is
+# the G4.2 hardening unit — see `docs/audits/gateway_http_spike.md`).
+tiny_http = { workspace = true }
+# Typed errors with `Display` / `From` impls — same discipline as the
+# sibling crates.
+thiserror = { workspace = true }
+# Structured logging.
+tracing = { workspace = true }
+
+[dev-dependencies]
+# `tiny_http` is also a dev-dependency so the integration smoke test
+# (`tests/smoke.rs`) can drive a real listener directly (mirrors the
+# storage crate's `rusqlite` dev/normal split).
+tiny_http = { workspace = true }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints whose value the rustc `missing_docs` lint already
+# provides (we require docs on every public surface).
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `module_name_repetitions` fires on `GatewayError` inside the
+# `knomosis_gateway` crate.  Workspace convention.
+module_name_repetitions = "allow"
+# `must_use_candidate` fires on every pure getter / constructor.
+must_use_candidate = "allow"
+# `doc_markdown` fires on prose words that look like type names.
+doc_markdown = "allow"
+
+[lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+# `forbid` is appropriate: the gateway is pure-Rust orchestration over
+# `tiny_http` + the sibling crates.  No FFI surface.
+unsafe_code = "forbid"

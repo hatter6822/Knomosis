@@ -42,6 +42,7 @@ implementation proceeds.
   * §7 Phase 7 — portfolio prioritisation questions
   * §8 Documentation / process questions
   * §9 Sub-workstream-surfaced questions (post-expansion)
+  * §9A GW (Gateway, Workstream GW) — design questions
   * §10 Resolved questions (historical record)
   * §11 References
 
@@ -1163,6 +1164,34 @@ synthesis fails, what's the behaviour?
 authors should opt into manual instances explicitly.
 
 **Status.**  NEW.
+
+---
+
+## §9A GW (Gateway, Workstream GW) — design questions
+
+The gateway's design questions `OQ-GW-1 … OQ-GW-12` are specified in
+full (Context / Options / Trade-offs / Recommendation) in
+`docs/planning/gateway_integration_plan.md` §14; this is their index in
+the master registry so PR descriptions can cite them by id.
+
+| ID | Question | Status / recommendation |
+|----|----------|-------------------------|
+| OQ-GW-1 | Authoritative kernel/host `getBalance` read vs indexer-only reads | OPEN — build it (G6); ship indexer-only first |
+| OQ-GW-2 | `NotAdmissible` → `200 {accepted:false}` vs `422` | OPEN — `200` + body (a verdict is a domain result, not a transport error) |
+| OQ-GW-3 | Signing / key custody (user-wallet vs custodial BFF signer) | OPEN — client/SIWE wallet signing; the gateway holds no keys |
+| OQ-GW-4 | Cross-instance idempotency (per-instance cache vs shared store) | OPEN — per-instance best-effort; the kernel nonce is the safety backstop |
+| OQ-GW-5 | AuthZ scopes / multi-tenancy / browser-direct (CORS + HTTP/2) | OPEN — single token, BFF-fronted, HTTP/1.1 for v1 |
+| OQ-GW-6 | Post-submit seq (host wire extension vs event-stream correlation) | OPEN — stream correlation v1; measure demand first |
+| OQ-GW-7 | Address→actor-id resolution (gateway helper vs BFF supplies id) | OPEN — ids stay canonical; optional gateway address→id helper |
+| OQ-GW-8 | HTTP library (hand-rolled vs vetted sync crate vs reuse listener) | **RESOLVED** — vetted sync crate `tiny_http` (G1.0; `docs/audits/gateway_http_spike.md`) |
+| OQ-GW-9 | Read source (direct read-only SQLite vs indexer query server) | OPEN — SQLite-direct, read-only, same-host v1 (WAL constraint) |
+| OQ-GW-10 | Metrics surface (log-based vs a `/metrics` endpoint) | OPEN — both behind config; default log-based |
+| OQ-GW-11 | Licio contract surface | **RESOLVED** — §1.4 reconciliation (read-first behind a fail-closed flag) |
+| OQ-GW-12 | Seamless SSE catch-up (dedicated upstream sub vs backfill-then-reconnect) | OPEN — backfill-then-reconnect for v1 |
+
+The two **RESOLVED** entries (OQ-GW-8, OQ-GW-11) carry their resolution
+inline above; the ten OPEN entries carry their full trade-offs in the
+plan's §14 and are tracked here for citation.
 
 ---
 
