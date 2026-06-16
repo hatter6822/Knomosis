@@ -1091,7 +1091,8 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   schema (contract test).
 * **G1.6 — Read: balances** · M · deps: G1.2, G1.3. Broken into:
   * **G1.6a — `knomosis-storage` read-only open** · S · deps: — (lands in
-    `runtime/knomosis-storage/`). *Deliverable:* a new
+    `runtime/knomosis-storage/`) · **DONE** (resolution note at the end of this
+    bullet). *Deliverable:* a new
     `SqliteStorage::open_read_only(path, &options)` that opens an **existing**
     database (never `SQLITE_OPEN_CREATE`) and **without running migrations**,
     then **verifies** the on-disk `_meta.schema_version` is in the gateway's
@@ -1126,6 +1127,25 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     internal deferred reads); the open-flag choice + its empirical basis is
     recorded in the module docs. *This is the prerequisite the v0.3 plan
     assumed existed (v0.4 audit finding 1).*
+
+    **Resolution (DONE).**  Pure `SQLITE_OPEN_READ_ONLY` was found **sufficient
+    for every read view** — but only after correcting a code/intent gap the
+    v0.5 plan's "BudgetReadView is DEFERRED-read-only" assumption missed:
+    `BudgetReadView::remaining_this_epoch` took a `BEGIN IMMEDIATE` **write
+    lock** for a pure read, which a read-only connection cannot grant.  Rather
+    than fall back to `query_only` (the weaker, runtime-blocked isolation), the
+    root cause was fixed: a new `BEGIN DEFERRED` combined-read path
+    (`SqliteStorage::combined_read_transaction` +
+    `CombinedStorage::begin_combined_read_tx`, a non-breaking default-method
+    addition that `SqliteStorage` overrides) makes the read genuinely
+    read-only, so the gateway gets the **strongest structural** OS-level write
+    isolation and the indexer's budget read no longer blocks the writer.
+    `open_read_only` verifies the **exact** supported-schema set (membership,
+    not `≥`) plus an optional caller-supplied required-cell guard — the
+    `c/identifier` check is supplied by the caller, keeping `knomosis-storage`
+    agnostic to the indexer's key conventions.  Covered by 12 `knomosis-storage`
+    tests + the `knomosis-indexer/tests/read_only_views.rs` acceptance suite (3
+    tests); workspace clippy `-D warnings` + the full 2011-test suite stay green.
   * **G1.6b — Balances endpoints** · S · deps: G1.6a. *Deliverable:*
     `reads/store.rs` (open + snapshot helper) + `reads/balances.rs`:
     `GET /actors/{id}/balances` (via `BalanceView::scan_all` filtered to

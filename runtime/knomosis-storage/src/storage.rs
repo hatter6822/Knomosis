@@ -116,6 +116,51 @@ pub enum StorageError {
         reason: String,
     },
 
+    /// A [`crate::sqlite::SqliteStorage::open_read_only`] call
+    /// targeted a path that does not exist.  Unlike
+    /// [`crate::sqlite::SqliteStorage::open`], the read-only path
+    /// never creates the database, so a missing file is a
+    /// configuration / readiness error, surfaced distinctly so a
+    /// read-only consumer (e.g. the Knomosis gateway) can map it to
+    /// a "not ready" state rather than a generic backend failure.
+    #[error("read-only open: database not found at {path}")]
+    DatabaseNotFound {
+        /// The path that was requested.
+        path: String,
+    },
+
+    /// A [`crate::sqlite::SqliteStorage::open_read_only`] call found
+    /// an on-disk `_meta.schema_version` that is not a member of the
+    /// caller's explicit supported set.  Unlike the migration
+    /// runner's `>` forward-incompat check, the read-only path
+    /// requires an EXACT membership match: a consumer built against
+    /// schema `{2}` must refuse a future schema `3` database (whose
+    /// table *semantics* may have changed) rather than silently
+    /// misreading it.
+    #[error("read-only open: on-disk schema version {found} not in supported set {supported:?}")]
+    SchemaVersionUnsupported {
+        /// The schema version recorded on disk.
+        found: u32,
+        /// The versions the caller declared support for.
+        supported: Vec<u32>,
+    },
+
+    /// A [`crate::sqlite::SqliteStorage::open_read_only`] call's
+    /// required-cell precondition failed: a key the caller asked to
+    /// verify (e.g. the indexer's deployment-identity cell
+    /// `c/identifier`) was absent or held a value other than the
+    /// expected one.  Lets a consumer refuse to read a database
+    /// belonging to a different deployment.
+    #[error("read-only open: required cell {key} mismatch (expected {expected}, found {found})")]
+    RequiredCellMismatch {
+        /// The verified key, rendered for diagnostics.
+        key: String,
+        /// The expected value, rendered for diagnostics.
+        expected: String,
+        /// The on-disk value (or `<absent>`), rendered for diagnostics.
+        found: String,
+    },
+
     /// Catch-all for backend errors that don't fit one of the
     /// typed variants above.  Used only when the backend's error
     /// type doesn't map onto a more specific variant.
@@ -353,5 +398,34 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
         let storage: StorageError = io_err.into();
         assert!(storage.to_string().starts_with("storage I/O error: "));
+    }
+
+    /// The read-only-open error variants render stable, operator-
+    /// readable Display strings.
+    #[test]
+    fn read_only_error_display_shapes() {
+        let nf = StorageError::DatabaseNotFound {
+            path: "/var/lib/knomosis/index.db".to_string(),
+        };
+        assert!(nf.to_string().contains("database not found at"));
+        assert!(nf.to_string().contains("/var/lib/knomosis/index.db"));
+
+        let sv = StorageError::SchemaVersionUnsupported {
+            found: 3,
+            supported: vec![2],
+        };
+        assert!(sv.to_string().contains("schema version 3"));
+        assert!(sv.to_string().contains("[2]"));
+
+        let rc = StorageError::RequiredCellMismatch {
+            key: "c/identifier".to_string(),
+            expected: "alpha".to_string(),
+            found: "<absent>".to_string(),
+        };
+        assert!(rc
+            .to_string()
+            .contains("required cell c/identifier mismatch"));
+        assert!(rc.to_string().contains("expected alpha"));
+        assert!(rc.to_string().contains("found <absent>"));
     }
 }

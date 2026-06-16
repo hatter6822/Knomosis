@@ -119,9 +119,16 @@
 //!     bound parameters — no string interpolation.  Defends against
 //!     SQL injection at the type system level even though the
 //!     caller never supplies SQL.
-//!   * Database files are opened with `OpenFlags::SQLITE_OPEN_READ_WRITE
-//!     | SQLITE_OPEN_CREATE`; the parent directory is not modified
-//!     beyond the file itself plus the `*-wal` / `*-shm` sidecars.
+//!   * Read-write consumers open via [`sqlite::SqliteStorage::open`]
+//!     (`SQLITE_OPEN_READ_WRITE | SQLITE_OPEN_CREATE`); the parent
+//!     directory is not modified beyond the file itself plus the
+//!     `*-wal` / `*-shm` sidecars.  A **read-only** consumer (e.g.
+//!     the Knomosis gateway) instead uses
+//!     [`sqlite::SqliteStorage::open_read_only`], which opens with
+//!     `SQLITE_OPEN_READ_ONLY` (never `CREATE`, never migrating) so
+//!     the OS/SQLite layer refuses writes STRUCTURALLY — the
+//!     strongest read-isolation guarantee (a logic bug in the
+//!     consumer cannot mutate the writer's database).
 
 #![doc(html_root_url = "https://docs.rs/knomosis-storage/0.2.0")]
 

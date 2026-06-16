@@ -198,6 +198,100 @@ impl SqliteOpenOptions {
     }
 }
 
+/// Options for [`SqliteStorage::open_read_only`].
+///
+/// A read-only consumer (e.g. the Knomosis gateway) declares:
+///
+///   * `supported_schema_versions` — the EXACT set of on-disk
+///     `_meta.schema_version` values it understands.  The open fails
+///     with [`StorageError::SchemaVersionUnsupported`] if the
+///     database's version is not a member.  This is a membership
+///     test, NOT a `>=` lower bound: a consumer built against `{2}`
+///     refuses a future `3` database (whose table *semantics* may
+///     have changed) rather than silently misreading it.  Defaults
+///     to exactly the binary's [`crate::migration::target_schema_version`].
+///   * `required_kv` — an optional `(key, expected_value)` cell the
+///     open verifies after connecting (e.g. the indexer's deployment
+///     identity, `c/identifier`), failing with
+///     [`StorageError::RequiredCellMismatch`] on absence/mismatch so
+///     a consumer never reads a database belonging to a different
+///     deployment.  Defaults to `None` (the storage layer stays
+///     agnostic to the caller's key conventions).
+///   * `busy_timeout_ms` — SQLite busy timeout for the read
+///     connection (absorbs a brief WAL checkpoint by the writer).
+#[derive(Clone, Debug)]
+pub struct ReadOnlyOpenOptions {
+    supported_schema_versions: Vec<u32>,
+    required_kv: Option<(Vec<u8>, Vec<u8>)>,
+    busy_timeout_ms: u32,
+}
+
+impl Default for ReadOnlyOpenOptions {
+    fn default() -> Self {
+        Self {
+            supported_schema_versions: vec![crate::migration::target_schema_version()],
+            required_kv: None,
+            busy_timeout_ms: 5_000,
+        }
+    }
+}
+
+impl ReadOnlyOpenOptions {
+    /// Default options: support exactly the binary's target schema
+    /// version, no required cell, 5-second busy timeout.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Replace the supported-schema-version set.  In practice this
+    /// must be non-empty — an empty set rejects every database.
+    #[must_use]
+    pub fn with_supported_schema_versions(mut self, versions: impl Into<Vec<u32>>) -> Self {
+        self.supported_schema_versions = versions.into();
+        self
+    }
+
+    /// Require an exact `(key, value)` cell to be present after open
+    /// (e.g. a deployment-identity guard such as `c/identifier`).
+    #[must_use]
+    pub fn with_required_cell(
+        mut self,
+        key: impl Into<Vec<u8>>,
+        expected: impl Into<Vec<u8>>,
+    ) -> Self {
+        self.required_kv = Some((key.into(), expected.into()));
+        self
+    }
+
+    /// Override the busy timeout (ms).
+    #[must_use]
+    pub fn with_busy_timeout_ms(mut self, ms: u32) -> Self {
+        self.busy_timeout_ms = ms;
+        self
+    }
+}
+
+/// Render an opaque byte string for operator-facing diagnostics: as
+/// text when it is printable ASCII (keys like `c/identifier`), else
+/// as a `0x`-prefixed hex dump.  Panic-free.
+fn render_bytes(bytes: &[u8]) -> String {
+    let printable = bytes
+        .iter()
+        .all(|&b| b == b'/' || b == b' ' || b.is_ascii_graphic());
+    if printable {
+        String::from_utf8_lossy(bytes).into_owned()
+    } else {
+        let mut s = String::with_capacity(2 + bytes.len() * 2);
+        s.push_str("0x");
+        for &b in bytes {
+            s.push(char::from_digit(u32::from(b >> 4), 16).unwrap_or('?'));
+            s.push(char::from_digit(u32::from(b & 0x0f), 16).unwrap_or('?'));
+        }
+        s
+    }
+}
+
 /// SQLite-backed implementation of [`Storage`].
 ///
 /// Open a database via [`SqliteStorage::open`] (filesystem path),
@@ -284,6 +378,124 @@ impl SqliteStorage {
             path: None,
         };
         storage.configure_and_migrate(options)?;
+        Ok(storage)
+    }
+
+    /// Open an EXISTING database at `path` in **read-only** mode.
+    ///
+    /// Unlike [`Self::open`], this:
+    ///
+    ///   * opens with `SQLITE_OPEN_READ_ONLY` (never `CREATE`) — a
+    ///     missing file fails with [`StorageError::DatabaseNotFound`]
+    ///     rather than being created;
+    ///   * runs **no migrations** — the database is consumed as-is
+    ///     (a read-only consumer must never mutate the writer's
+    ///     schema);
+    ///   * verifies the on-disk `_meta.schema_version` is a member of
+    ///     `options.supported_schema_versions` (an EXACT membership
+    ///     test — see [`ReadOnlyOpenOptions`]);
+    ///   * optionally verifies a required `(key, value)` cell
+    ///     (`options.required_kv`).
+    ///
+    /// ## Structural write isolation
+    ///
+    /// The returned handle's write methods (`put` / `delete` /
+    /// `transaction` / `combined_transaction`) fail at the SQLite
+    /// layer with `SQLITE_READONLY`: the OS/SQLite layer refuses
+    /// writes STRUCTURALLY, the strongest read-isolation guarantee
+    /// (a logic bug in a read-only consumer *cannot* mutate the
+    /// database).  Read methods — `get` / `scan` / [`Storage::snapshot`]
+    /// (`BEGIN DEFERRED`) and [`Self::combined_read_transaction`]
+    /// (`BEGIN DEFERRED`) — function normally.  This was the load-
+    /// bearing motivation for the DEFERRED combined-read path: the
+    /// indexer's `BudgetReadView::remaining_this_epoch` previously
+    /// took a `BEGIN IMMEDIATE` write lock for a pure read, which a
+    /// read-only connection cannot grant; it now uses the DEFERRED
+    /// read, so every read view is read-only-compatible and pure
+    /// `SQLITE_OPEN_READ_ONLY` suffices (no `query_only` fallback
+    /// required).
+    ///
+    /// ## WAL + live writer
+    ///
+    /// For a WAL-mode database (the production indexer default), a
+    /// read-only connection can read committed data **only while the
+    /// writer is live** (the `-shm`/`-wal` sidecars exist and are
+    /// mapped — a read-only connection cannot create them).  A
+    /// read-only consumer therefore co-locates with the writer and
+    /// gates readiness on the writer being up.  After a clean writer
+    /// shutdown (WAL checkpointed away), the plain database file is
+    /// also readable read-only.
+    ///
+    /// # Errors
+    ///
+    /// * [`StorageError::DatabaseNotFound`] — `path` does not exist.
+    /// * [`StorageError::SchemaVersionUnsupported`] — on-disk schema
+    ///   is not in the supported set.
+    /// * [`StorageError::RequiredCellMismatch`] — a required cell is
+    ///   absent or mismatched.
+    /// * [`StorageError::Backend`] — the open or a pragma failed.
+    pub fn open_read_only(
+        path: impl AsRef<Path>,
+        options: &ReadOnlyOpenOptions,
+    ) -> Result<Self, StorageError> {
+        let path_ref = path.as_ref();
+        // A missing file is a distinct, actionable condition: the
+        // read-only path never creates the database, so map it to a
+        // typed error a consumer can surface as "not ready" rather
+        // than a generic backend fault.
+        if !path_ref.exists() {
+            return Err(StorageError::DatabaseNotFound {
+                path: path_ref.display().to_string(),
+            });
+        }
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let conn = Connection::open_with_flags(path_ref, flags).map_err(|e| {
+            StorageError::Backend(format!("open_read_only {}: {e}", path_ref.display()))
+        })?;
+        // Busy timeout: absorb a brief WAL checkpoint by the writer.
+        conn.busy_timeout(std::time::Duration::from_millis(u64::from(
+            options.busy_timeout_ms,
+        )))
+        .map_err(|e| StorageError::Backend(format!("set busy_timeout: {e}")))?;
+        // Connection-level pragmas valid on a read-only connection
+        // (none write to the database file): keep temp tables in RAM,
+        // and set `query_only` as belt-and-suspenders OVER the
+        // structural READ_ONLY open.  We deliberately do NOT touch
+        // `journal_mode` / `synchronous` — those write the file
+        // header and would fail on a read-only connection (the writer
+        // owns the journal mode).  `foreign_keys` is likewise omitted:
+        // it is write-path defence-in-depth with no effect on reads.
+        conn.pragma_update(None, "temp_store", "MEMORY")
+            .map_err(|e| StorageError::Backend(format!("set temp_store: {e}")))?;
+        conn.pragma_update(None, "query_only", "ON")
+            .map_err(|e| StorageError::Backend(format!("set query_only: {e}")))?;
+        let storage = Self {
+            conn: Mutex::new(conn),
+            path: Some(path_ref.to_path_buf()),
+        };
+        // Verify the schema version is EXACTLY supported (membership,
+        // not a `>=` lower bound — finding #9: a v2 consumer must
+        // refuse a future v3 DB rather than misread it).
+        let found = storage.schema_version()?;
+        if !options.supported_schema_versions.contains(&found) {
+            return Err(StorageError::SchemaVersionUnsupported {
+                found,
+                supported: options.supported_schema_versions.clone(),
+            });
+        }
+        // Verify the required deployment-identity cell, if requested.
+        if let Some((key, expected)) = &options.required_kv {
+            let found_val = storage.get(key)?;
+            if found_val.as_deref() != Some(expected.as_slice()) {
+                return Err(StorageError::RequiredCellMismatch {
+                    key: render_bytes(key),
+                    expected: render_bytes(expected),
+                    found: found_val
+                        .as_deref()
+                        .map_or_else(|| "<absent>".to_string(), render_bytes),
+                });
+            }
+        }
         Ok(storage)
     }
 
@@ -387,6 +599,32 @@ impl SqliteStorage {
     > {
         let guard = self.lock();
         crate::combined_transaction::SqliteCombinedTransaction::begin(guard)
+    }
+
+    /// Begin a **read-only** combined transaction (`BEGIN
+    /// DEFERRED`).  Read-only peer of [`Self::combined_transaction`]:
+    /// it acquires only a SHARED READ lock, so it functions over a
+    /// `SQLITE_OPEN_READ_ONLY` connection (see [`Self::open_read_only`])
+    /// and never blocks a concurrent writer.  Callers invoke only
+    /// the read methods (`kv_get`, `kv_scan`, `get_*`) on the
+    /// returned handle.
+    ///
+    /// `knomosis-indexer`'s `BudgetReadView::remaining_this_epoch`
+    /// uses this to read the per-epoch grants + consumed cells under
+    /// one consistent snapshot without grabbing the write lock.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::combined_transaction::CombinedTransactionError`]
+    /// on `BEGIN DEFERRED` failure.
+    pub fn combined_read_transaction(
+        &self,
+    ) -> Result<
+        crate::combined_transaction::SqliteCombinedTransaction<'_>,
+        crate::combined_transaction::CombinedTransactionError,
+    > {
+        let guard = self.lock();
+        crate::combined_transaction::SqliteCombinedTransaction::begin_deferred(guard)
     }
 }
 
@@ -1375,5 +1613,223 @@ mod tests {
         };
         assert_eq!(v1, v2);
         assert_eq!(v2, crate::migration::target_schema_version());
+    }
+
+    // ---- open_read_only (gateway G1.6a) -----------------------------
+
+    use super::ReadOnlyOpenOptions;
+    use crate::budget_storage::BudgetStorage;
+    use crate::combined_transaction::CombinedStorage;
+
+    /// Create a schema-v2 on-disk WAL database, seed it with kv +
+    /// budget data via the write path, and return the LIVE writer
+    /// (kept open so the WAL `-shm`/`-wal` sidecars stay mapped for
+    /// read-only readers — the production "indexer writer is live"
+    /// scenario) alongside the path.
+    fn seed_live_writer(dir: &tempfile::TempDir) -> (SqliteStorage, std::path::PathBuf) {
+        let path = dir.path().join("index.db");
+        let writer = SqliteStorage::open(&path).unwrap();
+        writer.put(b"b/some-balance", b"\x00\x01").unwrap();
+        writer.put(b"c/identifier", b"deployment-alpha").unwrap();
+        let mut tx = writer.combined_transaction().unwrap();
+        tx.credit_actor_budget_current_epoch_grants(7, 100).unwrap();
+        tx.credit_actor_budget_current_epoch_consumed(7, 30)
+            .unwrap();
+        tx.commit().unwrap();
+        (writer, path)
+    }
+
+    /// A read-only handle reads committed kv values byte-identically
+    /// to the writer, while the writer is live (WAL).
+    #[test]
+    fn read_only_reads_committed_kv() {
+        let dir = tempfile::tempdir().unwrap();
+        let (writer, path) = seed_live_writer(&dir);
+        let ro = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();
+        assert_eq!(ro.get(b"b/some-balance").unwrap(), Some(vec![0x00, 0x01]));
+        assert_eq!(
+            ro.get(b"c/identifier").unwrap(),
+            Some(b"deployment-alpha".to_vec())
+        );
+        assert_eq!(ro.get(b"absent").unwrap(), None);
+        let rows = ro.scan(b"b/").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, b"b/some-balance");
+        drop(writer);
+    }
+
+    /// Budget reads function over a read-only handle — the load-
+    /// bearing G1.6a acceptance.  Both the direct `BudgetStorage`
+    /// SELECTs and the DEFERRED combined-read transaction (which is
+    /// exactly what `BudgetReadView::remaining_this_epoch` now uses)
+    /// work without the write lock.
+    #[test]
+    fn read_only_budget_reads_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let (writer, path) = seed_live_writer(&dir);
+        let ro = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();
+        assert_eq!(ro.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        assert_eq!(ro.get_actor_budget_current_epoch_consumed(7).unwrap(), 30);
+        let rtx = ro.combined_read_transaction().unwrap();
+        assert_eq!(rtx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        assert_eq!(rtx.get_actor_budget_current_epoch_consumed(7).unwrap(), 30);
+        rtx.rollback().unwrap();
+        let btx = ro.begin_combined_read_tx().unwrap();
+        assert_eq!(btx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        btx.rollback().unwrap();
+        drop(writer);
+    }
+
+    /// A `snapshot` (`BEGIN DEFERRED`) works over a read-only handle.
+    #[test]
+    fn read_only_snapshot_works() {
+        let dir = tempfile::tempdir().unwrap();
+        let (writer, path) = seed_live_writer(&dir);
+        let ro = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();
+        let snap = ro.snapshot().unwrap();
+        assert_eq!(
+            snap.get(b"c/identifier").unwrap(),
+            Some(b"deployment-alpha".to_vec())
+        );
+        drop(snap);
+        drop(writer);
+    }
+
+    /// Writes through a read-only handle fail STRUCTURALLY (the
+    /// SQLite layer refuses them); the database is untouched.
+    #[test]
+    fn read_only_rejects_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (writer, path) = seed_live_writer(&dir);
+        let ro = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();
+        assert!(ro.put(b"x", b"y").is_err());
+        assert!(ro.delete(b"b/some-balance").is_err());
+        assert!(ro.transaction().is_err());
+        assert!(ro.combined_transaction().is_err());
+        // The writer still sees the original value (no mutation leaked).
+        assert_eq!(
+            writer.get(b"b/some-balance").unwrap(),
+            Some(vec![0x00, 0x01])
+        );
+        drop(writer);
+    }
+
+    /// A missing file is refused with `DatabaseNotFound` (no CREATE).
+    #[test]
+    fn read_only_missing_file_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("does-not-exist.db");
+        match SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()) {
+            Err(StorageError::DatabaseNotFound { path: p }) => {
+                assert!(p.contains("does-not-exist.db"));
+            }
+            other => panic!("expected DatabaseNotFound, got {other:?}"),
+        }
+        assert!(!path.exists(), "read-only open must not create the file");
+    }
+
+    /// On-disk schema version outside the supported set is refused —
+    /// EXACT membership, not a `>=` lower bound.
+    #[test]
+    fn read_only_schema_version_must_match_exactly() {
+        let dir = tempfile::tempdir().unwrap();
+        let (writer, path) = seed_live_writer(&dir);
+        let target = crate::migration::target_schema_version();
+        // On-disk version is `target` (2).  Supported = {3} → reject.
+        let opts = ReadOnlyOpenOptions::new().with_supported_schema_versions([3u32]);
+        match SqliteStorage::open_read_only(&path, &opts) {
+            Err(StorageError::SchemaVersionUnsupported { found, supported }) => {
+                assert_eq!(found, target);
+                assert_eq!(supported, vec![3]);
+            }
+            other => panic!("expected SchemaVersionUnsupported, got {other:?}"),
+        }
+        // Supported set that includes the on-disk version → accepted.
+        let ok = ReadOnlyOpenOptions::new().with_supported_schema_versions([1u32, target]);
+        assert!(SqliteStorage::open_read_only(&path, &ok).is_ok());
+        drop(writer);
+    }
+
+    /// A future-versioned DB (on-disk version greater than the
+    /// supported set) is refused rather than silently misread
+    /// (finding #9).
+    #[test]
+    fn read_only_future_schema_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let (writer, path) = seed_live_writer(&dir);
+        // Simulate a future writer bumping the on-disk schema to 3.
+        writer
+            .lock_connection()
+            .execute(
+                "UPDATE _meta SET value = '3' WHERE key = 'schema_version'",
+                [],
+            )
+            .unwrap();
+        let opts = ReadOnlyOpenOptions::new()
+            .with_supported_schema_versions([crate::migration::target_schema_version()]);
+        match SqliteStorage::open_read_only(&path, &opts) {
+            Err(StorageError::SchemaVersionUnsupported { found, .. }) => assert_eq!(found, 3),
+            other => panic!("expected SchemaVersionUnsupported, got {other:?}"),
+        }
+        drop(writer);
+    }
+
+    /// The required-cell guard accepts a matching identity and
+    /// rejects a mismatch / absence.
+    #[test]
+    fn read_only_required_cell_guard() {
+        let dir = tempfile::tempdir().unwrap();
+        let (writer, path) = seed_live_writer(&dir);
+        let ok = ReadOnlyOpenOptions::new()
+            .with_required_cell(b"c/identifier".to_vec(), b"deployment-alpha".to_vec());
+        assert!(SqliteStorage::open_read_only(&path, &ok).is_ok());
+
+        let bad = ReadOnlyOpenOptions::new()
+            .with_required_cell(b"c/identifier".to_vec(), b"deployment-beta".to_vec());
+        match SqliteStorage::open_read_only(&path, &bad) {
+            Err(StorageError::RequiredCellMismatch {
+                key,
+                expected,
+                found,
+            }) => {
+                assert_eq!(key, "c/identifier");
+                assert_eq!(expected, "deployment-beta");
+                assert_eq!(found, "deployment-alpha");
+            }
+            other => panic!("expected RequiredCellMismatch, got {other:?}"),
+        }
+
+        let absent =
+            ReadOnlyOpenOptions::new().with_required_cell(b"c/missing".to_vec(), b"x".to_vec());
+        match SqliteStorage::open_read_only(&path, &absent) {
+            Err(StorageError::RequiredCellMismatch { found, .. }) => assert_eq!(found, "<absent>"),
+            other => panic!("expected RequiredCellMismatch, got {other:?}"),
+        }
+        drop(writer);
+    }
+
+    /// After a CLEAN writer shutdown (WAL checkpointed away), the
+    /// plain database file is still readable read-only.
+    #[test]
+    fn read_only_after_writer_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = {
+            let (writer, path) = seed_live_writer(&dir);
+            drop(writer); // clean close → checkpoint
+            path
+        };
+        let ro = SqliteStorage::open_read_only(&path, &ReadOnlyOpenOptions::new()).unwrap();
+        assert_eq!(
+            ro.get(b"c/identifier").unwrap(),
+            Some(b"deployment-alpha".to_vec())
+        );
+    }
+
+    /// `render_bytes` renders printable keys as text and opaque
+    /// values as hex.
+    #[test]
+    fn render_bytes_text_and_hex() {
+        assert_eq!(super::render_bytes(b"c/identifier"), "c/identifier");
+        assert_eq!(super::render_bytes(&[0x00, 0xAB, 0xFF]), "0x00abff");
     }
 }
