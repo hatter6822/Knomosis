@@ -74,6 +74,35 @@ pub fn decode(input: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// The standard Base64 alphabet (RFC 4648 §4).
+const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Encode bytes as standard Base64 (`+/`, `=` padding) — the inverse of
+/// [`decode`].  Used to forward an opaque / unknown event payload as a
+/// JSON string (G3.2).
+#[must_use]
+pub fn encode(input: &[u8]) -> String {
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0];
+        let b1 = chunk.get(1).copied().unwrap_or(0);
+        let b2 = chunk.get(2).copied().unwrap_or(0);
+        out.push(ALPHABET[(b0 >> 2) as usize] as char);
+        out.push(ALPHABET[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(((b1 & 0x0F) << 2) | (b2 >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[(b2 & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
 /// Map one Base64 alphabet byte to its 6-bit value; `None` for any byte
 /// outside `A-Za-z0-9+/`.
 fn sextet(b: u8) -> Option<u8> {
@@ -89,32 +118,16 @@ fn sextet(b: u8) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::decode;
+    use super::{decode, encode};
 
-    /// A tiny reference encoder so the tests assert against independent
-    /// golden vectors (and round-trips).
-    fn encode(input: &[u8]) -> String {
-        const ALPHA: &[u8; 64] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut out = String::new();
-        for chunk in input.chunks(3) {
-            let b0 = chunk[0];
-            let b1 = chunk.get(1).copied().unwrap_or(0);
-            let b2 = chunk.get(2).copied().unwrap_or(0);
-            out.push(ALPHA[(b0 >> 2) as usize] as char);
-            out.push(ALPHA[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
-            if chunk.len() > 1 {
-                out.push(ALPHA[(((b1 & 0x0F) << 2) | (b2 >> 6)) as usize] as char);
-            } else {
-                out.push('=');
-            }
-            if chunk.len() > 2 {
-                out.push(ALPHA[(b2 & 0x3F) as usize] as char);
-            } else {
-                out.push('=');
-            }
-        }
-        out
+    #[test]
+    fn encode_known_vectors() {
+        // RFC 4648 §10 test vectors (the encode direction).
+        assert_eq!(encode(b""), "");
+        assert_eq!(encode(b"f"), "Zg==");
+        assert_eq!(encode(b"fo"), "Zm8=");
+        assert_eq!(encode(b"foo"), "Zm9v");
+        assert_eq!(encode(b"foobar"), "Zm9vYmFy");
     }
 
     #[test]

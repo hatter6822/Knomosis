@@ -54,11 +54,17 @@ The companion machine-readable contract is
 > **G2.4** (the `Idempotency-Key` replay cache — bounded, TTL'd,
 > LRU-evicted), and **G2.5** (the submit test surface) have also landed:
 > **the submit track is complete** (only the optional G2.1c pipelining is
-> deferred). The events (**G3**) track has begun with **G3.1** (the
+> deferred). The events (**G3**) track is underway with **G3.1** (the
 > resilient `UpstreamSubscription` event-subscribe client — reconnect /
-> backoff / gap-surfacing / staleness watchdog). Next: **G3.2** (event
-> decode → JSON) → **G3.3** (`/v1/events` backfill) → **G3.4** (the SSE
-> fan-out) + the remaining G4 hardening (TLS, graceful drain).
+> backoff / gap-surfacing / staleness watchdog) and **G3.2** (the event
+> decode → JSON renderer `events/decode.rs::render_event` — the §6.2
+> envelope over `decoder::decode_event`: bigint→decimal string,
+> bytes→`0x`-hex, `outcome` name, forward-unknown for tags ≥23, and a
+> fail-closed `Corrupt` on a known-tag decode failure; G3.2c's cross-stack
+> corpus pin is deferred to land alongside the first endpoint that surfaces
+> the JSON). Next: **G3.3** (`/v1/events` backfill) → **G3.4** (the SSE
+> fan-out) → **G3.5** (`/v1/events/stream` wiring) + the remaining G4
+> hardening (TLS, graceful drain).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1502,29 +1508,44 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   and the last-delivered seq after a drop / `LagExceeded`, and the oldest
   seq after a `Truncated`; connect-failure surfaces as a `Reconnecting`
   item.
-* **G3.2 — Event decode → JSON** · M · deps: G3.1. Broken into:
-  * **G3.2a — Classify + forward-unknown** · S. `events/decode.rs`:
-    `event_type::classify` → type name; tags ≥23 → `type:"unknown"` +
+* **G3.2 — Event decode → JSON** · M · deps: G3.1 · **DONE (a + b; c
+  deferred).**  `events/decode.rs`: `render_event(payload, seq, index)
+  → Result<EventJson, DecodeError>` classifies via
+  `event_type::EventClass::classify` and renders the §6.2 envelope
+  (`{seq, index, type, actor?, resource?, payload}`).
+  * **G3.2a — Classify + forward-unknown** · S · **DONE.** `events/decode.rs`:
+    `EventClass::classify` → type name; tags ≥23 → `type:"unknown"` +
     base64 `raw` (never reject — additive-extension policy, §11.1).
-    *Acceptance:* an injected future tag forwards verbatim with the right
-    shape.
-  * **G3.2b — Typed render (all 23 tags)** · M. For known tags,
-    `decoder::decode_event` → `Event` → the §6.2 JSON table (bigint→string,
-    bytes→`0x`-hex, `outcome` name). A *decode failure on a known tag*
+    *Acceptance:* `unknown_tag_is_forwarded_as_base64_raw` injects a
+    well-formed 9-byte head carrying tag 99 and asserts the verbatim
+    forward shape.
+  * **G3.2b — Typed render (all 23 tags)** · M · **DONE.** For known tags,
+    `decoder::decode_event` → `Event` → the §6.2 JSON table (bigint→decimal
+    string, bytes→`0x`-hex, `outcome` name, lowerCamelCase keys, top-level
+    `actor`/`resource` denormalisation). A *decode failure on a known tag*
     (truncated/over-long payload — not an unknown tag, which G3.2a forwards)
-    is a corruption signal and **fails closed**: drop the SSE stream with
-    `event: error` carrying the dedicated `decode_error` value (added to
-    `EventStreamError.error`, §15B) / fail the REST page with a problem,
-    never silently skip the record and never mislabel it as
-    `server_shutdown`/`lag_exceeded` (no silent gaps, §2 principle 7).
-    *Acceptance:* a unit test per tag asserts the exact JSON shape;
-    round-trips a decoded `Event`; a truncated known-tag payload yields a
-    `decode_error` close (does not panic — §3.2).
-  * **G3.2c — Cross-stack pin** · S · deps: G3.2b. `tests/
-    cross_stack_events.rs`: decode real `knomosis extract-events` output
-    and assert the gateway JSON matches the Lean reference for tags
-    `0..=22` (reuse the `.cxsf` corpus pattern). *Acceptance:* CI gate
-    green; a deliberate field-rename breaks it.
+    is a corruption signal and **fails closed** (`DecodeError::Corrupt`):
+    the consumer drops the SSE stream with `event: error` carrying the
+    dedicated `decode_error` value (added to `EventStreamError.error`, §15B)
+    / fails the REST page with a problem, never silently skipping the record
+    and never mislabelling it as `server_shutdown`/`lag_exceeded` (no silent
+    gaps, §2 principle 7). *Acceptance (8 unit tests):* the contract
+    `balanceChanged` example matches field-for-field; a `> 2^53` amount
+    renders as a decimal *string* (never a lossy JSON number); byte fields
+    render as `0x`-hex; verdict outcomes render as names; every registry tag
+    `0..=22` round-trips (`encode_event` → `render_event`) carrying its name;
+    a truncated known-tag payload yields `Corrupt` (does not panic — §3.2);
+    an empty head yields `Unparseable`.
+  * **G3.2c — Cross-stack pin** · S · deps: G3.2b · **DEFERRED (additive CI
+    gate).** `tests/cross_stack_events.rs`: decode real `knomosis
+    extract-events` output and assert the gateway JSON matches the Lean
+    reference for tags `0..=22` (reuse the `.cxsf` corpus pattern). Decoder
+    correctness is already established by the per-tag `encode_event` →
+    `render_event` round-trip over the cross-stack-validated
+    `knomosis-indexer` codec; the corpus pin is a strictly-additive
+    belt-and-braces gate landed alongside G3.3/G3.5 (the first endpoints to
+    surface the rendered JSON to a client). *Acceptance:* CI gate green;
+    a deliberate field-rename breaks it.
 * **G3.3 — `GET /events` backfill** · M · deps: G3.1, G3.2.
   `events/backfill.rs` builds a *bounded page* API over the *unbounded*
   `SUBSCRIBE` stream — which needs three things the naïve "open a sub, drain
