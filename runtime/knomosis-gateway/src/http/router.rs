@@ -95,6 +95,17 @@ pub enum Route {
         /// Optional repeatable event-type-name filter (empty = all types).
         types: Vec<String>,
     },
+    /// `GET /v1/events/stream?since={cursor}&type={t}...` — the live
+    /// Server-Sent-Events stream over the fan-out (§6.1).  `Last-Event-ID`
+    /// (a header) takes precedence over `since` and is read in the IO shell,
+    /// not here.
+    EventStream {
+        /// The `since` cursor, if present (absent ⇒ `Last-Event-ID` / live
+        /// tail); `Some(0)` is the live tail.
+        since: Option<u64>,
+        /// Optional repeatable event-type-name filter (empty = all types).
+        types: Vec<String>,
+    },
     /// A structurally-matched path with a malformed parameter (e.g. a
     /// non-numeric id).  Carries the problem `detail`.
     BadRequest {
@@ -223,6 +234,7 @@ pub fn route(method: &str, path: &str, query: &str) -> Route {
         "/v1/info" => get_only(method, Route::Info),
         "/v1/actions" => post_only(method, Route::SubmitAction),
         "/v1/events" => route_v1_events(method, query),
+        "/v1/events/stream" => route_v1_event_stream(method, query),
         _ => route_v1_actors(method, path)
             .or_else(|| route_v1_pools(method, path, query))
             .unwrap_or_else(|| Route::NotFound {
@@ -348,6 +360,32 @@ fn route_v1_events(method: &str, query: &str) -> Route {
     Route::Events {
         since,
         limit,
+        types: query_param_all(query, "type"),
+    }
+}
+
+/// Parse `GET /v1/events/stream?since={cursor}&type={t}...` — the live SSE
+/// stream.  `since` is **optional** here (absent ⇒ the `Last-Event-ID`
+/// header / live tail; a malformed value ⇒ [`Route::BadRequest`]); `type`
+/// is the repeatable event-type filter.  A non-`GET` method yields
+/// [`Route::MethodNotAllowed`].
+fn route_v1_event_stream(method: &str, query: &str) -> Route {
+    if method != "GET" {
+        return Route::MethodNotAllowed { allow: "GET" };
+    }
+    let since = match query_param(query, "since") {
+        None => None,
+        Some(raw) => match raw.parse::<u64>() {
+            Ok(s) => Some(s),
+            Err(_) => {
+                return Route::BadRequest {
+                    detail: format!("invalid since cursor {raw:?}"),
+                }
+            }
+        },
+    };
+    Route::EventStream {
+        since,
         types: query_param_all(query, "type"),
     }
 }
@@ -664,6 +702,39 @@ mod tests {
     fn events_route_method_discipline() {
         assert_eq!(
             route("POST", "/v1/events", ""),
+            Route::MethodNotAllowed { allow: "GET" }
+        );
+    }
+
+    #[test]
+    fn event_stream_route_parses_optional_since_and_types() {
+        // No query → live tail (since None), no filter.
+        assert_eq!(
+            route("GET", "/v1/events/stream", ""),
+            Route::EventStream {
+                since: None,
+                types: vec![],
+            }
+        );
+        // `since` + a repeatable `type` filter.
+        assert_eq!(
+            route(
+                "GET",
+                "/v1/events/stream",
+                "since=104233&type=balanceChanged&type=nonceAdvanced"
+            ),
+            Route::EventStream {
+                since: Some(104_233),
+                types: vec!["balanceChanged".to_string(), "nonceAdvanced".to_string()],
+            }
+        );
+        // A malformed `since` → 400; a non-GET → 405.
+        assert!(matches!(
+            route("GET", "/v1/events/stream", "since=soon"),
+            Route::BadRequest { .. }
+        ));
+        assert_eq!(
+            route("POST", "/v1/events/stream", ""),
             Route::MethodNotAllowed { allow: "GET" }
         );
     }

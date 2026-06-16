@@ -18,4 +18,5 @@
 pub mod backfill;
 pub mod decode;
 pub mod fanout;
+pub mod stream;
 pub mod subscribe;

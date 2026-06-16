@@ -20,10 +20,14 @@
 //! connection-pool refactor is a future throughput optimisation,
 //! OQ-GW-9.)
 
+use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::Arc;
+
 use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
 
 use crate::auth::Auth;
 use crate::config::{Config, IDEMPOTENCY_MAX_ENTRIES};
+use crate::events::fanout::FanoutState;
 use crate::rate_limit::RateLimiter;
 use crate::submit::idempotency::IdempotencyCache;
 use crate::submit::pool::HostPool;
@@ -91,6 +95,20 @@ pub struct AppState {
     /// The `Idempotency-Key` response cache (G2.4); disabled when
     /// `--idempotency-ttl-secs` is `0`.
     pub idempotency: IdempotencyCache,
+    /// The shared SSE fan-out ring (G3.4), present iff
+    /// `--event-subscribe-addr` was configured.  `serve` spawns the single
+    /// upstream multiplexer ([`crate::events::fanout::mux::Mux`]) feeding
+    /// it; the `GET /v1/events/stream` handlers read it.  `None` makes the
+    /// stream endpoint answer `503` (events disabled).
+    pub fanout: Option<Arc<FanoutState>>,
+    /// The count of live SSE streams, bounded by `config.sse.max_streams`
+    /// (an over-cap connect is `503`).  Each stream runs on its own thread
+    /// and decrements this on exit (G3.5).
+    pub active_streams: Arc<AtomicUsize>,
+    /// The process-wide shutdown flag shared by the mux + every live SSE
+    /// stream; setting it stops them (graceful drain is G4.4 — today it is
+    /// only ever set on test teardown).
+    pub shutdown: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -137,6 +155,11 @@ impl AppState {
         });
         let idempotency =
             IdempotencyCache::new(config.idempotency_ttl_secs, IDEMPOTENCY_MAX_ENTRIES);
+        // The fan-out ring exists iff an event-subscribe upstream is
+        // configured; `serve` spawns the mux that feeds it.
+        let fanout = config
+            .event_subscribe_addr
+            .map(|_| FanoutState::new(config.sse.ring_capacity));
         Ok(Self {
             config,
             reads,
@@ -144,6 +167,9 @@ impl AppState {
             rate_limiter,
             host_pool,
             idempotency,
+            fanout,
+            active_streams: Arc::new(AtomicUsize::new(0)),
+            shutdown: Arc::new(AtomicBool::new(false)),
         })
     }
 }
@@ -173,6 +199,7 @@ mod tests {
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
             idempotency_ttl_secs: 0,
+            sse: crate::config::SseConfig::default(),
         }
     }
 

@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use knomosis_gateway::config::{AdmissionStage, Config};
+use knomosis_gateway::config::{AdmissionStage, Config, SseConfig};
 use knomosis_gateway::http::spawn_handler_pool;
 use knomosis_gateway::state::AppState;
 use knomosis_host::frame::{read_frame, DEFAULT_MAX_FRAME_SIZE};
@@ -156,6 +156,7 @@ fn start_harness_cfg(
         request_deadline_ms: 5000,
         max_frame_size: 1024 * 1024,
         idempotency_ttl_secs: 60,
+        sse: SseConfig::default(),
     };
     let state = Arc::new(AppState::new(config).expect("open read-only state + load tokens"));
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
@@ -718,9 +719,11 @@ fn event_frame(seq: u64, actor: u64) -> Vec<u8> {
 }
 
 /// A minimal event-subscribe stand-in: on each connection it reads the
-/// 9-byte handshake, writes the scripted frames, then closes.  The gateway
-/// backfill stops on the first `seq > tip` (no idle wait needed), so a
-/// single connection suffices.
+/// 9-byte handshake, writes the scripted frames, then **holds the
+/// connection open** (idle) until test stop.  Holding (rather than closing)
+/// suits both consumers: the backfill stops on the first `seq > tip` before
+/// reaching EOF, and the SSE fan-out mux keeps its single live-tail
+/// subscription open without reconnect churn.
 struct MockEventSubscribe {
     addr: SocketAddr,
     stop: Arc<AtomicBool>,
@@ -748,8 +751,11 @@ impl MockEventSubscribe {
                                 break;
                             }
                         }
-                        // Drop the stream → EOF (the gateway has already
-                        // stopped on the beyond-tip frame).
+                        // Hold the connection open + idle until stop (no
+                        // reconnect churn for the live-tail mux).
+                        while !halt.load(Ordering::Relaxed) {
+                            thread::sleep(Duration::from_millis(5));
+                        }
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(5));
@@ -817,4 +823,166 @@ fn events_backfill_requires_auth_and_validates_query() {
     let bad = get(h.addr, "/v1/events?limit=0");
     assert_eq!(bad.status, 400);
     assert_eq!(bad.header("Content-Type"), Some("application/problem+json"));
+}
+
+/// A running gateway with the SSE fan-out mux started (mirroring `serve`),
+/// fed by a mock event-subscribe upstream.  No indexer is needed: the SSE
+/// path reads only the fan-out ring.
+struct SseHarness {
+    _dir: tempfile::TempDir,
+    state: Arc<AppState>,
+    server: Arc<tiny_http::Server>,
+    _workers: Vec<JoinHandle<()>>,
+    addr: SocketAddr,
+}
+
+impl Drop for SseHarness {
+    fn drop(&mut self) {
+        // Stop the mux + every live SSE stream, then nudge the accept loop.
+        self.state.shutdown.store(true, Ordering::Relaxed);
+        self.server.unblock();
+    }
+}
+
+/// Build a gateway wired to `event_subscribe_addr`, start the single fan-out
+/// mux (a long staleness timeout → one persistent subscription for the
+/// test), and spawn the handler pool.  The mux thread is detached; dropping
+/// the harness (then the mock) tears everything down.
+fn start_sse_harness(event_subscribe_addr: SocketAddr) -> SseHarness {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let token_path = dir.path().join("tokens");
+    std::fs::write(&token_path, TOKEN).expect("write token file");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600))
+            .expect("chmod token file");
+    }
+    let config = Config {
+        listen: "127.0.0.1:0".parse().unwrap(),
+        handler_threads: 4,
+        indexer_db: None,
+        free_tier: 0,
+        action_cost: 0,
+        epoch_length: 0,
+        gas_pool_actor: None,
+        deployment_id: "knx-sse".to_string(),
+        ok_admission_stage: AdmissionStage::Finalized,
+        host_addr: None,
+        event_subscribe_addr: Some(event_subscribe_addr),
+        auth_token_file: Some(token_path),
+        rate_limit_rps: 0,
+        host_pool_size: 8,
+        host_max_inflight: 8,
+        request_deadline_ms: 5000,
+        max_frame_size: 1024 * 1024,
+        idempotency_ttl_secs: 0,
+        sse: SseConfig::default(),
+    };
+    let state = Arc::new(AppState::new(config).expect("open SSE state"));
+    // Start the mux (mirrors `serve`), with a long staleness timeout so the
+    // single subscription persists for the whole test (no reconnect churn).
+    let mux = knomosis_gateway::events::fanout::mux::Mux::new(
+        event_subscribe_addr,
+        1024 * 1024,
+        Duration::from_secs(10),
+        Arc::clone(state.fanout.as_ref().expect("fanout present")),
+    );
+    let _mux = mux.spawn(Arc::clone(&state.shutdown)); // detached
+    let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
+    let addr = server.server_addr().to_ip().expect("ip addr");
+    let workers = spawn_handler_pool(&server, 4, &state).expect("spawn pool");
+    SseHarness {
+        _dir: dir,
+        state,
+        server,
+        _workers: workers,
+        addr,
+    }
+}
+
+/// The number of records currently retained in the harness's fan-out ring.
+fn ring_len(h: &SseHarness) -> usize {
+    use knomosis_gateway::events::fanout::ring::Cursor;
+    h.state
+        .fanout
+        .as_ref()
+        .unwrap()
+        .ring()
+        .records_after(Cursor::ORIGIN)
+        .len()
+}
+
+#[test]
+fn event_stream_serves_live_records_over_sse() {
+    // The mux ingests these live events into the ring; the SSE client then
+    // resumes from since=40 and streams 41.0 + 42.0 as composite-id records.
+    let mock = MockEventSubscribe::start(vec![event_frame(41, 7), event_frame(42, 9)]);
+    let h = start_sse_harness(mock.addr);
+
+    // Wait for the mux to ingest both events.
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while ring_len(&h) < 2 && std::time::Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(ring_len(&h), 2, "the mux ingested the live events");
+
+    // Open the SSE stream (authenticated) resuming from since=40.
+    let mut stream = TcpStream::connect(h.addr).expect("connect");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .expect("read timeout");
+    stream
+        .write_all(
+            format!(
+                "GET /v1/events/stream?since=40 HTTP/1.1\r\nHost: localhost\r\n\
+                 Authorization: Bearer {TOKEN}\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .expect("write request");
+
+    // Read until both records have arrived (or the deadline).
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while std::time::Instant::now() < deadline {
+        match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                buf.extend_from_slice(&chunk[..n]);
+                if String::from_utf8_lossy(&buf).contains("id: 42.0") {
+                    break;
+                }
+            }
+        }
+    }
+    let out = String::from_utf8_lossy(&buf);
+    // The SSE response head.
+    assert!(out.contains("HTTP/1.1 200 OK"));
+    assert!(out.contains("Content-Type: text/event-stream"));
+    assert!(out.contains("Cache-Control: no-store"));
+    // The composite-id records (§6.1).
+    assert!(
+        out.contains("id: 41.0\nevent: balanceChanged\ndata: {"),
+        "first record; got:\n{out}"
+    );
+    assert!(out.contains("id: 42.0\nevent: balanceChanged\ndata: {"));
+    // The §6.2 envelope carries the actor.
+    assert!(out.contains("\"actor\":\"9\""));
+
+    drop(stream);
+    drop(h);
+    drop(mock);
+}
+
+#[test]
+fn event_stream_without_upstream_is_503() {
+    // The default harness configures no --event-subscribe-addr → no fan-out
+    // → the stream endpoint answers 503 (events disabled), not a hijack.
+    let h = start_harness();
+    let r = get(h.addr, "/v1/events/stream");
+    assert_eq!(r.status, 503);
+    assert_eq!(r.header("Content-Type"), Some("application/problem+json"));
+    assert!(r.body.contains("events-unavailable"));
 }

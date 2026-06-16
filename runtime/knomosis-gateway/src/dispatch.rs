@@ -96,6 +96,12 @@ pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> Ro
             limit,
             types,
         } => events_backfill(state, *since, *limit, types),
+        // The live SSE stream is hijacked in the IO shell
+        // (`crate::events::stream::serve` takes over the connection), so it
+        // never reaches dispatch; this defensive arm signals a wiring bug.
+        Route::EventStream { .. } => Problem::new("internal", "Internal Error", 500)
+            .with_detail("event stream must be served by the SSE hijack, not dispatch")
+            .into_outcome(),
         Route::MethodNotAllowed { allow } => Problem::method_not_allowed()
             .into_outcome()
             .with_header("Allow", *allow),
@@ -210,6 +216,7 @@ mod tests {
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
             idempotency_ttl_secs: 0,
+            sse: crate::config::SseConfig::default(),
         })
         .expect("no DB to open")
     }
@@ -365,6 +372,7 @@ mod tests {
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
             idempotency_ttl_secs: 0,
+            sse: crate::config::SseConfig::default(),
         })
         .expect("open read-only state");
 

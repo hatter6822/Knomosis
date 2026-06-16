@@ -89,9 +89,15 @@ The companion machine-readable contract is
 > fast one), and **G3.4d** (the `events/fanout/resume.rs` resume classifier
 > — `Last-Event-ID`/`since` decomposition + the intra-seq-skip
 > in-window/behind/truncated tiers; the headline test proves a mid-seq-group
-> resume redelivers *exactly* the unseen records). **G3.4 (the SSE fan-out)
-> is complete.** Next: **G3.5** (`/v1/events/stream` HTTP wiring) + the
-> remaining G4 hardening (TLS, graceful drain).
+> resume redelivers *exactly* the unseen records), and **G3.5** (the
+> `events/stream.rs` HTTP wiring — `GET /v1/events/stream` hijacks the
+> connection via `into_writer`, reserves a bounded stream slot, and runs the
+> per-client dispatch on its own thread; the single mux is started in
+> `serve`; `Last-Event-ID`/`since` resume + `Cache-Control: no-store`; an
+> end-to-end test streams composite-id records to a real socket client).
+> **The events (G3) track is complete (G3.1–G3.5).** Next: the G4 hardening
+> (TLS/mTLS, observability, graceful drain, the runbook) + the deferred
+> additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1711,11 +1717,34 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     (`classify_resume` takes only `&EventRing`, so a resume cannot open an
     upstream subscription — the G3.4b O(1) invariant holds across
     reconnects).
-* **G3.5 — `GET /events/stream` wiring + tests** · S · deps: G3.4.
-  *Deliverable:* `events/stream.rs` atop `http/sse.rs` + the fan-out;
-  `Cache-Control: no-store`; auth; `Last-Event-ID`/`since` precedence.
-  *Acceptance:* reconnect/resume/truncation/lag/multi-event-seq-group
-  integration + contract tests green.
+* **G3.5 — `GET /v1/events/stream` wiring + tests** · S · deps: G3.4 ·
+  **DONE.** `events/stream.rs` wires the live SSE endpoint atop the G3.4
+  fan-out.  Because an SSE stream is open-ended it **hijacks the
+  connection** (`tiny_http::Request::into_writer`) rather than returning a
+  `RouteOutcome`: `serve` reserves a stream slot (lock-free atomic admission,
+  bounded by `SseConfig::max_streams` — an over-cap connect is `503` +
+  `Retry-After`), then runs the per-client dispatch on **its own thread** so
+  the handler-pool worker returns immediately (a long-lived stream never
+  starves request processing).  The single fan-out `Mux` is started once in
+  `serve` (iff `--event-subscribe-addr` is set; the shared `FanoutState`
+  lives in `AppState`).  The stream writes a raw `200` head
+  (`text/event-stream`, **`Cache-Control: no-store`**, `X-Accel-Buffering:
+  no`, no `Content-Length`), then `parse_resume` (the `Last-Event-ID` header
+  over the `since` query, §3.5) + `classify_resume` pick the
+  Stream / `behind` / `truncated` action.  Auth + the rate gate run in the
+  IO shell **before** the hijack; `Route::EventStream` is intercepted in
+  `handle_request` (its `dispatch` arm is a defensive `500`).  `SseConfig`
+  (ring capacity / max streams / max client lag / heartbeat / mux staleness)
+  is defaulted today — per-knob `--sse-*` flags are an additive follow-up.
+  *Acceptance (DONE):* a router parse test (optional `since` / repeatable
+  `type` / malformed→`400` / non-GET→`405`) + two end-to-end HTTP
+  integration tests over a real mock upstream + the live mux — the SSE head
+  + composite-`id` records stream to a real socket client resuming from
+  `since`, and the no-upstream `503`.  The reconnect/resume/lag correctness
+  is carried by the G3.4 unit/property/chaos suites.
+
+**The events (G3) track is complete (G3.1–G3.5);** only the additive G3.2c
+cross-stack corpus pin remains deferred.
 
 ### G4 — Hardening + runbook
 

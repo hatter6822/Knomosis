@@ -293,6 +293,39 @@ impl std::str::FromStr for AdmissionStage {
     }
 }
 
+/// SSE fan-out tunables (Workstream G3.4 / G3.5).  Sensible defaults wire
+/// the live `GET /v1/events/stream` endpoint without operator action;
+/// per-knob `--sse-*` flags are an additive follow-up (§9.2).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SseConfig {
+    /// Shared fan-out ring capacity (records retained for replay / resume).
+    pub ring_capacity: usize,
+    /// Maximum concurrent SSE streams; an over-cap connect is `503`.
+    pub max_streams: usize,
+    /// Per-client lag bound in records before a `lag_exceeded` eviction
+    /// (kept below `ring_capacity` so the eviction fires before the ring
+    /// drops the client's unseen records).
+    pub max_client_lag: usize,
+    /// SSE heartbeat-comment interval (seconds) when a stream is idle.
+    pub heartbeat_secs: u64,
+    /// Upstream-read staleness timeout (seconds) for the single fan-out
+    /// subscription (a quiet live-tail reconnects from the watermark after
+    /// this; also bounds the mux's shutdown latency).
+    pub stale_secs: u64,
+}
+
+impl Default for SseConfig {
+    fn default() -> Self {
+        Self {
+            ring_capacity: 4096,
+            max_streams: 256,
+            max_client_lag: 2048,
+            heartbeat_secs: 15,
+            stale_secs: 55,
+        }
+    }
+}
+
 /// Validated gateway configuration.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
@@ -378,6 +411,9 @@ pub struct Config {
     /// (`--idempotency-ttl-secs`, G2.4); `0` disables the cache.  Default
     /// [`DEFAULT_IDEMPOTENCY_TTL_SECS`].
     pub idempotency_ttl_secs: u64,
+    /// SSE fan-out tunables (G3.4 / G3.5); see [`SseConfig`].  Defaulted
+    /// today (no per-knob flags yet).
+    pub sse: SseConfig,
 }
 
 impl Config {
@@ -501,6 +537,8 @@ impl Config {
             request_deadline_ms,
             max_frame_size,
             idempotency_ttl_secs,
+            // SSE tunables are defaulted today (no per-knob flags yet, §9.2).
+            sse: SseConfig::default(),
         })
     }
 }

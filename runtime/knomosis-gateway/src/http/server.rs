@@ -101,6 +101,21 @@ pub fn serve(config: &Config) -> Result<(), ServeError> {
         );
     }
     let state = Arc::new(state);
+    // Start the single SSE fan-out multiplexer (G3.4b) iff an
+    // event-subscribe upstream is configured: one shared live-tail
+    // subscription feeds the ring every `/v1/events/stream` client reads.
+    // The thread runs for the process lifetime (graceful drain is G4.4);
+    // its handle is detached.
+    if let (Some(fanout), Some(addr)) = (&state.fanout, config.event_subscribe_addr) {
+        let mux = crate::events::fanout::mux::Mux::new(
+            addr,
+            config.max_frame_size,
+            std::time::Duration::from_secs(config.sse.stale_secs),
+            Arc::clone(fanout),
+        );
+        let _ = mux.spawn(Arc::clone(&state.shutdown));
+        tracing::info!(%addr, "SSE fan-out multiplexer started");
+    }
     let handles = spawn_handler_pool(&server, config.handler_threads, &state)?;
     // Block until a worker exits.  Under normal operation the workers
     // loop forever on `recv`; graceful shutdown is G4.4.
@@ -178,7 +193,7 @@ pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
     // so the submit-body read below can take `&mut request` without a
     // borrow conflict.  (`split_once` is total + panic-free; an absent
     // `?` yields the whole target as the path and an empty query.)
-    let (routed, path, content_type, auth_header, if_none_match, idempotency_key) = {
+    let (routed, path, content_type, auth_header, if_none_match, idempotency_key, last_event_id) = {
         let url = request.url();
         let (path, query) = url.split_once('?').unwrap_or((url, ""));
         (
@@ -188,36 +203,48 @@ pub fn handle_request(mut request: tiny_http::Request, state: &AppState) {
             header_value(&request, "Authorization").map(str::to_string),
             header_value(&request, "If-None-Match").map(str::to_string),
             header_value(&request, "Idempotency-Key").map(str::to_string),
+            header_value(&request, "Last-Event-ID").map(str::to_string),
         )
     };
 
-    let outcome =
-        if let Some(denied) = crate::auth::gate(&state.auth, &path, auth_header.as_deref()) {
-            // Denied by the auth gate (401 / 403) — answer without routing.
-            denied
-        } else if let Some(limited) =
-            crate::auth::rate_limit_check(&state.rate_limiter, &path, auth_header.as_deref())
-        {
-            // Admitted by auth but over the per-credential rate cap (429).
-            limited
-        } else {
-            // Authorized (or an exempt path) and within budget.  Read the
-            // submit body (only for `POST /v1/actions`) bounded by the cap,
-            // dispatch, then apply any `If-None-Match` conditional (a
-            // matching weak ETag → 304; a no-op for a POST response).
-            match read_submit_body(&mut request, &routed, state.config.max_frame_size) {
-                Err(too_large) => too_large,
-                Ok(body) => {
-                    let payload = RequestPayload {
-                        content_type: content_type.as_deref(),
-                        body: &body,
-                        idempotency_key: idempotency_key.as_deref(),
-                    };
-                    let outcome = dispatch(&routed, state, &payload);
-                    crate::http::apply_conditional(outcome, if_none_match.as_deref())
-                }
+    // The auth + rate gates run before routing for every path.  If they
+    // deny, answer without routing (and without hijacking an SSE stream).
+    if let Some(denied) = crate::auth::gate(&state.auth, &path, auth_header.as_deref()) {
+        respond(request, &denied);
+        return;
+    }
+    if let Some(limited) =
+        crate::auth::rate_limit_check(&state.rate_limiter, &path, auth_header.as_deref())
+    {
+        respond(request, &limited);
+        return;
+    }
+
+    // The live SSE stream takes over the connection (G3.5): it does not
+    // produce a `RouteOutcome`, so it is handled here, not via dispatch.
+    if let Route::EventStream { since, types } = &routed {
+        crate::events::stream::serve(request, state, *since, types.clone(), last_event_id);
+        return;
+    }
+
+    // Authorized (or an exempt path) and within budget.  Read the submit
+    // body (only for `POST /v1/actions`) bounded by the cap, dispatch, then
+    // apply any `If-None-Match` conditional (a matching weak ETag → 304; a
+    // no-op for a POST response).
+    let outcome = {
+        match read_submit_body(&mut request, &routed, state.config.max_frame_size) {
+            Err(too_large) => too_large,
+            Ok(body) => {
+                let payload = RequestPayload {
+                    content_type: content_type.as_deref(),
+                    body: &body,
+                    idempotency_key: idempotency_key.as_deref(),
+                };
+                let outcome = dispatch(&routed, state, &payload);
+                crate::http::apply_conditional(outcome, if_none_match.as_deref())
             }
-        };
+        }
+    };
     respond(request, &outcome);
 }
 

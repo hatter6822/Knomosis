@@ -159,7 +159,9 @@ fn write_heartbeat<W: Write>(sink: &mut W) -> std::io::Result<()> {
 
 /// Write a terminal `event: error` carrying the §15B `EventStreamError`
 /// (`{error, oldestSeq?}`).  No `id:` — an error is not a resume point.
-fn write_stream_error<W: Write>(
+/// Reused by the G3.5 stream handler for the pre-stream `behind` /
+/// `truncated` resume errors.
+pub(crate) fn write_stream_error<W: Write>(
     sink: &mut W,
     code: &str,
     oldest_seq: Option<u64>,

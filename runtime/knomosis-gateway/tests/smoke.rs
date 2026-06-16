@@ -94,6 +94,7 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
             idempotency_ttl_secs: 0,
+            sse: knomosis_gateway::config::SseConfig::default(),
         })
         .expect("load token file"),
     )

@@ -211,6 +211,7 @@ mod tests {
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
             idempotency_ttl_secs: 0,
+            sse: crate::config::SseConfig::default(),
         }
     }
 
