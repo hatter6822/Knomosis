@@ -649,7 +649,7 @@ work units.  Status:
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
-| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B complete; C/D documented; GP.8.5 v2 receipt-verified claim core shipped (Lean + Rust); BOLD-leg oracle + observer receipt-fetch = OQ-GP-8b |
+| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim core shipped (Lean + Rust); BOLD-leg oracle + observer receipt-fetch = OQ-GP-8b |
 | GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Track A+B, GP.8.5 v2 core, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining) |
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
@@ -861,10 +861,13 @@ witness + `receiptVerifiedClaimAdmissible` gate; headline
 `…_implies_gasPoolPolicy` = pure strengthening of v1) mirrored by
 `SequencerClaim::build_receipt_backed` / `is_receipt_backed_by`.  ETH-leg
 only (wei-exact); BOLD-leg price oracle + independent-observer
-receipt-fetch binding = OQ-GP-8b.  Track D claim/fair-queuing ops in
-`gas_pool_runbook.md` §8 / §11.  Remaining: Track C config note + the
-`--epoch-duration-seconds`-absence test, and GP.10 final ratification
-(§15E touch, migration guide).
+receipt-fetch binding = OQ-GP-8b.  Track C complete: the action-clock
+budget-epoch config note (`gas_pool_runbook.md` §8.1) + the
+`--epoch-duration-seconds`-absence regression test (`knomosis-host`
+`config::tests::epoch_duration_seconds_flag_does_not_exist`).  Track D
+claim/fair-queuing ops in `gas_pool_runbook.md` §8 / §11.  Remaining:
+OQ-GP-8b (BOLD-leg oracle + observer receipt-fetch) and GP.10 final
+ratification (§15E touch, migration guide).
 
 ### Audit remediation (Workstream AR)
 

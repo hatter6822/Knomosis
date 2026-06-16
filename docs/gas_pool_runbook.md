@@ -354,6 +354,51 @@ indicates the host is saturated overall.
 See `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2 (design) and
 §2.6 (the trust/safety invariants) for the full treatment.
 
+### 8.1 Budget admission epochs: the action-clock model (Track C)
+
+When the host runs the GP.6.2 budget admission gate (`--budget-policy`),
+the per-actor budget refills on an **epoch** boundary.  The shipped flags
+configure that gate:
+
+| Flag | Meaning |
+|------|---------|
+| `--free-tier <N>`     | Per-epoch budget floor granted to every actor (needs `--current-epoch ≥ 1`). |
+| `--action-cost <C>`   | Per-action budget debit (clamped `≥ 1`; default 1). |
+| `--current-epoch <E>` | The current epoch index (default 0). |
+| `--epoch-length <N>`  | Admitted actions per epoch (`0` = no advancement). |
+
+**The epoch is an action clock, not a wall clock.**  An epoch advances
+every `--epoch-length` *admitted actions*, as a deterministic function of
+the log index — `epoch = logIndex / epochLength` (the indexer mirrors it
+as `epoch_for_seq(seq) = (seq − 1) / epoch_length`,
+`runtime/knomosis-indexer/src/budget_view.rs`).  Because the epoch is a
+pure function of position in the log, deterministic replay reproduces
+every epoch — and therefore every admit/reject verdict — exactly.  This
+is the property the `replay_deterministic`
+(`LegalKernel/Runtime/Replay.lean`) and `replenishment_via_epoch_advance`
+(`LegalKernel/Authority/SignedAction.lean`) theorems carry, exercised
+end-to-end by the `epochAdvanceReplenishesAndReplays` value-level test.
+
+**There is no `--epoch-duration-seconds` flag (a deliberate non-goal).**
+A wall-clock epoch would break replay determinism: re-running the same
+log later would land actions in different epochs (different budgets,
+different verdicts), so the off-chain truth oracle, the indexer, and the
+fault-proof observer could disagree with the sequencer on whether an
+action was admitted — a regression of the load-bearing property the
+GP.6.2 post-audit established.  The wall-clock flag the original GP.8.2
+sketch proposed was therefore **not** added, and a `knomosis-host`
+regression test (`config::tests::epoch_duration_seconds_flag_does_not_exist`)
+pins that the parser rejects `--epoch-duration-seconds` as an unknown
+flag, so the name can never silently reappear.
+
+**Approximating a time-based epoch.**  A deployment that wants
+roughly-time-based replenishment can choose
+`--epoch-length ≈ target_seconds × observed_admit_rate` (actions/second),
+accepting that the mapping is load-dependent — but it must not introduce
+a real clock into the admission path.  See
+`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §6.3 for the design
+decision.
+
 ---
 
 ## 9. Gas economics (v1.3 L1 operations; WU GP.11.9)
