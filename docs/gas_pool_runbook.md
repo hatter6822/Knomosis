@@ -354,6 +354,51 @@ indicates the host is saturated overall.
 See `docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §2 (design) and
 §2.6 (the trust/safety invariants) for the full treatment.
 
+### 8.1 Budget admission epochs: the action-clock model (Track C)
+
+When the host runs the GP.6.2 budget admission gate (`--budget-policy`),
+the per-actor budget refills on an **epoch** boundary.  The shipped flags
+configure that gate:
+
+| Flag | Meaning |
+|------|---------|
+| `--free-tier <N>`     | Per-epoch budget floor granted to every actor (needs `--current-epoch ≥ 1`). |
+| `--action-cost <C>`   | Per-action budget debit (clamped `≥ 1`; default 1). |
+| `--current-epoch <E>` | The current epoch index (default 0). |
+| `--epoch-length <N>`  | Admitted actions per epoch (`0` = no advancement). |
+
+**The epoch is an action clock, not a wall clock.**  An epoch advances
+every `--epoch-length` *admitted actions*, as a deterministic function of
+the log index — `epoch = logIndex / epochLength` (the indexer mirrors it
+as `epoch_for_seq(seq) = (seq − 1) / epoch_length`,
+`runtime/knomosis-indexer/src/budget_view.rs`).  Because the epoch is a
+pure function of position in the log, deterministic replay reproduces
+every epoch — and therefore every admit/reject verdict — exactly.  This
+is the property the `replay_deterministic`
+(`LegalKernel/Runtime/Replay.lean`) and `replenishment_via_epoch_advance`
+(`LegalKernel/Authority/SignedAction.lean`) theorems carry, exercised
+end-to-end by the `epochAdvanceReplenishesAndReplays` value-level test.
+
+**There is no `--epoch-duration-seconds` flag (a deliberate non-goal).**
+A wall-clock epoch would break replay determinism: re-running the same
+log later would land actions in different epochs (different budgets,
+different verdicts), so the off-chain truth oracle, the indexer, and the
+fault-proof observer could disagree with the sequencer on whether an
+action was admitted — a regression of the load-bearing property the
+GP.6.2 post-audit established.  The wall-clock flag the original GP.8.2
+sketch proposed was therefore **not** added, and a `knomosis-host`
+regression test (`config::tests::epoch_duration_seconds_flag_does_not_exist`)
+pins that the parser rejects `--epoch-duration-seconds` as an unknown
+flag, so the name can never silently reappear.
+
+**Approximating a time-based epoch.**  A deployment that wants
+roughly-time-based replenishment can choose
+`--epoch-length ≈ target_seconds × observed_admit_rate` (actions/second),
+accepting that the mapping is load-dependent — but it must not introduce
+a real clock into the admission path.  See
+`docs/planning/GP.8_SEQUENCER_INTEGRATION_PLAN.md` §6.3 for the design
+decision.
+
 ---
 
 ## 9. Gas economics (v1.3 L1 operations; WU GP.11.9)
@@ -827,13 +872,39 @@ bound).  Operationally:
      keccak binding hash).
   2. Build the claim with that `GasReceipt`; submit the (identical-shape)
      `SignedAction` exactly as a v1 claim.
-  3. Retain the `GasReceipt` for audit so any independent observer can
-     re-run `is_receipt_backed_by` against the on-chain receipt.
+  3. Retain the batch-publication **tx hash** + **`batch_id`** so any
+     independent observer can re-derive the `GasReceipt` from L1 and
+     re-check the claim — see the independent-observer binding below.
 
-**Scope + remaining work (OQ-GP-8b).**  v2 covers the **ETH leg
-(resource 0)** only — the leg whose receipt cost is exactly wei.  The
-**BOLD leg** still uses the v1 honour-system-within-cap `build` pending a
-ratified ETH→BOLD price oracle.  The production binding of
-`l1GasReceiptVerifier` to a watcher that *independently* fetches the
-batch-publication receipt (so a third party, not only the claim builder,
-attests `(gasUsed, gasPrice)`) is the other open item.
+**Both legs + independent observer (OQ-GP-8b, closed).**  v2 now covers
+**both legs**.  For the **BOLD leg (resource 1)**, call
+`SequencerClaim::build_receipt_backed_bold(key, &receipt, &rate, …)` with
+an attested `EthBoldRate { rate_num, rate_den, rate_binding_hash }` (BOLD
+base units per ETH wei, from your price oracle): the builder clamps to
+`min(cap, ⌊gas_used * gas_price * rate_num / rate_den⌋)`, floored so it
+never over-reimburses.  This adds a **second** off-chain trust assumption
+(the rate oracle, GENESIS_PLAN §15E.7); size and cross-check it like the
+gas verifier — a stale/low rate can only *under*-reimburse.  For
+**independent verification**, run the
+`knomosis-l1-ingest::receipt_verifier` binding:
+`verify_eth_claim_independently(source, claim, tx_hash, batch_id, confirmed_head)`
+(or `verify_bold_claim_independently(source, oracle, …)`) fetches the
+receipt via `eth_getTransactionReceipt`, re-derives the `GasReceipt`
+(canonical binding hash), and confirms the backing **without trusting the
+operator's asserted receipt** — the production binding of
+`l1GasReceiptVerifier`.  Three operator obligations:
+
+  * **Confirmation depth.**  Pass `confirmed_head = head − confirmation_depth`
+    (the same depth your watcher uses); the verifier returns `Unconfirmed`
+    for a receipt whose block is shallower, so a claim is never attested
+    against a still-reorgable tx.
+  * **BOLD rate oracle.**  The BOLD verifiers take a `RateOracle`; implement
+    it over your price feed so the rate is attested **for the exact batch**
+    (`RateUnavailable` if none) — never trust a passed-in rate.
+  * **No-reuse.**  Thread your spent-receipt set through the `…_fresh`
+    variants (which return `Reused` when the receipt's canonical hash is
+    already consumed); **key that set on the canonical re-derived hash**
+    (`fetch_and_derive_gas_receipt` returns it), never on a sequencer-asserted
+    one — otherwise one L1 receipt could back several claims.
+
+Run ≥1 such observer alongside the watchtower.

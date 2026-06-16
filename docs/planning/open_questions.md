@@ -1263,7 +1263,7 @@ ships this layout.
   * OQ-GP-7 — BOLD-circuit emergency closure operational policy.
   * OQ-GP-8 — Event-index compatibility and indexer rollout policy.
   * OQ-GP-8b — Receipt-verified sequencer reimbursement (GP.8.5 v2):
-    **substantially shipped.**  The core gate now exists end-to-end —
+    **RESOLVED (2026-06-16): both follow-ons shipped.**  The core gate exists end-to-end —
     Lean (`LegalKernel.Bridge.ReceiptVerifiedClaim`: the
     `l1GasReceiptVerifier` opaque, the `gasReceiptReimbursement` wei
     bound, the `SequencerReimbursementVerified` witness, the
@@ -1272,16 +1272,25 @@ ships this layout.
     theorems) and Rust (`SequencerClaim::build_receipt_backed` +
     `is_receipt_backed_by`).  An admitted v2 claim is bounded by
     `min(cap, L1 wei cost)`, and v2 is a proven pure strengthening of v1
-    (see `abi.md` §10.2.6).  **Two follow-ons remain open:** (a) the
-    **BOLD-leg price oracle** — receipt-backing the BOLD leg from a
-    wei-denominated receipt needs a deployment-configured ETH→BOLD rate
-    (a second trust assumption), so v2 currently covers only the exact,
-    oracle-free ETH leg (resource 0); and (b) the
-    **independent-observer receipt-fetch binding** — the production
-    binding of `l1GasReceiptVerifier` to a watcher that fetches the L1
-    batch-publication transaction receipt and re-derives
-    `(gasUsed, gasPrice)`, so a third party (not just the claim builder)
-    can attest the backing.  **No-reuse + enforcement now shipped** (PR
+    (see `abi.md` §10.2.6).  **Both follow-ons now shipped:** (a) the
+    **BOLD-leg price oracle** — `LegalKernel.Bridge` adds the second opaque
+    `l1EthBoldRateOracle` (ETH→BOLD rate as a floored rational,
+    fail-closed) + `boldReceiptReimbursement` + the
+    `SequencerReimbursementVerifiedBold` witness +
+    `receiptVerifiedBoldClaimAdmissible` gate, with the BOLD analogue of
+    every ETH theorem and a UNIFIED composer `receiptGatedAdmissibleUnified`
+    that requires the matching leg's gate for every gas-pool claim (closing
+    the "BOLD claims slip through ungated" gap the ETH-only composer left);
+    Rust mirror `SequencerClaim::build_receipt_backed_bold` /
+    `is_bold_receipt_backed_by`.  (b) the **independent-observer
+    receipt-fetch binding** — `knomosis-l1-ingest::receipt_verifier` defines
+    the canonical receipt binding hash (`keccak256(DOMAIN ‖ tx_hash ‖
+    batch_id ‖ gas_used ‖ gas_price)`), `derive_gas_receipt` (re-derives the
+    `GasReceipt` from a fetched L1 receipt, status-gated), a `ReceiptSource`
+    trait with a live `eth_getTransactionReceipt` impl over
+    `JsonRpcL1Source`, and `verify_{eth,bold}_claim_independently`, so a
+    third party (not the claim builder) attests the backing against L1
+    reality.  **No-reuse + enforcement** (PR
     #126 review): `ConsumedReceipts` + `consumeReceipt` +
     `SequencerReimbursementVerifiedFresh` + `consumeReceipt_blocks_reuse`
     prove one receipt backs at most one claim (so the per-claim

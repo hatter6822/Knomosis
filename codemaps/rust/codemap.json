@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "47744e152d1d1a41e9d49ef13e34a79e7f85a3d5f745e2217432338692c5a10b"
+    "source_digest": "14a2aa03f503e35fceb167163c1611d3aed0bf1895632b481af27d145ca028bd"
   },
   "summary": {
-    "module_count": 138,
-    "declaration_count": 4663
+    "module_count": 139,
+    "declaration_count": 4739
   },
   "modules": [
     {
@@ -40619,7 +40619,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::lib",
       "path": "runtime/knomosis-l1-ingest/src/lib.rs",
-      "declaration_count": 20,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "mod",
@@ -40659,68 +40659,74 @@
         },
         {
           "kind": "mod",
-          "name": "reorg",
+          "name": "receipt_verifier",
           "line": 163,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "sequencer_claim",
+          "name": "reorg",
           "line": 164,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "source",
+          "name": "sequencer_claim",
           "line": 165,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "state",
+          "name": "source",
           "line": 166,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "submitter",
+          "name": "state",
           "line": 167,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "translation",
+          "name": "submitter",
           "line": 168,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "watcher",
+          "name": "translation",
           "line": 169,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "watcher",
+          "line": 170,
           "called": []
         },
         {
           "kind": "const",
           "name": "CRATE_NAME",
-          "line": 172,
+          "line": 173,
           "called": []
         },
         {
           "kind": "const",
           "name": "INGEST_IDENTIFIER",
-          "line": 178,
+          "line": 179,
           "called": []
         },
         {
           "kind": "const",
           "name": "PROTOCOL_VERSION",
-          "line": 184,
+          "line": 185,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 187,
+          "line": 188,
           "called": [
             "CRATE_NAME",
             "INGEST_IDENTIFIER",
@@ -40730,7 +40736,7 @@
         {
           "kind": "fn",
           "name": "crate_name_constant",
-          "line": 192,
+          "line": 193,
           "called": [
             "CRATE_NAME"
           ]
@@ -40738,7 +40744,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 198,
+          "line": 199,
           "called": [
             "INGEST_IDENTIFIER"
           ]
@@ -40746,7 +40752,7 @@
         {
           "kind": "fn",
           "name": "protocol_version_constant",
-          "line": 204,
+          "line": 205,
           "called": [
             "PROTOCOL_VERSION"
           ]
@@ -40986,6 +40992,665 @@
             "argv",
             "base",
             "parse_args"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-l1-ingest::src::receipt_verifier",
+      "path": "runtime/knomosis-l1-ingest/src/receipt_verifier.rs",
+      "declaration_count": 62,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "RECEIPT_BINDING_DOMAIN",
+          "line": 91,
+          "called": [
+            "b"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "canonical_receipt_binding_hash",
+          "line": 107,
+          "called": [
+            "RECEIPT_BINDING_DOMAIN"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "EthTxReceipt",
+          "line": 120,
+          "called": [
+            "block_number"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "derive_gas_receipt",
+          "line": 147,
+          "called": [
+            "EthTxReceipt",
+            "GasReceipt",
+            "canonical_receipt_binding_hash"
+          ]
+        },
+        {
+          "kind": "enum",
+          "name": "ReceiptFetchError",
+          "line": 161,
+          "called": [
+            "error"
+          ]
+        },
+        {
+          "kind": "trait",
+          "name": "ReceiptSource",
+          "line": 177,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "fetch_receipt",
+          "line": 185,
+          "called": [
+            "EthTxReceipt",
+            "ReceiptFetchError"
+          ]
+        },
+        {
+          "kind": "trait",
+          "name": "RateOracle",
+          "line": 194,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "attested_rate",
+          "line": 202,
+          "called": [
+            "EthBoldRate",
+            "ReceiptFetchError"
+          ]
+        },
+        {
+          "kind": "enum",
+          "name": "ClaimBackingOutcome",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "ClaimBackingOutcome",
+          "line": 233,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "is_backed",
+          "line": 236,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "fetch_and_derive_gas_receipt",
+          "line": 264,
+          "called": [
+            "GasReceipt",
+            "ReceiptFetchError",
+            "ReceiptSource",
+            "block_number",
+            "derive_gas_receipt",
+            "fetch_receipt",
+            "source"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "verify_eth_claim_independently",
+          "line": 288,
+          "called": [
+            "ClaimBackingOutcome",
+            "ReceiptFetchError",
+            "ReceiptSource",
+            "SequencerClaim",
+            "source",
+            "verify_eth_claim_independently_fresh"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "verify_eth_claim_independently_fresh",
+          "line": 315,
+          "called": [
+            "ClaimBackingOutcome",
+            "ReceiptFetchError",
+            "ReceiptSource",
+            "SequencerClaim",
+            "block_number",
+            "derive_gas_receipt",
+            "fetch_receipt",
+            "is_receipt_backed_by",
+            "source"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "verify_bold_claim_independently",
+          "line": 360,
+          "called": [
+            "ClaimBackingOutcome",
+            "RateOracle",
+            "ReceiptFetchError",
+            "ReceiptSource",
+            "SequencerClaim",
+            "source",
+            "verify_bold_claim_independently_fresh"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "verify_bold_claim_independently_fresh",
+          "line": 390,
+          "called": [
+            "ClaimBackingOutcome",
+            "RateOracle",
+            "ReceiptFetchError",
+            "ReceiptSource",
+            "SequencerClaim",
+            "attested_rate",
+            "block_number",
+            "derive_gas_receipt",
+            "fetch_receipt",
+            "is_bold_receipt_backed_by",
+            "rate",
+            "source"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_eth_receipt",
+          "line": 432,
+          "called": [
+            "EthTxReceipt",
+            "ReceiptFetchError",
+            "block_number",
+            "decode_hex32",
+            "get_str",
+            "parse_hex_u128",
+            "parse_hex_u64"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "get_str",
+          "line": 460,
+          "called": [
+            "ReceiptFetchError",
+            "get",
+            "key"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "strip_hex_prefix",
+          "line": 473,
+          "called": [
+            "ReceiptFetchError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_hex_u128",
+          "line": 479,
+          "called": [
+            "ReceiptFetchError",
+            "strip_hex_prefix"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_hex_u64",
+          "line": 484,
+          "called": [
+            "ReceiptFetchError",
+            "strip_hex_prefix"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_hex32",
+          "line": 489,
+          "called": [
+            "get",
+            "len"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_eth_receipt_for",
+          "line": 507,
+          "called": [
+            "Err",
+            "EthTxReceipt",
+            "ReceiptFetchError",
+            "parse_eth_receipt"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "ReceiptSource for crate::source::json_rpc::JsonRpcL1Source",
+          "line": 524,
+          "called": [
+            "ReceiptSource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fetch_receipt",
+          "line": 525,
+          "called": [
+            "EthTxReceipt",
+            "ReceiptFetchError",
+            "_",
+            "b",
+            "hex",
+            "parse_eth_receipt_for",
+            "rpc",
+            "write"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 543,
+          "called": [
+            "GAS_POOL_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "RECEIPT_BLOCK",
+          "line": 552,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "CONFIRMED",
+          "line": 553,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "UNCONFIRMED_HEAD",
+          "line": 554,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "MockReceiptSource",
+          "line": 558,
+          "called": [
+            "EthTxReceipt"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "MockReceiptSource",
+          "line": 562,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "with",
+          "line": 563,
+          "called": [
+            "EthTxReceipt",
+            "insert"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "ReceiptSource for MockReceiptSource",
+          "line": 569,
+          "called": [
+            "MockReceiptSource",
+            "ReceiptSource"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fetch_receipt",
+          "line": 570,
+          "called": [
+            "EthTxReceipt",
+            "ReceiptFetchError",
+            "get"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "MockRateOracle",
+          "line": 581,
+          "called": [
+            "EthBoldRate"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "MockRateOracle",
+          "line": 585,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "with",
+          "line": 586,
+          "called": [
+            "EthBoldRate",
+            "insert",
+            "rate"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "RateOracle for MockRateOracle",
+          "line": 592,
+          "called": [
+            "MockRateOracle",
+            "RateOracle"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "attested_rate",
+          "line": 593,
+          "called": [
+            "EthBoldRate",
+            "ReceiptFetchError",
+            "get"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rate",
+          "line": 598,
+          "called": [
+            "EthBoldRate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "ok_receipt",
+          "line": 606,
+          "called": [
+            "EthTxReceipt",
+            "RECEIPT_BLOCK",
+            "block_number"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "mk_claim",
+          "line": 616,
+          "called": [
+            "Action",
+            "GAS_POOL_ACTOR_ID",
+            "SIGNATURE_LEN",
+            "SequencerClaim",
+            "action",
+            "nonce",
+            "signer"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "eth_claim",
+          "line": 625,
+          "called": [
+            "GAS_POOL_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "SequencerClaim",
+            "amount",
+            "mk_claim"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bold_claim",
+          "line": 634,
+          "called": [
+            "GAS_POOL_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "SequencerClaim",
+            "amount",
+            "mk_claim"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "binding_hash_is_deterministic_and_tx_keyed",
+          "line": 644,
+          "called": [
+            "canonical_receipt_binding_hash"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "binding_hash_is_independent_of_caller_supplied_batch_id",
+          "line": 656,
+          "called": [
+            "canonical_receipt_binding_hash",
+            "derive_gas_receipt",
+            "ok_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "derive_gas_receipt_uses_canonical_hash_and_fetched_fields",
+          "line": 675,
+          "called": [
+            "canonical_receipt_binding_hash",
+            "derive_gas_receipt",
+            "ok_receipt",
+            "reimbursement"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "derive_gas_receipt_rejects_reverted_tx",
+          "line": 687,
+          "called": [
+            "derive_gas_receipt",
+            "ok_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "independent_eth_verify_backs_a_within_cost_claim",
+          "line": 697,
+          "called": [
+            "CONFIRMED",
+            "eth_claim",
+            "is_backed",
+            "ok_receipt",
+            "source",
+            "verify_eth_claim_independently",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "independent_eth_verify_rejects_overspend_and_fabrication",
+          "line": 715,
+          "called": [
+            "CONFIRMED",
+            "GAS_POOL_ACTOR_ID",
+            "amount",
+            "eth_claim",
+            "mk_claim",
+            "ok_receipt",
+            "source",
+            "verify_eth_claim_independently",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "independent_verify_rejects_unconfirmed_receipt",
+          "line": 741,
+          "called": [
+            "CONFIRMED",
+            "UNCONFIRMED_HEAD",
+            "eth_claim",
+            "fetch_and_derive_gas_receipt",
+            "is_backed",
+            "ok_receipt",
+            "source",
+            "verify_eth_claim_independently",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "independent_verify_reports_missing_and_failed",
+          "line": 773,
+          "called": [
+            "CONFIRMED",
+            "eth_claim",
+            "ok_receipt",
+            "source",
+            "verify_eth_claim_independently",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "unconfirmed_failed_receipt_is_not_terminal",
+          "line": 795,
+          "called": [
+            "CONFIRMED",
+            "UNCONFIRMED_HEAD",
+            "eth_claim",
+            "ok_receipt",
+            "rate",
+            "source",
+            "verify_bold_claim_independently",
+            "verify_eth_claim_independently",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_eth_receipt_for_rejects_mismatched_tx",
+          "line": 825,
+          "called": [
+            "parse_eth_receipt_for"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "independent_bold_verify_uses_the_oracle_rate",
+          "line": 850,
+          "called": [
+            "CONFIRMED",
+            "bold_claim",
+            "eth_claim",
+            "is_backed",
+            "ok_receipt",
+            "rate",
+            "source",
+            "verify_bold_claim_independently",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "independent_bold_verify_binds_the_rate_to_the_batch",
+          "line": 886,
+          "called": [
+            "CONFIRMED",
+            "bold_claim",
+            "is_backed",
+            "ok_receipt",
+            "rate",
+            "source",
+            "verify_bold_claim_independently",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_eth_receipt_parses_and_rejects",
+          "line": 916,
+          "called": [
+            "block_number",
+            "clone",
+            "insert",
+            "parse_eth_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fresh_verify_rejects_a_reused_receipt",
+          "line": 962,
+          "called": [
+            "CONFIRMED",
+            "canonical_receipt_binding_hash",
+            "eth_claim",
+            "ok_receipt",
+            "source",
+            "verify_eth_claim_independently",
+            "verify_eth_claim_independently_fresh",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fresh_bold_verify_rejects_a_reused_receipt",
+          "line": 1010,
+          "called": [
+            "CONFIRMED",
+            "bold_claim",
+            "canonical_receipt_binding_hash",
+            "ok_receipt",
+            "rate",
+            "source",
+            "verify_bold_claim_independently_fresh",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "fetch_and_derive_exposes_the_canonical_receipt",
+          "line": 1037,
+          "called": [
+            "CONFIRMED",
+            "canonical_receipt_binding_hash",
+            "fetch_and_derive_gas_receipt",
+            "ok_receipt",
+            "reimbursement",
+            "source",
+            "with"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "builder_and_observer_agree_on_the_canonical_hash",
+          "line": 1054,
+          "called": [
+            "CONFIRMED",
+            "clone",
+            "derive_gas_receipt",
+            "eth_claim",
+            "fetch_and_derive_gas_receipt",
+            "is_backed",
+            "ok_receipt",
+            "source",
+            "verify_eth_claim_independently",
+            "verify_eth_claim_independently_fresh",
+            "with"
           ]
         }
       ]
@@ -41385,12 +42050,12 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::sequencer_claim",
       "path": "runtime/knomosis-l1-ingest/src/sequencer_claim.rs",
-      "declaration_count": 37,
+      "declaration_count": 50,
       "declarations": [
         {
           "kind": "enum",
           "name": "ClaimError",
-          "line": 85,
+          "line": 91,
           "called": [
             "EncodeError",
             "KeyError"
@@ -41399,7 +42064,7 @@
         {
           "kind": "impl",
           "name": "core::fmt::Display for ClaimError",
-          "line": 92,
+          "line": 98,
           "called": [
             "ClaimError"
           ]
@@ -41407,7 +42072,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 93,
+          "line": 99,
           "called": [
             "_",
             "write"
@@ -41416,7 +42081,7 @@
         {
           "kind": "impl",
           "name": "std::error::Error for ClaimError",
-          "line": 101,
+          "line": 107,
           "called": [
             "ClaimError"
           ]
@@ -41424,27 +42089,10 @@
         {
           "kind": "impl",
           "name": "From<EncodeError> for ClaimError",
-          "line": 103,
-          "called": [
-            "ClaimError",
-            "EncodeError"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "from",
-          "line": 104,
-          "called": [
-            "EncodeError"
-          ]
-        },
-        {
-          "kind": "impl",
-          "name": "From<KeyError> for ClaimError",
           "line": 109,
           "called": [
             "ClaimError",
-            "KeyError"
+            "EncodeError"
           ]
         },
         {
@@ -41452,13 +42100,30 @@
           "name": "from",
           "line": 110,
           "called": [
+            "EncodeError"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "From<KeyError> for ClaimError",
+          "line": 115,
+          "called": [
+            "ClaimError",
+            "KeyError"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "from",
+          "line": 116,
+          "called": [
             "KeyError"
           ]
         },
         {
           "kind": "struct",
           "name": "SequencerClaim",
-          "line": 121,
+          "line": 127,
           "called": [
             "Action",
             "SIGNATURE_LEN",
@@ -41470,13 +42135,13 @@
         {
           "kind": "impl",
           "name": "SequencerClaim",
-          "line": 134,
+          "line": 140,
           "called": []
         },
         {
           "kind": "fn",
           "name": "build",
-          "line": 148,
+          "line": 154,
           "called": [
             "Amount",
             "BridgeActorKey",
@@ -41499,7 +42164,7 @@
         {
           "kind": "fn",
           "name": "amount",
-          "line": 180,
+          "line": 186,
           "called": [
             "Amount",
             "_",
@@ -41509,7 +42174,7 @@
         {
           "kind": "fn",
           "name": "encode",
-          "line": 194,
+          "line": 200,
           "called": [
             "ClaimError",
             "action",
@@ -41521,7 +42186,7 @@
         {
           "kind": "fn",
           "name": "build_receipt_backed",
-          "line": 226,
+          "line": 232,
           "called": [
             "Amount",
             "BridgeActorKey",
@@ -41537,7 +42202,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by",
-          "line": 257,
+          "line": 263,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "GasReceipt",
@@ -41551,28 +42216,98 @@
         {
           "kind": "fn",
           "name": "is_receipt_fresh_and_backed",
-          "line": 287,
+          "line": 293,
           "called": [
             "GasReceipt",
             "is_receipt_backed_by"
           ]
         },
         {
+          "kind": "fn",
+          "name": "build_receipt_backed_bold",
+          "line": 314,
+          "called": [
+            "Amount",
+            "BridgeActorKey",
+            "ClaimError",
+            "EthBoldRate",
+            "GasReceipt",
+            "amount",
+            "bold_reimbursement",
+            "key",
+            "min",
+            "nonce",
+            "rate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_bold_receipt_backed_by",
+          "line": 346,
+          "called": [
+            "EthBoldRate",
+            "GAS_POOL_ACTOR_ID",
+            "GasReceipt",
+            "SEQUENCER_ACTOR_ID",
+            "_",
+            "action",
+            "amount",
+            "bold_reimbursement",
+            "rate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_bold_receipt_fresh_and_backed",
+          "line": 370,
+          "called": [
+            "EthBoldRate",
+            "GasReceipt",
+            "is_bold_receipt_backed_by",
+            "rate"
+          ]
+        },
+        {
           "kind": "struct",
           "name": "GasReceipt",
-          "line": 302,
+          "line": 391,
           "called": []
         },
         {
           "kind": "impl",
           "name": "GasReceipt",
-          "line": 314,
+          "line": 403,
           "called": []
         },
         {
           "kind": "fn",
           "name": "reimbursement",
-          "line": 322,
+          "line": 411,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bold_reimbursement",
+          "line": 421,
+          "called": [
+            "Amount",
+            "EthBoldRate",
+            "bold_receipt_reimbursement",
+            "rate"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "EthBoldRate",
+          "line": 432,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "bold_receipt_reimbursement",
+          "line": 452,
           "called": [
             "Amount"
           ]
@@ -41580,7 +42315,7 @@
         {
           "kind": "fn",
           "name": "gas_receipt_reimbursement",
-          "line": 332,
+          "line": 470,
           "called": [
             "Amount"
           ]
@@ -41588,19 +42323,19 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 337,
+          "line": 475,
           "called": []
         },
         {
           "kind": "const",
           "name": "TEST_SCALAR",
-          "line": 344,
+          "line": 482,
           "called": []
         },
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 350,
+          "line": 488,
           "called": [
             "BridgeActorKey",
             "TEST_SCALAR"
@@ -41609,7 +42344,7 @@
         {
           "kind": "fn",
           "name": "claim_is_capped_gas_pool_to_sequencer_transfer",
-          "line": 355,
+          "line": 493,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -41625,7 +42360,7 @@
         {
           "kind": "fn",
           "name": "over_cap_request_is_clamped_to_cap",
-          "line": 376,
+          "line": 514,
           "called": [
             "SEQUENCER_ACTOR_ID",
             "_",
@@ -41639,7 +42374,7 @@
         {
           "kind": "fn",
           "name": "signature_verifies_against_the_pool_public_key",
-          "line": 389,
+          "line": 527,
           "called": [
             "action",
             "b",
@@ -41654,7 +42389,7 @@
         {
           "kind": "fn",
           "name": "build_is_deterministic_and_encodes",
-          "line": 406,
+          "line": 544,
           "called": [
             "b",
             "encode",
@@ -41666,7 +42401,7 @@
         {
           "kind": "fn",
           "name": "test_receipt",
-          "line": 418,
+          "line": 556,
           "called": [
             "GasReceipt"
           ]
@@ -41674,7 +42409,7 @@
         {
           "kind": "fn",
           "name": "reimbursement_is_gas_used_times_gas_price",
-          "line": 428,
+          "line": 566,
           "called": [
             "gas_receipt_reimbursement",
             "reimbursement",
@@ -41684,7 +42419,7 @@
         {
           "kind": "fn",
           "name": "reimbursement_saturates_instead_of_wrapping",
-          "line": 438,
+          "line": 576,
           "called": [
             "gas_receipt_reimbursement",
             "reimbursement",
@@ -41694,7 +42429,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_clamps_to_the_receipt_when_it_binds",
-          "line": 448,
+          "line": 586,
           "called": [
             "GAS_POOL_ACTOR_ID",
             "SEQUENCER_ACTOR_ID",
@@ -41711,7 +42446,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_still_respects_the_cap_when_cap_binds",
-          "line": 480,
+          "line": 618,
           "called": [
             "amount",
             "b",
@@ -41724,7 +42459,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_passes_through_under_both_bounds",
-          "line": 493,
+          "line": 631,
           "called": [
             "amount",
             "b",
@@ -41737,7 +42472,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by_rejects_an_overspend",
-          "line": 504,
+          "line": 642,
           "called": [
             "amount",
             "b",
@@ -41750,7 +42485,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_backed_by_rejects_noncanonical_claim_shapes",
-          "line": 521,
+          "line": 659,
           "called": [
             "Action",
             "GAS_POOL_ACTOR_ID",
@@ -41768,7 +42503,7 @@
         {
           "kind": "fn",
           "name": "is_receipt_fresh_and_backed_rejects_consumed_receipts",
-          "line": 593,
+          "line": 731,
           "called": [
             "b",
             "is_receipt_fresh_and_backed",
@@ -41780,7 +42515,7 @@
         {
           "kind": "fn",
           "name": "receipt_backed_signature_verifies",
-          "line": 618,
+          "line": 756,
           "called": [
             "action",
             "b",
@@ -41790,6 +42525,101 @@
             "signer",
             "signing_input",
             "test_key",
+            "test_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "test_rate",
+          "line": 777,
+          "called": [
+            "EthBoldRate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bold_reimbursement_converts_wei_via_rate",
+          "line": 786,
+          "called": [
+            "bold_receipt_reimbursement",
+            "bold_reimbursement",
+            "test_rate",
+            "test_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bold_reimbursement_floors_and_fail_closes",
+          "line": 799,
+          "called": [
+            "bold_receipt_reimbursement"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bold_receipt_backed_clamps_to_the_converted_cost",
+          "line": 814,
+          "called": [
+            "GAS_POOL_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "_",
+            "action",
+            "amount",
+            "b",
+            "is_bold_receipt_backed_by",
+            "key",
+            "rate",
+            "test_key",
+            "test_rate",
+            "test_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bold_receipt_backed_still_respects_the_cap",
+          "line": 854,
+          "called": [
+            "amount",
+            "b",
+            "is_bold_receipt_backed_by",
+            "key",
+            "rate",
+            "test_key",
+            "test_rate",
+            "test_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_bold_receipt_backed_by_rejects_noncanonical_claim_shapes",
+          "line": 868,
+          "called": [
+            "Action",
+            "GAS_POOL_ACTOR_ID",
+            "SEQUENCER_ACTOR_ID",
+            "SIGNATURE_LEN",
+            "SequencerClaim",
+            "action",
+            "amount",
+            "is_bold_receipt_backed_by",
+            "nonce",
+            "rate",
+            "signer",
+            "test_rate",
+            "test_receipt"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "is_bold_receipt_fresh_and_backed_rejects_consumed_receipts",
+          "line": 928,
+          "called": [
+            "b",
+            "is_bold_receipt_fresh_and_backed",
+            "key",
+            "rate",
+            "test_key",
+            "test_rate",
             "test_receipt"
           ]
         }
@@ -42631,7 +43461,8 @@
             "block_hash",
             "block_number",
             "default",
-            "next_nonce"
+            "next_nonce",
+            "with"
           ]
         },
         {

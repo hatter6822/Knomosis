@@ -152,8 +152,20 @@ diverge from FIFO.  What ships:
     `compare_against_baseline` refuses to compare across either mode
     dimension (`RegressionVerdict::NotComparable`).
 
-**Remaining: Tracks B–D.  Planned.  Not started.**  Every prerequisite
-is met:
+**Status (2026-06-16): Tracks A–C complete; Track D documented.**
+Track A (FQ Rungs 0+1) shipped; Track B (v1 reimbursement claim) shipped
+(`knomosis-l1-ingest::sequencer_claim::SequencerClaim::build`) together
+with the GP.8.5 v2 receipt-verified core
+(`LegalKernel.Bridge.ReceiptVerifiedClaim`); Track C (configuration)
+shipped (§6.3 — the action-clock budget-epoch config note in
+`docs/gas_pool_runbook.md` §8.1 plus the `--epoch-duration-seconds`-absence
+regression test); Track D operations are documented in
+`docs/gas_pool_runbook.md` §8 / §11.  **OQ-GP-8b is now closed** — GP.8.5
+v2 is receipt-verified on both legs (the BOLD-leg `l1EthBoldRateOracle` +
+the `receiptGatedAdmissibleUnified` composer) with the independent-observer
+receipt-fetch binding (`knomosis-l1-ingest::receipt_verifier`).  Remaining:
+GP.10 final ratification (the two-reviewer pass).  The prerequisites for
+every track were met:
 
   * **RH-C (`knomosis-host`) — Complete.**  Track A (FQ) extends it.
   * **GP.6.2 (`knomosis-host` budget admission gate) — Complete.**
@@ -176,7 +188,7 @@ is met:
   * **Track B — Reimbursement claims:** ~1.0 d (GP.8.1a–c ≈ 8 h;
     GP.8.5 v2 path is deferred / out of scope for v1).
   * **Track C — Configuration:** ~0.5 d (GP.8.2, mostly guidance now
-    that the flags ship).
+    that the flags ship).  **Complete** (§6.3).
   * **Track D — Operations:** ~2.5 d (GP.8.3 ≈ 6 h; GP.8.4 ≈ 14 h).
 
 Track A dominates and is independently shippable; Tracks B–D are small
@@ -1867,6 +1879,13 @@ path.  Record this as the resolution of the dangling
     documentation + possibly a help-text clarification.
   * **Dependencies.**  GP.6.2 (Complete).
   * **Estimated effort.**  ~3 hours.
+  * **Status.**  **Complete (2026-06-16).**  The action-clock rationale
+    + shipped-flag table + the wall-clock non-goal + the approximation
+    guidance are documented in `docs/gas_pool_runbook.md` §8.1, and the
+    `--epoch-duration-seconds`-absence assertion ships as
+    `knomosis-host` `config::tests::epoch_duration_seconds_flag_does_not_exist`
+    (the host's module-header flag table + `--help` text already document
+    the flags themselves).
 
 ## §7 Track D — Operations (operator runbook)
 

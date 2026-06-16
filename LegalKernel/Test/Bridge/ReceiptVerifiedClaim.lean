@@ -315,6 +315,210 @@ def tests : List TestCase :=
         let _ := @receiptEnforced_second_claim_distinct_receipt
         pure ()
     }
+    -- ====================================================================
+    -- ## OQ-GP-8b follow-on (a): the BOLD leg + ETH→BOLD price oracle
+    -- ====================================================================
+  , { name := "GP.8.5-bold: boldReceiptReimbursement converts wei via the rate (floored)"
+    , body := do
+        -- 21000 gas @ 50 wei = 1.05e6 wei; at 3000 BOLD-base-units/wei
+        -- (den 1) that is 3.15e9 BOLD base units.
+        assertEq (expected := 21000 * 50 * 3000)
+          (actual := boldReceiptReimbursement 21000 50 3000 1)
+          "bold reimbursement = wei cost * rate (den 1)"
+        assertEq (expected := 3_150_000_000)
+          (actual := boldReceiptReimbursement 21000 50 3000 1) "value check"
+    }
+  , { name := "GP.8.5-bold: boldReceiptReimbursement rounds DOWN (never over-reimburses)"
+    , body := do
+        -- 10 wei * 1 / 3 = 10/3 = 3 (floor), not 4 — the conversion can
+        -- never back MORE BOLD than the wei cost justifies.
+        assertEq (expected := 3) (actual := boldReceiptReimbursement 10 1 1 3)
+          "floor division: 10/3 = 3"
+        assertEq (expected := 0) (actual := boldReceiptReimbursement 2 1 1 3)
+          "floor division: 2/3 = 0"
+    }
+  , { name := "GP.8.5-bold: boldReceiptReimbursement fail-closed corners (zero gas/price/rate/den)"
+    , body := do
+        assertEq (expected := 0) (actual := boldReceiptReimbursement 0 50 3000 1) "zero gas ⇒ 0"
+        assertEq (expected := 0) (actual := boldReceiptReimbursement 21000 0 3000 1) "zero price ⇒ 0"
+        assertEq (expected := 0) (actual := boldReceiptReimbursement 21000 50 0 1) "zero rate ⇒ 0"
+        -- den = 0 is fail-closed (Lean `_ / 0 = 0`): a malformed rate backs nothing.
+        assertEq (expected := 0) (actual := boldReceiptReimbursement 21000 50 3000 0)
+          "zero denominator ⇒ 0 (fail-closed)"
+    }
+  , { name := "GP.8.5-bold: boldReceiptReimbursement monotone in the wei cost (sample)"
+    , body := do
+        assert (decide (boldReceiptReimbursement 100 7 5 2 ≤ boldReceiptReimbursement 200 7 5 2))
+          "monotone in gasUsed"
+        assert (decide (boldReceiptReimbursement 100 7 5 2 ≤ boldReceiptReimbursement 100 9 5 2))
+          "monotone in gasPrice"
+    }
+  , { name := "GP.8.5-bold: l1EthBoldRateOracle opaque is present (evaluates to Bool)"
+    , body := do
+        let _b : Bool := l1EthBoldRateOracle ByteArray.empty 0 0 1
+        pure ()
+    }
+  , { name := "GP.8.5-bold: a backed, capped BOLD receipt is admissible (proof term)"
+    , body := do
+        -- GIVEN gas + rate attestations and that the converted cost is
+        -- within the BOLD cap, the canonical BOLD-leg claim of exactly the
+        -- converted cost is admissible — the full of_receipt → gate path.
+        let _proof :
+            ∀ (cap : Amount) (rbh rateBh : ByteArray) (b gu gp num den : Nat),
+              l1GasReceiptVerifier rbh b gu gp = true →
+              l1EthBoldRateOracle rateBh b num den = true →
+              boldReceiptReimbursement gu gp num den ≤ cap →
+              receiptVerifiedBoldClaimAdmissible cap
+                (.transfer 1 gasPoolActor sequencerActor
+                  (boldReceiptReimbursement gu gp num den)) :=
+          fun _cap rbh rateBh b gu gp num den hgas hrate hcap =>
+            ⟨boldReceiptReimbursement gu gp num den, rfl, hcap,
+              ⟨SequencerReimbursementVerifiedBold.of_receipt
+                  (boldReceiptReimbursement gu gp num den)
+                  rbh rateBh b gu gp num den hgas hrate (Nat.le_refl _)⟩⟩
+        pure ()
+    }
+  , { name := "GP.8.5-bold: BOLD headline extracts cap + gas + rate + bound (proof term)"
+    , body := do
+        let _proof :
+            ∀ (cap : Amount) (action : Action),
+              receiptVerifiedBoldClaimAdmissible cap action →
+              ∃ amount, action = .transfer 1 gasPoolActor sequencerActor amount ∧
+                amount ≤ cap ∧
+                ∃ rbh rateBh b gu gp num den,
+                  l1GasReceiptVerifier rbh b gu gp = true ∧
+                  l1EthBoldRateOracle rateBh b num den = true ∧
+                  amount ≤ boldReceiptReimbursement gu gp num den :=
+          fun cap _action h => receiptVerifiedBoldClaim_capped_and_backed cap h
+        pure ()
+    }
+  , { name := "GP.8.5-bold: every BOLD receipt-verified claim is gasPoolPolicy-permitted (proof term)"
+    , body := do
+        let _proof :
+            ∀ (mEth mBold : Amount) (action : Action),
+              receiptVerifiedBoldClaimAdmissible mBold action →
+              (gasPoolPolicy mEth mBold).permits gasPoolActor action :=
+          fun mEth mBold _action h =>
+            receiptVerifiedBoldClaimAdmissible_implies_gasPoolPolicy mEth mBold h
+        pure ()
+    }
+  , { name := "GP.8.5-bold: an ETH-leg (resource 0) transfer is NOT BOLD-admissible (proof term)"
+    , body := do
+        -- Leg discrimination: the BOLD gate pins resource 1, so a
+        -- resource-0 transfer can never satisfy it (regardless of receipt).
+        let _proof :
+            ∀ (cap amount : Amount),
+              ¬ receiptVerifiedBoldClaimAdmissible cap
+                  (.transfer 0 gasPoolActor sequencerActor amount) :=
+          fun _cap _amount h => by
+            obtain ⟨_a, ha, _, _⟩ := h
+            rw [Action.transfer.injEq] at ha
+            exact absurd ha.1 (by decide)
+        pure ()
+    }
+  , { name := "GP.8.5-bold: a non-transfer action is NOT BOLD-admissible (proof term)"
+    , body := do
+        let _proof :
+            ∀ (cap : Amount),
+              ¬ receiptVerifiedBoldClaimAdmissible cap (.mint 1 sequencerActor 5) :=
+          fun _cap h => by obtain ⟨_a, ha, _, _⟩ := h; simp at ha
+        pure ()
+    }
+  , { name := "GP.8.5-bold: a wrong-recipient BOLD transfer is NOT admissible (proof term)"
+    , body := do
+        -- A resource-1 transfer to someone OTHER than sequencerActor cannot
+        -- match the BOLD gate's canonical shape (recipient discrimination).
+        let _proof :
+            ∀ (cap amount : Amount),
+              ¬ receiptVerifiedBoldClaimAdmissible cap
+                  (.transfer 1 gasPoolActor bridgeActor amount) :=
+          fun _cap _amount h => by
+            obtain ⟨_a, ha, _, _⟩ := h
+            rw [Action.transfer.injEq] at ha
+            exact absurd ha.2.2.1 (by decide)
+        pure ()
+    }
+  , { name := "GP.8.5-bold: consumeReceipt_blocks_reuse_bold — fresh ⇒ hash ≠ consumed (proof term)"
+    , body := do
+        let _proof :
+            ∀ (consumed : ConsumedReceipts) (rbh : ByteArray) (amount : Amount)
+              (w : SequencerReimbursementVerifiedBoldFresh (consumeReceipt consumed rbh) amount),
+              w.backing.receiptBindingHash ≠ rbh :=
+          fun consumed rbh _amount w => consumeReceipt_blocks_reuse_bold consumed rbh w
+        pure ()
+    }
+  , { name := "GP.8.5-bold: enforced BOLD ⇒ base ⇒ gasPoolPolicy (proof term)"
+    , body := do
+        let _proof :
+            ∀ (consumed : ConsumedReceipts) (mEth mBold : Amount) (action : Action),
+              receiptEnforcedBoldClaimAdmissible consumed mBold action →
+              (gasPoolPolicy mEth mBold).permits gasPoolActor action :=
+          fun consumed mEth mBold _action h =>
+            receiptEnforcedBoldClaimAdmissible_implies_gasPoolPolicy consumed mEth mBold h
+        pure ()
+    }
+  , -- ## Unified composer — gate BOTH legs (the OQ-GP-8b closure)
+    { name := "GP.8.5-bold: unified composer REQUIRES the BOLD gate for a BOLD claim (proof term)"
+    , body := do
+        -- The gap the ETH-only `receiptGatedAdmissible` left open: under
+        -- the unified composer a BOLD gas-pool claim is admitted ONLY if
+        -- the enforced BOLD gate holds.
+        let _proof :
+            ∀ (base : Prop) (consumed : ConsumedReceipts) (mEth mBold amount : Amount),
+              receiptGatedAdmissibleUnified base consumed mEth mBold
+                  (.transfer 1 gasPoolActor sequencerActor amount) →
+              receiptEnforcedBoldClaimAdmissible consumed mBold
+                  (.transfer 1 gasPoolActor sequencerActor amount) :=
+          fun _base consumed mEth mBold amount h =>
+            receiptGatedAdmissibleUnified_requires_bold_gate consumed mEth mBold ⟨amount, rfl⟩ h
+        pure ()
+    }
+  , { name := "GP.8.5-bold: unified composer REQUIRES the ETH gate for an ETH claim (proof term)"
+    , body := do
+        let _proof :
+            ∀ (base : Prop) (consumed : ConsumedReceipts) (mEth mBold amount : Amount),
+              receiptGatedAdmissibleUnified base consumed mEth mBold
+                  (.transfer 0 gasPoolActor sequencerActor amount) →
+              receiptEnforcedClaimAdmissible consumed mEth
+                  (.transfer 0 gasPoolActor sequencerActor amount) :=
+          fun _base consumed mEth mBold amount h =>
+            receiptGatedAdmissibleUnified_requires_eth_gate consumed mEth mBold ⟨amount, rfl⟩ h
+        pure ()
+    }
+  , { name := "GP.8.5-bold: unified composer defers to base off-claim (v1 unaffected, proof term)"
+    , body := do
+        let _proof :
+            ∀ (base : Prop) (consumed : ConsumedReceipts) (mEth mBold : Amount) (action : Action),
+              ¬ isGasPoolClaim action →
+              (receiptGatedAdmissibleUnified base consumed mEth mBold action ↔ base) :=
+          fun _base consumed mEth mBold action hnot =>
+            receiptGatedAdmissibleUnified_eq_base_off_claim consumed mEth mBold hnot
+        pure ()
+    }
+  , { name := "GP.8.5-bold: BOLD-leg + unified-composer API stable"
+    , body := do
+        let _ := @l1EthBoldRateOracle
+        let _ := @boldReceiptReimbursement
+        let _ := @SequencerReimbursementVerifiedBold.of_receipt
+        let _ := @sequencerReimbursementVerifiedBold_backed
+        let _ := @receiptVerifiedBoldClaimAdmissible
+        let _ := @receiptVerifiedBoldClaim_capped_and_backed
+        let _ := @receiptVerifiedBoldClaimAdmissible_implies_gasPoolPolicy
+        let _ := @SequencerReimbursementVerifiedBoldFresh.backing
+        let _ := @consumeReceipt_blocks_reuse_bold
+        let _ := @receiptEnforcedBoldClaimAdmissible
+        let _ := @receiptEnforcedBoldClaimAdmissible_implies_base
+        let _ := @receiptEnforcedBoldClaimAdmissible_implies_gasPoolPolicy
+        let _ := @receiptEnforcedBoldClaim_capped_backed_and_fresh
+        let _ := @isGasPoolBoldClaim
+        let _ := @isGasPoolClaim
+        let _ := @receiptGatedAdmissibleUnified
+        let _ := @receiptGatedAdmissibleUnified_implies_base
+        let _ := @receiptGatedAdmissibleUnified_requires_eth_gate
+        let _ := @receiptGatedAdmissibleUnified_requires_bold_gate
+        let _ := @receiptGatedAdmissibleUnified_eq_base_off_claim
+        pure ()
+    }
   ]
 
 end ReceiptVerifiedClaimTests

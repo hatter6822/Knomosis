@@ -54,8 +54,10 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       on the explorer.
 - [ ] Constructor parameters (`MIN_CHALLENGE_BOND`, bisection timeouts,
       `stakeAmount`, `maxDrainPerAction{Eth,Bold}`, `MIN_FEE_BPS` /
-      `MAX_FEE_BPS`, TVL cap) **sized per `docs/economic_incentive_analysis.md`
-      IC-1…IC-6** for testnet gas/value assumptions.
+      `MAX_FEE_BPS`, TVL cap) **sized per `docs/deployment_parameters.md`**
+      (the per-parameter sizing guide mapping every immutable constructor
+      value to its IC-1…IC-6 condition) for testnet gas/value assumptions,
+      calibrated with `scripts/economic_simulation.py`.
 - [ ] `KnomosisAmmDisasterRecoveryMultisig` signer set chosen; `N`
       such that 3-of-N collusion exceeds reserve value (E-2/§5).
 
@@ -66,8 +68,14 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       reach production.
 - [ ] **F-2:** verifier-identifier assert — **done** (run
       `knomosis verify-check` in the deploy pipeline; exit 1 on the
-      Lean-opaque fallback). **Remaining:** SHA-256-pin the cdylib
-      artefacts (`knomosis-verify-secp256k1`, `knomosis-hash-keccak256`).
+      Lean-opaque fallback). Cdylib **SHA-256 artefact pin — done for
+      both** adaptors: `scripts/verify_secp256k1_link.sh`
+      (`knomosis-verify-secp256k1`) and `scripts/verify_keccak_link.sh`
+      (`knomosis-hash-keccak256`) record / `--check` the staticlib
+      SHA-256 and prove the fallback→production flip (CI:
+      `ci-verify-secp256k1.yml`, `ci-hash-keccak256-link.yml`).
+      **Remaining:** run the `--check` pin in the deploy pipeline as a
+      required step.
 
 ### 3.3 Liveness / watchtower (the IC-3 assumption)
 - [ ] ≥1 **independent** `knomosis-faultproof-observer` running and
@@ -133,9 +141,12 @@ F.3 acceptance harness, and the two operator runbooks.  The system is
 **Gaps before a *value-bearing* public testnet** (ordered):
 1. The **F-1 / F-2 trust-binding hardening** (security review §7) — the
    single most important pre-deployment code items.
-2. A **deployment parameterisation guide** encoding IC-1…IC-6
-   (economic analysis E-1) so bonds/caps/stakes/fees are sized, not
-   guessed.
+2. ~~A **deployment parameterisation guide** encoding IC-1…IC-6 so
+   bonds/caps/stakes/fees are sized, not guessed.~~ **Shipped:**
+   `docs/deployment_parameters.md` enumerates every immutable constructor
+   parameter and maps it to its IC condition / sizing guidance;
+   `scripts/economic_simulation.py` is the calibration harness. *Remaining
+   per deployment:* run them against the target gas/value assumptions.
 3. **Monitoring/alerting + key-custody** procedures (§3.5) — currently
    the daemons exist but the *operational* wrapping does not.
 4. **Adversarial fuzzing** of the untrusted-input boundaries —

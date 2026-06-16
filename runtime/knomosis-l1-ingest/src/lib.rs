@@ -161,6 +161,7 @@ pub mod encoding;
 pub mod events;
 pub mod fixture;
 pub mod key;
+pub mod receipt_verifier;
 pub mod reorg;
 pub mod sequencer_claim;
 pub mod source;

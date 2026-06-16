@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "ac2efb14642394d119ac8e00e875a1c57757f8d467a756a5905981d761348e09"
+    "source_digest": "cbf00f0d934c908cc0d91d9d54e7da7fa87c148f940ff70398e15853eaa59d69"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5149
+    "declaration_count": 5170
   },
   "modules": [
     {
@@ -11047,7 +11047,7 @@
     {
       "module": "LegalKernel.Bridge.ReceiptVerifiedClaim",
       "path": "LegalKernel/Bridge/ReceiptVerifiedClaim.lean",
-      "declaration_count": 25,
+      "declaration_count": 46,
       "declarations": [
         {
           "kind": "namespace",
@@ -11338,9 +11338,7 @@
           "called": [
             "Action",
             "Amount",
-            "Bridge",
             "ConsumedReceipts",
-            "LegalKernel",
             "consumeReceipt",
             "gasPoolActor",
             "gasReceiptReimbursement",
@@ -11350,6 +11348,284 @@
             "receiptEnforcedClaim_capped_backed_and_fresh",
             "sequencerActor",
             "transfer"
+          ]
+        },
+        {
+          "kind": "opaque",
+          "name": "l1EthBoldRateOracle",
+          "line": 507,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "boldReceiptReimbursement",
+          "line": 517,
+          "called": [
+            "Amount"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "SequencerReimbursementVerifiedBold",
+          "line": 537,
+          "called": [
+            "Amount",
+            "boldReceiptReimbursement",
+            "l1EthBoldRateOracle",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "SequencerReimbursementVerifiedBold.of_receipt",
+          "line": 569,
+          "called": [
+            "Amount",
+            "SequencerReimbursementVerifiedBold",
+            "boldReceiptReimbursement",
+            "l1EthBoldRateOracle",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "sequencerReimbursementVerifiedBold_backed",
+          "line": 594,
+          "called": [
+            "Amount",
+            "SequencerReimbursementVerifiedBold",
+            "boldReceiptReimbursement",
+            "l1EthBoldRateOracle",
+            "l1GasReceiptVerifier"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptVerifiedBoldClaimAdmissible",
+          "line": 608,
+          "called": [
+            "Action",
+            "Amount",
+            "SequencerReimbursementVerifiedBold",
+            "gasPoolActor",
+            "maxDrainPerActionBold",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedBoldClaim_capped_and_backed",
+          "line": 620,
+          "called": [
+            "Action",
+            "Amount",
+            "boldReceiptReimbursement",
+            "gasPoolActor",
+            "l1EthBoldRateOracle",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionBold",
+            "receiptVerifiedBoldClaimAdmissible",
+            "sequencerActor",
+            "sequencerReimbursementVerifiedBold_backed",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptVerifiedBoldClaimAdmissible_implies_gasPoolPolicy",
+          "line": 640,
+          "called": [
+            "Action",
+            "Amount",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "gasPoolPolicy_permits_sequencer_transfer_bold",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "permits",
+            "receiptVerifiedBoldClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "SequencerReimbursementVerifiedBoldFresh",
+          "line": 655,
+          "called": [
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerifiedBold"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "consumeReceipt_blocks_reuse_bold",
+          "line": 664,
+          "called": [
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerifiedBoldFresh",
+            "consumeReceipt"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptEnforcedBoldClaimAdmissible",
+          "line": 675,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "SequencerReimbursementVerifiedBoldFresh",
+            "gasPoolActor",
+            "maxDrainPerActionBold",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedBoldClaimAdmissible_implies_base",
+          "line": 684,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "maxDrainPerActionBold",
+            "receiptEnforcedBoldClaimAdmissible",
+            "receiptVerifiedBoldClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedBoldClaimAdmissible_implies_gasPoolPolicy",
+          "line": 692,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "gasPoolActor",
+            "gasPoolPolicy",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "permits",
+            "receiptEnforcedBoldClaimAdmissible",
+            "receiptEnforcedBoldClaimAdmissible_implies_base",
+            "receiptVerifiedBoldClaimAdmissible_implies_gasPoolPolicy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptEnforcedBoldClaim_capped_backed_and_fresh",
+          "line": 704,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "boldReceiptReimbursement",
+            "gasPoolActor",
+            "l1EthBoldRateOracle",
+            "l1GasReceiptVerifier",
+            "maxDrainPerActionBold",
+            "receiptEnforcedBoldClaimAdmissible",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "isGasPoolBoldClaim",
+          "line": 733,
+          "called": [
+            "Action",
+            "gasPoolActor",
+            "sequencerActor",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "isGasPoolClaim",
+          "line": 738,
+          "called": [
+            "Action",
+            "isGasPoolBoldClaim",
+            "isGasPoolEthClaim"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "receiptGatedAdmissibleUnified",
+          "line": 747,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolBoldClaim",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "receiptEnforcedBoldClaimAdmissible",
+            "receiptEnforcedClaimAdmissible"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissibleUnified_implies_base",
+          "line": 757,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "receiptGatedAdmissibleUnified"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissibleUnified_requires_eth_gate",
+          "line": 766,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolEthClaim",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "receiptEnforcedClaimAdmissible",
+            "receiptGatedAdmissibleUnified"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissibleUnified_requires_bold_gate",
+          "line": 778,
+          "called": [
+            "Action",
+            "Amount",
+            "ConsumedReceipts",
+            "isGasPoolBoldClaim",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "receiptEnforcedBoldClaimAdmissible",
+            "receiptGatedAdmissibleUnified"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "receiptGatedAdmissibleUnified_eq_base_off_claim",
+          "line": 790,
+          "called": [
+            "Action",
+            "Amount",
+            "Bridge",
+            "ConsumedReceipts",
+            "LegalKernel",
+            "isGasPoolClaim",
+            "maxDrainPerActionBold",
+            "maxDrainPerActionEth",
+            "receiptGatedAdmissibleUnified"
           ]
         }
       ]
@@ -41601,36 +41877,56 @@
             "LegalKernel.Test.Bridge",
             "ReceiptVerifiedClaimTests",
             "SequencerReimbursementVerified.of_receipt",
+            "SequencerReimbursementVerifiedBold.of_receipt",
+            "SequencerReimbursementVerifiedBoldFresh",
             "SequencerReimbursementVerifiedFresh",
             "TestCase",
             "assert",
             "assertEq",
+            "boldReceiptReimbursement",
             "bridgeActor",
             "consumeReceipt",
             "consumeReceipt_blocks_reuse",
+            "consumeReceipt_blocks_reuse_bold",
             "gasPoolActor",
             "gasPoolPolicy",
             "gasReceiptReimbursement",
+            "isGasPoolBoldClaim",
+            "isGasPoolClaim",
             "isGasPoolEthClaim",
+            "l1EthBoldRateOracle",
             "l1GasReceiptVerifier",
             "mBold",
             "mEth",
             "mint",
             "permits",
+            "receiptEnforcedBoldClaimAdmissible",
+            "receiptEnforcedBoldClaimAdmissible_implies_base",
+            "receiptEnforcedBoldClaimAdmissible_implies_gasPoolPolicy",
+            "receiptEnforcedBoldClaim_capped_backed_and_fresh",
             "receiptEnforcedClaimAdmissible",
             "receiptEnforcedClaimAdmissible_implies_base",
             "receiptEnforcedClaimAdmissible_implies_gasPoolPolicy",
             "receiptEnforcedClaim_capped_backed_and_fresh",
             "receiptEnforced_second_claim_distinct_receipt",
             "receiptGatedAdmissible",
+            "receiptGatedAdmissibleUnified",
+            "receiptGatedAdmissibleUnified_eq_base_off_claim",
+            "receiptGatedAdmissibleUnified_implies_base",
+            "receiptGatedAdmissibleUnified_requires_bold_gate",
+            "receiptGatedAdmissibleUnified_requires_eth_gate",
             "receiptGatedAdmissible_eq_base_off_claim",
             "receiptGatedAdmissible_implies_base",
             "receiptGatedAdmissible_requires_gate_for_claim",
+            "receiptVerifiedBoldClaimAdmissible",
+            "receiptVerifiedBoldClaimAdmissible_implies_gasPoolPolicy",
+            "receiptVerifiedBoldClaim_capped_and_backed",
             "receiptVerifiedClaimAdmissible",
             "receiptVerifiedClaimAdmissible_implies_gasPoolPolicy",
             "receiptVerifiedClaim_capped_and_backed",
             "receiptVerifiedClaim_requires_backing",
             "sequencerActor",
+            "sequencerReimbursementVerifiedBold_backed",
             "sequencerReimbursementVerified_backed",
             "transfer"
           ]

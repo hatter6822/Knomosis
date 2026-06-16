@@ -113,6 +113,14 @@ cd solidity && make devnet                    # F.3 LIVE anvil deploy +
 ./scripts/verify_secp256k1_link.sh            # build + record + prove
 ./scripts/verify_secp256k1_link.sh --check    # build + verify SHA-256 snapshot
 
+# F-1/F-2 production keccak256-hash link verification: proves
+# `hash-check` flips fallback(exit 1) -> production(exit 0) when the real
+# keccak adaptor is linked, and records/verifies the staticlib SHA-256
+# (the hash-adaptor peer of the secp256k1 verifier pin above; together
+# they pin BOTH FFI cdylibs named in the F-2 residual).
+./scripts/verify_keccak_link.sh               # build + record + prove
+./scripts/verify_keccak_link.sh --check       # build + verify SHA-256 snapshot
+
 # Quantitative economic-incentive simulation (IC-1..IC-6 envelope +
 # self-asserting invariant checks; companion to docs/economic_incentive_analysis.md).
 python3 scripts/economic_simulation.py
@@ -243,12 +251,15 @@ knomosis/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
 │   ├── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
 │   ├── verify_secp256k1_link.sh -- F-2 production-verifier link proof + SHA-256
+│   ├── verify_keccak_link.sh  -- F-1/F-2 production keccak256-hash link proof + SHA-256
 │   └── economic_simulation.py -- IC-1..IC-6 quantitative incentive harness
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
 │   ├── ci-rust.yml            -- Rust workspace gates (runtime/**)
 │   ├── ci-solidity.yml        -- Solidity cap gate + forge gates (solidity/**)
-│   └── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
+│   ├── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
+│   ├── ci-verify-secp256k1.yml -- F-2 secp256k1-verifier production-link proof
+│   └── ci-hash-keccak256-link.yml -- F-1/F-2 keccak256-hash production-link + SHA-256 pin
 ├── README.md                  -- project entry point
 ├── CLAUDE.md                  -- this file
 └── docs/
@@ -578,6 +589,7 @@ The Genesis Plan promises a small set of type-level guarantees
 | GP.7.2 | Gas-pool outflow capped | `gasPoolPolicy_permits_transfer_iff` | `Bridge/GasPoolPolicy.lean` |
 | GP.7.3 | Per-resource pool drain bound | `pool_drain_bounded_by_action_count_per_resource` | `Bridge/PoolDrainBound.lean` |
 | GP.8.5 | Receipt-verified claim double bound | `receiptVerifiedClaim_capped_and_backed` | `Bridge/ReceiptVerifiedClaim.lean` |
+| GP.8.5/OQ-GP-8b | BOLD-leg receipt double bound | `receiptVerifiedBoldClaim_capped_and_backed` | `Bridge/ReceiptVerifiedClaim.lean` |
 | GP.11.6 | AMM reserve outflow restricted | `ammReservePolicy_permits_iff` | `Bridge/AmmReservePolicy.lean` |
 | GP.11.8 | AMM state committed to bridge | `bridgeState_commit_includes_ammState` | `FaultProof/Commit.lean` |
 | GP.11.8 | v1.2 backward compatibility | `bridgeState_commit_extends_v1_2` | `FaultProof/Commit.lean` |
@@ -638,8 +650,8 @@ work units.  Status:
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
-| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B complete; C/D documented; GP.8.5 v2 receipt-verified claim core shipped (Lean + Rust); BOLD-leg oracle + observer receipt-fetch = OQ-GP-8b |
-| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Track A+B, GP.8.5 v2 core, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining) |
+| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim shipped — **both legs** (Lean + Rust); OQ-GP-8b closed (BOLD-leg ETH→BOLD oracle + independent-observer receipt-fetch) |
+| GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Tracks A–C, GP.8.5 v2 both legs incl. OQ-GP-8b, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining — now gated only on the two-reviewer pass, see `unified_gas_pool_plan.md` §GP.10) |
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
@@ -725,7 +737,9 @@ full catalogue):
 - `bridge-gas-pool-policy` — GP.7.2 gas-pool policy characterisation.
 - `bridge-pool-drain-bound` — GP.7.3 inductive pool-drain bound.
 - `bridge-receipt-verified-claim` — GP.8.5 v2 receipt-verified
-  sequencer-reimbursement gate (the `min(cap, L1 wei cost)` bound).
+  sequencer-reimbursement gate, both legs (the `min(cap, cost)` bound;
+  ETH wei-exact + BOLD via the OQ-GP-8b ETH→BOLD oracle + the unified
+  composer).
 - `bridge-amm-reserve-policy` — GP.11.6 AMM reserve policy.
 - `crosscheck-amm-swap` — GP.11.7 tri-stack AMM fixture corpus.
 - `faultproof-amm-commit` — GP.11.8 AMM state-root commitment
@@ -748,8 +762,9 @@ full catalogue):
 
 **TCB audit.**  `#print axioms` on every kernel theorem returns a
 subset of `[propext, Classical.choice, Quot.sound]`.  No custom
-axioms exist.  `Verify`, `hashBytes`, and `l1FaultProofVerifier` are
-`opaque`, not `axiom`.
+axioms exist.  `Verify`, `hashBytes`, `l1FaultProofVerifier`,
+`l1GasReceiptVerifier`, and `l1EthBoldRateOracle` are `opaque`, not
+`axiom`.
 
 **TCB import discipline.**  `Tools.Common.tcbInternalImports`
 enumerates the project-internal modules each TCB-core file may import
@@ -809,7 +824,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.5.1–5.5 | Complete | Solidity: ETH+BOLD fee-split deposits, cap audit gate, step-VM kind 21, BOLD circuit breaker + Liquity auto-trigger + TVL cap |
 | GP.6.1–6.5 | Complete | Rust: GP-family encoder, budget admission gate, event-type registry, indexer budget/pool views, BOLD cross-stack corpus |
 | GP.7.0–7.4 | Complete | Bridge-policy characterisation, reserved actors, `gasPoolPolicy`, inductive drain bound, genesis ratification + CLI |
-| GP.8.5 | Core complete | Receipt-verified claim gate: Lean `ReceiptVerifiedClaim` (`l1GasReceiptVerifier` opaque, `SequencerReimbursementVerified` witness, `receiptVerifiedClaimAdmissible`, the `min(cap, wei)` double-bound + pure-strengthening theorems) + Rust `build_receipt_backed` / `is_receipt_backed_by`; ETH-leg only; BOLD oracle + observer receipt-fetch = OQ-GP-8b |
+| GP.8.5 | Complete (both legs) | Receipt-verified claim gate: Lean `ReceiptVerifiedClaim` (`l1GasReceiptVerifier` + `l1EthBoldRateOracle` opaques, `SequencerReimbursementVerified{,Bold}` witnesses, `receiptVerifiedClaimAdmissible` + `…Bold…` + `receiptGatedAdmissibleUnified`, the `min(cap, cost)` double-bounds + pure-strengthening theorems) + Rust `build_receipt_backed{,_bold}` / `is_{,bold_}receipt_backed_by`. OQ-GP-8b closed: BOLD leg via the floored ETH→BOLD conversion + the independent-observer receipt-fetch binding (`knomosis-l1-ingest::receipt_verifier`: tx-keyed canonical binding hash, `derive_gas_receipt`, `verify_{eth,bold}_claim_independently{,_fresh}` with observer-path no-reuse keyed on the canonical re-derived hash, confirmation-depth re-org gate, batch-keyed `RateOracle` for BOLD, fail-closed `0x`/EIP-658 receipt parsing) |
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
 | GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
@@ -848,12 +863,21 @@ receipt-verified claim core complete: `LegalKernel.Bridge.ReceiptVerifiedClaim`
 witness + `receiptVerifiedClaimAdmissible` gate; headline
 `receiptVerifiedClaim_capped_and_backed` = `min(cap, L1 wei cost)` bound;
 `…_implies_gasPoolPolicy` = pure strengthening of v1) mirrored by
-`SequencerClaim::build_receipt_backed` / `is_receipt_backed_by`.  ETH-leg
-only (wei-exact); BOLD-leg price oracle + independent-observer
-receipt-fetch binding = OQ-GP-8b.  Track D claim/fair-queuing ops in
-`gas_pool_runbook.md` §8 / §11.  Remaining: Track C config note + the
-`--epoch-duration-seconds`-absence test, and GP.10 final ratification
-(§15E touch, migration guide).
+`SequencerClaim::build_receipt_backed{,_bold}` /
+`is_{,bold_}receipt_backed_by`.  **OQ-GP-8b closed:** the BOLD leg is
+receipt-verified via the `l1EthBoldRateOracle` opaque +
+`boldReceiptReimbursement` (floored ETH→BOLD conversion) + the
+`receiptVerifiedBoldClaim_*` / `receiptGatedAdmissibleUnified` theorems,
+and the independent-observer receipt-fetch binding
+(`knomosis-l1-ingest::receipt_verifier`) re-derives the receipt from L1
+(`eth_getTransactionReceipt` + a canonical binding hash) so a third party
+attests the backing without trusting the claim builder.  Track C complete: the action-clock
+budget-epoch config note (`gas_pool_runbook.md` §8.1) + the
+`--epoch-duration-seconds`-absence regression test (`knomosis-host`
+`config::tests::epoch_duration_seconds_flag_does_not_exist`).  Track D
+claim/fair-queuing ops in `gas_pool_runbook.md` §8 / §11.  Remaining:
+GP.10 final ratification (the two-reviewer pass; §15E is already updated
+for the BOLD oracle).
 
 ### Audit remediation (Workstream AR)
 

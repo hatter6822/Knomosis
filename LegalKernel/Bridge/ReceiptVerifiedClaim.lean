@@ -473,5 +473,331 @@ theorem receiptEnforced_second_claim_distinct_receipt
   intro heq
   exact hfresh (heq ▸ by simp [consumeReceipt])
 
+/-! ## BOLD leg — the ETH→BOLD price oracle (OQ-GP-8b follow-on (a))
+
+The ETH-leg gate above is *oracle-free*: the receipt attests a wei cost
+(`gasUsed * gasPrice`) and the ETH leg (resource `0`) reimburses in wei,
+so the bound is exact.  The BOLD leg (resource `1`) reimburses in BOLD
+units, so backing a BOLD claim from a wei-denominated receipt needs the
+ETH→BOLD exchange rate at the batch — a SECOND deployment-supplied trust
+assumption (a price oracle).  This section ships it, mirroring the ETH
+structure theorem-for-theorem, so the BOLD leg gains the same
+`min(cap, verified cost)` double bound, narrowing, and no-reuse
+guarantees — the only addition being the rate attestation.
+
+**Conservatism.**  The conversion `gasUsed * gasPrice * rateNum / rateDen`
+uses `Nat` floor division, so the BOLD bound is never larger than the
+real-valued conversion at the attested rate — the sequencer can never be
+reimbursed MORE BOLD than the wei cost justifies.  A zero denominator
+yields `0` (Lean `_ / 0 = 0`), i.e. fail-closed: a malformed rate backs
+nothing. -/
+
+/-- Deployment-supplied ETH→BOLD price oracle.  Given a binding hash for
+    the rate quotation, the batch id it applies to, and the rate as a
+    rational `rateNum / rateDen` (BOLD base units per ETH wei), the
+    deployment-side oracle confirms whether that rate is the attested
+    ETH→BOLD price for the batch.  Returns `true` iff yes.
+
+    `opaque` (not `axiom`): the SECOND trust assumption of this module,
+    held to the same discipline as `l1GasReceiptVerifier` and
+    `FaultProof.l1FaultProofVerifier` — it never appears in
+    `#print axioms`, and until a deployment links the oracle the
+    Lean-level value is unspecified, so no BOLD witness is constructible
+    without an explicit attestation (fail-closed).  Like the gas
+    verifier, the rate can be cross-checked across independent oracles. -/
+opaque l1EthBoldRateOracle
+    (rateBindingHash : ByteArray) (batchId : Nat)
+    (rateNum rateDen : Nat) : Bool
+
+/-- The maximum BOLD reimbursement a verified wei expenditure justifies at
+    the attested rate: `⌊gasUsed * gasPrice * rateNum / rateDen⌋` (BOLD
+    base units), the wei cost converted via `rateNum/rateDen` BOLD-per-wei
+    and rounded DOWN.  Floor division makes this an upper bound that never
+    exceeds the real-valued conversion; `rateDen = 0` yields `0`
+    (fail-closed).  The BOLD analogue of `gasReceiptReimbursement`. -/
+def boldReceiptReimbursement (gasUsed gasPrice rateNum rateDen : Nat) : Amount :=
+  gasUsed * gasPrice * rateNum / rateDen
+
+/-- A propositional witness that a sequencer reimbursement of `amount`
+    BOLD base units is fully backed by an L1-verified gas expenditure
+    converted at an attested ETH→BOLD rate.
+
+    The witness exhibits a concrete L1 gas receipt AND a rate quotation,
+    together with THREE obligations:
+      * `gas_attestation`: the watcher confirmed a batch-publication
+        receipt with exactly `(gasUsed, gasPrice)` (same `l1GasReceiptVerifier`
+        as the ETH leg — the gas cost is wei regardless of leg);
+      * `rate_attestation`: the oracle confirmed `rateNum/rateDen` is the
+        ETH→BOLD price for that batch;
+      * `amount_backed`: the claimed `amount` is within the converted
+        wei cost (`boldReceiptReimbursement …`).
+
+    Without this witness the BOLD gate is unenterable, so an unbacked
+    BOLD over-claim is unconstructible — the BOLD analogue of
+    `SequencerReimbursementVerified`. -/
+structure SequencerReimbursementVerifiedBold (amount : Amount) where
+  /-- The binding hash of the L1 batch-publication transaction receipt
+      (the handle consumed by `ConsumedReceipts`; one batch receipt backs
+      at most one reimbursement across BOTH legs). -/
+  receiptBindingHash : ByteArray
+  /-- The binding hash of the ETH→BOLD rate quotation. -/
+  rateBindingHash : ByteArray
+  /-- The L1 batch id this receipt settles (and the rate applies to). -/
+  batchId : Nat
+  /-- The gas units the L1 batch-publication transaction consumed. -/
+  gasUsed : Nat
+  /-- The effective gas price (wei per gas) of that transaction. -/
+  gasPrice : Nat
+  /-- The attested ETH→BOLD rate numerator (BOLD base units). -/
+  rateNum : Nat
+  /-- The attested ETH→BOLD rate denominator (ETH wei). -/
+  rateDen : Nat
+  /-- The L1 gas attestation (same opaque as the ETH leg). -/
+  gas_attestation :
+    l1GasReceiptVerifier receiptBindingHash batchId gasUsed gasPrice = true
+  /-- The ETH→BOLD rate attestation (the new oracle). -/
+  rate_attestation :
+    l1EthBoldRateOracle rateBindingHash batchId rateNum rateDen = true
+  /-- The reimbursement bound: the claimed BOLD `amount` does not exceed
+      the converted wei cost the verified receipt + rate justify. -/
+  amount_backed :
+    amount ≤ boldReceiptReimbursement gasUsed gasPrice rateNum rateDen
+
+/-- Construct a `SequencerReimbursementVerifiedBold` witness from a
+    concrete receipt, a rate quotation, and the three discharged
+    obligations.  The BOLD analogue of
+    `SequencerReimbursementVerified.of_receipt`. -/
+def SequencerReimbursementVerifiedBold.of_receipt
+    (amount : Amount) (receiptBindingHash rateBindingHash : ByteArray)
+    (batchId gasUsed gasPrice rateNum rateDen : Nat)
+    (h_gas :
+      l1GasReceiptVerifier receiptBindingHash batchId gasUsed gasPrice = true)
+    (h_rate :
+      l1EthBoldRateOracle rateBindingHash batchId rateNum rateDen = true)
+    (h_backed :
+      amount ≤ boldReceiptReimbursement gasUsed gasPrice rateNum rateDen) :
+    SequencerReimbursementVerifiedBold amount where
+  receiptBindingHash := receiptBindingHash
+  rateBindingHash := rateBindingHash
+  batchId := batchId
+  gasUsed := gasUsed
+  gasPrice := gasPrice
+  rateNum := rateNum
+  rateDen := rateDen
+  gas_attestation := h_gas
+  rate_attestation := h_rate
+  amount_backed := h_backed
+
+/-- **BOLD backing projection.**  A BOLD receipt witness for `amount`
+    exhibits an L1-attested expenditure and an attested rate whose
+    converted cost is at least `amount`.  The BOLD analogue of
+    `sequencerReimbursementVerified_backed`. -/
+theorem sequencerReimbursementVerifiedBold_backed
+    {amount : Amount} (w : SequencerReimbursementVerifiedBold amount) :
+    ∃ rbh rateBh batchId gasUsed gasPrice rateNum rateDen,
+      l1GasReceiptVerifier rbh batchId gasUsed gasPrice = true ∧
+      l1EthBoldRateOracle rateBh batchId rateNum rateDen = true ∧
+      amount ≤ boldReceiptReimbursement gasUsed gasPrice rateNum rateDen :=
+  ⟨w.receiptBindingHash, w.rateBindingHash, w.batchId, w.gasUsed, w.gasPrice,
+   w.rateNum, w.rateDen, w.gas_attestation, w.rate_attestation, w.amount_backed⟩
+
+/-- The v2 receipt-verified admission gate for a BOLD-leg
+    sequencer-reimbursement claim.  Holds iff the action is the canonical
+    capped `gasPoolActor → sequencerActor` transfer over resource `1` AND
+    a BOLD receipt witness (gas + rate + bound) backs the claimed amount.
+    The resource-1 analogue of `receiptVerifiedClaimAdmissible`. -/
+def receiptVerifiedBoldClaimAdmissible
+    (maxDrainPerActionBold : Amount) (action : Action) : Prop :=
+  ∃ amount,
+    action = .transfer 1 gasPoolActor sequencerActor amount ∧
+    amount ≤ maxDrainPerActionBold ∧
+    Nonempty (SequencerReimbursementVerifiedBold amount)
+
+/-- **BOLD headline (v2 double bound).**  Every BOLD receipt-verified
+    claim is BOTH within the GP.7.2 BOLD cap AND backed by an L1-attested
+    expenditure converted at an attested ETH→BOLD rate — the effective
+    bound is `min(cap, converted wei cost)`.  The BOLD analogue of
+    `receiptVerifiedClaim_capped_and_backed`. -/
+theorem receiptVerifiedBoldClaim_capped_and_backed
+    (maxDrainPerActionBold : Amount) {action : Action}
+    (h : receiptVerifiedBoldClaimAdmissible maxDrainPerActionBold action) :
+    ∃ amount,
+      action = .transfer 1 gasPoolActor sequencerActor amount ∧
+      amount ≤ maxDrainPerActionBold ∧
+      (∃ rbh rateBh batchId gasUsed gasPrice rateNum rateDen,
+        l1GasReceiptVerifier rbh batchId gasUsed gasPrice = true ∧
+        l1EthBoldRateOracle rateBh batchId rateNum rateDen = true ∧
+        amount ≤ boldReceiptReimbursement gasUsed gasPrice rateNum rateDen) := by
+  obtain ⟨amount, haction, hcap, hwit⟩ := h
+  obtain ⟨w⟩ := hwit
+  exact ⟨amount, haction, hcap, sequencerReimbursementVerifiedBold_backed w⟩
+
+/-- **BOLD v2 is a pure strengthening of v1 (the narrowing direction).**
+    Every BOLD receipt-verified claim is already permitted by the GP.7.2
+    `gasPoolPolicy` (for any ETH cap).  So enabling the BOLD gate can only
+    REJECT claims `gasPoolPolicy` would admit, never admit one it rejects.
+    The BOLD analogue of `receiptVerifiedClaimAdmissible_implies_gasPoolPolicy`,
+    discharged by `gasPoolPolicy_permits_sequencer_transfer_bold`. -/
+theorem receiptVerifiedBoldClaimAdmissible_implies_gasPoolPolicy
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) {action : Action}
+    (h : receiptVerifiedBoldClaimAdmissible maxDrainPerActionBold action) :
+    (gasPoolPolicy maxDrainPerActionEth maxDrainPerActionBold).permits
+      gasPoolActor action := by
+  obtain ⟨amount, haction, hcap, _⟩ := h
+  subst haction
+  exact gasPoolPolicy_permits_sequencer_transfer_bold
+    maxDrainPerActionEth maxDrainPerActionBold gasPoolActor amount hcap
+
+/-- A BOLD-leg claim that consumes a **fresh** gas receipt.  The BOLD
+    analogue of `SequencerReimbursementVerifiedFresh`: the gas receipt's
+    binding hash is not already consumed, so one batch-publication receipt
+    backs at most one reimbursement — across BOTH legs, since the consumed
+    set is shared. -/
+structure SequencerReimbursementVerifiedBoldFresh
+    (consumed : ConsumedReceipts) (amount : Amount) where
+  /-- The BOLD backing witness (gas + rate attestations + the bound). -/
+  backing : SequencerReimbursementVerifiedBold amount
+  /-- The gas receipt has NOT been consumed by a prior claim. -/
+  fresh : backing.receiptBindingHash ∉ consumed
+
+/-- **A consumed receipt can never back a fresh BOLD claim.**  The BOLD
+    analogue of `consumeReceipt_blocks_reuse`. -/
+theorem consumeReceipt_blocks_reuse_bold
+    (consumed : ConsumedReceipts) (rbh : ByteArray) {amount : Amount}
+    (w : SequencerReimbursementVerifiedBoldFresh (consumeReceipt consumed rbh) amount) :
+    w.backing.receiptBindingHash ≠ rbh := by
+  intro h
+  apply w.fresh
+  simp only [consumeReceipt, h, List.mem_cons, true_or]
+
+/-- The ENFORCED BOLD-leg admission predicate: the canonical BOLD claim,
+    within the BOLD cap, backed by a FRESH receipt.  The resource-1
+    analogue of `receiptEnforcedClaimAdmissible`. -/
+def receiptEnforcedBoldClaimAdmissible
+    (consumed : ConsumedReceipts) (maxDrainPerActionBold : Amount)
+    (action : Action) : Prop :=
+  ∃ amount,
+    action = .transfer 1 gasPoolActor sequencerActor amount ∧
+    amount ≤ maxDrainPerActionBold ∧
+    Nonempty (SequencerReimbursementVerifiedBoldFresh consumed amount)
+
+/-- The enforced BOLD gate implies the base BOLD gate (it adds freshness). -/
+theorem receiptEnforcedBoldClaimAdmissible_implies_base
+    (consumed : ConsumedReceipts) (maxDrainPerActionBold : Amount) {action : Action}
+    (h : receiptEnforcedBoldClaimAdmissible consumed maxDrainPerActionBold action) :
+    receiptVerifiedBoldClaimAdmissible maxDrainPerActionBold action := by
+  obtain ⟨amount, haction, hcap, ⟨wf⟩⟩ := h
+  exact ⟨amount, haction, hcap, ⟨wf.backing⟩⟩
+
+/-- The enforced BOLD gate only NARROWS pool outflow. -/
+theorem receiptEnforcedBoldClaimAdmissible_implies_gasPoolPolicy
+    (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) {action : Action}
+    (h : receiptEnforcedBoldClaimAdmissible consumed maxDrainPerActionBold action) :
+    (gasPoolPolicy maxDrainPerActionEth maxDrainPerActionBold).permits
+      gasPoolActor action :=
+  receiptVerifiedBoldClaimAdmissible_implies_gasPoolPolicy
+    maxDrainPerActionEth maxDrainPerActionBold
+    (receiptEnforcedBoldClaimAdmissible_implies_base consumed maxDrainPerActionBold h)
+
+/-- **Enforced BOLD headline (capped, backed, AND fresh).**  The BOLD
+    analogue of `receiptEnforcedClaim_capped_backed_and_fresh`. -/
+theorem receiptEnforcedBoldClaim_capped_backed_and_fresh
+    (consumed : ConsumedReceipts) (maxDrainPerActionBold : Amount) {action : Action}
+    (h : receiptEnforcedBoldClaimAdmissible consumed maxDrainPerActionBold action) :
+    ∃ amount rbh rateBh batchId gasUsed gasPrice rateNum rateDen,
+      action = .transfer 1 gasPoolActor sequencerActor amount ∧
+      amount ≤ maxDrainPerActionBold ∧
+      l1GasReceiptVerifier rbh batchId gasUsed gasPrice = true ∧
+      l1EthBoldRateOracle rateBh batchId rateNum rateDen = true ∧
+      amount ≤ boldReceiptReimbursement gasUsed gasPrice rateNum rateDen ∧
+      rbh ∉ consumed := by
+  obtain ⟨amount, haction, hcap, ⟨wf⟩⟩ := h
+  exact ⟨amount, wf.backing.receiptBindingHash, wf.backing.rateBindingHash,
+         wf.backing.batchId, wf.backing.gasUsed, wf.backing.gasPrice,
+         wf.backing.rateNum, wf.backing.rateDen, haction, hcap,
+         wf.backing.gas_attestation, wf.backing.rate_attestation,
+         wf.backing.amount_backed, wf.fresh⟩
+
+/-! ## Unified admission — gate BOTH legs (OQ-GP-8b closure)
+
+`receiptGatedAdmissible` above gates only the ETH leg: under it a BOLD
+gas-pool claim defers entirely to the base (ungated).  With the BOLD gate
+shipped, `receiptGatedAdmissibleUnified` is the COMPLETE composer — it
+requires the ETH gate for an ETH-leg claim AND the BOLD gate for a
+BOLD-leg claim, so a v2 deployment receipt-gates EVERY gas-pool → sequencer
+claim regardless of leg.  This is the admission-level closure of
+OQ-GP-8b. -/
+
+/-- Is `action` the canonical BOLD-leg (resource `1`) gas-pool → sequencer
+    claim?  The resource-1 analogue of `isGasPoolEthClaim`. -/
+def isGasPoolBoldClaim (action : Action) : Prop :=
+  ∃ amount, action = .transfer 1 gasPoolActor sequencerActor amount
+
+/-- Is `action` a canonical gas-pool → sequencer reimbursement claim on
+    EITHER leg (ETH resource `0` or BOLD resource `1`)? -/
+def isGasPoolClaim (action : Action) : Prop :=
+  isGasPoolEthClaim action ∨ isGasPoolBoldClaim action
+
+/-- **Unified receipt-gated admission.**  A v2 deployment admits `action`
+    iff `baseAdmissible` holds AND each leg's enforced receipt gate holds
+    for the matching claim shape.  For non-claim actions both conjuncts are
+    vacuous, so it equals the base; for a gas-pool claim the matching leg's
+    gate is REQUIRED.  The complete (both-leg) analogue of
+    `receiptGatedAdmissible`. -/
+def receiptGatedAdmissibleUnified
+    (baseAdmissible : Prop) (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) (action : Action) : Prop :=
+  baseAdmissible ∧
+    (isGasPoolEthClaim action →
+      receiptEnforcedClaimAdmissible consumed maxDrainPerActionEth action) ∧
+    (isGasPoolBoldClaim action →
+      receiptEnforcedBoldClaimAdmissible consumed maxDrainPerActionBold action)
+
+/-- The unified composer only NARROWS: it implies the base. -/
+theorem receiptGatedAdmissibleUnified_implies_base
+    {baseAdmissible : Prop} (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) {action : Action}
+    (h : receiptGatedAdmissibleUnified baseAdmissible consumed
+          maxDrainPerActionEth maxDrainPerActionBold action) :
+    baseAdmissible := h.1
+
+/-- **The ETH gate is REQUIRED for an ETH-leg claim** under the unified
+    composer (the BOLD analogue follows). -/
+theorem receiptGatedAdmissibleUnified_requires_eth_gate
+    {baseAdmissible : Prop} (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) {action : Action}
+    (hclaim : isGasPoolEthClaim action)
+    (h : receiptGatedAdmissibleUnified baseAdmissible consumed
+          maxDrainPerActionEth maxDrainPerActionBold action) :
+    receiptEnforcedClaimAdmissible consumed maxDrainPerActionEth action :=
+  h.2.1 hclaim
+
+/-- **The BOLD gate is REQUIRED for a BOLD-leg claim** under the unified
+    composer — closing the "BOLD claims slip through ungated" gap that the
+    ETH-only `receiptGatedAdmissible` left open. -/
+theorem receiptGatedAdmissibleUnified_requires_bold_gate
+    {baseAdmissible : Prop} (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) {action : Action}
+    (hclaim : isGasPoolBoldClaim action)
+    (h : receiptGatedAdmissibleUnified baseAdmissible consumed
+          maxDrainPerActionEth maxDrainPerActionBold action) :
+    receiptEnforcedBoldClaimAdmissible consumed maxDrainPerActionBold action :=
+  h.2.2 hclaim
+
+/-- A non-claim action's unified admission is EXACTLY the base (both gate
+    conjuncts are vacuous), so enabling the unified v2 gate restricts only
+    gas-pool claims — v1 deployments are unaffected. -/
+theorem receiptGatedAdmissibleUnified_eq_base_off_claim
+    {baseAdmissible : Prop} (consumed : ConsumedReceipts)
+    (maxDrainPerActionEth maxDrainPerActionBold : Amount) {action : Action}
+    (hnot : ¬ isGasPoolClaim action) :
+    receiptGatedAdmissibleUnified baseAdmissible consumed
+        maxDrainPerActionEth maxDrainPerActionBold action ↔ baseAdmissible := by
+  unfold receiptGatedAdmissibleUnified isGasPoolClaim at *
+  refine ⟨fun h => h.1, fun h => ⟨h, ?_, ?_⟩⟩
+  · exact fun hc => absurd (Or.inl hc) hnot
+  · exact fun hc => absurd (Or.inr hc) hnot
+
 end Bridge
 end LegalKernel
