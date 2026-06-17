@@ -40,6 +40,11 @@
 //!   * **Any framing ambiguity closes the connection** rather than guessing a
 //!     boundary — a desync cannot persist across requests.
 //!
+//! It also honours **`Expect: 100-continue`** (RFC 7231 §5.1.1): the request
+//! head and body are read in two steps, so once the (bounded) body length is
+//! validated the loop writes the interim `100 Continue` *before* reading the
+//! body — a client that gates a large body behind it is never stalled.
+//!
 //! Each accepted connection runs on its **own thread** (bounded by
 //! `--tls-max-connections`), so a long-lived SSE stream never starves request
 //! processing and a slow client only blocks itself.
@@ -398,15 +403,8 @@ fn connection_loop(reader: &mut BufReader<TlsStream>, state: &AppState, shutdown
         }
         let request_id = next_request_id();
         let start = Instant::now();
-        match read_request(reader, state.config.max_frame_size) {
-            Ok(parsed) => {
-                if matches!(
-                    serve_parsed(reader, state, parsed, &request_id, start),
-                    ConnControl::Close
-                ) {
-                    return;
-                }
-            }
+        let head = match read_head(reader, state.config.max_frame_size) {
+            Ok(head) => head,
             // A clean EOF (idle keep-alive closed) or a socket error / timeout:
             // close quietly, nothing owed.
             Err(RequestError::ConnectionClosed | RequestError::Io) => return,
@@ -426,8 +424,34 @@ fn connection_loop(reader: &mut BufReader<TlsStream>, state: &AppState, shutdown
                 let _ = write_response(reader.get_mut(), &outcome, false);
                 return;
             }
+        };
+        // Honour `Expect: 100-continue` (RFC 7231 §5.1.1): the body length is
+        // already validated as acceptable, so commit with the interim
+        // `100 Continue` *before* reading the body — prompting a waiting client
+        // to send it (without this it would stall until its own fallback).
+        if head.expect_continue
+            && head.content_length > 0
+            && write_continue(reader.get_mut()).is_err()
+        {
+            return;
+        }
+        let Ok(body) = read_body(reader, head.content_length) else {
+            return; // a truncated body / socket error → close
+        };
+        if matches!(
+            serve_parsed(reader, state, head.into_request(body), &request_id, start),
+            ConnControl::Close
+        ) {
+            return;
         }
     }
+}
+
+/// Write the interim `100 Continue` status line (RFC 7231 §5.1.1) — sent
+/// before reading a body the client gated behind `Expect: 100-continue`.
+fn write_continue<W: Write>(w: &mut W) -> std::io::Result<()> {
+    w.write_all(b"HTTP/1.1 100 Continue\r\n\r\n")?;
+    w.flush()
 }
 
 /// Whether the connection loop should keep the connection alive or close it.
@@ -580,7 +604,47 @@ struct ParsedRequest {
     keep_alive: bool,
 }
 
-/// Why [`read_request`] did not yield a request.
+/// The parsed request **head** (request line + headers + the validated framing
+/// decision), read *before* the body.  Splitting head from body lets the
+/// connection loop honour `Expect: 100-continue` — writing the interim
+/// `100 Continue` *between* the head and the body (RFC 7231 §5.1.1) — which a
+/// single body-inclusive read could not.
+struct RequestHead {
+    method: String,
+    path: String,
+    query: String,
+    authorization: Option<String>,
+    content_type: Option<String>,
+    if_none_match: Option<String>,
+    idempotency_key: Option<String>,
+    last_event_id: Option<String>,
+    keep_alive: bool,
+    /// The validated body length (already in `0 ..= max_body`).
+    content_length: usize,
+    /// Whether the client gated the body behind `Expect: 100-continue`.
+    expect_continue: bool,
+}
+
+impl RequestHead {
+    /// Combine this head with its (already-read) `body` into a full
+    /// [`ParsedRequest`].
+    fn into_request(self, body: Vec<u8>) -> ParsedRequest {
+        ParsedRequest {
+            method: self.method,
+            path: self.path,
+            query: self.query,
+            body,
+            authorization: self.authorization,
+            content_type: self.content_type,
+            if_none_match: self.if_none_match,
+            idempotency_key: self.idempotency_key,
+            last_event_id: self.last_event_id,
+            keep_alive: self.keep_alive,
+        }
+    }
+}
+
+/// Why [`read_head`] did not yield a request.
 #[derive(Debug)]
 enum RequestError {
     /// A clean EOF before any request bytes — a closed idle keep-alive.
@@ -617,13 +681,12 @@ enum Version {
     Http11,
 }
 
-/// Read one strict HTTP/1.1 request: the request line, the header section, and
-/// exactly `Content-Length` body bytes (bounded by `max_body`).  See the
+/// Read one strict HTTP/1.1 request **head**: the request line, the header
+/// section, and the validated framing decision (`Content-Length` bounded by
+/// `max_body`).  The body is read separately by the caller (so an
+/// `Expect: 100-continue` body can be gated behind a `100 Continue`).  See the
 /// module docstring for the anti-smuggling rules.
-fn read_request<R: BufRead>(
-    reader: &mut R,
-    max_body: usize,
-) -> Result<ParsedRequest, RequestError> {
+fn read_head<R: BufRead>(reader: &mut R, max_body: usize) -> Result<RequestHead, RequestError> {
     let line = match read_line(reader, MAX_REQUEST_LINE_BYTES) {
         LineRead::Line(l) => l,
         LineRead::Eof => return Err(RequestError::ConnectionClosed),
@@ -658,7 +721,6 @@ fn read_request<R: BufRead>(
             format!("request body exceeds the {max_body}-byte limit"),
         ));
     }
-    let body = read_body(reader, content_length)?;
 
     let keep_alive = match version {
         _ if headers.connection_close => false,
@@ -666,17 +728,18 @@ fn read_request<R: BufRead>(
         Version::Http10 => headers.connection_keep_alive,
     };
 
-    Ok(ParsedRequest {
+    Ok(RequestHead {
         method,
         path,
         query,
-        body,
         authorization: headers.authorization,
         content_type: headers.content_type,
         if_none_match: headers.if_none_match,
         idempotency_key: headers.idempotency_key,
         last_event_id: headers.last_event_id,
         keep_alive,
+        content_length,
+        expect_continue: headers.expect_continue,
     })
 }
 
@@ -718,6 +781,9 @@ fn parse_request_line(line: &str) -> Result<(String, String, Version), RequestEr
 /// The subset of request headers the gateway reads, plus the framing-relevant
 /// ones.  Field-name matching is case-insensitive; the first occurrence of a
 /// value header wins (matching the `tiny_http` path's header selection).
+// A flat parse-accumulator of independent flags (not a state machine), so the
+// >3-bool lint does not apply.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Default)]
 struct HeaderSet {
     authorization: Option<String>,
@@ -729,6 +795,9 @@ struct HeaderSet {
     transfer_encoding: bool,
     connection_close: bool,
     connection_keep_alive: bool,
+    /// The client sent `Expect: 100-continue` (RFC 7231 §5.1.1): the body must
+    /// be gated behind an interim `100 Continue`.
+    expect_continue: bool,
 }
 
 /// Read the header section (lines until a blank line), bounded in count + size,
@@ -814,6 +883,16 @@ fn insert_header(headers: &mut HeaderSet, name: &str, value: &str) -> Result<(),
         set_first(&mut headers.idempotency_key, value);
     } else if name.eq_ignore_ascii_case("last-event-id") {
         set_first(&mut headers.last_event_id, value);
+    } else if name.eq_ignore_ascii_case("expect") {
+        // RFC 7231 §5.1.1: recognise the `100-continue` expectation (a
+        // comma-list); any *other* expectation is ignored (lenient — we can't
+        // satisfy unknown ones, and rejecting would harm interop).
+        if value
+            .split(',')
+            .any(|t| t.trim().eq_ignore_ascii_case("100-continue"))
+        {
+            headers.expect_continue = true;
+        }
     }
     // Every other header is ignored (the gateway reads only the set above).
     Ok(())
@@ -1024,17 +1103,21 @@ fn reject_slug(status: u16) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        read_request, reason_phrase, reject_slug, write_response, ConnControl, RequestError,
-        Version,
+        read_body, read_head, reason_phrase, reject_slug, write_response, ConnControl,
+        RequestError, Version,
     };
     use crate::http::RouteOutcome;
     use std::io::BufReader;
 
-    /// Parse a request from a byte slice (the reader is generic over
-    /// `BufRead`, so the strict HTTP/1.1 parser is unit-testable with no TLS).
+    /// Parse a full request (head + body) from a byte slice — the same
+    /// `read_head` → `read_body` sequence the connection loop runs (minus the
+    /// `Expect: 100-continue` write).  The reader is generic over `BufRead`, so
+    /// the strict HTTP/1.1 parser is unit-testable with no TLS.
     fn parse(raw: &[u8], max_body: usize) -> Result<super::ParsedRequest, RequestError> {
         let mut reader = BufReader::new(raw);
-        read_request(&mut reader, max_body)
+        let head = read_head(&mut reader, max_body)?;
+        let body = read_body(&mut reader, head.content_length)?;
+        Ok(head.into_request(body))
     }
 
     #[test]
@@ -1073,6 +1156,27 @@ mod tests {
             req.content_type.as_deref(),
             Some("application/octet-stream")
         );
+    }
+
+    #[test]
+    fn expect_100_continue_is_recognised_and_unknown_expectations_ignored() {
+        // `Expect: 100-continue` sets the flag the connection loop gates the
+        // body behind (RFC 7231 §5.1.1); the length is still validated.
+        let raw = b"POST /v1/actions HTTP/1.1\r\nHost: x\r\n\
+                    Expect: 100-continue\r\nContent-Length: 4\r\n\r\nbody";
+        let mut reader = BufReader::new(&raw[..]);
+        let head = read_head(&mut reader, 1024).unwrap();
+        assert!(head.expect_continue);
+        assert_eq!(head.content_length, 4);
+        // The case-insensitive scheme is accepted within a list.
+        let raw2 = b"POST / HTTP/1.1\r\nExpect: 100-Continue, foo\r\nContent-Length: 0\r\n\r\n";
+        let mut r2 = BufReader::new(&raw2[..]);
+        assert!(read_head(&mut r2, 1024).unwrap().expect_continue);
+        // An unknown expectation is ignored (lenient — not a 417), so the
+        // request still parses with the flag clear.
+        let raw3 = b"GET / HTTP/1.1\r\nExpect: other-thing\r\n\r\n";
+        let mut r3 = BufReader::new(&raw3[..]);
+        assert!(!read_head(&mut r3, 1024).unwrap().expect_continue);
     }
 
     #[test]
@@ -1517,11 +1621,10 @@ mod handshake_tests {
         }
     }
 
-    /// The native-TLS request surface end-to-end over a real handshake: the
-    /// shared gate → route → dispatch core answers correctly over `rustls`, the
-    /// strict reader rejects a bad version, a POST body is framed exactly, an
-    /// SSE request without fan-out is `503`, and keep-alive serves pipelined
-    /// requests.
+    /// The native-TLS **request/auth** surface end-to-end over a real
+    /// handshake: the shared gate → route → dispatch core answers correctly
+    /// over `rustls` — `/healthz` `200`, an authed `/v1/info` `200`, an
+    /// unauthed `401`, and a strict-framing bad-version `505`.
     #[test]
     fn native_tls_server_auth_surface() {
         let dir = tempfile::tempdir().unwrap();
@@ -1573,6 +1676,24 @@ mod handshake_tests {
         // closes without desync.
         let bad = request(server.addr, &ca, None, b"GET / HTTP/2.0\r\nHost: x\r\n\r\n");
         assert!(text(&bad).contains("HTTP/1.1 505"));
+        drop(server);
+    }
+
+    /// The native-TLS **body + streaming** surface end-to-end over a real
+    /// handshake: a framed POST body, `Expect: 100-continue`, the SSE `503`,
+    /// and keep-alive — including a body-framed pipelined pair (the
+    /// smuggling-resistance crux).
+    #[test]
+    fn native_tls_body_and_stream_surface() {
+        let dir = tempfile::tempdir().unwrap();
+        if !gen_pki(dir.path()) {
+            eprintln!("skipping native_tls_body_and_stream_surface: openssl unavailable");
+            return;
+        }
+        let state = make_state(dir.path());
+        let (server, _shared) = serve(&server_tls(dir.path()), &state);
+        let ca = dir.path().join("ca.crt");
+        let authed = format!("Authorization: Bearer {TOKEN}\r\n");
 
         // A POST body is read off the wire (exact framing); submit is disabled
         // (no --host-addr) → 503 over TLS.
@@ -1588,6 +1709,31 @@ mod handshake_tests {
             .as_bytes(),
         );
         assert!(text(&submit).contains("HTTP/1.1 503"));
+
+        // `Expect: 100-continue` (RFC 7231 §5.1.1): the server emits the interim
+        // `100 Continue` BEFORE the final response, so a waiting client knows to
+        // send the body.  (Here the test client sends it eagerly; we assert the
+        // 100 precedes the final 503.)
+        let expect = request(
+            server.addr,
+            &ca,
+            None,
+            format!(
+                "POST /v1/actions HTTP/1.1\r\nHost: x\r\n{authed}\
+                 Expect: 100-continue\r\nContent-Type: application/octet-stream\r\n\
+                 Content-Length: 4\r\nConnection: close\r\n\r\nbody"
+            )
+            .as_bytes(),
+        );
+        let et = text(&expect);
+        let cont_at = et
+            .find("HTTP/1.1 100 Continue")
+            .expect("an interim 100 Continue");
+        let final_at = et.find("HTTP/1.1 503").expect("the final 503");
+        assert!(
+            cont_at < final_at,
+            "100 Continue precedes the final response:\n{et}"
+        );
 
         // An SSE stream with no fan-out configured → 503 events-unavailable
         // (the TLS serve_stream raw-503 path).

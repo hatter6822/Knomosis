@@ -1822,7 +1822,9 @@ Event` (RH-D.2), not on the gateway.
   class is impossible), a duplicate / comma-listed `Content-Length` rejected,
   obsolete folding rejected, the body read **exactly** (keep-alive framing stays
   synchronised), request-line / header-line / header-count / section size all
-  bounded, and any framing ambiguity closes the connection.  Per-connection
+  bounded, and any framing ambiguity closes the connection; it also honours
+  `Expect: 100-continue` (RFC 7231 §5.1.1 — the head/body are read in two steps,
+  so the interim `100 Continue` is written before the body).  Per-connection
   threads are bounded by `--tls-max-connections` (spawn-storm guard); the
   `ServerConfig` is built + the socket bound at **startup** (fail-fast on a bad
   cert / key / CA — a fatal `ServeError::Tls`); the accept thread + every
