@@ -1189,9 +1189,10 @@ the master registry so PR descriptions can cite them by id.
 | OQ-GW-11 | Licio contract surface | **RESOLVED** — §1.4 reconciliation (read-first behind a fail-closed flag) |
 | OQ-GW-12 | Seamless SSE catch-up (dedicated upstream sub vs backfill-then-reconnect) | OPEN — backfill-then-reconnect for v1 |
 | OQ-GW-13 | Read-only-WAL snapshot consistency under concurrent indexer checkpointing | OPEN — accept §3.6 eventual consistency for v1 (the kernel is authoritative; reads self-correct). A read-only SQLite connection cannot take WAL read-locks / participate in checkpointing, so under heavy concurrent writes a `BEGIN DEFERRED` list snapshot can briefly lag or tear. The G1.9 concurrency test asserts the **actual** guarantee (availability + well-formedness + cursor monotonicity), not strict intra-snapshot atomicity. Strict consistency is a **storage-layer** hardening item (e.g. a checkpoint-coordination or read-lock fix in `knomosis-storage`'s read-only path), out of the gateway's scope. |
+| OQ-GW-14 | Concurrent-SSE-stream ceiling under `tiny_http` (G4.6) | OPEN — accept the `tiny_http` bound for v1. `tiny_http` services each connection on an internal task thread iterating `for rq in client`, which blocks until the *current* request's writer is dropped; a long-lived (hijacked) SSE stream therefore pins one such task for its lifetime, so the **effective** number of simultaneously-live SSE streams is bounded by tiny_http's connection handling — *below* the `--sse` `max_streams` ceiling (empirically it does not scale 1:1 with `--handler-threads`). For a browser-BFF fan-out (a handful of dashboards) this is sufficient. Raising the ceiling is a **transport** change (a `tiny_http` connection-handling patch, an alternate sync HTTP server for the stream endpoint, or a dedicated SSE listener) — out of scope for v1; the G4.6 soak validates the *correctness* (no slot/thread leak across open/close cycles), not a high-concurrency target. |
 
 The two **RESOLVED** entries (OQ-GW-8, OQ-GW-11) carry their resolution
-inline above; the eleven OPEN entries carry their full trade-offs in the
+inline above; the remaining OPEN entries carry their full trade-offs in the
 plan's §14 and are tracked here for citation.
 
 ---

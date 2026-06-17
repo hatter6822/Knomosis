@@ -849,6 +849,10 @@ impl Drop for SseHarness {
 /// test), and spawn the handler pool.  The mux thread is detached; dropping
 /// the harness (then the mock) tears everything down.
 fn start_sse_harness(event_subscribe_addr: SocketAddr) -> SseHarness {
+    start_sse_harness_cfg(event_subscribe_addr, SseConfig::default())
+}
+
+fn start_sse_harness_cfg(event_subscribe_addr: SocketAddr, sse: SseConfig) -> SseHarness {
     let dir = tempfile::tempdir().expect("tempdir");
     let token_path = dir.path().join("tokens");
     std::fs::write(&token_path, TOKEN).expect("write token file");
@@ -877,7 +881,7 @@ fn start_sse_harness(event_subscribe_addr: SocketAddr) -> SseHarness {
         request_deadline_ms: 5000,
         max_frame_size: 1024 * 1024,
         idempotency_ttl_secs: 0,
-        sse: SseConfig::default(),
+        sse,
     };
     let state = Arc::new(AppState::new(config).expect("open SSE state"));
     // Start the mux (mirrors `serve`), with a long staleness timeout so the
@@ -1005,4 +1009,142 @@ fn responses_carry_a_request_id_and_problem_instance() {
 
     // Distinct requests get distinct ids.
     assert_ne!(ok_id, nf_id);
+}
+
+// ---- G4.6 fan-out + soak (no-leak) --------------------------------------
+//
+// NOTE on concurrency scope: `tiny_http` services each connection on an
+// internal task thread iterating `for rq in client`, which blocks until the
+// current request's writer is dropped.  A long-lived (hijacked) SSE stream
+// therefore pins one such task for its lifetime, so the *effective* number
+// of simultaneously-live SSE streams is bounded by tiny_http's connection
+// handling (below the `--sse` `max_streams` ceiling).  These tests stay
+// within that bound (a few concurrent streams); raising the effective
+// concurrent-SSE ceiling is tracked as OQ-GW-14.
+
+/// Open an authenticated SSE stream (send the request; do not read yet).
+fn open_sse_stream(addr: SocketAddr, since: u64) -> TcpStream {
+    let mut s = TcpStream::connect(addr).expect("connect");
+    s.set_read_timeout(Some(Duration::from_secs(3))).ok();
+    s.write_all(
+        format!(
+            "GET /v1/events/stream?since={since} HTTP/1.1\r\nHost: localhost\r\n\
+             Authorization: Bearer {TOKEN}\r\n\r\n"
+        )
+        .as_bytes(),
+    )
+    .expect("write request");
+    s
+}
+
+/// Read from `stream` until `needle` appears or `deadline` elapses.
+fn read_until(stream: &mut TcpStream, needle: &str, deadline: Duration) -> String {
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let end = std::time::Instant::now() + deadline;
+    while std::time::Instant::now() < end {
+        match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                buf.extend_from_slice(&chunk[..n]);
+                if String::from_utf8_lossy(&buf).contains(needle) {
+                    break;
+                }
+            }
+        }
+    }
+    String::from_utf8_lossy(&buf).into_owned()
+}
+
+/// The harness's live SSE-stream count.
+fn active_streams(h: &SseHarness) -> usize {
+    h.state.active_streams.load(Ordering::SeqCst)
+}
+
+/// Poll the live-stream count until it reaches `target` or `deadline`.
+fn wait_active_streams(h: &SseHarness, target: usize, deadline: Duration) -> bool {
+    let end = std::time::Instant::now() + deadline;
+    while std::time::Instant::now() < end {
+        if active_streams(h) == target {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    active_streams(h) == target
+}
+
+/// Wait for the mux to ingest `n` records into the harness ring.
+fn wait_ring_len(h: &SseHarness, n: usize, deadline: Duration) -> bool {
+    let end = std::time::Instant::now() + deadline;
+    while std::time::Instant::now() < end {
+        if ring_len(h) >= n {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    ring_len(h) >= n
+}
+
+#[test]
+fn concurrent_sse_clients_all_receive_the_fan_out() {
+    // The fan-out: ONE shared upstream subscription feeds several concurrent
+    // SSE clients, and every client receives the same records.
+    let mock = MockEventSubscribe::start(vec![event_frame(41, 7), event_frame(42, 9)]);
+    let h = start_sse_harness(mock.addr);
+    assert!(
+        wait_ring_len(&h, 2, Duration::from_secs(3)),
+        "events ingested"
+    );
+
+    let n = 3;
+    let mut clients: Vec<TcpStream> = (0..n).map(|_| open_sse_stream(h.addr, 40)).collect();
+    for client in &mut clients {
+        let out = read_until(client, "id: 42.0", Duration::from_secs(3));
+        assert!(out.contains("HTTP/1.1 200 OK"), "client got the SSE head");
+        assert!(out.contains("id: 41.0"), "client got record 41");
+        assert!(out.contains("id: 42.0"), "client got record 42");
+    }
+    // All clients are live concurrently over the single shared upstream.
+    assert_eq!(active_streams(&h), n);
+
+    drop(clients);
+    drop(h);
+    drop(mock);
+}
+
+#[test]
+fn repeated_stream_open_close_releases_every_slot_no_leak() {
+    // The no-leak soak for the per-stream-thread model: across many
+    // open→close cycles the live-stream count always returns to 0 — slots
+    // are never leaked.  A short heartbeat makes a disconnected idle stream's
+    // next write fail promptly, so the thread exits + decrements the counter.
+    let mock = MockEventSubscribe::start(vec![event_frame(41, 7)]);
+    let sse = SseConfig {
+        heartbeat_secs: 1,
+        ..SseConfig::default()
+    };
+    let h = start_sse_harness_cfg(mock.addr, sse);
+    assert!(
+        wait_ring_len(&h, 1, Duration::from_secs(3)),
+        "event ingested"
+    );
+
+    for cycle in 0..8 {
+        let per_cycle = 3;
+        let clients: Vec<TcpStream> = (0..per_cycle).map(|_| open_sse_stream(h.addr, 0)).collect();
+        assert!(
+            wait_active_streams(&h, per_cycle, Duration::from_secs(3)),
+            "cycle {cycle}: all {per_cycle} streams admitted"
+        );
+        // Disconnect every client; each stream's next heartbeat write fails,
+        // so it releases its slot.
+        drop(clients);
+        assert!(
+            wait_active_streams(&h, 0, Duration::from_secs(5)),
+            "cycle {cycle}: every slot released after disconnect (no leak)"
+        );
+    }
+
+    drop(h);
+    drop(mock);
 }

@@ -107,9 +107,12 @@ The companion machine-readable contract is
 > with no mid-record truncation), and **G4.5** (the dep audit — the repo's
 > first `runtime/deny.toml` cargo-deny policy with a locally-verified licence
 > allow-list, a dedicated `ci-cargo-deny.yml`, and the supply-chain review
-> doc `docs/audits/gateway_dependency_audit.md`).  Next: **G4.2** (TLS/mTLS),
-> **G4.6** (load/soak/chaos), **G4.7** (the runbook) + the deferred additive
-> pins (G2.1c pipelining, G3.2c cross-stack corpus).
+> doc `docs/audits/gateway_dependency_audit.md`), and **G4.6 (partial)** (the
+> end-to-end fan-out + the no-leak soak — slots/threads never leak across
+> open→close cycles; the throughput bench + high-concurrency are deferred,
+> and the `tiny_http` concurrent-SSE ceiling is filed as OQ-GW-14).  Next:
+> **G4.2** (TLS/mTLS), **G4.7** (the runbook), the G4.6 throughput bench +
+> the deferred additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1828,12 +1831,25 @@ cross-stack corpus pin remains deferred.
   *(Note: the audit replaced the planned `base64` dep — the gateway
   hand-rolls a dependency-free RFC 4648 codec — so only HTTP / `signal-hook`
   needed justifying.)*
-* **G4.6 — Load/soak/chaos** · M · deps: G1–G3. A `knomosis-gateway`-bench
-  (mirroring `knomosis-bench`) for submit throughput + concurrent-SSE
-  fan-out; `tests/chaos.rs` (upstream kill/restart incl. indexer-writer-
-  death, cursor jumps, slow clients, mid-group resume). *Acceptance:*
-  throughput target met; **no fd/memory leak under soak** (the per-stream-
-  thread + ring model); chaos cases recover.
+* **G4.6 — Load/soak/chaos** · M · deps: G1–G3 · **PARTIAL (the no-leak +
+  recovery correctness done; the throughput bench + high-concurrency
+  deferred).** End-to-end `tests/integration.rs` additions: a **fan-out**
+  case (one shared upstream subscription feeds several concurrent SSE
+  clients, all receiving the same records) and a **no-leak soak** (8
+  open→close cycles, each confirming the live-stream count returns to `0` —
+  slots/threads are never leaked under the per-stream-thread + ring model).
+  The component-level chaos is already covered by the G3.4 suites (the
+  finding-#4 mid-group-drop recovery, the slow-client eviction, the
+  mid-seq-group resume).  **Discovered + filed OQ-GW-14:** `tiny_http`
+  services each connection on an internal task that blocks until the request
+  writer drops, so a long-lived (hijacked) SSE stream pins one such task —
+  the *effective* concurrent-SSE ceiling is bounded by tiny_http's
+  connection handling, below `--sse max_streams`.  Sufficient for a
+  browser-BFF fan-out; raising it is a transport change (OQ-GW-14).
+  *Deferred:* the `knomosis-gateway`-bench throughput binary (a perf tool,
+  not a correctness gate) and the indexer-writer-death / cursor-jump chaos
+  cases.  *Acceptance (met for the correctness core):* no slot/thread leak
+  under the soak; the fan-out + the G3.4 recovery cases pass.
 * **G4.7 — `docs/gateway_runbook.md`** · S · deps: G4.1–G4.4.
   *Acceptance:* covers roles, start/stop, config (incl. the
   operator-obligation consistency knobs §9.2), health/readiness, the §9.5
