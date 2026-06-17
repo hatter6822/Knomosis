@@ -83,7 +83,7 @@ Secrets (the auth token file) are passed **by path, never argv/env value**.
 | Flag (env) | Default | Purpose |
 |---|---|---|
 | `--listen` (`KNX_GW_LISTEN`) | `127.0.0.1:8080` | HTTP listen address (loopback-safe). |
-| `--handler-threads` (`…_HANDLER_THREADS`) | `16` | Bounded request-handler pool; the concurrency governor for request *processing*. |
+| `--max-connections` (`…_MAX_CONNECTIONS`) | `1024` | Cap on simultaneously-active **plaintext** connections; the gateway serves each on its own thread (the spawn-storm DoS bound + concurrency governor). |
 | `--indexer-db` (`…_INDEXER_DB`) | unset → reads `503` | Indexer SQLite path, opened **read-only**. |
 | `--free-tier` / `--action-cost` / `--epoch-length` | `0` | Budget-view rendering + `/v1/info` echo (**must match the deployment policy**, §10). |
 | `--gas-pool-actor` (`…_GAS_POOL_ACTOR`) | unset | Sets the pool-view `net` flag (**must match the indexer's**, §10). |
@@ -93,18 +93,24 @@ Secrets (the auth token file) are passed **by path, never argv/env value**.
 | `--request-deadline-ms` | `5000` | End-to-end submit deadline (host connect/read/write). |
 | `--max-frame-size` | `1 MiB` (ceiling 16 MiB) | `POST /v1/actions` body cap → `413`. |
 | `--event-subscribe-addr` (`…_EVENT_SUBSCRIBE_ADDR`) | unset → events `503` | Event-subscribe upstream; probed by `/readyz`; feeds the SSE fan-out + the backfill. |
+| `--upstream-subscriptions` (`…_UPSTREAM_SUBSCRIPTIONS`) | `1` | Shared live-tail subscriptions feeding the single SSE ring; `>1` is a redundancy knob, deduped on `(seq,index)`. Range `1..=64`. |
 | `--auth-token-file` (`…_AUTH_TOKEN_FILE`) | unset → **fail-closed** | Bearer token(s), one per line.  Must **not** be world-readable. |
 | `--rate-limit-rps` (`…_RATE_LIMIT_RPS`) | `100` (`0`=off) | Per-credential token-bucket cap → `429` + `Retry-After`. |
 | `--idempotency-ttl-secs` | `120` (`0`=off) | `Idempotency-Key` response-cache TTL. |
 | `--tls-listen` (`…_TLS_LISTEN`) | unset → HTTPS off | Native HTTPS listen address (rustls 0.23, TLS 1.3); runs **alongside** `--listen`. Requires `--tls-cert` + `--tls-key`. |
 | `--tls-cert` / `--tls-key` (`…_TLS_CERT` / `…_TLS_KEY`) | unset | PEM cert chain (leaf first) + private key (PKCS#8 / RSA / SEC1) for `--tls-listen`. Required when it is set. Key bytes by **path**, never argv/env. |
 | `--mtls-client-ca` (`…_MTLS_CLIENT_CA`) | unset → no client auth | PEM CA bundle; presence **requires** a client cert chaining to it (mTLS). |
+| `--mtls-crl` (`…_MTLS_CRL`) | unset → no revocation check | PEM CRL bundle; with it the mTLS verifier rejects a revoked-but-unexpired client cert.  **Requires `--mtls-client-ca`.** |
 | `--tls-max-connections` (`…_TLS_MAX_CONNECTIONS`) | `1024` | Cap on concurrent TLS connections (each on its own thread); the spawn-storm bound. |
 | `--sse-ring-capacity` (`…_SSE_RING_CAPACITY`) | `4096` | SSE fan-out ring depth (records retained for replay / resume). Range `2..=1048576`. |
 | `--sse-max-streams` (`…_SSE_MAX_STREAMS`) | `256` | Max concurrent SSE streams; an over-cap connect is `503`. |
 | `--sse-max-client-lag` (`…_SSE_MAX_CLIENT_LAG`) | `2048` | Per-client lag bound (records) before a `lag_exceeded` eviction. **Must be `< --sse-ring-capacity`** (the default auto-fits a smaller ring). |
 | `--sse-heartbeat-secs` (`…_SSE_HEARTBEAT_SECS`) | `15` | SSE heartbeat-comment interval when a stream is idle. |
 | `--sse-stale-secs` (`…_SSE_STALE_SECS`) | `55` | Fan-out upstream-read staleness timeout (quiet live-tail reconnect cadence). |
+| `--sse-write-timeout-ms` (`…_SSE_WRITE_TIMEOUT_MS`) | `30000` | Per-record SSE write deadline; a record/heartbeat write that blocks longer (a stalled browser) drops the stream.  Honoured on **both** transports (each owns its socket). |
+| `--cors-origin` (`…_CORS_ORIGIN`) | unset → no CORS | Browser CORS allowlist: an exact origin, a comma-separated list, or `*`.  Enables the OPTIONS preflight + `Access-Control-*` decoration.  Leave unset for a server-side BFF caller. |
+| `--log-format` (`…_LOG_FORMAT`) | `json` | Structured-log format: `json` (machine-readable, the default the log-based metrics consume) or `text` (human-readable). |
+| `--dev` (`…_DEV`) | off | Run against **in-process mock upstreams** (a mock host + seeded read-only indexer DB + mock event-subscribe).  **Development only** — overrides `--host-addr` / `--event-subscribe-addr` / `--indexer-db`; never use in production. |
 
 The SSE knobs above are honoured **identically** on the plaintext and
 native-TLS stream paths (they share one `config::SseConfig` through the
@@ -190,10 +196,12 @@ unseen records.
 
 SIGTERM / SIGINT set the shared shutdown flag; `serve` then drains:
 
-  1. New requests stop being accepted; in-flight requests **complete**
-     (bounded by `--request-deadline-ms`).
-  2. The handler pool is drained under a **10 s deadline** — a stuck worker
-     cannot hang shutdown past it.
+  1. The listeners' accept loops exit (no new connection accepted); in-flight
+     requests **complete** (bounded by `--request-deadline-ms`).
+  2. The in-flight connections are drained under a **15 s deadline** — `serve`
+     waits for the shared `active_connections` gauge to reach `0` (each
+     connection thread observes the flag and exits within its per-read socket
+     timeout); a stuck connection cannot hang shutdown past the deadline.
   3. The SSE fan-out mux stops; every live SSE stream emits a clean
      `event: error` `{"error":"server_shutdown"}` close (checked **between
      whole records**, so a record is never truncated) and exits.
@@ -216,7 +224,7 @@ stops the process (without the drain).
 | SSE `event: error{lag_exceeded}` | A slow client exceeded `max_client_lag` or stalled its socket. | Client reconnects; if chronic, the consumer is too slow / the network is degraded. |
 | SSE `event: error{decode_error}` then close | A **known-tag** upstream event failed to decode (corruption). | **Fail-closed by design** (never a silent skip).  Investigate the upstream / extractor; this should not occur with a healthy stack. |
 | Stale / lagging reads | Read-only WAL goes stale when the **indexer writer dies** (OQ-GW-13). | `/readyz` enforces a live cursor read; restart the indexer writer.  Reads are §3.6 eventually-consistent — the kernel is authoritative. |
-| New SSE connections hang / are not served at high fan-out | The `tiny_http` per-connection-task ceiling (**OQ-GW-14**) — long-lived streams pin internal tasks below `max_streams`. | Keep concurrent-SSE fan-out modest (a browser-BFF scale); the no-leak soak confirms slots are never *leaked*.  Raising the ceiling is a transport change (OQ-GW-14). |
+| New SSE connections refused at high fan-out | The configured `--sse-max-streams` cap is reached (a `503` + short `Retry-After`). | Raise `--sse-max-streams` (each live stream is one thread); the no-leak soak confirms slots are never *leaked*.  (The former `tiny_http` task-ceiling, OQ-GW-14, is closed — the own HTTP stack serves each connection on its own thread, so the ceiling is exactly `--sse-max-streams`.) |
 | Startup refuses with a permission error | The `--auth-token-file` is world-readable. | `chmod 600` the token file. |
 | Every request `401` despite a token | No `--auth-token-file` configured (fail-closed) — see the startup warning. | Configure the token file. |
 | Config drift (wrong budget / pool numbers) | `--free-tier` / `--gas-pool-actor` mismatch the deployment (§10). | Diff `/v1/info`'s echo against the indexer's config; reconcile. |
@@ -255,23 +263,23 @@ silently renders the wrong numbers.  Keep them in lockstep and verify via
 ## 11. Known limitations / deferred
 
   * **Native TLS / mTLS (G4.2)** — **implemented** (`--tls-listen` /
-    `--tls-cert` / `--tls-key` / `--mtls-client-ca`, rustls 0.23, TLS 1.3,
-    §3 / §4); certificate **rotation is hot-reloaded on `SIGHUP`** (§5, no
-    downtime).  Edge termination stays a supported alternative.  *Residual:*
-    the TLS path's per-read timeout bounds slow-loris per read (not an overall
-    per-request deadline) — parity with `knomosis-host`.
-  * **Concurrent-SSE ceiling (OQ-GW-14)** — on the **plaintext** path SSE
-    concurrency is bounded by `tiny_http`'s connection model *below*
-    `--sse-max-streams`; adequate for a browser-BFF fan-out.  The **native-TLS**
-    path (`--tls-listen`) is **not** subject to this ceiling — each connection
-    runs on its own thread — so prefer it for higher SSE fan-out.
-  * **Plaintext SSE stalled-reader (OQ-GW-15)** — on the **plaintext** path a
-    client that opens a stream then stops reading blocks that stream's writer
-    thread (and holds its `--sse-max-streams` slot) until it disconnects;
-    `tiny_http`'s hijacked writer exposes no socket handle for a write timeout.
-    The **native-TLS** path bounds this with a per-connection write timeout
-    (a stalled reader is dropped) — **prefer `--tls-listen` for untrusted /
-    public SSE clients.**
+    `--tls-cert` / `--tls-key` / `--mtls-client-ca` / `--mtls-crl` for
+    revocation, rustls 0.23, TLS 1.3, §3 / §4); certificate **rotation is
+    hot-reloaded on `SIGHUP`** (§5, no downtime).  Edge termination stays a
+    supported alternative.  Both transports now bound slow-loris with an overall
+    per-request read deadline (a wall-clock cap on cumulative read time), not
+    just a per-read timeout.
+  * **Concurrent-SSE ceiling (OQ-GW-14) — CLOSED.** Formerly the plaintext
+    path's `tiny_http` connection model pinned one task per hijacked stream,
+    capping concurrent SSE *below* `--sse-max-streams`.  The G4.2/G4.6 own-HTTP-
+    stack unification serves each connection on its own thread on **both**
+    transports, so the live-stream ceiling is now exactly `--sse-max-streams`
+    (a real `503` over cap) — no transport asymmetry.
+  * **SSE stalled-reader write deadline (OQ-GW-15) — CLOSED.** Each connection
+    now owns its socket on both transports, so `--sse-write-timeout-ms` is a
+    real `SO_SNDTIMEO`: a stalled browser that stops reading is dropped within
+    the deadline (and releases its `--sse-max-streams` slot) on plaintext as
+    well as native TLS.
   * **Throughput bench (G4.6)** — shipped as the `knomosis-gateway-bench`
     binary (read-path throughput + latency, with a JSON report + `--baseline`
     regression detection; see §12).  It is a **manual** tool (the numbers vary

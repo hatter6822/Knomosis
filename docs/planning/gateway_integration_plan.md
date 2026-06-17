@@ -27,9 +27,11 @@ The companion machine-readable contract is
 > (OpenAPI sketch), **G0.2** (this plan), **G0.3** (the `ci-gateway.yml`
 > OpenAPI-lint gate + `docs/api/redocly.yaml`), **G1.0** (the HTTP-layer
 > decision → the vetted sync crate `tiny_http`, recorded in
-> `docs/audits/gateway_http_spike.md`), **G1.1** (the `knomosis-gateway`
-> crate scaffold — lib+bin serving `/healthz` over `tiny_http`, a workspace
-> member), **G1.6a** (the `knomosis-storage` read-only open path), the
+> `docs/audits/gateway_http_spike.md` — **later retired** by the G4.2/G4.6
+> own-HTTP-stack unification, which closed OQ-GW-14/15; see the G4 status
+> below), **G1.1** (the `knomosis-gateway` crate scaffold — lib+bin serving
+> `/healthz`, a workspace member), **G1.6a** (the `knomosis-storage`
+> read-only open path), the
 > sync HTTP request foundation + routing surface (**G1.2**, the *parse →
 > dispatch → write* split), and the read endpoints **G1.6b** (balances)
 > and **G1.7** (budget + pools — `GET /v1/actors/{id}/budget` and
@@ -92,45 +94,44 @@ The companion machine-readable contract is
 > — `Last-Event-ID`/`since` decomposition + the intra-seq-skip
 > in-window/behind/truncated tiers; the headline test proves a mid-seq-group
 > resume redelivers *exactly* the unseen records), and **G3.5** (the
-> `events/stream.rs` HTTP wiring — `GET /v1/events/stream` hijacks the
-> connection via `into_writer`, reserves a bounded stream slot, and runs the
-> per-client dispatch on its own thread; the single mux is started in
+> `events/stream.rs` streaming core — `GET /v1/events/stream` hijacks the
+> connection (the own-stack `http::conn` handler hands off the socket writer),
+> reserves a bounded stream slot, and runs the per-client dispatch on its own
+> thread; the single mux is started in
 > `serve`; `Last-Event-ID`/`since` resume + `Cache-Control: no-store`; an
 > end-to-end test streams composite-id records to a real socket client).
-> **The events (G3) track is complete (G3.1–G3.5).** The **G4 hardening**
-> track is underway: **G4.1** (rate limiting — shipped early as G1.3) and
-> **G4.3** (observability — a per-request `X-Request-Id` correlation id
-> propagated to the header / `problem.instance` / a structured log line, the
-> log-based metrics surface, with a redaction-tested no-secret guarantee),
-> and **G4.4** (graceful shutdown — a `signal_hook` SIGTERM/SIGINT trigger
-> sets the shared shutdown flag; `serve` drains the handler pool under a
-> deadline via `tiny_http::unblock`, and the mux + every live SSE stream
-> stop on the flag, the streams emitting a clean `server_shutdown` close
-> with no mid-record truncation), and **G4.5** (the dep audit — the repo's
-> first `runtime/deny.toml` cargo-deny policy with a locally-verified licence
-> allow-list, a dedicated `ci-cargo-deny.yml`, and the supply-chain review
-> doc `docs/audits/gateway_dependency_audit.md`), and **G4.6** (load/soak +
-> the throughput bench — the end-to-end fan-out + the no-leak soak
-> (slots/threads never leak across open→close cycles), and the new
-> `knomosis-gateway-bench` crate: a read-path throughput/latency harness
-> driving a real listener with concurrent raw-HTTP clients, with a JSON report
-> + baseline regression detection (a manual tool, not a CI gate); the
-> `tiny_http` concurrent-SSE ceiling is filed as OQ-GW-14), and
-> **G4.7** (the operator `docs/gateway_runbook.md` — roles/topology, the
-> implemented config reference, the security model, health/readiness,
-> observability, graceful shutdown, the §9.5 failure-signature table, the
-> operator-obligation knobs, and a quick reference), and **G4.2** (native
-> in-process HTTPS — a `rustls 0.23` (TLS 1.3, ring) front-end with optional
-> mTLS (`--tls-listen` / `--tls-cert` / `--tls-key` / `--mtls-client-ca`) that
-> runs ALONGSIDE the plaintext `--listen` socket and reuses the EXACT shared
-> request core, fronted by a deliberately strict, smuggling-proof HTTP/1.1
-> reader; uses the workspace's rustls 0.23, not tiny_http's bundled rustls
-> 0.20 — see `docs/audits/gateway_tls_spike.md`).  **The core G4 hardening
-> track is complete (G4.1–G4.7, incl. the G4.6 throughput bench);** deferred:
-> the G2.1c submit pipelining (a modest, situational optimisation) and the
-> G3.2c cross-stack pin against the Lean reference (blocked upstream on the
-> deferred Lean `Encodable Event` — the gateway-side §6.2 envelope shape is
-> already golden-pinned for every tag).
+> **The events (G3) track is complete (G3.1–G3.5).** **The G4 hardening track
+> is complete (G4.1–G4.7).** Highlights: **G4.1** (rate limiting — shipped early
+> as G1.3); **G4.3** (observability — a per-request `X-Request-Id` propagated to
+> the header / `problem.instance` / a structured log line, the log-based metrics
+> surface, redaction-tested); **G4.4** (graceful shutdown — a `signal_hook`
+> SIGTERM/SIGINT trigger sets the shared flag; `serve` drains the in-flight
+> connections under a deadline via the shared `active_connections` gauge, and
+> the mux + every live SSE stream stop on the flag, emitting a clean
+> `server_shutdown` close); **G4.5** (the dep audit — `runtime/deny.toml`
+> cargo-deny + `ci-cargo-deny.yml` + `docs/audits/gateway_dependency_audit.md`);
+> **G4.6** (load/soak + the `knomosis-gateway-bench` throughput/latency harness,
+> the fan-out + no-leak soak); **G4.7** (the operator
+> `docs/gateway_runbook.md`); and **G4.2** (native in-process HTTPS — a
+> `rustls 0.23`, TLS 1.3, `ring` front-end with optional mTLS + CRL revocation:
+> `--tls-listen` / `--tls-cert` / `--tls-key` / `--mtls-client-ca` /
+> `--mtls-crl`).
+>
+> **The gateway now owns its WHOLE HTTP stack** (the transport-neutral
+> `http::conn` handler over the workspace rustls 0.23 — **no `tiny_http`**): one
+> thread per connection on both the plaintext and native-TLS listeners, each
+> with a socket-owned read/write timeout + a per-request read deadline.  This
+> closed **OQ-GW-14** (the concurrent-SSE ceiling is now exactly
+> `--sse-max-streams`) and **OQ-GW-15** (the `--sse-write-timeout-ms` per-record
+> write deadline is now honoured on both transports).  The remaining §9.2 surface
+> is complete: **`--cors-origin`** (+ OPTIONS preflight), **`--log-format`**,
+> **`--dev`** (in-process mock upstreams), **`--upstream-subscriptions`**, and
+> **`--sse-write-timeout-ms`**.  The **G3.2c cross-stack pin is shipped**: the
+> Lean `Encodable Event` instance (`Encoding/Event.lean`) is the byte authority,
+> pinned byte-for-byte by `knomosis-indexer` and lifted to the gateway's §6.2
+> envelope by `knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen
+> tag 0..=22 renders to its canonical type, never `unknown`).  *Deferred:* only
+> the G2.1c submit pipelining (a modest, situational optimisation).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -970,13 +971,13 @@ separate hosts.
 | Flag (env) | Default | Purpose |
 |---|---|---|
 | `--listen` (`KNX_GW_LISTEN`) | `127.0.0.1:8080` | HTTP listen addr (loopback-safe default) |
-| `--tls-listen` / `--tls-cert` / `--tls-key` | off | HTTPS listener (rustls, TLS 1.3 min) |
-| `--mtls-client-ca` | off | require + verify client certs (G4.2) |
+| `--tls-listen` / `--tls-cert` / `--tls-key` | off | HTTPS listener (rustls 0.23, TLS 1.3 min) — **DONE** (G4.2; the gateway owns its whole HTTP stack now, no `tiny_http`) |
+| `--mtls-client-ca` / `--mtls-crl` | off | require + verify client certs, optionally checking revocation against a CRL — **DONE** (G4.2) |
 | `--host-addr` (`KNX_GW_HOST_ADDR`) | unset (G1.8) | knomosis-host upstream (loopback plaintext); probed by `/readyz` when set — the `127.0.0.1:7654` default + submit client land with G2 |
 | `--host-pool-size` | `8` | persistent host connections (one in-flight each) |
 | `--host-max-inflight` | = pool size | cap concurrent host checkouts (≤ host `--max-queue-depth`) |
 | `--event-subscribe-addr` (`KNX_GW_EVENT_SUBSCRIBE_ADDR`) | unset (G1.8) | event-subscribe upstream; probed by `/readyz` when set — the `127.0.0.1:7655` default + SSE client land with G3 |
-| `--upstream-subscriptions` | `1` | shared live-tail subs feeding the ring (O(1) in clients); `>1` requires `(seq,index)` dedup in the mux (G3.4b, finding #6) |
+| `--upstream-subscriptions` | `1` | shared live-tail subs feeding the SINGLE ring (O(1) in clients); `>1` is a redundancy knob deduped on `(seq,index)` by the ring (G3.4b, finding #6) — **DONE** |
 | `--indexer-db` (`KNX_GW_INDEXER_DB`) | — | indexer SQLite path (opened read-only) |
 | `--free-tier` / `--action-cost` / `--epoch-length` | `0`/`0`/`0` | budget-view rendering (must match the deployment policy) |
 | `--gas-pool-actor` | off | sets the pool-view `net` flag (must match the indexer's) |
@@ -985,13 +986,13 @@ separate hosts.
 | `--request-deadline-ms` | `5000` | end-to-end submit deadline |
 | `--tls-max-connections` / `--sse-max-streams` | `1024` / `256` | resource governors (TLS conn cap **DONE**; `--sse-max-streams` **DONE**) |
 | `--sse-heartbeat-secs` / `--sse-max-client-lag` | `15` / `2048` | SSE keepalive / per-client lag bound (**DONE**; lag validated `< --sse-ring-capacity`) |
-| `--sse-write-timeout-ms` | `30000` | per-record SSE write deadline (stalled-browser drop) — **deferred** on the plaintext path (`tiny_http`'s `into_writer` is a type-erased `Box<dyn Write>`, so no per-write socket timeout); the native-TLS path already bounds writes by its per-connection timeout |
+| `--sse-write-timeout-ms` | `30000` | per-record SSE write deadline (stalled-browser drop) — **DONE** on **both** paths: the gateway owns its socket now (no `tiny_http`), so the deadline is a real `SO_SNDTIMEO` applied to a live stream's socket on either transport (the former plaintext deferral is closed) |
 | `--sse-ring-capacity` / `--sse-stale-secs` | `4096` / `55` | SSE fan-out ring depth / fan-out upstream-staleness (**DONE**) |
 | `--rate-limit-rps` | `100` | per-credential rate cap |
 | `--idempotency-ttl-secs` | `120` (`0`=off) | idempotency-key response cache TTL |
-| `--cors-origin` | off | allowed origin if browser-direct (else no CORS) |
-| `--log-format` | `json` | structured logging |
-| `--dev` | off | mock-upstream profile (§9.3) |
+| `--cors-origin` | off | allowed origin(s) if browser-direct (exact / comma-list / `*`); enables the OPTIONS preflight + `Access-Control-*` decoration (incl. the SSE head) — **DONE** |
+| `--log-format` | `json` | structured logging (`json`\|`text`); the gateway installs its own subscriber (cli-common is text-only) — **DONE** |
+| `--dev` | off | in-process mock-upstream profile (§9.3): MockKernel host + seeded read-only indexer DB + mock event-subscribe emitting real CBE events — **DONE** |
 
 Validation fails fast (`OperatorExitCode::OperatorAction`) with a typed
 error naming the offending knob; `--help` documents every flag. Secrets
@@ -1190,8 +1191,8 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     `src/http/tls.rs`, on its own `--tls-listen` socket + a
     `--tls-max-connections` cap, alongside the still-loopback-plaintext default
     `--listen`). *Acceptance met:* `/healthz` 200 over
-    HTTP; the bounded pool serves 12 concurrent clients across 4 threads
-    (`tests/smoke.rs::handler_pool_serves_concurrent_requests`).
+    HTTP; the own-stack listener serves 12 concurrent clients (thread per
+    connection) (`tests/smoke.rs::listener_serves_concurrent_requests`).
   * **G1.2e — Streaming response primitive** · S. `http/sse.rs`: a
     flush-after-each-write `text/event-stream` body with no `Content-
     Length`, `Cache-Control: no-store` + `X-Accel-Buffering: no` (defeat
@@ -1606,8 +1607,8 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     `0..=22` round-trips (`encode_event` → `render_event`) carrying its name;
     a truncated known-tag payload yields `Corrupt` (does not panic — §3.2);
     an empty head yields `Unparseable`.
-  * **G3.2c — §6.2 envelope pin** · S · deps: G3.2b · **DONE (gateway-side
-    golden pin); the Lean-reference cross-stack pin is BLOCKED upstream.**
+  * **G3.2c — §6.2 envelope pin** · S · deps: G3.2b · **DONE (the gateway-side
+    golden pin AND the Lean-reference cross-stack pin).**
     The §6.2 *contract shape* is now pinned for **every** tag `0..=22`:
     `events/decode.rs::every_tag_pins_the_full_v62_envelope` asserts the exact
     rendered envelope — the denormalised `actor` / `resource` subject **and**
@@ -1618,15 +1619,18 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     mistyped field for any tag fails the test).  This is the complete BFF
     contract-shape regression guard the per-field tests only sampled.
     *Acceptance met:* the golden pin is green and a deliberate field-rename
-    breaks it.  **Upstream blocker (the residual):** the *true* cross-stack
-    pin against real `knomosis extract-events` output cannot be written yet —
-    the Lean side does **not** ship an `Encodable Event` instance and the
-    `extract-events` subcommand is deferred (RH-D.2; see
-    `knomosis-indexer::decoder`'s module docstring).  Until it lands, the
-    canonical CBE format is defined *by convention* by the cross-stack-
-    validated `knomosis-indexer` codec, against which the gateway golden pin
-    rides; when the Lean encoder ships, the `.cxsf`-corpus pin becomes a
-    strictly-additive belt-and-braces gate.
+    breaks it.  **The Lean-reference cross-stack pin is now SHIPPED** (the
+    former "upstream blocker" was stale — the Lean `Encodable Event` instance
+    `instEncodableEvent` ships in `LegalKernel/Encoding/Event.lean`, and
+    `knomosis extract-events` emits exactly those bytes).  The byte authority is
+    the Lean-generated `solidity/test/CrossCheck/fixtures/event_subscribe_cbe.json`:
+    `knomosis-indexer/tests/cross_stack_lean_event.rs` pins it **byte-for-byte**
+    (decode→re-encode == Lean bytes for every tag 0..=22), and
+    `knomosis-gateway/tests/cross_stack_lean_event.rs` **lifts that to the §6.2
+    JSON envelope** — `render_event` over each fixture entry must produce the
+    canonical type (never `unknown`) and the §6.2 value rules.  A Lean encoder
+    change drifts the committed fixture (caught Lean-side) and any divergence
+    fails these pins.
 * **G3.3 — `GET /events` backfill** · M · deps: G3.1, G3.2 · **DONE.**
   `events/backfill.rs` builds a *bounded page* API over the *unbounded*
   `SUBSCRIBE` stream (`backfill(addr, tip, max_frame, idle_timeout, req)
@@ -1768,8 +1772,9 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
 * **G3.5 — `GET /v1/events/stream` wiring + tests** · S · deps: G3.4 ·
   **DONE.** `events/stream.rs` wires the live SSE endpoint atop the G3.4
   fan-out.  Because an SSE stream is open-ended it **hijacks the
-  connection** (`tiny_http::Request::into_writer`) rather than returning a
-  `RouteOutcome`: `serve` reserves a stream slot (lock-free atomic admission,
+  connection** (the own-stack `http::conn` handler hands the socket writer to
+  the streaming core, on both transports) rather than returning a
+  `RouteOutcome`: the stream path reserves a slot (lock-free atomic admission,
   bounded by `SseConfig::max_streams` — an over-cap connect is `503` +
   `Retry-After`), then runs the per-client dispatch on **its own thread** so
   the handler-pool worker returns immediately (a long-lived stream never
@@ -1810,19 +1815,24 @@ Event` (RH-D.2), not on the gateway.
 * **G4.2 — TLS/mTLS hardening** · S · deps: G1.2d · **DONE (native in-process
   HTTPS).** `src/http/tls.rs`: a native `rustls 0.23` (TLS 1.3 floor, the
   `ring` backend) HTTPS front-end — `--tls-listen` / `--tls-cert` /
-  `--tls-key` / `--mtls-client-ca` / `--tls-max-connections` — that runs
-  **alongside** the plaintext `--listen` socket and reuses the **exact** shared
-  request core (`http::handler`): the same fail-closed auth gate, per-credential
-  rate cap, router, dispatch, and SSE fan-out (`run_one_stream` over the same
+  `--tls-key` / `--mtls-client-ca` / `--mtls-crl` / `--tls-max-connections` —
+  that runs **alongside** the plaintext `--listen` socket and shares the
+  **exact** transport-neutral connection handler (`http::conn`, also used by the
+  plaintext listener) over the same request core (`http::handler`): the same
+  strict HTTP/1.1 reader/writer, fail-closed auth gate, per-credential rate cap,
+  router, dispatch, and SSE fan-out (`run_one_stream` over the same
   `StreamSlot` bound), so the two transports cannot diverge in security
   behaviour.  It uses the **workspace's rustls 0.23** — the same audited stack
   `knomosis-host` uses, **not** `tiny_http`'s bundled rustls 0.20 (rejected as a
   security downgrade; see `docs/audits/gateway_tls_spike.md`) — reusing
   `knomosis_host::tls`'s vetted PEM loaders; **no new crate** enters the
   dependency graph.  mTLS (`--mtls-client-ca`) wires a `WebPkiClientVerifier`
-  requiring a CA-chained client certificate.  A deliberately **strict HTTP/1.1
-  reader** feeds the core (`tiny_http` cannot consume an externally-decrypted
-  stream): `Transfer-Encoding` rejected (no chunked → the TE.CL/CL.TE desync
+  requiring a CA-chained client certificate, optionally **checking revocation**
+  against a `--mtls-crl` CRL bundle (a revoked-but-unexpired client cert is
+  rejected at the handshake).  A deliberately **strict HTTP/1.1 reader** feeds
+  the core (the gateway is the sole HTTP processor on the connection — it owns
+  its whole stack, no `tiny_http`): `Transfer-Encoding` rejected (no chunked →
+  the TE.CL/CL.TE desync
   class is impossible), a duplicate / comma-listed `Content-Length` rejected,
   obsolete folding rejected, the body read **exactly** (keep-alive framing stays
   synchronised), request-line / header-line / header-count / section size all
@@ -1843,12 +1853,14 @@ Event` (RH-D.2), not on the gateway.
   `200`, info authed `200`, unauthed `401`, bad-version `505`, submit
   body-framed `503`, SSE `503`, keep-alive pipelining incl. a body-framed
   pipelined pair) and **mTLS** (handshake **rejected** with no client cert;
-  **accepted** with a CA-signed cert) — plus a **hot-reload** pair: the swap
-  mechanism (swaps on success, keeps the current config on a bad path) and an
-  **end-to-end rotation** (a live listener reloaded from cert A to a different
-  CA's cert B then serves B; the old CA-A no longer validates) — plus 30
-  pure-parser unit tests for the strict reader + response writer
-  (request-smuggling + response-splitting guards).  TLS at a **co-located
+  **accepted** with a CA-signed cert; **revoked**-cert handshake rejected once a
+  `--mtls-crl` CRL is configured, over a webpki-conforming openssl-generated v2
+  CRL) — plus a **hot-reload** pair: the swap mechanism (swaps on success, keeps
+  the current config on a bad path) and an **end-to-end rotation** (a live
+  listener reloaded from cert A to a different CA's cert B then serves B; the
+  old CA-A no longer validates) — plus the pure-parser unit tests for the
+  strict reader + response writer (request-smuggling + response-splitting
+  guards).  TLS at a **co-located
   edge** remains a supported alternative (the gateway then stays plaintext
   behind it; the runbook documents both).
 * **G4.3 — Observability** · M · deps: G1–G3 · **DONE.**
@@ -1909,12 +1921,15 @@ Event` (RH-D.2), not on the gateway.
   hand-rolls a dependency-free RFC 4648 codec — so only HTTP / `signal-hook`
   needed justifying.)*
 * **G4.6 — Load/soak/chaos** · M · deps: G1–G3 · **DONE (throughput bench
-  shipped; the no-leak + recovery correctness already done; only the
-  high-concurrency-SSE ceiling is upstream-bounded by OQ-GW-14).**
+  shipped; the no-leak + recovery correctness already done; the
+  high-concurrency-SSE ceiling OQ-GW-14 is now CLOSED by the own-HTTP-stack
+  unification — each connection has its own thread, so the live-stream bound is
+  the configured `--sse-max-streams`).**
   The **throughput / latency bench** is the new `knomosis-gateway-bench`
   crate (the read-path peer of `knomosis-bench`): it seeds a read-only indexer
-  fixture, drives a **real** gateway `spawn_handler_pool` listener with
-  `--workers` concurrent raw-HTTP `GET /v1/actors/{id}/balances` clients, and
+  fixture, drives a **real** gateway `spawn_plain_listener` (own-HTTP-stack)
+  listener with `--workers` concurrent raw-HTTP `GET /v1/actors/{id}/balances`
+  clients, and
   reports sustained wallclock throughput + a reused-`knomosis-bench`-histogram
   latency summary, as a human table + a JSON sidecar (`--report`) with
   direction-aware **baseline regression detection** (`--baseline`, exit 1 on a
@@ -1933,15 +1948,14 @@ Event` (RH-D.2), not on the gateway.
   slots/threads are never leaked under the per-stream-thread + ring model).
   The component-level chaos is already covered by the G3.4 suites (the
   finding-#4 mid-group-drop recovery, the slow-client eviction, the
-  mid-seq-group resume).  **Discovered + filed OQ-GW-14:** `tiny_http`
-  services each connection on an internal task that blocks until the request
-  writer drops, so a long-lived (hijacked) SSE stream pins one such task —
-  the *effective* concurrent-SSE ceiling is bounded by tiny_http's
-  connection handling, below `--sse max_streams`.  Sufficient for a
-  browser-BFF fan-out; raising it is a transport change (OQ-GW-14) — though
-  the native-TLS path (G4.2) already lifts it for TLS clients.  *Deferred:*
-  only the indexer-writer-death / cursor-jump chaos cases (the kernel-
-  authoritative reads self-correct; OQ-GW-13).  *Acceptance (met):* the
+  mid-seq-group resume).  **OQ-GW-14 (filed here, now CLOSED):** the former
+  `tiny_http` connection model pinned one internal task per hijacked SSE stream
+  (the effective concurrent-SSE ceiling sat below `--sse-max-streams` on the
+  plaintext path); the own-HTTP-stack unification gives each connection its own
+  thread on both transports, so the ceiling is now exactly `--sse-max-streams`
+  (a real `503` over cap).  *Deferred:* only the indexer-writer-death /
+  cursor-jump chaos cases (the kernel-authoritative reads self-correct;
+  OQ-GW-13).  *Acceptance (met):* the
   `knomosis-gateway-bench` binary runs the read path end-to-end and reports
   throughput + latency with baseline regression detection; no slot/thread
   leak under the soak; the fan-out + the G3.4 recovery cases pass.
@@ -2143,6 +2157,22 @@ Format mirrors `docs/planning/open_questions.md`; promote there on sign-off.
   seam + extra upstream subs), or be steered to `GET /events` backfill then
   reconnect (simpler, O(1) upstream)? *Rec:* backfill-then-reconnect for v1
   (§3.5 step 2); dedicated catch-up as a measured optimization.
+* **OQ-GW-14 — Concurrent-SSE ceiling. RESOLVED.** Filed in G3.4 when the
+  plaintext path rode `tiny_http`, whose `for rq in client` connection model
+  pins one task per hijacked SSE stream, capping the *effective* number of
+  simultaneously-live plaintext streams below the `--sse-max-streams` ceiling.
+  Closed by the G4.2/G4.6 **own-HTTP-stack unification**: the gateway serves
+  each connection on its own thread over its transport-neutral `http::conn`
+  handler (no `tiny_http`), so the live-stream ceiling is the configured
+  `--sse-max-streams` (a real `503` over cap), not a transport artefact —
+  identical on the plaintext and native-TLS paths.
+* **OQ-GW-15 — Plaintext SSE write deadline. RESOLVED.** Filed alongside
+  OQ-GW-14: `tiny_http`'s `Request::into_writer` yields a type-erased
+  `Box<dyn Write>` with no per-write socket timeout, so the
+  `--sse-write-timeout-ms` stalled-browser drop was deferred on the plaintext
+  path.  Closed by the same unification: each connection owns its socket, so
+  the per-record write deadline is a real `SO_SNDTIMEO` honoured on **both**
+  transports.
 
 ## §15 References
 

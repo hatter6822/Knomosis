@@ -5,10 +5,16 @@
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
-//! G3.4b upstream multiplexer: a **single** shared live-tail
-//! event-subscribe subscription feeds the shared ring, fanned out to many
-//! SSE clients (each reads the ring; none holds its own upstream socket —
-//! the O(1)-subscribers-in-N-clients property, finding #6).
+//! G3.4b upstream multiplexer: a shared live-tail event-subscribe
+//! subscription feeds the shared ring, fanned out to many SSE clients (each
+//! reads the ring; none holds its own upstream socket — the
+//! O(1)-subscribers-in-N-clients property, finding #6).
+//!
+//! Each [`Mux`] runs **one** subscription.  `--upstream-subscriptions N` (the
+//! default `1`) makes [`crate::http::serve`] spawn `N` muxes that all feed the
+//! **same** ring — a redundancy / availability knob: because the ring `push`
+//! dedups on `(seq, index)` (below), `N > 1` loses no record and delivers none
+//! twice, it just ingests each event up to `N` times into the dedup gate.
 //!
 //! **Resubscribe from the watermark, not the newest seq (finding #4).**  On
 //! any interruption the mux recreates the subscription from the ring's

@@ -16,15 +16,20 @@ machine-enforced policy in `runtime/deny.toml` (run by
 
 ## Scope
 
-The gateway is **pure-Rust orchestration** over `tiny_http` and the sibling
-runtime crates: `unsafe_code = "forbid"`, no FFI, no `tokio`.  Its only new
+The gateway is **pure-Rust orchestration** over the workspace's `rustls 0.23`,
+the std network stack, and the sibling runtime crates: `unsafe_code = "forbid"`,
+no FFI, no `tokio`.  **The G4.2/G4.6 own-HTTP-stack unification retired the
+former `tiny_http` dependency** — the gateway now owns its whole HTTP/1.1 stack
+(the plaintext + native-TLS accept loops, a strict hand-rolled reader/writer,
+and a thread-per-connection model) over `rustls 0.23`.  Its only new
 *production* third-party dependencies beyond the workspace-standard set
 (`serde`, `serde_json`, `thiserror`, `tracing`) are:
 
 | Crate | Kind | Role | Justification |
 |-------|------|------|---------------|
-| `tiny_http` | normal | The synchronous HTTP/1.1 server (G1.0 decision). | Vetted in `docs/audits/gateway_http_spike.md`; chosen precisely to avoid `tokio`.  `default-features = false` keeps its (version-stale, rustls 0.20) bundled TLS out — native HTTPS (G4.2) uses the workspace's rustls 0.23 instead (below). |
-| `rustls` | normal | Native in-process HTTPS / mTLS (G4.2, `src/http/tls.rs`). | The **workspace-pinned `rustls 0.23`** (TLS 1.3, the `ring` backend) — the SAME audited stack `knomosis-host` already uses, NOT `tiny_http`'s bundled `rustls 0.20`.  Adds **no new crate** to the graph (rustls 0.23 + its transitive deps were already present via `knomosis-host`); the only `Cargo.lock` change is the gateway→rustls edge.  PEM cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders. |
+| `rustls` | normal | Native in-process HTTPS / mTLS (G4.2, `src/http/tls.rs`) **and** the gateway's whole HTTP stack (after the `tiny_http` retirement). | The **workspace-pinned `rustls 0.23`** (TLS 1.3, the `ring` backend) — the SAME audited stack `knomosis-host` already uses.  Adds **no new crate** to the graph (rustls 0.23 + its transitive deps were already present via `knomosis-host`).  PEM cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders. |
+| `rustls-pemfile` | normal | PEM certificate-revocation-list parsing for the `--mtls-crl` gate (`rustls_pemfile::crls`). | The same workspace-pinned PEM loader `knomosis-host` already uses for certs/keys; shares rustls 0.23's `pki_types` vocabulary.  Adds **no new crate** to the graph (already present via `knomosis-host`). |
+| `tracing-subscriber` (feature `json`) | normal | The gateway installs its own structured-log subscriber (`src/logging.rs`, `--log-format json\|text`); cli-common is text-only and the gateway is the first WU needing JSON. | The same workspace-pinned crate the sibling crates use, with the additive `json` feature.  That feature pulls two new transitive crates — `tracing-serde` and `valuable`, both MIT (on the allow-list, §below). |
 | `subtle` | normal | Constant-time bearer-token comparison (G1.4 auth gate). | The same audited, `no_std`, constant-time crate the secp256k1 verifier already uses workspace-wide; eliminates an early-return timing oracle on the secret token. |
 | `signal-hook` | normal | SIGTERM/SIGINT graceful-shutdown trigger (G4.4). | A safe `sigaction` wrapper — the crate's `unsafe = forbid` rules out a hand-rolled handler.  `default-features = false` pulls only the atomic-flag registration (`flag::register`), not the channel/iterator helpers. |
 
@@ -32,13 +37,13 @@ New **dev-only** dependencies (never in the shipped binary):
 
 | Crate | Role |
 |-------|------|
-| `tempfile` | Isolated on-disk SQLite databases the read tests seed + open read-only. |
+| `tempfile` | Isolated on-disk SQLite databases the read tests seed + open read-only (and the TLS handshake tests' PKI dir). |
 | `proptest` | The G3.4 fan-out-ring property tests (ordering / gap-freeness / seq-group integrity / watermark) — the same workspace-pinned crate the host / indexer / event-subscribe suites use. |
-| `tracing-subscriber` | The G4.3 redaction test captures the structured request log into a buffer and asserts no bearer token appears — the same workspace-pinned crate `knomosis-cli-common` uses. |
 
-All three dev deps were already present at the workspace level (used by
-sibling crates), so they add **no new crate** to the dependency graph — only
-a new *edge* from the gateway.
+Both dev deps were already present at the workspace level (used by sibling
+crates), so they add **no new crate** to the dependency graph — only a new
+*edge* from the gateway.  (`tracing-subscriber` moved from a dev-only to a
+*production* dependency when the gateway took over its own log subscriber.)
 
 ## Licence policy (verified)
 
@@ -51,7 +56,7 @@ GPL-3.0-or-later }`:
 | Expression (as resolved) | Satisfied by | Example crates |
 |--------------------------|--------------|----------------|
 | `MIT OR Apache-2.0` / `Apache-2.0 OR MIT` / `MIT/Apache-2.0` / `Apache-2.0/MIT` | MIT | ~90 crates (most of the tree, incl. `signal-hook`) |
-| `MIT` | MIT | `rusqlite`, `generic-array`, … |
+| `MIT` | MIT | `rusqlite`, `generic-array`, `tracing-serde`, `valuable` (the latter two new via `tracing-subscriber`'s `json` feature), … |
 | `(MIT OR Apache-2.0) AND Unicode-3.0` | MIT **+ Unicode-3.0** | `unicode-ident` |
 | `Apache-2.0 AND ISC` | Apache-2.0 **+ ISC** | `ring` |
 | `Apache-2.0 OR ISC OR MIT` | MIT | `rustls`, `rustls-pemfile` |
