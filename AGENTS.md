@@ -137,6 +137,11 @@ cd runtime && cargo fmt --all -- --check
 # Its Rust gates ride the --workspace commands above; run/test directly:
 cd runtime && cargo run -p knomosis-gateway -- --help
 cd runtime && cargo test -p knomosis-gateway
+# Read-path throughput / latency bench (manual; G4.6) — numbers vary by
+# machine, so it is NOT a CI gate (its deterministic tests ride --workspace):
+cd runtime && cargo run -p knomosis-gateway-bench -- --help
+cd runtime && cargo run -p knomosis-gateway-bench -- \
+  --actors 1000 --resources 2 --requests 10000 --workers 32 --report bench.json
 ```
 
 `lakefile.lean` is the source of truth for every build target,
@@ -252,6 +257,8 @@ knomosis/
 │   ├── knomosis-indexer/         --   SQLite event indexer daemon
 │   ├── knomosis-faultproof-observer/ -- off-chain bisection-game observer
 │   ├── knomosis-bench/           --   transfer-throughput benchmark
+│   ├── knomosis-gateway/         --   Workstream GW: HTTP/JSON + SSE service
+│   ├── knomosis-gateway-bench/   --   GW read-path throughput/latency bench (G4.6)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
@@ -663,7 +670,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
-| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; submit track complete; events track underway: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2/G2.3/G2.4/G2.5/events track complete (G3.1/G3.2/G3.3 + the full G3.4 SSE fan-out (ring/mux/dispatch/resume) + G3.5 `/v1/events/stream` wiring); G4 hardening: core complete (G4.1 rate-limit (early via G1.3) + G4.2 native in-process HTTPS/mTLS (rustls 0.23, TLS 1.3, alongside the plaintext socket, reusing the shared request core via a strict HTTP/1.1 reader) + G4.3 observability + G4.4 graceful shutdown + G4.5 dep-audit + G4.7 runbook; G4.6 partial (fan-out + no-leak soak; throughput-bench/high-concurrency deferred, tiny_http SSE-concurrency ceiling = OQ-GW-14)); G2.1c pipelining deferred; G3.2c §6.2 envelope golden-pinned for every tag (the Lean-reference cross-stack pin stays blocked on the deferred Lean `Encodable Event`) — `gateway_integration_plan.md`) |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only slice shipped + hardened; submit track complete; events track underway: G0.1–G0.3/G1.0–G1.4/G1.6a/G1.6b/G1.7/G1.8/G1.9/G2.1a/G2.1b/G2.2/G2.3/G2.4/G2.5/events track complete (G3.1/G3.2/G3.3 + the full G3.4 SSE fan-out (ring/mux/dispatch/resume) + G3.5 `/v1/events/stream` wiring); G4 hardening: core complete (G4.1 rate-limit (early via G1.3) + G4.2 native in-process HTTPS/mTLS (rustls 0.23, TLS 1.3, alongside the plaintext socket, reusing the shared request core via a strict HTTP/1.1 reader) + G4.3 observability + G4.4 graceful shutdown + G4.5 dep-audit + G4.7 runbook; G4.6 (load/soak + the `knomosis-gateway-bench` read-path throughput/latency tool with JSON report + baseline regression detection; the tiny_http high-concurrency-SSE ceiling = OQ-GW-14)); G2.1c pipelining deferred; G3.2c §6.2 envelope golden-pinned for every tag (the Lean-reference cross-stack pin stays blocked on the deferred Lean `Encodable Event`) — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -729,7 +736,7 @@ at the current version:
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
 | Lean | ~3 050 | ~150 | `lake test` |
-| Rust | ~1 960 | across 11 crates | `cargo test --workspace` |
+| Rust | ~1 990 | across 12 crates | `cargo test --workspace` |
 | Solidity | ~867 passed | 58 forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
@@ -894,9 +901,14 @@ rejected, body read exactly, every length bounded; the workspace's rustls
 0.23, NOT tiny_http's bundled rustls 0.20; no new crate in the graph;
 ServerConfig built + socket bound at startup, fail-fast on a bad cert/key/CA;
 two openssl-cert handshake tests drive a real rustls client end-to-end incl.
-mTLS reject/accept).  **The core G4 hardening track is complete (G4.1–G4.7);**
-the lone remaining G4 item is the deferred G4.6 throughput / high-concurrency
-bench (the tiny_http SSE ceiling = OQ-GW-14).
+mTLS reject/accept).  **The G4 hardening track is complete (G4.1–G4.7);** G4.6
+shipped the `knomosis-gateway-bench` crate — a read-path throughput/latency
+harness (seeds a read-only indexer fixture, drives a real listener with
+concurrent raw-HTTP clients, reports throughput + a reused-`knomosis-bench`
+histogram latency summary as a human table + JSON, with `--baseline` regression
+detection; a manual tool, not a CI gate). Remaining gateway items are the G2.1c
+submit pipelining (modest optimisation) + the G3.2c Lean-reference cross-stack
+pin (blocked on the deferred Lean `Encodable Event`).
 Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; auth is
 fail-closed (no token file ⇒ every non-exempt request denied) + the token
 file must not be world-readable; the submit path forwards client-signed

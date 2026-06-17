@@ -82,6 +82,7 @@ members = [
     "knomosis-faultproof-observer",
     "knomosis-bench",
     "knomosis-gateway",
+    "knomosis-gateway-bench",
 ]
 
 # Shared package metadata.  Per-crate manifests use

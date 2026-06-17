@@ -413,6 +413,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "knomosis-gateway-bench"
+version = "0.8.4"
+dependencies = [
+ "knomosis-bench",
+ "knomosis-cli-common",
+ "knomosis-gateway",
+ "knomosis-indexer",
+ "knomosis-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tiny_http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "knomosis-hash-keccak256"
 version = "0.8.4"
 dependencies = [

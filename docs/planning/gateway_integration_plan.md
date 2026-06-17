@@ -109,10 +109,13 @@ The companion machine-readable contract is
 > with no mid-record truncation), and **G4.5** (the dep audit — the repo's
 > first `runtime/deny.toml` cargo-deny policy with a locally-verified licence
 > allow-list, a dedicated `ci-cargo-deny.yml`, and the supply-chain review
-> doc `docs/audits/gateway_dependency_audit.md`), and **G4.6 (partial)** (the
-> end-to-end fan-out + the no-leak soak — slots/threads never leak across
-> open→close cycles; the throughput bench + high-concurrency are deferred,
-> and the `tiny_http` concurrent-SSE ceiling is filed as OQ-GW-14), and
+> doc `docs/audits/gateway_dependency_audit.md`), and **G4.6** (load/soak +
+> the throughput bench — the end-to-end fan-out + the no-leak soak
+> (slots/threads never leak across open→close cycles), and the new
+> `knomosis-gateway-bench` crate: a read-path throughput/latency harness
+> driving a real listener with concurrent raw-HTTP clients, with a JSON report
+> + baseline regression detection (a manual tool, not a CI gate); the
+> `tiny_http` concurrent-SSE ceiling is filed as OQ-GW-14), and
 > **G4.7** (the operator `docs/gateway_runbook.md` — roles/topology, the
 > implemented config reference, the security model, health/readiness,
 > observability, graceful shutdown, the §9.5 failure-signature table, the
@@ -123,10 +126,11 @@ The companion machine-readable contract is
 > request core, fronted by a deliberately strict, smuggling-proof HTTP/1.1
 > reader; uses the workspace's rustls 0.23, not tiny_http's bundled rustls
 > 0.20 — see `docs/audits/gateway_tls_spike.md`).  **The core G4 hardening
-> track is complete (G4.1–G4.7);** deferred: the G4.6 throughput bench, the
-> G2.1c submit pipelining, and the G3.2c cross-stack pin against the Lean
-> reference (blocked upstream on the deferred Lean `Encodable Event` — the
-> gateway-side §6.2 envelope shape is already golden-pinned for every tag).
+> track is complete (G4.1–G4.7, incl. the G4.6 throughput bench);** deferred:
+> the G2.1c submit pipelining (a modest, situational optimisation) and the
+> G3.2c cross-stack pin against the Lean reference (blocked upstream on the
+> deferred Lean `Encodable Event` — the gateway-side §6.2 envelope shape is
+> already golden-pinned for every tag).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1904,9 +1908,25 @@ Event` (RH-D.2), not on the gateway.
   *(Note: the audit replaced the planned `base64` dep — the gateway
   hand-rolls a dependency-free RFC 4648 codec — so only HTTP / `signal-hook`
   needed justifying.)*
-* **G4.6 — Load/soak/chaos** · M · deps: G1–G3 · **PARTIAL (the no-leak +
-  recovery correctness done; the throughput bench + high-concurrency
-  deferred).** End-to-end `tests/integration.rs` additions: a **fan-out**
+* **G4.6 — Load/soak/chaos** · M · deps: G1–G3 · **DONE (throughput bench
+  shipped; the no-leak + recovery correctness already done; only the
+  high-concurrency-SSE ceiling is upstream-bounded by OQ-GW-14).**
+  The **throughput / latency bench** is the new `knomosis-gateway-bench`
+  crate (the read-path peer of `knomosis-bench`): it seeds a read-only indexer
+  fixture, drives a **real** gateway `spawn_handler_pool` listener with
+  `--workers` concurrent raw-HTTP `GET /v1/actors/{id}/balances` clients, and
+  reports sustained wallclock throughput + a reused-`knomosis-bench`-histogram
+  latency summary, as a human table + a JSON sidecar (`--report`) with
+  direction-aware **baseline regression detection** (`--baseline`, exit 1 on a
+  drift past `--threshold`).  It is a **manual** tool (the numbers vary by
+  machine — NOT a CI throughput gate), but its deterministic unit + end-to-end
+  tests (fixture readability, a real concurrent run, report round-trip +
+  regression detection, config parsing) ride `cargo test --workspace`.  It
+  characterises (and regression-guards) the read path's real bound: HTTP →
+  auth → route → dispatch → the read-only `SqliteStorage` read, serialised at
+  the storage connection mutex (OQ-GW-9).
+  The pre-existing correctness core stands — end-to-end `tests/integration.rs`
+  additions: a **fan-out**
   case (one shared upstream subscription feeds several concurrent SSE
   clients, all receiving the same records) and a **no-leak soak** (8
   open→close cycles, each confirming the live-stream count returns to `0` —
@@ -1918,11 +1938,13 @@ Event` (RH-D.2), not on the gateway.
   writer drops, so a long-lived (hijacked) SSE stream pins one such task —
   the *effective* concurrent-SSE ceiling is bounded by tiny_http's
   connection handling, below `--sse max_streams`.  Sufficient for a
-  browser-BFF fan-out; raising it is a transport change (OQ-GW-14).
-  *Deferred:* the `knomosis-gateway`-bench throughput binary (a perf tool,
-  not a correctness gate) and the indexer-writer-death / cursor-jump chaos
-  cases.  *Acceptance (met for the correctness core):* no slot/thread leak
-  under the soak; the fan-out + the G3.4 recovery cases pass.
+  browser-BFF fan-out; raising it is a transport change (OQ-GW-14) — though
+  the native-TLS path (G4.2) already lifts it for TLS clients.  *Deferred:*
+  only the indexer-writer-death / cursor-jump chaos cases (the kernel-
+  authoritative reads self-correct; OQ-GW-13).  *Acceptance (met):* the
+  `knomosis-gateway-bench` binary runs the read path end-to-end and reports
+  throughput + latency with baseline regression detection; no slot/thread
+  leak under the soak; the fan-out + the G3.4 recovery cases pass.
 * **G4.7 — `docs/gateway_runbook.md`** · S · deps: G4.1–G4.4 · **DONE.**
   The operator runbook, to the `gas_pool_runbook.md` standard: roles +
   topology, the endpoint surface, the **implemented** config reference (the

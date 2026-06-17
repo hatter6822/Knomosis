@@ -1,0 +1,86 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# `knomosis-gateway-bench` — Workstream GW (G4.6).  Read-path
+# throughput / latency benchmark for `knomosis-gateway`.  It seeds a
+# read-only indexer SQLite fixture, drives a real `knomosis-gateway`
+# HTTP listener with concurrent raw-HTTP `GET` clients, and reports
+# end-to-end throughput + a latency percentile summary (with optional
+# baseline regression detection) — the peer of `knomosis-bench` for the
+# host.  See `docs/planning/gateway_integration_plan.md` §G4.6.
+#
+# Build artefacts:
+#   * `rlib` (library) — the fixture / runner / report / config
+#     primitives, unit- + integration-testable.
+#   * Binary (`knomosis-gateway-bench`) — the standalone harness.
+#
+# It is a manual measurement tool (the throughput *numbers* vary by
+# machine, so the binary is NOT a CI throughput gate); its deterministic
+# unit + integration tests DO run under `cargo test --workspace`.
+
+[package]
+name = "knomosis-gateway-bench"
+description = "Read-path throughput / latency benchmark for knomosis-gateway (Workstream GW, G4.6)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "knomosis-gateway-bench"
+path = "src/main.rs"
+
+[dependencies]
+# Shared CLI / logging helpers (exit-code discipline + `tracing` init).
+knomosis-cli-common = { workspace = true }
+# The system-under-benchmark: the runner builds an `AppState` over the
+# fixture DB and drives a real `spawn_handler_pool` listener.
+knomosis-gateway = { path = "../knomosis-gateway" }
+# Seeds the read-only indexer fixture: `SqliteStorage` (the writer) +
+# the `balance_key` / cursor codecs the gateway reads.
+knomosis-storage = { path = "../knomosis-storage" }
+knomosis-indexer = { path = "../knomosis-indexer" }
+# Reuses the host bench's well-tested latency `Histogram` +
+# `LatencySummary` (a generic percentile tracker — DRY rather than a
+# second copy of the same Welford/nearest-rank maths).
+knomosis-bench = { path = "../knomosis-bench" }
+# The runner binds a `tiny_http::Server` for `spawn_handler_pool`
+# (the gateway's HTTP substrate); the *client* side is raw `std` TCP.
+tiny_http = { workspace = true }
+# Typed errors + structured logging, same discipline as the sibling
+# crates.
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# JSON report format (stdout + the `--report` sidecar for baselines).
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Isolated on-disk SQLite fixture databases (a 0700 tempdir).
+tempfile = { workspace = true }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+doc_markdown = "allow"
+too_many_lines = "allow"
+
+[lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+# Pure-Rust orchestration over the gateway + std TCP; no FFI surface.
+unsafe_code = "forbid"

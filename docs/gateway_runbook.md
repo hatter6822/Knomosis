@@ -272,9 +272,11 @@ silently renders the wrong numbers.  Keep them in lockstep and verify via
     The **native-TLS** path bounds this with a per-connection write timeout
     (a stalled reader is dropped) — **prefer `--tls-listen` for untrusted /
     public SSE clients.**
-  * **Throughput bench (G4.6)** — the `knomosis-gateway`-bench perf tool is
-    deferred (the no-leak soak validates correctness, not a throughput
-    target).
+  * **Throughput bench (G4.6)** — shipped as the `knomosis-gateway-bench`
+    binary (read-path throughput + latency, with a JSON report + `--baseline`
+    regression detection; see §12).  It is a **manual** tool (the numbers vary
+    by machine — not a CI gate); the read path is bounded by the storage
+    connection mutex (OQ-GW-9).
   * **Cross-instance idempotency** (OQ-GW-4) + **cross-host reads**
     (OQ-GW-9, the indexer query server) are out of v1 scope.
 
@@ -312,4 +314,13 @@ curl -fsS -H 'Authorization: Bearer <tok>' localhost:8080/v1/info | jq
 
 # Graceful stop:
 kill -TERM <pid>     # drains in-flight requests + closes SSE streams cleanly
+# (TLS cert rotation, no downtime: replace the cert/key files, then)
+kill -HUP <pid>      # hot-reloads the native-TLS certificate
+
+# Read-path throughput / latency benchmark (manual; numbers vary by machine):
+knomosis-gateway-bench --actors 1000 --resources 2 --requests 10000 \
+  --workers 32 --report bench.json
+# Regression-check a later run against the saved baseline (exit 1 on a >10% drift):
+knomosis-gateway-bench --actors 1000 --resources 2 --requests 10000 \
+  --workers 32 --baseline bench.json
 ```
