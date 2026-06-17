@@ -100,11 +100,17 @@ Secrets (the auth token file) are passed **by path, never argv/env value**.
 | `--tls-cert` / `--tls-key` (`…_TLS_CERT` / `…_TLS_KEY`) | unset | PEM cert chain (leaf first) + private key (PKCS#8 / RSA / SEC1) for `--tls-listen`. Required when it is set. Key bytes by **path**, never argv/env. |
 | `--mtls-client-ca` (`…_MTLS_CLIENT_CA`) | unset → no client auth | PEM CA bundle; presence **requires** a client cert chaining to it (mTLS). |
 | `--tls-max-connections` (`…_TLS_MAX_CONNECTIONS`) | `1024` | Cap on concurrent TLS connections (each on its own thread); the spawn-storm bound. |
+| `--sse-ring-capacity` (`…_SSE_RING_CAPACITY`) | `4096` | SSE fan-out ring depth (records retained for replay / resume). Range `2..=1048576`. |
+| `--sse-max-streams` (`…_SSE_MAX_STREAMS`) | `256` | Max concurrent SSE streams; an over-cap connect is `503`. |
+| `--sse-max-client-lag` (`…_SSE_MAX_CLIENT_LAG`) | `2048` | Per-client lag bound (records) before a `lag_exceeded` eviction. **Must be `< --sse-ring-capacity`** (the default auto-fits a smaller ring). |
+| `--sse-heartbeat-secs` (`…_SSE_HEARTBEAT_SECS`) | `15` | SSE heartbeat-comment interval when a stream is idle. |
+| `--sse-stale-secs` (`…_SSE_STALE_SECS`) | `55` | Fan-out upstream-read staleness timeout (quiet live-tail reconnect cadence). |
 
-**Defaulted (not yet CLI-tunable):** the SSE fan-out knobs — `ring_capacity`
-(`4096`), `max_streams` (`256`), `max_client_lag` (`2048`), `heartbeat`
-(`15 s`), the mux upstream-staleness (`55 s`).  Per-knob `--sse-*` flags are a
-follow-up; today they are compile-time defaults (`config::SseConfig`).
+The SSE knobs above are honoured **identically** on the plaintext and
+native-TLS stream paths (they share one `config::SseConfig` through the
+`AppState`).  `--sse-max-client-lag` is validated **below** `--sse-ring-capacity`
+so the proactive `lag_exceeded` eviction fires before the ring drops a client's
+unseen records.
 
 ---
 

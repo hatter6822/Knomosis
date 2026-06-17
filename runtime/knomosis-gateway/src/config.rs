@@ -163,6 +163,33 @@ pub const DEFAULT_TLS_MAX_CONNECTIONS: usize = 1024;
 /// exhaust the thread / fd table).
 pub const MAX_TLS_MAX_CONNECTIONS: usize = 65_536;
 
+/// Environment variable mirroring `--sse-ring-capacity`.
+pub const SSE_RING_CAPACITY_ENV: &str = "KNX_GW_SSE_RING_CAPACITY";
+
+/// Environment variable mirroring `--sse-max-streams`.
+pub const SSE_MAX_STREAMS_ENV: &str = "KNX_GW_SSE_MAX_STREAMS";
+
+/// Environment variable mirroring `--sse-max-client-lag`.
+pub const SSE_MAX_CLIENT_LAG_ENV: &str = "KNX_GW_SSE_MAX_CLIENT_LAG";
+
+/// Environment variable mirroring `--sse-heartbeat-secs`.
+pub const SSE_HEARTBEAT_SECS_ENV: &str = "KNX_GW_SSE_HEARTBEAT_SECS";
+
+/// Environment variable mirroring `--sse-stale-secs`.
+pub const SSE_STALE_SECS_ENV: &str = "KNX_GW_SSE_STALE_SECS";
+
+/// Hard ceiling on `--sse-ring-capacity` (records retained in memory; at this
+/// cap a worst-case-sized record corpus is still bounded).
+pub const MAX_SSE_RING_CAPACITY: usize = 1_048_576;
+
+/// Hard ceiling on `--sse-max-streams` (each live stream is a thread; the peer
+/// of `MAX_TLS_MAX_CONNECTIONS`).
+pub const MAX_SSE_MAX_STREAMS: usize = 65_536;
+
+/// Hard ceiling (in seconds) on `--sse-heartbeat-secs` / `--sse-stale-secs`
+/// (one day — far above any sane keepalive / staleness interval).
+pub const MAX_SSE_SECS: u64 = 86_400;
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -258,6 +285,23 @@ OPTIONS:
                        Cap on simultaneously-active TLS connections (each on
                        its own thread); over-cap connects are closed
                        (env KNX_GW_TLS_MAX_CONNECTIONS) [default: 1024]
+    --sse-ring-capacity <N>
+                       SSE fan-out ring depth (records retained for replay /
+                       resume) (env KNX_GW_SSE_RING_CAPACITY) [default: 4096]
+    --sse-max-streams <N>
+                       Max concurrent SSE streams; an over-cap connect is 503
+                       (env KNX_GW_SSE_MAX_STREAMS) [default: 256]
+    --sse-max-client-lag <N>
+                       Per-client lag bound (records) before a lag_exceeded
+                       eviction; MUST be < --sse-ring-capacity
+                       (env KNX_GW_SSE_MAX_CLIENT_LAG) [default: 2048]
+    --sse-heartbeat-secs <N>
+                       SSE heartbeat-comment interval when a stream is idle
+                       (env KNX_GW_SSE_HEARTBEAT_SECS) [default: 15]
+    --sse-stale-secs <N>
+                       Upstream-read staleness timeout for the single fan-out
+                       subscription (quiet live-tail reconnect cadence)
+                       (env KNX_GW_SSE_STALE_SECS) [default: 55]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -346,8 +390,11 @@ impl std::str::FromStr for AdmissionStage {
 }
 
 /// SSE fan-out tunables (Workstream G3.4 / G3.5).  Sensible defaults wire
-/// the live `GET /v1/events/stream` endpoint without operator action;
-/// per-knob `--sse-*` flags are an additive follow-up (§9.2).
+/// the live `GET /v1/events/stream` endpoint without operator action; each
+/// field is overridable via its `--sse-*` flag (§9.2), resolved + validated
+/// by [`resolve_sse`] (including the `max_client_lag < ring_capacity`
+/// invariant).  Honoured identically on both the plaintext and native-TLS
+/// stream paths (they share this config through [`crate::state::AppState`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SseConfig {
     /// Shared fan-out ring capacity (records retained for replay / resume).
@@ -556,21 +603,7 @@ impl Config {
         let rate_limit_rps = resolve_rate_limit_rps(raw.rate_limit_rps)?;
         let host_pool_size = resolve_host_pool_size(raw.host_pool_size)?;
         let host_max_inflight = resolve_host_max_inflight(raw.host_max_inflight, host_pool_size)?;
-        let request_deadline_ms = match parse_optional_u64_flag(
-            "--request-deadline-ms",
-            raw.request_deadline_ms,
-            REQUEST_DEADLINE_MS_ENV,
-        )? {
-            None => DEFAULT_REQUEST_DEADLINE_MS,
-            Some(0) => {
-                return Err(ConfigError::InvalidValue {
-                    flag: "--request-deadline-ms".to_string(),
-                    value: "0".to_string(),
-                    reason: "must be at least 1 (a zero deadline never completes)".to_string(),
-                })
-            }
-            Some(n) => n,
-        };
+        let request_deadline_ms = resolve_request_deadline_ms(raw.request_deadline_ms)?;
         let max_frame_size = resolve_max_frame_size(raw.max_frame_size)?;
         // `--idempotency-ttl-secs` defaults to 120; `0` is valid (disables
         // the cache).
@@ -586,6 +619,13 @@ impl Config {
             raw.tls_key,
             raw.mtls_client_ca,
             raw.tls_max_connections,
+        )?;
+        let sse = resolve_sse(
+            raw.sse_ring_capacity,
+            raw.sse_max_streams,
+            raw.sse_max_client_lag,
+            raw.sse_heartbeat_secs,
+            raw.sse_stale_secs,
         )?;
 
         Ok(Self {
@@ -607,8 +647,7 @@ impl Config {
             request_deadline_ms,
             max_frame_size,
             idempotency_ttl_secs,
-            // SSE tunables are defaulted today (no per-knob flags yet, §9.2).
-            sse: SseConfig::default(),
+            sse,
             tls,
         })
     }
@@ -699,6 +738,151 @@ fn resolve_host_max_inflight(
         }),
         Some(n) => Ok(n.min(host_pool_size)),
     }
+}
+
+/// Resolve `--request-deadline-ms`: the default, or a value rejecting `0`
+/// (a zero end-to-end submit deadline never completes).
+fn resolve_request_deadline_ms(raw: Option<String>) -> Result<u64, ConfigError> {
+    match parse_optional_u64_flag("--request-deadline-ms", raw, REQUEST_DEADLINE_MS_ENV)? {
+        None => Ok(DEFAULT_REQUEST_DEADLINE_MS),
+        Some(0) => Err(ConfigError::InvalidValue {
+            flag: "--request-deadline-ms".to_string(),
+            value: "0".to_string(),
+            reason: "must be at least 1 (a zero deadline never completes)".to_string(),
+        }),
+        Some(n) => Ok(n),
+    }
+}
+
+/// Resolve the SSE fan-out tunables (the `--sse-*` flags), each CLI > env >
+/// the [`SseConfig::default`] value, with range validation and the
+/// `max_client_lag < ring_capacity` invariant (so the proactive
+/// `lag_exceeded` eviction fires *before* the ring drops a client's unseen
+/// records).  An unset `--sse-max-client-lag` auto-adjusts down to fit a
+/// smaller-than-default ring; an explicit value at/above the ring is rejected.
+fn resolve_sse(
+    ring_raw: Option<String>,
+    streams_raw: Option<String>,
+    lag_raw: Option<String>,
+    heartbeat_raw: Option<String>,
+    stale_raw: Option<String>,
+) -> Result<SseConfig, ConfigError> {
+    let d = SseConfig::default();
+    let ring_capacity = resolve_bounded_usize(
+        "--sse-ring-capacity",
+        ring_raw,
+        SSE_RING_CAPACITY_ENV,
+        d.ring_capacity,
+        2,
+        MAX_SSE_RING_CAPACITY,
+    )?;
+    let max_streams = resolve_bounded_usize(
+        "--sse-max-streams",
+        streams_raw,
+        SSE_MAX_STREAMS_ENV,
+        d.max_streams,
+        1,
+        MAX_SSE_MAX_STREAMS,
+    )?;
+    // The default lag auto-fits a smaller ring (so setting only the ring is
+    // valid); an explicit value is range-checked then the invariant enforced.
+    let lag_default = d.max_client_lag.min(ring_capacity - 1).max(1);
+    let max_client_lag = resolve_bounded_usize(
+        "--sse-max-client-lag",
+        lag_raw,
+        SSE_MAX_CLIENT_LAG_ENV,
+        lag_default,
+        1,
+        MAX_SSE_RING_CAPACITY,
+    )?;
+    if max_client_lag >= ring_capacity {
+        return Err(ConfigError::InvalidValue {
+            flag: "--sse-max-client-lag".to_string(),
+            value: max_client_lag.to_string(),
+            reason: format!("must be < --sse-ring-capacity ({ring_capacity})"),
+        });
+    }
+    let heartbeat_secs = resolve_bounded_u64(
+        "--sse-heartbeat-secs",
+        heartbeat_raw,
+        SSE_HEARTBEAT_SECS_ENV,
+        d.heartbeat_secs,
+        1,
+        MAX_SSE_SECS,
+    )?;
+    let stale_secs = resolve_bounded_u64(
+        "--sse-stale-secs",
+        stale_raw,
+        SSE_STALE_SECS_ENV,
+        d.stale_secs,
+        1,
+        MAX_SSE_SECS,
+    )?;
+    Ok(SseConfig {
+        ring_capacity,
+        max_streams,
+        max_client_lag,
+        heartbeat_secs,
+        stale_secs,
+    })
+}
+
+/// Resolve a bounded `usize` flag: CLI value > env var > `default`, validating
+/// the inclusive `min..=max` range.
+fn resolve_bounded_usize(
+    flag: &str,
+    cli_raw: Option<String>,
+    env_var: &str,
+    default: usize,
+    min: usize,
+    max: usize,
+) -> Result<usize, ConfigError> {
+    let Some(raw) = cli_raw.or_else(|| std::env::var(env_var).ok()) else {
+        return Ok(default);
+    };
+    let n = raw
+        .parse::<usize>()
+        .map_err(|e| ConfigError::InvalidValue {
+            flag: flag.to_string(),
+            value: raw.clone(),
+            reason: e.to_string(),
+        })?;
+    if n < min || n > max {
+        return Err(ConfigError::InvalidValue {
+            flag: flag.to_string(),
+            value: raw,
+            reason: format!("must be in {min}..={max}"),
+        });
+    }
+    Ok(n)
+}
+
+/// Resolve a bounded `u64` flag: CLI value > env var > `default`, validating
+/// the inclusive `min..=max` range.
+fn resolve_bounded_u64(
+    flag: &str,
+    cli_raw: Option<String>,
+    env_var: &str,
+    default: u64,
+    min: u64,
+    max: u64,
+) -> Result<u64, ConfigError> {
+    let Some(raw) = cli_raw.or_else(|| std::env::var(env_var).ok()) else {
+        return Ok(default);
+    };
+    let n = raw.parse::<u64>().map_err(|e| ConfigError::InvalidValue {
+        flag: flag.to_string(),
+        value: raw.clone(),
+        reason: e.to_string(),
+    })?;
+    if n < min || n > max {
+        return Err(ConfigError::InvalidValue {
+            flag: flag.to_string(),
+            value: raw,
+            reason: format!("must be in {min}..={max}"),
+        });
+    }
+    Ok(n)
 }
 
 /// Resolve `--tls-max-connections`: the default, or a value validated against
@@ -874,6 +1058,11 @@ struct RawArgs {
     tls_key: Option<String>,
     mtls_client_ca: Option<String>,
     tls_max_connections: Option<String>,
+    sse_ring_capacity: Option<String>,
+    sse_max_streams: Option<String>,
+    sse_max_client_lag: Option<String>,
+    sse_heartbeat_secs: Option<String>,
+    sse_stale_secs: Option<String>,
 }
 
 impl RawArgs {
@@ -946,6 +1135,23 @@ impl RawArgs {
                 "--tls-max-connections" => {
                     raw.tls_max_connections =
                         Some(take_value(args, &mut i, "--tls-max-connections")?);
+                }
+                "--sse-ring-capacity" => {
+                    raw.sse_ring_capacity = Some(take_value(args, &mut i, "--sse-ring-capacity")?);
+                }
+                "--sse-max-streams" => {
+                    raw.sse_max_streams = Some(take_value(args, &mut i, "--sse-max-streams")?);
+                }
+                "--sse-max-client-lag" => {
+                    raw.sse_max_client_lag =
+                        Some(take_value(args, &mut i, "--sse-max-client-lag")?);
+                }
+                "--sse-heartbeat-secs" => {
+                    raw.sse_heartbeat_secs =
+                        Some(take_value(args, &mut i, "--sse-heartbeat-secs")?);
+                }
+                "--sse-stale-secs" => {
+                    raw.sse_stale_secs = Some(take_value(args, &mut i, "--sse-stale-secs")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -1506,6 +1712,99 @@ mod tests {
                     Err(ConfigError::InvalidValue { .. })
                 ),
                 "a {extra:?} without --tls-listen must be rejected"
+            );
+        }
+    }
+
+    /// Clear every SSE-flag env var so the SSE-parsing tests are deterministic.
+    fn clear_sse_env() {
+        for var in [
+            super::SSE_RING_CAPACITY_ENV,
+            super::SSE_MAX_STREAMS_ENV,
+            super::SSE_MAX_CLIENT_LAG_ENV,
+            super::SSE_HEARTBEAT_SECS_ENV,
+            super::SSE_STALE_SECS_ENV,
+        ] {
+            std::env::remove_var(var);
+        }
+    }
+
+    /// With no `--sse-*` flags the config matches [`super::SseConfig::default`].
+    #[test]
+    fn sse_defaults_match_struct_default() {
+        clear_sse_env();
+        assert_eq!(
+            Config::parse(&argv(&[])).unwrap().sse,
+            super::SseConfig::default()
+        );
+    }
+
+    /// Each `--sse-*` flag overrides its field.
+    #[test]
+    fn sse_flags_override_each_field() {
+        clear_sse_env();
+        let cfg = Config::parse(&argv(&[
+            "--sse-ring-capacity",
+            "8192",
+            "--sse-max-streams",
+            "64",
+            "--sse-max-client-lag",
+            "1000",
+            "--sse-heartbeat-secs",
+            "30",
+            "--sse-stale-secs",
+            "20",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.sse.ring_capacity, 8192);
+        assert_eq!(cfg.sse.max_streams, 64);
+        assert_eq!(cfg.sse.max_client_lag, 1000);
+        assert_eq!(cfg.sse.heartbeat_secs, 30);
+        assert_eq!(cfg.sse.stale_secs, 20);
+    }
+
+    /// `--sse-max-client-lag` must stay below `--sse-ring-capacity`; an
+    /// explicit value at/above the ring is rejected, and the **default** lag
+    /// auto-adjusts down to fit a smaller-than-default ring.
+    #[test]
+    fn sse_lag_invariant_enforced_and_default_auto_adjusts() {
+        clear_sse_env();
+        // Explicit lag >= ring → rejected.
+        assert!(matches!(
+            Config::parse(&argv(&[
+                "--sse-ring-capacity",
+                "100",
+                "--sse-max-client-lag",
+                "100",
+            ])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+        // Only the ring set (below the default lag 2048) → the default lag
+        // auto-fits to ring-1, preserving the invariant.
+        let cfg = Config::parse(&argv(&["--sse-ring-capacity", "100"])).unwrap();
+        assert_eq!(cfg.sse.ring_capacity, 100);
+        assert_eq!(cfg.sse.max_client_lag, 99);
+    }
+
+    /// SSE-flag ranges are validated: ring `< 2`, an over-ceiling value, and a
+    /// zero heartbeat / staleness are all rejected.
+    #[test]
+    fn sse_ranges_validated() {
+        clear_sse_env();
+        for bad in [
+            vec!["--sse-ring-capacity", "1"],
+            vec!["--sse-ring-capacity", "2000000"],
+            vec!["--sse-max-streams", "0"],
+            vec!["--sse-heartbeat-secs", "0"],
+            vec!["--sse-stale-secs", "0"],
+            vec!["--sse-ring-capacity", "lots"],
+        ] {
+            assert!(
+                matches!(
+                    Config::parse(&argv(&bad)),
+                    Err(ConfigError::InvalidValue { .. })
+                ),
+                "{bad:?} must be rejected"
             );
         }
     }

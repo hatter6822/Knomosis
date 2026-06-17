@@ -975,10 +975,10 @@ separate hosts.
 | `--auth-token-file` (`KNX_GW_AUTH_TOKEN_FILE`) | — | bearer token(s); file (not argv) for secrecy |
 | `--max-frame-size` | `1 MiB` | submit body cap (ceiling 16 MiB) |
 | `--request-deadline-ms` | `5000` | end-to-end submit deadline |
-| `--max-connections` / `--max-streams` | `1024` / `256` | resource governors |
-| `--heartbeat-secs` / `--max-client-lag` | `15` / `1024` | SSE keepalive / per-client lag bound |
-| `--sse-write-timeout-ms` | `30000` | per-record SSE write deadline (stalled-browser drop) |
-| `--ring-capacity` | `4096` | SSE fan-out ring buffer depth |
+| `--tls-max-connections` / `--sse-max-streams` | `1024` / `256` | resource governors (TLS conn cap **DONE**; `--sse-max-streams` **DONE**) |
+| `--sse-heartbeat-secs` / `--sse-max-client-lag` | `15` / `2048` | SSE keepalive / per-client lag bound (**DONE**; lag validated `< --sse-ring-capacity`) |
+| `--sse-write-timeout-ms` | `30000` | per-record SSE write deadline (stalled-browser drop) — **deferred** on the plaintext path (`tiny_http`'s `into_writer` is a type-erased `Box<dyn Write>`, so no per-write socket timeout); the native-TLS path already bounds writes by its per-connection timeout |
+| `--sse-ring-capacity` / `--sse-stale-secs` | `4096` / `55` | SSE fan-out ring depth / fan-out upstream-staleness (**DONE**) |
 | `--rate-limit-rps` | `100` | per-credential rate cap |
 | `--idempotency-ttl-secs` | `120` (`0`=off) | idempotency-key response cache TTL |
 | `--cors-origin` | off | allowed origin if browser-direct (else no CORS) |

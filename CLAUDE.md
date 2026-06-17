@@ -901,9 +901,12 @@ Design invariants: reads use pure `SQLITE_OPEN_READ_ONLY`; auth is
 fail-closed (no token file ⇒ every non-exempt request denied) + the token
 file must not be world-readable; the submit path forwards client-signed
 `SignedAction` bytes opaquely (no key custody); the SSE fan-out
-multiplexes one upstream subscription; native TLS terminates rustls 0.23
-(TLS 1.3) in-process alongside the plaintext socket — same request core (no
-security divergence) + optional mTLS — or is terminated at a co-located edge.
+multiplexes one upstream subscription, its tunables (ring / streams / lag /
+heartbeat / staleness) CLI-configurable via `--sse-*` (the lag validated below
+the ring capacity), honoured identically on both stream paths; native TLS
+terminates rustls 0.23 (TLS 1.3) in-process alongside the plaintext socket —
+same request core (no security divergence) + optional mTLS — or is terminated
+at a co-located edge.
 
 ### Rust host runtime (Workstream RH)
 
