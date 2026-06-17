@@ -23,7 +23,8 @@ runtime crates: `unsafe_code = "forbid"`, no FFI, no `tokio`.  Its only new
 
 | Crate | Kind | Role | Justification |
 |-------|------|------|---------------|
-| `tiny_http` | normal | The synchronous HTTP/1.1 server (G1.0 decision). | Vetted in `docs/audits/gateway_http_spike.md`; chosen precisely to avoid `tokio`.  `default-features = false` keeps its (version-stale) bundled TLS out — HTTPS is the G4.2 unit. |
+| `tiny_http` | normal | The synchronous HTTP/1.1 server (G1.0 decision). | Vetted in `docs/audits/gateway_http_spike.md`; chosen precisely to avoid `tokio`.  `default-features = false` keeps its (version-stale, rustls 0.20) bundled TLS out — native HTTPS (G4.2) uses the workspace's rustls 0.23 instead (below). |
+| `rustls` | normal | Native in-process HTTPS / mTLS (G4.2, `src/http/tls.rs`). | The **workspace-pinned `rustls 0.23`** (TLS 1.3, the `ring` backend) — the SAME audited stack `knomosis-host` already uses, NOT `tiny_http`'s bundled `rustls 0.20`.  Adds **no new crate** to the graph (rustls 0.23 + its transitive deps were already present via `knomosis-host`); the only `Cargo.lock` change is the gateway→rustls edge.  PEM cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders. |
 | `subtle` | normal | Constant-time bearer-token comparison (G1.4 auth gate). | The same audited, `no_std`, constant-time crate the secp256k1 verifier already uses workspace-wide; eliminates an early-return timing oracle on the secret token. |
 | `signal-hook` | normal | SIGTERM/SIGINT graceful-shutdown trigger (G4.4). | A safe `sigaction` wrapper — the crate's `unsafe = forbid` rules out a hand-rolled handler.  `default-features = false` pulls only the atomic-flag registration (`flag::register`), not the channel/iterator helpers. |
 
@@ -99,6 +100,8 @@ third-party copyleft dependency** in the tree.
 
 The dependency set is minimal, the licence allow-list is verified against
 the resolved tree, and the advisory/ban/source policy is enforced in CI.
-The lone deferred hardening item is **G4.2 (TLS/mTLS)**, which will
-introduce a TLS dependency (rustls is already in the workspace tree) and
-extend this audit.
+**G4.2 (native TLS/mTLS)** is now shipped: it makes the workspace's
+already-present `rustls 0.23` a **direct** gateway dependency (`Apache-2.0 OR
+ISC OR MIT`, already on the allow-list) without adding any new crate to the
+graph, so the supply-chain surface is unchanged and this audit's policy holds
+as-is.

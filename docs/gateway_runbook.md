@@ -17,8 +17,9 @@ Design + rationale: `docs/planning/gateway_integration_plan.md`.
 Contract: `docs/api/gateway.openapi.yaml`.
 Supply-chain review: `docs/audits/gateway_dependency_audit.md`.
 
-This runbook describes the **currently-shipped** surface.  Pending hardening
-(native TLS, the SSE-tuning flags, the throughput bench) is called out in
+This runbook describes the **currently-shipped** surface — including native
+in-process HTTPS / mTLS (G4.2, §3 / §4).  The remaining deferred items (the
+SSE-tuning flags, the throughput bench, cert hot-reload) are called out in
 §11.
 
 ---
@@ -95,13 +96,15 @@ Secrets (the auth token file) are passed **by path, never argv/env value**.
 | `--auth-token-file` (`…_AUTH_TOKEN_FILE`) | unset → **fail-closed** | Bearer token(s), one per line.  Must **not** be world-readable. |
 | `--rate-limit-rps` (`…_RATE_LIMIT_RPS`) | `100` (`0`=off) | Per-credential token-bucket cap → `429` + `Retry-After`. |
 | `--idempotency-ttl-secs` | `120` (`0`=off) | `Idempotency-Key` response-cache TTL. |
+| `--tls-listen` (`…_TLS_LISTEN`) | unset → HTTPS off | Native HTTPS listen address (rustls 0.23, TLS 1.3); runs **alongside** `--listen`. Requires `--tls-cert` + `--tls-key`. |
+| `--tls-cert` / `--tls-key` (`…_TLS_CERT` / `…_TLS_KEY`) | unset | PEM cert chain (leaf first) + private key (PKCS#8 / RSA / SEC1) for `--tls-listen`. Required when it is set. Key bytes by **path**, never argv/env. |
+| `--mtls-client-ca` (`…_MTLS_CLIENT_CA`) | unset → no client auth | PEM CA bundle; presence **requires** a client cert chaining to it (mTLS). |
+| `--tls-max-connections` (`…_TLS_MAX_CONNECTIONS`) | `1024` | Cap on concurrent TLS connections (each on its own thread); the spawn-storm bound. |
 
 **Defaulted (not yet CLI-tunable):** the SSE fan-out knobs — `ring_capacity`
 (`4096`), `max_streams` (`256`), `max_client_lag` (`2048`), `heartbeat`
 (`15 s`), the mux upstream-staleness (`55 s`).  Per-knob `--sse-*` flags are a
 follow-up; today they are compile-time defaults (`config::SseConfig`).
-
-**Not yet implemented:** native TLS / mTLS (`--tls-*`, `--mtls-*`) — see §11.
 
 ---
 
@@ -121,8 +124,17 @@ follow-up; today they are compile-time defaults (`config::SseConfig`).
   * **Resource bounds.**  Concurrent streams, host connections, in-flight
     submits, the fan-out ring, and the idempotency cache are all bounded;
     an over-cap request is a `503`, never unbounded growth.
-  * **TLS termination** is currently at the **L7 edge** in front of the
-    gateway (the `--listen` default is loopback).  Native TLS is G4.2 (§11).
+  * **TLS termination.**  Two supported models: **native in-process HTTPS**
+    (`--tls-listen`, rustls 0.23, TLS 1.3 floor, the `ring` backend), which
+    runs **alongside** the plaintext `--listen` socket and can additionally
+    **require client certificates** via `--mtls-client-ca` (mTLS); **or** an
+    **L7 edge** that terminates TLS and forwards loopback-plaintext HTTP (then
+    leave `--tls-listen` unset and keep `--listen` loopback).  The native path
+    feeds the **same** auth / rate / dispatch core through a strict,
+    smuggling-proof HTTP/1.1 reader (TLS 1.3 only; `Transfer-Encoding` and
+    ambiguous `Content-Length` rejected), and **fails fast at startup** on a
+    bad cert / key / CA.  Bind `--tls-listen` to a public interface only when
+    you intend the gateway to face clients directly.
 
 ---
 
@@ -232,9 +244,13 @@ silently renders the wrong numbers.  Keep them in lockstep and verify via
 
 ## 11. Known limitations / deferred
 
-  * **Native TLS / mTLS (G4.2)** — not yet implemented; terminate TLS at the
-    L7 edge in front of the loopback-bound gateway.  (The workspace already
-    carries `rustls`; the unit is the tiny_http/rustls version reconciliation.)
+  * **Native TLS / mTLS (G4.2)** — **implemented** (`--tls-listen` /
+    `--tls-cert` / `--tls-key` / `--mtls-client-ca`, rustls 0.23, TLS 1.3,
+    §3 / §4).  Edge termination stays a supported alternative.  *Residual:*
+    the TLS path's per-read timeout bounds slow-loris per read (not an overall
+    per-request deadline) — parity with `knomosis-host`; and certificate
+    **rotation** requires a process restart (no hot-reload of the
+    `ServerConfig` yet).
   * **SSE-tuning flags** — the ring / stream / heartbeat knobs are
     compile-time defaults (`SseConfig`); `--sse-*` flags are a follow-up.
   * **Concurrent-SSE ceiling (OQ-GW-14)** — bounded by `tiny_http`'s
@@ -252,6 +268,15 @@ silently renders the wrong numbers.  Keep them in lockstep and verify via
 ```bash
 # Minimal read-only deployment (TLS at the edge):
 knomosis-gateway --listen 127.0.0.1:8080 \
+  --indexer-db /var/lib/knomosis/index.db \
+  --auth-token-file /etc/knomosis/gw.tokens     # chmod 600
+
+# Native HTTPS (rustls 0.23, TLS 1.3) + mTLS, alongside the plaintext socket:
+knomosis-gateway --listen 127.0.0.1:8080 \
+  --tls-listen 0.0.0.0:8443 \
+  --tls-cert /etc/knomosis/tls/server.crt \
+  --tls-key  /etc/knomosis/tls/server.key \      # chmod 600
+  --mtls-client-ca /etc/knomosis/tls/clients-ca.crt \
   --indexer-db /var/lib/knomosis/index.db \
   --auth-token-file /etc/knomosis/gw.tokens     # chmod 600
 

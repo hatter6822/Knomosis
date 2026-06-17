@@ -79,17 +79,23 @@ pub enum ServeError {
 
 /// Run the gateway HTTP server, blocking the calling thread.
 ///
-/// Builds the shared [`AppState`], binds the listener, spawns the SSE
-/// fan-out multiplexer (if configured) and a bounded pool of
+/// Builds the shared [`AppState`], binds the plaintext listener, spawns the
+/// SSE fan-out multiplexer (if configured), starts the native in-process TLS
+/// listener (G4.2) if `--tls-listen` is configured (it shares this `state` and
+/// runs alongside the plaintext socket), and a bounded pool of
 /// `config.handler_threads` worker threads (the concurrency governor —
 /// [`spawn_handler_pool`]), registers the SIGTERM/SIGINT shutdown trigger,
-/// then blocks until the shutdown flag is set and drains the pool under
-/// [`DRAIN_DEADLINE`] (G4.4), returning `Ok(())` on a clean exit.
+/// then blocks until the shutdown flag is set and drains the pool (and joins
+/// the TLS accept thread) under [`DRAIN_DEADLINE`] (G4.4), returning `Ok(())`
+/// on a clean exit.
 ///
 /// # Errors
 ///
 /// Returns [`ServeError::Bind`] if the listen socket cannot be bound,
-/// or [`ServeError::Spawn`] if a worker thread cannot be spawned.
+/// [`ServeError::Spawn`] if a worker thread cannot be spawned, or
+/// [`ServeError::Tls`] if the native TLS listener cannot be stood up (a bad
+/// certificate / key / client-CA, a `rustls` config rejection, or a bind
+/// failure — fatal at startup).
 pub fn serve(config: &Config) -> Result<(), ServeError> {
     let server =
         Arc::new(

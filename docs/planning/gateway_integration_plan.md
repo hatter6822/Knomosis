@@ -114,9 +114,15 @@ The companion machine-readable contract is
 > **G4.7** (the operator `docs/gateway_runbook.md` — roles/topology, the
 > implemented config reference, the security model, health/readiness,
 > observability, graceful shutdown, the §9.5 failure-signature table, the
-> operator-obligation knobs, and a quick reference).  **Only G4.2 (TLS/mTLS)
-> remains** of the core hardening track; deferred: the G4.6 throughput bench
-> + the additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
+> operator-obligation knobs, and a quick reference), and **G4.2** (native
+> in-process HTTPS — a `rustls 0.23` (TLS 1.3, ring) front-end with optional
+> mTLS (`--tls-listen` / `--tls-cert` / `--tls-key` / `--mtls-client-ca`) that
+> runs ALONGSIDE the plaintext `--listen` socket and reuses the EXACT shared
+> request core, fronted by a deliberately strict, smuggling-proof HTTP/1.1
+> reader; uses the workspace's rustls 0.23, not tiny_http's bundled rustls
+> 0.20 — see `docs/audits/gateway_tls_spike.md`).  **The core G4 hardening
+> track is complete (G4.1–G4.7);** deferred: the G4.6 throughput bench + the
+> additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -885,9 +891,11 @@ every tag.
    `CORS_ORIGIN`) and `OPTIONS` preflight is answered for the documented
    methods/headers.
 5. **TLS termination.** event-subscribe is plain-TCP-only (§11.5); the
-   gateway terminates HTTPS for the web regardless (reuse
-   `knomosis_host::tls`, rustls + `ring`, TLS 1.3 min). mTLS client-cert
-   verification is the G4.2 hardening option.
+   gateway terminates HTTPS for the web regardless — **natively in-process**
+   (G4.2 DONE: `--tls-listen`, rustls 0.23 + `ring`, TLS 1.3 min, reusing
+   `knomosis_host::tls`'s PEM loaders) **or** at a co-located edge (the
+   gateway then stays loopback plaintext behind it). mTLS client-cert
+   verification (`--mtls-client-ca`) is implemented for the native path.
 6. **Idempotency.** A client-supplied `Idempotency-Key` (the BFF, which
    built the action, can use the action nonce) keys a bounded TTL response
    cache so retries return the *same* response; independently, the kernel's
@@ -1170,8 +1178,10 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     (`1..=4096`, default 16). The `tiny_http` accept loop is the crate's, so
     a hard `--max-connections` cap and per-connection read/idle timeouts are
     constrained by its API and become an `http`-layer follow-up (G4.x);
-    **TLS** termination moves to **G4.2** per the G1.0 decision (the default
-    listener is loopback plaintext). *Acceptance met:* `/healthz` 200 over
+    **TLS** termination is **G4.2** (now **DONE** — native in-process HTTPS via
+    `src/http/tls.rs`, on its own `--tls-listen` socket + a
+    `--tls-max-connections` cap, alongside the still-loopback-plaintext default
+    `--listen`). *Acceptance met:* `/healthz` 200 over
     HTTP; the bounded pool serves 12 concurrent clients across 4 threads
     (`tests/smoke.rs::handler_pool_serves_concurrent_requests`).
   * **G1.2e — Streaming response primitive** · S. `http/sse.rs`: a
@@ -1214,7 +1224,7 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   documents on the read endpoints is now real.  *Deferred to G4.x:*
   per-connection read/idle timeouts (constrained by `tiny_http`'s API).
 * **G1.4 — AuthN middleware** · S · deps: G1.2 · **DONE (bearer; mTLS
-  deferred to G4.2).** *Deliverable:* `auth.rs` — a **fail-closed**
+  shipped in G4.2).** *Deliverable:* `auth.rs` — a **fail-closed**
   bearer-token gate.  `Auth::load` reads the `--auth-token-file` (one
   token per line; blank + `#`-comment lines skipped; multiple tokens
   supported); `authorize` compares the presented `Bearer` token against
@@ -1236,8 +1246,8 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   rejected; any-of-N tokens; case-insensitive scheme), the fail-closed
   empty set, and the gate's exempt-path + 401/403 mapping; smoke tests
   for the authed happy path, the 401 bearer challenge, and the 403
-  wrong-token over a real socket.  *Deferred:* the optional mTLS hook
-  (rides on TLS termination — G4.2).
+  wrong-token over a real socket.  The optional mTLS hook (rides on TLS
+  termination) is **shipped in G4.2** (`--mtls-client-ca`).
 * **G1.5 — Problem responder + error taxonomy** · S · deps: G1.2 · **DONE
   (core).** `problem.rs` — one RFC 9457 `Problem` type with a stable `type`
   URI under `https://knomosis/errors/…`, an optional request-id `instance`,
@@ -1774,10 +1784,38 @@ cross-stack corpus pin remains deferred.
   `rate_limit_returns_429_with_retry_after` integration test), the
   `Retry-After` header + `retryAfterMs` extension are present, and the map
   is bounded.
-* **G4.2 — TLS/mTLS hardening** · S · deps: G1.2d. mTLS client-cert verify
-  (`--mtls-client-ca`); cipher/proto floor (TLS 1.3 default); cert-rotation
-  note. *Acceptance:* mTLS round-trip; weak-proto / unknown-client-cert
-  rejected.
+* **G4.2 — TLS/mTLS hardening** · S · deps: G1.2d · **DONE (native in-process
+  HTTPS).** `src/http/tls.rs`: a native `rustls 0.23` (TLS 1.3 floor, the
+  `ring` backend) HTTPS front-end — `--tls-listen` / `--tls-cert` /
+  `--tls-key` / `--mtls-client-ca` / `--tls-max-connections` — that runs
+  **alongside** the plaintext `--listen` socket and reuses the **exact** shared
+  request core (`http::handler`): the same fail-closed auth gate, per-credential
+  rate cap, router, dispatch, and SSE fan-out (`run_one_stream` over the same
+  `StreamSlot` bound), so the two transports cannot diverge in security
+  behaviour.  It uses the **workspace's rustls 0.23** — the same audited stack
+  `knomosis-host` uses, **not** `tiny_http`'s bundled rustls 0.20 (rejected as a
+  security downgrade; see `docs/audits/gateway_tls_spike.md`) — reusing
+  `knomosis_host::tls`'s vetted PEM loaders; **no new crate** enters the
+  dependency graph.  mTLS (`--mtls-client-ca`) wires a `WebPkiClientVerifier`
+  requiring a CA-chained client certificate.  A deliberately **strict HTTP/1.1
+  reader** feeds the core (`tiny_http` cannot consume an externally-decrypted
+  stream): `Transfer-Encoding` rejected (no chunked → the TE.CL/CL.TE desync
+  class is impossible), a duplicate / comma-listed `Content-Length` rejected,
+  obsolete folding rejected, the body read **exactly** (keep-alive framing stays
+  synchronised), request-line / header-line / header-count / section size all
+  bounded, and any framing ambiguity closes the connection.  Per-connection
+  threads are bounded by `--tls-max-connections` (spawn-storm guard); the
+  `ServerConfig` is built + the socket bound at **startup** (fail-fast on a bad
+  cert / key / CA — a fatal `ServeError::Tls`); the accept thread + every
+  connection observe the graceful-shutdown flag.  *Acceptance (DONE):* two
+  openssl-cert handshake tests drive a real `rustls 0.23` client end-to-end —
+  **server-auth** (healthz `200`, info authed `200`, unauthed `401`, bad-version
+  `505`, submit body-framed `503`, SSE `503`, keep-alive pipelining) and
+  **mTLS** (handshake **rejected** with no client cert; **accepted** with a
+  CA-signed cert) — plus 30 pure-parser unit tests for the strict reader +
+  response writer (request-smuggling + response-splitting guards).  TLS at a
+  **co-located edge** remains a supported alternative (the gateway then stays
+  plaintext behind it; the runbook documents both).
 * **G4.3 — Observability** · M · deps: G1–G3 · **DONE.**
   `observability.rs`: a process-unique per-request correlation id
   (`next_request_id` → `req-<nonce>-<seq>`) propagated to (1) the

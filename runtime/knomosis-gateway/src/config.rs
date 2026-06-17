@@ -14,12 +14,15 @@
 //! `--epoch-length` / `--gas-pool-actor`); the `/v1/info` + `/readyz`
 //! metadata (`--deployment-id`, `--ok-admission-stage`, `--host-addr`,
 //! `--event-subscribe-addr`); the fail-closed auth token file
-//! (`--auth-token-file`, G1.4); and the per-credential rate cap
-//! (`--rate-limit-rps`, G1.3).  The remaining §9.2 surface — TLS (G4.2)
-//! and the submit/SSE governors (request-body size, deadlines, SSE
-//! keepalive) — lands with its G2 / G3 / G4 track, following this
-//! module's fail-fast discipline (a typed [`ConfigError`] naming the
-//! offending knob).
+//! (`--auth-token-file`, G1.4); the per-credential rate cap
+//! (`--rate-limit-rps`, G1.3); the submit governors (`--host-addr`,
+//! `--host-pool-size`, `--host-max-inflight`, `--request-deadline-ms`,
+//! `--max-frame-size`, `--idempotency-ttl-secs`); and native HTTPS / mTLS
+//! (`--tls-listen` / `--tls-cert` / `--tls-key` / `--mtls-client-ca` /
+//! `--tls-max-connections`, G4.2; see [`TlsConfig`]).  The only remaining
+//! §9.2 surface is the per-knob `--sse-*` tuning (today compile-time
+//! [`SseConfig`] defaults).  Every knob follows this module's fail-fast
+//! discipline (a typed [`ConfigError`] naming the offending flag).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
