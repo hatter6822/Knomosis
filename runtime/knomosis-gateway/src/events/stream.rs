@@ -23,7 +23,7 @@
 //! before the hijack, in the IO shell) round out the contract.
 
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -62,13 +62,10 @@ pub fn serve(
         );
         return;
     };
-    // Reserve a stream slot (lock-free admission via the atomic counter):
-    // a `fetch_add` whose prior value is at the cap is over-budget, so undo
-    // and reject.  At most `max_streams` are admitted; a transient overshoot
-    // during concurrent rejects is corrected by the matching `fetch_sub`.
-    let prev = state.active_streams.fetch_add(1, Ordering::SeqCst);
-    if prev >= state.config.sse.max_streams {
-        state.active_streams.fetch_sub(1, Ordering::SeqCst);
+    // Reserve a stream slot (RAII; released when the guard drops).  At the
+    // configured capacity → 503 + a short `Retry-After`.
+    let Some(slot) = StreamSlot::try_acquire(&state.active_streams, state.config.sse.max_streams)
+    else {
         respond_problem(
             request,
             "too-many-streams",
@@ -79,12 +76,11 @@ pub fn serve(
             request_id,
         );
         return;
-    }
+    };
 
     // Slot reserved.  Hijack the connection and run the stream on its own
     // thread; the handler-pool worker returns immediately.
     let fanout = Arc::clone(fanout);
-    let active = Arc::clone(&state.active_streams);
     let shutdown = Arc::clone(&state.shutdown);
     let sse = state.config.sse;
     let request_id = request_id.to_string();
@@ -92,6 +88,9 @@ pub fn serve(
     let spawned = std::thread::Builder::new()
         .name("knx-gw-sse".to_string())
         .spawn(move || {
+            // The slot guard rides the stream thread; its `Drop` releases the
+            // reservation on every exit path (clean close, eviction, fault).
+            let _slot = slot;
             let request = StreamRequest {
                 fanout: &fanout,
                 since,
@@ -102,34 +101,79 @@ pub fn serve(
                 request_id: &request_id,
             };
             let end = run_one_stream(&mut writer, &request);
-            active.fetch_sub(1, Ordering::SeqCst);
             tracing::info!(request_id, ?end, "sse stream closed");
         });
     if spawned.is_err() {
-        // The thread could not be spawned: release the reserved slot. The
-        // connection writer was moved into the (failed) closure and is
-        // dropped, closing the socket — the client reconnects.
-        state.active_streams.fetch_sub(1, Ordering::SeqCst);
+        // The thread could not be spawned: the closure — and with it the slot
+        // guard *and* the connection writer — is dropped, releasing the
+        // reservation and closing the socket; the client reconnects.
         tracing::error!("failed to spawn an SSE stream thread");
+    }
+}
+
+/// An RAII reservation of one live-SSE-stream slot, bounded by the configured
+/// `--sse` `max_streams`.  [`StreamSlot::try_acquire`] increments the shared
+/// `active_streams` counter and returns the guard, or `None` when the cap is
+/// already reached (the caller answers `503`); the guard's `Drop` decrements
+/// the counter, so a slot is released on **every** exit path — a clean close,
+/// an eviction, a fault, *or* a failed thread spawn.  Shared by the
+/// `tiny_http` ([`serve`]) and native-TLS ([`crate::http::tls`]) stream paths
+/// so both honour the same single capacity bound.
+pub(crate) struct StreamSlot {
+    active: Arc<AtomicUsize>,
+}
+
+impl StreamSlot {
+    /// Try to reserve a slot.  A `fetch_add` whose prior value is already at
+    /// (or above) `max` is over budget, so it is immediately undone and `None`
+    /// returned; otherwise the reservation stands and the guard is returned.
+    /// A transient overshoot during concurrent rejects is corrected by the
+    /// matching `fetch_sub` (lock-free admission via the atomic counter).
+    pub(crate) fn try_acquire(active: &Arc<AtomicUsize>, max: usize) -> Option<Self> {
+        let prev = active.fetch_add(1, Ordering::SeqCst);
+        if prev >= max {
+            active.fetch_sub(1, Ordering::SeqCst);
+            return None;
+        }
+        Some(Self {
+            active: Arc::clone(active),
+        })
+    }
+}
+
+impl Drop for StreamSlot {
+    fn drop(&mut self) {
+        self.active.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
 /// The per-stream inputs (bundled to keep [`run_one_stream`] within the
 /// argument-count budget): the shared ring, the resume request, the SSE
-/// tunables, the shutdown flag, and the correlation id.
-struct StreamRequest<'a> {
-    fanout: &'a FanoutState,
-    since: Option<u64>,
-    types: &'a [String],
-    last_event_id: Option<&'a str>,
-    sse: &'a crate::config::SseConfig,
-    shutdown: &'a AtomicBool,
-    request_id: &'a str,
+/// tunables, the shutdown flag, and the correlation id.  `pub(crate)` so the
+/// native-TLS front-end ([`crate::http::tls`]) can drive the same streaming
+/// core over its hijacked `rustls` writer.
+pub(crate) struct StreamRequest<'a> {
+    /// The shared fan-out ring + decode-fault flag.
+    pub(crate) fanout: &'a FanoutState,
+    /// The `since` cursor (absent ⇒ `Last-Event-ID` / live tail).
+    pub(crate) since: Option<u64>,
+    /// The repeatable event-type filter (empty = all).
+    pub(crate) types: &'a [String],
+    /// The `Last-Event-ID` header value, if present.
+    pub(crate) last_event_id: Option<&'a str>,
+    /// The SSE fan-out tunables (lag bound, heartbeat, poll cadence).
+    pub(crate) sse: &'a crate::config::SseConfig,
+    /// The process-wide shutdown flag (a clean `server_shutdown` close).
+    pub(crate) shutdown: &'a AtomicBool,
+    /// The per-request correlation id (stamped on the SSE head).
+    pub(crate) request_id: &'a str,
 }
 
 /// Write the SSE response head, classify the resume point, then either
 /// stream live records or emit the terminal `behind` / `truncated` error.
-fn run_one_stream<W: Write>(writer: &mut W, request: &StreamRequest) -> StreamEnd {
+/// `pub(crate)` so both the `tiny_http` ([`serve`]) and native-TLS
+/// ([`crate::http::tls`]) front-ends share one streaming implementation.
+pub(crate) fn run_one_stream<W: Write>(writer: &mut W, request: &StreamRequest) -> StreamEnd {
     if write_sse_head(writer, request.request_id).is_err() {
         return StreamEnd::Disconnected; // the client hung up before we could respond
     }
