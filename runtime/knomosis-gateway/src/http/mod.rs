@@ -8,11 +8,13 @@
 //! The gateway's synchronous HTTP layer.
 //!
 //! Split into a **pure routing core** ([`router`]) — transport- and
-//! `tiny_http`-agnostic, so it is unit-testable in isolation — and a
-//! thin **IO shell** ([`server`]) that owns the `tiny_http` accept
-//! loop and the request→response glue.  This "testable core + thin IO
-//! shell" split is the pattern every later HTTP unit (G1.2) extends.
+//! `tiny_http`-agnostic, so it is unit-testable in isolation — a
+//! **transport-agnostic request core** ([`handler`]) shared by the HTTP and
+//! HTTPS front-ends (so they cannot diverge in security behaviour), the
+//! and the thin **IO shell** ([`server`]) that owns the `tiny_http` accept
+//! loop and the request→response glue.
 
+pub mod handler;
 mod router;
 mod server;
 
