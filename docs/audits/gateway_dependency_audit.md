@@ -77,9 +77,21 @@ third-party copyleft dependency** in the tree.
 ## Advisory / ban / source policy
 
   * **Advisories** (`[advisories] version = 2`): every RUSTSEC advisory is a
-    hard failure (no `ignore` entries); a yanked version fails.  The
-    advisory-database match is performed by `cargo deny` in CI against the
-    live RUSTSEC DB (it cannot be evaluated offline).
+    hard failure; a yanked version fails.  The advisory-database match is
+    performed by `cargo deny` (pinned `^0.19` so its `cvss` crate can parse the
+    CVSS-4.0 advisories now present upstream) in CI against the live RUSTSEC DB
+    (it cannot be evaluated offline).  **One advisory is ignored**, with
+    justification in `deny.toml`:
+      * `RUSTSEC-2025-0134` — `rustls-pemfile` unmaintained (archived Aug 2025).
+        *Not a vulnerability*: it is a thin wrapper around the **same** PEM
+        parsing code now exported by the maintained `rustls-pki-types` (>= 1.9;
+        the workspace pins 1.10) via its `PemObject` trait, so there is no
+        security/correctness exposure.  It enters the tree through
+        `knomosis-host`'s cert/key loaders and the gateway's `--mtls-crl` parser
+        (`rustls_pemfile::crls`).  **Tracked follow-up:** migrate both loaders to
+        `rustls_pki_types::pem::PemObject` to drop the dependency entirely (a
+        cross-crate change touching `knomosis-host`, out of the gateway
+        workstream's scope).
   * **Bans**: a wildcard (`*`) version requirement is denied (every
     dependency carries a concrete constraint); duplicate versions are
     *warned*, not failed (benign, but surfaced for tracking).
