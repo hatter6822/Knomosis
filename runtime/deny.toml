@@ -34,21 +34,19 @@ version = 2
 #   * BSD-3-Clause               — `subtle` (sole licence).
 #   * Unicode-3.0                — `unicode-ident`
 #                                  (`(MIT OR Apache-2.0) AND Unicode-3.0`).
-#   * GPL-3.0-or-later           — the project's own workspace crates.  The
-#                                  allow entry is the BARE GNU id `GPL-3.0`:
-#                                  cargo-deny's allow-list uses SPDX `Licensee`
-#                                  syntax (a bare GNU license, no `+` / `-only`
-#                                  / `-or-later` modifier — those are rejected
-#                                  by the parser), and a bare `GPL-3.0` Licensee
-#                                  satisfies the workspace crates' actual
-#                                  `GPL-3.0-or-later` expression.
+#   * GPL-3.0-or-later           — the project's own workspace crates,
+#                                  matched by the exact SPDX expression
+#                                  (cargo-deny >= 0.18 evaluates the allow
+#                                  list against each crate's licence
+#                                  expression, so the `-or-later` form is both
+#                                  accepted and required here).
 allow = [
     "MIT",
     "Apache-2.0",
     "ISC",
     "BSD-3-Clause",
     "Unicode-3.0",
-    "GPL-3.0",
+    "GPL-3.0-or-later",
 ]
 # Default detection confidence; a lower-confidence licence match is a
 # failure (surfaces an unexpected / unclear licence for review).

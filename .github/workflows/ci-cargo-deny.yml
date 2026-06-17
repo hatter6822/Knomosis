@@ -88,9 +88,15 @@ jobs:
           cache-all-crates: true
 
       - name: Install cargo-deny
-        # From crates.io with `--locked` (the `deny.toml` uses the
-        # `version = 2` schema, cargo-deny >= 0.14).
-        run: cargo install cargo-deny --locked --version "^0.16"
+        # Built with a recent `stable` (NOT the project's pinned 1.83, which
+        # cargo-deny 0.19's MSRV exceeds) — cargo-deny is a standalone tool, so
+        # its build toolchain is independent of the workspace's.  Pinned to
+        # `^0.19`: 0.16.x can no longer load the RustSec advisory DB (its bundled
+        # `cvss` cannot parse the CVSS-4.0 advisories now present upstream); 0.19
+        # parses them.  `--locked` for a reproducible tool build.
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          cargo +stable install cargo-deny --locked --version "^0.19"
 
       - name: cargo deny check
         run: cargo deny --manifest-path Cargo.toml check
