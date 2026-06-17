@@ -200,6 +200,31 @@ fn unknown_path_returns_404() {
 }
 
 #[test]
+fn unauthenticated_post_with_body_is_denied_before_the_body_and_closes() {
+    // Gate-before-body (DoS boundary): an unauthenticated POST carrying a body
+    // is denied by the fail-closed auth gate WITHOUT the gateway reading (and
+    // buffering) the body.  Because the body is left unread, the connection
+    // cannot be kept alive — the 401 is sent with `Connection: close`.
+    let (addr, state, handle) = start_gateway();
+    let request = "POST /v1/actions HTTP/1.1\r\nHost: localhost\r\n\
+                   Content-Type: application/octet-stream\r\nContent-Length: 4\r\n\r\nbody";
+    let mut stream = TcpStream::connect(addr).expect("connect");
+    stream.write_all(request.as_bytes()).expect("write");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("read");
+    stop_gateway(&state, handle);
+
+    assert!(
+        response.starts_with("HTTP/1.1 401"),
+        "fail-closed gate before the body, got: {response:?}"
+    );
+    assert!(
+        response.to_ascii_lowercase().contains("connection: close"),
+        "a denied request with an unread body must close the connection, got: {response:?}"
+    );
+}
+
+#[test]
 fn head_returns_headers_with_no_body() {
     // HEAD is identical to GET except the response carries no body (RFC 9110
     // §9.3.2): the status + `Content-Length` (of the GET body) are present, but

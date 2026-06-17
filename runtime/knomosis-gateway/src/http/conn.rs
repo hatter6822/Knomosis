@@ -254,27 +254,14 @@ pub(crate) fn run_connection<S: Read + Write>(
                 return;
             }
         };
-        // Honour `Expect: 100-continue` (RFC 7231 §5.1.1): the body length is
-        // already validated as acceptable, so commit with the interim
-        // `100 Continue` *before* reading the body.
-        if head.expect_continue
-            && head.content_length > 0
-            && write_continue(reader.get_mut()).is_err()
-        {
-            return;
-        }
-        let Ok(body) = read_body(reader, head.content_length) else {
-            return; // a truncated body / socket error / deadline breach → close
-        };
+        // The body is read LAZILY by `serve_parsed` (inside the handler's
+        // body closure, invoked only *after* the auth + rate gates pass), so an
+        // unauthenticated / rate-limited request never makes the gateway buffer
+        // its (up to `--max-frame-size`) body — the documented gate-before-body
+        // ordering + DoS boundary.  `Expect: 100-continue` is likewise honoured
+        // post-gate, just before the body is read.
         if matches!(
-            serve_parsed(
-                reader,
-                socket,
-                state,
-                head.into_request(body),
-                &request_id,
-                start
-            ),
+            serve_parsed(reader, socket, state, &head, &request_id, start),
             ConnControl::Close
         ) {
             return;
@@ -297,55 +284,82 @@ enum ConnControl {
     Close,
 }
 
-/// Serve one fully-parsed request through the shared request core, then write
-/// the response (or hijack the connection for SSE).  Returns whether the
-/// connection may be kept alive.
+/// Serve one parsed request **head** through the shared request core, reading
+/// the body **lazily** (only after the gate passes), then write the response
+/// (or hijack the connection for SSE).  Returns whether the connection may be
+/// kept alive.
+///
+/// **Gate-before-body (DoS boundary).** The body is read inside the handler's
+/// gated closure, so an unauthenticated / rate-limited request never makes the
+/// gateway buffer its (up to `--max-frame-size`) body.  When the gate denies a
+/// request that carried a body, that body is left unread — so the connection
+/// **cannot** be kept alive (the unread bytes would desync the next keep-alive
+/// request); the response is sent with `Connection: close`.
 fn serve_parsed<S: Read + Write>(
     reader: &mut BufReader<DeadlineStream<S>>,
     socket: Option<&TcpStream>,
     state: &AppState,
-    parsed: ParsedRequest,
+    head: &RequestHead,
     request_id: &str,
     start: Instant,
 ) -> ConnControl {
-    let ParsedRequest {
-        method,
-        path,
-        query,
-        body,
-        authorization,
-        content_type,
-        if_none_match,
-        idempotency_key,
-        last_event_id,
-        origin,
-        keep_alive,
-    } = parsed;
     let parts = RequestParts {
-        method: &method,
-        path: &path,
-        query: &query,
-        auth_header: authorization.as_deref(),
-        content_type: content_type.as_deref(),
-        if_none_match: if_none_match.as_deref(),
-        idempotency_key: idempotency_key.as_deref(),
-        last_event_id: last_event_id.as_deref(),
-        origin: origin.as_deref(),
+        method: &head.method,
+        path: &head.path,
+        query: &head.query,
+        auth_header: head.authorization.as_deref(),
+        content_type: head.content_type.as_deref(),
+        if_none_match: head.if_none_match.as_deref(),
+        idempotency_key: head.idempotency_key.as_deref(),
+        last_event_id: head.last_event_id.as_deref(),
+        origin: head.origin.as_deref(),
     };
     // HEAD is GET-routed (the router maps it), but the response carries no body
     // (RFC 9110 §9.3.2) and an SSE stream is never hijacked for a HEAD.
-    let is_head = method == "HEAD";
+    let is_head = head.method == "HEAD";
+    let keep_alive = head.keep_alive;
+    let content_length = head.content_length;
+    let expect_continue = head.expect_continue;
     let routed = route_request(&parts);
-    // The body was already read off the wire (bounded by `--max-frame-size`
-    // while reading), so the handler's gated body closure just hands it back.
-    let handled = handler::handle(&routed, &parts, move |_max| Ok(body), state, request_id);
+
+    // The gated body reader: invoked by `handler::handle` ONLY after the auth +
+    // rate gates pass.  It honours `Expect: 100-continue` (RFC 7231 §5.1.1) just
+    // before reading (so the interim `100 Continue` is sent only once we commit
+    // to the body), then reads the validated, bounded body.  `body_read` /
+    // `body_failed` let the caller decide whether the connection can survive.
+    let mut body_read = false;
+    let mut body_failed = false;
+    let read_body_fn = |_max: usize| -> Result<Vec<u8>, RouteOutcome> {
+        body_read = true;
+        if expect_continue && content_length > 0 && write_continue(reader.get_mut()).is_err() {
+            body_failed = true;
+            return Err(body_unreadable_outcome());
+        }
+        read_body(reader, content_length).map_err(|_| {
+            body_failed = true;
+            body_unreadable_outcome()
+        })
+    };
+    let handled = handler::handle(&routed, &parts, read_body_fn, state, request_id);
+
+    // A request denied (or routed to SSE) before its body was read, OR whose
+    // body read failed mid-stream, leaves the connection unsafe to keep alive.
+    let must_close = body_failed || (!body_read && content_length > 0);
+
     match handled {
         Handled::Respond(outcome) => {
-            log_request(&method, &path, outcome.status, start.elapsed(), request_id);
-            if write_response(reader.get_mut(), &outcome, keep_alive, is_head).is_err() {
+            log_request(
+                &head.method,
+                &head.path,
+                outcome.status,
+                start.elapsed(),
+                request_id,
+            );
+            let keep = keep_alive && !must_close;
+            if write_response(reader.get_mut(), &outcome, keep, is_head).is_err() {
                 return ConnControl::Close;
             }
-            if keep_alive {
+            if keep {
                 ConnControl::KeepAlive
             } else {
                 ConnControl::Close
@@ -354,9 +368,10 @@ fn serve_parsed<S: Read + Write>(
         // A HEAD on the SSE endpoint returns the stream's response headers with
         // no body and **no hijack** (the GET would stream indefinitely).
         Handled::Stream { cors_headers, .. } if is_head => {
-            log_request(&method, &path, 200, start.elapsed(), request_id);
-            let head = stream_head_outcome(&cors_headers, request_id);
-            if write_response(reader.get_mut(), &head, keep_alive, true).is_err() {
+            log_request(&head.method, &head.path, 200, start.elapsed(), request_id);
+            let stream_head = stream_head_outcome(&cors_headers, request_id);
+            // A GET stream carries no request body, so keep-alive is unaffected.
+            if write_response(reader.get_mut(), &stream_head, keep_alive, true).is_err() {
                 return ConnControl::Close;
             }
             if keep_alive {
@@ -371,7 +386,7 @@ fn serve_parsed<S: Read + Write>(
             last_event_id,
             cors_headers,
         } => {
-            log_request(&method, &path, 200, start.elapsed(), request_id);
+            log_request(&head.method, &head.path, 200, start.elapsed(), request_id);
             serve_stream(
                 reader.get_mut(),
                 socket,
@@ -388,6 +403,15 @@ fn serve_parsed<S: Read + Write>(
             ConnControl::Close
         }
     }
+}
+
+/// The `400` response when the request body could not be read off the wire (a
+/// truncated body, a socket error, or the read-deadline breach during the
+/// gated body read).  The connection is closed afterwards (`must_close`).
+fn body_unreadable_outcome() -> RouteOutcome {
+    Problem::new("bad-request", "Bad Request", 400)
+        .with_detail("the request body could not be read".to_string())
+        .into_outcome()
 }
 
 /// Build the headers-only response a HEAD on `GET /v1/events/stream` returns:
@@ -492,7 +516,10 @@ fn serve_stream<W: Write>(
 // Strict HTTP/1.1 request reader
 // ---------------------------------------------------------------------------
 
-/// A fully-read, framing-unambiguous request.
+/// A fully-read, framing-unambiguous request — the head combined with its
+/// (eagerly-read) body.  Used **only by the parser tests** (the live path reads
+/// the body lazily, post-gate, via [`serve_parsed`]'s closure).
+#[cfg(test)]
 struct ParsedRequest {
     method: String,
     path: String,
@@ -529,7 +556,8 @@ struct RequestHead {
 
 impl RequestHead {
     /// Combine this head with its (already-read) `body` into a full
-    /// [`ParsedRequest`].
+    /// [`ParsedRequest`] — **test-only** (the live path reads the body lazily).
+    #[cfg(test)]
     fn into_request(self, body: Vec<u8>) -> ParsedRequest {
         ParsedRequest {
             method: self.method,
@@ -1071,12 +1099,16 @@ mod tests {
         let raw = b"GET /v1/pools/161?resource=1 HTTP/1.1\r\n\
                     Authorization: Bearer tok\r\n\
                     If-None-Match: W/\"7-42\"\r\n\
+                    Idempotency-Key: idem-123\r\n\
+                    Origin: https://app.example.com\r\n\
                     Last-Event-ID: 5.0\r\n\r\n";
         let req = parse(raw, 1024).unwrap();
         assert_eq!(req.path, "/v1/pools/161");
         assert_eq!(req.query, "resource=1");
         assert_eq!(req.authorization.as_deref(), Some("Bearer tok"));
         assert_eq!(req.if_none_match.as_deref(), Some("W/\"7-42\""));
+        assert_eq!(req.idempotency_key.as_deref(), Some("idem-123"));
+        assert_eq!(req.origin.as_deref(), Some("https://app.example.com"));
         assert_eq!(req.last_event_id.as_deref(), Some("5.0"));
     }
 

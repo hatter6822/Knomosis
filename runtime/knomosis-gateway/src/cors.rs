@@ -16,9 +16,10 @@
 //!     **before** the auth gate (a preflight carries no credentials, per the
 //!     Fetch standard);
 //!   * the **actual-response decoration** ([`response_headers`]) —
-//!     `Access-Control-Allow-Origin` (+ `Vary: Origin`, +
-//!     `Access-Control-Allow-Credentials` for an explicit allowlist) added to
-//!     every real response so the browser will surface it.
+//!     `Access-Control-Allow-Origin` (+ `Vary: Origin`,
+//!     `Access-Control-Expose-Headers` so JS can read the gateway's
+//!     non-safelisted headers, + `Access-Control-Allow-Credentials` for an
+//!     explicit allowlist) added to every real response.
 //!
 //! The policy is parsed **once** at startup ([`CorsPolicy::parse`], from the
 //! already-validated [`crate::config::Config::cors_origin`]) and held in
@@ -42,6 +43,13 @@ const ALLOW_HEADERS: &str =
 /// How long a browser may cache the preflight (`Access-Control-Max-Age`, 10
 /// minutes) — bounded so a policy change is picked up promptly.
 const MAX_AGE_SECS: &str = "600";
+
+/// The non-CORS-safelisted response headers a browser-direct client must be
+/// able to read (`Access-Control-Expose-Headers`).  Without this, JS can read
+/// only the safelisted set (`Cache-Control`, `Content-Type`, …) and would miss:
+/// `X-Knomosis-Seq` (post-submit read reconciliation), `ETag` (revalidation),
+/// `Retry-After` (backoff), and `X-Request-Id` (support diagnostics).
+const EXPOSE_HEADERS: &str = "ETag, Retry-After, X-Request-Id, X-Knomosis-Seq";
 
 /// A parsed browser-CORS allow policy (from `--cors-origin`).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -116,6 +124,8 @@ pub fn response_headers(policy: &CorsPolicy, origin: Option<&str>) -> Vec<(&'sta
     let mut headers = vec![
         ("Access-Control-Allow-Origin", allow),
         ("Vary", "Origin".to_string()),
+        // Let the browser read the gateway's non-safelisted headers.
+        ("Access-Control-Expose-Headers", EXPOSE_HEADERS.to_string()),
     ];
     if policy.allows_credentials() {
         headers.push(("Access-Control-Allow-Credentials", "true".to_string()));
@@ -200,6 +210,14 @@ mod tests {
         let h = response_headers(&policy, Some("https://anything.example.com"));
         assert_eq!(has(&h, "Access-Control-Allow-Origin"), Some("*"));
         assert_eq!(has(&h, "Vary"), Some("Origin"));
+        // The browser can read the gateway's non-safelisted headers.
+        let expose = has(&h, "Access-Control-Expose-Headers").expect("expose-headers");
+        for header in ["ETag", "Retry-After", "X-Request-Id", "X-Knomosis-Seq"] {
+            assert!(
+                expose.contains(header),
+                "{header} must be exposed; got {expose:?}"
+            );
+        }
         // The wildcard never advertises credentials (Fetch-standard rule).
         assert!(has(&h, "Access-Control-Allow-Credentials").is_none());
     }
