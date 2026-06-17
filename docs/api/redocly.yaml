@@ -1,0 +1,19 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# Redocly lint configuration for the Knomosis Gateway OpenAPI contract
+# (`gateway.openapi.yaml`).  Consumed by the `openapi-lint` job in
+# `.github/workflows/ci-gateway.yml` (gateway WU G0.3).
+#
+# It extends the built-in `minimal` ruleset: structural OpenAPI 3.1
+# validity + `$ref` resolution (the G0.3 acceptance: "CI fails on an
+# invalid / edited-without-lint spec; passes on the committed spec"),
+# WITHOUT the opinionated documentation-style rules of `recommended`
+# (operation descriptions, tags, examples, …) which the DRAFT contract
+# does not yet target.  Tightening toward `recommended` is a follow-up
+# tracked alongside the G5 contract-test work.
+extends:
+  - minimal

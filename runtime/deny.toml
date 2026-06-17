@@ -1,0 +1,84 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# cargo-deny supply-chain policy for the `runtime/` Cargo workspace
+# (Workstream GW §G4.5).  Run with `cargo deny --manifest-path
+# runtime/Cargo.toml check`; enforced in CI by `.github/workflows/
+# ci-cargo-deny.yml`.  The rationale, the full dependency inventory, and
+# the per-new-dependency justifications live in
+# `docs/audits/gateway_dependency_audit.md`.
+#
+# Schema: the `version = 2` opt-in (cargo-deny ≥ 0.14) — all RUSTSEC
+# advisories fail unless explicitly ignored, and the licence policy is a
+# strict allow-list.
+
+[advisories]
+version = 2
+# A yanked dependency version fails the check.  Every RUSTSEC advisory
+# (vulnerability / unmaintained / unsound / notice) is a hard failure under the
+# v2 schema unless explicitly ignored below.
+yanked = "deny"
+ignore = [
+    # rustls-pemfile is unmaintained (archived Aug 2025).  It is NOT a
+    # vulnerability: rustls-pemfile 2.x is a thin wrapper around the SAME PEM
+    # parsing code now exported by the maintained `rustls-pki-types` (>= 1.9,
+    # the workspace already pins 1.10) via its `PemObject` trait, so there is no
+    # security or correctness exposure.  The crate enters the tree through
+    # `knomosis-host`'s cert/key loaders (and the gateway's `--mtls-crl` CRL
+    # parser); migrating both to `rustls_pki_types::pem::PemObject` removes the
+    # dependency entirely and is tracked as follow-up
+    # (docs/audits/gateway_dependency_audit.md).
+    "RUSTSEC-2025-0134",
+]
+
+[licenses]
+version = 2
+# The allow-list is *derived from and verified against* the workspace's
+# actual dependency licences (see the audit doc).  Every license
+# expression in the tree is satisfiable by this set:
+#   * MIT / Apache-2.0           — the overwhelming majority (dual-licensed).
+#   * ISC                        — `ring` (`Apache-2.0 AND ISC`),
+#                                  `rustls-webpki`, `untrusted`.
+#   * BSD-3-Clause               — `subtle` (sole licence).
+#   * Unicode-3.0                — `unicode-ident`
+#                                  (`(MIT OR Apache-2.0) AND Unicode-3.0`).
+#   * GPL-3.0-or-later           — the project's own workspace crates,
+#                                  matched by the exact SPDX expression
+#                                  (cargo-deny >= 0.18 evaluates the allow
+#                                  list against each crate's licence
+#                                  expression, so the `-or-later` form is both
+#                                  accepted and required here).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "ISC",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "GPL-3.0-or-later",
+]
+# Default detection confidence; a lower-confidence licence match is a
+# failure (surfaces an unexpected / unclear licence for review).
+confidence-threshold = 0.8
+
+[bans]
+# Duplicate versions are surfaced (benign but worth tracking) rather than
+# failing the build; a wildcard version requirement (`*`) is denied for
+# crates.io dependencies — but ALLOWED for the workspace-internal `path`
+# crates (`knomosis-*`), which are declared `{ path = "..." }` without a
+# version and would otherwise trip the wildcard ban.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+# `signal-hook` declares the deprecated `Apache-2.0/MIT` slash form; allowed
+# implicitly by the MIT / Apache-2.0 allow entries (cargo-deny parses the
+# slash as OR).
+
+[sources]
+# Only the canonical crates.io registry is permitted; an unknown registry
+# or any git source is denied (no out-of-band dependency provenance).
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

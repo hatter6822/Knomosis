@@ -6529,21 +6529,17 @@ escrowed against the identity.  Independent workstream
 > legs** (the BOLD-leg ETH→BOLD oracle + the unified composer) with the
 > independent-observer receipt-fetch binding
 > (`knomosis-l1-ingest::receipt_verifier`), so the receipt-verified path
-> no longer gates ratification.  **One gate remains** before the closing
-> vote:
+> no longer gates ratification.  The **build-tag reconciliation is also
+> resolved**: `kernelBuildTag` and its three value-pinning regression tests
+> (`Test/Umbrella.lean`, `Lex/Test/M2.lean`, `Lex/Test/ExampleLex.lean`)
+> were **removed** project-wide in favour of the `lakefile.lean` `version`
+> field (surfaced as `LegalKernel.kernelVersion`), so there is no milestone
+> tag for GP.10 to reconcile and no pins to update — the per-PR version bump
+> is the sole build identifier (the GP.10.2 / GP.10.6 build-tag instructions
+> are superseded).
 >
->   * **The build-tag reconciliation + the two-reviewer pass (GP.10.2 /
->     GP.10.5 / GP.10.6 are stale here).**  Those WUs specify bumping
->     `kernelBuildTag` to `"knomosis-gas-pool-amm"`, but they predate the
->     **SVC** milestone, which set `kernelBuildTag =
->     "knomosis-step-vm-coherence"` *after* the GP.11 work landed.  The
->     ratification PR must decide the final tag relative to the current SVC
->     tag (not blindly apply the pre-SVC instruction) and update every
->     regression pin in lockstep (`Test/Umbrella.lean`, `Lex/Test/M2.lean`,
->     `Lex/Test/ExampleLex.lean`), then carry the two-reviewer sign-off.
->
-> Net: the remaining GP.10 work is the two-reviewer ratification vote (+
-> the tag decision), **not** new GP feature code.
+> Net: the **only** remaining GP.10 work is the two-reviewer ratification
+> vote, **not** new GP feature code.
 
 #### WU GP.10.1: Genesis-Plan amendment §15E final
 
@@ -6650,12 +6646,12 @@ escrowed against the identity.  Independent workstream
         all of the above on every PR + push.
 
     Build-tag update:
-    `LegalKernel.lean`'s `kernelBuildTag` bumps from
-    `"knomosis-step-vm-coherence"` to
-    `"knomosis-gas-pool-amm"` (per the v1.4-landing PR).
-    `Test/Umbrella.lean`, `Lex/Test/M2.lean`, and
-    `Lex/Test/ExampleLex.lean` regression pins all updated
-    in the same PR.
+    Superseded — `LegalKernel.lean`'s `kernelBuildTag` and its
+    `Test/Umbrella.lean` / `Lex/Test/M2.lean` /
+    `Lex/Test/ExampleLex.lean` regression pins were **removed**
+    project-wide in favour of the `lakefile.lean` `version` field
+    (surfaced as `kernelVersion`); there is no milestone tag to bump.
+    The per-PR version bump is the sole build identifier.
 
     Tests:
     * Each new module has at least one test in its
@@ -9891,8 +9887,10 @@ Five new WUs filling v1.3 coverage gaps:
   7h. **GP.10.6 (build-system + audit-binary updates).**
       Explicit WU for the audit binaries (`count_sorries`,
       `tcb_audit`, `naming_audit`, etc.) to ensure CI is
-      actually checking the new code.  Build-tag bump from
-      `"knomosis-step-vm-coherence"` to `"knomosis-gas-pool-amm"`.
+      actually checking the new code.  (The build-tag bump this WU
+      originally specified is superseded — `kernelBuildTag` was removed
+      project-wide in favour of the `lakefile.lean` `version` /
+      `LegalKernel.kernelVersion`.)
 
 Complex-WU subdivision:
   7i. **Six complex WUs subdivided** into ~30 granular sub-WUs:

@@ -71,8 +71,7 @@ topic:
 
 | Attribute | Value |
 |-----------|-------|
-| Project version | `v0.7.1` (Lean + Rust in lockstep) |
-| Build tag | `knomosis-step-vm-coherence` (`kernelBuildTag` in `LegalKernel.lean`) |
+| Project version | `v0.8.4` (Lean + Rust in lockstep; `kernelVersion` in `LegalKernel.lean`) |
 | Lean toolchain | `leanprover/lean4:v4.29.1` (pinned in [`../lean-toolchain`](../lean-toolchain)) |
 | Rust toolchain | stable **1.83** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.83`) |
 | Solidity toolchain | Foundry **v1.7.0** + solc **0.8.20** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
@@ -725,11 +724,11 @@ Key facts about the harness:
 - Test growth is monotonic but **not** pinned by a global count gate — there is
   no magic number to bump.
 
-> **Build-tag pinning.** The `kernelBuildTag` constant in `LegalKernel.lean`
-> (currently `"knomosis-step-vm-coherence"`) is pinned by three regression
-> tests: `LegalKernel/Test/Umbrella.lean`, `Lex/Test/M2.lean`, and
-> `Lex/Test/ExampleLex.lean`. Any phase/milestone bump of that constant **must**
-> update all three pinning tests in the same PR, or `lake test` fails.
+> **Build identifier.** `knomosis info` reports `kernelVersion`
+> (`LegalKernel.lean`), which mirrors the `lakefile.lean` `version` field and
+> is bumped in lockstep on every PR. There is no separate milestone build tag
+> and no value-pinning regression test — the former `kernelBuildTag` was
+> removed as redundant once every PR bumps the version.
 
 ## 13. Worked walkthroughs (adding code)
 
@@ -961,7 +960,7 @@ knomosis/
 ├── tcb_allowlist.txt        TCB import allowlist (tcb_audit)
 ├── Main.lean / Replay.lean  the knomosis CLI / knomosis-replay binary
 ├── Tests.lean               @[test_driver] — imports every test suite
-├── LegalKernel.lean         umbrella re-export + kernelBuildTag
+├── LegalKernel.lean         umbrella re-export + kernelVersion
 ├── Lex.lean / Deployments.lean   umbrella modules
 ├── LegalKernel/             kernel (TCB) + laws + authority + encoding +
 │                            events + runtime + disputes + bridge + faultproof +

@@ -258,13 +258,7 @@ private def aggregateTests : List TestCase :=
 /-! ## LX.30 — M2 milestone gate -/
 
 private def milestoneGateTests : List TestCase :=
-  [ { name := "LX.30 / LX.38: kernelBuildTag is `knomosis-step-vm-coherence`"
-    , body := do
-        assertEq (expected := "knomosis-step-vm-coherence")
-                 (actual   := LegalKernel.kernelBuildTag)
-                 "Workstream SVC milestone gate (supersedes EI + AR + M2 + M3 + H)"
-    }
-  , { name := "LX.30: 17 kernel-built-in laws have Lex re-expressions"
+  [ { name := "LX.30: 17 kernel-built-in laws have Lex re-expressions"
     , body := do
         -- Term-level API stability: every `legalkernel_<law>_transition`
         -- exists and has the expected type.  An identifier rename or

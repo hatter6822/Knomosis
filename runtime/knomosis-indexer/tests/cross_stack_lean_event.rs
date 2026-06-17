@@ -13,7 +13,7 @@
 //! proves that consumer agrees with the Lean `Event.encode` authority
 //! BYTE-FOR-BYTE: for every fixture entry (real Lean
 //! `Event.encode` hex) whose tag is in the indexer's known range
-//! `0..=20`, `decode_event` succeeds, the decoded tag matches, AND
+//! `0..=22`, `decode_event` succeeds, the decoded tag matches, AND
 //! `encode_event` reproduces the exact Lean bytes (a full
 //! Lean→decode→re-encode round-trip).
 //!
@@ -21,7 +21,8 @@
 //! initially in GP.6.3 — `DepositWithFeeCredited`,
 //! `ActionBudgetTopUp`, `GasPoolClaim`,
 //! `DelegatedActionBudgetTopUp`.  GP.6.4 added tag 20
-//! (`BudgetConsumed`) to enable per-epoch consumption tracking.
+//! (`BudgetConsumed`); GP.11.4 / GP.11.10 added the AMM family —
+//! `AmmSwapExecuted` (21) and `AmmReservesReclaimed` (22).
 //! All round-trip byte-for-byte through the indexer.
 //!
 //! Gated on the Lean-generated fixture's presence (written by
@@ -34,7 +35,8 @@ use knomosis_indexer::event::Event;
 use serde::Deserialize;
 
 /// The highest event tag the indexer's `Event` mirror models.
-/// GP.11.4 widened this from 20 to 21 by adding `AmmSwapExecuted`.
+/// GP.11.4 widened this to 21 (`AmmSwapExecuted`); GP.11.10 to 22
+/// (`AmmReservesReclaimed`).
 const INDEXER_MAX_KNOWN_TAG: u64 = 22;
 
 /// Pinned generator identifier (a Lean-side version bump forces an

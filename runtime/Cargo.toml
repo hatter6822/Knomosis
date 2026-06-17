@@ -81,6 +81,8 @@ members = [
     "knomosis-indexer",
     "knomosis-faultproof-observer",
     "knomosis-bench",
+    "knomosis-gateway",
+    "knomosis-gateway-bench",
 ]
 
 # Shared package metadata.  Per-crate manifests use
@@ -94,7 +96,7 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.8.3"
+version = "0.9.0"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
@@ -118,6 +120,12 @@ publish = false
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter"] }
+# `signal-hook` provides the gateway's SIGTERM/SIGINT graceful-shutdown
+# trigger (§G4.4).  A safe wrapper over `sigaction` (the gateway forbids
+# `unsafe`, so a hand-rolled handler is not an option); `default-features
+# = false` drops the channel/iterator helpers we do not use, keeping just
+# the atomic-flag registration (`signal_hook::flag::register`).
+signal-hook = { version = "0.3", default-features = false }
 
 # RH-A cryptographic adaptor dependencies.  Pinned to minor versions
 # per the plan §7 risk register: silent major-version bumps in audited
@@ -201,6 +209,15 @@ rustls-pki-types = { version = "1.10", default-features = false, features = ["st
 #     `min_sqlite_version_3_14_0`) intentionally kept; we rely on
 #     `WAL` mode (3.7+) and `BEGIN DEFERRED` (any version).
 rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
+
+# Workstream GW (gateway) HTTP layer.  `tiny_http` is the vetted
+# synchronous HTTP/1.1 server chosen by the G1.0 spike (OQ-GW-8; see
+# `docs/audits/gateway_http_spike.md`): pure std threads, no tokio.
+# `default-features = false` keeps its optional TLS (which depends on
+# an older rustls than the workspace's pinned 0.23) out of the tree —
+# HTTPS termination is the G4.2 hardening unit.  Pinned to a minor
+# version per the §7 risk register.
+tiny_http = { version = "0.12", default-features = false }
 
 # Workspace-internal crates (other members depend on these via the
 # `workspace = true` shorthand).

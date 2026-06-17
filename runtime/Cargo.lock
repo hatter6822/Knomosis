@@ -304,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-bench"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "knomosis-cli-common",
  "knomosis-host",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cli-common"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cross-stack"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-event-subscribe"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "hex",
  "knomosis-cli-common",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-faultproof-observer"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "hex",
  "k256",
@@ -373,8 +373,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "knomosis-gateway"
+version = "0.9.0"
+dependencies = [
+ "knomosis-cli-common",
+ "knomosis-event-subscribe",
+ "knomosis-host",
+ "knomosis-indexer",
+ "knomosis-storage",
+ "proptest",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "serde_json",
+ "signal-hook",
+ "subtle",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "knomosis-gateway-bench"
+version = "0.9.0"
+dependencies = [
+ "knomosis-bench",
+ "knomosis-cli-common",
+ "knomosis-gateway",
+ "knomosis-indexer",
+ "knomosis-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "knomosis-hash-keccak256"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "cc",
  "hex",
@@ -385,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-host"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "knomosis-cli-common",
  "proptest",
@@ -400,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-indexer"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "hex",
  "knomosis-cli-common",
@@ -416,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-l1-ingest"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "hex",
  "k256",
@@ -436,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-storage"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "proptest",
  "rusqlite",
@@ -447,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-verify-secp256k1"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "cc",
  "hex",
@@ -825,6 +864,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "signal-hook"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+dependencies = [
+ "errno",
+ "libc",
+]
+
+[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -938,6 +997,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
 ]
 
 [[package]]
@@ -949,10 +1019,13 @@ dependencies = [
  "matchers",
  "once_cell",
  "regex-automata",
+ "serde",
+ "serde_json",
  "sharded-slab",
  "thread_local",
  "tracing",
  "tracing-core",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -978,6 +1051,12 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+
+[[package]]
+name = "valuable"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "vcpkg"

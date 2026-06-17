@@ -515,13 +515,17 @@ fn write_eth_address(out: &mut Vec<u8>, addr: &EthAddress) {
 }
 
 /// Re-encode an event back to bytes.  Inverse of [`decode_event`]
-/// up to the `Amount`-fits-in-u64 bound (per CBE).  Used by
-/// integration tests to round-trip events through the decoder.
+/// up to the `Amount`-fits-in-u64 bound (per CBE).
 ///
-/// **Public** so the future Lean-side `Encodable Event` instance
-/// can be cross-checked against this byte format (in the same way
-/// `knomosis-l1-ingest` cross-checks its `encode_action` against
-/// `Encoding.Action.encode`).
+/// **Public** because it is cross-checked **byte-for-byte** against the
+/// Lean-side `Encoding.Event.encode` authority (the `instEncodableEvent`
+/// instance in `LegalKernel/Encoding/Event.lean`): the
+/// `tests/cross_stack_lean_event.rs` pin decodes every entry of the
+/// Lean-generated `event_subscribe_cbe.json` fixture and asserts
+/// `encode_event` reproduces the exact Lean bytes — the same mechanism by
+/// which `knomosis-l1-ingest` cross-checks its `encode_action` against
+/// `Encoding.Action.encode`.  (The gateway lifts this pin to its §6.2 JSON
+/// envelope in `knomosis-gateway/tests/cross_stack_lean_event.rs`.)
 #[must_use]
 pub fn encode_event(event: &Event) -> Vec<u8> {
     let mut out = Vec::new();

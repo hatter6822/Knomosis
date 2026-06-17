@@ -152,7 +152,7 @@ Plus root-level:
 * `KernelTests.lean` (265 lines): WU 1.5 balance lemmas, WU 1.7
   reachability, WU 1.8 law-set reachability, etc.
 * `RBMapLemmasTests.lean` (117 lines): §8.3 fold lemmas.
-* `Umbrella.lean` (47 lines): pins the `kernelBuildTag` constant.
+* `Umbrella.lean`: smoke-checks the `kernelVersion` constant (non-empty).
 * `ConservationTests.lean` (456 lines): TotalSupply, IsConservative,
   ConservativeLawSet, total_supply_global.
 * `Property.lean` (167 lines): shared property-test helpers.
@@ -242,9 +242,9 @@ at the term level.
   at the time of the last milestone.  The exact number drifts;
   `lake test` is the canonical query.
 * **No `sorry`, no custom axioms in test modules.**
-* **Test count is not pinned** (unlike `kernelBuildTag`); only
-  its monotonic growth is enforced by individual regression
-  tests landing alongside new theorems.
+* **Test count is not pinned**; only its monotonic growth is
+  enforced by individual regression tests landing alongside new
+  theorems.
 
 **Recommendation:** Consider extending one of the audit tools
 to flag production imports of `Test.*` modules.  This would

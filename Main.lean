@@ -126,14 +126,14 @@ def readSignedActionsFromFile (path : System.FilePath) :
 def formatHashHex (h : ContentHash) : String :=
   LegalKernel.Runtime.CellProofJson.formatHashHex h
 
-/-- Subcommand: `knomosis info`.  Prints the build tag and the
+/-- Subcommand: `knomosis info`.  Prints the runtime version and the
     hash-implementation identity (Audit-3.1).  Operators reading
     this output can tell at a glance whether a binary is running
     with the Lean fallback hash (FNV-1a-64 padded to 32 bytes —
     NOT for production) or a production-grade implementation. -/
 def cmdInfo : IO UInt32 := do
   IO.println s!"knomosis: legal-kernel runtime"
-  IO.println s!"  build tag: {LegalKernel.kernelBuildTag}"
+  IO.println s!"  version:   {LegalKernel.kernelVersion}"
   IO.println s!"  proof-carrying state-transition kernel (see CLAUDE.md for milestone status)"
   IO.println s!"  hash:        {hashImplementationIdentifier ()}"
   if isProductionHash then

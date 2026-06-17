@@ -1,0 +1,122 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# `knomosis-gateway` — Workstream GW.  HTTP/JSON + SSE gateway that
+# fronts the Knomosis binary host (§10), event-subscribe (§11), and
+# indexer SQLite (§11A) surfaces for browser-facing consumers.  See
+# `docs/planning/gateway_integration_plan.md` for the plan and
+# `docs/api/gateway.openapi.yaml` for the contract.
+#
+# The gateway owns its whole HTTP stack — the plaintext + native-TLS accept
+# loops, a strict hand-rolled HTTP/1.1 reader/writer, the routing table,
+# problem responder, governors, reads, submit, and the SSE fan-out — over
+# the workspace's rustls 0.23 (no `tiny_http`; see
+# `docs/audits/gateway_http_spike.md` for the original G1.0 decision and the
+# G4.2/G4.6 unification that retired it).
+
+[package]
+name = "knomosis-gateway"
+description = "HTTP/JSON + SSE gateway fronting the Knomosis host, event-subscribe, and indexer surfaces for browser-facing consumers (Workstream GW)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "knomosis-gateway"
+path = "src/main.rs"
+
+[dependencies]
+# Shared CLI / logging helpers (exit-code discipline + `tracing` init).
+knomosis-cli-common = { workspace = true }
+# The read-only indexer storage handle: the G1.6b reads open the
+# indexer's SQLite database via `SqliteStorage::open_read_only` (the
+# G1.6a path — pure SQLITE_OPEN_READ_ONLY).
+knomosis-storage = { path = "../knomosis-storage" }
+# The indexer's typed read views (BalanceView) + key/cursor codecs the
+# gateway renders to the JSON contract.
+knomosis-indexer = { path = "../knomosis-indexer" }
+# The host + event-subscribe crates supply the wire `PROTOCOL_VERSION`
+# constants `/v1/info` reports (a single source of truth — no hardcoded
+# version drift).  Both are featherweight (cli-common + thiserror only)
+# and become the submit (G2) / SSE (G3) clients.
+knomosis-host = { path = "../knomosis-host" }
+knomosis-event-subscribe = { path = "../knomosis-event-subscribe" }
+# Native in-process TLS termination (G4.2) AND the gateway's own HTTP/1.1
+# stack: the workspace-pinned rustls 0.23 (TLS 1.3, the `ring` backend) — the
+# SAME audited stack `knomosis-host` uses.  The gateway owns its whole HTTP
+# stack now (no `tiny_http`): the plaintext + TLS accept loops, the
+# `StreamOwned` handshake, a strict HTTP/1.1 reader/writer, and a thread-per-
+# connection model with socket-owned read/write timeouts (so a stalled SSE
+# reader is bounded on BOTH transports — closing OQ-GW-14 + OQ-GW-15).  PEM
+# cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders.  No new
+# crate enters the graph (knomosis-host already pulls rustls 0.23).
+rustls = { workspace = true }
+# PEM certificate-revocation-list parsing for the mTLS `--mtls-crl` gate
+# (`rustls_pemfile::crls`).  The same workspace-pinned loader `knomosis-host`
+# uses for certs/keys; shares rustls 0.23's `pki_types` vocabulary.
+rustls-pemfile = { workspace = true }
+# Structured-log formatter the gateway installs itself (G4.3 / `--log-format`):
+# the workspace `tracing-subscriber` PLUS the `json` feature, because the
+# gateway is the first WU that needs JSON output (its `--log-format` default).
+# `knomosis-cli-common::logging` stays text-only; the gateway installs its own
+# subscriber in `crate::logging` instead.
+tracing-subscriber = { workspace = true, features = ["json"] }
+# Typed errors with `Display` / `From` impls — same discipline as the
+# sibling crates.
+thiserror = { workspace = true }
+# Constant-time byte comparison for the G1.4 bearer-token auth gate
+# (no early-return timing leak on the secret token value).  Same crate
+# the secp256k1 verifier uses; `default-features = false` keeps it no_std.
+subtle = { workspace = true }
+# Structured logging.
+tracing = { workspace = true }
+# SIGTERM/SIGINT graceful-shutdown trigger (G4.4): a safe `sigaction`
+# wrapper (the crate forbids `unsafe`) that sets the shared shutdown
+# `AtomicBool` on a signal via `signal_hook::flag::register`.
+signal-hook = { workspace = true }
+# JSON (de)serialization for response bodies — the RFC 9457 problem
+# responder and the typed `/v1` schemas.  `serde` derive + `serde_json`
+# are workspace-pinned (alloc feature).
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# `tempfile` provides the isolated on-disk SQLite database the reads
+# unit tests seed and open read-only (and the TLS handshake tests' PKI dir).
+tempfile = { workspace = true }
+# `proptest` powers the property tests over the SSE fan-out ring (G3.4):
+# ordering, gap-freeness, seq-group integrity, and watermark correctness
+# against an oracle stream.  Dev-only; the same workspace-pinned crate the
+# host / indexer / event-subscribe property suites use.
+proptest = { workspace = true }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints whose value the rustc `missing_docs` lint already
+# provides (we require docs on every public surface).
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `module_name_repetitions` fires on `GatewayError` inside the
+# `knomosis_gateway` crate.  Workspace convention.
+module_name_repetitions = "allow"
+# `must_use_candidate` fires on every pure getter / constructor.
+must_use_candidate = "allow"
+# `doc_markdown` fires on prose words that look like type names.
+doc_markdown = "allow"
+
+[lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+# `forbid` is appropriate: the gateway is pure-Rust orchestration over
+# rustls 0.23 + the std net stack + the sibling crates.  No FFI surface.
+unsafe_code = "forbid"

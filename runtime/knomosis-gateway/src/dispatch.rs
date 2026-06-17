@@ -1,0 +1,420 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Knomosis  - A Societal Kernel
+// Copyright (C) 2026  Adam Hall
+// This program comes with ABSOLUTELY NO WARRANTY.
+// This is free software, and you are welcome to redistribute it
+// under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+//! The dispatch layer: turn a [`Route`] (what was requested) into a
+//! [`RouteOutcome`] (the response), reading [`AppState`] where the
+//! endpoint needs it.  Sits between the pure router
+//! ([`crate::http::router`]) and the IO shell ([`crate::http::server`])
+//! — the *dispatch* step of the parse → dispatch → write pipeline.
+//!
+//! Only `/healthz` (liveness) is state-free; `/readyz` and `/v1/info`
+//! read [`AppState`] (the readiness probes + the indexer cursor /
+//! config echo, G1.8), as do the reads over the read-only indexer
+//! handle (G1.6b / G1.7) and `POST /v1/actions` over the host pool
+//! (G2.2, which also consumes the [`RequestPayload`] body).  The auth +
+//! rate-limit gates run in the IO shell *before* dispatch (G1.4 / G1.3).
+
+use std::time::Duration;
+
+use knomosis_indexer::cursor::read_cursor;
+
+use crate::events::backfill::{self, BackfillError, BackfillRequest};
+use crate::http::{Route, RouteOutcome};
+use crate::problem::Problem;
+use crate::state::AppState;
+
+/// The per-read staleness timeout the backfill drain uses to detect
+/// "caught up to the live tail" (the event-subscribe server goes silent
+/// at its tail rather than sending a frame, §11.3).  Generous relative to
+/// an in-memory cache replay (frames arrive back-to-back) yet bounded so a
+/// fully-caught-up request returns promptly.
+const BACKFILL_IDLE_TIMEOUT: Duration = Duration::from_millis(500);
+
+/// The request payload a dispatched route may consume: the body bytes and
+/// their declared `Content-Type`.  Empty for body-less methods (every
+/// read; `EMPTY` is the shared no-body value).  Only `POST /v1/actions`
+/// reads it (G2.2).
+#[derive(Clone, Copy)]
+pub struct RequestPayload<'a> {
+    /// The request `Content-Type` header value, if present.
+    pub content_type: Option<&'a str>,
+    /// The request body bytes.
+    pub body: &'a [u8],
+    /// The request `Idempotency-Key` header value, if present (G2.4).
+    pub idempotency_key: Option<&'a str>,
+}
+
+impl RequestPayload<'_> {
+    /// The empty payload (no body, no content type) — used by every
+    /// body-less route and the dispatch unit tests.
+    pub const EMPTY: RequestPayload<'static> = RequestPayload {
+        content_type: None,
+        body: &[],
+        idempotency_key: None,
+    };
+}
+
+/// Dispatch a routed request to its response.
+///
+/// Total over [`Route`]: every variant maps to a concrete outcome, so
+/// adding a route forces a dispatch arm (the compiler enforces it).
+#[must_use]
+pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> RouteOutcome {
+    match route {
+        Route::Health => RouteOutcome::text(200, "ok\n"),
+        Route::Ready => crate::system::readyz(state),
+        Route::Info => crate::system::info_view(state),
+        Route::SubmitAction => crate::submit::handler::handle(state, payload),
+        Route::ActorBalances { actor } => with_reads(state, |reads| {
+            crate::reads::balances::actor_balances(reads, *actor)
+        }),
+        Route::ActorBalance { actor, resource } => with_reads(state, |reads| {
+            crate::reads::balances::actor_balance(reads, *actor, *resource)
+        }),
+        Route::ActorBudget { actor } => {
+            let free_tier = state.config.free_tier;
+            let action_cost = state.config.action_cost;
+            with_reads(state, |reads| {
+                crate::reads::budget::actor_budget(reads, *actor, free_tier, action_cost)
+            })
+        }
+        Route::Pool { pool, resource } => {
+            // The pool view is net of drains iff this is the configured
+            // gas-pool actor (the indexer drains only that one actor; see
+            // `reads::pools` for the operator-echo rationale).
+            let net = state.config.gas_pool_actor == Some(*pool);
+            with_reads(state, |reads| {
+                crate::reads::pools::pool_view(reads, *pool, *resource, net)
+            })
+        }
+        Route::Events {
+            since,
+            limit,
+            types,
+        } => events_backfill(state, *since, *limit, types),
+        // The live SSE stream is hijacked in the connection handler
+        // (`crate::http::conn` takes over the connection via the
+        // `Handled::Stream` directive), so it never reaches dispatch; this
+        // defensive arm signals a wiring bug.
+        Route::EventStream { .. } => Problem::new("internal", "Internal Error", 500)
+            .with_detail("event stream must be served by the SSE hijack, not dispatch")
+            .into_outcome(),
+        Route::MethodNotAllowed { allow } => Problem::method_not_allowed()
+            .into_outcome()
+            .with_header("Allow", *allow),
+        Route::BadRequest { detail } => Problem::new("bad-request", "Bad Request", 400)
+            .with_detail(detail.clone())
+            .into_outcome(),
+        Route::NotFound { path } => Problem::not_found(path).into_outcome(),
+    }
+}
+
+/// `GET /v1/events` — drain a bounded backfill page from the
+/// event-subscribe upstream (G3.3).  Requires `--event-subscribe-addr`
+/// (else `503`); the scan is bounded by the indexer cursor (the "tip")
+/// when an indexer is configured + readable, else it drains to the live
+/// tail.  There is no wire query for the event-subscribe ring's newest
+/// seq, so the indexer cursor is the tip source (plan §G3.3); a cursor
+/// read failure degrades to a live-tail-bounded drain rather than failing
+/// the page.
+fn events_backfill(state: &AppState, since: u64, limit: usize, types: &[String]) -> RouteOutcome {
+    let Some(addr) = state.config.event_subscribe_addr else {
+        return Problem::new("events-unavailable", "Events Unavailable", 503)
+            .with_detail(
+                "event backfill is disabled: the gateway was started without \
+                 --event-subscribe-addr",
+            )
+            .into_outcome();
+    };
+    let tip = state
+        .reads
+        .as_ref()
+        .and_then(|reads| read_cursor(&reads.storage).ok());
+    let request = BackfillRequest {
+        since,
+        limit,
+        types: types.to_vec(),
+    };
+    match backfill::backfill(
+        addr,
+        tip,
+        state.config.max_frame_size,
+        BACKFILL_IDLE_TIMEOUT,
+        &request,
+    ) {
+        Ok(page) => RouteOutcome::json(200, page.to_json()),
+        Err(BackfillError::Truncated { oldest_seq }) => {
+            Problem::new("truncated-cursor", "Cursor older than history window", 409)
+                .with_oldest_seq(oldest_seq)
+                .with_detail(format!(
+                    "the requested cursor predates the retained history; \
+                     resume from {oldest_seq}"
+                ))
+                .into_outcome()
+        }
+        Err(BackfillError::Render { detail }) => {
+            Problem::new("event-decode-failed", "Event Decode Failed", 503)
+                .with_detail(detail)
+                .into_outcome()
+        }
+        Err(BackfillError::Upstream { reason }) => {
+            Problem::new("upstream-unavailable", "Upstream Unavailable", 503)
+                .with_detail(reason)
+                .into_outcome()
+        }
+    }
+}
+
+/// Run `f` against the read backend, or answer `503` if reads are
+/// disabled (the gateway was started without `--indexer-db`).
+fn with_reads(
+    state: &AppState,
+    f: impl FnOnce(&crate::state::ReadState) -> RouteOutcome,
+) -> RouteOutcome {
+    match &state.reads {
+        Some(reads) => f(reads),
+        None => Problem::new("reads-unavailable", "Reads Unavailable", 503)
+            .with_detail("reads are disabled: the gateway was started without --indexer-db")
+            .into_outcome(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{dispatch as dispatch_inner, RequestPayload};
+    use crate::config::Config;
+    use crate::http::{Route, RouteOutcome};
+    use crate::state::AppState;
+
+    /// Dispatch with an empty request body (the body-less common case the
+    /// read / system routes use); the submit body path is covered in the
+    /// integration tests.
+    fn dispatch(route: &Route, state: &AppState) -> RouteOutcome {
+        dispatch_inner(route, state, &RequestPayload::EMPTY)
+    }
+
+    fn state() -> AppState {
+        AppState::new(Config {
+            listen: "127.0.0.1:0".parse().expect("loopback addr"),
+            max_connections: 1,
+            indexer_db: None,
+            free_tier: 0,
+            action_cost: 0,
+            epoch_length: 0,
+            gas_pool_actor: None,
+            deployment_id: String::new(),
+            ok_admission_stage: crate::config::AdmissionStage::Finalized,
+            host_addr: None,
+            event_subscribe_addr: None,
+            auth_token_file: None,
+            rate_limit_rps: 0,
+            host_pool_size: 8,
+            host_max_inflight: 8,
+            request_deadline_ms: 5000,
+            max_frame_size: 1024 * 1024,
+            idempotency_ttl_secs: 0,
+            sse: crate::config::SseConfig::default(),
+            tls: None,
+            cors_origin: None,
+            log_format: crate::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
+        })
+        .expect("no DB to open")
+    }
+
+    #[test]
+    fn health_is_text_200() {
+        let o = dispatch(&Route::Health, &state());
+        assert_eq!(o.status, 200);
+        assert_eq!(o.content_type, "text/plain; charset=utf-8");
+        assert_eq!(o.body, "ok\n");
+        assert!(o.headers.is_empty());
+    }
+
+    #[test]
+    fn info_dispatches_to_typed_view() {
+        // Dispatch routes `/v1/info` to the typed `system::info_view`
+        // (the field-level rendering is covered in `system`'s tests).
+        let o = dispatch(&Route::Info, &state());
+        assert_eq!(o.status, 200);
+        assert_eq!(o.content_type, "application/json");
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["okAdmissionStage"], "Finalized");
+        assert_eq!(v["submitProtocolVersion"], knomosis_host::PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn ready_dispatches_to_readiness_probe() {
+        // With no upstreams configured, readiness is satisfied (200).
+        let o = dispatch(&Route::Ready, &state());
+        assert_eq!(o.status, 200);
+        assert_eq!(o.content_type, "application/json");
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["ready"], true);
+    }
+
+    #[test]
+    fn method_not_allowed_carries_allow_header() {
+        let o = dispatch(&Route::MethodNotAllowed { allow: "GET" }, &state());
+        assert_eq!(o.status, 405);
+        assert_eq!(o.content_type, "application/problem+json");
+        assert!(o.headers.iter().any(|(n, v)| *n == "Allow" && v == "GET"));
+    }
+
+    #[test]
+    fn not_found_is_problem_json_404_with_path() {
+        let o = dispatch(
+            &Route::NotFound {
+                path: "/v1/x".to_string(),
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 404);
+        assert_eq!(o.content_type, "application/problem+json");
+        assert!(o.body.contains("/v1/x"));
+    }
+
+    #[test]
+    fn read_route_without_indexer_db_is_503() {
+        // `state()` configures no --indexer-db, so reads are disabled.
+        let o = dispatch(&Route::ActorBalances { actor: 7 }, &state());
+        assert_eq!(o.status, 503);
+        assert_eq!(o.content_type, "application/problem+json");
+        let o = dispatch(
+            &Route::ActorBalance {
+                actor: 7,
+                resource: 0,
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 503);
+        let o = dispatch(&Route::ActorBudget { actor: 7 }, &state());
+        assert_eq!(o.status, 503);
+        let o = dispatch(
+            &Route::Pool {
+                pool: 7,
+                resource: 0,
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 503);
+    }
+
+    #[test]
+    fn events_route_without_upstream_is_503() {
+        // `state()` configures no --event-subscribe-addr, so backfill is
+        // disabled and answers a 503 events-unavailable problem (without
+        // ever opening a socket).
+        let o = dispatch(
+            &Route::Events {
+                since: 0,
+                limit: 100,
+                types: vec![],
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 503);
+        assert_eq!(o.content_type, "application/problem+json");
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["type"], "https://knomosis/errors/events-unavailable");
+    }
+
+    #[test]
+    fn bad_request_is_problem_json_400() {
+        let o = dispatch(
+            &Route::BadRequest {
+                detail: "invalid actor id".to_string(),
+            },
+            &state(),
+        );
+        assert_eq!(o.status, 400);
+        assert_eq!(o.content_type, "application/problem+json");
+        assert!(o.body.contains("invalid actor id"));
+    }
+
+    /// The dispatcher derives `PoolView.net` from the `--gas-pool-actor`
+    /// echo: `net = true` exactly for the configured pool actor, `false`
+    /// for any other.  Exercised end-to-end through a seeded read-only
+    /// indexer DB so the config → `net` wiring is covered (the read
+    /// itself is unit-tested in `reads::pools`).
+    #[test]
+    fn pool_net_flag_follows_configured_gas_pool_actor() {
+        use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
+        use knomosis_indexer::INDEXER_IDENTIFIER;
+        use knomosis_storage::sqlite::SqliteStorage;
+        use knomosis_storage::storage::Storage;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("index.db");
+        // Seed pool 161 with an ETH balance; keep the writer alive so the
+        // read-only reader can map the WAL sidecars.
+        let writer = SqliteStorage::open(&path).expect("open writer");
+        ensure_identifier(&writer, INDEXER_IDENTIFIER).expect("seed indexer identity");
+        let mut tx = writer.combined_transaction().expect("begin");
+        tx.credit_pool_eth(161, 500).expect("credit eth");
+        tx.commit().expect("commit");
+        writer.put(CURSOR_KEY, &7u64.to_be_bytes()).expect("cursor");
+
+        // Gateway configured with --gas-pool-actor 161.
+        let state = AppState::new(Config {
+            listen: "127.0.0.1:0".parse().expect("loopback addr"),
+            max_connections: 1,
+            indexer_db: Some(path.clone()),
+            free_tier: 0,
+            action_cost: 0,
+            epoch_length: 0,
+            gas_pool_actor: Some(161),
+            deployment_id: String::new(),
+            ok_admission_stage: crate::config::AdmissionStage::Finalized,
+            host_addr: None,
+            event_subscribe_addr: None,
+            auth_token_file: None,
+            rate_limit_rps: 0,
+            host_pool_size: 8,
+            host_max_inflight: 8,
+            request_deadline_ms: 5000,
+            max_frame_size: 1024 * 1024,
+            idempotency_ttl_secs: 0,
+            sse: crate::config::SseConfig::default(),
+            tls: None,
+            cors_origin: None,
+            log_format: crate::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
+        })
+        .expect("open read-only state");
+
+        // The configured pool → net = true.
+        let o = dispatch(
+            &Route::Pool {
+                pool: 161,
+                resource: 0,
+            },
+            &state,
+        );
+        assert_eq!(o.status, 200);
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["poolId"], "161");
+        assert_eq!(v["balance"], "500");
+        assert_eq!(v["net"], true);
+
+        // A different pool → net = false (gross inflows).
+        let o = dispatch(
+            &Route::Pool {
+                pool: 999,
+                resource: 0,
+            },
+            &state,
+        );
+        let v: serde_json::Value = serde_json::from_str(&o.body).expect("json");
+        assert_eq!(v["net"], false);
+        assert_eq!(v["balance"], "0");
+
+        drop(writer);
+    }
+}

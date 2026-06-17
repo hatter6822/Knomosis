@@ -501,13 +501,15 @@ impl<'a> BudgetReadView<'a> {
     /// ## Consistency
     ///
     /// The grants and consumed cells are read within a SINGLE
-    /// transaction so a concurrent `apply_batch` commit cannot
-    /// tear the two reads (one pre-commit, one post-commit).
-    /// Without this, the arithmetic could combine a stale
-    /// `grants` with a fresh `consumed` (or vice versa), yielding
-    /// an off-by-one-batch answer.  The transaction is read-only
-    /// (rolled back); it briefly holds the connection's write
-    /// lock, negligible for a one-shot operator query.
+    /// `BEGIN DEFERRED` read transaction so a concurrent
+    /// `apply_batch` commit cannot tear the two reads (one
+    /// pre-commit, one post-commit).  Without this, the arithmetic
+    /// could combine a stale `grants` with a fresh `consumed` (or
+    /// vice versa), yielding an off-by-one-batch answer.  The
+    /// transaction acquires only a SHARED READ lock (not the write
+    /// lock), so — unlike the earlier `BEGIN IMMEDIATE` form — it
+    /// functions over a `SQLITE_OPEN_READ_ONLY` connection (the
+    /// read-only gateway path) and never blocks the indexer writer.
     ///
     /// # Errors
     ///
@@ -518,9 +520,12 @@ impl<'a> BudgetReadView<'a> {
         free_tier: BudgetUnits,
     ) -> Result<BudgetUnits, knomosis_storage::budget_storage::BudgetStorageError> {
         use knomosis_storage::combined_transaction::CombinedStorage;
+        // DEFERRED read transaction (shared read lock only): a budget
+        // read must not take the write lock, so this path also works
+        // over a read-only connection (the gateway's `open_read_only`).
         let tx = self
             .storage
-            .begin_combined_tx()
+            .begin_combined_read_tx()
             .map_err(combined_to_budget_err)?;
         let grants = tx
             .get_actor_budget_current_epoch_grants(actor)

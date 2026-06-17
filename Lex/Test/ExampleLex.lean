@@ -65,11 +65,6 @@ def tests : List TestCase :=
         let _ : s'.balances = s.balances := by rfl
         pure ()
     }
-  , { name := "kernelBuildTag is `knomosis-step-vm-coherence` (SVC milestone gate)"
-    , body := do
-        assertEq (expected := "knomosis-step-vm-coherence")
-                 (actual := LegalKernel.kernelBuildTag) "SVC build tag"
-    }
   -- M1 acceptance §24.1 #10: the example Lex law's transition
   -- composes correctly with the LX.2 / LX.3 classification
   -- instances — the kernel-impl-identity transition satisfies

@@ -254,9 +254,9 @@ pub trait CombinedTransactionOps {
 /// inherent gives a concrete handle (for direct callers), the
 /// trait gives a boxed handle (for generic / test consumers).
 pub trait CombinedStorage: Send + Sync {
-    /// Begin a combined transaction.  The returned handle holds
-    /// the connection mutex for its lifetime so all operations
-    /// run within a single SQL-level transaction.
+    /// Begin a combined WRITE transaction (`BEGIN IMMEDIATE`).  The
+    /// returned handle holds the connection mutex for its lifetime
+    /// so all operations run within a single SQL-level transaction.
     ///
     /// # Errors
     ///
@@ -264,6 +264,30 @@ pub trait CombinedStorage: Send + Sync {
     fn begin_combined_tx(
         &self,
     ) -> Result<Box<dyn CombinedTransactionOps + '_>, CombinedTransactionError>;
+
+    /// Begin a combined READ-ONLY transaction (`BEGIN DEFERRED`).
+    /// Acquires only a SHARED READ lock, so a backend that supports
+    /// it (e.g. [`crate::sqlite::SqliteStorage`] opened via
+    /// `open_read_only`) can read several cells under one consistent
+    /// snapshot WITHOUT write capability.  The caller MUST invoke
+    /// only the read methods (`kv_get`, `kv_scan`, `get_*`) on the
+    /// returned handle.
+    ///
+    /// The default implementation falls back to
+    /// [`Self::begin_combined_tx`] — correct for read-write backends
+    /// (and the in-memory test adaptors), where an `IMMEDIATE`
+    /// transaction that performs only reads is observationally
+    /// identical.  Read-only-capable backends override this with a
+    /// genuine `DEFERRED` begin.
+    ///
+    /// # Errors
+    ///
+    /// See [`CombinedTransactionError`].
+    fn begin_combined_read_tx(
+        &self,
+    ) -> Result<Box<dyn CombinedTransactionOps + '_>, CombinedTransactionError> {
+        self.begin_combined_tx()
+    }
 }
 
 /// Combined-transaction handle.  See module docstring.
@@ -298,9 +322,43 @@ pub enum CombinedTransactionError {
 
 impl<'a> SqliteCombinedTransaction<'a> {
     /// Internal constructor — only called by
-    /// `SqliteStorage::combined_transaction`.
+    /// `SqliteStorage::combined_transaction`.  Opens a WRITE
+    /// transaction (`BEGIN IMMEDIATE`): the write lock is acquired
+    /// at the BEGIN itself, so a later `credit_*` / `kv_put` cannot
+    /// lose a lock-upgrade race.
     pub(crate) fn begin(
         guard: std::sync::MutexGuard<'a, Connection>,
+    ) -> Result<Self, CombinedTransactionError> {
+        Self::begin_with(guard, "BEGIN IMMEDIATE")
+    }
+
+    /// Internal constructor — only called by
+    /// `SqliteStorage::combined_read_transaction`.  Opens a
+    /// READ-ONLY transaction (`BEGIN DEFERRED`): it acquires only a
+    /// SHARED READ lock (not the write lock [`Self::begin`] takes),
+    /// so it functions over a `SQLITE_OPEN_READ_ONLY` connection
+    /// (the read-only gateway path) and never blocks a concurrent
+    /// writer.
+    ///
+    /// The handle still exposes the full operation surface for type
+    /// uniformity, but a write method (`kv_put`, `credit_*`, …) on a
+    /// deferred/read-only transaction fails at the SQL layer
+    /// (`SQLITE_READONLY` on a read-only connection, or a lock
+    /// upgrade against a live writer) rather than silently
+    /// succeeding — callers MUST invoke only the read methods
+    /// (`kv_get`, `kv_scan`, `get_*`).
+    pub(crate) fn begin_deferred(
+        guard: std::sync::MutexGuard<'a, Connection>,
+    ) -> Result<Self, CombinedTransactionError> {
+        Self::begin_with(guard, "BEGIN DEFERRED")
+    }
+
+    /// Shared body of [`Self::begin`] / [`Self::begin_deferred`].
+    /// `begin_sql` is a compile-time-constant `BEGIN` statement
+    /// (never user input — no SQL-injection surface).
+    fn begin_with(
+        guard: std::sync::MutexGuard<'a, Connection>,
+        begin_sql: &'static str,
     ) -> Result<Self, CombinedTransactionError> {
         // Defence-in-depth recovery (mirroring
         // `recover_autocommit_if_needed` from the kv tx path).
@@ -308,8 +366,8 @@ impl<'a> SqliteCombinedTransaction<'a> {
             let _ = guard.execute_batch("ROLLBACK");
         }
         guard
-            .execute_batch("BEGIN IMMEDIATE")
-            .map_err(|e| StorageError::Backend(format!("combined tx BEGIN: {e}")))?;
+            .execute_batch(begin_sql)
+            .map_err(|e| StorageError::Backend(format!("combined tx {begin_sql}: {e}")))?;
         Ok(Self {
             guard: Some(guard),
             finalised: false,
@@ -846,6 +904,13 @@ impl CombinedStorage for crate::sqlite::SqliteStorage {
         let tx = self.combined_transaction()?;
         Ok(Box::new(tx))
     }
+
+    fn begin_combined_read_tx(
+        &self,
+    ) -> Result<Box<dyn CombinedTransactionOps + '_>, CombinedTransactionError> {
+        let tx = self.combined_read_transaction()?;
+        Ok(Box::new(tx))
+    }
 }
 
 impl Drop for SqliteCombinedTransaction<'_> {
@@ -1095,5 +1160,40 @@ mod tests {
     fn combined_tx_is_returnable_by_value() {
         fn assert_sized<T: Sized>() {}
         assert_sized::<SqliteCombinedTransaction<'_>>();
+    }
+
+    /// The DEFERRED read transaction (`combined_read_transaction` /
+    /// `begin_combined_read_tx`) reads committed kv + budget cells
+    /// identically to the write path — without taking the write
+    /// lock.  (The read-only-CONNECTION enforcement is exercised in
+    /// the `sqlite.rs::open_read_only` tests; here we confirm the
+    /// read path's observable equivalence on a read-write
+    /// connection, plus the boxed-trait surface.)
+    #[test]
+    fn combined_read_tx_reads_committed_state() {
+        use crate::budget_storage::BudgetStorage;
+        use crate::combined_transaction::CombinedStorage;
+        let s = SqliteStorage::open_in_memory().unwrap();
+        // Seed via the write path.
+        let mut wtx = s.combined_transaction().unwrap();
+        wtx.kv_put(b"k", b"v").unwrap();
+        wtx.credit_actor_budget_current_epoch_grants(7, 100)
+            .unwrap();
+        wtx.credit_actor_budget_current_epoch_consumed(7, 30)
+            .unwrap();
+        wtx.commit().unwrap();
+        // Read back via the inherent DEFERRED read transaction.
+        let rtx = s.combined_read_transaction().unwrap();
+        assert_eq!(rtx.kv_get(b"k").unwrap(), Some(b"v".to_vec()));
+        assert_eq!(rtx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        assert_eq!(rtx.get_actor_budget_current_epoch_consumed(7).unwrap(), 30);
+        rtx.rollback().unwrap();
+        // The boxed trait surface (`begin_combined_read_tx`) is
+        // observationally equivalent.
+        let btx = s.begin_combined_read_tx().unwrap();
+        assert_eq!(btx.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
+        btx.rollback().unwrap();
+        // Sanity: the seeded state is unchanged by the read txs.
+        assert_eq!(s.get_actor_budget_current_epoch_grants(7).unwrap(), 100);
     }
 }

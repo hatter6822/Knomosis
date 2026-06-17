@@ -131,6 +131,17 @@ cd runtime && cargo build --workspace --all-targets
 cd runtime && cargo test --workspace
 cd runtime && cargo clippy --workspace --all-targets -- -D warnings
 cd runtime && cargo fmt --all -- --check
+
+# Workstream GW (gateway) — synchronous HTTP/JSON + SSE service
+# (runtime/knomosis-gateway/; contract docs/api/gateway.openapi.yaml).
+# Its Rust gates ride the --workspace commands above; run/test directly:
+cd runtime && cargo run -p knomosis-gateway -- --help
+cd runtime && cargo test -p knomosis-gateway
+# Read-path throughput / latency bench (manual; G4.6) — numbers vary by
+# machine, so it is NOT a CI gate (its deterministic tests ride --workspace):
+cd runtime && cargo run -p knomosis-gateway-bench -- --help
+cd runtime && cargo run -p knomosis-gateway-bench -- \
+  --actors 1000 --resources 2 --requests 10000 --workers 32 --report bench.json
 ```
 
 `lakefile.lean` is the source of truth for every build target,
@@ -246,6 +257,8 @@ knomosis/
 │   ├── knomosis-indexer/         --   SQLite event indexer daemon
 │   ├── knomosis-faultproof-observer/ -- off-chain bisection-game observer
 │   ├── knomosis-bench/           --   transfer-throughput benchmark
+│   ├── knomosis-gateway/         --   Workstream GW: HTTP/JSON + SSE service
+│   ├── knomosis-gateway-bench/   --   GW read-path throughput/latency bench (G4.6)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
@@ -525,7 +538,7 @@ better code is correct.
 
   | Surface        | Bump location                                    |
   |----------------|--------------------------------------------------|
-  | Lean kernel    | `lakefile.lean` `version` field                  |
+  | Lean kernel    | `lakefile.lean` `version` + `LegalKernel.lean` `kernelVersion` |
   | Rust workspace | `runtime/Cargo.toml` `[workspace.package] version` |
   | Solidity       | `solidity/foundry.toml` (if `version` present)   |
   | README banner  | `README.md` top-of-file `**Version:** vX.Y.Z`    |
@@ -545,6 +558,8 @@ better code is correct.
   -- lakefile.lean
   package knomosis where
     version := v!"0.5.6"     -- <-- bump this in lockstep
+  -- LegalKernel.lean  (mirrors lakefile.lean; surfaced by `knomosis info`)
+  def kernelVersion : String := "0.5.6"
   ```
   `Cargo.lock` is regenerated automatically and must be committed.
 
@@ -655,6 +670,7 @@ work units.  Status:
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
 | EI | Encoder injectivity | Complete |
+| GW | Gateway (HTTP/JSON + SSE) | In progress (read-only + submit + events tracks complete; G4 hardening complete (G4.1–G4.7).  **The gateway owns its WHOLE HTTP stack** — the transport-neutral `http::conn` handler over the workspace rustls 0.23, **no `tiny_http`**: one thread per connection on both the plaintext and native-TLS listeners, each with a socket-owned timeout + a per-request read deadline; this closed OQ-GW-14 (concurrent-SSE ceiling = `--sse-max-streams`) and OQ-GW-15 (the `--sse-write-timeout-ms` write deadline now honoured on both transports).  The §9.2 surface is complete incl. `--mtls-crl` (mTLS revocation), `--cors-origin` (+ OPTIONS preflight), `--log-format`, `--dev` (in-process mock upstreams), and `--upstream-subscriptions`.  G3.2c cross-stack pin shipped: the Lean `Encodable Event` (`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by `knomosis-indexer` and lifted to the gateway §6.2 envelope by `knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=22).  Only G2.1c submit pipelining deferred — `gateway_integration_plan.md`) |
 | 7 | Advanced capabilities | Not started |
 
 Read the Genesis Plan's per-phase work-unit breakdown and the
@@ -704,20 +720,23 @@ every match.
 
 ## Current development status
 
-**Build tag** (`kernelBuildTag` in `LegalKernel.lean`):
-`"knomosis-step-vm-coherence"` (SVC).  `Test/Umbrella.lean`,
-`Lex/Test/M2.lean`, and `Lex/Test/ExampleLex.lean` all pin this
-value in regression tests, so any phase / milestone bump must
-update the constant and every pinning test in the same PR.
+**Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
+the `lakefile.lean` `version` field (currently `0.9.0`) — the single
+project-wide build identifier, surfaced by `knomosis info` and the
+test driver.  It is bumped in lockstep with `lakefile.lean`,
+`runtime/Cargo.toml`, and the `README.md` banner per the
+"Patch-version bumps" table; there is no separate milestone tag and
+no value-pinning regression test (the former `kernelBuildTag` was
+removed as redundant once every PR bumps the version).
 
 **Test counts.**  `lake test` is the canonical Lean query; `cargo
 test --workspace` is the Rust canonical query.  Approximate counts
-at the current build tag:
+at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
 | Lean | ~3 050 | ~150 | `lake test` |
-| Rust | ~1 960 | across 11 crates | `cargo test --workspace` |
+| Rust | ~1 990 | across 12 crates | `cargo test --workspace` |
 | Solidity | ~867 passed | 58 forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
@@ -788,6 +807,137 @@ Each workstream's detailed plan, design rationale, and per-WU
 completion narrative live in the relevant `docs/planning/` document
 and in git history (`git log --grep="WU"` / `git log --grep="audit"`).
 This section is a concise index pointing to source and documentation.
+
+### Knomosis Gateway (Workstream GW)
+
+Plan: `docs/planning/gateway_integration_plan.md` · Contract:
+`docs/api/gateway.openapi.yaml` · HTTP-layer decision:
+`docs/audits/gateway_http_spike.md`.
+
+A synchronous (no-`tokio`) HTTP/JSON + Server-Sent-Events service
+(`runtime/knomosis-gateway/`) that fronts the binary host (§10),
+event-subscribe (§11), and indexer SQLite (§11A) surfaces for a
+browser-facing BFF.  Originally built on the vetted sync crate `tiny_http`
+(G1.0), it now owns its **own** HTTP stack (the G4.2/G4.6 unification — see
+below).  **Complete:** G0.1–G0.3 (contract + OpenAPI-lint gate),
+G1.0 (HTTP-layer spike), G1.1 (crate scaffold — `/healthz`),
+G1.6a (the `knomosis-storage` read-only open path
++ the DEFERRED budget-read fix), G1.2 (the parse→dispatch→write HTTP
+foundation + routing surface), and the read endpoints G1.6b (balances)
++ G1.7 (budget + pools — `GET /v1/actors/{id}/budget` and
+`GET /v1/pools/{pool}?resource={0|1}`, with a `--gas-pool-actor` `net`
+echo), G1.8 (the typed `/v1/info` — admission stage + wire protocol
+versions + indexer cursor/schema + budget-policy echo — and `/readyz`
+indexer + upstream TCP probes), G1.4 (the fail-closed
+`subtle::ConstantTimeEq` bearer-token gate, applied before routing;
+`/healthz` + `/readyz` exempt), G1.9 (the read-path integration
+harness — read endpoints end-to-end behind auth, `ETag`/`304`
+revalidation, a concurrent-write chaos case), G1.3 (read-path
+hardening — per-credential token-bucket rate limiting → `429` +
+`Retry-After`, and a fail-fast world-readable-token-file permission
+check), and the **submit path** G2.1a (host wire codec) + G2.1b (bounded
+persistent connection pool, no-double-submit) + G2.2 (`POST /v1/actions`
+— content-negotiated octet-stream / json+base64 intake → opaque forward
+→ §5 verdict mapping) + G2.3 (the backpressure matrix — deadline→`504`,
+`Busy`/saturated→`503`+`Retry-After`, `413` body cap; a write-timeout is
+treated as ambiguous-delivery and not retried) + G2.4 (the
+`Idempotency-Key` replay cache — bounded, TTL'd, LRU-evicted; a cached
+retry does no second host round-trip) + G2.5 (the submit test surface)
+are complete — **the read-only slice is shipped + hardened and the submit
+track is complete** (only the optional G2.1c pipelining is deferred).
+The events (G3) track is underway with G3.1 (the resilient
+`UpstreamSubscription` event-subscribe client — reconnect/backoff,
+gap-surfacing, staleness watchdog) and G3.2 (the event decode → JSON
+renderer `events/decode.rs::render_event` — the §6.2 envelope over
+`knomosis-indexer::decoder::decode_event`: bigint→decimal string,
+bytes→`0x`-hex, `outcome` name, forward-unknown for tags ≥23, fail-closed
+`Corrupt` on a known-tag decode failure; the G3.2c cross-stack pin is
+**shipped** — see the events-track summary below), and G3.3 (the
+bounded, group-complete `GET /v1/events` backfill — `events/backfill.rs`
+drains the unbounded `SUBSCRIBE` stream into a page bounded by the indexer
+cursor "tip", `since=0` "from oldest" following the upstream `TRUNCATED`, a
+concrete `since < oldest` → `409`+`oldestSeq`, soft-`limit` group-complete
+rounding, a gateway-side `type` filter, and the fail-closed decode path;
+wired end-to-end through auth → route(query) → dispatch → drain).  The
+**G3.4 SSE fan-out** (`events/fanout/`) is complete: G3.4a the bounded
+`(seq, index)`-keyed record `ring` (dedup/order guard, `last_evicted`
+frontier, `records_after`/`position` queries, last-complete-group
+watermark; `proptest`-oracle-verified); G3.4b the single-subscription
+`mux` (one shared live-tail subscription feeds the ring, resubscribing on a
+drop from the watermark — **not** the newest seq, so a mid-group drop loses
+no record; the ring dedups the re-delivered head, a known-tag decode
+failure fails closed); G3.4c the per-client `dispatch::run_stream`
+(replay-then-live-tail composite `id: <seq>.<index>` records + no-`id:`
+heartbeats, type-filtered, `lag_exceeded`/`decode_error` eviction, one
+thread per client so a slow client never stalls a fast one); and G3.4d the
+`resume` classifier (`Last-Event-ID`/`since` decomposition + the intra-seq
+skip — a mid-seq-group resume redelivers exactly the unseen records, with
+in-window/behind/truncated tiers).  G3.5 (`events/stream.rs`) is the live
+`GET /v1/events/stream` streaming core: the `http::conn` handler hijacks the
+connection (handing the socket writer to the per-client dispatch on its own
+thread) rather than returning a `RouteOutcome`, reserving a bounded stream slot
+(atomic admission, `503` over cap); the mux(es) are started in `serve`;
+`Last-Event-ID`/`since` resume + `Cache-Control: no-store`.  **The events (G3)
+track is complete (G3.1–G3.5).**  The G4 hardening track is complete: G4.1 (rate
+limiting — shipped early as G1.3); G4.3 (`observability.rs` — a per-request
+`X-Request-Id` correlation id propagated to the response header, the RFC
+9457 `problem.instance`, and a structured per-request log line (the
+log-based metrics surface, OQ-GW-10), redaction-tested to never log a
+bearer token); G4.4 (graceful shutdown — a `signal_hook` SIGTERM/SIGINT
+trigger sets the shared shutdown flag; `serve` drains the in-flight
+connections under a deadline via the shared `active_connections` gauge, and
+the mux + every live SSE stream stop on the flag, the streams emitting a clean
+`server_shutdown` close with no mid-record truncation); G4.5 (the dependency
+audit — the repo's first `runtime/deny.toml` cargo-deny policy
+(locally-verified licence allow-list, advisory/ban/source rules), a dedicated
+`ci-cargo-deny.yml`, and the supply-chain review
+`docs/audits/gateway_dependency_audit.md`); G4.7 (the operator runbook
+`docs/gateway_runbook.md`); and G4.2 (native in-process HTTPS + the
+own-HTTP-stack unification — `src/http/{conn,plain,tls}.rs`: a rustls 0.23
+(TLS 1.3, ring) front-end with optional mTLS + CRL revocation
+(`--tls-listen`/`--tls-cert`/`--tls-key`/`--mtls-client-ca`/`--mtls-crl`/
+`--tls-max-connections`) running ALONGSIDE the plaintext `--listen` socket and
+sharing the EXACT transport-neutral connection handler (`http::conn`) + request
+core (`http::handler`) — a strict, smuggling-proof HTTP/1.1 reader
+(Transfer-Encoding + ambiguous Content-Length rejected, body read exactly,
+every length bounded), one thread per connection with a socket-owned
+read/write timeout + a per-request read deadline; the workspace's rustls 0.23,
+**no `tiny_http`** anywhere; `ServerConfig` built + socket bound at startup,
+fail-fast on a bad cert/key/CA; SIGHUP hot-reload; openssl-cert handshake tests
+drive a real rustls client end-to-end incl. mTLS reject/accept/**revoke**).
+G4.6 shipped the `knomosis-gateway-bench` crate — a read-path throughput/latency
+harness (seeds a read-only indexer fixture, drives a real `spawn_plain_listener`
+listener with concurrent raw-HTTP clients, reports throughput + a
+reused-`knomosis-bench` histogram latency summary as a human table + JSON, with
+`--baseline` regression detection; a manual tool, not a CI gate).  The
+own-stack unification closed **OQ-GW-14** (concurrent-SSE ceiling =
+`--sse-max-streams`) and **OQ-GW-15** (`--sse-write-timeout-ms` honoured on
+both transports), and completed the §9.2 surface: `--cors-origin` (+ OPTIONS
+preflight, `http/cors.rs`), `--log-format` (`http`-installed JSON/text
+subscriber, `logging.rs`), `--dev` (in-process mock upstreams, `dev.rs`), and
+`--upstream-subscriptions` (N shared subs feeding the single `(seq,index)`-dedup
+ring).  The G3.2c cross-stack pin is **shipped**: the Lean `Encodable Event`
+(`Encoding/Event.lean`) is the byte authority, pinned byte-for-byte by
+`knomosis-indexer` and lifted to the gateway §6.2 envelope by
+`knomosis-gateway/tests/cross_stack_lean_event.rs` (every frozen tag 0..=22).
+The only remaining gateway item is the G2.1c submit pipelining (modest
+optimisation).
+Design invariants: the gateway owns its whole HTTP stack (thread per
+connection on both transports, no `tiny_http`); reads use pure
+`SQLITE_OPEN_READ_ONLY`; auth is fail-closed (no token file ⇒ every non-exempt
+request denied) + the token file must not be world-readable; the submit path
+forwards client-signed `SignedAction` bytes opaquely (no key custody); the SSE
+fan-out multiplexes `--upstream-subscriptions` shared subscriptions (default 1)
+into the single `(seq,index)`-dedup ring, its tunables (ring / streams / lag /
+heartbeat / staleness / write-timeout) CLI-configurable via `--sse-*` (the lag
+validated below the ring capacity), honoured identically on both stream paths;
+browser CORS is off unless `--cors-origin` is set (then the OPTIONS preflight is
+answered before auth and every response is decorated); `--dev` stands up
+in-process mock upstreams for BFF iteration with no full stack; native TLS
+terminates rustls 0.23 (TLS 1.3) in-process alongside the plaintext socket —
+same connection handler + request core (no security divergence) + optional mTLS
+(with `--mtls-crl` revocation), the certificate hot-reloaded on SIGHUP (zero
+downtime) — or is terminated at a co-located edge.
 
 ### Rust host runtime (Workstream RH)
 

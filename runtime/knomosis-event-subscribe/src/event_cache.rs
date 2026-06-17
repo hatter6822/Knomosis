@@ -52,6 +52,27 @@ pub const DEFAULT_KEEP_HISTORY: usize = 256;
 /// they should switch to a real indexer (RH-E.1).
 pub const HARD_MAX_KEEP_HISTORY: usize = 1_000_000;
 
+/// Sentinel `from_seq` for [`EventCache::range`] meaning "deliver every
+/// event currently cached, from the **oldest complete batch**" — the
+/// explicit *backfill-from-oldest-retained* request (the gateway's
+/// `GET /v1/events?since=0`).
+///
+/// This is **distinct from `from_seq = 0`**, which means *live-tail* (no
+/// resume).  The ordinary exclusive `range(from_seq)` contract — "events
+/// with `seq > from_seq`" — has no value that includes the very first
+/// retained event (`seq = 1`): `range(1)` starts at `seq = 2` and drops it.
+/// This sentinel closes that gap without overloading `0`.
+///
+/// `u64::MAX` is a safe sentinel: sequence numbers are 1-indexed and the
+/// cache is bounded by [`HARD_MAX_KEEP_HISTORY`], so `u64::MAX` can never be
+/// a real `seq`; the ordinary path would otherwise treat it as the
+/// degenerate `from_seq >= newest` → [`RangeOutcome::AtLiveTail`] (a request
+/// for events strictly after `u64::MAX`, i.e. nothing), so repurposing it
+/// collides with no meaningful input.  It travels the wire as the
+/// `SUBSCRIBE { resume_from }` u64 unchanged (`subscribe_max_u64` pins the
+/// round-trip).
+pub const FROM_OLDEST: u64 = u64::MAX;
+
 /// A single cached event entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CachedEvent {
@@ -270,14 +291,20 @@ impl EventCache {
     ///   * [`RangeOutcome::AtLiveTail`] if the cache is empty OR
     ///     `from_seq >= newest_seq` (nothing to backfill yet).
     ///
-    /// **Special case: `from_seq = 0`.**  Treated as "give me
-    /// everything currently in the cache."  If the cache is
-    /// non-empty, returns `InWindow` with the full contents.
-    /// If empty, returns `AtLiveTail`.  This matches the
-    /// wire-format spec: `resume_from = 0` means "no resume,
-    /// start from the live tail" — the cache is empty at startup
-    /// so the subscriber begins streaming from the next extracted
-    /// event.
+    /// **Special case: `from_seq = 0`.**  This is the *live-tail*
+    /// request (`resume_from = 0` in the wire spec): "no resume,
+    /// start from the next extracted event."  Returns `AtLiveTail`
+    /// even on a populated cache — it does NOT backfill the window.
+    ///
+    /// **Special case: `from_seq = `[`FROM_OLDEST`]` (`u64::MAX`).**
+    /// The explicit *backfill-from-oldest-retained* request: returns
+    /// `InWindow` with **every event from the oldest complete batch**
+    /// (i.e. `seq >= oldest`, or `seq > oldest` when the front is a
+    /// partial batch — never surfacing a partial batch, the same
+    /// defence as the in-window partial-front check).  This is the
+    /// only way to receive the very first retained event (`seq = 1`),
+    /// which the exclusive `seq > from_seq` contract cannot express.
+    /// On an empty cache it falls through to `AtLiveTail`.
     #[must_use]
     pub fn range(&self, from_seq: u64) -> RangeOutcome {
         if self.buffer.is_empty() {
@@ -286,6 +313,29 @@ impl EventCache {
         // Safe: buffer is non-empty.
         let oldest = self.buffer.front().expect("non-empty").seq;
         let newest = self.buffer.back().expect("non-empty").seq;
+        // `FROM_OLDEST` (u64::MAX) is the explicit "from the oldest
+        // retained" backfill: deliver everything currently cached, from
+        // the oldest COMPLETE batch.  Checked before the `>= newest`
+        // live-tail short-circuit (which u64::MAX would otherwise hit).
+        // If the front is a partial batch (some events at `oldest` were
+        // evicted), skip it and start at the next complete batch — never
+        // surface a partial batch (mirrors the in-window partial-front
+        // defence below).  `oldest >= 1` (push rejects seq=0), so the
+        // non-partial `oldest - 1` lower bound includes the whole cache.
+        if from_seq == FROM_OLDEST {
+            let start_exclusive = if self.has_partial_front() {
+                oldest
+            } else {
+                oldest.saturating_sub(1)
+            };
+            let events: Vec<CachedEvent> = self
+                .buffer
+                .iter()
+                .filter(|e| e.seq > start_exclusive)
+                .cloned()
+                .collect();
+            return RangeOutcome::InWindow { events };
+        }
         // `resume_from = 0` is a request for "live tail"; the
         // subscriber will pick up events as the extractor produces
         // them.  Do not backfill the entire cache window.
@@ -358,7 +408,7 @@ pub enum NewCacheError {
 mod tests {
     use super::{
         CachedEvent, EventCache, NewCacheError, PushError, RangeOutcome, DEFAULT_KEEP_HISTORY,
-        HARD_MAX_KEEP_HISTORY,
+        FROM_OLDEST, HARD_MAX_KEEP_HISTORY,
     };
 
     fn make_event(seq: u64) -> CachedEvent {
@@ -686,6 +736,103 @@ mod tests {
         match cache.range(0) {
             RangeOutcome::AtLiveTail => {}
             other => panic!("expected AtLiveTail, got {other:?}"),
+        }
+    }
+
+    /// `FROM_OLDEST` on a fully-retained cache delivers EVERY event,
+    /// **including `seq = 1`** — the case the exclusive `seq > from_seq`
+    /// contract cannot express (`range(1)` would drop seq 1).  This is the
+    /// gateway `since = 0` "from oldest" backfill's first event.
+    #[test]
+    fn from_oldest_delivers_entire_cache_including_seq_one() {
+        let mut cache = EventCache::new(10).unwrap();
+        for seq in 1..=5 {
+            cache.push(make_event(seq)).unwrap();
+        }
+        match cache.range(FROM_OLDEST) {
+            RangeOutcome::InWindow { events } => {
+                assert_eq!(events.len(), 5, "all five events, none dropped");
+                assert_eq!(events[0].seq, 1, "seq 1 IS delivered");
+                assert_eq!(events[4].seq, 5);
+            }
+            other => panic!("expected InWindow, got {other:?}"),
+        }
+        // Contrast: the exclusive range(1) drops seq 1 (the bug this
+        // sentinel fixes when the gateway maps since=0 → resume_from=1).
+        match cache.range(1) {
+            RangeOutcome::InWindow { events } => {
+                assert_eq!(events.len(), 4);
+                assert_eq!(events[0].seq, 2, "exclusive: seq 1 omitted");
+            }
+            other => panic!("expected InWindow, got {other:?}"),
+        }
+    }
+
+    /// `FROM_OLDEST` on an empty cache is `AtLiveTail` (nothing to
+    /// backfill; the subscriber proceeds straight to live mode).
+    #[test]
+    fn from_oldest_on_empty_cache_is_at_live_tail() {
+        let cache = EventCache::new(10).unwrap();
+        match cache.range(FROM_OLDEST) {
+            RangeOutcome::AtLiveTail => {}
+            other => panic!("expected AtLiveTail, got {other:?}"),
+        }
+    }
+
+    /// `FROM_OLDEST` after eviction delivers from the oldest **retained**
+    /// seq (the cache window), not from an evicted seq 1.
+    #[test]
+    fn from_oldest_after_eviction_delivers_the_retained_window() {
+        let mut cache = EventCache::new(5).unwrap();
+        for seq in 1..=20 {
+            cache.push(make_event(seq)).unwrap();
+        }
+        assert_eq!(cache.oldest_seq(), Some(16));
+        match cache.range(FROM_OLDEST) {
+            RangeOutcome::InWindow { events } => {
+                assert_eq!(events.len(), 5);
+                assert_eq!(events[0].seq, 16, "oldest RETAINED, not evicted seq 1");
+                assert_eq!(events[4].seq, 20);
+            }
+            other => panic!("expected InWindow, got {other:?}"),
+        }
+    }
+
+    /// `FROM_OLDEST` skips a partial front batch: when eviction cut a
+    /// multi-event seq-group (the front is incomplete), the sentinel
+    /// delivers from the next COMPLETE batch rather than surfacing the
+    /// partial one — the same data-loss defence as `has_partial_front`.
+    #[test]
+    fn from_oldest_skips_a_partial_front_batch() {
+        // Capacity 3.  Push two events at seq=5, then 6 and 7.  The cache
+        // holds [(5,b), (6), (7)] after evicting (5,a): the front seq=5 is
+        // a PARTIAL batch (its sibling (5,a) was evicted).
+        let mut cache = EventCache::new(3).unwrap();
+        cache
+            .push(CachedEvent {
+                seq: 5,
+                payload: b"a".to_vec(),
+            })
+            .unwrap();
+        cache
+            .push(CachedEvent {
+                seq: 5,
+                payload: b"b".to_vec(),
+            })
+            .unwrap();
+        cache.push(make_event(6)).unwrap();
+        cache.push(make_event(7)).unwrap();
+        assert_eq!(cache.oldest_seq(), Some(5));
+        assert!(cache.has_partial_front(), "front seq=5 is partial");
+        // FROM_OLDEST must skip the partial seq=5 batch and deliver the
+        // complete 6, 7 — never the lone (5,b).
+        match cache.range(FROM_OLDEST) {
+            RangeOutcome::InWindow { events } => {
+                assert_eq!(events.len(), 2, "partial seq-5 batch skipped");
+                assert_eq!(events[0].seq, 6);
+                assert_eq!(events[1].seq, 7);
+            }
+            other => panic!("expected InWindow, got {other:?}"),
         }
     }
 

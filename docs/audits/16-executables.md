@@ -167,10 +167,10 @@ adds one, but the hand-roll is fine and matches the
 
 ### `cmdInfo` (line 131)
 
-Prints build tag, phase, hash implementation, hash grade.  The
-"hash-grade" check (`isProductionHash`) is what Audit-3.1
-introduced to distinguish FNV-1a-64 fallback from production
-BLAKE3/keccak256.
+Prints the runtime version, the kernel descriptor line, hash
+implementation, and hash grade.  The "hash-grade" check
+(`isProductionHash`) is what Audit-3.1 introduced to distinguish
+FNV-1a-64 fallback from production BLAKE3/keccak256.
 
 **Finding:** Correct.  The `WARN` line is helpful but does NOT
 block execution — only chain-touching subcommands warn (via
@@ -336,22 +336,20 @@ This is correct: those keywords would shadow common parameter
 names in unrelated code.  Importing the umbrella should not
 introduce surprising parser behaviour.
 
-### `kernelBuildTag` (line 285)
+### `kernelVersion`
 
 ```lean
-def kernelBuildTag : String := "knomosis-fault-proof-migration"
+def kernelVersion : String := "0.8.4"
 ```
 
-Pinned by `Test/Umbrella.lean` regression.  CLAUDE.md notes:
-"any phase / milestone bump must update both the constant and
-the test in the same PR."
-
-**Hazard observation:** The constant is hand-maintained.  A
-forgotten update would be caught by the regression test, but
-nothing prevents a typo.  The build tag is consumed by
-`knomosis info` and external auditors; consistency with the
-release / branch / commit metadata is the operator's
-responsibility.
+Mirrors the `lakefile.lean` `version` field and is bumped in
+lockstep with it (and `runtime/Cargo.toml` / the README banner)
+on every PR, so the version is the single build identifier.  It
+is consumed by `knomosis info` and the test driver.  (The former
+hand-maintained `kernelBuildTag` milestone string — and its three
+value-pinning regression tests — were removed as redundant once
+every PR bumps the version, eliminating the prior "forgotten
+bump / typo" hazard this audit flagged.)
 
 **Finding:** Correct.  No issues with the import list; the
 omission is documented.
@@ -414,8 +412,8 @@ no logic.
   * `parseGlobalFlags` handles one flag; would need extension.
   * `Tests.lean` `maxRecDepth` bump is needed for the long
     test-suite chain; documented.
-  * `kernelBuildTag` is hand-maintained; regression test
-    catches drift.
+  * `kernelVersion` mirrors the `lakefile.lean` `version` and is
+    bumped in lockstep per PR (no separate milestone tag).
 * **Test driver:** ~100 test suites enumerated; the linear
   `failed := failed + (← runAll ...)` chain is readable but
   long.  No issues with the structure.

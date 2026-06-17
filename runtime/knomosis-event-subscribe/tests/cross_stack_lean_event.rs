@@ -13,7 +13,8 @@
 //! `event_subscribe_cbe.json` is the hex of LEAN's
 //! `Encoding.Event.encode` (not a Rust self-encoding), so these
 //! tests prove the registry's leading-tag assumption against REAL
-//! Lean bytes for all 21 frozen constructors (tags 0..=20).
+//! Lean bytes for all 23 frozen constructors (tags 0..=22, through
+//! GP.11.10's `AmmReservesReclaimed`).
 //!
 //! For each fixture entry this asserts:
 //!   * [`peek_event_tag`] reads exactly the entry's `tag` from the
