@@ -199,6 +199,40 @@ fn unknown_path_returns_404() {
     );
 }
 
+#[test]
+fn head_returns_headers_with_no_body() {
+    // HEAD is identical to GET except the response carries no body (RFC 9110
+    // §9.3.2): the status + `Content-Length` (of the GET body) are present, but
+    // nothing follows the header terminator.
+    let (addr, state, handle) = start_gateway();
+    let request = format!(
+        "HEAD /v1/info HTTP/1.1\r\nHost: localhost\r\n\
+         Authorization: Bearer {TEST_TOKEN}\r\nConnection: close\r\n\r\n"
+    );
+    let mut stream = TcpStream::connect(addr).expect("connect");
+    stream.write_all(request.as_bytes()).expect("write");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("read");
+    stop_gateway(&state, handle);
+
+    assert!(response.starts_with("HTTP/1.1 200"), "got: {response:?}");
+    assert!(
+        response.contains("Content-Type: application/json"),
+        "HEAD keeps the GET headers, got: {response:?}"
+    );
+    let (head, body) = response
+        .split_once("\r\n\r\n")
+        .expect("a header terminator");
+    assert!(
+        head.contains("Content-Length:"),
+        "HEAD reports the GET body length, got: {head:?}"
+    );
+    assert!(
+        body.is_empty(),
+        "HEAD must send NO body, got body: {body:?}"
+    );
+}
+
 /// The thread-per-connection model serves many concurrent requests (more
 /// in-flight clients than would fit a fixed worker pool) — proves the
 /// own-HTTP-stack acceptor works end-to-end, not just the single-shot path.

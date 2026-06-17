@@ -250,7 +250,7 @@ pub(crate) fn run_connection<S: Read + Write>(
                     &request_id,
                 );
                 log_request("-", "-", status, start.elapsed(), &request_id);
-                let _ = write_response(reader.get_mut(), &outcome, false);
+                let _ = write_response(reader.get_mut(), &outcome, false, false);
                 return;
             }
         };
@@ -332,6 +332,9 @@ fn serve_parsed<S: Read + Write>(
         last_event_id: last_event_id.as_deref(),
         origin: origin.as_deref(),
     };
+    // HEAD is GET-routed (the router maps it), but the response carries no body
+    // (RFC 9110 §9.3.2) and an SSE stream is never hijacked for a HEAD.
+    let is_head = method == "HEAD";
     let routed = route_request(&parts);
     // The body was already read off the wire (bounded by `--max-frame-size`
     // while reading), so the handler's gated body closure just hands it back.
@@ -339,7 +342,21 @@ fn serve_parsed<S: Read + Write>(
     match handled {
         Handled::Respond(outcome) => {
             log_request(&method, &path, outcome.status, start.elapsed(), request_id);
-            if write_response(reader.get_mut(), &outcome, keep_alive).is_err() {
+            if write_response(reader.get_mut(), &outcome, keep_alive, is_head).is_err() {
+                return ConnControl::Close;
+            }
+            if keep_alive {
+                ConnControl::KeepAlive
+            } else {
+                ConnControl::Close
+            }
+        }
+        // A HEAD on the SSE endpoint returns the stream's response headers with
+        // no body and **no hijack** (the GET would stream indefinitely).
+        Handled::Stream { cors_headers, .. } if is_head => {
+            log_request(&method, &path, 200, start.elapsed(), request_id);
+            let head = stream_head_outcome(&cors_headers, request_id);
+            if write_response(reader.get_mut(), &head, keep_alive, true).is_err() {
                 return ConnControl::Close;
             }
             if keep_alive {
@@ -371,6 +388,20 @@ fn serve_parsed<S: Read + Write>(
             ConnControl::Close
         }
     }
+}
+
+/// Build the headers-only response a HEAD on `GET /v1/events/stream` returns:
+/// the `200 text/event-stream` head a GET would open (with `Cache-Control:
+/// no-store`, the anti-buffering hint, any browser-CORS headers, and the
+/// request id), but no streamed body.
+fn stream_head_outcome(cors_headers: &[(&'static str, String)], request_id: &str) -> RouteOutcome {
+    let mut outcome = RouteOutcome::event_stream_head()
+        .with_header("Cache-Control", "no-store")
+        .with_header("X-Accel-Buffering", "no");
+    for (name, value) in cors_headers {
+        outcome = outcome.with_header(name, value.clone());
+    }
+    handler::finalize(outcome, request_id)
 }
 
 /// The per-request SSE inputs [`serve_stream`] forwards into a [`StreamRequest`]
@@ -891,6 +922,7 @@ pub(crate) fn write_response<W: Write>(
     w: &mut W,
     outcome: &RouteOutcome,
     keep_alive: bool,
+    head_only: bool,
 ) -> std::io::Result<()> {
     write!(
         w,
@@ -899,6 +931,9 @@ pub(crate) fn write_response<W: Write>(
         reason_phrase(outcome.status)
     )?;
     write!(w, "Content-Type: {}\r\n", outcome.content_type)?;
+    // The `Content-Length` is always that of the GET body — for a HEAD the
+    // header set is identical to GET (RFC 9110 §9.3.2), only the body is
+    // omitted, so a client can read the size without the payload.
     write!(w, "Content-Length: {}\r\n", outcome.body.len())?;
     for (name, value) in &outcome.headers {
         if header_is_safe(name, value) {
@@ -910,7 +945,9 @@ pub(crate) fn write_response<W: Write>(
         "Connection: {}\r\n\r\n",
         if keep_alive { "keep-alive" } else { "close" }
     )?;
-    w.write_all(outcome.body.as_bytes())?;
+    if !head_only {
+        w.write_all(outcome.body.as_bytes())?;
+    }
     w.flush()
 }
 
@@ -939,7 +976,7 @@ fn write_raw_problem<W: Write>(
     for (name, value) in cors_headers {
         outcome = outcome.with_header(name, value.clone());
     }
-    write_response(w, &outcome, false)
+    write_response(w, &outcome, false, false)
 }
 
 /// Whether a header name + value is safe to write (no CR/LF/`:` injection).
@@ -1180,7 +1217,7 @@ mod tests {
         let outcome =
             RouteOutcome::json(200, r#"{"ok":true}"#.to_string()).with_header("ETag", "W/\"7-42\"");
         let mut buf = Vec::new();
-        write_response(&mut buf, &outcome, true).unwrap();
+        write_response(&mut buf, &outcome, true, false).unwrap();
         let text = String::from_utf8(buf).unwrap();
         assert!(text.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(text.contains("Content-Type: application/json\r\n"));
@@ -1191,11 +1228,30 @@ mod tests {
     }
 
     #[test]
+    fn head_only_omits_body_but_keeps_content_length() {
+        // A HEAD response carries the GET's status + headers + Content-Length
+        // (RFC 9110 §9.3.2) but NO body, so a keep-alive HEAD does not desync.
+        let outcome = RouteOutcome::json(200, r#"{"ok":true}"#.to_string());
+        let mut buf = Vec::new();
+        write_response(&mut buf, &outcome, true, true).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert!(
+            text.contains("Content-Length: 11\r\n"),
+            "GET body length kept"
+        );
+        assert!(
+            text.ends_with("\r\n\r\n"),
+            "no body after the head: {text:?}"
+        );
+        assert!(!text.contains("\"ok\":true"), "the body must be omitted");
+    }
+
+    #[test]
     fn response_writer_blocks_header_injection() {
         let outcome =
             RouteOutcome::json(200, "{}".to_string()).with_header("X-Evil", "a\r\nInjected: 1");
         let mut buf = Vec::new();
-        write_response(&mut buf, &outcome, false).unwrap();
+        write_response(&mut buf, &outcome, false, false).unwrap();
         let text = String::from_utf8(buf).unwrap();
         assert!(!text.contains("Injected"));
         assert!(text.contains("Connection: close\r\n"));

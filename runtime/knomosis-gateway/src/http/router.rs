@@ -136,6 +136,9 @@ const TEXT_PLAIN: &str = "text/plain; charset=utf-8";
 const APPLICATION_JSON: &str = "application/json";
 /// `Content-Type` for RFC 9457 problem-details responses.
 const APPLICATION_PROBLEM_JSON: &str = "application/problem+json";
+/// `Content-Type` for the Server-Sent-Events stream (used by a `HEAD` on the
+/// stream endpoint, which returns the head a `GET` would open, body-less).
+const TEXT_EVENT_STREAM: &str = "text/event-stream";
 
 impl RouteOutcome {
     /// A plain-text outcome with no extra headers.
@@ -155,6 +158,18 @@ impl RouteOutcome {
         Self {
             status: 204,
             content_type: TEXT_PLAIN,
+            body: String::new(),
+            headers: Vec::new(),
+        }
+    }
+
+    /// A bodiless `200` with the `text/event-stream` content type — the
+    /// response head a `GET /v1/events/stream` opens, returned (headers only,
+    /// no hijack) for a `HEAD` on that endpoint (RFC 9110 §9.3.2).
+    pub(crate) fn event_stream_head() -> Self {
+        Self {
+            status: 200,
+            content_type: TEXT_EVENT_STREAM,
             body: String::new(),
             headers: Vec::new(),
         }
@@ -240,6 +255,11 @@ pub fn apply_conditional(outcome: RouteOutcome, if_none_match: Option<&str>) -> 
 ///   * an unknown path → [`Route::NotFound`].
 #[must_use]
 pub fn route(method: &str, path: &str, query: &str) -> Route {
+    // HEAD is identical to GET except that the response carries no body
+    // (RFC 9110 §9.3.2), so it routes exactly as GET (the writer suppresses the
+    // body); a HEAD on any GET resource is served headers-only, and on a
+    // non-GET resource (e.g. `POST /v1/actions`) yields the same `405`.
+    let method = if method == "HEAD" { "GET" } else { method };
     match path {
         "/healthz" => get_only(method, Route::Health),
         "/readyz" => get_only(method, Route::Ready),
@@ -468,6 +488,22 @@ mod tests {
         assert_eq!(r("GET", "/healthz"), Route::Health);
         assert_eq!(r("GET", "/readyz"), Route::Ready);
         assert_eq!(r("GET", "/v1/info"), Route::Info);
+    }
+
+    #[test]
+    fn head_routes_identically_to_get() {
+        // HEAD on a GET resource resolves to the GET route (the writer omits
+        // the body); HEAD on a non-GET resource yields the same 405 as GET.
+        assert_eq!(r("HEAD", "/healthz"), Route::Health);
+        assert_eq!(r("HEAD", "/v1/info"), Route::Info);
+        assert_eq!(
+            route("HEAD", "/v1/actors/7/balances", ""),
+            Route::ActorBalances { actor: 7 }
+        );
+        assert_eq!(
+            r("HEAD", "/v1/actions"),
+            Route::MethodNotAllowed { allow: "POST" }
+        );
     }
 
     #[test]
