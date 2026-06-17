@@ -130,6 +130,36 @@ pub const DEFAULT_IDEMPOTENCY_TTL_SECS: u64 = 120;
 /// fixed bound on the cache's memory; not separately configurable.
 pub const IDEMPOTENCY_MAX_ENTRIES: usize = 8192;
 
+/// Environment variable mirroring `--tls-listen` (G4.2).  Setting it (or the
+/// flag) enables the native in-process HTTPS listener; cert + key are then
+/// required.
+pub const TLS_LISTEN_ENV: &str = "KNX_GW_TLS_LISTEN";
+
+/// Environment variable mirroring `--tls-cert`.  Only the file *path* comes
+/// from the flag / env; the certificate bytes live in the file.
+pub const TLS_CERT_ENV: &str = "KNX_GW_TLS_CERT";
+
+/// Environment variable mirroring `--tls-key`.  Only the file *path* comes
+/// from the flag / env; the private-key bytes live in the file (never argv /
+/// an env value), per §8.1.
+pub const TLS_KEY_ENV: &str = "KNX_GW_TLS_KEY";
+
+/// Environment variable mirroring `--mtls-client-ca`.  Presence enables mTLS:
+/// the TLS listener then *requires* a client certificate chaining to this CA.
+pub const MTLS_CLIENT_CA_ENV: &str = "KNX_GW_MTLS_CLIENT_CA";
+
+/// Environment variable mirroring `--tls-max-connections`.
+pub const TLS_MAX_CONNECTIONS_ENV: &str = "KNX_GW_TLS_MAX_CONNECTIONS";
+
+/// Default cap on simultaneously-active TLS connections (G4.2) — each runs on
+/// its own thread, so this is the native-TLS spawn-storm DoS bound (the peer
+/// of `knomosis-host`'s `DEFAULT_MAX_CONCURRENT_CONNECTIONS`).
+pub const DEFAULT_TLS_MAX_CONNECTIONS: usize = 1024;
+
+/// Hard ceiling on `--tls-max-connections` (rejects a fat-finger that would
+/// exhaust the thread / fd table).
+pub const MAX_TLS_MAX_CONNECTIONS: usize = 65_536;
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -207,12 +237,31 @@ OPTIONS:
                        duplicate key within the TTL returns the cached
                        response.  0 disables the cache
                        (env KNX_GW_IDEMPOTENCY_TTL_SECS) [default: 120]
+    --tls-listen <ADDR>
+                       Enable the native in-process HTTPS listener on ADDR
+                       (rustls 0.23, TLS 1.3); requires --tls-cert + --tls-key.
+                       Runs ALONGSIDE the plaintext --listen socket
+                       (env KNX_GW_TLS_LISTEN) [default: disabled]
+    --tls-cert <PATH>  PEM certificate chain (leaf first) for --tls-listen
+                       (env KNX_GW_TLS_CERT) [required with --tls-listen]
+    --tls-key <PATH>   PEM private key (PKCS#8 / RSA / SEC1) for --tls-listen
+                       (env KNX_GW_TLS_KEY) [required with --tls-listen]
+    --mtls-client-ca <PATH>
+                       PEM CA bundle that client certificates must chain to;
+                       presence enables mTLS (the TLS listener then REQUIRES a
+                       valid client certificate)
+                       (env KNX_GW_MTLS_CLIENT_CA) [default: no client auth]
+    --tls-max-connections <N>
+                       Cap on simultaneously-active TLS connections (each on
+                       its own thread); over-cap connects are closed
+                       (env KNX_GW_TLS_MAX_CONNECTIONS) [default: 1024]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
-NOTE: this is the read-only-slice surface; the submit/SSE governors
-(request-body size, deadlines, SSE keepalive) and TLS land with the
-G2 / G3 / G4 tracks.
+NOTE: native HTTPS (--tls-listen) terminates TLS in-process with the
+workspace's rustls 0.23 (TLS 1.3, ring), reusing the exact gate -> route ->
+dispatch core as the plaintext path.  TLS may also be terminated at a
+co-located edge (the gateway then stays plaintext behind it); see the runbook.
 ";
 
 /// Errors from parsing the gateway's CLI / environment configuration.
@@ -326,6 +375,29 @@ impl Default for SseConfig {
     }
 }
 
+/// Native in-process HTTPS configuration (G4.2), present iff `--tls-listen`
+/// is set.  The TLS listener runs **alongside** the plaintext `--listen`
+/// socket, sharing the same [`crate::state::AppState`] and the exact same
+/// gate → route → dispatch core; only the wire transport (rustls 0.23, TLS
+/// 1.3, the `ring` backend) differs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TlsConfig {
+    /// The HTTPS listen address (`--tls-listen`).
+    pub listen: SocketAddr,
+    /// PEM certificate-chain path (`--tls-cert`), leaf first.
+    pub cert: PathBuf,
+    /// PEM private-key path (`--tls-key`): PKCS#8, RSA, or SEC1.
+    pub key: PathBuf,
+    /// PEM client-CA bundle path (`--mtls-client-ca`).  `Some` enables mTLS:
+    /// the listener requires a client certificate chaining to this CA;
+    /// `None` (the default) is server-auth only.
+    pub client_ca: Option<PathBuf>,
+    /// Cap on simultaneously-active TLS connections (`--tls-max-connections`),
+    /// the native-TLS spawn-storm DoS bound.  Always in
+    /// `1..=MAX_TLS_MAX_CONNECTIONS`.  Default [`DEFAULT_TLS_MAX_CONNECTIONS`].
+    pub max_connections: usize,
+}
+
 /// Validated gateway configuration.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
@@ -414,6 +486,10 @@ pub struct Config {
     /// SSE fan-out tunables (G3.4 / G3.5); see [`SseConfig`].  Defaulted
     /// today (no per-knob flags yet).
     pub sse: SseConfig,
+    /// Native in-process HTTPS configuration (G4.2), present iff
+    /// `--tls-listen` is set; see [`TlsConfig`].  `None` (the default) runs
+    /// the plaintext `--listen` socket only (TLS terminated at an edge).
+    pub tls: Option<TlsConfig>,
 }
 
 impl Config {
@@ -476,23 +552,7 @@ impl Config {
             .map(PathBuf::from);
         let rate_limit_rps = resolve_rate_limit_rps(raw.rate_limit_rps)?;
         let host_pool_size = resolve_host_pool_size(raw.host_pool_size)?;
-        // `--host-max-inflight` defaults to (and is clamped to) the pool
-        // size — one in-flight request per persistent connection.
-        let host_max_inflight = match parse_optional_usize_flag(
-            "--host-max-inflight",
-            raw.host_max_inflight,
-            HOST_MAX_INFLIGHT_ENV,
-        )? {
-            None => host_pool_size,
-            Some(0) => {
-                return Err(ConfigError::InvalidValue {
-                    flag: "--host-max-inflight".to_string(),
-                    value: "0".to_string(),
-                    reason: "must be at least 1".to_string(),
-                })
-            }
-            Some(n) => n.min(host_pool_size),
-        };
+        let host_max_inflight = resolve_host_max_inflight(raw.host_max_inflight, host_pool_size)?;
         let request_deadline_ms = match parse_optional_u64_flag(
             "--request-deadline-ms",
             raw.request_deadline_ms,
@@ -517,6 +577,13 @@ impl Config {
             IDEMPOTENCY_TTL_SECS_ENV,
         )?
         .unwrap_or(DEFAULT_IDEMPOTENCY_TTL_SECS);
+        let tls = resolve_tls(
+            raw.tls_listen,
+            raw.tls_cert,
+            raw.tls_key,
+            raw.mtls_client_ca,
+            raw.tls_max_connections,
+        )?;
 
         Ok(Self {
             listen,
@@ -539,8 +606,119 @@ impl Config {
             idempotency_ttl_secs,
             // SSE tunables are defaulted today (no per-knob flags yet, §9.2).
             sse: SseConfig::default(),
+            tls,
         })
     }
+}
+
+/// Resolve the optional native-TLS configuration (G4.2): CLI value > env var.
+///
+/// TLS is enabled iff `--tls-listen` (or its env var) is present, in which
+/// case `--tls-cert` + `--tls-key` are **required** (fail-fast otherwise) and
+/// `--mtls-client-ca` / `--tls-max-connections` are optional.  Supplying any
+/// `--tls-*` / `--mtls-*` knob *without* `--tls-listen` is a hard error rather
+/// than a silently-ignored flag — a cert with no listener is a misconfig.
+fn resolve_tls(
+    listen_raw: Option<String>,
+    cert_raw: Option<String>,
+    key_raw: Option<String>,
+    client_ca_raw: Option<String>,
+    max_connections_raw: Option<String>,
+) -> Result<Option<TlsConfig>, ConfigError> {
+    let listen_str = listen_raw.or_else(|| std::env::var(TLS_LISTEN_ENV).ok());
+    let cert = cert_raw.or_else(|| std::env::var(TLS_CERT_ENV).ok());
+    let key = key_raw.or_else(|| std::env::var(TLS_KEY_ENV).ok());
+    let client_ca = client_ca_raw.or_else(|| std::env::var(MTLS_CLIENT_CA_ENV).ok());
+    let max_connections_raw =
+        max_connections_raw.or_else(|| std::env::var(TLS_MAX_CONNECTIONS_ENV).ok());
+
+    let Some(listen_str) = listen_str else {
+        // TLS disabled: reject any dependent knob supplied without a listener
+        // (fail-fast, never a silent no-op).
+        for (value, flag) in [
+            (&cert, "--tls-cert"),
+            (&key, "--tls-key"),
+            (&client_ca, "--mtls-client-ca"),
+            (&max_connections_raw, "--tls-max-connections"),
+        ] {
+            if let Some(value) = value {
+                return Err(ConfigError::InvalidValue {
+                    flag: flag.to_string(),
+                    value: value.clone(),
+                    reason: "requires --tls-listen (native TLS is enabled only by --tls-listen)"
+                        .to_string(),
+                });
+            }
+        }
+        return Ok(None);
+    };
+
+    let listen = listen_str
+        .parse::<SocketAddr>()
+        .map_err(|e| ConfigError::InvalidValue {
+            flag: "--tls-listen".to_string(),
+            value: listen_str.clone(),
+            reason: e.to_string(),
+        })?;
+    let cert = cert.ok_or_else(|| ConfigError::InvalidValue {
+        flag: "--tls-cert".to_string(),
+        value: "(unset)".to_string(),
+        reason: "--tls-listen requires both --tls-cert and --tls-key".to_string(),
+    })?;
+    let key = key.ok_or_else(|| ConfigError::InvalidValue {
+        flag: "--tls-key".to_string(),
+        value: "(unset)".to_string(),
+        reason: "--tls-listen requires both --tls-cert and --tls-key".to_string(),
+    })?;
+    let max_connections = resolve_tls_max_connections(max_connections_raw)?;
+    Ok(Some(TlsConfig {
+        listen,
+        cert: PathBuf::from(cert),
+        key: PathBuf::from(key),
+        client_ca: client_ca.map(PathBuf::from),
+        max_connections,
+    }))
+}
+
+/// Resolve `--host-max-inflight`: it defaults to (and is clamped down to) the
+/// pool size — one in-flight request per persistent connection — and rejects an
+/// explicit `0`.
+fn resolve_host_max_inflight(
+    raw: Option<String>,
+    host_pool_size: usize,
+) -> Result<usize, ConfigError> {
+    match parse_optional_usize_flag("--host-max-inflight", raw, HOST_MAX_INFLIGHT_ENV)? {
+        None => Ok(host_pool_size),
+        Some(0) => Err(ConfigError::InvalidValue {
+            flag: "--host-max-inflight".to_string(),
+            value: "0".to_string(),
+            reason: "must be at least 1".to_string(),
+        }),
+        Some(n) => Ok(n.min(host_pool_size)),
+    }
+}
+
+/// Resolve `--tls-max-connections`: the default, or a value validated against
+/// the `1..=MAX_TLS_MAX_CONNECTIONS` range.
+fn resolve_tls_max_connections(raw: Option<String>) -> Result<usize, ConfigError> {
+    let Some(raw) = raw else {
+        return Ok(DEFAULT_TLS_MAX_CONNECTIONS);
+    };
+    let n = raw
+        .parse::<usize>()
+        .map_err(|e| ConfigError::InvalidValue {
+            flag: "--tls-max-connections".to_string(),
+            value: raw.clone(),
+            reason: e.to_string(),
+        })?;
+    if n == 0 || n > MAX_TLS_MAX_CONNECTIONS {
+        return Err(ConfigError::InvalidValue {
+            flag: "--tls-max-connections".to_string(),
+            value: raw,
+            reason: format!("must be in 1..={MAX_TLS_MAX_CONNECTIONS}"),
+        });
+    }
+    Ok(n)
 }
 
 /// Resolve `--max-frame-size`: CLI value > env var > the default,
@@ -688,6 +866,11 @@ struct RawArgs {
     request_deadline_ms: Option<String>,
     max_frame_size: Option<String>,
     idempotency_ttl_secs: Option<String>,
+    tls_listen: Option<String>,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    mtls_client_ca: Option<String>,
+    tls_max_connections: Option<String>,
 }
 
 impl RawArgs {
@@ -750,6 +933,16 @@ impl RawArgs {
                 "--idempotency-ttl-secs" => {
                     raw.idempotency_ttl_secs =
                         Some(take_value(args, &mut i, "--idempotency-ttl-secs")?);
+                }
+                "--tls-listen" => raw.tls_listen = Some(take_value(args, &mut i, "--tls-listen")?),
+                "--tls-cert" => raw.tls_cert = Some(take_value(args, &mut i, "--tls-cert")?),
+                "--tls-key" => raw.tls_key = Some(take_value(args, &mut i, "--tls-key")?),
+                "--mtls-client-ca" => {
+                    raw.mtls_client_ca = Some(take_value(args, &mut i, "--mtls-client-ca")?);
+                }
+                "--tls-max-connections" => {
+                    raw.tls_max_connections =
+                        Some(take_value(args, &mut i, "--tls-max-connections")?);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
@@ -1199,6 +1392,152 @@ mod tests {
         use super::AdmissionStage::{Finalized, LocallyAdmitted, Received, Sequenced};
         for stage in [Received, LocallyAdmitted, Sequenced, Finalized] {
             assert_eq!(stage.as_str().parse::<super::AdmissionStage>(), Ok(stage));
+        }
+    }
+
+    /// Clear every TLS-related env var so the TLS-parsing tests are
+    /// deterministic regardless of the ambient environment.
+    fn clear_tls_env() {
+        for var in [
+            super::TLS_LISTEN_ENV,
+            super::TLS_CERT_ENV,
+            super::TLS_KEY_ENV,
+            super::MTLS_CLIENT_CA_ENV,
+            super::TLS_MAX_CONNECTIONS_ENV,
+        ] {
+            std::env::remove_var(var);
+        }
+    }
+
+    /// No `--tls-listen` → native TLS disabled (`tls` is `None`).
+    #[test]
+    fn tls_disabled_by_default() {
+        clear_tls_env();
+        assert!(Config::parse(&argv(&[])).unwrap().tls.is_none());
+    }
+
+    /// `--tls-listen` with cert + key parses into a full [`super::TlsConfig`]
+    /// (no mTLS, the default connection cap).
+    #[test]
+    fn tls_full_config_parsed() {
+        clear_tls_env();
+        let cfg = Config::parse(&argv(&[
+            "--tls-listen",
+            "127.0.0.1:8443",
+            "--tls-cert",
+            "/etc/knomosis/tls/cert.pem",
+            "--tls-key",
+            "/etc/knomosis/tls/key.pem",
+        ]))
+        .unwrap();
+        let tls = cfg.tls.expect("TLS enabled");
+        assert_eq!(tls.listen.to_string(), "127.0.0.1:8443");
+        assert_eq!(
+            tls.cert,
+            std::path::PathBuf::from("/etc/knomosis/tls/cert.pem")
+        );
+        assert_eq!(
+            tls.key,
+            std::path::PathBuf::from("/etc/knomosis/tls/key.pem")
+        );
+        assert_eq!(tls.client_ca, None);
+        assert_eq!(tls.max_connections, super::DEFAULT_TLS_MAX_CONNECTIONS);
+    }
+
+    /// `--mtls-client-ca` enables mTLS; `--tls-max-connections` is honoured.
+    #[test]
+    fn tls_mtls_and_max_connections_parsed() {
+        clear_tls_env();
+        let cfg = Config::parse(&argv(&[
+            "--tls-listen",
+            "0.0.0.0:8443",
+            "--tls-cert",
+            "/c.pem",
+            "--tls-key",
+            "/k.pem",
+            "--mtls-client-ca",
+            "/ca.pem",
+            "--tls-max-connections",
+            "32",
+        ]))
+        .unwrap();
+        let tls = cfg.tls.expect("TLS enabled");
+        assert_eq!(tls.client_ca, Some(std::path::PathBuf::from("/ca.pem")));
+        assert_eq!(tls.max_connections, 32);
+    }
+
+    /// `--tls-listen` without cert/key fails fast.
+    #[test]
+    fn tls_listen_requires_cert_and_key() {
+        clear_tls_env();
+        assert!(matches!(
+            Config::parse(&argv(&["--tls-listen", "127.0.0.1:8443"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+        // Cert without key is still incomplete.
+        assert!(matches!(
+            Config::parse(&argv(&[
+                "--tls-listen",
+                "127.0.0.1:8443",
+                "--tls-cert",
+                "/c.pem"
+            ])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// A TLS knob supplied *without* `--tls-listen` is a hard error (never a
+    /// silently-ignored flag).
+    #[test]
+    fn tls_knob_without_listen_rejected() {
+        clear_tls_env();
+        for extra in [
+            vec!["--tls-cert", "/c.pem"],
+            vec!["--tls-key", "/k.pem"],
+            vec!["--mtls-client-ca", "/ca.pem"],
+            vec!["--tls-max-connections", "10"],
+        ] {
+            assert!(
+                matches!(
+                    Config::parse(&argv(&extra)),
+                    Err(ConfigError::InvalidValue { .. })
+                ),
+                "a {extra:?} without --tls-listen must be rejected"
+            );
+        }
+    }
+
+    /// A malformed TLS listen address / out-of-range connection cap is
+    /// rejected.
+    #[test]
+    fn tls_invalid_values_rejected() {
+        clear_tls_env();
+        assert!(matches!(
+            Config::parse(&argv(&[
+                "--tls-listen",
+                "not-an-addr",
+                "--tls-cert",
+                "/c.pem",
+                "--tls-key",
+                "/k.pem"
+            ])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+        let over = (super::MAX_TLS_MAX_CONNECTIONS + 1).to_string();
+        for bad in ["0", over.as_str()] {
+            assert!(matches!(
+                Config::parse(&argv(&[
+                    "--tls-listen",
+                    "127.0.0.1:8443",
+                    "--tls-cert",
+                    "/c.pem",
+                    "--tls-key",
+                    "/k.pem",
+                    "--tls-max-connections",
+                    bad,
+                ])),
+                Err(ConfigError::InvalidValue { .. })
+            ));
         }
     }
 }

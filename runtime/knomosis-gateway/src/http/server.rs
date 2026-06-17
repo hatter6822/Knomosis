@@ -66,6 +66,15 @@ pub enum ServeError {
         /// The state-layer diagnostic.
         reason: String,
     },
+    /// The native-TLS listener (`--tls-listen`, G4.2) could not be stood up:
+    /// a bad certificate / key / client-CA, a `rustls` config rejection, a
+    /// bind failure, or a thread-spawn failure.  Fatal at startup so a
+    /// misconfigured public TLS surface never serves.
+    #[error("failed to start the TLS listener: {reason}")]
+    Tls {
+        /// The TLS-setup diagnostic.
+        reason: String,
+    },
 }
 
 /// Run the gateway HTTP server, blocking the calling thread.
@@ -129,6 +138,15 @@ pub fn serve(config: &Config) -> Result<(), ServeError> {
         let _ = mux.spawn(Arc::clone(&state.shutdown));
         tracing::info!(%addr, "SSE fan-out multiplexer started");
     }
+    // Start the native in-process HTTPS listener (G4.2) iff `--tls-listen` is
+    // configured.  It runs alongside the plaintext socket, sharing this
+    // `state` + the same request core; it fails fast on a bad cert/key/CA
+    // before the handler pool comes up.  Its accept thread observes the same
+    // shutdown flag and is joined on drain.
+    let tls_handle =
+        crate::http::tls::spawn_tls_listener(config, &state).map_err(|e| ServeError::Tls {
+            reason: e.to_string(),
+        })?;
     let handles = spawn_handler_pool(&server, config.handler_threads, &state)?;
     // Register the graceful-shutdown trigger: SIGTERM / SIGINT set the
     // shared shutdown flag (G4.4), which the mux + every live SSE stream
@@ -146,6 +164,14 @@ pub fn serve(config: &Config) -> Result<(), ServeError> {
             deadline_secs = DRAIN_DEADLINE.as_secs(),
             "drain deadline exceeded; exiting with handler workers still active"
         );
+    }
+    // Join the TLS accept thread (it polls the shutdown flag, so it exits
+    // within one accept-poll; its per-connection threads observe the flag too
+    // and are reclaimed at process exit, mirroring the host's TLS handlers).
+    if let Some(handle) = tls_handle {
+        if handle.join().is_err() {
+            tracing::error!("the TLS accept thread panicked during shutdown");
+        }
     }
     Ok(())
 }

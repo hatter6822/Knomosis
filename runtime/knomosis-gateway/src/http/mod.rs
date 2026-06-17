@@ -10,13 +10,16 @@
 //! Split into a **pure routing core** ([`router`]) — transport- and
 //! `tiny_http`-agnostic, so it is unit-testable in isolation — a
 //! **transport-agnostic request core** ([`handler`]) shared by the HTTP and
-//! HTTPS front-ends (so they cannot diverge in security behaviour), the
-//! and the thin **IO shell** ([`server`]) that owns the `tiny_http` accept
-//! loop and the request→response glue.
+//! HTTPS front-ends (so they cannot diverge in security behaviour), the thin
+//! plaintext **IO shell** ([`server`]) that owns the `tiny_http` accept loop
+//! and the request→response glue, and the native-HTTPS front-end ([`tls`],
+//! G4.2) that terminates `rustls 0.23` in-process and feeds the same request
+//! core over a strict HTTP/1.1 reader.
 
 pub mod handler;
 mod router;
 mod server;
+pub mod tls;
 
 pub use router::{apply_conditional, route, Route, RouteOutcome};
 pub use server::{handle_request, serve, spawn_handler_pool, ServeError};

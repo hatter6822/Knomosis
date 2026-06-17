@@ -157,6 +157,7 @@ fn start_harness_cfg(
         max_frame_size: 1024 * 1024,
         idempotency_ttl_secs: 60,
         sse: SseConfig::default(),
+        tls: None,
     };
     let state = Arc::new(AppState::new(config).expect("open read-only state + load tokens"));
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
@@ -882,6 +883,7 @@ fn start_sse_harness_cfg(event_subscribe_addr: SocketAddr, sse: SseConfig) -> Ss
         max_frame_size: 1024 * 1024,
         idempotency_ttl_secs: 0,
         sse,
+        tls: None,
     };
     let state = Arc::new(AppState::new(config).expect("open SSE state"));
     // Start the mux (mirrors `serve`), with a long staleness timeout so the
