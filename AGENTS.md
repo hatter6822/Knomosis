@@ -905,8 +905,8 @@ multiplexes one upstream subscription, its tunables (ring / streams / lag /
 heartbeat / staleness) CLI-configurable via `--sse-*` (the lag validated below
 the ring capacity), honoured identically on both stream paths; native TLS
 terminates rustls 0.23 (TLS 1.3) in-process alongside the plaintext socket —
-same request core (no security divergence) + optional mTLS — or is terminated
-at a co-located edge.
+same request core (no security divergence) + optional mTLS, the certificate
+hot-reloaded on SIGHUP (zero downtime) — or is terminated at a co-located edge.
 
 ### Rust host runtime (Workstream RH)
 

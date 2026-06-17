@@ -1826,15 +1826,25 @@ Event` (RH-D.2), not on the gateway.
   threads are bounded by `--tls-max-connections` (spawn-storm guard); the
   `ServerConfig` is built + the socket bound at **startup** (fail-fast on a bad
   cert / key / CA — a fatal `ServeError::Tls`); the accept thread + every
-  connection observe the graceful-shutdown flag.  *Acceptance (DONE):* two
-  openssl-cert handshake tests drive a real `rustls 0.23` client end-to-end —
-  **server-auth** (healthz `200`, info authed `200`, unauthed `401`, bad-version
-  `505`, submit body-framed `503`, SSE `503`, keep-alive pipelining) and
-  **mTLS** (handshake **rejected** with no client cert; **accepted** with a
-  CA-signed cert) — plus 30 pure-parser unit tests for the strict reader +
-  response writer (request-smuggling + response-splitting guards).  TLS at a
-  **co-located edge** remains a supported alternative (the gateway then stays
-  plaintext behind it; the runbook documents both).
+  connection observe the graceful-shutdown flag.  **Certificate rotation is
+  hot-reloaded on `SIGHUP`** (zero downtime): the config is held in an
+  `Arc<Mutex<Arc<ServerConfig>>>`, the accept loop reloads it from disk between
+  accepts on the signal and clones the current `Arc` per new connection
+  (existing sessions keep theirs); a reload that fails to load/build is logged
+  and **the current certificate is kept** (a fat-fingered rotation never takes
+  the listener down).  *Acceptance (DONE):* two openssl-cert handshake tests
+  drive a real `rustls 0.23` client end-to-end — **server-auth** (healthz
+  `200`, info authed `200`, unauthed `401`, bad-version `505`, submit
+  body-framed `503`, SSE `503`, keep-alive pipelining incl. a body-framed
+  pipelined pair) and **mTLS** (handshake **rejected** with no client cert;
+  **accepted** with a CA-signed cert) — plus a **hot-reload** pair: the swap
+  mechanism (swaps on success, keeps the current config on a bad path) and an
+  **end-to-end rotation** (a live listener reloaded from cert A to a different
+  CA's cert B then serves B; the old CA-A no longer validates) — plus 30
+  pure-parser unit tests for the strict reader + response writer
+  (request-smuggling + response-splitting guards).  TLS at a **co-located
+  edge** remains a supported alternative (the gateway then stays plaintext
+  behind it; the runbook documents both).
 * **G4.3 — Observability** · M · deps: G1–G3 · **DONE.**
   `observability.rs`: a process-unique per-request correlation id
   (`next_request_id` → `req-<nonce>-<seq>`) propagated to (1) the

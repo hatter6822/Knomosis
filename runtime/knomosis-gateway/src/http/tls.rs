@@ -47,11 +47,18 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
+
+/// The **hot-swappable** server config.  The accept loop clones the current
+/// `Arc<ServerConfig>` under a brief lock for each new connection; a `SIGHUP`
+/// reload ([`reload_server_config`]) swaps in a freshly-loaded one, so a
+/// certificate can be rotated **without dropping the listener or any existing
+/// session** (G4.2 zero-downtime rotation).
+type SharedConfig = Arc<Mutex<Arc<ServerConfig>>>;
 
 use crate::config::{Config, TlsConfig};
 use crate::events::stream::{run_one_stream, StreamRequest, StreamSlot};
@@ -139,7 +146,9 @@ pub(crate) fn spawn_tls_listener(
     let Some(tls) = &config.tls else {
         return Ok(None);
     };
-    let server_config = build_server_config(tls)?;
+    // Built + bound up front so a bad cert / key / CA / address is a fatal
+    // startup error; then wrapped for hot-swap on SIGHUP.
+    let server_config: SharedConfig = Arc::new(Mutex::new(build_server_config(tls)?));
     let listener = TcpListener::bind(tls.listen).map_err(|e| TlsSetupError::Bind {
         addr: tls.listen.to_string(),
         reason: e.to_string(),
@@ -150,28 +159,60 @@ pub(crate) fn spawn_tls_listener(
             addr: tls.listen.to_string(),
             reason: e.to_string(),
         })?;
+    // SIGHUP triggers a zero-downtime certificate reload (handled between
+    // accepts in the loop below).
+    let reload = Arc::new(AtomicBool::new(false));
+    register_reload_signal(&reload);
     tracing::info!(
         listen = %tls.listen,
         mtls = tls.client_ca.is_some(),
         max_connections = tls.max_connections,
-        "knomosis-gateway native TLS listener started"
+        "knomosis-gateway native TLS listener started (SIGHUP reloads the certificate)"
     );
     let state = Arc::clone(state);
     let shutdown = Arc::clone(&state.shutdown);
-    let max_connections = tls.max_connections;
+    let tls = tls.clone();
     let handle = thread::Builder::new()
         .name("knx-gw-tls-accept".to_string())
         .spawn(move || {
-            accept_loop(
-                &listener,
-                &server_config,
-                &state,
-                &shutdown,
-                max_connections,
-            );
+            accept_loop(&listener, &server_config, &reload, &tls, &state, &shutdown);
         })
         .map_err(|e| TlsSetupError::Spawn(e.to_string()))?;
     Ok(Some(handle))
+}
+
+/// Register `SIGHUP` as the certificate-reload trigger (zero-downtime
+/// rotation): each `SIGHUP` sets the shared `reload` flag, which the accept
+/// loop observes and acts on between accepts.  A registration failure is
+/// logged, not fatal — the gateway keeps serving with the loaded certificate.
+fn register_reload_signal(reload: &Arc<AtomicBool>) {
+    #[cfg(unix)]
+    if let Err(error) = signal_hook::flag::register(signal_hook::consts::SIGHUP, Arc::clone(reload))
+    {
+        tracing::warn!(%error, "failed to register the SIGHUP certificate-reload handler");
+    }
+    #[cfg(not(unix))]
+    let _ = reload; // no SIGHUP off Unix; the certificate is reloaded on restart
+}
+
+/// Reload the certificate / key / client-CA from disk and **hot-swap** the
+/// shared `ServerConfig` (the `SIGHUP` rotation).  On any load / build error
+/// the **current** certificate is kept, so a fat-fingered rotation never
+/// breaks serving; the swap is atomic from a new connection's view (existing
+/// sessions keep their old config).
+fn reload_server_config(current: &SharedConfig, tls: &TlsConfig) {
+    match build_server_config(tls) {
+        Ok(new_config) => {
+            *current.lock().unwrap_or_else(PoisonError::into_inner) = new_config;
+            tracing::info!(cert = %tls.cert.display(), "TLS certificate hot-reloaded (SIGHUP)");
+        }
+        Err(error) => {
+            tracing::error!(
+                %error,
+                "TLS certificate reload failed; keeping the current certificate"
+            );
+        }
+    }
 }
 
 /// Build the `rustls 0.23` `ServerConfig`: TLS 1.3 only, the `ring` backend
@@ -251,29 +292,41 @@ impl Drop for ConnGuard {
     }
 }
 
-/// The accept loop: non-blocking `accept`, a connection-count guard
-/// (`--tls-max-connections`), and one handler thread per admitted connection.
-/// Exits when the shared `shutdown` flag is set.
+/// The accept loop: non-blocking `accept`, a `SIGHUP` certificate hot-reload
+/// (between accepts), a connection-count guard (`--tls-max-connections`), and
+/// one handler thread per admitted connection.  Exits when the shared
+/// `shutdown` flag is set.  `max_connections` is read from `tls`.
 fn accept_loop(
     listener: &TcpListener,
-    server_config: &Arc<ServerConfig>,
+    current_config: &SharedConfig,
+    reload: &Arc<AtomicBool>,
+    tls: &TlsConfig,
     state: &Arc<AppState>,
     shutdown: &Arc<AtomicBool>,
-    max_connections: usize,
 ) {
     let active = Arc::new(AtomicUsize::new(0));
     let mut consecutive_errors = 0u32;
     while !shutdown.load(Ordering::Relaxed) {
+        // A SIGHUP since the last iteration → hot-reload the certificate, here
+        // (between accepts) so no in-flight handshake is disturbed.
+        if reload.swap(false, Ordering::Relaxed) {
+            reload_server_config(current_config, tls);
+        }
         match listener.accept() {
             Ok((stream, _peer)) => {
                 consecutive_errors = 0;
-                let Some(guard) = ConnGuard::try_acquire(&active, max_connections) else {
+                let Some(guard) = ConnGuard::try_acquire(&active, tls.max_connections) else {
                     // Over the connection cap: close without a handshake (a
                     // plaintext message would be unreadable to a TLS client).
                     let _ = stream.shutdown(Shutdown::Both);
                     continue;
                 };
-                let server_config = Arc::clone(server_config);
+                // Clone the CURRENT config under a brief lock — a SIGHUP reload
+                // swaps it, but an in-flight connection keeps the one it took.
+                let server_config = current_config
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .clone();
                 let state = Arc::clone(state);
                 let shutdown = Arc::clone(shutdown);
                 let spawned = thread::Builder::new()
@@ -282,7 +335,7 @@ fn accept_loop(
                         // The guard rides the connection thread; its `Drop`
                         // releases the slot on every exit path (incl. a panic).
                         let _guard = guard;
-                        handle_connection(stream, &server_config, &state, &shutdown);
+                        handle_connection(stream, server_config, &state, &shutdown);
                     });
                 if spawned.is_err() {
                     // The closure (and with it the guard) is dropped, releasing
@@ -310,7 +363,7 @@ fn accept_loop(
 /// `StreamOwned`); the socket closes when this returns.
 fn handle_connection(
     stream: TcpStream,
-    server_config: &Arc<ServerConfig>,
+    server_config: Arc<ServerConfig>,
     state: &AppState,
     shutdown: &AtomicBool,
 ) {
@@ -320,7 +373,7 @@ fn handle_connection(
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(CONNECTION_TIMEOUT));
     let _ = stream.set_write_timeout(Some(CONNECTION_TIMEOUT));
-    let connection = match ServerConnection::new(Arc::clone(server_config)) {
+    let connection = match ServerConnection::new(server_config) {
         Ok(c) => c,
         Err(e) => {
             // Only a rustls mis-configuration reaches here (impossible once the
@@ -1164,10 +1217,10 @@ mod handshake_tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use super::{accept_loop, build_server_config};
+    use super::{accept_loop, build_server_config, reload_server_config, SharedConfig};
     use crate::config::{AdmissionStage, Config, SseConfig, TlsConfig};
     use crate::state::AppState;
 
@@ -1355,26 +1408,35 @@ mod handshake_tests {
     }
 
     /// Bind an ephemeral TLS listener serving `state` with `tls` config, and run
-    /// the real `accept_loop` on its own thread.
-    fn serve(tls: &TlsConfig, state: &Arc<AppState>) -> TlsServer {
-        let server_config = build_server_config(tls).expect("build rustls server config");
+    /// the real `accept_loop` on its own thread.  Returns the running server
+    /// **and** the hot-swappable [`SharedConfig`] so a test can rotate the
+    /// certificate via [`reload_server_config`].
+    fn serve(tls: &TlsConfig, state: &Arc<AppState>) -> (TlsServer, SharedConfig) {
+        let shared: SharedConfig = Arc::new(Mutex::new(
+            build_server_config(tls).expect("build rustls server config"),
+        ));
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         listener.set_nonblocking(true).unwrap();
         let addr = listener.local_addr().unwrap();
         let shutdown = Arc::new(AtomicBool::new(false));
-        let (state, sd, max) = (
+        let reload = Arc::new(AtomicBool::new(false));
+        let (cfg, state, sd, tls_owned) = (
+            Arc::clone(&shared),
             Arc::clone(state),
             Arc::clone(&shutdown),
-            tls.max_connections,
+            tls.clone(),
         );
         let handle = std::thread::spawn(move || {
-            accept_loop(&listener, &server_config, &state, &sd, max);
+            accept_loop(&listener, &cfg, &reload, &tls_owned, &state, &sd);
         });
-        TlsServer {
-            addr,
-            shutdown,
-            handle: Some(handle),
-        }
+        (
+            TlsServer {
+                addr,
+                shutdown,
+                handle: Some(handle),
+            },
+            shared,
+        )
     }
 
     /// Load a PEM file into a fresh `RootCertStore`.
@@ -1468,7 +1530,7 @@ mod handshake_tests {
             return;
         }
         let state = make_state(dir.path());
-        let server = serve(&server_tls(dir.path()), &state);
+        let (server, _shared) = serve(&server_tls(dir.path()), &state);
         let ca = dir.path().join("ca.crt");
         let authed = format!("Authorization: Bearer {TOKEN}\r\n");
 
@@ -1601,7 +1663,7 @@ mod handshake_tests {
             client_ca: Some(PathBuf::from(at(dir.path(), "ca.crt"))),
             ..server_tls(dir.path())
         };
-        let server = serve(&mtls, &state);
+        let (server, _shared) = serve(&mtls, &state);
         let ca = dir.path().join("ca.crt");
 
         // No client certificate → the handshake is rejected (Err, no response).
@@ -1629,6 +1691,83 @@ mod handshake_tests {
             text(&accepted).starts_with("HTTP/1.1 200 OK"),
             "mTLS must accept a CA-signed client certificate: {}",
             text(&accepted)
+        );
+        drop(server);
+    }
+
+    /// The hot-reload mechanism in isolation: a successful reload swaps in a
+    /// new `Arc<ServerConfig>` (pointer changes), and a failing reload (a bad
+    /// path) keeps the current one — so a fat-fingered rotation never breaks
+    /// serving.
+    #[test]
+    fn cert_reload_swaps_on_success_keeps_on_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        if !gen_pki(dir.path()) {
+            eprintln!(
+                "skipping cert_reload_swaps_on_success_keeps_on_failure: openssl unavailable"
+            );
+            return;
+        }
+        let tls = server_tls(dir.path());
+        let initial = build_server_config(&tls).expect("initial config");
+        let shared: SharedConfig = Arc::new(Mutex::new(Arc::clone(&initial)));
+
+        // A valid reload swaps the config (a different `Arc`).
+        reload_server_config(&shared, &tls);
+        let after_ok = shared.lock().unwrap().clone();
+        assert!(
+            !Arc::ptr_eq(&initial, &after_ok),
+            "a successful reload swaps in a new config"
+        );
+
+        // A reload with a bad cert path fails and KEEPS the current config.
+        let bad = TlsConfig {
+            cert: dir.path().join("does-not-exist.crt"),
+            ..tls
+        };
+        reload_server_config(&shared, &bad);
+        let after_err = shared.lock().unwrap().clone();
+        assert!(
+            Arc::ptr_eq(&after_ok, &after_err),
+            "a failed reload keeps the current config (serving never breaks)"
+        );
+    }
+
+    /// End-to-end zero-downtime rotation: a live listener serving cert A is
+    /// hot-reloaded to a cert from a *different* CA (B); a new connection then
+    /// presents B (a CA-B client succeeds) and the old CA-A no longer
+    /// validates — proving the accept loop serves the swapped certificate.
+    #[test]
+    fn cert_hot_reload_serves_the_new_certificate() {
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        if !gen_pki(dir_a.path()) || !gen_pki(dir_b.path()) {
+            eprintln!("skipping cert_hot_reload_serves_the_new_certificate: openssl unavailable");
+            return;
+        }
+        let state = make_state(dir_a.path());
+        let (server, shared) = serve(&server_tls(dir_a.path()), &state);
+        let ca_a = dir_a.path().join("ca.crt");
+        let ca_b = dir_b.path().join("ca.crt");
+        let health = b"GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n";
+
+        // Initially the server presents cert A.
+        assert!(text(&request(server.addr, &ca_a, None, health)).starts_with("HTTP/1.1 200 OK"));
+
+        // Hot-reload to cert B (a different CA).
+        reload_server_config(&shared, &server_tls(dir_b.path()));
+
+        // A CA-B client now succeeds…
+        let rb = request(server.addr, &ca_b, None, health);
+        assert!(
+            text(&rb).starts_with("HTTP/1.1 200 OK"),
+            "the reloaded cert B is served: {}",
+            text(&rb)
+        );
+        // …and the old CA-A no longer validates the presented (B) certificate.
+        assert!(
+            request(server.addr, &ca_a, None, health).is_err(),
+            "after the hot-reload, a CA-A-only client must fail to validate cert B"
         );
         drop(server);
     }

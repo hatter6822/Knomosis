@@ -162,10 +162,14 @@ unseen records.
     + schema version, and the **budget/pool config echo** (so a §10 drift is
     observable).
   * **Graceful stop:** send **SIGTERM** or **SIGINT** (§7).
-
----
-
-## 6. Observability
+  * **TLS certificate rotation (native HTTPS):** replace the `--tls-cert` /
+    `--tls-key` (and, for mTLS, `--mtls-client-ca`) files in place, then send
+    **`SIGHUP`** — the native-TLS listener hot-reloads the `ServerConfig` for
+    **new** connections with **no downtime** (existing sessions keep their
+    certificate).  A reload that fails to load / build (e.g. a half-written
+    file, or a key that does not match the cert) is **logged and ignored** —
+    the previously-loaded certificate keeps serving, so a fat-fingered rotation
+    never takes the listener down.  (No effect when `--tls-listen` is unset.)
 
   * **Per-request correlation id** (`X-Request-Id: req-<nonce>-<seq>`) on
     every response, mirrored into the RFC 9457 `problem.instance` on error
@@ -252,11 +256,10 @@ silently renders the wrong numbers.  Keep them in lockstep and verify via
 
   * **Native TLS / mTLS (G4.2)** — **implemented** (`--tls-listen` /
     `--tls-cert` / `--tls-key` / `--mtls-client-ca`, rustls 0.23, TLS 1.3,
-    §3 / §4).  Edge termination stays a supported alternative.  *Residual:*
+    §3 / §4); certificate **rotation is hot-reloaded on `SIGHUP`** (§5, no
+    downtime).  Edge termination stays a supported alternative.  *Residual:*
     the TLS path's per-read timeout bounds slow-loris per read (not an overall
-    per-request deadline) — parity with `knomosis-host`; and certificate
-    **rotation** requires a process restart (no hot-reload of the
-    `ServerConfig` yet).
+    per-request deadline) — parity with `knomosis-host`.
   * **Concurrent-SSE ceiling (OQ-GW-14)** — on the **plaintext** path SSE
     concurrency is bounded by `tiny_http`'s connection model *below*
     `--sse-max-streams`; adequate for a browser-BFF fan-out.  The **native-TLS**
