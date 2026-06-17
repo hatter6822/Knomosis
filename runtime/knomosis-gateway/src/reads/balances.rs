@@ -74,7 +74,14 @@ pub fn actor_balances(reads: &ReadState, actor: u64) -> RouteOutcome {
         Ok(s) => s,
         Err(e) => return read_failed("snapshot failed", &e.to_string()),
     };
-    let rows = match snap.scan(BALANCE_KEY_PREFIX) {
+    // Scan only THIS actor's rows.  A balance key is `b/` + actor(8BE) +
+    // resource(8BE), so the `b/` + actor(8BE) prefix selects exactly the
+    // actor's balances — O(actor's balances), not O(all balances in the
+    // deployment) followed by a Rust-side filter.
+    let mut actor_prefix = Vec::with_capacity(BALANCE_KEY_PREFIX.len() + 8);
+    actor_prefix.extend_from_slice(BALANCE_KEY_PREFIX);
+    actor_prefix.extend_from_slice(&actor.to_be_bytes());
+    let rows = match snap.scan(&actor_prefix) {
         Ok(r) => r,
         Err(e) => return read_failed("balance scan failed", &e.to_string()),
     };
