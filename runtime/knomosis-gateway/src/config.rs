@@ -8,8 +8,8 @@
 //! Gateway CLI / environment configuration.
 //!
 //! **Surface (the read-only slice, through G1.3):** the HTTP listen
-//! address (`--listen`) + bounded handler-pool size
-//! (`--handler-threads`); the read backend (`--indexer-db`); the
+//! address (`--listen`) + the plaintext connection cap
+//! (`--max-connections`); the read backend (`--indexer-db`); the
 //! budget-policy echo (`--free-tier` / `--action-cost` /
 //! `--epoch-length` / `--gas-pool-actor`); the `/v1/info` + `/readyz`
 //! metadata (`--deployment-id`, `--ok-admission-stage`, `--host-addr`,
@@ -19,9 +19,11 @@
 //! `--host-pool-size`, `--host-max-inflight`, `--request-deadline-ms`,
 //! `--max-frame-size`, `--idempotency-ttl-secs`); and native HTTPS / mTLS
 //! (`--tls-listen` / `--tls-cert` / `--tls-key` / `--mtls-client-ca` /
-//! `--tls-max-connections`, G4.2; see [`TlsConfig`]).  The only remaining
-//! §9.2 surface is the per-knob `--sse-*` tuning (today compile-time
-//! [`SseConfig`] defaults).  Every knob follows this module's fail-fast
+//! `--mtls-crl` / `--tls-max-connections`, G4.2; see [`TlsConfig`]); the SSE
+//! fan-out tuning (`--sse-*`, see [`SseConfig`]); the browser CORS allowlist
+//! (`--cors-origin`); the structured-log format (`--log-format`); the `--dev`
+//! mock-upstream profile; and the SSE upstream-subscription count
+//! (`--upstream-subscriptions`).  Every knob follows this module's fail-fast
 //! discipline (a typed [`ConfigError`] naming the offending flag).
 
 use std::net::SocketAddr;
@@ -36,20 +38,20 @@ pub const DEFAULT_LISTEN: &str = "127.0.0.1:8080";
 /// takes precedence over the environment.
 pub const LISTEN_ENV: &str = "KNX_GW_LISTEN";
 
-/// Default size of the bounded request-handler thread pool (G1.2d).
-/// The gateway is a synchronous server: this many worker threads each
-/// block on `tiny_http::Server::recv`, so the pool caps concurrent
-/// request *processing* — the practical resource governor.
-pub const DEFAULT_HANDLER_THREADS: usize = 16;
+/// Default cap on simultaneously-active **plaintext** connections.  The
+/// gateway serves each connection on its own thread (the same model as the
+/// TLS listener + `knomosis-host`), so this is the spawn-storm DoS bound — the
+/// practical concurrency governor.
+pub const DEFAULT_MAX_CONNECTIONS: usize = 1024;
 
-/// Sanity ceiling on `--handler-threads` (far above any reasonable
+/// Sanity ceiling on `--max-connections` (far above any reasonable
 /// single-host deployment; rejects a fat-finger that would exhaust
-/// the thread table).
-pub const MAX_HANDLER_THREADS: usize = 4096;
+/// the thread / fd table).
+pub const MAX_CONNECTIONS_CEILING: usize = 65_536;
 
-/// Environment variable mirroring `--handler-threads`.  The CLI flag
+/// Environment variable mirroring `--max-connections`.  The CLI flag
 /// takes precedence over the environment.
-pub const HANDLER_THREADS_ENV: &str = "KNX_GW_HANDLER_THREADS";
+pub const MAX_CONNECTIONS_ENV: &str = "KNX_GW_MAX_CONNECTIONS";
 
 /// Environment variable mirroring `--indexer-db`.  The CLI flag takes
 /// precedence over the environment.
@@ -151,6 +153,12 @@ pub const TLS_KEY_ENV: &str = "KNX_GW_TLS_KEY";
 /// the TLS listener then *requires* a client certificate chaining to this CA.
 pub const MTLS_CLIENT_CA_ENV: &str = "KNX_GW_MTLS_CLIENT_CA";
 
+/// Environment variable mirroring `--mtls-crl`.  Presence makes the mTLS
+/// verifier *check revocation* against the PEM CRL bundle: an otherwise-valid
+/// but revoked client certificate is rejected at the handshake.  Requires mTLS
+/// (`--mtls-client-ca`) — a CRL with no client-CA is meaningless.
+pub const MTLS_CRL_ENV: &str = "KNX_GW_MTLS_CRL";
+
 /// Environment variable mirroring `--tls-max-connections`.
 pub const TLS_MAX_CONNECTIONS_ENV: &str = "KNX_GW_TLS_MAX_CONNECTIONS";
 
@@ -178,6 +186,16 @@ pub const SSE_HEARTBEAT_SECS_ENV: &str = "KNX_GW_SSE_HEARTBEAT_SECS";
 /// Environment variable mirroring `--sse-stale-secs`.
 pub const SSE_STALE_SECS_ENV: &str = "KNX_GW_SSE_STALE_SECS";
 
+/// Environment variable mirroring `--sse-write-timeout-ms`.
+pub const SSE_WRITE_TIMEOUT_MS_ENV: &str = "KNX_GW_SSE_WRITE_TIMEOUT_MS";
+
+/// Default per-record SSE write deadline (milliseconds): a single record /
+/// heartbeat write that blocks longer than this (a stalled browser that has
+/// stopped reading) drops the stream rather than pinning the writer thread.
+/// Now honoured on **both** the plaintext and native-TLS paths (each owns its
+/// socket, so the timeout is a real `SO_SNDTIMEO`).
+pub const DEFAULT_SSE_WRITE_TIMEOUT_MS: u64 = 30_000;
+
 /// Hard ceiling on `--sse-ring-capacity` (records retained in memory; at this
 /// cap a worst-case-sized record corpus is still bounded).
 pub const MAX_SSE_RING_CAPACITY: usize = 1_048_576;
@@ -190,6 +208,32 @@ pub const MAX_SSE_MAX_STREAMS: usize = 65_536;
 /// (one day — far above any sane keepalive / staleness interval).
 pub const MAX_SSE_SECS: u64 = 86_400;
 
+/// Hard ceiling (in milliseconds) on `--sse-write-timeout-ms` (one day).
+pub const MAX_SSE_WRITE_TIMEOUT_MS: u64 = 86_400_000;
+
+/// Environment variable mirroring `--cors-origin`.
+pub const CORS_ORIGIN_ENV: &str = "KNX_GW_CORS_ORIGIN";
+
+/// Environment variable mirroring `--log-format`.
+pub const LOG_FORMAT_ENV: &str = "KNX_GW_LOG_FORMAT";
+
+/// Environment variable mirroring `--dev` (any non-empty value other than
+/// `0` / `false` enables it).
+pub const DEV_ENV: &str = "KNX_GW_DEV";
+
+/// Environment variable mirroring `--upstream-subscriptions`.
+pub const UPSTREAM_SUBSCRIPTIONS_ENV: &str = "KNX_GW_UPSTREAM_SUBSCRIPTIONS";
+
+/// Default number of shared live-tail subscriptions feeding the SSE fan-out
+/// ring.  `1` is correct for almost every deployment (a single subscription is
+/// `O(1)` in clients); `>1` is a redundancy / availability knob, de-duplicated
+/// by the ring's `(seq, index)` key (G3.4b).
+pub const DEFAULT_UPSTREAM_SUBSCRIPTIONS: usize = 1;
+
+/// Hard ceiling on `--upstream-subscriptions` (more than this many redundant
+/// subscriptions to one upstream is never useful and just multiplies ingest).
+pub const MAX_UPSTREAM_SUBSCRIPTIONS: usize = 64;
+
 /// `--help` text for the scaffold surface (expanded in G1.3).
 pub const HELP_TEXT: &str = "\
 knomosis-gateway — HTTP/JSON + SSE gateway for the Knomosis runtime
@@ -200,10 +244,10 @@ USAGE:
 OPTIONS:
     --listen <ADDR>    HTTP listen address (env KNX_GW_LISTEN)
                        [default: 127.0.0.1:8080]
-    --handler-threads <N>
-                       Bounded request-handler pool size; caps
-                       concurrent request processing
-                       (env KNX_GW_HANDLER_THREADS) [default: 16]
+    --max-connections <N>
+                       Cap on simultaneously-active plaintext connections
+                       (each served on its own thread); the concurrency
+                       governor (env KNX_GW_MAX_CONNECTIONS) [default: 1024]
     --indexer-db <PATH>
                        Path to the knomosis-indexer SQLite database,
                        opened READ-ONLY for balance/budget/pool reads
@@ -281,6 +325,10 @@ OPTIONS:
                        presence enables mTLS (the TLS listener then REQUIRES a
                        valid client certificate)
                        (env KNX_GW_MTLS_CLIENT_CA) [default: no client auth]
+    --mtls-crl <PATH>  PEM certificate-revocation-list bundle; with it the mTLS
+                       verifier rejects a revoked (but unexpired) client
+                       certificate.  Requires --mtls-client-ca
+                       (env KNX_GW_MTLS_CRL) [default: no revocation check]
     --tls-max-connections <N>
                        Cap on simultaneously-active TLS connections (each on
                        its own thread); over-cap connects are closed
@@ -302,6 +350,28 @@ OPTIONS:
                        Upstream-read staleness timeout for the single fan-out
                        subscription (quiet live-tail reconnect cadence)
                        (env KNX_GW_SSE_STALE_SECS) [default: 55]
+    --sse-write-timeout-ms <N>
+                       Per-record SSE write deadline; a record/heartbeat write
+                       that blocks longer (a stalled browser) drops the stream
+                       (env KNX_GW_SSE_WRITE_TIMEOUT_MS) [default: 30000]
+    --upstream-subscriptions <N>
+                       Shared live-tail event-subscribe subscriptions feeding
+                       the SSE fan-out ring; >1 is a redundancy knob,
+                       de-duplicated by the ring's (seq,index) key
+                       (env KNX_GW_UPSTREAM_SUBSCRIPTIONS) [default: 1]
+    --cors-origin <ORIGIN>
+                       Allowed browser CORS origin(s): an exact origin, a
+                       comma-separated allowlist, or '*' (any).  Enables the
+                       OPTIONS preflight + Access-Control-* response headers.
+                       Unset emits no CORS headers (server-side BFF callers)
+                       (env KNX_GW_CORS_ORIGIN) [default: off]
+    --log-format <FMT> Structured-log format: one of json|text
+                       (env KNX_GW_LOG_FORMAT) [default: json]
+    --dev              Run against in-process MOCK upstreams (a mock host, an
+                       in-memory event generator, and a seeded temp indexer DB)
+                       so the BFF can iterate with no full Knomosis stack.
+                       Overrides --host-addr/--event-subscribe-addr/--indexer-db
+                       (env KNX_GW_DEV) [default: off]
     -h, --help         Print this help and exit
     -V, --version      Print version and exit
 
@@ -389,6 +459,31 @@ impl std::str::FromStr for AdmissionStage {
     }
 }
 
+/// Structured-log output format (`--log-format`).  Selects the
+/// `tracing-subscriber` formatter `main` installs at startup.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum LogFormat {
+    /// Machine-readable JSON lines (the default; what the log-based metrics
+    /// surface and a log aggregator consume).
+    #[default]
+    Json,
+    /// Human-readable single-line text (handy for local `--dev` runs).
+    Text,
+}
+
+impl std::str::FromStr for LogFormat {
+    type Err = ();
+
+    /// Parse `json` / `text` (case-insensitive); any other string is rejected.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "json" => Ok(LogFormat::Json),
+            "text" => Ok(LogFormat::Text),
+            _ => Err(()),
+        }
+    }
+}
+
 /// SSE fan-out tunables (Workstream G3.4 / G3.5).  Sensible defaults wire
 /// the live `GET /v1/events/stream` endpoint without operator action; each
 /// field is overridable via its `--sse-*` flag (§9.2), resolved + validated
@@ -411,6 +506,10 @@ pub struct SseConfig {
     /// subscription (a quiet live-tail reconnects from the watermark after
     /// this; also bounds the mux's shutdown latency).
     pub stale_secs: u64,
+    /// Per-record SSE write deadline (milliseconds): a single record /
+    /// heartbeat write that blocks longer than this drops the stream (a
+    /// stalled browser).  Honoured on both transports (each owns its socket).
+    pub write_timeout_ms: u64,
 }
 
 impl Default for SseConfig {
@@ -421,6 +520,7 @@ impl Default for SseConfig {
             max_client_lag: 2048,
             heartbeat_secs: 15,
             stale_secs: 55,
+            write_timeout_ms: 30_000,
         }
     }
 }
@@ -442,6 +542,11 @@ pub struct TlsConfig {
     /// the listener requires a client certificate chaining to this CA;
     /// `None` (the default) is server-auth only.
     pub client_ca: Option<PathBuf>,
+    /// PEM certificate-revocation-list bundle path (`--mtls-crl`).  `Some`
+    /// makes the mTLS verifier check revocation (a revoked-but-unexpired client
+    /// certificate is rejected); requires `client_ca` to be `Some` (enforced at
+    /// parse time).  `None` (the default) performs no revocation check.
+    pub mtls_crl: Option<PathBuf>,
     /// Cap on simultaneously-active TLS connections (`--tls-max-connections`),
     /// the native-TLS spawn-storm DoS bound.  Always in
     /// `1..=MAX_TLS_MAX_CONNECTIONS`.  Default [`DEFAULT_TLS_MAX_CONNECTIONS`].
@@ -453,10 +558,12 @@ pub struct TlsConfig {
 pub struct Config {
     /// HTTP listen address.
     pub listen: SocketAddr,
-    /// Bounded request-handler thread-pool size (G1.2d): the number of
-    /// worker threads each blocking on `Server::recv`, capping
-    /// concurrent request processing.  Always in `1..=MAX_HANDLER_THREADS`.
-    pub handler_threads: usize,
+    /// Cap on simultaneously-active **plaintext** connections (`--listen`):
+    /// the gateway serves each connection on its own thread, so this bounds
+    /// concurrency (the spawn-storm guard).  Always in
+    /// `1..=MAX_CONNECTIONS_CEILING`.  The TLS listener has its own
+    /// [`TlsConfig::max_connections`].
+    pub max_connections: usize,
     /// Path to the indexer SQLite database, opened READ-ONLY for the
     /// balance / budget / pool reads (G1.6b).  `None` disables the read
     /// endpoints (they answer `503`); set via `--indexer-db`.
@@ -533,13 +640,34 @@ pub struct Config {
     /// (`--idempotency-ttl-secs`, G2.4); `0` disables the cache.  Default
     /// [`DEFAULT_IDEMPOTENCY_TTL_SECS`].
     pub idempotency_ttl_secs: u64,
-    /// SSE fan-out tunables (G3.4 / G3.5); see [`SseConfig`].  Defaulted
-    /// today (no per-knob flags yet).
+    /// SSE fan-out tunables (G3.4 / G3.5); see [`SseConfig`].  Each field is
+    /// overridable via its `--sse-*` flag.
     pub sse: SseConfig,
     /// Native in-process HTTPS configuration (G4.2), present iff
     /// `--tls-listen` is set; see [`TlsConfig`].  `None` (the default) runs
     /// the plaintext `--listen` socket only (TLS terminated at an edge).
     pub tls: Option<TlsConfig>,
+    /// Browser CORS allowlist (`--cors-origin`): an exact origin, a
+    /// comma-separated list, or `*` (any).  `Some` enables the `OPTIONS`
+    /// preflight + `Access-Control-*` response headers (see
+    /// [`crate::http::cors`]); `None` (the default) emits no CORS headers — the
+    /// gateway then serves server-side BFF callers only.  Validated at parse
+    /// time (each entry a syntactically well-formed origin).
+    pub cors_origin: Option<String>,
+    /// Structured-log output format (`--log-format`), installed by `main` at
+    /// startup.  Default [`LogFormat::Json`].
+    pub log_format: LogFormat,
+    /// Run against in-process **mock** upstreams (`--dev`, §9.3): a mock host,
+    /// an in-memory event generator, and a seeded temp indexer database, so the
+    /// BFF can iterate with no full Knomosis stack.  When `true`,
+    /// [`crate::dev`] stands the mocks up at startup and overrides
+    /// `host_addr` / `event_subscribe_addr` / `indexer_db`.  Default `false`.
+    pub dev: bool,
+    /// Number of shared live-tail event-subscribe subscriptions feeding the SSE
+    /// fan-out ring (`--upstream-subscriptions`).  `1` (the default) is correct
+    /// almost always; `>1` is a redundancy knob, de-duplicated by the ring's
+    /// `(seq, index)` key (G3.4b).  Always in `1..=MAX_UPSTREAM_SUBSCRIPTIONS`.
+    pub upstream_subscriptions: usize,
 }
 
 impl Config {
@@ -571,7 +699,7 @@ impl Config {
                 reason: e.to_string(),
             })?;
 
-        let handler_threads = resolve_handler_threads(raw.handler_threads)?;
+        let max_connections = resolve_max_connections(raw.max_connections)?;
 
         let indexer_db = raw
             .indexer_db
@@ -618,6 +746,7 @@ impl Config {
             raw.tls_cert,
             raw.tls_key,
             raw.mtls_client_ca,
+            raw.mtls_crl,
             raw.tls_max_connections,
         )?;
         let sse = resolve_sse(
@@ -626,11 +755,16 @@ impl Config {
             raw.sse_max_client_lag,
             raw.sse_heartbeat_secs,
             raw.sse_stale_secs,
+            raw.sse_write_timeout_ms,
         )?;
+        let cors_origin = resolve_cors_origin(raw.cors_origin)?;
+        let log_format = resolve_log_format(raw.log_format)?;
+        let dev = resolve_dev(raw.dev);
+        let upstream_subscriptions = resolve_upstream_subscriptions(raw.upstream_subscriptions)?;
 
         Ok(Self {
             listen,
-            handler_threads,
+            max_connections,
             indexer_db,
             free_tier,
             action_cost,
@@ -649,6 +783,10 @@ impl Config {
             idempotency_ttl_secs,
             sse,
             tls,
+            cors_origin,
+            log_format,
+            dev,
+            upstream_subscriptions,
         })
     }
 }
@@ -657,20 +795,24 @@ impl Config {
 ///
 /// TLS is enabled iff `--tls-listen` (or its env var) is present, in which
 /// case `--tls-cert` + `--tls-key` are **required** (fail-fast otherwise) and
-/// `--mtls-client-ca` / `--tls-max-connections` are optional.  Supplying any
-/// `--tls-*` / `--mtls-*` knob *without* `--tls-listen` is a hard error rather
-/// than a silently-ignored flag — a cert with no listener is a misconfig.
+/// `--mtls-client-ca` / `--mtls-crl` / `--tls-max-connections` are optional.
+/// Supplying any `--tls-*` / `--mtls-*` knob *without* `--tls-listen` is a hard
+/// error rather than a silently-ignored flag — a cert with no listener is a
+/// misconfig; likewise `--mtls-crl` without `--mtls-client-ca` (a revocation
+/// list with no client-cert verification can never fire).
 fn resolve_tls(
     listen_raw: Option<String>,
     cert_raw: Option<String>,
     key_raw: Option<String>,
     client_ca_raw: Option<String>,
+    crl_raw: Option<String>,
     max_connections_raw: Option<String>,
 ) -> Result<Option<TlsConfig>, ConfigError> {
     let listen_str = listen_raw.or_else(|| std::env::var(TLS_LISTEN_ENV).ok());
     let cert = cert_raw.or_else(|| std::env::var(TLS_CERT_ENV).ok());
     let key = key_raw.or_else(|| std::env::var(TLS_KEY_ENV).ok());
     let client_ca = client_ca_raw.or_else(|| std::env::var(MTLS_CLIENT_CA_ENV).ok());
+    let crl = crl_raw.or_else(|| std::env::var(MTLS_CRL_ENV).ok());
     let max_connections_raw =
         max_connections_raw.or_else(|| std::env::var(TLS_MAX_CONNECTIONS_ENV).ok());
 
@@ -681,6 +823,7 @@ fn resolve_tls(
             (&cert, "--tls-cert"),
             (&key, "--tls-key"),
             (&client_ca, "--mtls-client-ca"),
+            (&crl, "--mtls-crl"),
             (&max_connections_raw, "--tls-max-connections"),
         ] {
             if let Some(value) = value {
@@ -694,6 +837,17 @@ fn resolve_tls(
         }
         return Ok(None);
     };
+
+    // A CRL with no client-CA can never fire — reject it rather than silently
+    // ignore the revocation list.
+    if let (Some(crl_value), None) = (&crl, &client_ca) {
+        return Err(ConfigError::InvalidValue {
+            flag: "--mtls-crl".to_string(),
+            value: crl_value.clone(),
+            reason: "requires --mtls-client-ca (a CRL is only checked against client certificates)"
+                .to_string(),
+        });
+    }
 
     let listen = listen_str
         .parse::<SocketAddr>()
@@ -718,6 +872,7 @@ fn resolve_tls(
         cert: PathBuf::from(cert),
         key: PathBuf::from(key),
         client_ca: client_ca.map(PathBuf::from),
+        mtls_crl: crl.map(PathBuf::from),
         max_connections,
     }))
 }
@@ -766,6 +921,7 @@ fn resolve_sse(
     lag_raw: Option<String>,
     heartbeat_raw: Option<String>,
     stale_raw: Option<String>,
+    write_timeout_raw: Option<String>,
 ) -> Result<SseConfig, ConfigError> {
     let d = SseConfig::default();
     let ring_capacity = resolve_bounded_usize(
@@ -818,12 +974,21 @@ fn resolve_sse(
         1,
         MAX_SSE_SECS,
     )?;
+    let write_timeout_ms = resolve_bounded_u64(
+        "--sse-write-timeout-ms",
+        write_timeout_raw,
+        SSE_WRITE_TIMEOUT_MS_ENV,
+        d.write_timeout_ms,
+        1,
+        MAX_SSE_WRITE_TIMEOUT_MS,
+    )?;
     Ok(SseConfig {
         ring_capacity,
         max_streams,
         max_client_lag,
         heartbeat_secs,
         stale_secs,
+        write_timeout_ms,
     })
 }
 
@@ -1008,6 +1173,141 @@ fn resolve_admission_stage(cli_raw: Option<String>) -> Result<AdmissionStage, Co
     }
 }
 
+/// Resolve `--cors-origin`: CLI value > env var > `None` (no CORS).  Validates
+/// that the value is `*` (any origin), or a comma-separated allowlist in which
+/// every entry is a well-formed origin (`scheme://host[:port]`, no path).  The
+/// stored value is the trimmed, re-joined canonical form.
+fn resolve_cors_origin(cli_raw: Option<String>) -> Result<Option<String>, ConfigError> {
+    let Some(raw) = cli_raw.or_else(|| std::env::var(CORS_ORIGIN_ENV).ok()) else {
+        return Ok(None);
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(ConfigError::InvalidValue {
+            flag: "--cors-origin".to_string(),
+            value: raw,
+            reason: "must not be empty (omit the flag to disable CORS)".to_string(),
+        });
+    }
+    if trimmed == "*" {
+        return Ok(Some("*".to_string()));
+    }
+    let mut origins = Vec::new();
+    for entry in trimmed.split(',') {
+        let origin = entry.trim();
+        if !is_valid_origin(origin) {
+            return Err(ConfigError::InvalidValue {
+                flag: "--cors-origin".to_string(),
+                value: origin.to_string(),
+                reason: "expected an origin like https://app.example.com, a comma-separated \
+                         list of them, or '*'"
+                    .to_string(),
+            });
+        }
+        origins.push(origin.to_string());
+    }
+    Ok(Some(origins.join(",")))
+}
+
+/// Whether `origin` is a syntactically well-formed Web origin (RFC 6454): the
+/// literal `null`, or `scheme://host[:port]` with `scheme` ∈ {`http`,`https`},
+/// a non-empty host, an optional numeric port, and **no** path / query /
+/// fragment (a trailing slash is the most common fat-finger and is rejected).
+fn is_valid_origin(origin: &str) -> bool {
+    if origin == "null" {
+        return true;
+    }
+    let Some(authority) = origin
+        .strip_prefix("https://")
+        .or_else(|| origin.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    if authority.is_empty()
+        || authority.contains('/')
+        || authority.contains('?')
+        || authority.contains('#')
+    {
+        return false;
+    }
+    // Split an optional `:port` off, honouring a bracketed IPv6 host literal
+    // (`[::1]`) whose host part itself contains colons.
+    let (host, port) = if authority.starts_with('[') {
+        match authority.find(']') {
+            Some(close) => {
+                let host = &authority[..=close];
+                match authority[close + 1..].strip_prefix(':') {
+                    Some(port) => (host, Some(port)),
+                    None if close + 1 == authority.len() => (host, None),
+                    None => return false, // junk after the IPv6 bracket
+                }
+            }
+            None => return false, // unterminated IPv6 bracket
+        }
+    } else {
+        match authority.rsplit_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        }
+    };
+    !host.is_empty() && port.is_none_or(|p| !p.is_empty() && p.parse::<u16>().is_ok())
+}
+
+/// Resolve `--log-format`: CLI value > env var > [`LogFormat::Json`].  An
+/// unrecognised format is a typed [`ConfigError::InvalidValue`].
+fn resolve_log_format(cli_raw: Option<String>) -> Result<LogFormat, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(LOG_FORMAT_ENV).ok()) {
+        None => Ok(LogFormat::default()),
+        Some(raw) => raw
+            .parse::<LogFormat>()
+            .map_err(|()| ConfigError::InvalidValue {
+                flag: "--log-format".to_string(),
+                value: raw,
+                reason: "expected one of json|text".to_string(),
+            }),
+    }
+}
+
+/// Resolve `--dev`: the boolean flag (presence) OR the `KNX_GW_DEV` env var set
+/// to any value other than `` / `0` / `false`.
+fn resolve_dev(cli_flag: bool) -> bool {
+    if cli_flag {
+        return true;
+    }
+    match std::env::var(DEV_ENV) {
+        Ok(value) => {
+            let value = value.trim();
+            !(value.is_empty() || value == "0" || value.eq_ignore_ascii_case("false"))
+        }
+        Err(_) => false,
+    }
+}
+
+/// Resolve `--upstream-subscriptions`: CLI value > env var > the default,
+/// validating the `1..=MAX_UPSTREAM_SUBSCRIPTIONS` range.
+fn resolve_upstream_subscriptions(cli_raw: Option<String>) -> Result<usize, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(UPSTREAM_SUBSCRIPTIONS_ENV).ok()) {
+        None => Ok(DEFAULT_UPSTREAM_SUBSCRIPTIONS),
+        Some(raw) => {
+            let n = raw
+                .parse::<usize>()
+                .map_err(|e| ConfigError::InvalidValue {
+                    flag: "--upstream-subscriptions".to_string(),
+                    value: raw.clone(),
+                    reason: e.to_string(),
+                })?;
+            if n == 0 || n > MAX_UPSTREAM_SUBSCRIPTIONS {
+                return Err(ConfigError::InvalidValue {
+                    flag: "--upstream-subscriptions".to_string(),
+                    value: raw,
+                    reason: format!("must be in 1..={MAX_UPSTREAM_SUBSCRIPTIONS}"),
+                });
+            }
+            Ok(n)
+        }
+    }
+}
+
 /// Resolve an OPTIONAL `SocketAddr` flag: CLI value > env var > `None`.
 /// A present-but-malformed address is a hard [`ConfigError::InvalidValue`].
 fn parse_optional_socket_addr_flag(
@@ -1036,7 +1336,7 @@ fn parse_optional_socket_addr_flag(
 #[derive(Default)]
 struct RawArgs {
     listen: Option<String>,
-    handler_threads: Option<String>,
+    max_connections: Option<String>,
     indexer_db: Option<String>,
     free_tier: Option<String>,
     action_cost: Option<String>,
@@ -1057,18 +1357,27 @@ struct RawArgs {
     tls_cert: Option<String>,
     tls_key: Option<String>,
     mtls_client_ca: Option<String>,
+    mtls_crl: Option<String>,
     tls_max_connections: Option<String>,
     sse_ring_capacity: Option<String>,
     sse_max_streams: Option<String>,
     sse_max_client_lag: Option<String>,
     sse_heartbeat_secs: Option<String>,
     sse_stale_secs: Option<String>,
+    sse_write_timeout_ms: Option<String>,
+    cors_origin: Option<String>,
+    log_format: Option<String>,
+    dev: bool,
+    upstream_subscriptions: Option<String>,
 }
 
 impl RawArgs {
     /// Scan argv (`args[0]` is the program name; parsing starts at
     /// `args[1]`) into the raw option strings.  `-h`/`--help` and
     /// `-V`/`--version` short-circuit as their typed sentinels.
+    // A flat one-arm-per-flag dispatch; splitting it would only scatter the
+    // single source of truth for the flag set.
+    #[allow(clippy::too_many_lines)]
     fn scan(args: &[String]) -> Result<Self, ConfigError> {
         let mut raw = RawArgs::default();
         let mut i = 1;
@@ -1077,8 +1386,8 @@ impl RawArgs {
                 "-h" | "--help" => return Err(ConfigError::HelpRequested),
                 "-V" | "--version" => return Err(ConfigError::VersionRequested),
                 "--listen" => raw.listen = Some(take_value(args, &mut i, "--listen")?),
-                "--handler-threads" => {
-                    raw.handler_threads = Some(take_value(args, &mut i, "--handler-threads")?);
+                "--max-connections" => {
+                    raw.max_connections = Some(take_value(args, &mut i, "--max-connections")?);
                 }
                 "--indexer-db" => raw.indexer_db = Some(take_value(args, &mut i, "--indexer-db")?),
                 "--free-tier" => raw.free_tier = Some(take_value(args, &mut i, "--free-tier")?),
@@ -1132,6 +1441,7 @@ impl RawArgs {
                 "--mtls-client-ca" => {
                     raw.mtls_client_ca = Some(take_value(args, &mut i, "--mtls-client-ca")?);
                 }
+                "--mtls-crl" => raw.mtls_crl = Some(take_value(args, &mut i, "--mtls-crl")?),
                 "--tls-max-connections" => {
                     raw.tls_max_connections =
                         Some(take_value(args, &mut i, "--tls-max-connections")?);
@@ -1153,6 +1463,19 @@ impl RawArgs {
                 "--sse-stale-secs" => {
                     raw.sse_stale_secs = Some(take_value(args, &mut i, "--sse-stale-secs")?);
                 }
+                "--sse-write-timeout-ms" => {
+                    raw.sse_write_timeout_ms =
+                        Some(take_value(args, &mut i, "--sse-write-timeout-ms")?);
+                }
+                "--upstream-subscriptions" => {
+                    raw.upstream_subscriptions =
+                        Some(take_value(args, &mut i, "--upstream-subscriptions")?);
+                }
+                "--cors-origin" => {
+                    raw.cors_origin = Some(take_value(args, &mut i, "--cors-origin")?);
+                }
+                "--log-format" => raw.log_format = Some(take_value(args, &mut i, "--log-format")?),
+                "--dev" => raw.dev = true,
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
             i += 1;
@@ -1172,24 +1495,24 @@ fn take_value(args: &[String], i: &mut usize, flag: &str) -> Result<String, Conf
     Ok(value.clone())
 }
 
-/// Resolve `--handler-threads`: CLI value > env var > the compiled
-/// default, validating the `1..=MAX_HANDLER_THREADS` range.
-fn resolve_handler_threads(cli_raw: Option<String>) -> Result<usize, ConfigError> {
-    match cli_raw.or_else(|| std::env::var(HANDLER_THREADS_ENV).ok()) {
-        None => Ok(DEFAULT_HANDLER_THREADS),
+/// Resolve `--max-connections`: CLI value > env var > the compiled
+/// default, validating the `1..=MAX_CONNECTIONS_CEILING` range.
+fn resolve_max_connections(cli_raw: Option<String>) -> Result<usize, ConfigError> {
+    match cli_raw.or_else(|| std::env::var(MAX_CONNECTIONS_ENV).ok()) {
+        None => Ok(DEFAULT_MAX_CONNECTIONS),
         Some(raw) => {
             let n = raw
                 .parse::<usize>()
                 .map_err(|e| ConfigError::InvalidValue {
-                    flag: "--handler-threads".to_string(),
+                    flag: "--max-connections".to_string(),
                     value: raw.clone(),
                     reason: e.to_string(),
                 })?;
-            if n == 0 || n > MAX_HANDLER_THREADS {
+            if n == 0 || n > MAX_CONNECTIONS_CEILING {
                 return Err(ConfigError::InvalidValue {
-                    flag: "--handler-threads".to_string(),
+                    flag: "--max-connections".to_string(),
                     value: raw,
-                    reason: format!("must be in 1..={MAX_HANDLER_THREADS}"),
+                    reason: format!("must be in 1..={MAX_CONNECTIONS_CEILING}"),
                 });
             }
             Ok(n)
@@ -1323,41 +1646,41 @@ mod tests {
         ));
     }
 
-    /// `--handler-threads` defaults to [`super::DEFAULT_HANDLER_THREADS`]
+    /// `--max-connections` defaults to [`super::DEFAULT_MAX_CONNECTIONS`]
     /// and is overridable on the CLI.
     #[test]
-    fn handler_threads_default_and_override() {
-        std::env::remove_var(super::HANDLER_THREADS_ENV);
+    fn max_connections_default_and_override() {
+        std::env::remove_var(super::MAX_CONNECTIONS_ENV);
         let cfg = Config::parse(&argv(&[])).unwrap();
-        assert_eq!(cfg.handler_threads, super::DEFAULT_HANDLER_THREADS);
-        let cfg = Config::parse(&argv(&["--handler-threads", "4"])).unwrap();
-        assert_eq!(cfg.handler_threads, 4);
+        assert_eq!(cfg.max_connections, super::DEFAULT_MAX_CONNECTIONS);
+        let cfg = Config::parse(&argv(&["--max-connections", "4"])).unwrap();
+        assert_eq!(cfg.max_connections, 4);
     }
 
-    /// `--handler-threads 0` is rejected (the pool must be non-empty).
+    /// `--max-connections 0` is rejected (the pool must be non-empty).
     #[test]
-    fn handler_threads_zero_rejected() {
+    fn max_connections_zero_rejected() {
         assert!(matches!(
-            Config::parse(&argv(&["--handler-threads", "0"])),
+            Config::parse(&argv(&["--max-connections", "0"])),
             Err(ConfigError::InvalidValue { .. })
         ));
     }
 
-    /// `--handler-threads` above the ceiling is rejected.
+    /// `--max-connections` above the ceiling is rejected.
     #[test]
-    fn handler_threads_above_ceiling_rejected() {
-        let too_many = (super::MAX_HANDLER_THREADS + 1).to_string();
+    fn max_connections_above_ceiling_rejected() {
+        let too_many = (super::MAX_CONNECTIONS_CEILING + 1).to_string();
         assert!(matches!(
-            Config::parse(&argv(&["--handler-threads", &too_many])),
+            Config::parse(&argv(&["--max-connections", &too_many])),
             Err(ConfigError::InvalidValue { .. })
         ));
     }
 
-    /// A non-numeric `--handler-threads` value is rejected.
+    /// A non-numeric `--max-connections` value is rejected.
     #[test]
-    fn handler_threads_non_numeric_rejected() {
+    fn max_connections_non_numeric_rejected() {
         assert!(matches!(
-            Config::parse(&argv(&["--handler-threads", "lots"])),
+            Config::parse(&argv(&["--max-connections", "lots"])),
             Err(ConfigError::InvalidValue { .. })
         ));
     }
@@ -1612,6 +1935,7 @@ mod tests {
             super::TLS_CERT_ENV,
             super::TLS_KEY_ENV,
             super::MTLS_CLIENT_CA_ENV,
+            super::MTLS_CRL_ENV,
             super::TLS_MAX_CONNECTIONS_ENV,
         ] {
             std::env::remove_var(var);
@@ -1650,10 +1974,12 @@ mod tests {
             std::path::PathBuf::from("/etc/knomosis/tls/key.pem")
         );
         assert_eq!(tls.client_ca, None);
+        assert_eq!(tls.mtls_crl, None);
         assert_eq!(tls.max_connections, super::DEFAULT_TLS_MAX_CONNECTIONS);
     }
 
-    /// `--mtls-client-ca` enables mTLS; `--tls-max-connections` is honoured.
+    /// `--mtls-client-ca` enables mTLS; `--mtls-crl` adds a revocation list;
+    /// `--tls-max-connections` is honoured.
     #[test]
     fn tls_mtls_and_max_connections_parsed() {
         clear_tls_env();
@@ -1666,13 +1992,36 @@ mod tests {
             "/k.pem",
             "--mtls-client-ca",
             "/ca.pem",
+            "--mtls-crl",
+            "/crl.pem",
             "--tls-max-connections",
             "32",
         ]))
         .unwrap();
         let tls = cfg.tls.expect("TLS enabled");
         assert_eq!(tls.client_ca, Some(std::path::PathBuf::from("/ca.pem")));
+        assert_eq!(tls.mtls_crl, Some(std::path::PathBuf::from("/crl.pem")));
         assert_eq!(tls.max_connections, 32);
+    }
+
+    /// `--mtls-crl` without `--mtls-client-ca` is rejected (a revocation list
+    /// with no client-cert verification can never fire).
+    #[test]
+    fn mtls_crl_requires_client_ca() {
+        clear_tls_env();
+        assert!(matches!(
+            Config::parse(&argv(&[
+                "--tls-listen",
+                "127.0.0.1:8443",
+                "--tls-cert",
+                "/c.pem",
+                "--tls-key",
+                "/k.pem",
+                "--mtls-crl",
+                "/crl.pem",
+            ])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
     }
 
     /// `--tls-listen` without cert/key fails fast.
@@ -1704,6 +2053,7 @@ mod tests {
             vec!["--tls-cert", "/c.pem"],
             vec!["--tls-key", "/k.pem"],
             vec!["--mtls-client-ca", "/ca.pem"],
+            vec!["--mtls-crl", "/crl.pem"],
             vec!["--tls-max-connections", "10"],
         ] {
             assert!(
@@ -1724,6 +2074,7 @@ mod tests {
             super::SSE_MAX_CLIENT_LAG_ENV,
             super::SSE_HEARTBEAT_SECS_ENV,
             super::SSE_STALE_SECS_ENV,
+            super::SSE_WRITE_TIMEOUT_MS_ENV,
         ] {
             std::env::remove_var(var);
         }
@@ -1838,6 +2189,160 @@ mod tests {
                     "--tls-max-connections",
                     bad,
                 ])),
+                Err(ConfigError::InvalidValue { .. })
+            ));
+        }
+    }
+
+    /// `--sse-write-timeout-ms` defaults to 30000, overrides, and rejects `0`.
+    #[test]
+    fn sse_write_timeout_default_override_and_reject() {
+        clear_sse_env();
+        assert_eq!(
+            Config::parse(&argv(&[])).unwrap().sse.write_timeout_ms,
+            super::DEFAULT_SSE_WRITE_TIMEOUT_MS
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--sse-write-timeout-ms", "5000"]))
+                .unwrap()
+                .sse
+                .write_timeout_ms,
+            5000
+        );
+        assert!(matches!(
+            Config::parse(&argv(&["--sse-write-timeout-ms", "0"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// `--cors-origin` is off by default, accepts an exact origin / allowlist /
+    /// `*`, normalises whitespace, and rejects a malformed origin (a trailing
+    /// path is the common fat-finger) and an empty value.
+    #[test]
+    fn cors_origin_parsing() {
+        std::env::remove_var(super::CORS_ORIGIN_ENV);
+        assert_eq!(Config::parse(&argv(&[])).unwrap().cors_origin, None);
+        assert_eq!(
+            Config::parse(&argv(&["--cors-origin", "*"]))
+                .unwrap()
+                .cors_origin,
+            Some("*".to_string())
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--cors-origin", "https://app.example.com"]))
+                .unwrap()
+                .cors_origin,
+            Some("https://app.example.com".to_string())
+        );
+        // A comma-separated allowlist is trimmed + re-joined canonically.
+        assert_eq!(
+            Config::parse(&argv(&[
+                "--cors-origin",
+                " https://a.example.com , http://localhost:3000 ",
+            ]))
+            .unwrap()
+            .cors_origin,
+            Some("https://a.example.com,http://localhost:3000".to_string())
+        );
+        for bad in [
+            "app.example.com",               // no scheme
+            "https://app.example.com/",      // trailing path
+            "https://app.example.com/foo",   // path
+            "ftp://app.example.com",         // wrong scheme
+            "",                              // empty
+            "https://a.example.com,not-url", // one bad entry in the list
+        ] {
+            assert!(
+                matches!(
+                    Config::parse(&argv(&["--cors-origin", bad])),
+                    Err(ConfigError::InvalidValue { .. })
+                ),
+                "--cors-origin {bad:?} must be rejected"
+            );
+        }
+    }
+
+    /// `is_valid_origin` accepts host-only, port, IPv6-literal, and `null`
+    /// origins, and rejects path/query/fragment-bearing or schemeless input.
+    #[test]
+    fn valid_origin_predicate() {
+        for ok in [
+            "http://localhost",
+            "https://app.example.com",
+            "http://127.0.0.1:8080",
+            "https://[::1]:8443",
+            "http://[::1]",
+            "null",
+        ] {
+            assert!(super::is_valid_origin(ok), "{ok} should be valid");
+        }
+        for bad in [
+            "app.example.com",
+            "https://",
+            "https://a/b",
+            "https://a?x=1",
+            "https://a#frag",
+            "https://a:notaport",
+            "https://[::1",
+        ] {
+            assert!(!super::is_valid_origin(bad), "{bad} should be invalid");
+        }
+    }
+
+    /// `--log-format` defaults to JSON, parses json/text (case-insensitive),
+    /// and rejects an unknown format.
+    #[test]
+    fn log_format_parsing() {
+        use super::LogFormat;
+        std::env::remove_var(super::LOG_FORMAT_ENV);
+        assert_eq!(
+            Config::parse(&argv(&[])).unwrap().log_format,
+            LogFormat::Json
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--log-format", "text"]))
+                .unwrap()
+                .log_format,
+            LogFormat::Text
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--log-format", "JSON"]))
+                .unwrap()
+                .log_format,
+            LogFormat::Json
+        );
+        assert!(matches!(
+            Config::parse(&argv(&["--log-format", "yaml"])),
+            Err(ConfigError::InvalidValue { .. })
+        ));
+    }
+
+    /// `--dev` is a valueless flag, off by default.
+    #[test]
+    fn dev_flag_parsing() {
+        std::env::remove_var(super::DEV_ENV);
+        assert!(!Config::parse(&argv(&[])).unwrap().dev);
+        assert!(Config::parse(&argv(&["--dev"])).unwrap().dev);
+    }
+
+    /// `--upstream-subscriptions` defaults to 1, overrides, and rejects
+    /// `0` / over-ceiling.
+    #[test]
+    fn upstream_subscriptions_parsing() {
+        std::env::remove_var(super::UPSTREAM_SUBSCRIPTIONS_ENV);
+        assert_eq!(
+            Config::parse(&argv(&[])).unwrap().upstream_subscriptions,
+            super::DEFAULT_UPSTREAM_SUBSCRIPTIONS
+        );
+        assert_eq!(
+            Config::parse(&argv(&["--upstream-subscriptions", "4"]))
+                .unwrap()
+                .upstream_subscriptions,
+            4
+        );
+        for bad in ["0", &(super::MAX_UPSTREAM_SUBSCRIPTIONS + 1).to_string()] {
+            assert!(matches!(
+                Config::parse(&argv(&["--upstream-subscriptions", bad])),
                 Err(ConfigError::InvalidValue { .. })
             ));
         }

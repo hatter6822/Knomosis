@@ -5,15 +5,17 @@
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
-//! The **transport-agnostic** request core, shared by the HTTP
-//! (`tiny_http`) and HTTPS (`rustls`) front-ends.
+//! The **transport-agnostic** request core, shared by the plaintext and
+//! native-TLS front-ends (both over the gateway's own [`crate::http::conn`]
+//! handler — no `tiny_http`).
 //!
 //! Keeping a single source of truth for the gate → route → dispatch →
 //! finalise sequence means the two transports **cannot diverge in security
 //! behaviour**: both run the same fail-closed auth gate, the same
-//! per-credential rate cap, the same router, the same dispatch, and the
-//! same `X-Request-Id` / `problem.instance` finalisation.  Only the wire I/O
-//! (reading the request, writing the response, hijacking for SSE) differs.
+//! per-credential rate cap, the same router, the same dispatch, the same
+//! browser-CORS policy ([`crate::cors`]), and the same `X-Request-Id` /
+//! `problem.instance` finalisation.  Only the wire I/O (reading the request,
+//! writing the response, hijacking for SSE) differs.
 //!
 //! The request body is read through a caller-supplied closure so the
 //! **gate-before-body** ordering is preserved: an unauthenticated request
@@ -47,6 +49,8 @@ pub struct RequestParts<'a> {
     pub idempotency_key: Option<&'a str>,
     /// The `Last-Event-ID` header value, if present.
     pub last_event_id: Option<&'a str>,
+    /// The `Origin` header value, if present (browser CORS, §8.4).
+    pub origin: Option<&'a str>,
 }
 
 /// The decision the core reaches for one request: a finalised response to
@@ -64,6 +68,10 @@ pub enum Handled {
         types: Vec<String>,
         /// The `Last-Event-ID` header value, if present.
         last_event_id: Option<String>,
+        /// The browser-CORS headers to stamp on the SSE response head (empty
+        /// when CORS is disabled or the origin is not allowed), so a
+        /// browser-direct `EventSource` can read the cross-origin stream.
+        cors_headers: Vec<(&'static str, String)>,
     },
 }
 
@@ -89,6 +97,26 @@ pub fn handle(
     state: &AppState,
     request_id: &str,
 ) -> Handled {
+    // A CORS preflight is answered BEFORE the auth gate — a browser sends it
+    // with no credentials (Fetch standard), so gating it would break CORS.
+    // Only a genuine preflight (an `OPTIONS` carrying an `Origin`, with CORS
+    // configured) short-circuits; any other `OPTIONS` falls through to the
+    // router (→ 405/404).
+    if parts.method == "OPTIONS" {
+        if let (Some(policy), Some(origin)) = (state.cors.as_ref(), parts.origin) {
+            return Handled::Respond(finalize(crate::cors::preflight(policy, origin), request_id));
+        }
+    }
+
+    // The browser-CORS decorator for every real response (a no-op when CORS is
+    // disabled or the origin is absent / not allowed).
+    let respond = |outcome: RouteOutcome| {
+        Handled::Respond(finalize(
+            crate::cors::decorate(outcome, state.cors.as_ref(), parts.origin),
+            request_id,
+        ))
+    };
+
     // Auth first; the per-credential rate cap only if authenticated.
     let gate = auth::gate(&state.auth, parts.path, parts.auth_header)
         .or_else(|| auth::rate_limit_check(&state.rate_limiter, parts.path, parts.auth_header));
@@ -101,16 +129,18 @@ pub fn handle(
                 since: *since,
                 types: types.clone(),
                 last_event_id: parts.last_event_id.map(str::to_string),
+                cors_headers: crate::cors::response_headers_opt(state.cors.as_ref(), parts.origin),
             };
         }
     }
 
     // A denial short-circuits; otherwise read the (gated, bounded) body and
-    // dispatch.  Either way the response is finalised with the request id.
+    // dispatch.  Either way the response is finalised with the request id +
+    // any CORS headers.
     let Some(denied) = gate else {
         let body = match read_body(state.config.max_frame_size) {
             Ok(body) => body,
-            Err(too_large) => return Handled::Respond(finalize(too_large, request_id)),
+            Err(too_large) => return respond(too_large),
         };
         let payload = RequestPayload {
             content_type: parts.content_type,
@@ -118,9 +148,9 @@ pub fn handle(
             idempotency_key: parts.idempotency_key,
         };
         let outcome = apply_conditional(dispatch(routed, state, &payload), parts.if_none_match);
-        return Handled::Respond(finalize(outcome, request_id));
+        return respond(outcome);
     };
-    Handled::Respond(finalize(denied, request_id))
+    respond(denied)
 }
 
 /// Stamp the per-request correlation id onto the outcome (§G4.3): an

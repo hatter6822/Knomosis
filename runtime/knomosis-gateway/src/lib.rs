@@ -16,10 +16,12 @@
 //!
 //! ## Status
 //!
-//! **G1.1 crate scaffold.**  This landing wires the crate into the
-//! workspace and stands up the HTTP substrate (the vetted synchronous
-//! `tiny_http` server, per the G1.0 decision in
-//! `docs/audits/gateway_http_spike.md`) serving:
+//! The gateway owns its **whole** HTTP stack (the transport-neutral
+//! [`http::conn`] handler over the workspace's `rustls 0.23` — **no**
+//! `tiny_http`): one thread per connection on both the plaintext
+//! ([`http::plain`]) and native-TLS ([`http::tls`]) listeners, each with a
+//! socket-owned read/write timeout + a per-request read deadline.  The full
+//! surface is in place:
 //!
 //!   * `GET /healthz` — liveness (always 200 while the process runs).
 //!   * `GET /readyz`  — readiness: probes the indexer (a fresh cursor
@@ -29,14 +31,15 @@
 //!     stage (config echo), the host / event-subscribe wire protocol
 //!     versions, and the live indexer cursor (G1.8).
 //!   * the read endpoints — `GET /v1/actors/{id}/balances[/{resource}]`,
-//!     `/budget`, and `GET /v1/pools/{pool}?resource=` — over the G1.6a
-//!     read-only `SqliteStorage` handle (G1.6b / G1.7).
-//!
-//! The routing table (405 + `Allow`), the RFC 9457 problem responder,
-//! the bounded acceptor, the fail-closed bearer auth gate (G1.4), and
-//! `ETag` / `If-None-Match` → `304` revalidation (G1.9) are in place —
-//! **the read-only slice is shippable.**  The submit path (G2) and the
-//! SSE fan-out (G3), plus the remaining governors (G1.3), land next.
+//!     `/budget`, and `GET /v1/pools/{pool}?resource=` (G1.6b / G1.7).
+//!   * the submit path — `POST /v1/actions` (G2), forwarding client-signed
+//!     `SignedAction` bytes opaquely to the host.
+//!   * the events track — `GET /v1/events` backfill + `GET /v1/events/stream`
+//!     SSE fan-out (G3).
+//!   * the G4 hardening — auth (G1.4), rate limiting (G1.3), observability
+//!     (G4.3), graceful shutdown (G4.4), native TLS + mTLS (+ CRL revocation)
+//!     (G4.2), browser CORS ([`cors`]), and the `--dev` mock-upstream profile
+//!     ([`dev`]).
 //!
 //! ## Constraints (inherited from `runtime/`)
 //!
@@ -62,9 +65,12 @@ pub const GATEWAY_IDENTIFIER: &str = "knomosis-gateway/v1";
 
 pub mod auth;
 pub mod config;
+pub mod cors;
+pub mod dev;
 pub mod dispatch;
 pub mod events;
 pub mod http;
+pub mod logging;
 pub mod observability;
 pub mod problem;
 pub mod rate_limit;

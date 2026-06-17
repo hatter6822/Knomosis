@@ -5,58 +5,29 @@
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
-//! G4.2 native in-process HTTPS — the public-facing TLS front-end.
+//! G4.2 native in-process HTTPS — the TLS listener on `--tls-listen`.
 //!
-//! This terminates TLS **in the gateway process** with the workspace's
-//! `rustls 0.23` (TLS 1.3, the `ring` backend) — the same audited stack
-//! `knomosis-host` uses, **not** `tiny_http`'s bundled `rustls 0.20`.  It runs
-//! **alongside** the plaintext `tiny_http` `--listen` socket (so an operator
-//! can offer HTTPS directly *or* keep terminating TLS at a co-located edge),
-//! and it reuses the **exact** shared request core
-//! ([`crate::http::handler`]): the same fail-closed auth gate, the same
-//! per-credential rate cap, the same router, the same dispatch, and the same
-//! SSE fan-out ([`crate::events::stream::run_one_stream`] over the same
-//! [`StreamSlot`] capacity bound).  The two transports therefore **cannot
-//! diverge in security behaviour** — only the wire I/O differs.
-//!
-//! ## Why a hand-rolled HTTP/1.1 reader is safe here
-//!
-//! `tiny_http` cannot consume an externally-`rustls`-decrypted stream (its
-//! `from_listener` only accepts a `TcpListener`/`UnixListener`), so the TLS
-//! path reads HTTP/1.1 off the `rustls` `StreamOwned` itself.  The reader is
-//! deliberately **strict and unambiguous** — the request-smuggling / desync
-//! surface that motivated choosing `tiny_http` (G1.0) is closed by
-//! *construction*, because the gateway is the sole HTTP processor on the
-//! connection (it is the TLS terminator — there is no intermediary to disagree
-//! with about message boundaries):
-//!
-//!   * **`Transfer-Encoding` is rejected** (`501`) — no chunked decoding, so
-//!     the entire TE.CL / CL.TE desync class is impossible.
-//!   * **A duplicate or comma-listed `Content-Length` is rejected** (`400`);
-//!     a single valid `Content-Length` is read **exactly**, so the next
-//!     keep-alive request always starts at the right byte offset.
-//!   * **Obsolete line folding is rejected** (`400`); request line, header
-//!     line, header count, and header-section size are all bounded.
-//!   * **Any framing ambiguity closes the connection** rather than guessing a
-//!     boundary — a desync cannot persist across requests.
-//!
-//! It also honours **`Expect: 100-continue`** (RFC 7231 §5.1.1): the request
-//! head and body are read in two steps, so once the (bounded) body length is
-//! validated the loop writes the interim `100 Continue` *before* reading the
-//! body — a client that gates a large body behind it is never stalled.
-//!
-//! Each accepted connection runs on its **own thread** (bounded by
-//! `--tls-max-connections`), so a long-lived SSE stream never starves request
-//! processing and a slow client only blocks itself.
+//! This is the **TLS-specific** half: the `rustls 0.23` (TLS 1.3, `ring`)
+//! `ServerConfig` (optional mTLS), a SIGHUP zero-downtime certificate reload,
+//! and the accept loop / handshake.  Once the handshake completes, every
+//! connection is served by the **transport-neutral** [`crate::http::conn`]
+//! handler — the exact same strict reader + writer + keep-alive loop the
+//! plaintext [`crate::http::plain`] listener uses — so the two transports
+//! cannot diverge in security behaviour.  The TLS stack is the workspace's own
+//! `rustls 0.23` (the same `knomosis-host` uses); PEM cert/key/CA loading
+//! reuses `knomosis_host::tls`'s vetted loaders.
 
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::io::BufReader;
+use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
 
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
+
+use crate::config::{Config, TlsConfig};
+use crate::http::conn::{self, DeadlineStream};
+use crate::state::AppState;
 
 /// The **hot-swappable** server config.  The accept loop clones the current
 /// `Arc<ServerConfig>` under a brief lock for each new connection; a `SIGHUP`
@@ -64,40 +35,6 @@ use rustls::{ServerConfig, ServerConnection, StreamOwned};
 /// certificate can be rotated **without dropping the listener or any existing
 /// session** (G4.2 zero-downtime rotation).
 type SharedConfig = Arc<Mutex<Arc<ServerConfig>>>;
-
-use crate::config::{Config, TlsConfig};
-use crate::events::stream::{run_one_stream, StreamRequest, StreamSlot};
-use crate::http::handler::{self, log_request, route_request, Handled, RequestParts};
-use crate::http::router::RouteOutcome;
-use crate::observability::next_request_id;
-use crate::problem::Problem;
-use crate::state::AppState;
-
-/// Per-connection socket read / write timeout — the slow-loris bound (the peer
-/// of `knomosis_host`'s `DEFAULT_CONNECTION_TIMEOUT`).  It also bounds the TLS
-/// handshake (a stalled handshake read/write trips it) and a keep-alive idle
-/// gap (an idle connection is closed after this, freeing its thread).
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// How long the accept loop sleeps when no connection is ready (the listener
-/// is non-blocking so the loop can poll the shutdown flag).
-const ACCEPT_POLL: Duration = Duration::from_millis(50);
-
-/// Maximum request-line length (method + target + version).  A longer line is
-/// `414 URI Too Long`.
-const MAX_REQUEST_LINE_BYTES: usize = 8 * 1024;
-
-/// Maximum single header-line length.  A longer line is `431`.
-const MAX_HEADER_LINE_BYTES: usize = 8 * 1024;
-
-/// Maximum number of request header lines.  More is `431`.
-const MAX_HEADERS: usize = 100;
-
-/// Maximum total request-header-section size.  Larger is `431`.
-const MAX_HEADER_SECTION_BYTES: usize = 64 * 1024;
-
-/// The concrete `rustls` server stream the connection loop reads and writes.
-type TlsStream = StreamOwned<ServerConnection, TcpStream>;
 
 /// Errors standing up the native-TLS listener at startup (surfaced by
 /// [`crate::http::serve`] as a fatal `ServeError`, so a misconfigured TLS
@@ -113,6 +50,9 @@ pub enum TlsSetupError {
     /// The mTLS client-CA bundle (`--mtls-client-ca`) could not be loaded.
     #[error("loading the mTLS client CA ({0}) failed")]
     ClientCa(#[source] knomosis_host::tls::TlsConfigError),
+    /// The mTLS client-revocation list (`--mtls-crl`) could not be loaded.
+    #[error("loading the mTLS CRL failed: {0}")]
+    Crl(String),
     /// `rustls` rejected the assembled server configuration (e.g. the key
     /// does not match the certificate, or a client-CA cert is not a valid
     /// trust anchor).
@@ -136,14 +76,14 @@ pub enum TlsSetupError {
 /// thread's join handle (the caller joins it on drain).
 ///
 /// The `rustls` `ServerConfig` is built and the socket bound **here**, before
-/// returning, so a bad cert / key / CA / address is a fatal startup error
+/// returning, so a bad cert / key / CA / CRL / address is a fatal startup error
 /// rather than a per-connection fault.
 ///
 /// # Errors
 ///
-/// Returns a [`TlsSetupError`] if the certificate / key / client-CA cannot be
-/// loaded, `rustls` rejects the configuration, the socket cannot be bound, or
-/// the accept thread cannot be spawned.
+/// Returns a [`TlsSetupError`] if the certificate / key / client-CA / CRL
+/// cannot be loaded, `rustls` rejects the configuration, the socket cannot be
+/// bound, or the accept thread cannot be spawned.
 pub(crate) fn spawn_tls_listener(
     config: &Config,
     state: &Arc<AppState>,
@@ -151,8 +91,8 @@ pub(crate) fn spawn_tls_listener(
     let Some(tls) = &config.tls else {
         return Ok(None);
     };
-    // Built + bound up front so a bad cert / key / CA / address is a fatal
-    // startup error; then wrapped for hot-swap on SIGHUP.
+    // Built + bound up front so a bad cert / key / CA / CRL is a fatal startup
+    // error; then wrapped for hot-swap on SIGHUP.
     let server_config: SharedConfig = Arc::new(Mutex::new(build_server_config(tls)?));
     let listener = TcpListener::bind(tls.listen).map_err(|e| TlsSetupError::Bind {
         addr: tls.listen.to_string(),
@@ -171,6 +111,7 @@ pub(crate) fn spawn_tls_listener(
     tracing::info!(
         listen = %tls.listen,
         mtls = tls.client_ca.is_some(),
+        mtls_crl = tls.mtls_crl.is_some(),
         max_connections = tls.max_connections,
         "knomosis-gateway native TLS listener started (SIGHUP reloads the certificate)"
     );
@@ -200,9 +141,9 @@ fn register_reload_signal(reload: &Arc<AtomicBool>) {
     let _ = reload; // no SIGHUP off Unix; the certificate is reloaded on restart
 }
 
-/// Reload the certificate / key / client-CA from disk and **hot-swap** the
-/// shared `ServerConfig` (the `SIGHUP` rotation).  On any load / build error
-/// the **current** certificate is kept, so a fat-fingered rotation never
+/// Reload the certificate / key / client-CA / CRL from disk and **hot-swap**
+/// the shared `ServerConfig` (the `SIGHUP` rotation).  On any load / build
+/// error the **current** certificate is kept, so a fat-fingered rotation never
 /// breaks serving; the swap is atomic from a new connection's view (existing
 /// sessions keep their old config).
 fn reload_server_config(current: &SharedConfig, tls: &TlsConfig) {
@@ -223,7 +164,8 @@ fn reload_server_config(current: &SharedConfig, tls: &TlsConfig) {
 /// Build the `rustls 0.23` `ServerConfig`: TLS 1.3 only, the `ring` backend
 /// (pinned per-config so any process-global default is irrelevant), the
 /// gateway's server cert + key, and — iff `--mtls-client-ca` is set — a WebPKI
-/// client-certificate verifier **requiring** a chain to that CA.
+/// client-certificate verifier **requiring** a chain to that CA, optionally
+/// **checking revocation** against the `--mtls-crl` CRL bundle.
 fn build_server_config(tls: &TlsConfig) -> Result<Arc<ServerConfig>, TlsSetupError> {
     use knomosis_host::tls::{load_certs, load_private_key};
 
@@ -252,12 +194,18 @@ fn build_server_config(tls: &TlsConfig) -> Result<Arc<ServerConfig>, TlsSetupErr
                     .add(cert)
                     .map_err(|e| TlsSetupError::Build(format!("client CA rejected: {e}")))?;
             }
-            let verifier = rustls::server::WebPkiClientVerifier::builder_with_provider(
+            let mut verifier_builder = rustls::server::WebPkiClientVerifier::builder_with_provider(
                 Arc::new(roots),
                 provider,
-            )
-            .build()
-            .map_err(|e| TlsSetupError::Build(format!("client verifier: {e}")))?;
+            );
+            // mTLS revocation (best practice): a revoked-but-unexpired client
+            // certificate is rejected once a CRL is configured.
+            if let Some(crl_path) = &tls.mtls_crl {
+                verifier_builder = verifier_builder.with_crls(load_crls(crl_path)?);
+            }
+            let verifier = verifier_builder
+                .build()
+                .map_err(|e| TlsSetupError::Build(format!("client verifier: {e}")))?;
             builder
                 .with_client_cert_verifier(verifier)
                 .with_single_cert(certs, key)
@@ -267,40 +215,32 @@ fn build_server_config(tls: &TlsConfig) -> Result<Arc<ServerConfig>, TlsSetupErr
     Ok(Arc::new(config))
 }
 
-/// An RAII reservation of one TLS connection slot, bounded by
-/// `--tls-max-connections` — the native-TLS spawn-storm DoS guard (the peer of
-/// `knomosis_host`'s `ConnectionSlot`).  [`ConnGuard::try_acquire`] increments
-/// the shared counter and returns the guard, or `None` at capacity (the accept
-/// loop then closes the socket without a handshake); the guard's `Drop`
-/// decrements, releasing the slot on every connection-thread exit path.
-struct ConnGuard {
-    active: Arc<AtomicUsize>,
-}
-
-impl ConnGuard {
-    /// Reserve a slot, or `None` if already at `max`.
-    fn try_acquire(active: &Arc<AtomicUsize>, max: usize) -> Option<Self> {
-        let prev = active.fetch_add(1, Ordering::SeqCst);
-        if prev >= max {
-            active.fetch_sub(1, Ordering::SeqCst);
-            return None;
-        }
-        Some(Self {
-            active: Arc::clone(active),
-        })
+/// Load the PEM-encoded certificate-revocation lists from `path` (one or more
+/// `X509 CRL` blocks) into the rustls vocabulary.
+fn load_crls(
+    path: &std::path::Path,
+) -> Result<Vec<rustls::pki_types::CertificateRevocationListDer<'static>>, TlsSetupError> {
+    let file = std::fs::File::open(path)
+        .map_err(|e| TlsSetupError::Crl(format!("opening {}: {e}", path.display())))?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut crls = Vec::new();
+    for crl in rustls_pemfile::crls(&mut reader) {
+        crls.push(crl.map_err(|e| TlsSetupError::Crl(format!("parsing {}: {e}", path.display())))?);
     }
-}
-
-impl Drop for ConnGuard {
-    fn drop(&mut self) {
-        self.active.fetch_sub(1, Ordering::SeqCst);
+    if crls.is_empty() {
+        return Err(TlsSetupError::Crl(format!(
+            "no CRL blocks found in {}",
+            path.display()
+        )));
     }
+    Ok(crls)
 }
 
-/// The accept loop: non-blocking `accept`, a `SIGHUP` certificate hot-reload
-/// (between accepts), a connection-count guard (`--tls-max-connections`), and
-/// one handler thread per admitted connection.  Exits when the shared
-/// `shutdown` flag is set.  `max_connections` is read from `tls`.
+/// The TLS accept loop: reuses the shared [`conn::accept_loop`] with a
+/// `pre_accept` hook that performs the SIGHUP certificate reload between
+/// accepts, and a per-connection handler that completes the handshake then
+/// hands off to [`conn::run_connection`].  Bounded by `--tls-max-connections`,
+/// counting toward the shared drain gauge.
 fn accept_loop(
     listener: &TcpListener,
     current_config: &SharedConfig,
@@ -309,1011 +249,78 @@ fn accept_loop(
     state: &Arc<AppState>,
     shutdown: &Arc<AtomicBool>,
 ) {
-    let active = Arc::new(AtomicUsize::new(0));
-    let mut consecutive_errors = 0u32;
-    while !shutdown.load(Ordering::Relaxed) {
-        // A SIGHUP since the last iteration → hot-reload the certificate, here
-        // (between accepts) so no in-flight handshake is disturbed.
-        if reload.swap(false, Ordering::Relaxed) {
-            reload_server_config(current_config, tls);
-        }
-        match listener.accept() {
-            Ok((stream, _peer)) => {
-                consecutive_errors = 0;
-                let Some(guard) = ConnGuard::try_acquire(&active, tls.max_connections) else {
-                    // Over the connection cap: close without a handshake (a
-                    // plaintext message would be unreadable to a TLS client).
-                    let _ = stream.shutdown(Shutdown::Both);
-                    continue;
-                };
-                // Clone the CURRENT config under a brief lock — a SIGHUP reload
-                // swaps it, but an in-flight connection keeps the one it took.
-                let server_config = current_config
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .clone();
-                let state = Arc::clone(state);
-                let shutdown = Arc::clone(shutdown);
-                let spawned = thread::Builder::new()
-                    .name("knx-gw-tls-conn".to_string())
-                    .spawn(move || {
-                        // The guard rides the connection thread; its `Drop`
-                        // releases the slot on every exit path (incl. a panic).
-                        let _guard = guard;
-                        handle_connection(stream, server_config, &state, &shutdown);
-                    });
-                if spawned.is_err() {
-                    // The closure (and with it the guard) is dropped, releasing
-                    // the slot; the socket closes and the client reconnects.
-                    tracing::error!("failed to spawn a TLS connection thread");
-                }
+    conn::accept_loop(
+        listener,
+        shutdown,
+        tls.max_connections,
+        &state.active_connections,
+        || {
+            // A SIGHUP since the last iteration → hot-reload the certificate,
+            // here (between accepts) so no in-flight handshake is disturbed.
+            if reload.swap(false, Ordering::Relaxed) {
+                reload_server_config(current_config, tls);
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                consecutive_errors = 0;
-                thread::sleep(ACCEPT_POLL);
+        },
+        |stream, guard| {
+            // Clone the CURRENT config under a brief lock — a SIGHUP reload
+            // swaps it, but an in-flight connection keeps the one it took.
+            let server_config = current_config
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            let state = Arc::clone(state);
+            let shutdown = Arc::clone(shutdown);
+            let spawned = thread::Builder::new()
+                .name("knx-gw-tls-conn".to_string())
+                .spawn(move || {
+                    // The guard rides the connection thread; its `Drop` releases
+                    // the slot + decrements the drain gauge on every exit path.
+                    let _guard = guard;
+                    handle_connection(stream, server_config, &state, &shutdown);
+                });
+            if spawned.is_err() {
+                tracing::error!("failed to spawn a TLS connection thread");
             }
-            Err(e) => {
-                consecutive_errors = consecutive_errors.saturating_add(1);
-                tracing::warn!(error = %e, consecutive_errors, "TLS accept failed");
-                let exp = consecutive_errors.saturating_sub(1).min(5);
-                thread::sleep(Duration::from_millis(100u64 << exp));
-            }
-        }
-    }
-    tracing::debug!("TLS accept loop exiting (shutdown signalled)");
+        },
+    );
 }
 
 /// Complete the TLS handshake and run the keep-alive request loop on one
 /// accepted connection.  Consumes `stream` (moved into the `rustls`
-/// `StreamOwned`); the socket closes when this returns.
+/// `StreamOwned`, then the per-request read-deadline wrapper); the socket
+/// closes when this returns.
 fn handle_connection(
     stream: TcpStream,
     server_config: Arc<ServerConfig>,
     state: &AppState,
     shutdown: &AtomicBool,
 ) {
-    let _ = stream.set_nodelay(true);
-    // Blocking mode is required by the synchronous `rustls::StreamOwned`
-    // adapter; the read/write timeouts bound slow-loris + the handshake.
-    let _ = stream.set_nonblocking(false);
-    let _ = stream.set_read_timeout(Some(CONNECTION_TIMEOUT));
-    let _ = stream.set_write_timeout(Some(CONNECTION_TIMEOUT));
+    conn::arm_socket(&stream);
+    // A second handle on the same underlying socket, used only to tune the SSE
+    // write timeout (`--sse-write-timeout-ms`); cloned before the `TcpStream` is
+    // moved into the `rustls` `StreamOwned`.  A clone failure leaves the
+    // `arm_socket` default in force.
+    let control = stream.try_clone().ok();
     let connection = match ServerConnection::new(server_config) {
         Ok(c) => c,
         Err(e) => {
             // Only a rustls mis-configuration reaches here (impossible once the
             // config was built by `build_server_config`); a *handshake* failure
-            // (e.g. a missing client cert under mTLS) surfaces later, on first
-            // read, and closes the connection.
+            // (e.g. a missing / revoked client cert under mTLS) surfaces later,
+            // on first read, and closes the connection.
             tracing::warn!(error = %e, "TLS session setup failed");
             return;
         }
     };
-    let mut reader = BufReader::new(StreamOwned::new(connection, stream));
-    connection_loop(&mut reader, state, shutdown);
-}
-
-/// One connection's keep-alive request loop: read a request, serve it via the
-/// shared core, and either loop (keep-alive) or return (close).  A framing
-/// reject is answered once and then closes the connection (no resync).
-fn connection_loop(reader: &mut BufReader<TlsStream>, state: &AppState, shutdown: &AtomicBool) {
-    loop {
-        if shutdown.load(Ordering::Relaxed) {
-            return;
-        }
-        let request_id = next_request_id();
-        let start = Instant::now();
-        let head = match read_head(reader, state.config.max_frame_size) {
-            Ok(head) => head,
-            // A clean EOF (idle keep-alive closed) or a socket error / timeout:
-            // close quietly, nothing owed.
-            Err(RequestError::ConnectionClosed | RequestError::Io) => return,
-            // A malformed / oversized / ambiguous request: answer once, close.
-            Err(RequestError::Reject {
-                status,
-                title,
-                detail,
-            }) => {
-                let outcome = handler::finalize(
-                    Problem::new(reject_slug(status), title, status)
-                        .with_detail(detail)
-                        .into_outcome(),
-                    &request_id,
-                );
-                log_request("-", "-", status, start.elapsed(), &request_id);
-                let _ = write_response(reader.get_mut(), &outcome, false);
-                return;
-            }
-        };
-        // Honour `Expect: 100-continue` (RFC 7231 §5.1.1): the body length is
-        // already validated as acceptable, so commit with the interim
-        // `100 Continue` *before* reading the body — prompting a waiting client
-        // to send it (without this it would stall until its own fallback).
-        if head.expect_continue
-            && head.content_length > 0
-            && write_continue(reader.get_mut()).is_err()
-        {
-            return;
-        }
-        let Ok(body) = read_body(reader, head.content_length) else {
-            return; // a truncated body / socket error → close
-        };
-        if matches!(
-            serve_parsed(reader, state, head.into_request(body), &request_id, start),
-            ConnControl::Close
-        ) {
-            return;
-        }
-    }
-}
-
-/// Write the interim `100 Continue` status line (RFC 7231 §5.1.1) — sent
-/// before reading a body the client gated behind `Expect: 100-continue`.
-fn write_continue<W: Write>(w: &mut W) -> std::io::Result<()> {
-    w.write_all(b"HTTP/1.1 100 Continue\r\n\r\n")?;
-    w.flush()
-}
-
-/// Whether the connection loop should keep the connection alive or close it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ConnControl {
-    /// Loop for another request on this connection.
-    KeepAlive,
-    /// Close the connection.
-    Close,
-}
-
-/// Serve one fully-parsed request through the shared request core, then write
-/// the response (or hijack the connection for SSE).  Returns whether the
-/// connection may be kept alive.
-fn serve_parsed(
-    reader: &mut BufReader<TlsStream>,
-    state: &AppState,
-    parsed: ParsedRequest,
-    request_id: &str,
-    start: Instant,
-) -> ConnControl {
-    let ParsedRequest {
-        method,
-        path,
-        query,
-        body,
-        authorization,
-        content_type,
-        if_none_match,
-        idempotency_key,
-        last_event_id,
-        keep_alive,
-    } = parsed;
-    let parts = RequestParts {
-        method: &method,
-        path: &path,
-        query: &query,
-        auth_header: authorization.as_deref(),
-        content_type: content_type.as_deref(),
-        if_none_match: if_none_match.as_deref(),
-        idempotency_key: idempotency_key.as_deref(),
-        last_event_id: last_event_id.as_deref(),
-    };
-    let routed = route_request(&parts);
-    // The body was already read off the wire (bounded by `--max-frame-size`
-    // while reading), so the handler's gated body closure just hands it back.
-    let handled = handler::handle(&routed, &parts, move |_max| Ok(body), state, request_id);
-    match handled {
-        Handled::Respond(outcome) => {
-            log_request(&method, &path, outcome.status, start.elapsed(), request_id);
-            if write_response(reader.get_mut(), &outcome, keep_alive).is_err() {
-                return ConnControl::Close;
-            }
-            if keep_alive {
-                ConnControl::KeepAlive
-            } else {
-                ConnControl::Close
-            }
-        }
-        Handled::Stream {
-            since,
-            types,
-            last_event_id,
-        } => {
-            log_request(&method, &path, 200, start.elapsed(), request_id);
-            serve_stream(
-                reader.get_mut(),
-                state,
-                since,
-                &types,
-                last_event_id.as_deref(),
-                request_id,
-            );
-            // An SSE stream owns the connection until it closes.
-            ConnControl::Close
-        }
-    }
-}
-
-/// Drive a live SSE stream over the hijacked `rustls` writer, reusing the exact
-/// fan-out core ([`run_one_stream`]) and capacity bound ([`StreamSlot`]) as the
-/// `tiny_http` path.  Answers `503` (a raw HTTP response) when events streaming
-/// is disabled or the stream cap is reached.
-fn serve_stream<W: Write>(
-    writer: &mut W,
-    state: &AppState,
-    since: Option<u64>,
-    types: &[String],
-    last_event_id: Option<&str>,
-    request_id: &str,
-) {
-    let Some(fanout) = &state.fanout else {
-        let _ = write_raw_problem(
-            writer,
-            503,
-            "events-unavailable",
-            "Events Unavailable",
-            "event streaming is disabled: the gateway was started without --event-subscribe-addr",
-            None,
-            request_id,
-        );
-        return;
-    };
-    let Some(_slot) = StreamSlot::try_acquire(&state.active_streams, state.config.sse.max_streams)
-    else {
-        let _ = write_raw_problem(
-            writer,
-            503,
-            "too-many-streams",
-            "Too Many Streams",
-            "the gateway is at its configured SSE stream capacity; retry shortly",
-            Some(1),
-            request_id,
-        );
-        return;
-    };
-    // Bind deref'd references so the `StreamRequest` field types line up.
-    let fanout: &crate::events::fanout::FanoutState = fanout;
-    let sse: &crate::config::SseConfig = &state.config.sse;
-    let shutdown: &AtomicBool = &state.shutdown;
-    let request = StreamRequest {
-        fanout,
-        since,
-        types,
-        last_event_id,
-        sse,
-        shutdown,
-        request_id,
-    };
-    let end = run_one_stream(writer, &request);
-    tracing::info!(request_id, ?end, "tls sse stream closed");
-    // `_slot` drops here → `active_streams` is decremented.
-}
-
-// ---------------------------------------------------------------------------
-// Strict HTTP/1.1 request reader
-// ---------------------------------------------------------------------------
-
-/// A fully-read, framing-unambiguous request.
-struct ParsedRequest {
-    method: String,
-    path: String,
-    query: String,
-    body: Vec<u8>,
-    authorization: Option<String>,
-    content_type: Option<String>,
-    if_none_match: Option<String>,
-    idempotency_key: Option<String>,
-    last_event_id: Option<String>,
-    keep_alive: bool,
-}
-
-/// The parsed request **head** (request line + headers + the validated framing
-/// decision), read *before* the body.  Splitting head from body lets the
-/// connection loop honour `Expect: 100-continue` — writing the interim
-/// `100 Continue` *between* the head and the body (RFC 7231 §5.1.1) — which a
-/// single body-inclusive read could not.
-struct RequestHead {
-    method: String,
-    path: String,
-    query: String,
-    authorization: Option<String>,
-    content_type: Option<String>,
-    if_none_match: Option<String>,
-    idempotency_key: Option<String>,
-    last_event_id: Option<String>,
-    keep_alive: bool,
-    /// The validated body length (already in `0 ..= max_body`).
-    content_length: usize,
-    /// Whether the client gated the body behind `Expect: 100-continue`.
-    expect_continue: bool,
-}
-
-impl RequestHead {
-    /// Combine this head with its (already-read) `body` into a full
-    /// [`ParsedRequest`].
-    fn into_request(self, body: Vec<u8>) -> ParsedRequest {
-        ParsedRequest {
-            method: self.method,
-            path: self.path,
-            query: self.query,
-            body,
-            authorization: self.authorization,
-            content_type: self.content_type,
-            if_none_match: self.if_none_match,
-            idempotency_key: self.idempotency_key,
-            last_event_id: self.last_event_id,
-            keep_alive: self.keep_alive,
-        }
-    }
-}
-
-/// Why [`read_head`] did not yield a request.
-#[derive(Debug)]
-enum RequestError {
-    /// A clean EOF before any request bytes — a closed idle keep-alive.
-    ConnectionClosed,
-    /// A socket I/O error / timeout, or a truncated request — close quietly.
-    Io,
-    /// A malformed / oversized / ambiguous request — answer `status`, then
-    /// close (a framing reject is never kept alive).
-    Reject {
-        /// The HTTP status to answer.
-        status: u16,
-        /// The RFC 9457 problem title.
-        title: &'static str,
-        /// The problem detail.
-        detail: String,
-    },
-}
-
-/// Build a [`RequestError::Reject`].
-fn reject(status: u16, title: &'static str, detail: impl Into<String>) -> RequestError {
-    RequestError::Reject {
-        status,
-        title,
-        detail: detail.into(),
-    }
-}
-
-/// The recognised request-line HTTP versions.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Version {
-    /// `HTTP/1.0` — defaults to connection-close.
-    Http10,
-    /// `HTTP/1.1` — defaults to keep-alive.
-    Http11,
-}
-
-/// Read one strict HTTP/1.1 request **head**: the request line, the header
-/// section, and the validated framing decision (`Content-Length` bounded by
-/// `max_body`).  The body is read separately by the caller (so an
-/// `Expect: 100-continue` body can be gated behind a `100 Continue`).  See the
-/// module docstring for the anti-smuggling rules.
-fn read_head<R: BufRead>(reader: &mut R, max_body: usize) -> Result<RequestHead, RequestError> {
-    let line = match read_line(reader, MAX_REQUEST_LINE_BYTES) {
-        LineRead::Line(l) => l,
-        LineRead::Eof => return Err(RequestError::ConnectionClosed),
-        LineRead::TooLong => return Err(reject(414, "URI Too Long", "request line too long")),
-        LineRead::Invalid => return Err(reject(400, "Bad Request", "non-UTF-8 request line")),
-        LineRead::Io => return Err(RequestError::Io),
-    };
-    let (method, target, version) = parse_request_line(&line)?;
-    let (path, query) = match target.split_once('?') {
-        Some((p, q)) => (p.to_string(), q.to_string()),
-        None => (target, String::new()),
-    };
-
-    let headers = read_headers(reader)?;
-
-    if headers.transfer_encoding {
-        return Err(reject(
-            501,
-            "Not Implemented",
-            "Transfer-Encoding is not supported; use Content-Length",
-        ));
-    }
-    let content_length = match headers.content_length {
-        None => 0,
-        Some(n) => usize::try_from(n)
-            .map_err(|_| reject(413, "Payload Too Large", "Content-Length out of range"))?,
-    };
-    if content_length > max_body {
-        return Err(reject(
-            413,
-            "Payload Too Large",
-            format!("request body exceeds the {max_body}-byte limit"),
-        ));
-    }
-
-    let keep_alive = match version {
-        _ if headers.connection_close => false,
-        Version::Http11 => true,
-        Version::Http10 => headers.connection_keep_alive,
-    };
-
-    Ok(RequestHead {
-        method,
-        path,
-        query,
-        authorization: headers.authorization,
-        content_type: headers.content_type,
-        if_none_match: headers.if_none_match,
-        idempotency_key: headers.idempotency_key,
-        last_event_id: headers.last_event_id,
-        keep_alive,
-        content_length,
-        expect_continue: headers.expect_continue,
-    })
-}
-
-/// Parse `METHOD SP request-target SP HTTP-version`.  Requires an origin-form
-/// target (`/...`) and HTTP/1.0 or /1.1; anything else is rejected.
-fn parse_request_line(line: &str) -> Result<(String, String, Version), RequestError> {
-    let line = strip_eol(line);
-    let mut parts = line.split(' ');
-    let method = parts.next().unwrap_or("");
-    let target = parts.next().unwrap_or("");
-    let version = parts.next().unwrap_or("");
-    if parts.next().is_some() {
-        return Err(reject(400, "Bad Request", "malformed request line"));
-    }
-    if method.is_empty() || method.bytes().any(|b| !is_tchar(b)) {
-        return Err(reject(400, "Bad Request", "malformed request method"));
-    }
-    if !target.starts_with('/') {
-        return Err(reject(
-            400,
-            "Bad Request",
-            "only origin-form request targets are supported",
-        ));
-    }
-    let version = match version {
-        "HTTP/1.1" => Version::Http11,
-        "HTTP/1.0" => Version::Http10,
-        _ => {
-            return Err(reject(
-                505,
-                "HTTP Version Not Supported",
-                "only HTTP/1.0 and HTTP/1.1 are supported",
-            ))
-        }
-    };
-    Ok((method.to_string(), target.to_string(), version))
-}
-
-/// The subset of request headers the gateway reads, plus the framing-relevant
-/// ones.  Field-name matching is case-insensitive; the first occurrence of a
-/// value header wins (matching the `tiny_http` path's header selection).
-// A flat parse-accumulator of independent flags (not a state machine), so the
-// >3-bool lint does not apply.
-#[allow(clippy::struct_excessive_bools)]
-#[derive(Default)]
-struct HeaderSet {
-    authorization: Option<String>,
-    content_type: Option<String>,
-    if_none_match: Option<String>,
-    idempotency_key: Option<String>,
-    last_event_id: Option<String>,
-    content_length: Option<u64>,
-    transfer_encoding: bool,
-    connection_close: bool,
-    connection_keep_alive: bool,
-    /// The client sent `Expect: 100-continue` (RFC 7231 §5.1.1): the body must
-    /// be gated behind an interim `100 Continue`.
-    expect_continue: bool,
-}
-
-/// Read the header section (lines until a blank line), bounded in count + size,
-/// rejecting obsolete folding and a duplicate / comma-listed `Content-Length`.
-fn read_headers<R: BufRead>(reader: &mut R) -> Result<HeaderSet, RequestError> {
-    let mut headers = HeaderSet::default();
-    let mut section_bytes = 0usize;
-    let mut count = 0usize;
-    loop {
-        let line = match read_line(reader, MAX_HEADER_LINE_BYTES) {
-            LineRead::Line(l) => l,
-            LineRead::Eof | LineRead::Io => return Err(RequestError::Io),
-            LineRead::TooLong => {
-                return Err(reject(
-                    431,
-                    "Request Header Fields Too Large",
-                    "header line too long",
-                ))
-            }
-            LineRead::Invalid => return Err(reject(400, "Bad Request", "non-UTF-8 header line")),
-        };
-        // Obsolete line folding (a continuation line starting with SP/HTAB) is
-        // a smuggling vector — reject it.
-        if line.starts_with(' ') || line.starts_with('\t') {
-            return Err(reject(400, "Bad Request", "obsolete header folding"));
-        }
-        let trimmed = strip_eol(&line);
-        if trimmed.is_empty() {
-            return Ok(headers); // end of header section
-        }
-        section_bytes = section_bytes.saturating_add(line.len());
-        count += 1;
-        if count > MAX_HEADERS || section_bytes > MAX_HEADER_SECTION_BYTES {
-            return Err(reject(
-                431,
-                "Request Header Fields Too Large",
-                "too many request headers",
-            ));
-        }
-        let (name, value) = trimmed
-            .split_once(':')
-            .ok_or_else(|| reject(400, "Bad Request", "header line without a colon"))?;
-        if name.is_empty() || name.bytes().any(|b| !is_tchar(b)) {
-            return Err(reject(400, "Bad Request", "malformed header field name"));
-        }
-        insert_header(&mut headers, name, value.trim())?;
-    }
-}
-
-/// Record one header into [`HeaderSet`], applying the framing rules.
-fn insert_header(headers: &mut HeaderSet, name: &str, value: &str) -> Result<(), RequestError> {
-    if name.eq_ignore_ascii_case("content-length") {
-        // A duplicate (even with the same value) or a comma-list is a
-        // request-smuggling vector — reject rather than guess.
-        if headers.content_length.is_some() {
-            return Err(reject(400, "Bad Request", "duplicate Content-Length"));
-        }
-        if value.contains(',') {
-            return Err(reject(400, "Bad Request", "multiple Content-Length values"));
-        }
-        let n = value
-            .parse::<u64>()
-            .map_err(|_| reject(400, "Bad Request", "malformed Content-Length"))?;
-        headers.content_length = Some(n);
-    } else if name.eq_ignore_ascii_case("transfer-encoding") {
-        headers.transfer_encoding = true;
-    } else if name.eq_ignore_ascii_case("connection") {
-        for token in value.split(',') {
-            let token = token.trim();
-            if token.eq_ignore_ascii_case("close") {
-                headers.connection_close = true;
-            } else if token.eq_ignore_ascii_case("keep-alive") {
-                headers.connection_keep_alive = true;
-            }
-        }
-    } else if name.eq_ignore_ascii_case("authorization") {
-        set_first(&mut headers.authorization, value);
-    } else if name.eq_ignore_ascii_case("content-type") {
-        set_first(&mut headers.content_type, value);
-    } else if name.eq_ignore_ascii_case("if-none-match") {
-        set_first(&mut headers.if_none_match, value);
-    } else if name.eq_ignore_ascii_case("idempotency-key") {
-        set_first(&mut headers.idempotency_key, value);
-    } else if name.eq_ignore_ascii_case("last-event-id") {
-        set_first(&mut headers.last_event_id, value);
-    } else if name.eq_ignore_ascii_case("expect") {
-        // RFC 7231 §5.1.1: recognise the `100-continue` expectation (a
-        // comma-list); any *other* expectation is ignored (lenient — we can't
-        // satisfy unknown ones, and rejecting would harm interop).
-        if value
-            .split(',')
-            .any(|t| t.trim().eq_ignore_ascii_case("100-continue"))
-        {
-            headers.expect_continue = true;
-        }
-    }
-    // Every other header is ignored (the gateway reads only the set above).
-    Ok(())
-}
-
-/// Set `slot` to `value` iff it is still empty (first-occurrence-wins).
-fn set_first(slot: &mut Option<String>, value: &str) {
-    if slot.is_none() {
-        *slot = Some(value.to_string());
-    }
-}
-
-/// Read exactly `content_length` body bytes, growing the buffer only by what
-/// actually arrives (no pre-allocation amplification on a lying length).  A
-/// short read (the client hung up) is an [`RequestError::Io`].
-fn read_body<R: Read>(reader: &mut R, content_length: usize) -> Result<Vec<u8>, RequestError> {
-    let mut body = Vec::new();
-    let mut remaining = content_length;
-    let mut chunk = [0u8; 8192];
-    while remaining > 0 {
-        let want = remaining.min(chunk.len());
-        match reader.read(&mut chunk[..want]) {
-            Ok(0) => return Err(RequestError::Io), // EOF before the full body
-            Ok(n) => {
-                body.extend_from_slice(&chunk[..n]);
-                remaining -= n;
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(_) => return Err(RequestError::Io),
-        }
-    }
-    Ok(body)
-}
-
-/// The outcome of [`read_line`].
-enum LineRead {
-    /// A complete line (terminated by `\n`), as UTF-8.
-    Line(String),
-    /// A clean EOF with no bytes read.
-    Eof,
-    /// The line exceeded its byte budget before a `\n`.
-    TooLong,
-    /// The line was not valid UTF-8.
-    Invalid,
-    /// A socket I/O error, or EOF mid-line.
-    Io,
-}
-
-/// Read one `\n`-terminated line, bounded to `cap` bytes (so a newline-less
-/// flood cannot allocate without bound).  Bytes after the `\n` stay buffered
-/// in `reader` for the next call (keep-alive framing is preserved).
-fn read_line<R: BufRead>(reader: &mut R, cap: usize) -> LineRead {
-    let mut buf = Vec::new();
-    let limit = u64::try_from(cap).unwrap_or(u64::MAX);
-    let Ok(n) = (&mut *reader).take(limit).read_until(b'\n', &mut buf) else {
-        return LineRead::Io;
-    };
-    if n == 0 {
-        return LineRead::Eof;
-    }
-    if buf.last() == Some(&b'\n') {
-        match String::from_utf8(buf) {
-            Ok(s) => LineRead::Line(s),
-            Err(_) => LineRead::Invalid,
-        }
-    } else if n >= cap {
-        LineRead::TooLong
-    } else {
-        LineRead::Io // underlying EOF mid-line (truncated)
-    }
-}
-
-/// Strip a trailing `\r\n` / `\n` from a line.
-fn strip_eol(s: &str) -> &str {
-    s.strip_suffix('\n')
-        .map_or(s, |s| s.strip_suffix('\r').unwrap_or(s))
-}
-
-/// RFC 7230 token character (for method + header-field-name validation).
-fn is_tchar(b: u8) -> bool {
-    b.is_ascii_alphanumeric()
-        || matches!(
-            b,
-            b'!' | b'#'
-                | b'$'
-                | b'%'
-                | b'&'
-                | b'\''
-                | b'*'
-                | b'+'
-                | b'-'
-                | b'.'
-                | b'^'
-                | b'_'
-                | b'`'
-                | b'|'
-                | b'~'
-        )
-}
-
-// ---------------------------------------------------------------------------
-// HTTP/1.1 response writer
-// ---------------------------------------------------------------------------
-
-/// Write a [`RouteOutcome`] as a framed HTTP/1.1 response (an explicit
-/// `Content-Length` + a `Connection` token, so keep-alive framing is exact).
-/// A header whose name/value carries a control character is skipped
-/// (response-splitting guard) — defensive: the gateway's headers are
-/// controlled.
-fn write_response<W: Write>(
-    w: &mut W,
-    outcome: &RouteOutcome,
-    keep_alive: bool,
-) -> std::io::Result<()> {
-    write!(
-        w,
-        "HTTP/1.1 {} {}\r\n",
-        outcome.status,
-        reason_phrase(outcome.status)
-    )?;
-    write!(w, "Content-Type: {}\r\n", outcome.content_type)?;
-    write!(w, "Content-Length: {}\r\n", outcome.body.len())?;
-    for (name, value) in &outcome.headers {
-        if header_is_safe(name, value) {
-            write!(w, "{name}: {value}\r\n")?;
-        }
-    }
-    write!(
-        w,
-        "Connection: {}\r\n\r\n",
-        if keep_alive { "keep-alive" } else { "close" }
-    )?;
-    w.write_all(outcome.body.as_bytes())?;
-    w.flush()
-}
-
-/// Build + write a framing-time problem (`503` events / over-cap) as a raw
-/// HTTP/1.1 response, carrying the `X-Request-Id` (via [`handler::finalize`])
-/// and an optional `Retry-After`.
-fn write_raw_problem<W: Write>(
-    w: &mut W,
-    status: u16,
-    slug: &str,
-    title: &str,
-    detail: &str,
-    retry_after_secs: Option<u64>,
-    request_id: &str,
-) -> std::io::Result<()> {
-    let mut problem = Problem::new(slug, title, status).with_detail(detail.to_string());
-    if let Some(secs) = retry_after_secs {
-        problem = problem.with_retry_after_ms(secs.saturating_mul(1000));
-    }
-    let mut outcome = handler::finalize(problem.into_outcome(), request_id);
-    if let Some(secs) = retry_after_secs {
-        outcome = outcome.with_header("Retry-After", secs.max(1).to_string());
-    }
-    write_response(w, &outcome, false)
-}
-
-/// Whether a header name + value is safe to write (no CR/LF/`:` injection).
-fn header_is_safe(name: &str, value: &str) -> bool {
-    !name.is_empty()
-        && name.bytes().all(|b| !matches!(b, b'\r' | b'\n' | b':'))
-        && value.bytes().all(|b| !matches!(b, b'\r' | b'\n'))
-}
-
-/// The reason phrase for a status code (informational; clients do not parse
-/// it).  Covers the gateway's emitted set; anything else is a generic token.
-fn reason_phrase(status: u16) -> &'static str {
-    match status {
-        200 => "OK",
-        201 => "Created",
-        202 => "Accepted",
-        204 => "No Content",
-        304 => "Not Modified",
-        400 => "Bad Request",
-        401 => "Unauthorized",
-        403 => "Forbidden",
-        404 => "Not Found",
-        405 => "Method Not Allowed",
-        409 => "Conflict",
-        413 => "Payload Too Large",
-        414 => "URI Too Long",
-        415 => "Unsupported Media Type",
-        429 => "Too Many Requests",
-        431 => "Request Header Fields Too Large",
-        500 => "Internal Server Error",
-        501 => "Not Implemented",
-        503 => "Service Unavailable",
-        504 => "Gateway Timeout",
-        505 => "HTTP Version Not Supported",
-        _ => "Status",
-    }
-}
-
-/// The RFC 9457 problem `type` slug for a framing-reject status.
-fn reject_slug(status: u16) -> &'static str {
-    match status {
-        413 => "payload-too-large",
-        414 => "uri-too-long",
-        431 => "request-header-fields-too-large",
-        501 => "not-implemented",
-        505 => "http-version-not-supported",
-        _ => "bad-request",
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        read_body, read_head, reason_phrase, reject_slug, write_response, ConnControl,
-        RequestError, Version,
-    };
-    use crate::http::RouteOutcome;
-    use std::io::BufReader;
-
-    /// Parse a full request (head + body) from a byte slice — the same
-    /// `read_head` → `read_body` sequence the connection loop runs (minus the
-    /// `Expect: 100-continue` write).  The reader is generic over `BufRead`, so
-    /// the strict HTTP/1.1 parser is unit-testable with no TLS.
-    fn parse(raw: &[u8], max_body: usize) -> Result<super::ParsedRequest, RequestError> {
-        let mut reader = BufReader::new(raw);
-        let head = read_head(&mut reader, max_body)?;
-        let body = read_body(&mut reader, head.content_length)?;
-        Ok(head.into_request(body))
-    }
-
-    #[test]
-    fn parses_a_simple_get() {
-        let req = parse(b"GET /healthz HTTP/1.1\r\nHost: x\r\n\r\n", 1024).unwrap();
-        assert_eq!(req.method, "GET");
-        assert_eq!(req.path, "/healthz");
-        assert_eq!(req.query, "");
-        assert!(req.keep_alive); // HTTP/1.1 default
-        assert!(req.body.is_empty());
-    }
-
-    #[test]
-    fn splits_path_and_query_and_reads_known_headers() {
-        let raw = b"GET /v1/pools/161?resource=1 HTTP/1.1\r\n\
-                    Authorization: Bearer tok\r\n\
-                    If-None-Match: W/\"7-42\"\r\n\
-                    Last-Event-ID: 5.0\r\n\r\n";
-        let req = parse(raw, 1024).unwrap();
-        assert_eq!(req.path, "/v1/pools/161");
-        assert_eq!(req.query, "resource=1");
-        assert_eq!(req.authorization.as_deref(), Some("Bearer tok"));
-        assert_eq!(req.if_none_match.as_deref(), Some("W/\"7-42\""));
-        assert_eq!(req.last_event_id.as_deref(), Some("5.0"));
-    }
-
-    #[test]
-    fn reads_post_body_exactly() {
-        let raw = b"POST /v1/actions HTTP/1.1\r\n\
-                    Content-Type: application/octet-stream\r\n\
-                    Content-Length: 5\r\n\r\n\
-                    helloTRAILING";
-        let req = parse(raw, 1024).unwrap();
-        assert_eq!(req.body, b"hello");
-        assert_eq!(
-            req.content_type.as_deref(),
-            Some("application/octet-stream")
-        );
-    }
-
-    #[test]
-    fn expect_100_continue_is_recognised_and_unknown_expectations_ignored() {
-        // `Expect: 100-continue` sets the flag the connection loop gates the
-        // body behind (RFC 7231 §5.1.1); the length is still validated.
-        let raw = b"POST /v1/actions HTTP/1.1\r\nHost: x\r\n\
-                    Expect: 100-continue\r\nContent-Length: 4\r\n\r\nbody";
-        let mut reader = BufReader::new(&raw[..]);
-        let head = read_head(&mut reader, 1024).unwrap();
-        assert!(head.expect_continue);
-        assert_eq!(head.content_length, 4);
-        // The case-insensitive scheme is accepted within a list.
-        let raw2 = b"POST / HTTP/1.1\r\nExpect: 100-Continue, foo\r\nContent-Length: 0\r\n\r\n";
-        let mut r2 = BufReader::new(&raw2[..]);
-        assert!(read_head(&mut r2, 1024).unwrap().expect_continue);
-        // An unknown expectation is ignored (lenient — not a 417), so the
-        // request still parses with the flag clear.
-        let raw3 = b"GET / HTTP/1.1\r\nExpect: other-thing\r\n\r\n";
-        let mut r3 = BufReader::new(&raw3[..]);
-        assert!(!read_head(&mut r3, 1024).unwrap().expect_continue);
-    }
-
-    #[test]
-    fn rejects_transfer_encoding() {
-        let raw = b"POST /v1/actions HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n";
-        assert!(matches!(
-            parse(raw, 1024),
-            Err(RequestError::Reject { status: 501, .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_duplicate_content_length() {
-        let raw =
-            b"POST /v1/actions HTTP/1.1\r\nContent-Length: 5\r\nContent-Length: 6\r\n\r\nhello";
-        assert!(matches!(
-            parse(raw, 1024),
-            Err(RequestError::Reject { status: 400, .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_comma_listed_content_length() {
-        let raw = b"POST /v1/actions HTTP/1.1\r\nContent-Length: 5, 5\r\n\r\nhello";
-        assert!(matches!(
-            parse(raw, 1024),
-            Err(RequestError::Reject { status: 400, .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_oversized_body() {
-        let raw = b"POST /v1/actions HTTP/1.1\r\nContent-Length: 100\r\n\r\n";
-        // max_body = 10 < declared 100 → 413 (without reading the body).
-        assert!(matches!(
-            parse(raw, 10),
-            Err(RequestError::Reject { status: 413, .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_obsolete_folding_and_bad_version_and_target() {
-        let folded = b"GET / HTTP/1.1\r\nX-A: a\r\n b\r\n\r\n";
-        assert!(matches!(
-            parse(folded, 1024),
-            Err(RequestError::Reject { status: 400, .. })
-        ));
-        let bad_version = b"GET / HTTP/2.0\r\n\r\n";
-        assert!(matches!(
-            parse(bad_version, 1024),
-            Err(RequestError::Reject { status: 505, .. })
-        ));
-        let absolute = b"GET http://evil/ HTTP/1.1\r\n\r\n";
-        assert!(matches!(
-            parse(absolute, 1024),
-            Err(RequestError::Reject { status: 400, .. })
-        ));
-    }
-
-    #[test]
-    fn keep_alive_rules() {
-        // HTTP/1.1 + Connection: close → close.
-        let close = parse(b"GET / HTTP/1.1\r\nConnection: close\r\n\r\n", 16).unwrap();
-        assert!(!close.keep_alive);
-        // HTTP/1.0 defaults to close…
-        let h10 = parse(b"GET / HTTP/1.0\r\n\r\n", 16).unwrap();
-        assert!(!h10.keep_alive);
-        // …unless it opts in.
-        let h10_ka = parse(b"GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n", 16).unwrap();
-        assert!(h10_ka.keep_alive);
-    }
-
-    #[test]
-    fn eof_and_truncation() {
-        // No bytes at all → a clean idle close.
-        assert!(matches!(
-            parse(b"", 16),
-            Err(RequestError::ConnectionClosed)
-        ));
-        // A declared body that never arrives → Io (truncated), not a hang.
-        let raw = b"POST /v1/actions HTTP/1.1\r\nContent-Length: 5\r\n\r\nhi";
-        assert!(matches!(parse(raw, 16), Err(RequestError::Io)));
-    }
-
-    #[test]
-    fn writes_a_framed_response() {
-        let outcome =
-            RouteOutcome::json(200, r#"{"ok":true}"#.to_string()).with_header("ETag", "W/\"7-42\"");
-        let mut buf = Vec::new();
-        write_response(&mut buf, &outcome, true).unwrap();
-        let text = String::from_utf8(buf).unwrap();
-        assert!(text.starts_with("HTTP/1.1 200 OK\r\n"));
-        assert!(text.contains("Content-Type: application/json\r\n"));
-        assert!(text.contains("Content-Length: 11\r\n"));
-        assert!(text.contains("ETag: W/\"7-42\"\r\n"));
-        assert!(text.contains("Connection: keep-alive\r\n"));
-        assert!(text.ends_with("\r\n\r\n{\"ok\":true}"));
-    }
-
-    #[test]
-    fn response_writer_blocks_header_injection() {
-        // A header value carrying CRLF is dropped, never written (so a
-        // response cannot be split).  (Defensive — gateway headers are
-        // controlled.)
-        let outcome =
-            RouteOutcome::json(200, "{}".to_string()).with_header("X-Evil", "a\r\nInjected: 1");
-        let mut buf = Vec::new();
-        write_response(&mut buf, &outcome, false).unwrap();
-        let text = String::from_utf8(buf).unwrap();
-        assert!(!text.contains("Injected"));
-        assert!(text.contains("Connection: close\r\n"));
-    }
-
-    #[test]
-    fn reason_and_slug_tables() {
-        assert_eq!(reason_phrase(200), "OK");
-        assert_eq!(reason_phrase(503), "Service Unavailable");
-        assert_eq!(reason_phrase(599), "Status");
-        assert_eq!(reject_slug(413), "payload-too-large");
-        assert_eq!(reject_slug(400), "bad-request");
-        assert_eq!(reject_slug(999), "bad-request");
-    }
-
-    #[test]
-    fn enum_smoke() {
-        // Keep the small marker enums exercised (they gate the connection loop).
-        assert_ne!(ConnControl::KeepAlive, ConnControl::Close);
-        assert_ne!(Version::Http10, Version::Http11);
-    }
+    let mut reader = BufReader::new(DeadlineStream::new(StreamOwned::new(connection, stream)));
+    conn::run_connection(&mut reader, control.as_ref(), state, shutdown);
 }
 
 /// End-to-end TLS handshake tests: a real `rustls 0.23` client drives the real
 /// accept loop + `build_server_config` over openssl-generated certificates.
-/// These exercise the wire path the pure-parser tests above cannot — the
-/// handshake, the response framing over `rustls`, keep-alive, and mTLS
-/// client-certificate enforcement.  Skipped (with a notice) where `openssl` is
-/// unavailable; CI (`ubuntu-latest`) always has it.
+/// These exercise the wire path the pure-parser tests cannot — the handshake,
+/// the response framing over `rustls`, keep-alive, mTLS, and cert hot-reload.
+/// Skipped (with a notice) where `openssl` is unavailable; CI always has it.
 #[cfg(test)]
 mod handshake_tests {
     use std::io::{Read, Write};
@@ -1393,6 +400,10 @@ mod handshake_tests {
             "basicConstraints=critical,CA:TRUE",
             "-addext",
             "keyUsage=critical,keyCertSign,cRLSign",
+            // A Subject Key Identifier so a generated CRL's Authority Key
+            // Identifier can reference it (webpki requires a conforming v2 CRL).
+            "-addext",
+            "subjectKeyIdentifier=hash",
         ]) {
             return false;
         }
@@ -1472,7 +483,7 @@ mod handshake_tests {
         }
         let config = Config {
             listen: "127.0.0.1:0".parse().unwrap(),
-            handler_threads: 1,
+            max_connections: 64,
             indexer_db: None,
             free_tier: 0,
             action_cost: 0,
@@ -1489,6 +500,10 @@ mod handshake_tests {
             request_deadline_ms: 5000,
             max_frame_size: 1024 * 1024,
             idempotency_ttl_secs: 0,
+            cors_origin: None,
+            log_format: crate::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
             sse: SseConfig::default(),
             tls: None,
         };
@@ -1617,6 +632,7 @@ mod handshake_tests {
             cert: PathBuf::from(at(dir, "server.crt")),
             key: PathBuf::from(at(dir, "server.key")),
             client_ca: None,
+            mtls_crl: None,
             max_connections: 64,
         }
     }
@@ -1711,9 +727,7 @@ mod handshake_tests {
         assert!(text(&submit).contains("HTTP/1.1 503"));
 
         // `Expect: 100-continue` (RFC 7231 §5.1.1): the server emits the interim
-        // `100 Continue` BEFORE the final response, so a waiting client knows to
-        // send the body.  (Here the test client sends it eagerly; we assert the
-        // 100 precedes the final 503.)
+        // `100 Continue` BEFORE the final response.
         let expect = request(
             server.addr,
             &ca,
@@ -1735,8 +749,7 @@ mod handshake_tests {
             "100 Continue precedes the final response:\n{et}"
         );
 
-        // An SSE stream with no fan-out configured → 503 events-unavailable
-        // (the TLS serve_stream raw-503 path).
+        // An SSE stream with no fan-out configured → 503 events-unavailable.
         let stream = request(
             server.addr,
             &ca,
@@ -1765,10 +778,8 @@ mod handshake_tests {
         );
 
         // Keep-alive WITH a body: a POST whose exact Content-Length body is
-        // consumed, then a GET on the SAME connection.  This is the
-        // smuggling-resistance crux — if the body were under- or over-read by
-        // a single byte, the GET would be parsed from the wrong offset (a
-        // desync).  Both responses must appear, in request order.
+        // consumed, then a GET on the SAME connection — the smuggling-resistance
+        // crux (a single-byte under/over-read would desync the GET).
         let body_pipelined = request(
             server.addr,
             &ca,
@@ -1787,8 +798,7 @@ mod handshake_tests {
             .expect("health 200 after the body");
         assert!(
             submit_at < health_at,
-            "the body was consumed exactly: the next request parsed cleanly, \
-             in order — submit 503 then health 200:\n{bt}"
+            "the body was consumed exactly: submit 503 then health 200:\n{bt}"
         );
         drop(server);
     }
@@ -1804,7 +814,6 @@ mod handshake_tests {
             return;
         }
         let state = make_state(dir.path());
-        // A client certificate chaining to the CA is required.
         let mtls = TlsConfig {
             client_ca: Some(PathBuf::from(at(dir.path(), "ca.crt"))),
             ..server_tls(dir.path())
@@ -1841,6 +850,104 @@ mod handshake_tests {
         drop(server);
     }
 
+    /// mTLS **revocation**: a client whose (otherwise valid, CA-signed)
+    /// certificate appears on the configured CRL is rejected.
+    #[test]
+    fn native_tls_revoked_client_cert_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        if !gen_pki(dir.path()) {
+            eprintln!("skipping native_tls_revoked_client_cert_is_rejected: openssl unavailable");
+            return;
+        }
+        // Revoke the client cert + generate a CRL (openssl `ca` needs a config +
+        // a database; use the simpler `-gencrl` flow via a minimal CA setup).
+        let crl_ok = make_crl_revoking_client(dir.path());
+        if !crl_ok {
+            eprintln!("skipping native_tls_revoked_client_cert_is_rejected: CRL generation failed");
+            return;
+        }
+        let state = make_state(dir.path());
+        let mtls = TlsConfig {
+            client_ca: Some(PathBuf::from(at(dir.path(), "ca.crt"))),
+            mtls_crl: Some(PathBuf::from(at(dir.path(), "crl.pem"))),
+            ..server_tls(dir.path())
+        };
+        let (server, _shared) = serve(&mtls, &state);
+        let ca = dir.path().join("ca.crt");
+        let client_crt = dir.path().join("client.crt");
+        let client_key = dir.path().join("client.key");
+
+        // The revoked client certificate → the handshake is rejected.
+        let rejected = request(
+            server.addr,
+            &ca,
+            Some((&client_crt, &client_key)),
+            b"GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+        );
+        assert!(
+            rejected.is_err(),
+            "mTLS must reject a revoked client certificate"
+        );
+        drop(server);
+    }
+
+    /// Revoke `client.crt` against the CA and write `crl.pem`.  Uses an
+    /// openssl CA database (`index.txt` / `serial`) + `ca -gencrl`.  Returns
+    /// `false` if any step fails (the caller skips).
+    fn make_crl_revoking_client(dir: &Path) -> bool {
+        // Minimal openssl CA config.  `crlnumber` + a `crl_extensions` section
+        // carrying the Authority Key Identifier make `ca -gencrl` emit a
+        // **conforming v2 CRL** (CRL number + AKI), which webpki requires.
+        std::fs::write(
+            dir.join("ca.cnf"),
+            format!(
+                "[ca]\ndefault_ca = CA_default\n\
+                 [CA_default]\n\
+                 dir = {d}\n\
+                 database = {d}/index.txt\n\
+                 serial = {d}/serial\n\
+                 crlnumber = {d}/crlnumber\n\
+                 certificate = {d}/ca.crt\n\
+                 private_key = {d}/ca.key\n\
+                 default_md = sha256\n\
+                 default_crl_days = 30\n\
+                 crl_extensions = crl_ext\n\
+                 policy = pol\n\
+                 [pol]\n\
+                 commonName = supplied\n\
+                 [crl_ext]\n\
+                 authorityKeyIdentifier = keyid:always\n",
+                d = dir.to_string_lossy()
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join("index.txt"), "").unwrap();
+        std::fs::write(dir.join("serial"), "01\n").unwrap();
+        std::fs::write(dir.join("crlnumber"), "1000\n").unwrap();
+        openssl(&[
+            "ca",
+            "-config",
+            &at(dir, "ca.cnf"),
+            "-revoke",
+            &at(dir, "client.crt"),
+            "-keyfile",
+            &at(dir, "ca.key"),
+            "-cert",
+            &at(dir, "ca.crt"),
+        ]) && openssl(&[
+            "ca",
+            "-config",
+            &at(dir, "ca.cnf"),
+            "-gencrl",
+            "-out",
+            &at(dir, "crl.pem"),
+            "-keyfile",
+            &at(dir, "ca.key"),
+            "-cert",
+            &at(dir, "ca.crt"),
+        ])
+    }
+
     /// The hot-reload mechanism in isolation: a successful reload swaps in a
     /// new `Arc<ServerConfig>` (pointer changes), and a failing reload (a bad
     /// path) keeps the current one — so a fat-fingered rotation never breaks
@@ -1858,7 +965,6 @@ mod handshake_tests {
         let initial = build_server_config(&tls).expect("initial config");
         let shared: SharedConfig = Arc::new(Mutex::new(Arc::clone(&initial)));
 
-        // A valid reload swaps the config (a different `Arc`).
         reload_server_config(&shared, &tls);
         let after_ok = shared.lock().unwrap().clone();
         assert!(
@@ -1866,7 +972,6 @@ mod handshake_tests {
             "a successful reload swaps in a new config"
         );
 
-        // A reload with a bad cert path fails and KEEPS the current config.
         let bad = TlsConfig {
             cert: dir.path().join("does-not-exist.crt"),
             ..tls
@@ -1881,8 +986,7 @@ mod handshake_tests {
 
     /// End-to-end zero-downtime rotation: a live listener serving cert A is
     /// hot-reloaded to a cert from a *different* CA (B); a new connection then
-    /// presents B (a CA-B client succeeds) and the old CA-A no longer
-    /// validates — proving the accept loop serves the swapped certificate.
+    /// presents B (a CA-B client succeeds) and the old CA-A no longer validates.
     #[test]
     fn cert_hot_reload_serves_the_new_certificate() {
         let dir_a = tempfile::tempdir().unwrap();
@@ -1897,20 +1001,14 @@ mod handshake_tests {
         let ca_b = dir_b.path().join("ca.crt");
         let health = b"GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n";
 
-        // Initially the server presents cert A.
         assert!(text(&request(server.addr, &ca_a, None, health)).starts_with("HTTP/1.1 200 OK"));
-
-        // Hot-reload to cert B (a different CA).
         reload_server_config(&shared, &server_tls(dir_b.path()));
-
-        // A CA-B client now succeeds…
         let rb = request(server.addr, &ca_b, None, health);
         assert!(
             text(&rb).starts_with("HTTP/1.1 200 OK"),
             "the reloaded cert B is served: {}",
             text(&rb)
         );
-        // …and the old CA-A no longer validates the presented (B) certificate.
         assert!(
             request(server.addr, &ca_a, None, health).is_err(),
             "after the hot-reload, a CA-A-only client must fail to validate cert B"

@@ -194,7 +194,7 @@ mod tests {
     fn config() -> Config {
         Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
-            handler_threads: 1,
+            max_connections: 1,
             indexer_db: None,
             free_tier: 0,
             action_cost: 0,
@@ -213,6 +213,10 @@ mod tests {
             idempotency_ttl_secs: 0,
             sse: crate::config::SseConfig::default(),
             tls: None,
+            cors_origin: None,
+            log_format: crate::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
         }
     }
 

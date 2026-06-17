@@ -96,9 +96,10 @@ pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> Ro
             limit,
             types,
         } => events_backfill(state, *since, *limit, types),
-        // The live SSE stream is hijacked in the IO shell
-        // (`crate::events::stream::serve` takes over the connection), so it
-        // never reaches dispatch; this defensive arm signals a wiring bug.
+        // The live SSE stream is hijacked in the connection handler
+        // (`crate::http::conn` takes over the connection via the
+        // `Handled::Stream` directive), so it never reaches dispatch; this
+        // defensive arm signals a wiring bug.
         Route::EventStream { .. } => Problem::new("internal", "Internal Error", 500)
             .with_detail("event stream must be served by the SSE hijack, not dispatch")
             .into_outcome(),
@@ -199,7 +200,7 @@ mod tests {
     fn state() -> AppState {
         AppState::new(Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
-            handler_threads: 1,
+            max_connections: 1,
             indexer_db: None,
             free_tier: 0,
             action_cost: 0,
@@ -218,6 +219,10 @@ mod tests {
             idempotency_ttl_secs: 0,
             sse: crate::config::SseConfig::default(),
             tls: None,
+            cors_origin: None,
+            log_format: crate::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
         })
         .expect("no DB to open")
     }
@@ -356,7 +361,7 @@ mod tests {
         // Gateway configured with --gas-pool-actor 161.
         let state = AppState::new(Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
-            handler_threads: 1,
+            max_connections: 1,
             indexer_db: Some(path.clone()),
             free_tier: 0,
             action_cost: 0,
@@ -375,6 +380,10 @@ mod tests {
             idempotency_ttl_secs: 0,
             sse: crate::config::SseConfig::default(),
             tls: None,
+            cors_origin: None,
+            log_format: crate::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
         })
         .expect("open read-only state");
 

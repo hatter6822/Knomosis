@@ -15,9 +15,9 @@
 //!      the shape the gateway's `GET /v1/actors/{id}/balances` read consumes.
 //!   2. **Drives a real gateway listener** ([`runner`]) — builds an
 //!      [`knomosis_gateway::state::AppState`] over the fixture (read-only) +
-//!      a bearer token, spawns the gateway's real `spawn_handler_pool` HTTP
-//!      listener, and hits it with `--workers` concurrent **raw-HTTP** `GET`
-//!      clients pulling from a shared request counter.
+//!      a bearer token, spawns the gateway's own `spawn_plain_listener` HTTP
+//!      stack (thread-per-connection), and hits it with `--workers` concurrent
+//!      **raw-HTTP** `GET` clients pulling from a shared request counter.
 //!   3. **Reports** ([`report`]) — sustained end-to-end throughput
 //!      (requests/sec, wallclock) + a latency percentile summary (reusing the
 //!      host bench's [`knomosis_bench::histogram`]), as a human table + a JSON
@@ -40,8 +40,9 @@
 //!     (benchmarked by `knomosis-bench`); this harness is read-only.
 //!   * **TLS overhead** — it drives the plaintext `--listen` socket; the
 //!     native-TLS handshake cost is a separate concern.
-//!   * **A high-concurrency SSE fan-out** — bounded by the `tiny_http`
-//!     connection model on the plaintext path (OQ-GW-14), out of scope here.
+//!   * **A high-concurrency SSE fan-out** — the gateway now serves each
+//!     connection on its own thread (no `tiny_http` ceiling; OQ-GW-14 closed),
+//!     but SSE-stream throughput is a separate concern, out of scope here.
 //!
 //! ## Not a CI throughput gate
 //!

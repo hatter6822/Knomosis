@@ -95,8 +95,14 @@ pub struct AppState {
     /// The `Idempotency-Key` response cache (G2.4); disabled when
     /// `--idempotency-ttl-secs` is `0`.
     pub idempotency: IdempotencyCache,
+    /// The browser-CORS policy (§8.4), present iff `--cors-origin` was
+    /// configured.  Parsed once here from the validated config string; the
+    /// shared request core ([`crate::http::handler`]) answers the `OPTIONS`
+    /// preflight + decorates every response from it.  `None` emits no CORS
+    /// headers (server-side BFF callers only).
+    pub cors: Option<crate::cors::CorsPolicy>,
     /// The shared SSE fan-out ring (G3.4), present iff
-    /// `--event-subscribe-addr` was configured.  `serve` spawns the single
+    /// `--event-subscribe-addr` was configured.  `serve` spawns the
     /// upstream multiplexer ([`crate::events::fanout::mux::Mux`]) feeding
     /// it; the `GET /v1/events/stream` handlers read it.  `None` makes the
     /// stream endpoint answer `503` (events disabled).
@@ -105,9 +111,14 @@ pub struct AppState {
     /// (an over-cap connect is `503`).  Each stream runs on its own thread
     /// and decrements this on exit (G3.5).
     pub active_streams: Arc<AtomicUsize>,
-    /// The process-wide shutdown flag shared by the mux + every live SSE
-    /// stream; setting it stops them (graceful drain is G4.4 — today it is
-    /// only ever set on test teardown).
+    /// The process-wide count of live HTTP connections (plaintext + TLS), the
+    /// drain gauge: each connection's `ConnGuard` increments it on accept and
+    /// decrements on close, so [`crate::http::serve`] can wait for it to reach
+    /// `0` (under a deadline) on graceful shutdown (G4.4).
+    pub active_connections: Arc<AtomicUsize>,
+    /// The process-wide shutdown flag shared by the listeners' accept loops,
+    /// every connection thread, the mux, and every live SSE stream; setting it
+    /// stops them all (the graceful-shutdown trigger, G4.4).
     pub shutdown: Arc<AtomicBool>,
 }
 
@@ -160,6 +171,8 @@ impl AppState {
         let fanout = config
             .event_subscribe_addr
             .map(|_| FanoutState::new(config.sse.ring_capacity));
+        // The browser-CORS policy is parsed once from the validated config.
+        let cors = crate::cors::CorsPolicy::from_config(&config);
         Ok(Self {
             config,
             reads,
@@ -167,8 +180,10 @@ impl AppState {
             rate_limiter,
             host_pool,
             idempotency,
+            cors,
             fanout,
             active_streams: Arc::new(AtomicUsize::new(0)),
+            active_connections: Arc::new(AtomicUsize::new(0)),
             shutdown: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -182,7 +197,7 @@ mod tests {
     fn config(indexer_db: Option<std::path::PathBuf>) -> Config {
         Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
-            handler_threads: 1,
+            max_connections: 1,
             indexer_db,
             free_tier: 0,
             action_cost: 0,
@@ -201,6 +216,10 @@ mod tests {
             idempotency_ttl_secs: 0,
             sse: crate::config::SseConfig::default(),
             tls: None,
+            cors_origin: None,
+            log_format: crate::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
         }
     }
 

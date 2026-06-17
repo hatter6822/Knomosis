@@ -148,6 +148,18 @@ impl RouteOutcome {
         }
     }
 
+    /// A bodiless `204 No Content` outcome (the CORS preflight answer).  The
+    /// `Content-Type` is irrelevant for an empty body but is carried for a
+    /// uniform writer; the IO shell emits `Content-Length: 0`.
+    pub(crate) fn no_content() -> Self {
+        Self {
+            status: 204,
+            content_type: TEXT_PLAIN,
+            body: String::new(),
+            headers: Vec::new(),
+        }
+    }
+
     /// A JSON outcome (body already serialized) with no extra headers.
     pub(crate) fn json(status: u16, body: String) -> Self {
         Self {

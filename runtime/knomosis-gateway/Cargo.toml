@@ -10,12 +10,12 @@
 # `docs/planning/gateway_integration_plan.md` for the plan and
 # `docs/api/gateway.openapi.yaml` for the contract.
 #
-# Current landing: G1.1 crate scaffold — lib+bin skeleton serving
-# `/healthz` (+ `/readyz`/`/v1/info` stubs) over the vetted synchronous
-# HTTP crate `tiny_http` (the G1.0 decision; see
-# `docs/audits/gateway_http_spike.md`).  The HTTP request parser,
-# routing table, problem responder, governors, reads, submit, and SSE
-# fan-out land in G1.2–G3.
+# The gateway owns its whole HTTP stack — the plaintext + native-TLS accept
+# loops, a strict hand-rolled HTTP/1.1 reader/writer, the routing table,
+# problem responder, governors, reads, submit, and the SSE fan-out — over
+# the workspace's rustls 0.23 (no `tiny_http`; see
+# `docs/audits/gateway_http_spike.md` for the original G1.0 decision and the
+# G4.2/G4.6 unification that retired it).
 
 [package]
 name = "knomosis-gateway"
@@ -50,18 +50,26 @@ knomosis-indexer = { path = "../knomosis-indexer" }
 # and become the submit (G2) / SSE (G3) clients.
 knomosis-host = { path = "../knomosis-host" }
 knomosis-event-subscribe = { path = "../knomosis-event-subscribe" }
-# The synchronous HTTP/1.1 server (G1.0 / OQ-GW-8 decision: a vetted
-# sync crate, no tokio).  `default-features = false` keeps its bundled TLS
-# (rustls 0.20) out of the tree — native HTTPS (G4.2) uses the workspace's
-# rustls 0.23 instead (below); see `docs/audits/gateway_tls_spike.md`.
-tiny_http = { workspace = true }
-# Native in-process TLS termination (G4.2): the workspace-pinned rustls 0.23
-# (TLS 1.3, the `ring` backend) — the SAME audited stack `knomosis-host` uses,
-# NOT tiny_http's bundled rustls 0.20.  The gateway owns the TLS accept loop +
-# the `StreamOwned` handshake and a strict HTTP/1.1 reader; PEM cert/key/CA
-# loading reuses `knomosis_host::tls`'s vetted loaders.  No new crate enters
-# the graph (knomosis-host already pulls rustls 0.23).
+# Native in-process TLS termination (G4.2) AND the gateway's own HTTP/1.1
+# stack: the workspace-pinned rustls 0.23 (TLS 1.3, the `ring` backend) — the
+# SAME audited stack `knomosis-host` uses.  The gateway owns its whole HTTP
+# stack now (no `tiny_http`): the plaintext + TLS accept loops, the
+# `StreamOwned` handshake, a strict HTTP/1.1 reader/writer, and a thread-per-
+# connection model with socket-owned read/write timeouts (so a stalled SSE
+# reader is bounded on BOTH transports — closing OQ-GW-14 + OQ-GW-15).  PEM
+# cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders.  No new
+# crate enters the graph (knomosis-host already pulls rustls 0.23).
 rustls = { workspace = true }
+# PEM certificate-revocation-list parsing for the mTLS `--mtls-crl` gate
+# (`rustls_pemfile::crls`).  The same workspace-pinned loader `knomosis-host`
+# uses for certs/keys; shares rustls 0.23's `pki_types` vocabulary.
+rustls-pemfile = { workspace = true }
+# Structured-log formatter the gateway installs itself (G4.3 / `--log-format`):
+# the workspace `tracing-subscriber` PLUS the `json` feature, because the
+# gateway is the first WU that needs JSON output (its `--log-format` default).
+# `knomosis-cli-common::logging` stays text-only; the gateway installs its own
+# subscriber in `crate::logging` instead.
+tracing-subscriber = { workspace = true, features = ["json"] }
 # Typed errors with `Display` / `From` impls — same discipline as the
 # sibling crates.
 thiserror = { workspace = true }
@@ -82,22 +90,14 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-# `tiny_http` is also a dev-dependency so the integration smoke test
-# (`tests/smoke.rs`) can drive a real listener directly (mirrors the
-# storage crate's `rusqlite` dev/normal split).
-tiny_http = { workspace = true }
 # `tempfile` provides the isolated on-disk SQLite database the reads
-# unit tests seed and open read-only.
+# unit tests seed and open read-only (and the TLS handshake tests' PKI dir).
 tempfile = { workspace = true }
 # `proptest` powers the property tests over the SSE fan-out ring (G3.4):
 # ordering, gap-freeness, seq-group integrity, and watermark correctness
 # against an oracle stream.  Dev-only; the same workspace-pinned crate the
 # host / indexer / event-subscribe property suites use.
 proptest = { workspace = true }
-# `tracing-subscriber` lets the G4.3 redaction test capture the structured
-# request log into a buffer and assert no secret (bearer token) appears.
-# Dev-only; the same workspace-pinned crate `knomosis-cli-common` uses.
-tracing-subscriber = { workspace = true }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -118,5 +118,5 @@ doc_markdown = "allow"
 missing_docs = "warn"
 unreachable_pub = "warn"
 # `forbid` is appropriate: the gateway is pure-Rust orchestration over
-# `tiny_http` + the sibling crates.  No FFI surface.
+# rustls 0.23 + the std net stack + the sibling crates.  No FFI surface.
 unsafe_code = "forbid"

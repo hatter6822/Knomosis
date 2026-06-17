@@ -21,9 +21,8 @@
 use std::process::ExitCode;
 
 use knomosis_cli_common::exit::OperatorExitCode;
-use knomosis_cli_common::logging;
 use knomosis_gateway::config::{Config, ConfigError, HELP_TEXT};
-use knomosis_gateway::{GATEWAY_IDENTIFIER, VERSION};
+use knomosis_gateway::{logging, GATEWAY_IDENTIFIER, VERSION};
 use tracing::Level;
 
 fn main() -> ExitCode {
@@ -45,7 +44,7 @@ fn main() -> ExitCode {
         }
     };
 
-    if let Err(e) = logging::init(Level::INFO) {
+    if let Err(e) = logging::init(config.log_format, Level::INFO) {
         eprintln!("knomosis-gateway: logging init failed: {e}");
         return exit(OperatorExitCode::GeneralFailure);
     }

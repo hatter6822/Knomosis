@@ -6,7 +6,8 @@
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
 //! Gateway integration tests: the read **and** submit paths served
-//! end-to-end over a real `tiny_http` listener + handler pool, against a
+//! end-to-end over the gateway's **own** HTTP listener
+//! (`spawn_plain_listener`, thread-per-connection, no `tiny_http`), against a
 //! seeded read-only indexer SQLite database (reads) and a `MockHost`
 //! (submit), through the full pipeline (auth → rate-limit → route →
 //! dispatch → read / host round-trip).
@@ -27,8 +28,8 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use knomosis_gateway::config::{AdmissionStage, Config, SseConfig};
-use knomosis_gateway::http::spawn_handler_pool;
+use knomosis_gateway::config::{AdmissionStage, Config, LogFormat, SseConfig};
+use knomosis_gateway::http::spawn_plain_listener;
 use knomosis_gateway::state::AppState;
 use knomosis_host::frame::{read_frame, DEFAULT_MAX_FRAME_SIZE};
 use knomosis_host::verdict::{Verdict, VerdictResponse};
@@ -49,21 +50,20 @@ const TOKEN: &str = "integration-token";
 struct Harness {
     _dir: tempfile::TempDir,
     writer: Arc<SqliteStorage>,
-    server: Arc<tiny_http::Server>,
-    // The worker `JoinHandle`s are detached on drop (we do not join):
-    // `tiny_http::Server::unblock` wakes only one blocked `recv`, so
-    // joining every worker would deadlock.  Any worker still blocked in
-    // `recv` is reclaimed at process exit — there is no graceful pool
-    // shutdown yet (G4.4), and this mirrors the smoke test's teardown.
-    _workers: Vec<JoinHandle<()>>,
+    state: Arc<AppState>,
+    // The accept thread's join handle; the `Drop` sets the shutdown flag and
+    // joins it (the own-stack listener has a graceful drain, unlike the old
+    // detached `tiny_http` pool).
+    accept: Option<JoinHandle<()>>,
     addr: SocketAddr,
 }
 
 impl Drop for Harness {
     fn drop(&mut self) {
-        // Best-effort nudge to the accept loop; the detached workers are
-        // reclaimed at process exit.
-        self.server.unblock();
+        self.state.shutdown.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.accept.take() {
+            let _ = handle.join();
+        }
     }
 }
 
@@ -139,7 +139,7 @@ fn start_harness_cfg(
 
     let config = Config {
         listen: "127.0.0.1:0".parse().unwrap(),
-        handler_threads: 4,
+        max_connections: 4,
         indexer_db: Some(db_path),
         free_tier: 50,
         action_cost: 5,
@@ -158,17 +158,20 @@ fn start_harness_cfg(
         idempotency_ttl_secs: 60,
         sse: SseConfig::default(),
         tls: None,
+        cors_origin: None,
+        log_format: LogFormat::Json,
+        dev: false,
+        upstream_subscriptions: 1,
     };
     let state = Arc::new(AppState::new(config).expect("open read-only state + load tokens"));
-    let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
-    let addr = server.server_addr().to_ip().expect("ip addr");
-    let workers = spawn_handler_pool(&server, 4, &state).expect("spawn pool");
+    let (addr, accept) =
+        spawn_plain_listener(&state.config, &state).expect("spawn plaintext listener");
 
     Harness {
         _dir: dir,
         writer: Arc::new(writer),
-        server,
-        _workers: workers,
+        state,
+        accept: Some(accept),
         addr,
     }
 }
@@ -832,16 +835,17 @@ fn events_backfill_requires_auth_and_validates_query() {
 struct SseHarness {
     _dir: tempfile::TempDir,
     state: Arc<AppState>,
-    server: Arc<tiny_http::Server>,
-    _workers: Vec<JoinHandle<()>>,
+    accept: Option<JoinHandle<()>>,
     addr: SocketAddr,
 }
 
 impl Drop for SseHarness {
     fn drop(&mut self) {
-        // Stop the mux + every live SSE stream, then nudge the accept loop.
-        self.state.shutdown.store(true, Ordering::Relaxed);
-        self.server.unblock();
+        // Stop the mux + every live SSE stream + the accept loop, then join.
+        self.state.shutdown.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.accept.take() {
+            let _ = handle.join();
+        }
     }
 }
 
@@ -865,7 +869,7 @@ fn start_sse_harness_cfg(event_subscribe_addr: SocketAddr, sse: SseConfig) -> Ss
     }
     let config = Config {
         listen: "127.0.0.1:0".parse().unwrap(),
-        handler_threads: 4,
+        max_connections: 4,
         indexer_db: None,
         free_tier: 0,
         action_cost: 0,
@@ -884,6 +888,10 @@ fn start_sse_harness_cfg(event_subscribe_addr: SocketAddr, sse: SseConfig) -> Ss
         idempotency_ttl_secs: 0,
         sse,
         tls: None,
+        cors_origin: None,
+        log_format: LogFormat::Json,
+        dev: false,
+        upstream_subscriptions: 1,
     };
     let state = Arc::new(AppState::new(config).expect("open SSE state"));
     // Start the mux (mirrors `serve`), with a long staleness timeout so the
@@ -895,14 +903,12 @@ fn start_sse_harness_cfg(event_subscribe_addr: SocketAddr, sse: SseConfig) -> Ss
         Arc::clone(state.fanout.as_ref().expect("fanout present")),
     );
     let _mux = mux.spawn(Arc::clone(&state.shutdown)); // detached
-    let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind"));
-    let addr = server.server_addr().to_ip().expect("ip addr");
-    let workers = spawn_handler_pool(&server, 4, &state).expect("spawn pool");
+    let (addr, accept) =
+        spawn_plain_listener(&state.config, &state).expect("spawn plaintext listener");
     SseHarness {
         _dir: dir,
         state,
-        server,
-        _workers: workers,
+        accept: Some(accept),
         addr,
     }
 }
@@ -957,7 +963,12 @@ fn event_stream_serves_live_records_over_sse() {
             Ok(0) | Err(_) => break,
             Ok(n) => {
                 buf.extend_from_slice(&chunk[..n]);
-                if String::from_utf8_lossy(&buf).contains("id: 42.0") {
+                // Break only once the COMPLETE second record has arrived (its
+                // `data:` line may land in a later TCP segment than its `id:`
+                // line); breaking on the bare `id:` would race the record body.
+                if String::from_utf8_lossy(&buf)
+                    .contains("id: 42.0\nevent: balanceChanged\ndata: {")
+                {
                     break;
                 }
             }
@@ -1015,14 +1026,12 @@ fn responses_carry_a_request_id_and_problem_instance() {
 
 // ---- G4.6 fan-out + soak (no-leak) --------------------------------------
 //
-// NOTE on concurrency scope: `tiny_http` services each connection on an
-// internal task thread iterating `for rq in client`, which blocks until the
-// current request's writer is dropped.  A long-lived (hijacked) SSE stream
-// therefore pins one such task for its lifetime, so the *effective* number
-// of simultaneously-live SSE streams is bounded by tiny_http's connection
-// handling (below the `--sse` `max_streams` ceiling).  These tests stay
-// within that bound (a few concurrent streams); raising the effective
-// concurrent-SSE ceiling is tracked as OQ-GW-14.
+// NOTE on concurrency scope: the gateway now owns its HTTP stack and serves
+// each connection on its **own** thread (no `tiny_http`), so a long-lived
+// (hijacked) SSE stream pins only its own thread and the effective
+// concurrent-SSE ceiling is the configured `--sse` `max_streams` (a real
+// `503` over cap), not a transport artefact — this closed OQ-GW-14.  These
+// tests exercise a handful of concurrent streams against that bound.
 
 /// Open an authenticated SSE stream (send the request; do not read yet).
 fn open_sse_stream(addr: SocketAddr, since: u64) -> TcpStream {

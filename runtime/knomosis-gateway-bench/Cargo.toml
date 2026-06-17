@@ -42,7 +42,7 @@ path = "src/main.rs"
 # Shared CLI / logging helpers (exit-code discipline + `tracing` init).
 knomosis-cli-common = { workspace = true }
 # The system-under-benchmark: the runner builds an `AppState` over the
-# fixture DB and drives a real `spawn_handler_pool` listener.
+# fixture DB and drives the gateway's own `spawn_plain_listener` HTTP stack.
 knomosis-gateway = { path = "../knomosis-gateway" }
 # Seeds the read-only indexer fixture: `SqliteStorage` (the writer) +
 # the `balance_key` / cursor codecs the gateway reads.
@@ -52,9 +52,8 @@ knomosis-indexer = { path = "../knomosis-indexer" }
 # `LatencySummary` (a generic percentile tracker — DRY rather than a
 # second copy of the same Welford/nearest-rank maths).
 knomosis-bench = { path = "../knomosis-bench" }
-# The runner binds a `tiny_http::Server` for `spawn_handler_pool`
-# (the gateway's HTTP substrate); the *client* side is raw `std` TCP.
-tiny_http = { workspace = true }
+# Both the server (the gateway's own HTTP stack) and the client (raw `std`
+# TCP) need no extra HTTP crate — the gateway owns its listener now.
 # Typed errors + structured logging, same discipline as the sibling
 # crates.
 thiserror = { workspace = true }

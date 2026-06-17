@@ -7,19 +7,25 @@
 
 //! The gateway's synchronous HTTP layer.
 //!
-//! Split into a **pure routing core** ([`router`]) — transport- and
-//! `tiny_http`-agnostic, so it is unit-testable in isolation — a
-//! **transport-agnostic request core** ([`handler`]) shared by the HTTP and
-//! HTTPS front-ends (so they cannot diverge in security behaviour), the thin
-//! plaintext **IO shell** ([`server`]) that owns the `tiny_http` accept loop
-//! and the request→response glue, and the native-HTTPS front-end ([`tls`],
-//! G4.2) that terminates `rustls 0.23` in-process and feeds the same request
-//! core over a strict HTTP/1.1 reader.
+//! Split into a **pure routing core** ([`router`]) — transport-agnostic, so it
+//! is unit-testable in isolation; a **transport-agnostic request core**
+//! ([`handler`]) shared by every front-end (so they cannot diverge in security
+//! behaviour); the **transport-neutral connection handler** ([`conn`]) — the
+//! gateway's own strict HTTP/1.1 reader + writer + keep-alive loop, generic
+//! over any `Read + Write` stream; the two listeners that feed it — plaintext
+//! ([`plain`], on `--listen`) and native HTTPS ([`tls`], on `--tls-listen`,
+//! `rustls 0.23`); and the orchestration shell ([`server`]) that builds the
+//! shared state and runs both listeners under one graceful shutdown.  The
+//! gateway owns its whole HTTP stack (no `tiny_http`), so a connection is one
+//! thread + a socket-owned read/write deadline on **both** transports.
 
+pub mod conn;
 pub mod handler;
+mod plain;
 mod router;
 mod server;
 pub mod tls;
 
+pub use plain::spawn_plain_listener;
 pub use router::{apply_conditional, route, Route, RouteOutcome};
-pub use server::{handle_request, serve, spawn_handler_pool, ServeError};
+pub use server::{serve, ServeError};

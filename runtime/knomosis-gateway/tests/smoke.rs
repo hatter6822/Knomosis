@@ -5,19 +5,39 @@
 // This is free software, and you are welcome to redistribute it
 // under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
 
-//! G1.1 scaffold smoke test: the gateway's real request handler
-//! (`knomosis_gateway::http::handle_request`) serves the routing table
-//! over an actual `tiny_http` listener on an ephemeral port.  Proves
-//! the HTTP substrate works end-to-end, not just the pure router.
+//! End-to-end smoke test: the gateway's real listener
+//! (`knomosis_gateway::http::spawn_plain_listener`) serves the routing table
+//! over its **own** HTTP/1.1 stack (thread-per-connection, no `tiny_http`) on
+//! an ephemeral port.  Proves the HTTP substrate works end-to-end, not just the
+//! pure router.
 
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{SocketAddr, TcpStream};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::thread;
+use std::thread::{self, JoinHandle};
+
+use knomosis_gateway::state::AppState;
 
 /// The bearer token the smoke `test_state` accepts.  Authenticated
 /// requests present `Authorization: Bearer {TEST_TOKEN}`.
 const TEST_TOKEN: &str = "smoke-token";
+
+/// Stand up a real gateway listener on an ephemeral loopback port; returns the
+/// bound address, the shared state (whose `shutdown` flag stops the listener),
+/// and the accept thread's join handle.
+fn start_gateway() -> (SocketAddr, Arc<AppState>, JoinHandle<()>) {
+    let state = test_state();
+    let (addr, handle) = knomosis_gateway::http::spawn_plain_listener(&state.config, &state)
+        .expect("spawn listener");
+    (addr, state, handle)
+}
+
+/// Stop the listener (set `shutdown`) and join its accept thread.
+fn stop_gateway(state: &Arc<AppState>, handle: JoinHandle<()>) {
+    state.shutdown.store(true, Ordering::SeqCst);
+    let _ = handle.join();
+}
 
 /// `GET <path>` with a valid bearer credential — the authenticated
 /// happy path for a protected endpoint.
@@ -25,46 +45,31 @@ fn one_shot_get(path: &str) -> String {
     fetch(path, Some(TEST_TOKEN))
 }
 
-/// Bind an ephemeral listener, serve exactly one request with the
-/// crate's real handler in a background thread, and return the raw HTTP
-/// response for `GET <path>`.  When `token` is `Some`, an
+/// Stand up a listener, serve `GET <path>` over a real socket, tear the
+/// listener down, and return the raw HTTP response.  When `token` is `Some`, an
 /// `Authorization: Bearer` header is sent; when `None`, the request is
 /// unauthenticated (exercises the fail-closed auth gate).
 fn fetch(path: &str, token: Option<&str>) -> String {
-    let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind ephemeral port"));
-    let addr = server
-        .server_addr()
-        .to_ip()
-        .expect("listener bound to a TCP address");
-
-    let server_thread = Arc::clone(&server);
-    let state = test_state();
-    let handle = thread::spawn(move || {
-        if let Ok(request) = server_thread.recv() {
-            knomosis_gateway::http::handle_request(request, &state);
-        }
-    });
-
-    let mut stream = TcpStream::connect(addr).expect("connect to gateway");
+    let (addr, state, handle) = start_gateway();
     let auth_line = match token {
         Some(t) => format!("Authorization: Bearer {t}\r\n"),
         None => String::new(),
     };
     let request =
         format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n{auth_line}Connection: close\r\n\r\n");
+    let mut stream = TcpStream::connect(addr).expect("connect to gateway");
     stream.write_all(request.as_bytes()).expect("write request");
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read response");
-
-    handle.join().expect("server thread joined");
+    stop_gateway(&state, handle);
     response
 }
 
 /// A minimal shared `AppState` for the smoke tests: a loopback config
-/// with no read backend, and a single accepted bearer token
-/// ([`TEST_TOKEN`]).  The token file is loaded into memory by
+/// (ephemeral `:0` listen) with no read backend, and a single accepted bearer
+/// token ([`TEST_TOKEN`]).  The token file is loaded into memory by
 /// `AppState::new`, so the tempdir can drop immediately afterwards.
-fn test_state() -> Arc<knomosis_gateway::state::AppState> {
+fn test_state() -> Arc<AppState> {
     let dir = tempfile::tempdir().expect("tempdir");
     let token_path = dir.path().join("tokens");
     std::fs::write(&token_path, TEST_TOKEN).expect("write token file");
@@ -75,9 +80,9 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             .expect("chmod token file");
     }
     Arc::new(
-        knomosis_gateway::state::AppState::new(knomosis_gateway::config::Config {
+        AppState::new(knomosis_gateway::config::Config {
             listen: "127.0.0.1:0".parse().expect("loopback addr"),
-            handler_threads: 1,
+            max_connections: 16,
             indexer_db: None,
             free_tier: 0,
             action_cost: 0,
@@ -96,6 +101,10 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
             idempotency_ttl_secs: 0,
             sse: knomosis_gateway::config::SseConfig::default(),
             tls: None,
+            cors_origin: None,
+            log_format: knomosis_gateway::config::LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
         })
         .expect("load token file"),
     )
@@ -104,7 +113,7 @@ fn test_state() -> Arc<knomosis_gateway::state::AppState> {
 
 #[test]
 fn healthz_returns_200() {
-    let response = one_shot_get("/healthz");
+    let response = fetch("/healthz", None); // /healthz is auth-exempt
     assert!(
         response.starts_with("HTTP/1.1 200"),
         "expected a 200 status line, got: {response:?}"
@@ -190,20 +199,12 @@ fn unknown_path_returns_404() {
     );
 }
 
-/// G1.2d: the bounded handler pool serves multiple concurrent requests
-/// (more in-flight clients than pool threads) — proves the pool model
-/// works end-to-end, not just the single-shot path.
+/// The thread-per-connection model serves many concurrent requests (more
+/// in-flight clients than would fit a fixed worker pool) — proves the
+/// own-HTTP-stack acceptor works end-to-end, not just the single-shot path.
 #[test]
-fn handler_pool_serves_concurrent_requests() {
-    let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").expect("bind ephemeral port"));
-    let addr = server
-        .server_addr()
-        .to_ip()
-        .expect("listener bound to a TCP address");
-    // A pool of 4 workers; fire 12 concurrent clients at it.
-    let _workers =
-        knomosis_gateway::http::spawn_handler_pool(&server, 4, &test_state()).expect("spawn pool");
-
+fn listener_serves_concurrent_requests() {
+    let (addr, state, handle) = start_gateway();
     let mut clients = Vec::new();
     for _ in 0..12 {
         clients.push(thread::spawn(move || {
@@ -223,9 +224,5 @@ fn handler_pool_serves_concurrent_requests() {
             "every concurrent request must get 200, got: {response:?}"
         );
     }
-    // Drop the server so the detached workers' `recv` errors and they
-    // exit.  (The test holds the only non-worker Arc, so this is
-    // best-effort; the OS reclaims any still-blocked workers at process
-    // exit — acceptable for a test.)
-    drop(server);
+    stop_gateway(&state, handle);
 }

@@ -25,8 +25,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use knomosis_bench::histogram::Histogram;
-use knomosis_gateway::config::{AdmissionStage, Config, SseConfig};
-use knomosis_gateway::http::spawn_handler_pool;
+use knomosis_gateway::config::{AdmissionStage, Config, LogFormat, SseConfig};
+use knomosis_gateway::http::spawn_plain_listener;
 use knomosis_gateway::state::AppState;
 
 use crate::fixture::Fixture;
@@ -256,65 +256,57 @@ fn get_balances(addr: SocketAddr, actor: u64) -> bool {
     buf.starts_with(b"HTTP/1.1 200")
 }
 
-/// A running gateway listener over the fixture, with its handler pool.
-/// Dropping it cleanly stops the pool (wakes + joins every worker).
+/// A running gateway listener over the fixture (the gateway's own HTTP stack,
+/// thread-per-connection).  Dropping it sets the shutdown flag and joins the
+/// accept thread — no leaked threads across runs/tests.
 struct Gateway {
-    server: Arc<tiny_http::Server>,
     addr: SocketAddr,
-    handler_threads: usize,
-    workers: Option<Vec<JoinHandle<()>>>,
-    _state: Arc<AppState>,
+    state: Arc<AppState>,
+    accept: Option<JoinHandle<()>>,
 }
 
 impl Gateway {
     /// Build the gateway `AppState` over the fixture (read-only DB + the bench
-    /// token, rate limiting disabled), bind an ephemeral listener, and spawn
-    /// the handler pool.
-    fn start(fixture: &Fixture, handler_threads: usize) -> Result<Self, RunnerError> {
-        let state = AppState::new(bench_config(fixture, handler_threads))
+    /// token, rate limiting disabled), and spawn its own-stack plaintext
+    /// listener on an ephemeral port.  `max_connections` caps the server-side
+    /// concurrency (the gateway serves each connection on its own thread).
+    fn start(fixture: &Fixture, max_connections: usize) -> Result<Self, RunnerError> {
+        let state = AppState::new(bench_config(fixture, max_connections))
             .map_err(|e| RunnerError::State(e.to_string()))?;
         let state = Arc::new(state);
-        let server =
-            tiny_http::Server::http("127.0.0.1:0").map_err(|e| RunnerError::Bind(e.to_string()))?;
-        let server = Arc::new(server);
-        let addr = server
-            .server_addr()
-            .to_ip()
-            .ok_or_else(|| RunnerError::Bind("listener has no IP address".to_string()))?;
-        let workers = spawn_handler_pool(&server, handler_threads, &state)
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+        let (addr, accept) = spawn_plain_listener(&state.config, &state).map_err(|e| {
+            let msg = e.to_string();
+            if matches!(e, knomosis_gateway::http::ServeError::Bind { .. }) {
+                RunnerError::Bind(msg)
+            } else {
+                RunnerError::Spawn(msg)
+            }
+        })?;
         Ok(Self {
-            server,
             addr,
-            handler_threads,
-            workers: Some(workers),
-            _state: state,
+            state,
+            accept: Some(accept),
         })
     }
 }
 
 impl Drop for Gateway {
     fn drop(&mut self) {
-        // Wake every blocked worker (`tiny_http::unblock` wakes one `recv` per
-        // call) so it exits, then join — no leaked threads across runs/tests.
-        for _ in 0..self.handler_threads {
-            self.server.unblock();
-        }
-        if let Some(workers) = self.workers.take() {
-            for worker in workers {
-                let _ = worker.join();
-            }
+        self.state.shutdown.store(true, Ordering::SeqCst);
+        if let Some(accept) = self.accept.take() {
+            let _ = accept.join();
         }
     }
 }
 
 /// The gateway configuration the benchmark serves: the fixture's read-only DB +
 /// bearer token, **rate limiting disabled** (else the shared bench credential
-/// would be throttled to the default cap), no host / events / TLS.
-fn bench_config(fixture: &Fixture, handler_threads: usize) -> Config {
+/// would be throttled to the default cap), no host / events / TLS.  The bench's
+/// server-side concurrency knob maps to the gateway's `--max-connections`.
+fn bench_config(fixture: &Fixture, max_connections: usize) -> Config {
     Config {
         listen: "127.0.0.1:0".parse().expect("loopback addr"),
-        handler_threads,
+        max_connections,
         indexer_db: Some(fixture.db_path.clone()),
         free_tier: 0,
         action_cost: 0,
@@ -333,6 +325,10 @@ fn bench_config(fixture: &Fixture, handler_threads: usize) -> Config {
         idempotency_ttl_secs: 0,
         sse: SseConfig::default(),
         tls: None,
+        cors_origin: None,
+        log_format: LogFormat::Json,
+        dev: false,
+        upstream_subscriptions: 1,
     }
 }
 

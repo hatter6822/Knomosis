@@ -28,7 +28,8 @@ OPTIONS:
     --requests <N>        Measured requests (after warmup) [default: 10000]
     --warmup <N>          Warmup requests (latency discarded) [default: 1000]
     --workers <N>         Concurrent client worker threads [default: 32]
-    --handler-threads <N> Gateway handler-pool threads (server side) [default: 16]
+    --handler-threads <N> Gateway server-side connection cap (--max-connections;
+                          each connection is served on its own thread) [default: 16]
     --seed <N>            Deterministic fixture seed [default: 0]
     --report <PATH>       Write the JSON report to PATH (for --baseline)
     --baseline <PATH>     Compare against a prior report; exit 1 on a regression
