@@ -257,10 +257,18 @@ silently renders the wrong numbers.  Keep them in lockstep and verify via
     per-request deadline) — parity with `knomosis-host`; and certificate
     **rotation** requires a process restart (no hot-reload of the
     `ServerConfig` yet).
-  * **SSE-tuning flags** — the ring / stream / heartbeat knobs are
-    compile-time defaults (`SseConfig`); `--sse-*` flags are a follow-up.
-  * **Concurrent-SSE ceiling (OQ-GW-14)** — bounded by `tiny_http`'s
-    connection model below `max_streams`; adequate for a browser-BFF fan-out.
+  * **Concurrent-SSE ceiling (OQ-GW-14)** — on the **plaintext** path SSE
+    concurrency is bounded by `tiny_http`'s connection model *below*
+    `--sse-max-streams`; adequate for a browser-BFF fan-out.  The **native-TLS**
+    path (`--tls-listen`) is **not** subject to this ceiling — each connection
+    runs on its own thread — so prefer it for higher SSE fan-out.
+  * **Plaintext SSE stalled-reader (OQ-GW-15)** — on the **plaintext** path a
+    client that opens a stream then stops reading blocks that stream's writer
+    thread (and holds its `--sse-max-streams` slot) until it disconnects;
+    `tiny_http`'s hijacked writer exposes no socket handle for a write timeout.
+    The **native-TLS** path bounds this with a per-connection write timeout
+    (a stalled reader is dropped) — **prefer `--tls-listen` for untrusted /
+    public SSE clients.**
   * **Throughput bench (G4.6)** — the `knomosis-gateway`-bench perf tool is
     deferred (the no-leak soak validates correctness, not a throughput
     target).

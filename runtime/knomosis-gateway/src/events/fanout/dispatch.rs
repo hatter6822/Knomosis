@@ -80,8 +80,15 @@ pub enum StreamEnd {
 /// `sink`, until the client disconnects, is evicted, a decode fault occurs,
 /// or `shutdown` is set.
 ///
-/// The caller owns `sink`'s write deadline (a socket's `set_write_timeout`);
-/// a timed-out write surfaces as a write error → [`StreamEnd::Disconnected`].
+/// `sink`'s write deadline is the **caller's** responsibility, and the two
+/// transports differ (OQ-GW-15): the **native-TLS** path
+/// ([`crate::http::tls`]) owns its `TcpStream` and sets a per-connection write
+/// timeout, so a stalled-reader write surfaces as an error →
+/// [`StreamEnd::Disconnected`] and the slot is released; the **plaintext**
+/// `tiny_http` path **cannot** set one (`Request::into_writer` yields a
+/// type-erased `Box<dyn Write>` with no socket handle), so there a wedged
+/// reader blocks this stream's write until it disconnects — prefer the
+/// native-TLS path for untrusted SSE clients.
 pub fn run_stream<W: Write>(
     sink: &mut W,
     state: &FanoutState,

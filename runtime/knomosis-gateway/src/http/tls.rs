@@ -1555,6 +1555,33 @@ mod handshake_tests {
             2,
             "keep-alive served both pipelined requests"
         );
+
+        // Keep-alive WITH a body: a POST whose exact Content-Length body is
+        // consumed, then a GET on the SAME connection.  This is the
+        // smuggling-resistance crux — if the body were under- or over-read by
+        // a single byte, the GET would be parsed from the wrong offset (a
+        // desync).  Both responses must appear, in request order.
+        let body_pipelined = request(
+            server.addr,
+            &ca,
+            None,
+            format!(
+                "POST /v1/actions HTTP/1.1\r\nHost: x\r\n{authed}\
+                 Content-Type: application/octet-stream\r\nContent-Length: 4\r\n\r\nbody\
+                 GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        let bt = text(&body_pipelined);
+        let submit_at = bt.find("HTTP/1.1 503").expect("submit 503 after the body");
+        let health_at = bt
+            .find("HTTP/1.1 200 OK")
+            .expect("health 200 after the body");
+        assert!(
+            submit_at < health_at,
+            "the body was consumed exactly: the next request parsed cleanly, \
+             in order — submit 503 then health 200:\n{bt}"
+        );
         drop(server);
     }
 
