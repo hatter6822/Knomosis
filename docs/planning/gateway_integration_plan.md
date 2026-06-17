@@ -110,9 +110,13 @@ The companion machine-readable contract is
 > doc `docs/audits/gateway_dependency_audit.md`), and **G4.6 (partial)** (the
 > end-to-end fan-out + the no-leak soak — slots/threads never leak across
 > open→close cycles; the throughput bench + high-concurrency are deferred,
-> and the `tiny_http` concurrent-SSE ceiling is filed as OQ-GW-14).  Next:
-> **G4.2** (TLS/mTLS), **G4.7** (the runbook), the G4.6 throughput bench +
-> the deferred additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
+> and the `tiny_http` concurrent-SSE ceiling is filed as OQ-GW-14), and
+> **G4.7** (the operator `docs/gateway_runbook.md` — roles/topology, the
+> implemented config reference, the security model, health/readiness,
+> observability, graceful shutdown, the §9.5 failure-signature table, the
+> operator-obligation knobs, and a quick reference).  **Only G4.2 (TLS/mTLS)
+> remains** of the core hardening track; deferred: the G4.6 throughput bench
+> + the additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1850,11 +1854,21 @@ cross-stack corpus pin remains deferred.
   not a correctness gate) and the indexer-writer-death / cursor-jump chaos
   cases.  *Acceptance (met for the correctness core):* no slot/thread leak
   under the soak; the fan-out + the G3.4 recovery cases pass.
-* **G4.7 — `docs/gateway_runbook.md`** · S · deps: G4.1–G4.4.
-  *Acceptance:* covers roles, start/stop, config (incl. the
-  operator-obligation consistency knobs §9.2), health/readiness, the §9.5
-  failure signatures, dashboards, rollback — to the
-  `gas_pool_runbook.md` standard.
+* **G4.7 — `docs/gateway_runbook.md`** · S · deps: G4.1–G4.4 · **DONE.**
+  The operator runbook, to the `gas_pool_runbook.md` standard: roles +
+  topology, the endpoint surface, the **implemented** config reference (the
+  real flags — accurately distinguishing the shipped knobs from the
+  defaulted SSE knobs and the not-yet-implemented native TLS), the
+  fail-closed security model, start/stop + health/readiness (`/healthz`,
+  `/readyz`, `/v1/info`), observability (the request-id + the log-based
+  metrics + the redaction guarantee), graceful shutdown (SIGTERM/SIGINT →
+  drain + the `server_shutdown` SSE close), the **§9.5 failure-signature
+  table** (host `Busy` storms, event truncation, indexer lag / writer death,
+  the SSE `behind`/`lag_exceeded`/`decode_error` signals, the OQ-GW-14
+  concurrent-SSE ceiling, config drift), the monitoring checklist, the §10
+  operator-obligation knobs, the known-limitations register, and a quick
+  reference.  TLS is documented as **edge-terminated** today (the
+  loopback-bound default), with native TLS noted as the G4.2 follow-up.
 
 ### G5 — Client + contract CI + versioning
 
