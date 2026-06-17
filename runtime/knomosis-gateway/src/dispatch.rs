@@ -344,7 +344,8 @@ mod tests {
     /// itself is unit-tested in `reads::pools`).
     #[test]
     fn pool_net_flag_follows_configured_gas_pool_actor() {
-        use knomosis_indexer::cursor::CURSOR_KEY;
+        use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
+        use knomosis_indexer::INDEXER_IDENTIFIER;
         use knomosis_storage::sqlite::SqliteStorage;
         use knomosis_storage::storage::Storage;
 
@@ -353,6 +354,7 @@ mod tests {
         // Seed pool 161 with an ETH balance; keep the writer alive so the
         // read-only reader can map the WAL sidecars.
         let writer = SqliteStorage::open(&path).expect("open writer");
+        ensure_identifier(&writer, INDEXER_IDENTIFIER).expect("seed indexer identity");
         let mut tx = writer.combined_transaction().expect("begin");
         tx.credit_pool_eth(161, 500).expect("credit eth");
         tx.commit().expect("commit");

@@ -47,9 +47,10 @@ use knomosis_host::kernel::mock::MockKernel;
 use knomosis_host::listener::tcp::TcpListener as HostTcpListener;
 use knomosis_host::server::{Server as HostServer, ServerConfigBuilder};
 use knomosis_indexer::balance::balance_key;
-use knomosis_indexer::cursor::CURSOR_KEY;
+use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
 use knomosis_indexer::decoder::encode_event;
 use knomosis_indexer::event::Event;
+use knomosis_indexer::INDEXER_IDENTIFIER;
 use knomosis_storage::sqlite::SqliteStorage;
 use knomosis_storage::storage::Storage;
 
@@ -193,6 +194,9 @@ fn dev_salt() -> u64 {
 /// read-only reader sees the committed WAL data).
 fn seed_indexer_db(path: &std::path::Path) -> Result<SqliteStorage, String> {
     let writer = SqliteStorage::open(path).map_err(|e| e.to_string())?;
+    // Stamp the indexer identity cell so the gateway's read-only open (which
+    // now verifies `c/identifier`) accepts this seeded DB as a real indexer DB.
+    ensure_identifier(&writer, INDEXER_IDENTIFIER).map_err(|e| e.to_string())?;
     // Seed the gas pool (ETH + BOLD) in one combined transaction.
     let mut tx = writer.combined_transaction().map_err(|e| e.to_string())?;
     tx.credit_pool_eth(DEV_GAS_POOL_ACTOR, 1_000_000)

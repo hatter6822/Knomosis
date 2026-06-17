@@ -23,6 +23,8 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 
+use knomosis_indexer::cursor::verify_identifier;
+use knomosis_indexer::INDEXER_IDENTIFIER;
 use knomosis_storage::sqlite::{ReadOnlyOpenOptions, SqliteStorage};
 
 use crate::auth::Auth;
@@ -42,6 +44,18 @@ pub enum StateError {
         /// The configured database path.
         path: String,
         /// The storage-layer diagnostic.
+        reason: String,
+    },
+    /// The `--indexer-db` opened, but its `c/identifier` cell does not match
+    /// `knomosis-indexer/v1` (or is absent) — the gateway is pointed at a
+    /// foreign / incompatible database whose balances/budgets it would
+    /// otherwise misinterpret.  Fail fast at startup rather than serve wrong
+    /// data.
+    #[error("indexer database identity check failed at {path}: {reason}")]
+    IndexerIdentity {
+        /// The configured database path.
+        path: String,
+        /// The identity-mismatch diagnostic (expected vs. found).
         reason: String,
     },
     /// The bearer-token file (`--auth-token-file`) could not be loaded.
@@ -134,8 +148,9 @@ impl AppState {
     /// # Errors
     ///
     /// Returns [`StateError::IndexerOpen`] if the configured indexer
-    /// database cannot be opened read-only, or [`StateError::AuthLoad`]
-    /// if the configured token file cannot be read.
+    /// database cannot be opened read-only, [`StateError::IndexerIdentity`]
+    /// if its `c/identifier` cell does not match `knomosis-indexer/v1`, or
+    /// [`StateError::AuthLoad`] if the configured token file cannot be read.
     pub fn new(config: Config) -> Result<Self, StateError> {
         let reads = match &config.indexer_db {
             None => None,
@@ -145,6 +160,16 @@ impl AppState {
                         path: path.display().to_string(),
                         reason: e.to_string(),
                     })?;
+                // Fail fast on a foreign / incompatible database: the
+                // schema-compatible open above does NOT prove this is *the*
+                // indexer's database, so require its `c/identifier` cell to
+                // match `knomosis-indexer/v1` before serving any reads.
+                verify_identifier(&storage, INDEXER_IDENTIFIER).map_err(|e| {
+                    StateError::IndexerIdentity {
+                        path: path.display().to_string(),
+                        reason: e.to_string(),
+                    }
+                })?;
                 Some(ReadState { storage })
             }
         };

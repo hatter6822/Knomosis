@@ -258,6 +258,51 @@ pub fn ensure_identifier<S: Storage + ?Sized>(
     }
 }
 
+/// **Read-only** verification of the on-disk identifier — the read-only peer of
+/// [`ensure_identifier`] for a consumer that opens the database
+/// `SQLITE_OPEN_READ_ONLY` and so cannot (and must not) initialise it.
+///
+/// Unlike [`ensure_identifier`], an **absent** identifier cell is an error
+/// rather than a silent initialise: a read-only consumer is reading a database
+/// it does not own, so it must fail fast on anything other than a present,
+/// matching identifier rather than risk interpreting a foreign or
+/// uninitialised database as this indexer's data.
+///
+/// Returns `Ok(())` iff the cell is present and equals `expected`.
+///
+/// # Errors
+///
+/// [`CursorError::IdentifierMismatch`] if the cell is absent or holds a
+/// different identifier; [`CursorError::IdentifierNotUtf8`] if it is not UTF-8;
+/// [`CursorError::Storage`] on a storage failure.
+pub fn verify_identifier<S: Storage + ?Sized>(
+    storage: &S,
+    expected: &str,
+) -> Result<(), CursorError> {
+    match storage.get(IDENTIFIER_KEY)? {
+        None => Err(CursorError::IdentifierMismatch {
+            expected: expected.to_string(),
+            found: "(absent)".to_string(),
+        }),
+        Some(bytes) => {
+            let found = std::str::from_utf8(&bytes)
+                .map_err(|_| CursorError::IdentifierNotUtf8 {
+                    bytes_len: bytes.len(),
+                    preview_hex: hex_preview(&bytes),
+                })?
+                .to_string();
+            if found == expected {
+                Ok(())
+            } else {
+                Err(CursorError::IdentifierMismatch {
+                    expected: expected.to_string(),
+                    found,
+                })
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

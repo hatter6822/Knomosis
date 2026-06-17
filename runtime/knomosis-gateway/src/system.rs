@@ -185,7 +185,8 @@ mod tests {
     use super::{info_view, readyz};
     use crate::config::{AdmissionStage, Config};
     use crate::state::AppState;
-    use knomosis_indexer::cursor::CURSOR_KEY;
+    use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
+    use knomosis_indexer::INDEXER_IDENTIFIER;
     use knomosis_storage::sqlite::SqliteStorage;
     use knomosis_storage::storage::Storage;
     use std::net::{SocketAddr, TcpListener};
@@ -226,6 +227,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("index.db");
         let writer = SqliteStorage::open(&path).unwrap();
+        ensure_identifier(&writer, INDEXER_IDENTIFIER).expect("seed indexer identity");
         writer.put(CURSOR_KEY, &cursor.to_be_bytes()).unwrap();
         (dir, writer, path)
     }

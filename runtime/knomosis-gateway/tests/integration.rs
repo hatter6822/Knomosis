@@ -36,9 +36,10 @@ use knomosis_host::verdict::{Verdict, VerdictResponse};
 use knomosis_indexer::balance::balance_key;
 use knomosis_indexer::budget_view::CURRENT_EPOCH_KEY;
 use knomosis_indexer::client::KIND_EVENT;
-use knomosis_indexer::cursor::CURSOR_KEY;
+use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
 use knomosis_indexer::decoder::encode_event;
 use knomosis_indexer::event::Event;
+use knomosis_indexer::INDEXER_IDENTIFIER;
 use knomosis_storage::sqlite::SqliteStorage;
 use knomosis_storage::storage::Storage;
 
@@ -112,6 +113,7 @@ fn start_harness_cfg(
     }
 
     let writer = SqliteStorage::open(&db_path).expect("open writer");
+    ensure_identifier(&writer, INDEXER_IDENTIFIER).expect("seed indexer identity");
     // Balances: actor 7 holds resources 0 (1000) and 1 (250); actor 9 a
     // distinct balance (must be excluded from actor 7's list).
     writer

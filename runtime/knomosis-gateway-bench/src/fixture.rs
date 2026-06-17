@@ -21,7 +21,8 @@
 use std::path::PathBuf;
 
 use knomosis_indexer::balance::balance_key;
-use knomosis_indexer::cursor::CURSOR_KEY;
+use knomosis_indexer::cursor::{ensure_identifier, CURSOR_KEY};
+use knomosis_indexer::INDEXER_IDENTIFIER;
 use knomosis_storage::sqlite::SqliteStorage;
 use knomosis_storage::storage::Storage;
 
@@ -101,6 +102,11 @@ pub fn build(config: FixtureConfig) -> Result<Fixture, FixtureError> {
     }
 
     let writer = SqliteStorage::open(&db_path).map_err(|e| FixtureError::Storage(e.to_string()))?;
+    // Stamp the indexer-identity cell the gateway's read-only open verifies
+    // (`AppState::new` → `verify_identifier`); without it the fixture reads as a
+    // foreign database and the gateway refuses to serve.
+    ensure_identifier(&writer, INDEXER_IDENTIFIER)
+        .map_err(|e| FixtureError::Storage(e.to_string()))?;
     // One transaction for the whole seed — orders of magnitude faster than a
     // per-put WAL commit for a large fixture.
     let mut tx = writer
