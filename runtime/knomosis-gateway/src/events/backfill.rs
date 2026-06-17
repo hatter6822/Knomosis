@@ -27,10 +27,15 @@
 //!     lower bound**.
 //!   * **`since` semantics.**  `since = S ≥ 1` resumes at `seq > S`.
 //!     `since = 0` means "from the oldest retained" (NOT live-tail, which
-//!     §11.3 reserves for `resume_from = 0`): the drain resumes from `1`
-//!     and transparently follows the upstream's `TRUNCATED` to the oldest
-//!     cached seq.  A `TRUNCATED` for a *concrete* `since ≥ 1` is the
-//!     contract's `409` ([`BackfillError::Truncated`]).
+//!     §11.3 reserves for `resume_from = 0`): the drain handshakes with the
+//!     [`FROM_OLDEST`] sentinel so the upstream delivers the oldest retained
+//!     seq **inclusive** — the exclusive `seq > resume_from` contract cannot
+//!     otherwise include the first retained event (`seq = 1`), and resuming
+//!     from a concrete `oldest_available_seq` would drop *that* seq too.  A
+//!     `TRUNCATED` for a *concrete* `since ≥ 1` is the contract's `409`
+//!     ([`BackfillError::Truncated`]); on the `since = 0` path a `TRUNCATED`
+//!     is tolerated (resume from the new oldest) for the
+//!     reconnect-after-eviction case.
 //!
 //! A decode failure on a **known** tag is corruption and **fails closed**
 //! ([`BackfillError::Render`] → a `503` problem) — never silently skipped
@@ -39,6 +44,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use knomosis_event_subscribe::event_cache::FROM_OLDEST;
 use serde_json::json;
 
 use super::decode::{render_event, DecodeError, EventJson};
@@ -151,9 +157,16 @@ pub fn backfill(
     idle_timeout: Duration,
     req: &BackfillRequest,
 ) -> Result<EventPage, BackfillError> {
-    // `resume_from = 0` is reserved for live-tail; "from oldest" resumes
-    // from 1 and follows the upstream's TRUNCATED to the oldest cached seq.
-    let resume_from = if req.since == 0 { 1 } else { req.since };
+    // `resume_from = 0` is reserved for live-tail; "from oldest" uses the
+    // FROM_OLDEST sentinel so the upstream delivers the oldest retained seq
+    // INCLUSIVE.  The exclusive `seq > resume_from` contract cannot express
+    // "include the first retained event": `resume_from = 1` would silently
+    // drop seq 1, and resuming from a concrete oldest would drop that seq.
+    let resume_from = if req.since == 0 {
+        FROM_OLDEST
+    } else {
+        req.since
+    };
     let mut sub = UpstreamSubscription::new(addr, resume_from, max_frame_size, Some(idle_timeout));
     let mut builder = PageBuilder::new(req.since, req.limit, tip, &req.types);
     let mut reconnect_budget = RECONNECT_BUDGET;
@@ -170,9 +183,12 @@ pub fn backfill(
             StreamItem::Gap {
                 oldest_available_seq,
             } => {
-                // A concrete cursor predating the window is the 409; for
-                // "from oldest" (`since = 0`) the resume-from-oldest is the
-                // expected path, not an error.
+                // A concrete cursor predating the window is the 409.  The
+                // `since = 0` path handshakes with FROM_OLDEST, which the
+                // upstream answers in-window (never a TRUNCATED), so a Gap
+                // here is the defensive reconnect-after-eviction case: the
+                // subscription has already advanced to `oldest_available_seq`
+                // and resumes — tolerate it rather than fail.
                 if req.since != 0 {
                     return Err(BackfillError::Truncated {
                         oldest_seq: oldest_available_seq,
@@ -321,7 +337,7 @@ impl<'a> PageBuilder<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{backfill, BackfillError, BackfillRequest};
+    use super::{backfill, BackfillError, BackfillRequest, FROM_OLDEST};
     use knomosis_indexer::client::KIND_EVENT;
     use knomosis_indexer::client::{KIND_INVALID_REQUEST, KIND_TRUNCATED};
     use knomosis_indexer::decoder::encode_event;
@@ -541,11 +557,45 @@ mod tests {
         assert!(matches!(err, BackfillError::Truncated { oldest_seq: 50 }));
     }
 
+    /// **Finding #3 fix — `since = 0` includes the oldest retained seq.**
+    /// The normal in-window path: a real upstream answers the FROM_OLDEST
+    /// handshake with every retained event INCLUSIVE of the oldest, so the
+    /// page includes seq 50 (the oldest).  The bug was that
+    /// `since = 0 → resume_from = 1` (or resuming from a concrete oldest)
+    /// dropped the first retained event under the exclusive `seq > resume`
+    /// contract.
     #[test]
-    fn since_zero_follows_truncation_to_the_oldest_retained() {
-        // since = 0 ("from oldest"): the first connection (resume_from = 1)
-        // truncates to oldest = 50; the drain transparently resumes from 50
-        // and delivers 51, 52 — no 409.
+    fn since_zero_from_oldest_includes_the_oldest_retained_seq() {
+        // The upstream delivers 50, 51, 52 in-window (no TRUNCATED) for the
+        // FROM_OLDEST handshake — exactly what the real server's
+        // `range(FROM_OLDEST)` returns.
+        let server = mock_server(vec![vec![
+            balance(50, 1),
+            balance(51, 2),
+            balance(52, 3),
+            Frame::Hold,
+        ]]);
+        let page = backfill(server.addr, Some(99), 1 << 20, TEST_IDLE, &req(0, 100, &[])).unwrap();
+        assert_eq!(page.events.len(), 3, "the oldest seq is NOT dropped");
+        assert_eq!(page.events[0].seq, "50", "oldest retained seq included");
+        assert_eq!(page.events[2].seq, "52");
+        assert_eq!(page.next_cursor, 52);
+        assert!(!page.has_more);
+        assert_eq!(server.handshakes.recv().unwrap(), FROM_OLDEST); // since=0 → FROM_OLDEST
+    }
+
+    /// **Defensive `since = 0` reconnect-after-eviction.**  The `since = 0`
+    /// path now handshakes with FROM_OLDEST (the normal in-window path is
+    /// `since_zero_from_oldest_includes_the_oldest_retained_seq`).  A real
+    /// upstream answers FROM_OLDEST in-window, but if it nonetheless
+    /// truncates (e.g. an eviction race after a reconnect), the drain
+    /// tolerates the Gap and resumes from the new oldest rather than
+    /// failing with a 409.
+    #[test]
+    fn since_zero_tolerates_truncation_and_resumes() {
+        // The first connection (resume_from = FROM_OLDEST) truncates to
+        // oldest = 50; the drain transparently resumes from 50 and delivers
+        // 51, 52 — no 409.
         let server = mock_server(vec![
             vec![Frame::Truncated(50)],
             vec![balance(51, 1), balance(52, 2), Frame::Hold],
@@ -555,7 +605,7 @@ mod tests {
         assert_eq!(page.events[0].seq, "51");
         assert_eq!(page.next_cursor, 52);
         assert!(!page.has_more);
-        assert_eq!(server.handshakes.recv().unwrap(), 1); // since=0 → resume_from 1
+        assert_eq!(server.handshakes.recv().unwrap(), FROM_OLDEST); // since=0 → FROM_OLDEST
         assert_eq!(server.handshakes.recv().unwrap(), 50); // resumed from oldest
     }
 

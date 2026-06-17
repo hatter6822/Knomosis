@@ -1670,8 +1670,23 @@ to a newly-connected client:
     subscription is registered.  Pre-existing events in the
     cache are NOT delivered.  This is the canonical "I want to
     watch for new events" mode.
-  * **`resume_from > 0`** — Resume subscription.  The client
-    receives every event whose seq is strictly greater than
+  * **`resume_from == 0xFFFF_FFFF_FFFF_FFFF` (`u64::MAX`, the
+    *from-oldest* sentinel)** — From-oldest-retained subscription.
+    The client receives every event currently retained, from the
+    oldest **complete** batch **inclusive** (so the oldest retained
+    seq — including `seq = 1` — IS delivered), then live tail.  This
+    is the only handshake that delivers the oldest retained event:
+    the exclusive `> resume_from` rule below cannot express it
+    (`resume_from = 1` would skip `seq = 1`, and resuming from a
+    concrete oldest would skip that seq too).  If the oldest cached
+    batch is *incomplete* (its head events were already evicted),
+    that batch is skipped and delivery starts at the next complete
+    batch — a partial batch is never surfaced.  `u64::MAX` can never
+    be a real seq (seqs are 1-indexed and the cache is bounded), so
+    it is a safe sentinel; it is the gateway's `GET /v1/events?since=0`
+    handshake.
+  * **`0 < resume_from < u64::MAX`** — Resume subscription.  The
+    client receives every event whose seq is strictly greater than
     `resume_from`, drawn first from the keep-history cache (in
     seq order), then from live tail.
 
@@ -1679,7 +1694,9 @@ The server emits a `TRUNCATED` frame and closes the connection
 if `resume_from + 1 < oldest_cached_seq` (i.e., the client wants
 events the server has discarded).  The carried sequence is the
 **oldest available** seq — the smallest value the client could
-successfully `resume_from` on a retry.
+successfully `resume_from` on a retry.  (The *from-oldest* sentinel
+never truncates: it is always answered in-window or, on an empty
+cache, as a live-tail subscription.)
 
 ### 11.4 Sequence number invariants
 
