@@ -170,6 +170,17 @@ const MAX_HEADER_SECTION_BYTES: usize = 64 * 1024;
 /// Enforced by [`DeadlineStream`] regardless of how the bytes are dripped.
 pub(crate) const REQUEST_READ_DEADLINE: Duration = Duration::from_secs(30);
 
+/// Per-read socket timeout while [`lingering_drain`] discards an unread
+/// request body before a forced close — short, so a client that has stopped
+/// sending (and is reading the response) unblocks the close promptly.
+const LINGER_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
+
+/// Byte cap on [`lingering_drain`]: past this we close regardless.  We owe a
+/// rejected client only the chance to read the response, not an unbounded
+/// read of a body we already refused — so a body far larger than the cap does
+/// not pin the worker thread.
+const LINGER_DRAIN_MAX_BYTES: usize = 4 * 1024 * 1024;
+
 /// A `Read + Write` wrapper that fails **reads** once a per-request wallclock
 /// deadline passes — the slow-loris bound the per-read socket timeout alone
 /// cannot provide.  Because every buffer refill (every socket read) goes
@@ -214,6 +225,48 @@ impl<S: Write> Write for DeadlineStream<S> {
     }
 }
 
+/// **Lingering close** (RFC 7230 §6.6): after writing a response on a
+/// connection that must close while the peer may still be sending an unread
+/// request body, read-and-discard the incoming bytes — **bounded** in time
+/// ([`LINGER_DRAIN_TIMEOUT`] per read) and size ([`LINGER_DRAIN_MAX_BYTES`]) —
+/// before the socket closes.
+///
+/// **Why.** Closing a TCP socket while unread data sits in its receive buffer
+/// makes the OS emit a **RST**, which discards any not-yet-read bytes from the
+/// *peer's* buffer — including the response we just wrote.  That is the classic
+/// `413`-with-a-large-body (and gate-denied-with-a-body) truncation race: the
+/// client is still writing megabytes when we reject after the head, so a bare
+/// close would RST away our `413`/`401`/`429` before the client could read it.
+/// Draining the body first lets the client finish its send and read the
+/// response, after which it half-closes (`Ok(0)`) and we return promptly.
+///
+/// A no-op without a real socket (the in-memory test transport has no RST
+/// semantics) or when there is no unread body to drain.
+fn lingering_drain(socket: Option<&TcpStream>) {
+    let Some(sock) = socket else { return };
+    // A short per-read timeout bounds the wait when the peer has stopped
+    // sending (it is reading our response, not writing more).  We are closing
+    // right after, so we need not restore the prior timeout.
+    if sock.set_read_timeout(Some(LINGER_DRAIN_TIMEOUT)).is_err() {
+        return;
+    }
+    // `&TcpStream` implements `Read`, so a shared handle suffices (the `reader`
+    // owns the other clone; we are done reading through it).
+    let mut s: &TcpStream = sock;
+    let mut scratch = [0u8; 16 * 1024];
+    let mut drained = 0usize;
+    while drained < LINGER_DRAIN_MAX_BYTES {
+        match s.read(&mut scratch) {
+            // `Ok(0)`: peer half-closed (it read our response and closed) — a
+            // graceful FIN exchange, no RST owed.  `Err(_)`: the per-read
+            // timeout fired (peer idle, reading our response) or a socket
+            // error.  Either way, stop.
+            Ok(0) | Err(_) => break,
+            Ok(n) => drained += n, // discard the refused body
+        }
+    }
+}
+
 /// Run one accepted connection's keep-alive request loop until it closes,
 /// errors, is evicted, or `shutdown` is set.  Each request resets the
 /// [`DeadlineStream`]'s read deadline, so the cumulative read time per request
@@ -251,6 +304,12 @@ pub(crate) fn run_connection<S: Read + Write>(
                 );
                 log_request("-", "-", status, start.elapsed(), &request_id);
                 let _ = write_response(reader.get_mut(), &outcome, false, false);
+                // A `413` rejects an oversize body the client is still sending;
+                // drain it before closing so the response is not RST-truncated
+                // (the other rejects carry no large unread body to drain).
+                if status == 413 {
+                    lingering_drain(socket);
+                }
                 return;
             }
         };
@@ -362,6 +421,12 @@ fn serve_parsed<S: Read + Write>(
             if keep {
                 ConnControl::KeepAlive
             } else {
+                // Closing while the client may still be sending an unread body
+                // (a gate-denied request, `must_close` with a declared body):
+                // drain it first so the response is not RST-truncated.
+                if must_close && content_length > 0 {
+                    lingering_drain(socket);
+                }
                 ConnControl::Close
             }
         }
