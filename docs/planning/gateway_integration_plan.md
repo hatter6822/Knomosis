@@ -60,9 +60,11 @@ The companion machine-readable contract is
 > decode → JSON renderer `events/decode.rs::render_event` — the §6.2
 > envelope over `decoder::decode_event`: bigint→decimal string,
 > bytes→`0x`-hex, `outcome` name, forward-unknown for tags ≥23, and a
-> fail-closed `Corrupt` on a known-tag decode failure; G3.2c's cross-stack
-> corpus pin is deferred to land alongside the first endpoint that surfaces
-> the JSON), and **G3.3** (`GET /v1/events` — the bounded, group-complete
+> fail-closed `Corrupt` on a known-tag decode failure; **G3.2c** pins the full
+> §6.2 envelope for every tag `0..=22` via a contract-transcribed golden table
+> (`every_tag_pins_the_full_v62_envelope`) — the true cross-stack pin against
+> `knomosis extract-events` stays blocked on the deferred Lean `Encodable
+> Event`), and **G3.3** (`GET /v1/events` — the bounded, group-complete
 > backfill page over the unbounded `SUBSCRIBE` stream:
 > `events/backfill.rs`, tip-bounded by the indexer cursor, `since=0`
 > "from oldest" following the upstream `TRUNCATED`, a concrete
@@ -121,8 +123,10 @@ The companion machine-readable contract is
 > request core, fronted by a deliberately strict, smuggling-proof HTTP/1.1
 > reader; uses the workspace's rustls 0.23, not tiny_http's bundled rustls
 > 0.20 — see `docs/audits/gateway_tls_spike.md`).  **The core G4 hardening
-> track is complete (G4.1–G4.7);** deferred: the G4.6 throughput bench + the
-> additive pins (G2.1c pipelining, G3.2c cross-stack corpus).
+> track is complete (G4.1–G4.7);** deferred: the G4.6 throughput bench, the
+> G2.1c submit pipelining, and the G3.2c cross-stack pin against the Lean
+> reference (blocked upstream on the deferred Lean `Encodable Event` — the
+> gateway-side §6.2 envelope shape is already golden-pinned for every tag).
 
 There is currently **zero code coupling** between the repositories:
 Knomosis has no reference to Licio, and a reconciliation against Licio's
@@ -1598,16 +1602,27 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
     `0..=22` round-trips (`encode_event` → `render_event`) carrying its name;
     a truncated known-tag payload yields `Corrupt` (does not panic — §3.2);
     an empty head yields `Unparseable`.
-  * **G3.2c — Cross-stack pin** · S · deps: G3.2b · **DEFERRED (additive CI
-    gate).** `tests/cross_stack_events.rs`: decode real `knomosis
-    extract-events` output and assert the gateway JSON matches the Lean
-    reference for tags `0..=22` (reuse the `.cxsf` corpus pattern). Decoder
-    correctness is already established by the per-tag `encode_event` →
-    `render_event` round-trip over the cross-stack-validated
-    `knomosis-indexer` codec; the corpus pin is a strictly-additive
-    belt-and-braces gate landed alongside G3.3/G3.5 (the first endpoints to
-    surface the rendered JSON to a client). *Acceptance:* CI gate green;
-    a deliberate field-rename breaks it.
+  * **G3.2c — §6.2 envelope pin** · S · deps: G3.2b · **DONE (gateway-side
+    golden pin); the Lean-reference cross-stack pin is BLOCKED upstream.**
+    The §6.2 *contract shape* is now pinned for **every** tag `0..=22`:
+    `events/decode.rs::every_tag_pins_the_full_v62_envelope` asserts the exact
+    rendered envelope — the denormalised `actor` / `resource` subject **and**
+    the complete typed `payload` (key names + value formats: bigints/ids as
+    decimal strings, byte fields as `0x`-hex, a verdict outcome as a name) —
+    against a contract-transcribed golden table held *independent* of
+    `render_known` (so the two cannot drift together; a dropped / renamed /
+    mistyped field for any tag fails the test).  This is the complete BFF
+    contract-shape regression guard the per-field tests only sampled.
+    *Acceptance met:* the golden pin is green and a deliberate field-rename
+    breaks it.  **Upstream blocker (the residual):** the *true* cross-stack
+    pin against real `knomosis extract-events` output cannot be written yet —
+    the Lean side does **not** ship an `Encodable Event` instance and the
+    `extract-events` subcommand is deferred (RH-D.2; see
+    `knomosis-indexer::decoder`'s module docstring).  Until it lands, the
+    canonical CBE format is defined *by convention* by the cross-stack-
+    validated `knomosis-indexer` codec, against which the gateway golden pin
+    rides; when the Lean encoder ships, the `.cxsf`-corpus pin becomes a
+    strictly-additive belt-and-braces gate.
 * **G3.3 — `GET /events` backfill** · M · deps: G3.1, G3.2 · **DONE.**
   `events/backfill.rs` builds a *bounded page* API over the *unbounded*
   `SUBSCRIBE` stream (`backfill(addr, tip, max_frame, idle_timeout, req)
@@ -1764,7 +1779,9 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   IO shell **before** the hijack; `Route::EventStream` is intercepted in
   `handle_request` (its `dispatch` arm is a defensive `500`).  `SseConfig`
   (ring capacity / max streams / max client lag / heartbeat / mux staleness)
-  is defaulted today — per-knob `--sse-*` flags are an additive follow-up.
+  is operator-tunable via the `--sse-*` flags (resolved + range-validated in
+  `config.rs`, the lag enforced `< ring_capacity`), honoured identically on
+  the plaintext and native-TLS stream paths.
   *Acceptance (DONE):* a router parse test (optional `since` / repeatable
   `type` / malformed→`400` / non-GET→`405`) + two end-to-end HTTP
   integration tests over a real mock upstream + the live mux — the SSE head
@@ -1772,8 +1789,10 @@ tests/{integration,contract,cross_stack_events,chaos}.rs
   `since`, and the no-upstream `503`.  The reconnect/resume/lag correctness
   is carried by the G3.4 unit/property/chaos suites.
 
-**The events (G3) track is complete (G3.1–G3.5);** only the additive G3.2c
-cross-stack corpus pin remains deferred.
+**The events (G3) track is complete (G3.1–G3.5);** the G3.2c §6.2 envelope is
+golden-pinned for every tag, and only the *cross-stack* corpus pin against the
+Lean reference remains deferred — blocked upstream on the Lean `Encodable
+Event` (RH-D.2), not on the gateway.
 
 ### G4 — Hardening + runbook
 

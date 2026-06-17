@@ -434,6 +434,7 @@ mod tests {
     use knomosis_event_subscribe::event_type::ALL_EVENT_TYPES;
     use knomosis_indexer::decoder::encode_event;
     use knomosis_indexer::event::Event;
+    use serde_json::{json, Value};
 
     /// Encode an `Event`, render the bytes, and return the JSON value.
     fn render(event: &Event) -> EventJson {
@@ -530,6 +531,138 @@ mod tests {
             assert_eq!(json.event_type, ty.name(), "tag {}", ty.tag());
             assert!(json.payload.is_object());
         }
+    }
+
+    /// Golden §6.2 pin: every event tag renders to its **exact** contract
+    /// envelope — the denormalised `actor` / `resource` subject *and* the
+    /// full typed `payload` (key names + value formats: bigints/ids as
+    /// decimal strings, byte fields as `0x`-hex, a verdict outcome as a
+    /// name).  This is the complete BFF-contract regression guard the
+    /// per-field tests above only sample: a `render_known` refactor that
+    /// dropped, renamed, or mistyped a payload field for **any** tag fails
+    /// here.  (The type name is cross-checked against the §11A.5 registry,
+    /// so it need not be re-transcribed.)
+    ///
+    /// NOTE: the bytes come from the Rust `encode_event` (the canonical CBE
+    /// format by convention — see `knomosis-indexer::decoder`).  The true
+    /// cross-stack pin against `knomosis extract-events` output (plan G3.2c)
+    /// remains blocked on the Lean side shipping an `Encodable Event`
+    /// instance, which is deferred (RH-D.2); this pin closes the
+    /// gateway-side §6.2 shape guarantee in the meantime.
+    #[test]
+    fn every_tag_pins_the_full_v62_envelope() {
+        let samples = sample_events();
+        let expected = expected_envelopes();
+        assert_eq!(
+            samples.len(),
+            expected.len(),
+            "one expected envelope per tag"
+        );
+        assert_eq!(samples.len(), ALL_EVENT_TYPES.len(), "one sample per tag");
+        for ((event, ty), (actor, resource, payload)) in
+            samples.iter().zip(ALL_EVENT_TYPES).zip(expected)
+        {
+            let json = render(event);
+            assert_eq!(json.event_type, ty.name(), "tag {} type", ty.tag());
+            assert_eq!(json.actor.as_deref(), actor, "tag {} actor", ty.tag());
+            assert_eq!(
+                json.resource.as_deref(),
+                resource,
+                "tag {} resource",
+                ty.tag()
+            );
+            assert_eq!(json.payload, payload, "tag {} payload", ty.tag());
+        }
+    }
+
+    /// The expected §6.2 `(actor, resource, payload)` for each tag, in tag
+    /// order — paired one-to-one with [`sample_events`].  Transcribed from
+    /// the contract, *independent* of `render_known`, so the two cannot
+    /// drift together.
+    #[allow(clippy::too_many_lines)] // a flat 23-entry golden table; splitting hurts the pin
+    fn expected_envelopes() -> Vec<(Option<&'static str>, Option<&'static str>, Value)> {
+        let l1 = format!("0x{}", "01".repeat(20));
+        vec![
+            (
+                Some("1"),
+                Some("0"),
+                json!({"resource":"0","actor":"1","oldValue":"1","newValue":"2"}),
+            ),
+            (
+                Some("1"),
+                None,
+                json!({"actor":"1","oldNonce":"0","newNonce":"1"}),
+            ),
+            (Some("1"), None, json!({"actor":"1","key":"0x010203"})),
+            (Some("1"), None, json!({"actor":"1"})),
+            (None, None, json!({"time":"99"})),
+            (None, None, json!({"challenger":"1","targetIdx":"2"})),
+            (None, None, json!({"disputeIdx":"2"})),
+            (None, None, json!({"disputeIdx":"2","outcome":"upheld"})),
+            (
+                Some("1"),
+                Some("0"),
+                json!({"resource":"0","recipient":"1","amount":"5"}),
+            ),
+            (
+                Some("1"),
+                Some("0"),
+                json!({"resource":"0","sender":"1","amount":"5","recipientL1":l1,"withdrawalId":"1"}),
+            ),
+            (
+                Some("1"),
+                Some("0"),
+                json!({"resource":"0","recipient":"1","amount":"5","depositId":"1"}),
+            ),
+            (Some("1"), None, json!({"actor":"1","policy":"0x09"})),
+            (Some("1"), None, json!({"actor":"1"})),
+            (
+                None,
+                None,
+                json!({"gameId":"1","challenger":"2","disputedStartIdx":"3","disputedEndIdx":"4","bindingHash":"0x0707"}),
+            ),
+            (
+                None,
+                None,
+                json!({"gameId":"1","round":"2","party":"3","idx":"4","commit":"0x0808"}),
+            ),
+            (
+                None,
+                None,
+                json!({"gameId":"1","winner":"2","loser":"3","payout":"4"}),
+            ),
+            (
+                Some("1"),
+                Some("0"),
+                json!({"resource":"0","recipient":"1","poolActor":"2","userAmount":"5","poolAmount":"1","budgetGrant":"3","depositId":"1"}),
+            ),
+            (
+                Some("1"),
+                None,
+                json!({"signer":"1","gasResource":"0","gasAmount":"5","budgetIncrement":"3","poolActor":"2"}),
+            ),
+            (
+                Some("1"),
+                Some("0"),
+                json!({"resource":"0","sequencer":"1","amount":"5"}),
+            ),
+            (
+                Some("1"),
+                None,
+                json!({"recipient":"1","signer":"2","gasResource":"0","gasAmount":"5","budgetIncrement":"3","poolActor":"4"}),
+            ),
+            (Some("1"), None, json!({"actor":"1","amount":"5"})),
+            (
+                Some("2"),
+                None,
+                json!({"fromResource":"0","toResource":"1","amountIn":"5","amountOut":"4","ammReserveActor":"2"}),
+            ),
+            (
+                Some("3"),
+                Some("0"),
+                json!({"resource":"0","amount":"5","reserveActor":"2","poolActor":"3"}),
+            ),
+        ]
     }
 
     #[test]
