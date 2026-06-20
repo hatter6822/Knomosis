@@ -167,7 +167,7 @@ def upheldFlatRewardsTests : List TestCase :=
     }
   , { name := "E2E: applyVerdict (.upheld) computes the rollback target"
     , body := do
-        match applyVerdictUnchecked Pall fundedGenesis fundedGenesis plantedLog upheldVerdict with
+        match Disputes.applyVerdictUnchecked Pall fundedGenesis fundedGenesis plantedLog upheldVerdict with
         | .ok rolledBack =>
           -- The rollback target is replay of log[0..0] = entry 0 only.
           -- Entry 0 is `transfer 0 sender receiver 50`, applied via
@@ -220,7 +220,7 @@ def rejectedStakingTests : List TestCase :=
     }
   , { name := "E2E: applyVerdict (.rejected) leaves state unchanged"
     , body := do
-        match applyVerdictUnchecked Pall fundedGenesis fundedGenesis plantedLog rejectedVerdict with
+        match Disputes.applyVerdictUnchecked Pall fundedGenesis fundedGenesis plantedLog rejectedVerdict with
         | .ok unchanged =>
           assertEq (100 : Amount) (getBalance unchanged.base 0 sender) "sender unchanged"
           assertEq (50 : Amount) (getBalance unchanged.base 0 challenger) "challenger unchanged"

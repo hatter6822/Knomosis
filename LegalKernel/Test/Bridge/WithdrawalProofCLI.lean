@@ -34,7 +34,8 @@ The byte-stability test re-extracts the same proof twice and
 asserts the results are byte-equal.
 
 Out-of-scope: actually invoking the `knomosis` binary via
-`IO.Process` (Std.Process integration is a Phase-5 follow-up).
+`IO.Process`; end-to-end process invocation is exercised by the
+Rust host runtime (Workstream RH, `runtime/knomosis-host`).
 The in-process tests below establish the same correctness
 properties at a lower implementation-level granularity.
 -/

@@ -492,24 +492,19 @@ within the dispute pipeline. -/
     (witness-bearing).
 
     **Visibility contract (AR.18 / per-area audit `07-disputes.md`).**
-    This function is exported (Lean does not restrict it lexically
-    via `private` because two in-namespace callers
-    — `Rewards.applyVerdictWithRewardsUnchecked` and
-    `applyVerdictWithRewardsMultiUnchecked` — legitimately compose
-    on top of it).  The contract is a *review-gate*: any production
-    call site for `applyVerdictUnchecked` outside the
-    `LegalKernel.Disputes` namespace is a design defect; AR.18
-    relies on the human-review pass + the explicit
-    "UNCHECKED — TESTING ONLY" header to enforce the boundary, plus
-    the deferred mechanical option of refactoring internal callers
-    to use the qualified form `Disputes.applyVerdictUnchecked` and
-    promoting this `def` to `protected`.  The Lean visibility
-    promotion is deferred to a future workstream to avoid the
-    cascading internal-caller refactor; the operational guarantee
-    today is: every caller (verified by grep at landing time) is
-    either in the `LegalKernel.Disputes` namespace or in a test
-    file under `LegalKernel/Test/Disputes/`. -/
-def applyVerdictUnchecked
+    This `def` is `protected`: it cannot be reached by the bare short
+    name even under `open LegalKernel.Disputes`, so every caller must
+    spell out the qualified `Disputes.applyVerdictUnchecked`.  That
+    makes each use of the Stage-4 bypass explicit and greppable.
+    `private` is not available because the legitimate composing
+    callers `applyVerdictWithRewardsUnchecked` and
+    `applyVerdictWithRewardsMultiUnchecked` live in the sibling
+    `Disputes/Rewards.lean`; `protected` is the strongest visibility
+    that keeps the Verdict → Rewards layering intact.  Any production
+    call site outside the `LegalKernel.Disputes` namespace remains a
+    design defect; the "UNCHECKED — TESTING ONLY" header plus the
+    mandatory qualification are the mechanical enforcement. -/
+protected def applyVerdictUnchecked
     (P : AuthorityPolicy) (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (v : Verdict) :
     Except VerdictError ExtendedState :=
@@ -559,8 +554,8 @@ theorem applyVerdictUnchecked_rejected_no_change
     (h_act : entry.signedAction.action = .dispute d)
     (h_open : disputeStatus log v.disputeId = some .open)
     (h_rej : v.outcome = .rejected) :
-    applyVerdictUnchecked P currentEs genesis log v = .ok currentEs := by
-  unfold applyVerdictUnchecked
+    Disputes.applyVerdictUnchecked P currentEs genesis log v = .ok currentEs := by
+  unfold Disputes.applyVerdictUnchecked
   rw [h_idx]
   dsimp only
   rw [h_act]
@@ -579,8 +574,8 @@ theorem applyVerdictUnchecked_inconclusive_no_change
     (h_act : entry.signedAction.action = .dispute d)
     (h_open : disputeStatus log v.disputeId = some .open)
     (h_inc : v.outcome = .inconclusive) :
-    applyVerdictUnchecked P currentEs genesis log v = .ok currentEs := by
-  unfold applyVerdictUnchecked
+    Disputes.applyVerdictUnchecked P currentEs genesis log v = .ok currentEs := by
+  unfold Disputes.applyVerdictUnchecked
   rw [h_idx]
   dsimp only
   rw [h_act]
@@ -595,9 +590,9 @@ theorem applyVerdictUnchecked_unknown_dispute
     (P : AuthorityPolicy) (currentEs : ExtendedState) (genesis : ExtendedState)
     (log : List LogEntry) (v : Verdict)
     (h : log[v.disputeId]? = none) :
-    applyVerdictUnchecked P currentEs genesis log v =
+    Disputes.applyVerdictUnchecked P currentEs genesis log v =
     .error (.unknownDispute v.disputeId) := by
-  unfold applyVerdictUnchecked
+  unfold Disputes.applyVerdictUnchecked
   rw [h]
 
 /-- `applyVerdictUnchecked` is deterministic. -/
@@ -606,8 +601,8 @@ theorem applyVerdictUnchecked_deterministic
     (genesis₁ genesis₂ : ExtendedState) (log₁ log₂ : List LogEntry) (v₁ v₂ : Verdict)
     (h_es : currentEs₁ = currentEs₂) (h_g : genesis₁ = genesis₂)
     (h_l : log₁ = log₂) (h_v : v₁ = v₂) :
-    applyVerdictUnchecked P currentEs₁ genesis₁ log₁ v₁ =
-    applyVerdictUnchecked P currentEs₂ genesis₂ log₂ v₂ := by
+    Disputes.applyVerdictUnchecked P currentEs₁ genesis₁ log₁ v₁ =
+    Disputes.applyVerdictUnchecked P currentEs₂ genesis₂ log₂ v₂ := by
   rw [h_es, h_g, h_l, h_v]
 
 /-! ## Witness-bearing applyVerdict (C.4)
@@ -642,7 +637,7 @@ def applyVerdict
     (log : List LogEntry) (v : Verdict)
     (_h : VerdictPassedStage3 P oracle qp currentEs genesis log v) :
     Except VerdictError ExtendedState :=
-  applyVerdictUnchecked P currentEs genesis log v
+  Disputes.applyVerdictUnchecked P currentEs genesis log v
 
 /-- Trivial-equivalence theorem.  `applyVerdict` and
     `applyVerdictUnchecked` produce identical outputs on the same
@@ -654,7 +649,7 @@ theorem applyVerdict_eq_unchecked
     (currentEs genesis : ExtendedState) (log : List LogEntry) (v : Verdict)
     (h : VerdictPassedStage3 P oracle qp currentEs genesis log v) :
     applyVerdict P oracle qp currentEs genesis log v h =
-    applyVerdictUnchecked P currentEs genesis log v := rfl
+    Disputes.applyVerdictUnchecked P currentEs genesis log v := rfl
 
 /-! ## Per-outcome theorems for witness-bearing applyVerdict (C.4c)
 
@@ -948,7 +943,7 @@ theorem applyVerdict_under_witness_succeeds
     applyVerdict_entry_is_dispute P oracle qp currentEs genesis log v entry h h_idx
   have h_open := applyVerdict_dispute_open P oracle qp currentEs genesis log v h
   -- Walk applyVerdictUnchecked's match tree.
-  unfold applyVerdictUnchecked
+  unfold Disputes.applyVerdictUnchecked
   simp only [h_idx, h_act, h_open]
   -- Goal: ∃ es, (match v.outcome with
   --              | .upheld => let i := claimImpugnedIdx d.claim;
@@ -1064,7 +1059,7 @@ theorem proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok
     (currentEs genesis : ExtendedState) (log : List LogEntry) (v : Verdict)
     (h : proposeVerdict P oracle qp currentEs genesis log v = .ok v) :
     proposeAndApplyVerdict P oracle qp currentEs genesis log v =
-    applyVerdictUnchecked P currentEs genesis log v := by
+    Disputes.applyVerdictUnchecked P currentEs genesis log v := by
   unfold proposeAndApplyVerdict
   -- The match-with-pattern-binding requires the equation to evaluate.
   split

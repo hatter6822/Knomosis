@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+#
+# Release / deploy gate for the production crypto link (security-review
+# F-1 / F-2).  The per-PR workflows `ci-verify-secp256k1.yml` and
+# `ci-hash-keccak256-link.yml` prove the fallback->production FLIP on
+# every change to the adaptor surface.  THIS workflow is the
+# release-time backstop the F-1/F-2 findings call for: it runs on a
+# release / version tag (and on demand) and REQUIRES that the production
+# crypto links and the fail-closed gates pass before a build ships, so a
+# `knomosis` binary linking the FNV-1a-64 hash fallback or the
+# Lean-opaque verifier fallback can never be released.
+#
+# For each FFI cdylib it (1) records the staticlib SHA-256 and proves
+# `hash-check` / `verify-check` flip fallback(exit 1) -> production
+# (exit 0), then (2) re-runs in `--check` mode to verify the artefact
+# SHA-256 pin (the F-2 "run the --check pin in the release pipeline"
+# residual; also confirms the adaptor staticlib rebuilds bit-identically).
+# All orchestration lives in the two `scripts/verify_*_link.sh` scripts;
+# this workflow just provisions lean + rust and runs them.
+#
+# Note: a GitHub Release cut from a version tag may match both the
+# `release` and `push: tags` triggers and run twice — harmless for a
+# gate (each run is independent and idempotent).
+
+name: CI (Release Deploy Gate)
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# Do NOT cancel an in-flight release gate when a new ref appears: a
+# release verification should always run to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# `contents: read` for actions/checkout; `actions: write` for the narrow
+# rust-cache save scope (NOT a repo-write permission).
+permissions:
+  contents: read
+  actions: write
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  crypto-link-gate:
+    name: ${{ matrix.adaptor }} release gate (F-1/F-2)
+    runs-on: ubuntu-latest
+    # Budget: two Rust staticlib builds (record + --check) plus the Lean
+    # `knomosis` exe links per adaptor.
+    timeout-minutes: 50
+    strategy:
+      # Run BOTH adaptor gates even if one fails, so a release surfaces
+      # every crypto-link problem in a single run.
+      fail-fast: false
+      matrix:
+        include:
+          - adaptor: keccak256-hash
+            script: scripts/verify_keccak_link.sh
+            cache_key: release-gate-keccak256
+          - adaptor: secp256k1-verifier
+            script: scripts/verify_secp256k1_link.sh
+            cache_key: release-gate-secp256k1
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (same SHA pinned across the CI suite).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Lean toolchain
+        # leanprover/lean-action v1.5.0.  Installs elan + lean + lake from
+        # `lean-toolchain`; the verify script drives every Lean invocation
+        # (it controls the *_STATICLIB env var at link time).
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9
+        with:
+          build: false
+          test: false
+          lint: false
+
+      - name: Install Rust toolchain (per rust-toolchain.toml)
+        shell: bash
+        working-directory: runtime
+        run: |
+          rustup show active-toolchain || true
+          rustup show
+          cargo --version
+          rustc --version
+
+      - name: Cache cargo artifacts
+        # Swatinem/rust-cache v2.7.7 (same SHA pinned across the CI suite).
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: runtime
+          shared-key: ${{ matrix.cache_key }}
+
+      - name: Record + prove the production link flips the fail-closed gate
+        # Builds the real adaptor staticlib, records its SHA-256, asserts
+        # the DEFAULT build's check exits 1 (fail-closed) and the
+        # production-linked build exits 0.  A green step proves a release
+        # binary genuinely links production crypto, not the fallback.
+        shell: bash
+        run: ./${{ matrix.script }}
+
+      - name: Re-verify the artefact SHA-256 pin (--check)
+        # The F-2 "run the --check pin in the release/deploy pipeline"
+        # residual: rebuilds the staticlib and asserts its SHA-256 matches
+        # the snapshot just recorded (artefact integrity + reproducibility).
+        shell: bash
+        run: ./${{ matrix.script }} --check

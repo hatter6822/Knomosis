@@ -5564,7 +5564,7 @@ Quot.sound]`) and adds zero custom axioms.
 | AR.15    | `proportionalDilute` invariant comment      | Complete          |
 | AR.16    | `Verdict.encode` length-match boundary      | Complete          |
 | AR.17    | `kernelOnlyApply` exhaustive switch         | Complete          |
-| AR.18    | `applyVerdictUnchecked` docstring contract  | Document-only (mechanical `private` deferred — see below) |
+| AR.18    | `applyVerdictUnchecked` docstring contract  | Complete (mechanical `protected` landed under CL.3 — see below) |
 | AR.19    | `fileDispute_rejects_*` family completion   | Complete          |
 | AR.20    | `.github/CODEOWNERS`                        | Complete          |
 | AR.21    | `withdraw` positivity                       | Complete          |
@@ -5607,28 +5607,26 @@ into every binary).  Production deployments override by linking
 a real BLAKE3 / keccak256 implementation library ahead of the
 fallback in the link order.
 
-### 15C.6 AR.18 mechanical visibility (deferred)
+### 15C.6 AR.18 mechanical visibility (complete)
 
 The plan called for `private def applyVerdictUnchecked` to lexically
 restrict the unchecked stage-4 entry point.  Lean 4's `private`
 modifier is FILE-LOCAL: it makes the name accessible only within
 the same source file.  The legitimate in-namespace callers
-(`Rewards.applyVerdictWithRewardsUnchecked` and
+(`applyVerdictWithRewardsUnchecked` and
 `applyVerdictWithRewardsMultiUnchecked` in
 `LegalKernel/Disputes/Rewards.lean`) live in a different file, so
-`private` would break them.  The `protected` modifier (which
-requires full namespace qualification at every call site,
-including in-file ones) would compile but requires updating ~20
-in-file references in `Verdict.lean` plus the four cross-file
-references in `Rewards.lean` and the test files.
+`private` would break them, and relocating them into `Verdict.lean`
+would invert the clean Verdict → Rewards layering.
 
-AR.18 ships as documentation-only: the `applyVerdictUnchecked`
-docstring documents the contract loudly ("UNCHECKED — TESTING
-ONLY") and a review-gate rule enforces it.  The mechanical
-`protected` promotion is scoped as a future cleanup that
-coordinates with a refactor moving the legitimate
-`Rewards.applyVerdictWithRewardsUnchecked` callers into a public
-interface that re-exports the unchecked surface controllably.
+CL.3 lands the `protected` modifier instead — the strongest
+visibility that keeps that layering intact.  `protected` requires
+full namespace qualification at every call site (in-file ones
+included), so each use of the stage-4 bypass now spells out
+`Disputes.applyVerdictUnchecked`, making the bypass explicit and
+greppable.  The promotion qualified the ~20 in-file references in
+`Verdict.lean` plus the cross-file references in `Rewards.lean`
+and the dispute test files; `lake build` + `lake test` are clean.
 
 ### 15C.7 Encoder injectivity (complete)
 

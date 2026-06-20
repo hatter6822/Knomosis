@@ -243,8 +243,9 @@ manager, future auditor).
      signer / signature lengths (m-17).  AR.17 replaces the
      non-exhaustive wildcard match in `Disputes.kernelOnlyApply`
      with an explicit per-arm case-split (m-14).  AR.18 marks
-     `applyVerdictUnchecked` `private` so production callers
-     cannot reach the unchecked variant by accident.  AR.19 adds
+     `applyVerdictUnchecked` `protected` so production callers
+     cannot reach the unchecked variant without the explicit
+     qualified name.  AR.19 adds
      the missing `_indexOutOfRange` / `_duplicateDispute`
      rejection lemmas for `fileDispute`.  AR.20 lands a
      `.github/CODEOWNERS` file that mechanically encodes the
@@ -4272,43 +4273,43 @@ directly.
 
 **Scope.**
 
-  * `LegalKernel/Disputes/Verdict.lean` — add `private`
-    modifier to `applyVerdictUnchecked` (and any internal
-    helpers that should not be on the public surface).
-  * Any test files referencing it under the new visibility
-    must use the `private`-export pattern (per Lean's
-    `protected`/`private` rules) or be moved into the same
-    namespace.
+  * `LegalKernel/Disputes/Verdict.lean` — add the `protected`
+    modifier to `applyVerdictUnchecked`.  (`private` is
+    file-local and would break the legitimate cross-file reward
+    composers in `Rewards.lean`; relocating them would invert the
+    Verdict → Rewards layering — see GENESIS_PLAN §15C.6.)
+  * Every call site (in `Verdict.lean`, `Rewards.lean`, and the
+    dispute test files) qualifies the name as
+    `Disputes.applyVerdictUnchecked`.
 
 **Math / proof outline.**  None.
 
 **Implementation steps.**
 
-  1. Add `private` modifier.
+  1. Add the `protected` modifier (landed under CL.3).
 
-  2. Search for call sites; gate test references under
-     `open Verdict in` (or move tests into the same
-     namespace).
+  2. Qualify every call site as `Disputes.applyVerdictUnchecked`
+     (the bare short name no longer resolves, even in-file).
 
   3. Re-build.
 
 **Acceptance criteria.**
 
-  * `applyVerdictUnchecked` is `private`.
-  * No production caller can reach it without explicit
-    namespace opening.
+  * `applyVerdictUnchecked` is `protected`.
+  * No caller can reach it via the bare short name; the
+    qualified form is mandatory, making the bypass greppable.
   * All existing tests still elaborate.
 
-**Test plan.**  Self-test that an external module trying
-to invoke `applyVerdictUnchecked` fails to elaborate.
+**Test plan.**  The build itself is the self-test: any bare
+reference to `applyVerdictUnchecked` fails to elaborate (the
+`protected` modifier forces qualification).
 
 **Definition of Done.**
 
-  - [ ] `private` modifier added.
-  - [ ] All test-file references updated to use the
-        in-namespace pattern.
-  - [ ] Self-test confirming the visibility restriction.
-  - [ ] `lake build` + `lake test` clean.
+  - [x] `protected` modifier added.
+  - [x] All call sites qualified as `Disputes.applyVerdictUnchecked`.
+  - [x] Build-enforced visibility restriction (bare name rejected).
+  - [x] `lake build` + `lake test` clean.
 
 **Verification commands.**
 

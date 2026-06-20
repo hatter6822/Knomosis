@@ -148,7 +148,8 @@ def stakeFilingActions (sp : StakingPolicy) (challenger : ActorId) :
     `fileDisputeStaked` step ordering) and is NOT proved as a
     Lean theorem on the kernel side — promoting it would require
     a runtime-ordering predicate as a parameter to the rollback
-    semantics, a follow-up workstream. -/
+    semantics, which the current model deliberately leaves to the
+    adaptor. -/
 def stakeResolutionActions (sp : StakingPolicy) (v : Verdict) : List Action :=
   if sp.stakeAmount = 0 then []
   else

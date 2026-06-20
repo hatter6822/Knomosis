@@ -19,11 +19,10 @@ import LegalKernel
 import LegalKernel.Test.Framework
 import Lex.Examples.ExampleLex
 
--- Plan §2.5: `Law.mk` is deprecated in favour of `lexlaw`; the
--- non-deprecated `lex_law_mk` constructor is M3 work and the
--- deprecation cleanup is explicitly deferred.  The legacy-DSL
+-- `Law.mk` is deprecated in favour of `lexlaw`.  The legacy-DSL
 -- API-stability test below exercises the deprecated surface to
--- pin its behaviour for the duration of the deprecation window.
+-- pin its behaviour for the duration of the deprecation window, so
+-- the deprecation linter is disabled for this file.
 set_option linter.deprecated false
 
 namespace Lex.Test.ExampleLex

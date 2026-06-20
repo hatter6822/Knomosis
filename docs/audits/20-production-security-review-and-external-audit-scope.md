@@ -146,8 +146,8 @@ deliverable `docs/economic_incentive_analysis.md` (P2).
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| **F-1** | **Medium → addressed** | The hash fallback `knomosis-hash-fallback.c` provides only **64-bit** collision resistance (FNV-1a-64); the state-commitment soundness assumes ≥128-bit. The strong binding (BLAKE3/keccak via `@[extern]`) is the production default and the fallback is for tests/CI, but previously **nothing failed if a production binary shipped the fallback**. A 64-bit hash makes state-commitment collisions feasible (~2³² work), forging fault-proof state roots. **Addressed (2026-06-14):** the `knomosis hash-check` subcommand now *fails closed* — it prints the binding and exits `1` on the fallback, `0` on a production-grade hash. Deployment/release pipelines MUST run it as a required gate (verified: exits 1 on the CI/dev fallback build). Residual operational step: wiring it into the release pipeline. |
-| **F-2** | Low → partly addressed | TA-1/TA-2 are deployment-injected; a deployment that injects a *broken* verifier/hash silently loses all guarantees. Mitigated by the cdylibs + the cross-stack corpora, but the **injection point is unauthenticated at the Lean level** (build-time linkage). **Addressed (2026-06-14):** the verifier-identifier assertion is now implemented — `knomosis verify-check` fails closed (exit 1) on the Lean-opaque fallback and exit 0 when the secp256k1 cdylib (which now exports `knomosis_verify_identifier`) is linked; mirrors the F-1 hash gate. **Addressed further (2026-06-16):** the cdylib *build-artefact* SHA-256 pin now exists for **both** FFI cdylibs — `scripts/verify_secp256k1_link.sh` (verifier) and `scripts/verify_keccak_link.sh` (keccak hash) each record / `--check`-verify the staticlib SHA-256 **and** prove the gate flips fallback(exit 1)→production(exit 0), each behind a dedicated CI workflow (`ci-verify-secp256k1.yml`, `ci-hash-keccak256-link.yml`). **Residual:** run the `--check` pin in the release/deploy pipeline (the operational gating step, as `scripts/setup.sh` does for the toolchain). |
+| **F-1** | **Medium → addressed** | The hash fallback `knomosis-hash-fallback.c` provides only **64-bit** collision resistance (FNV-1a-64); the state-commitment soundness assumes ≥128-bit. The strong binding (BLAKE3/keccak via `@[extern]`) is the production default and the fallback is for tests/CI, but previously **nothing failed if a production binary shipped the fallback**. A 64-bit hash makes state-commitment collisions feasible (~2³² work), forging fault-proof state roots. **Addressed (2026-06-14):** the `knomosis hash-check` subcommand now *fails closed* — it prints the binding and exits `1` on the fallback, `0` on a production-grade hash. Deployment/release pipelines MUST run it as a required gate (verified: exits 1 on the CI/dev fallback build). Wired into the release pipeline: `ci-release-gate.yml` runs it as a required gate on every version tag / GitHub Release (and on demand). |
+| **F-2** | Low → partly addressed | TA-1/TA-2 are deployment-injected; a deployment that injects a *broken* verifier/hash silently loses all guarantees. Mitigated by the cdylibs + the cross-stack corpora, but the **injection point is unauthenticated at the Lean level** (build-time linkage). **Addressed (2026-06-14):** the verifier-identifier assertion is now implemented — `knomosis verify-check` fails closed (exit 1) on the Lean-opaque fallback and exit 0 when the secp256k1 cdylib (which now exports `knomosis_verify_identifier`) is linked; mirrors the F-1 hash gate. **Addressed further (2026-06-16):** the cdylib *build-artefact* SHA-256 pin now exists for **both** FFI cdylibs — `scripts/verify_secp256k1_link.sh` (verifier) and `scripts/verify_keccak_link.sh` (keccak hash) each record / `--check`-verify the staticlib SHA-256 **and** prove the gate flips fallback(exit 1)→production(exit 0), each behind a dedicated CI workflow (`ci-verify-secp256k1.yml`, `ci-hash-keccak256-link.yml`). **Wired:** `ci-release-gate.yml` runs the `--check` pin on every release / version tag (the operational gating step, alongside the F-1 hash gate). |
 | **F-3** | Informational | Cross-stack equivalence is corpus-validated (§4.2). No finding of divergence; the risk is **coverage**, addressed by P2 §6 adversarial-corpus expansion. |
 | **F-4** | Informational | Economic incentives are unmodelled (§4.5) — not a defect, a scope gap for the companion analysis. |
 
@@ -171,35 +171,44 @@ contracts (§4.1) and the deployment-discipline items above.
 
 ## 7. Pre-audit hardening checklist (Workstream P2)
 
-- [x] **F-1 (gate implemented):** `knomosis hash-check` fails closed on
-      the FNV-1a-64 fallback (exit 1; verified) **and** its production
-      flip (exit 0 on the linked keccak256 adaptor) is now CI-proven by
-      `ci-hash-keccak256-link.yml` / `scripts/verify_keccak_link.sh`.
-      **Remaining:** wire the gate into the release/deploy pipeline as a
-      required step.
+- [x] **F-1 (gate implemented + release-wired):** `knomosis hash-check`
+      fails closed on the FNV-1a-64 fallback (exit 1; verified) **and**
+      its production flip (exit 0 on the linked keccak256 adaptor) is
+      CI-proven by `ci-hash-keccak256-link.yml` /
+      `scripts/verify_keccak_link.sh`.  The release/deploy gate
+      `ci-release-gate.yml` runs it as a **required** step on every
+      version tag / GitHub Release (and on demand), so a fallback-hash
+      binary can never ship.
 - [x] **F-2:** verifier-identifier startup assert **done**
       (`knomosis verify-check`; cdylib exports `knomosis_verify_identifier`).
       Cdylib **build-artefact SHA-256 pin done for both** FFI cdylibs:
       `scripts/verify_secp256k1_link.sh` (verifier) +
       `scripts/verify_keccak_link.sh` (keccak hash) record / `--check` the
       staticlib SHA-256 and prove the fallback→production flip, each with
-      a dedicated CI workflow. **Remaining:** run the `--check` pin in the
-      release/deploy pipeline (operational gating).
+      a dedicated per-PR CI workflow.  The release/deploy gate
+      `ci-release-gate.yml` runs both scripts' `--check` pin on every
+      release / version tag (operational gating).
 - [ ] **Adversarial-corpus expansion** (§4.2) — boundary/adversarial
       fixtures for all 25 action variants + the fund paths
       (companion: P2 test-expansion increment).
-- [~] **Fuzz the untrusted-input boundaries** (§4.3) — *largely covered:*
-      the host frame parser is **already** proptest-fuzzed
-      (`read_frame_never_panics_on_arbitrary_input` + truncation /
-      oversize properties, `knomosis-host/tests/property.rs`); the L1-log
-      ABI decoder (`decode_event`) is **now** fuzzed for never-panics
-      (`knomosis-l1-ingest/tests/property.rs`, this PR); the observer has
-      a chaos suite (RH-G). **Remaining:** the indexer state
-      reconstruction (same never-panics property).
-- [ ] **Economic-incentive analysis** (§4.5) —
-      `docs/economic_incentive_analysis.md`.
-- [ ] **Testnet-readiness** — `docs/testnet_readiness.md`: exercise the
-      F.3 dry-run, the runbooks, and the observer/sequencer end-to-end.
+- [x] **Fuzz the untrusted-input boundaries** (§4.3) — the host frame
+      parser (`read_frame_never_panics_on_arbitrary_input` + truncation /
+      oversize properties, `knomosis-host/tests/property.rs`), the L1-log
+      ABI decoder (`decode_event`, `knomosis-l1-ingest/tests/property.rs`),
+      and the indexer state reconstruction
+      (`indexer_apply_arbitrary_events_never_panics`,
+      `restart_preserves_state`,
+      `indexer_apply_adversarial_amounts_never_panics`,
+      `knomosis-indexer/tests/property.rs`) are all proptest-fuzzed for
+      never-panics; the observer has a chaos suite (RH-G).
+- [x] **Economic-incentive analysis** (§4.5) — shipped:
+      `docs/economic_incentive_analysis.md` (+ the
+      `scripts/economic_simulation.py` IC-1..IC-6 harness).
+- [x] **Testnet-readiness assessment** — shipped:
+      `docs/testnet_readiness.md` (the go/no-go gate + honest gap
+      analysis).  Exercising the F.3 dry-run / runbooks /
+      observer-sequencer end-to-end on a live testnet remains the
+      operational deployment step the assessment gates.
 
 ---
 
