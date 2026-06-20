@@ -146,8 +146,8 @@ deliverable `docs/economic_incentive_analysis.md` (P2).
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| **F-1** | **Medium → addressed** | The hash fallback `knomosis-hash-fallback.c` provides only **64-bit** collision resistance (FNV-1a-64); the state-commitment soundness assumes ≥128-bit. The strong binding (BLAKE3/keccak via `@[extern]`) is the production default and the fallback is for tests/CI, but previously **nothing failed if a production binary shipped the fallback**. A 64-bit hash makes state-commitment collisions feasible (~2³² work), forging fault-proof state roots. **Addressed (2026-06-14):** the `knomosis hash-check` subcommand now *fails closed* — it prints the binding and exits `1` on the fallback, `0` on a production-grade hash. Deployment/release pipelines MUST run it as a required gate (verified: exits 1 on the CI/dev fallback build). Wired into the release pipeline: `ci-release-gate.yml` runs it as a required gate on every version tag / GitHub Release (and on demand). |
-| **F-2** | Low → partly addressed | TA-1/TA-2 are deployment-injected; a deployment that injects a *broken* verifier/hash silently loses all guarantees. Mitigated by the cdylibs + the cross-stack corpora, but the **injection point is unauthenticated at the Lean level** (build-time linkage). **Addressed (2026-06-14):** the verifier-identifier assertion is now implemented — `knomosis verify-check` fails closed (exit 1) on the Lean-opaque fallback and exit 0 when the secp256k1 cdylib (which now exports `knomosis_verify_identifier`) is linked; mirrors the F-1 hash gate. **Addressed further (2026-06-16):** the cdylib *build-artefact* SHA-256 pin now exists for **both** FFI cdylibs — `scripts/verify_secp256k1_link.sh` (verifier) and `scripts/verify_keccak_link.sh` (keccak hash) each record / `--check`-verify the staticlib SHA-256 **and** prove the gate flips fallback(exit 1)→production(exit 0), each behind a dedicated CI workflow (`ci-verify-secp256k1.yml`, `ci-hash-keccak256-link.yml`). **Wired:** `ci-release-gate.yml` runs the `--check` pin on every release / version tag (the operational gating step, alongside the F-1 hash gate). |
+| **F-1** | **Medium → addressed** | The hash fallback `knomosis-hash-fallback.c` provides only **64-bit** collision resistance (FNV-1a-64); the state-commitment soundness assumes ≥128-bit. The strong binding (BLAKE3/keccak via `@[extern]`) is the production default and the fallback is for tests/CI, but previously **nothing failed if a production binary shipped the fallback**. A 64-bit hash makes state-commitment collisions feasible (~2³² work), forging fault-proof state roots. **Addressed (2026-06-14):** the `knomosis hash-check` subcommand now *fails closed* — it prints the binding and exits `1` on the fallback, `0` on a production-grade hash. Deployment/release pipelines MUST run it as a required gate (verified: exits 1 on the CI/dev fallback build). Wired into the release pipeline: `ci-release-gate.yml` (via `scripts/verify_release_crypto.sh`) builds one binary with BOTH production adaptors linked and requires `hash-check` to pass on it, on every version-tag push (and on demand). |
+| **F-2** | Low → partly addressed | TA-1/TA-2 are deployment-injected; a deployment that injects a *broken* verifier/hash silently loses all guarantees. Mitigated by the cdylibs + the cross-stack corpora, but the **injection point is unauthenticated at the Lean level** (build-time linkage). **Addressed (2026-06-14):** the verifier-identifier assertion is now implemented — `knomosis verify-check` fails closed (exit 1) on the Lean-opaque fallback and exit 0 when the secp256k1 cdylib (which now exports `knomosis_verify_identifier`) is linked; mirrors the F-1 hash gate. **Addressed further (2026-06-16):** the cdylib *build-artefact* SHA-256 pin now exists for **both** FFI cdylibs — `scripts/verify_secp256k1_link.sh` (verifier) and `scripts/verify_keccak_link.sh` (keccak hash) each record / `--check`-verify the staticlib SHA-256 **and** prove the gate flips fallback(exit 1)→production(exit 0), each behind a dedicated CI workflow (`ci-verify-secp256k1.yml`, `ci-hash-keccak256-link.yml`). **Wired:** `ci-release-gate.yml` requires `verify-check` to pass on the same both-adaptors release binary as the F-1 hash gate, on every version-tag push. A committed SHA-256 pin is not used (the staticlib embeds its build path, so it is not cross-environment-reproducible); the per-release SHA is logged as a fingerprint. |
 | **F-3** | Informational | Cross-stack equivalence is corpus-validated (§4.2). No finding of divergence; the risk is **coverage**, addressed by P2 §6 adversarial-corpus expansion. |
 | **F-4** | Informational | Economic incentives are unmodelled (§4.5) — not a defect, a scope gap for the companion analysis. |
 
@@ -176,9 +176,10 @@ contracts (§4.1) and the deployment-discipline items above.
       its production flip (exit 0 on the linked keccak256 adaptor) is
       CI-proven by `ci-hash-keccak256-link.yml` /
       `scripts/verify_keccak_link.sh`.  The release/deploy gate
-      `ci-release-gate.yml` runs it as a **required** step on every
-      version tag / GitHub Release (and on demand), so a fallback-hash
-      binary can never ship.
+      `ci-release-gate.yml` (via `scripts/verify_release_crypto.sh`) builds
+      one `knomosis` with **both** production adaptors linked and
+      **requires** `hash-check` to pass on it, on every version-tag push
+      (and on demand), so a fallback-hash binary can never ship.
 - [x] **F-2:** verifier-identifier startup assert **done**
       (`knomosis verify-check`; cdylib exports `knomosis_verify_identifier`).
       Cdylib **build-artefact SHA-256 pin done for both** FFI cdylibs:
@@ -186,8 +187,11 @@ contracts (§4.1) and the deployment-discipline items above.
       `scripts/verify_keccak_link.sh` (keccak hash) record / `--check` the
       staticlib SHA-256 and prove the fallback→production flip, each with
       a dedicated per-PR CI workflow.  The release/deploy gate
-      `ci-release-gate.yml` runs both scripts' `--check` pin on every
-      release / version tag (operational gating).
+      `ci-release-gate.yml` requires `verify-check` to pass on that same
+      both-adaptors release binary.  (A committed SHA-256 pin is
+      intentionally not used: the staticlib embeds its absolute build path,
+      so the bytes are not reproducible across environments; the per-release
+      SHA is logged as a fingerprint.)
 - [ ] **Adversarial-corpus expansion** (§4.2) — boundary/adversarial
       fixtures for all 25 action variants + the fund paths
       (companion: P2 test-expansion increment).

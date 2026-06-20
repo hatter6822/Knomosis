@@ -121,6 +121,12 @@ cd solidity && make devnet                    # F.3 LIVE anvil deploy +
 ./scripts/verify_keccak_link.sh               # build + record + prove
 ./scripts/verify_keccak_link.sh --check       # build + verify SHA-256 snapshot
 
+# F-1/F-2 release gate: build ONE knomosis with BOTH production adaptors
+# linked and require hash-check AND verify-check to pass on that single
+# binary (the both-adaptors check the two single-adaptor scripts above
+# cannot give; run by the ci-release-gate.yml release workflow).
+./scripts/verify_release_crypto.sh
+
 # Quantitative economic-incentive simulation (IC-1..IC-6 envelope +
 # self-asserting invariant checks; companion to docs/economic_incentive_analysis.md).
 python3 scripts/economic_simulation.py
@@ -265,6 +271,7 @@ knomosis/
 │   ├── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
 │   ├── verify_secp256k1_link.sh -- F-2 production-verifier link proof + SHA-256
 │   ├── verify_keccak_link.sh  -- F-1/F-2 production keccak256-hash link proof + SHA-256
+│   ├── verify_release_crypto.sh -- F-1/F-2 release gate: both adaptors in one binary
 │   └── economic_simulation.py -- IC-1..IC-6 quantitative incentive harness
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits

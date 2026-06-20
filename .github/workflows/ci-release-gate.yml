@@ -7,31 +7,27 @@
 #
 # Release / deploy gate for the production crypto link (security-review
 # F-1 / F-2).  The per-PR workflows `ci-verify-secp256k1.yml` and
-# `ci-hash-keccak256-link.yml` prove the fallback->production FLIP on
-# every change to the adaptor surface.  THIS workflow is the
-# release-time backstop the F-1/F-2 findings call for: it runs on a
-# release / version tag (and on demand) and REQUIRES that the production
-# crypto links and the fail-closed gates pass before a build ships, so a
-# `knomosis` binary linking the FNV-1a-64 hash fallback or the
-# Lean-opaque verifier fallback can never be released.
+# `ci-hash-keccak256-link.yml` prove each adaptor's fallback->production
+# flip IN ISOLATION on every change to the adaptor surface.  THIS workflow
+# is the release-time backstop those cannot give: on a version tag (or on
+# demand) it builds a SINGLE `knomosis` binary with BOTH production
+# adaptors linked at once and REQUIRES `hash-check` AND `verify-check` to
+# pass on that one executable.  So a release binary that silently keeps
+# either trust binding on the fallback (FNV-1a-64 hash or the Lean-opaque
+# verifier) can never ship, and duplicate-symbol / link-order / env
+# interactions in the actual both-adaptors binary are exercised.
 #
-# For each FFI cdylib it (1) records the staticlib SHA-256 and proves
-# `hash-check` / `verify-check` flip fallback(exit 1) -> production
-# (exit 0), then (2) re-runs in `--check` mode to verify the artefact
-# SHA-256 pin (the F-2 "run the --check pin in the release pipeline"
-# residual; also confirms the adaptor staticlib rebuilds bit-identically).
-# All orchestration lives in the two `scripts/verify_*_link.sh` scripts;
-# this workflow just provisions lean + rust and runs them.
+# All orchestration lives in `scripts/verify_release_crypto.sh`; this
+# workflow just provisions lean + rust and runs it.
 #
-# Note: a GitHub Release cut from a version tag may match both the
-# `release` and `push: tags` triggers and run twice — harmless for a
-# gate (each run is independent and idempotent).
+# Trigger: a version-tag push (the pre-publication signal) and manual
+# dispatch.  The project ships no binary release assets, so the gate's job
+# is to verify the production crypto links at release time, not to block an
+# asset download; wire it as a REQUIRED status check to gate tag promotion.
 
 name: CI (Release Deploy Gate)
 
 on:
-  release:
-    types: [published]
   push:
     tags:
       - 'v*'
@@ -55,24 +51,12 @@ env:
   RUST_BACKTRACE: '1'
 
 jobs:
-  crypto-link-gate:
-    name: ${{ matrix.adaptor }} release gate (F-1/F-2)
+  release-crypto-gate:
+    name: both-adaptors release binary (F-1/F-2)
     runs-on: ubuntu-latest
-    # Budget: two Rust staticlib builds (record + --check) plus the Lean
-    # `knomosis` exe links per adaptor.
+    # Budget: two Rust staticlib builds plus the default + both-adaptors
+    # Lean `knomosis` exe links.
     timeout-minutes: 50
-    strategy:
-      # Run BOTH adaptor gates even if one fails, so a release surfaces
-      # every crypto-link problem in a single run.
-      fail-fast: false
-      matrix:
-        include:
-          - adaptor: keccak256-hash
-            script: scripts/verify_keccak_link.sh
-            cache_key: release-gate-keccak256
-          - adaptor: secp256k1-verifier
-            script: scripts/verify_secp256k1_link.sh
-            cache_key: release-gate-secp256k1
     steps:
       - name: Checkout
         # actions/checkout v4.3.1 (same SHA pinned across the CI suite).
@@ -81,7 +65,7 @@ jobs:
       - name: Install Lean toolchain
         # leanprover/lean-action v1.5.0.  Installs elan + lean + lake from
         # `lean-toolchain`; the verify script drives every Lean invocation
-        # (it controls the *_STATICLIB env var at link time).
+        # (it controls the *_STATICLIB env vars at link time).
         uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9
         with:
           build: false
@@ -102,19 +86,11 @@ jobs:
         uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
         with:
           workspaces: runtime
-          shared-key: ${{ matrix.cache_key }}
+          shared-key: release-gate
 
-      - name: Record + prove the production link flips the fail-closed gate
-        # Builds the real adaptor staticlib, records its SHA-256, asserts
-        # the DEFAULT build's check exits 1 (fail-closed) and the
-        # production-linked build exits 0.  A green step proves a release
-        # binary genuinely links production crypto, not the fallback.
+      - name: Build one knomosis with BOTH production adaptors + assert both gates
+        # Builds both adaptor staticlibs, asserts the default build is
+        # fail-closed on hash-check AND verify-check, then links BOTH into a
+        # single `knomosis` and requires both checks to exit 0 on it.
         shell: bash
-        run: ./${{ matrix.script }}
-
-      - name: Re-verify the artefact SHA-256 pin (--check)
-        # The F-2 "run the --check pin in the release/deploy pipeline"
-        # residual: rebuilds the staticlib and asserts its SHA-256 matches
-        # the snapshot just recorded (artefact integrity + reproducibility).
-        shell: bash
-        run: ./${{ matrix.script }} --check
+        run: ./scripts/verify_release_crypto.sh
