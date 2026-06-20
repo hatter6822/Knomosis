@@ -124,10 +124,11 @@ theorem smtPath_length (k : Nat) : (smtPath k).length = 64 :=
   smtPathFromNat_length k 64
 
 /-- Injectivity specialisation: per-bit equality at all 64 bit
-    positions.  The full structural injectivity theorem (via
-    `Nat.eq_of_testBit_eq`) is deferred as a follow-up; this
-    bit-equivalence form is what cross-stack equivalence
-    consumes. -/
+    positions.  This bit-equivalence form is the one cross-stack
+    equivalence consumes; since heights range over the low 64 bits,
+    a `k₁ = k₂` structural form (via `Nat.eq_of_testBit_eq`) holds
+    only under a `k < 2 ^ 64` bound and is intentionally not
+    mechanised — no consumer requires it. -/
 theorem smtPath_bits_eq
     (k₁ k₂ : Nat)
     (h_eq : smtPath k₁ = smtPath k₂) :

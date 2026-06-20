@@ -138,7 +138,7 @@ def applyVerdictUncheckedTests : List TestCase :=
     , body := do
         let v : Verdict := { disputeId := 99, outcome := .upheld,
                               rationale := ⟨#[]⟩, signatures := [] }
-        match applyVerdictUnchecked Pall baseEs ExtendedState.empty
+        match Disputes.applyVerdictUnchecked Pall baseEs ExtendedState.empty
                             transferThenDisputeLog v with
         | .error (.unknownDispute idx) => assert (idx = 99) "idx"
         | other => throw <| IO.userError s!"expected .unknownDispute, got {repr other}"
@@ -146,7 +146,7 @@ def applyVerdictUncheckedTests : List TestCase :=
   , { name := "applyVerdictUnchecked: .rejected outcome leaves state unchanged"
     , body := do
         let v := verdictAgainstDispute1 .rejected
-        match applyVerdictUnchecked Pall baseEs ExtendedState.empty
+        match Disputes.applyVerdictUnchecked Pall baseEs ExtendedState.empty
                             transferThenDisputeLog v with
         | .ok es' =>
           -- The verdict is `.rejected`, so state should equal `currentEs = baseEs`.
@@ -156,7 +156,7 @@ def applyVerdictUncheckedTests : List TestCase :=
   , { name := "applyVerdictUnchecked: .inconclusive outcome leaves state unchanged"
     , body := do
         let v := verdictAgainstDispute1 .inconclusive
-        match applyVerdictUnchecked Pall baseEs ExtendedState.empty
+        match Disputes.applyVerdictUnchecked Pall baseEs ExtendedState.empty
                             transferThenDisputeLog v with
         | .ok _es' => pure ()  -- state shape OK
         | other => throw <| IO.userError s!"expected .ok, got {repr other}"
@@ -168,8 +168,8 @@ def applyVerdictUncheckedTests : List TestCase :=
                       (log₁ log₂ : List LogEntry) (v₁ v₂ : Verdict),
             currentEs₁ = currentEs₂ → genesis₁ = genesis₂ →
             log₁ = log₂ → v₁ = v₂ →
-            applyVerdictUnchecked P currentEs₁ genesis₁ log₁ v₁ =
-            applyVerdictUnchecked P currentEs₂ genesis₂ log₂ v₂ :=
+            Disputes.applyVerdictUnchecked P currentEs₁ genesis₁ log₁ v₁ =
+            Disputes.applyVerdictUnchecked P currentEs₂ genesis₂ log₂ v₂ :=
           fun P e1 e2 g1 g2 l1 l2 v1 v2 he hg hl hv =>
             applyVerdictUnchecked_deterministic P e1 e2 g1 g2 l1 l2 v1 v2 he hg hl hv
         pure ()
@@ -179,7 +179,7 @@ def applyVerdictUncheckedTests : List TestCase :=
         let _proof : ∀ (P : AuthorityPolicy) (currentEs : ExtendedState)
                       (genesis : ExtendedState) (log : List LogEntry) (v : Verdict),
             log[v.disputeId]? = none →
-            applyVerdictUnchecked P currentEs genesis log v =
+            Disputes.applyVerdictUnchecked P currentEs genesis log v =
               .error (.unknownDispute v.disputeId) :=
           fun P es g log v h => applyVerdictUnchecked_unknown_dispute P es g log v h
         pure ()
@@ -351,7 +351,7 @@ def witnessApiTests : List TestCase :=
                        (log : List LogEntry) (v : Verdict)
                        (h : VerdictPassedStage3 P oracle qp currentEs genesis log v),
             applyVerdict P oracle qp currentEs genesis log v h =
-            applyVerdictUnchecked P currentEs genesis log v :=
+            Disputes.applyVerdictUnchecked P currentEs genesis log v :=
           fun P o q e g l v h => applyVerdict_eq_unchecked P o q e g l v h
         pure ()
     }
@@ -458,7 +458,7 @@ def proposeAndApplyVerdictTests : List TestCase :=
                        (log : List LogEntry) (v : Verdict),
             proposeVerdict P oracle qp currentEs genesis log v = .ok v →
             proposeAndApplyVerdict P oracle qp currentEs genesis log v =
-            applyVerdictUnchecked P currentEs genesis log v :=
+            Disputes.applyVerdictUnchecked P currentEs genesis log v :=
           fun P o q e g l v h =>
             proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok
               P o q e g l v h

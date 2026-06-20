@@ -79,7 +79,7 @@ macro should produce.
 The example uses the v1 macro's M1-mode emission: only the
 transition def is emitted by the per-file Pass 1.  Convenience
 metadata accessors (`<law>_intent`, `<law>_action_index`,
-`<law>_identifier`, `<law>_version`) are deferred to Pass 2
+`<law>_identifier`, `<law>_version`) are produced by Pass 2
 (`lake exe lex_codegen`); the codegen-input JSON sidecar at
 `Lex/Inputs/example_example_lex_only_law.json` is
 the canonical record. -/

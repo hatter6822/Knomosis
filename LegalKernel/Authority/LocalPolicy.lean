@@ -155,8 +155,10 @@ inductive LocalPolicyClause
       `burn`, `reward`, `distributeOthers`, `deposit`, `withdraw`.
       Other action variants are unaffected.  `proportionalDilute`
       is treated specially: its `totalReward` is a *pool* not an
-      individual amount, so capping it requires a separate clause
-      variant (deferred). -/
+      individual amount, so capping it would require a separate
+      pool-cap clause variant, which LP v1 does not provide (see the
+      LP forward-roadmap questions, `docs/planning/open_questions.md`
+      §4). -/
   | capAmount         (resource : ResourceId) (max : Amount)
   /-- GP.3.4: authorise the actors in `delegates` to credit this
       actor's action-budget via `Action.topUpActionBudgetFor`.  A

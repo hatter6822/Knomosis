@@ -88,7 +88,8 @@ structure SignedByAnalysis where
     admissibility check at Phase 3 — `Authority.SignedAction`),
     not in this shim; the shim is a *lint* that catches the worst
     obvious mistakes early.  Tightening to position-aware parsing
-    is a follow-up workstream. -/
+    is a possible future enhancement, not required for the lint's
+    purpose. -/
 private def stmtReferencesSignedBy (signedBy : String) (text : String) : Bool :=
   -- Substring match with whitespace/punctuation boundaries.
   let needle := " " ++ signedBy ++ " "

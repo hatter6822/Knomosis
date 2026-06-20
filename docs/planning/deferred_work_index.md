@@ -30,6 +30,21 @@ questions registry.
 > **LX2 / LX3** roadmap (demand-driven).  CLAUDE.md's roadmap table
 > is the canonical status; this index navigates the plans.
 
+> **Reconciliation update (2026-06-20).**  Two refinements since the
+> 2026-06-14 note.  (1) The **GP** tail is narrower than written
+> above: GP.8 Tracks **A–C** are complete (Track D documented), the
+> GP.8.5 v2 receipt-verified claim shipped on **both** legs with
+> **OQ-GP-8b** closed, and GP.9.1 is complete — so the only GP work
+> remaining is **GP.10 final ratification**, gated solely on the
+> §13.6 two-reviewer pass (CLAUDE.md is canonical).  (2) The **CL**
+> tidy-up workstream is now **complete** (CL.1–CL.5): the CL.2
+> stale-comment pass and the CL.3 `protected` lift of
+> `applyVerdictUnchecked` landed, closing GENESIS_PLAN §15C.6 (AR.18).
+> The genuinely-open work is therefore: GP.10 (two-reviewer),
+> **PA** (drafted, unlanded), **Phase 7** (P7.A + P7.F first),
+> **LX2 / LX3** (demand-driven), and the **P2** production-hardening
+> residuals (release-pipeline gating of the F-1/F-2 checks).
+
 ## Workstream catalogue
 
 Effort numbers are post-expansion (revised after each plan
@@ -45,9 +60,9 @@ counts in parentheses give the total granular landing surface.
 | `chain_level_accounting_plan.md` | CA — §7.6.4 / §7.6.5 inductive promotion | 3 (~13) | **Complete.**  Retired m-16, the last open AR finding: `Bridge/Reachable.lean` (`BridgeReachable`) + `Bridge/ChainAccounting.lean` (`bridge_chain_conserves`, `bridgeReachable_solvent`, `bridge_chain_accounting_equation`); concrete `bridgeEscrowBalance`. | independent (Lean-only) |
 | `parameterized_laws_landing_plan.md` | PA — land the drafted parameter substrate | 12 (~52) | ~5 wks | drafted in `parameterized_laws_plan.md` | benefits from EI; not strictly blocking |
 | `phase_7_plan.md` | P7 — advanced-capability portfolio | 7 sub-workstreams (~40) | 25+ wks (open-ended) | menu workstream; pick sub-workstreams per release | GP budget substrate is a prerequisite for variable-cost action pricing; otherwise varies per sub-workstream |
-| `unified_gas_pool_plan.md` | GP — unified gas pool + actor budgets | 12 phases (~80+) | ~20+ wks | active workstream — GP.0–7.4, GP.9.1, GP.11.1–11.10 complete (incl. the v1.4 AMM disaster-recovery quad-surface: 3-of-N multisig, `Action.reclaimAmmReserves` 24, `ammDisabled` state-root mirror); GP.8 Tracks B–D + remaining GP.9/GP.10 future | foundational for P7 variable-cost action economics |
+| `unified_gas_pool_plan.md` | GP — unified gas pool + actor budgets | 12 phases (~80+) | ~20+ wks | active workstream — GP.0–7.4, GP.9.1, GP.11.1–11.10 complete (incl. the v1.4 AMM disaster-recovery quad-surface: 3-of-N multisig, `Action.reclaimAmmReserves` 24, `ammDisabled` state-root mirror); GP.8 Tracks A–C complete (D documented) + GP.8.5 v2 both legs (OQ-GP-8b closed) + GP.9.1; GP.10 ratification (two-reviewer) remaining | foundational for P7 variable-cost action economics |
 | `lex_v2_v3_roadmap_plan.md` | LX2 / LX3 — Lex v2 + v3 evolution | 13 (~40) | ~22 wks total | forward-roadmap; demand-driven | LX3.3 triggers kernel amendment |
-| `cleanup_and_consolidation_plan.md` | CL — documentation + visibility tidy-up | 5 (~21 with CL.2 itemization) | ~5 days | the project's "tidy-up" PR sequence | CL.4 depends on EI.8 |
+| `cleanup_and_consolidation_plan.md` | CL — documentation + visibility tidy-up | 5 (~21 with CL.2 itemization) | ~5 days | **Complete** (CL.1–CL.5; CL.2 stale-comment pass + CL.3 `protected` lift of `applyVerdictUnchecked`). | CL.4 depended on EI.8 (closed) |
 | `step_vm_coherence_plan.md` | SVC — L1 step-VM cross-stack coherence + observer terminate wiring | 5 (~25) | ~9 wks (~5–6 wks with 2 engineers) | **Complete.**  25-variant step-VM dispatcher byte-equivalence (`stepVMHash_<variant>_kind`, kinds 0–24); 278-entry cross-stack corpus; `HonestMove::TerminateOnSingleStep` wired in the observer.  (The SVC-era `kernelBuildTag` milestone constant has since been removed project-wide in favour of the `lakefile.lean` `version`.) | builds on SC (SMT cell proofs); RH-G's observer is the consumer |
 | `fair_queuing_plan.md` | FQ — per-actor fair queuing / burst resistance | 2 rungs (28 WUs) | ~17 days | **Complete (Track A of GP.8).**  Rung 0 (connection-keyed DRR, no wire change) + Rung 1 (signer-hint, two-tier, `PROTOCOL_VERSION 2`) both ship in `knomosis-host` behind the default-OFF `--scheduler drr` flag.  **Unified into `GP.8_SEQUENCER_INTEGRATION_PLAN.md` as Track A — that document is the canonical implementation surface.** | builds on RH-C (`knomosis-host`, Complete); complements GP (kernel-side stock bound); liveness layer, no kernel touch |
 | `GP.8_SEQUENCER_INTEGRATION_PLAN.md` | GP.8 — sequencer integration (unifies FQ + GP §GP.8) | 4 tracks (~35 WUs) | ~21 days | **Track A complete; Tracks B–D planned.**  Track A = FQ inbound liveness (Rungs 0+1, shipped, incl. the FQ.13a `knomosis-l1-ingest` raw-TCP submitter); Tracks B–D = GP §GP.8 (reimbursement claim, configuration, operations) — incl. the subdivided GP.8.1a–c claim + the deferred v2 GP.8.5 — remain future work. | builds on RH-C + GP.6.2 + GP.7 + Workstream H (all Complete); supersedes `fair_queuing_plan.md` + `unified_gas_pool_plan.md` §GP.8 for the sequencer |
@@ -145,7 +160,7 @@ Tier 3 (large, post-EI, parallel-when-resources-allow):
   RH Rust host runtime                                  (~14–22 weeks)
 
 Tier 4 (forward-roadmap, demand-driven):
-  FQ per-actor fair-queuing                             (Track A COMPLETE — Rungs 0+1 shipped; GP.8 Tracks B–D pending)
+  FQ per-actor fair-queuing                             (Track A COMPLETE — Rungs 0+1 shipped; GP.8 Tracks B–C complete, D documented)
   LX2 Lex v2                                            (~8 weeks)
   LX3 Lex v3                                            (~18 weeks)
   P7 Phase 7 (pick sub-workstreams)                     (20+ weeks)

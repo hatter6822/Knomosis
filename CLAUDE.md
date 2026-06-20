@@ -121,6 +121,12 @@ cd solidity && make devnet                    # F.3 LIVE anvil deploy +
 ./scripts/verify_keccak_link.sh               # build + record + prove
 ./scripts/verify_keccak_link.sh --check       # build + verify SHA-256 snapshot
 
+# F-1/F-2 release gate: build ONE knomosis with BOTH production adaptors
+# linked and require hash-check AND verify-check to pass on that single
+# binary (the both-adaptors check the two single-adaptor scripts above
+# cannot give; run by the ci-release-gate.yml release workflow).
+./scripts/verify_release_crypto.sh
+
 # Quantitative economic-incentive simulation (IC-1..IC-6 envelope +
 # self-asserting invariant checks; companion to docs/economic_incentive_analysis.md).
 python3 scripts/economic_simulation.py
@@ -265,6 +271,7 @@ knomosis/
 │   ├── verify_keccak_crossstack.sh -- keccak-linked cross-stack orchestration
 │   ├── verify_secp256k1_link.sh -- F-2 production-verifier link proof + SHA-256
 │   ├── verify_keccak_link.sh  -- F-1/F-2 production keccak256-hash link proof + SHA-256
+│   ├── verify_release_crypto.sh -- F-1/F-2 release gate: both adaptors in one binary
 │   └── economic_simulation.py -- IC-1..IC-6 quantitative incentive harness
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
@@ -272,7 +279,8 @@ knomosis/
 │   ├── ci-solidity.yml        -- Solidity cap gate + forge gates (solidity/**)
 │   ├── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
 │   ├── ci-verify-secp256k1.yml -- F-2 secp256k1-verifier production-link proof
-│   └── ci-hash-keccak256-link.yml -- F-1/F-2 keccak256-hash production-link + SHA-256 pin
+│   ├── ci-hash-keccak256-link.yml -- F-1/F-2 keccak256-hash production-link + SHA-256 pin
+│   └── ci-release-gate.yml    -- F-1/F-2 release/deploy gate (version tag / release)
 ├── README.md                  -- project entry point
 ├── CLAUDE.md                  -- this file
 └── docs/
@@ -721,7 +729,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.9.0`) — the single
+the `lakefile.lean` `version` field (currently `0.9.1`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the

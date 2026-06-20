@@ -19,7 +19,7 @@ Generates and asserts the mainnet-goldens corpus described in
 
 This initial check-in ships a deterministic *synthetic* corpus
 (LCG-derived preimages with recorded production-binding output);
-upgrading to a real mainnet corpus is the follow-up tracked in
+a real-mainnet corpus is a future corpus-expansion item tracked in
 `solidity/test/goldens/README.md`.
 
 **Hash-binding-conditional behaviour.**  Per the integration plan

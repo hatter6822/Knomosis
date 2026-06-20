@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+#
+# Release / deploy gate for the production crypto link (security-review
+# F-1 / F-2).  The per-PR workflows `ci-verify-secp256k1.yml` and
+# `ci-hash-keccak256-link.yml` prove each adaptor's fallback->production
+# flip IN ISOLATION on every change to the adaptor surface.  THIS workflow
+# is the release-time backstop those cannot give: on a version tag (or on
+# demand) it builds a SINGLE `knomosis` binary with BOTH production
+# adaptors linked at once and REQUIRES `hash-check` AND `verify-check` to
+# pass on that one executable.  So a release binary that silently keeps
+# either trust binding on the fallback (FNV-1a-64 hash or the Lean-opaque
+# verifier) can never ship, and duplicate-symbol / link-order / env
+# interactions in the actual both-adaptors binary are exercised.
+#
+# All orchestration lives in `scripts/verify_release_crypto.sh`; this
+# workflow just provisions lean + rust and runs it.
+#
+# Trigger: a version-tag push (the pre-publication signal) and manual
+# dispatch.  The project ships no binary release assets, so the gate's job
+# is to verify the production crypto links at release time, not to block an
+# asset download; wire it as a REQUIRED status check to gate tag promotion.
+
+name: CI (Release Deploy Gate)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# Do NOT cancel an in-flight release gate when a new ref appears: a
+# release verification should always run to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# `contents: read` for actions/checkout; `actions: write` for the narrow
+# rust-cache save scope (NOT a repo-write permission).
+permissions:
+  contents: read
+  actions: write
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  release-crypto-gate:
+    name: both-adaptors release binary (F-1/F-2)
+    runs-on: ubuntu-latest
+    # Budget: two Rust staticlib builds plus the default + both-adaptors
+    # Lean `knomosis` exe links.
+    timeout-minutes: 50
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (same SHA pinned across the CI suite).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install Lean toolchain
+        # leanprover/lean-action v1.5.0.  Installs elan + lean + lake from
+        # `lean-toolchain`; the verify script drives every Lean invocation
+        # (it controls the *_STATICLIB env vars at link time).
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9
+        with:
+          build: false
+          test: false
+          lint: false
+
+      - name: Install Rust toolchain (per rust-toolchain.toml)
+        shell: bash
+        working-directory: runtime
+        run: |
+          rustup show active-toolchain || true
+          rustup show
+          cargo --version
+          rustc --version
+
+      - name: Cache cargo artifacts
+        # Swatinem/rust-cache v2.7.7 (same SHA pinned across the CI suite).
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: runtime
+          shared-key: release-gate
+
+      - name: Build one knomosis with BOTH production adaptors + assert both gates
+        # Builds both adaptor staticlibs, asserts the default build is
+        # fail-closed on hash-check AND verify-check, then links BOTH into a
+        # single `knomosis` and requires both checks to exit 0 on it.
+        shell: bash
+        run: ./scripts/verify_release_crypto.sh

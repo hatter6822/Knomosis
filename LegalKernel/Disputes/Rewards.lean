@@ -318,7 +318,7 @@ def applyVerdictWithRewardsUnchecked
   | some entry =>
     match entry.signedAction.action with
     | .dispute d =>
-      match applyVerdictUnchecked P currentEs genesis log v with
+      match Disputes.applyVerdictUnchecked P currentEs genesis log v with
       | .ok rolledBack =>
         let rewards := disputeRewardActions rewardPolicy log d v
         Except.ok (rolledBack, rewards)
@@ -346,7 +346,7 @@ def applyVerdictWithRewardsMultiUnchecked
   | some entry =>
     match entry.signedAction.action with
     | .dispute d =>
-      match applyVerdictUnchecked P currentEs genesis log v with
+      match Disputes.applyVerdictUnchecked P currentEs genesis log v with
       | .ok rolledBack =>
         let rewards := disputeRewardActionsMulti rewardPolicies log d v
         Except.ok (rolledBack, rewards)
@@ -724,9 +724,11 @@ def totalSignerStake
     (it follows from `Nat.div` floor + `∑ stake_i = totalStake`)
     but is NOT shipped as a stand-alone Lean theorem.  Promoting
     it would require a `disputeRewardActions_sum_le_pool`
-    inductive lemma over the `filterMap` body; deferred to a
-    future workstream (a "PA-tier" follow-up).  The cross-stack
-    F-corpus exercises the bound on representative inputs. -/
+    inductive lemma over the `filterMap` body — a parameterized-
+    laws-tier enhancement (Workstream PA,
+    `docs/planning/parameterized_laws_landing_plan.md`).  The
+    cross-stack F-corpus exercises the bound on representative
+    inputs. -/
 def stakeWeightedAdjudicatorRewards
     (es : ExtendedState) (stakeResource rewardResource : ResourceId)
     (pool : Amount) (signers : List ActorId) : List Action :=

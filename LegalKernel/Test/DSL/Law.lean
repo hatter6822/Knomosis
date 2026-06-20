@@ -20,11 +20,10 @@ import LegalKernel.DSL.Law
 import LegalKernel.DSL.LawSyntax
 import LegalKernel.Laws.Transfer
 
--- Plan §2.5: `Law.mk` is deprecated in favour of `lexlaw`; the
--- non-deprecated `lex_law_mk` constructor is M3 work and the
--- deprecation cleanup is explicitly deferred.  These tests
+-- `Law.mk` is deprecated in favour of `lexlaw`.  These tests
 -- legitimately exercise the deprecated surface to pin its
--- behaviour for the duration of the deprecation window.
+-- behaviour for the duration of the deprecation window, so the
+-- deprecation linter is disabled for this file.
 set_option linter.deprecated false
 
 namespace LegalKernel.Test.DSL

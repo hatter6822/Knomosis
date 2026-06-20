@@ -208,7 +208,7 @@ def endToEndTests : List TestCase :=
             outcome   := .upheld
             rationale := ⟨#[]⟩
             signatures := [] }
-        match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
+        match Disputes.applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok rolledBack =>
           -- Verify the rolled-back state matches the expected (post-entry-0) state at every probed cell.
           let senderBal   := getBalance rolledBack.base 0 sender
@@ -225,7 +225,7 @@ def endToEndTests : List TestCase :=
         let verdict : Verdict :=
           { disputeId := 2, outcome := .rejected
             rationale := ⟨#[]⟩, signatures := [] }
-        match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
+        match Disputes.applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok unchanged =>
           let senderBal := getBalance unchanged.base 0 sender
           let genesisSenderBal := getBalance genesis.base 0 sender
@@ -242,7 +242,7 @@ def endToEndTests : List TestCase :=
         let verdict : Verdict :=
           { disputeId := 2, outcome,
             rationale := ⟨#[]⟩, signatures := [] }
-        match applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
+        match Disputes.applyVerdictUnchecked Pall genesis genesis plantedLog verdict with
         | .ok rolledBack =>
           assert (getBalance rolledBack.base 0 sender = 50)
             "post-rollback sender = 50"

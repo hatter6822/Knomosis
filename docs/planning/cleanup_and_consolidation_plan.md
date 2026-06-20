@@ -22,8 +22,7 @@ debt the project's discipline says to keep at zero.
 ## Status
 
   * **Workstream prefix:** `CL` (Cleanup).  Five sub-units
-    (status as of the 2026-06-14 reconciliation — **3 of 5
-    complete**):
+    (**all 5 complete**):
     - **CL.1** Documentation drift (README build tag,
       test-count consistency, synthesis-doc refresh).
       **— COMPLETE.**  README version matches
@@ -31,13 +30,21 @@ debt the project's discipline says to keep at zero.
       README uses a "run `lake test`" pointer rather than a pinned
       count; synthesis-doc post-AR refresh shipped (OQ-DOC-4).
     - **CL.2** Stale code comments (the historical-context
-      cleanup catalogue).  **— OPEN.**  The 16 comment edits
-      have not landed (e.g. `LegalKernel/Events/Types.lean`
-      still reads "deferred to Phase 6").  ~2 engineer-days.
-    - **CL.3** AR.18 mechanical visibility (the `private` /
-      `protected` lift for `applyVerdictUnchecked`).
-      **— OPEN.**  `applyVerdictUnchecked` is still a plain
-      `def` in `LegalKernel/Disputes/Verdict.lean`.  ~1 day.
+      cleanup catalogue).  **— COMPLETE.**  Of the 16 catalogued
+      comments, 4 were already clean; the remaining 11 are
+      rewritten to describe content + cross-reference the tracking
+      registry (open-questions / workstream plans).  The
+      TCB-adjacent `RBMapLemmas.lean` conditional design-note
+      (item 16) is intentionally left as-is per its two-reviewer
+      status — it is a design note, not debt.
+    - **CL.3** AR.18 mechanical visibility (the `protected` lift
+      for `applyVerdictUnchecked`).
+      **— COMPLETE.**  `applyVerdictUnchecked` is now `protected`
+      in `LegalKernel/Disputes/Verdict.lean`; every call site
+      spells out `Disputes.applyVerdictUnchecked`.  Path A (move
+      the reward composers into `Verdict.lean`) was rejected — it
+      would invert the Verdict → Rewards layering; `protected`
+      (Path B) is the clean form that preserves it.
     - **CL.4** AR.23 partial → complete (depends on EI.8).
       **— COMPLETE.**  `Test/Integration/SnapshotBootstrap.lean`
       now asserts extensional equality via the EI.8.b lemma
@@ -336,8 +343,13 @@ Two solution paths:
     references and the 4 cross-file references with full
     namespace qualification.
 
-Recommended: **Path A** (smaller change surface, no
-namespace-quaification noise).
+**Landed: Path B** (`protected`).  Path A was rejected: moving the
+reward composers into `Verdict.lean` would invert the clean
+Verdict → Rewards layering (`Rewards.lean` composes reward issuance
+*on top of* the verdict core and imports `Verdict.lean`).  Path B's
+qualification churn (~20 in-file + the cross-file references) is the
+acceptable cost of the strongest visibility that preserves the
+layering.
 
 **Implementation steps (Path A).**
 
@@ -360,7 +372,9 @@ namespace-quaification noise).
 
 **Acceptance criteria.**
 
-  * `applyVerdictUnchecked` is `private`.
+  * `applyVerdictUnchecked` is `protected` (the bare short name
+    no longer resolves; callers qualify as
+    `Disputes.applyVerdictUnchecked`).
   * `lake build` succeeds.
   * `lake test` passes.
   * GENESIS_PLAN §15C.6 retired.
@@ -522,7 +536,8 @@ CL is **complete** when:
   1. README build tag matches `LegalKernel.lean:285`.
   2. Audit synthesis doc reflects post-AR state.
   3. 16 stale-comment edits land.
-  4. `applyVerdictUnchecked` is `private`.
+  4. `applyVerdictUnchecked` is `protected` (every call site
+    qualified as `Disputes.applyVerdictUnchecked`).
   5. AR.23 is "Complete" status post-EI.8.
   6. LP open questions registered in `open_questions.md`.
   7. GENESIS_PLAN §15C.6 (AR.18 deferred) retired.

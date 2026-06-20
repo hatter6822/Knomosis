@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "793a6806e7251e5d51ddab87e8f8a83748b29deb50c458c9abffb738bd09acad"
+    "source_digest": "64b4380f2e2b0be25a7b9a1c31ca0062d6dbb8b63f42400fea3daf25a2690ff9"
   },
   "summary": {
     "module_count": 308,
@@ -1588,7 +1588,7 @@
         {
           "kind": "structure",
           "name": "LocalPolicy",
-          "line": 178,
+          "line": 180,
           "called": [
             "LocalPolicyClause"
           ]
@@ -1596,7 +1596,7 @@
         {
           "kind": "def",
           "name": "LocalPolicy.empty",
-          "line": 184,
+          "line": 186,
           "called": [
             "LocalPolicy"
           ]
@@ -1604,7 +1604,7 @@
         {
           "kind": "abbrev",
           "name": "LocalPolicies",
-          "line": 200,
+          "line": 202,
           "called": [
             "ActorId",
             "LocalPolicy"
@@ -1613,7 +1613,7 @@
         {
           "kind": "def",
           "name": "LocalPolicies.empty",
-          "line": 204,
+          "line": 206,
           "called": [
             "LocalPolicies"
           ]
@@ -1621,7 +1621,7 @@
         {
           "kind": "def",
           "name": "LocalPolicies.lookup",
-          "line": 208,
+          "line": 210,
           "called": [
             "ActorId",
             "LocalPolicies",
@@ -1632,7 +1632,7 @@
         {
           "kind": "def",
           "name": "LocalPolicies.declare",
-          "line": 213,
+          "line": 215,
           "called": [
             "ActorId",
             "LocalPolicies",
@@ -1643,7 +1643,7 @@
         {
           "kind": "def",
           "name": "LocalPolicies.revoke",
-          "line": 219,
+          "line": 221,
           "called": [
             "ActorId",
             "LocalPolicies"
@@ -1652,13 +1652,13 @@
         {
           "kind": "namespace",
           "name": "LocalPolicies",
-          "line": 229,
+          "line": 231,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "lookup_declare_self",
-          "line": 232,
+          "line": 234,
           "called": [
             "ActorId",
             "LocalPolicies",
@@ -1672,7 +1672,7 @@
         {
           "kind": "theorem",
           "name": "lookup_declare_other",
-          "line": 240,
+          "line": 242,
           "called": [
             "ActorId",
             "LocalPolicies",
@@ -1686,7 +1686,7 @@
         {
           "kind": "theorem",
           "name": "lookup_revoke_self",
-          "line": 250,
+          "line": 252,
           "called": [
             "ActorId",
             "LocalPolicies",
@@ -1699,7 +1699,7 @@
         {
           "kind": "theorem",
           "name": "lookup_revoke_other",
-          "line": 259,
+          "line": 261,
           "called": [
             "ActorId",
             "LocalPolicies",
@@ -1712,7 +1712,7 @@
         {
           "kind": "theorem",
           "name": "empty_lookup",
-          "line": 271,
+          "line": 273,
           "called": [
             "ActorId",
             "Authority",
@@ -12670,7 +12670,7 @@
         {
           "kind": "theorem",
           "name": "verifyProof_sound",
-          "line": 1016,
+          "line": 1017,
           "called": [
             "BridgeState",
             "CollisionFree",
@@ -12694,7 +12694,7 @@
         {
           "kind": "theorem",
           "name": "verifyProof_sound_all_32",
-          "line": 1082,
+          "line": 1083,
           "called": [
             "Bridge",
             "BridgeState",
@@ -14199,7 +14199,6 @@
             "LogEntry",
             "Verdict",
             "VerdictError",
-            "applyVerdictUnchecked",
             "disputeRewardActions",
             "genesis"
           ]
@@ -14229,7 +14228,6 @@
             "LogEntry",
             "Verdict",
             "VerdictError",
-            "applyVerdictUnchecked",
             "disputeRewardActionsMulti",
             "genesis"
           ]
@@ -14571,7 +14569,7 @@
         {
           "kind": "def",
           "name": "stakeWeightedAdjudicatorRewards",
-          "line": 729,
+          "line": 731,
           "called": [
             "Action",
             "ActorId",
@@ -14587,7 +14585,7 @@
         {
           "kind": "theorem",
           "name": "stakeWeightedAdjudicatorRewards_zero_pool_no_actions",
-          "line": 744,
+          "line": 746,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -14600,7 +14598,7 @@
         {
           "kind": "theorem",
           "name": "stakeWeightedAdjudicatorRewards_zero_total_stake_no_actions",
-          "line": 758,
+          "line": 760,
           "called": [
             "ActorId",
             "Amount",
@@ -14614,7 +14612,7 @@
         {
           "kind": "theorem",
           "name": "stakeWeightedAdjudicatorRewards_emits_only_rewards",
-          "line": 767,
+          "line": 769,
           "called": [
             "ActorId",
             "Amount",
@@ -14629,7 +14627,7 @@
         {
           "kind": "theorem",
           "name": "foldl_balance_acc_le",
-          "line": 793,
+          "line": 795,
           "called": [
             "ActorId",
             "Amount",
@@ -14642,7 +14640,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_le_totalSignerStake",
-          "line": 806,
+          "line": 808,
           "called": [
             "ActorId",
             "Amount",
@@ -14657,7 +14655,7 @@
         {
           "kind": "theorem",
           "name": "stakeWeightedAdjudicatorRewards_each_le_pool",
-          "line": 845,
+          "line": 847,
           "called": [
             "ActorId",
             "Amount",
@@ -14748,7 +14746,7 @@
         {
           "kind": "def",
           "name": "stakeResolutionActions",
-          "line": 151,
+          "line": 152,
           "called": [
             "Action",
             "StakingPolicy",
@@ -14758,7 +14756,7 @@
         {
           "kind": "def",
           "name": "fileDisputeStaked",
-          "line": 177,
+          "line": 178,
           "called": [
             "Action",
             "Dispute",
@@ -14776,7 +14774,7 @@
         {
           "kind": "theorem",
           "name": "stakeFilingActions_emits_only_transfers",
-          "line": 192,
+          "line": 193,
           "called": [
             "ActorId",
             "StakingPolicy",
@@ -14787,7 +14785,7 @@
         {
           "kind": "theorem",
           "name": "stakeResolutionActions_emits_only_transfers",
-          "line": 205,
+          "line": 206,
           "called": [
             "StakingPolicy",
             "Verdict",
@@ -14797,7 +14795,7 @@
         {
           "kind": "theorem",
           "name": "stakeFilingActions_disabled_no_actions",
-          "line": 228,
+          "line": 229,
           "called": [
             "ActorId",
             "StakingPolicy.disabled",
@@ -14808,7 +14806,7 @@
         {
           "kind": "theorem",
           "name": "stakeResolutionActions_disabled_no_actions",
-          "line": 234,
+          "line": 235,
           "called": [
             "StakingPolicy.disabled",
             "Verdict",
@@ -14818,7 +14816,7 @@
         {
           "kind": "theorem",
           "name": "stakeResolutionActions_upheld_no_actions",
-          "line": 241,
+          "line": 242,
           "called": [
             "StakingPolicy",
             "Verdict",
@@ -14828,7 +14826,7 @@
         {
           "kind": "theorem",
           "name": "stakeResolutionActions_rejected_emits_treasury_transfer",
-          "line": 250,
+          "line": 251,
           "called": [
             "StakingPolicy",
             "Verdict",
@@ -14838,7 +14836,7 @@
         {
           "kind": "theorem",
           "name": "stakeResolutionActions_inconclusive_emits_treasury_transfer",
-          "line": 260,
+          "line": 261,
           "called": [
             "StakingPolicy",
             "Verdict",
@@ -14848,7 +14846,7 @@
         {
           "kind": "theorem",
           "name": "fileDisputeStaked_rejects_underfunded",
-          "line": 276,
+          "line": 277,
           "called": [
             "Dispute",
             "ExtendedState",
@@ -14862,7 +14860,7 @@
         {
           "kind": "theorem",
           "name": "fileDisputeStaked_disabled_passthrough",
-          "line": 296,
+          "line": 297,
           "called": [
             "Dispute",
             "Disputes",
@@ -15209,7 +15207,7 @@
         {
           "kind": "def",
           "name": "applyVerdictUnchecked",
-          "line": 511,
+          "line": 506,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15225,7 +15223,7 @@
         {
           "kind": "theorem",
           "name": "proposeVerdict_deterministic",
-          "line": 540,
+          "line": 535,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15240,14 +15238,13 @@
         {
           "kind": "theorem",
           "name": "applyVerdictUnchecked_rejected_no_change",
-          "line": 553,
+          "line": 548,
           "called": [
             "AuthorityPolicy",
             "Dispute",
             "ExtendedState",
             "LogEntry",
             "Verdict",
-            "applyVerdictUnchecked",
             "disputeStatus",
             "genesis"
           ]
@@ -15255,14 +15252,13 @@
         {
           "kind": "theorem",
           "name": "applyVerdictUnchecked_inconclusive_no_change",
-          "line": 573,
+          "line": 568,
           "called": [
             "AuthorityPolicy",
             "Dispute",
             "ExtendedState",
             "LogEntry",
             "Verdict",
-            "applyVerdictUnchecked",
             "disputeStatus",
             "genesis"
           ]
@@ -15270,33 +15266,31 @@
         {
           "kind": "theorem",
           "name": "applyVerdictUnchecked_unknown_dispute",
-          "line": 593,
+          "line": 588,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "LogEntry",
             "Verdict",
-            "applyVerdictUnchecked",
             "genesis"
           ]
         },
         {
           "kind": "theorem",
           "name": "applyVerdictUnchecked_deterministic",
-          "line": 603,
+          "line": 598,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
             "LogEntry",
             "Verdict",
-            "applyVerdictUnchecked",
             "genesis"
           ]
         },
         {
           "kind": "def",
           "name": "applyVerdict",
-          "line": 638,
+          "line": 633,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15306,14 +15300,13 @@
             "Verdict",
             "VerdictError",
             "VerdictPassedStage3",
-            "applyVerdictUnchecked",
             "genesis"
           ]
         },
         {
           "kind": "theorem",
           "name": "applyVerdict_eq_unchecked",
-          "line": 651,
+          "line": 646,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15323,14 +15316,13 @@
             "Verdict",
             "VerdictPassedStage3",
             "applyVerdict",
-            "applyVerdictUnchecked",
             "genesis"
           ]
         },
         {
           "kind": "theorem",
           "name": "applyVerdict_rejected_no_change",
-          "line": 667,
+          "line": 662,
           "called": [
             "AuthorityPolicy",
             "Dispute",
@@ -15350,7 +15342,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_inconclusive_no_change",
-          "line": 683,
+          "line": 678,
           "called": [
             "AuthorityPolicy",
             "Dispute",
@@ -15370,7 +15362,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_deterministic",
-          "line": 698,
+          "line": 693,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15388,7 +15380,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_log_in_range",
-          "line": 730,
+          "line": 725,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15404,7 +15396,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_entry_is_dispute",
-          "line": 744,
+          "line": 739,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15420,13 +15412,13 @@
         {
           "kind": "theorem",
           "name": "List_idx_lt_of_getElem?_some",
-          "line": 779,
+          "line": 774,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "claimImpugnedIdx_in_range_when_upheld",
-          "line": 788,
+          "line": 783,
           "called": [
             "AuthorityPolicy",
             "DisputeRecord",
@@ -15448,7 +15440,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_dispute_open",
-          "line": 862,
+          "line": 857,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15467,7 +15459,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_outcome_matches",
-          "line": 893,
+          "line": 888,
           "called": [
             "AuthorityPolicy",
             "Dispute",
@@ -15486,7 +15478,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_under_witness_succeeds",
-          "line": 935,
+          "line": 930,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15496,7 +15488,6 @@
             "Verdict",
             "VerdictPassedStage3",
             "applyVerdict",
-            "applyVerdictUnchecked",
             "applyVerdict_dispute_open",
             "applyVerdict_entry_is_dispute",
             "applyVerdict_eq_unchecked",
@@ -15514,7 +15505,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_unknownDispute_unreachable",
-          "line": 993,
+          "line": 988,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15531,7 +15522,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_alreadyDecided_unreachable",
-          "line": 1006,
+          "line": 1001,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15548,7 +15539,7 @@
         {
           "kind": "theorem",
           "name": "applyVerdict_replayFailed_unreachable",
-          "line": 1018,
+          "line": 1013,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15565,7 +15556,7 @@
         {
           "kind": "def",
           "name": "proposeAndApplyVerdict",
-          "line": 1042,
+          "line": 1037,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15585,7 +15576,7 @@
         {
           "kind": "theorem",
           "name": "proposeAndApplyVerdict_eq_applyVerdict_when_proposed_ok",
-          "line": 1061,
+          "line": 1056,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15593,7 +15584,6 @@
             "OraclePolicy",
             "QuorumPolicy",
             "Verdict",
-            "applyVerdictUnchecked",
             "genesis",
             "proposeAndApplyVerdict",
             "proposeVerdict"
@@ -15602,7 +15592,7 @@
         {
           "kind": "theorem",
           "name": "proposeAndApplyVerdict_proposeVerdict_error_path",
-          "line": 1082,
+          "line": 1077,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15619,7 +15609,7 @@
         {
           "kind": "theorem",
           "name": "proposeAndApplyVerdict_deterministic",
-          "line": 1103,
+          "line": 1098,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -15634,7 +15624,7 @@
         {
           "kind": "theorem",
           "name": "proposeAndApplyVerdict_unknown_dispute",
-          "line": 1114,
+          "line": 1109,
           "called": [
             "AuthorityPolicy",
             "Disputes",
@@ -21327,7 +21317,7 @@
         {
           "kind": "theorem",
           "name": "smtPath_bits_eq",
-          "line": 130,
+          "line": 131,
           "called": [
             "smtPath",
             "smtPathFromNat_eq_iff_bits_eq",
@@ -21337,13 +21327,13 @@
         {
           "kind": "theorem",
           "name": "nat_eq_of_testBit_below",
-          "line": 159,
+          "line": 160,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "smtPathFromNat_inj_under_bound",
-          "line": 183,
+          "line": 184,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -42388,13 +42378,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.WithdrawalProofCLI",
-          "line": 57,
+          "line": 58,
           "called": []
         },
         {
           "kind": "def",
           "name": "fixtureES",
-          "line": 60,
+          "line": 61,
           "called": [
             "EthAddress.zero",
             "ExtendedState",
@@ -42407,7 +42397,7 @@
         {
           "kind": "def",
           "name": "fixtureSnap",
-          "line": 69,
+          "line": 70,
           "called": [
             "Snapshot",
             "fixtureES",
@@ -42418,13 +42408,13 @@
         {
           "kind": "def",
           "name": "snapPath",
-          "line": 73,
+          "line": 74,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 76,
+          "line": 77,
           "called": [
             "LegalKernel.Test.Bridge.WithdrawalProofCLI",
             "Snapshot",
@@ -42672,13 +42662,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.DSL",
-          "line": 29,
+          "line": 28,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "LawTests",
-          "line": 30,
+          "line": 29,
           "called": [
             "LegalKernel",
             "LegalKernel.DSL"
@@ -42687,7 +42677,7 @@
         {
           "kind": "def",
           "name": "lawPreShape",
-          "line": 37,
+          "line": 36,
           "called": [
             "Amount",
             "State",
@@ -42701,7 +42691,7 @@
         {
           "kind": "def",
           "name": "lawImplOnlyShape",
-          "line": 51,
+          "line": 50,
           "called": [
             "State",
             "TestCase",
@@ -42711,7 +42701,7 @@
         {
           "kind": "def",
           "name": "transferDSLAgrees",
-          "line": 62,
+          "line": 61,
           "called": [
             "ActorId",
             "Amount",
@@ -42727,7 +42717,7 @@
         {
           "kind": "def",
           "name": "transferDSLPreMatches",
-          "line": 81,
+          "line": 80,
           "called": [
             "ActorId",
             "ResourceId",
@@ -42741,7 +42731,7 @@
         {
           "kind": "def",
           "name": "lawMkAPI",
-          "line": 107,
+          "line": 106,
           "called": [
             "Law.mk",
             "State",
@@ -42753,7 +42743,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 117,
+          "line": 116,
           "called": [
             "LawTests",
             "LegalKernel.Test.DSL",
@@ -43178,7 +43168,6 @@
             "Pall",
             "TestCase",
             "Verdict",
-            "applyVerdictUnchecked",
             "assert",
             "challenger",
             "checkEvidence",
@@ -43896,7 +43885,6 @@
             "DisputeRewardPolicy.union",
             "Pall",
             "TestCase",
-            "applyVerdictUnchecked",
             "applyVerdictWithRewardsUnchecked",
             "assertEq",
             "disputeRewardActions",
@@ -43922,7 +43910,6 @@
             "ResourceId",
             "StakingPolicy",
             "TestCase",
-            "applyVerdictUnchecked",
             "assertEq",
             "challenger",
             "disputeRewardActions",
@@ -44780,7 +44767,6 @@
             "Pall",
             "TestCase",
             "Verdict",
-            "applyVerdictUnchecked",
             "applyVerdictUnchecked_deterministic",
             "applyVerdictUnchecked_unknown_dispute",
             "assert",
@@ -44824,7 +44810,6 @@
             "Verdict",
             "VerdictPassedStage3",
             "applyVerdict",
-            "applyVerdictUnchecked",
             "applyVerdict_alreadyDecided_unreachable",
             "applyVerdict_dispute_open",
             "applyVerdict_entry_is_dispute",
@@ -44858,7 +44843,6 @@
             "TestCase",
             "Verdict",
             "VerdictError",
-            "applyVerdictUnchecked",
             "assert",
             "baseEs",
             "es",
@@ -57114,13 +57098,13 @@
         {
           "kind": "def",
           "name": "stmtReferencesSignedBy",
-          "line": 91,
+          "line": 92,
           "called": []
         },
         {
           "kind": "def",
           "name": "selfOnlyCheckStmt",
-          "line": 103,
+          "line": 104,
           "called": [
             "ImplStmt",
             "burn",
@@ -57133,7 +57117,7 @@
         {
           "kind": "def",
           "name": "selfOnlyCheckImplStmts",
-          "line": 127,
+          "line": 128,
           "called": [
             "ImplStmt",
             "SignedByAnalysis",
@@ -57143,7 +57127,7 @@
         {
           "kind": "def",
           "name": "shimDefName",
-          "line": 136,
+          "line": 137,
           "called": [
             "LegalKernel.DSL.Lex"
           ]
@@ -58035,7 +58019,7 @@
         {
           "kind": "namespace",
           "name": "Lex.Test.ExampleLex",
-          "line": 28,
+          "line": 27,
           "called": [
             "LegalKernel.Test",
             "Lex.Examples"
@@ -58044,7 +58028,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 34,
+          "line": 33,
           "called": [
             "Lex.Test.ExampleLex",
             "TestCase",

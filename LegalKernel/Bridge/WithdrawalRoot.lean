@@ -1000,8 +1000,9 @@ canonical's bytes (computed from the bridge state). -/
     two consecutive WithdrawalIds are mapped — the realistic
     deployment case).  The integration plan's existential form
     (`∃ wd, b.pending[idx]? = some wd ∧ proof.leaf = encode wd`)
-    follows by case analysis on `b.pending[idx]?` plus the
-    leaf-recovery lemma scoped as a follow-up.
+    follows by case analysis on `b.pending[idx]?` together with
+    leaf-recovery from the encoder-injectivity ladder (Workstream
+    EI, `Encoding/*Injective`).
 
     **Runtime-adaptor obligations (AR.13.3).**  The `h_leaf_size`
     and `h_sibs_match` hypotheses are size-equality witnesses
