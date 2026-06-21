@@ -14,7 +14,7 @@
   </picture>
 </p>
 
-<h1 align="center">Knomosis — A Societal Kernel</h1>
+<h1 align="center">Knomosis — A minimal, law-as-code L2</h1>
 
 <p align="center">
   <div align="center">
