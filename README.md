@@ -24,7 +24,7 @@
     claude :robot: :heart: :robot: codex
   </div>
   <div align="center">
-    <strong>TREAT THIS KERNEL ACCORDINGLY</strong>
+    <strong>TREAT THIS L2 ACCORDINGLY</strong>
   </div>
 </p>
 
