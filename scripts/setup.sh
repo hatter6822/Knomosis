@@ -23,10 +23,13 @@
 #      `bin/lean` / `bin/lake` content hashes match the snapshot recorded
 #      at install time (defense-in-depth integrity check, see
 #      `bin_sha256_snapshot_*`).
-#   3. Otherwise, downloads the Lean toolchain archive from the GitHub
-#      release (NOT the unauthenticated `release.lean-lang.org` mirror)
-#      and verifies its SHA-256 against the per-architecture pin baked
-#      into this script.
+#   3. Otherwise, downloads the Lean toolchain archive — from the GitHub
+#      release first, falling back to the official mirror
+#      `releases.lean-lang.org` (needed in sandboxes that scope
+#      github.com per-repository) — and verifies it against the
+#      per-architecture SHA-256 pin baked into this script.  The pin
+#      gates BOTH sources equally, so the mirror adds availability, not
+#      trust.
 #   4. Optionally downloads the `elan` toolchain manager (also SHA-256
 #      pinned) so the user can switch toolchains later.
 #   5. Records a content-hash snapshot of the freshly-installed
@@ -544,6 +547,11 @@ apt_update_once() {
 }
 
 # -------- Toolchain archive verification --------
+# Returns non-zero on any mismatch (deleting the bad file) instead of
+# exiting, so callers can fall back to another download source.  A
+# hard `exit` here would make every fallback below unreachable: the
+# elan-installer path at the bottom of this script only runs when
+# `manual_curl_install` *returns* failure.
 verify_toolchain_sha256() {
   local target_file="$1"
   local format="$2"
@@ -575,9 +583,48 @@ verify_toolchain_sha256() {
     echo "  expected: ${expected_sha}" >&2
     echo "  actual:   ${actual_sha}" >&2
     rm -f "${target_file}"
-    exit 1
+    return 1
   fi
   log_elapsed "toolchain SHA-256 verified (${format})"
+}
+
+# Download one Lean toolchain archive and verify it against the pinned
+# SHA-256.  Tries the GitHub release asset first (the canonical
+# origin), then the official mirror `releases.lean-lang.org` — the
+# host elan itself downloads from — for the default `leanprover/lean4`
+# origin.  The same per-architecture SHA-256 pin gates BOTH sources
+# (they serve byte-identical artefacts), so the fallback does not
+# weaken integrity: a compromised or truncated download from either
+# host surfaces as a checksum mismatch and the next source is tried.
+# Sandboxed CI environments (e.g. Claude Code on the web) commonly
+# scope github.com per-repository while allowing the Lean mirror, so
+# the fallback is what makes SessionStart self-setup work there.
+download_and_verify_toolchain_archive() {
+  local dest="$1"
+  local format="$2"
+  local archive_file="$3"
+  local github_url="https://github.com/${TOOLCHAIN_ORG}/${TOOLCHAIN_REPO}/releases/download/${TOOLCHAIN_TAG}/${archive_file}"
+  local mirror_url=""
+  if [ "${TOOLCHAIN_ORG}/${TOOLCHAIN_REPO}" = "leanprover/lean4" ]; then
+    mirror_url="https://releases.lean-lang.org/lean4/${TOOLCHAIN_TAG}/${archive_file}"
+  fi
+  local url
+  for url in "${github_url}" ${mirror_url:+"${mirror_url}"}; do
+    if ! curl -fsSL "${url}" -o "${dest}"; then
+      log_elapsed "toolchain download failed from ${url}"
+      rm -f "${dest}"
+      continue
+    fi
+    if verify_toolchain_sha256 "${dest}" "${format}"; then
+      return 0
+    fi
+  done
+  echo "error: could not obtain a checksum-verified Lean toolchain archive" >&2
+  echo "  tried: ${github_url}" >&2
+  if [ -n "${mirror_url}" ]; then
+    echo "  tried: ${mirror_url}" >&2
+  fi
+  return 1
 }
 
 # -------- zstd install (optional; we fall back to .zip if missing) --------
@@ -677,15 +724,20 @@ SETTINGSEOF
     elan_bg_pid=$!
   fi
 
-  # Install Lean toolchain (foreground — critical path).
+  # Install Lean toolchain (foreground — critical path).  Any failure
+  # returns (rather than exits) so the caller can try the elan-installer
+  # fallback path.
   if [ ! -d "${toolchain_dir}/bin" ]; then
     log_elapsed "downloading Lean toolchain ${TOOLCHAIN}"
     if command -v zstd >/dev/null 2>&1; then
       local lean_tar lean_extracted
       lean_tar="$(mktemp)"
       trap 'rm -f "${lean_tar}"' EXIT
-      curl -fsSL "https://github.com/${TOOLCHAIN_ORG}/${TOOLCHAIN_REPO}/releases/download/${TOOLCHAIN_TAG}/${lean_archive_name}.tar.zst" -o "${lean_tar}"
-      verify_toolchain_sha256 "${lean_tar}" "zst"
+      if ! download_and_verify_toolchain_archive "${lean_tar}" "zst" "${lean_archive_name}.tar.zst"; then
+        rm -f "${lean_tar}"
+        trap - EXIT
+        return 1
+      fi
       log_elapsed "extracting toolchain (zstd)"
       lean_extracted="$(mktemp).tar"
       zstd -d "${lean_tar}" -o "${lean_extracted}"
@@ -697,12 +749,16 @@ SETTINGSEOF
       local lean_zip
       lean_zip="$(mktemp)"
       trap 'rm -f "${lean_zip}"' EXIT
-      curl -fsSL "https://github.com/${TOOLCHAIN_ORG}/${TOOLCHAIN_REPO}/releases/download/${TOOLCHAIN_TAG}/${lean_archive_name}.zip" -o "${lean_zip}"
-      verify_toolchain_sha256 "${lean_zip}" "zip"
+      if ! download_and_verify_toolchain_archive "${lean_zip}" "zip" "${lean_archive_name}.zip"; then
+        rm -f "${lean_zip}"
+        trap - EXIT
+        return 1
+      fi
       if ! command -v unzip >/dev/null 2>&1; then
         echo "error: unzip is required when zstd is unavailable" >&2
         rm -f "${lean_zip}"
-        exit 1
+        trap - EXIT
+        return 1
       fi
       unzip -qo "${lean_zip}" -d "${ELAN_HOME_DIR}/toolchains/"
       rm -f "${lean_zip}"
