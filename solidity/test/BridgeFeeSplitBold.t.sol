@@ -716,10 +716,46 @@ contract BridgeFeeSplitBoldTest is Test {
     // ------------------------------------------------------------------
 
     function test_revert_constructor_boldAddressMismatch() public {
-        // A non-zero boldTokenAddress that is not the canonical pin reverts.
+        // On MAINNET (chainid 1) the canonical BOLD_TOKEN_ADDRESS pin is
+        // UNCONDITIONAL: any other non-zero boldTokenAddress reverts.  The
+        // chain-conditional relaxation only applies off-mainnet (see the
+        // companion below), so force the mainnet path here.
+        vm.chainId(1);
         address wrong = address(0x1234);
         vm.expectRevert(abi.encodeWithSelector(KnomosisBridge.BoldTokenAddressMismatch.selector, wrong));
         _deploy(0, 5000, 1, 1, wrong, type(uint256).max);
+    }
+
+    /// @notice The chain-conditional relaxation (GP.5.4 §13.6 amendment): on
+    ///         a NON-mainnet chain (here Sepolia, 11155111) there is no
+    ///         canonical mainnet BOLD, so the operator supplies a chain-native
+    ///         BOLD token.  A NON-pin address is ACCEPTED as long as it has
+    ///         code and `symbol() == "BOLD"`; the effective token is exposed
+    ///         via `boldToken()` and bound to `RESOURCE_ID_BOLD`.  The mainnet
+    ///         authenticity pin (asserted above) is unaffected.
+    function test_constructor_boldAcceptsOperatorTokenOffMainnet() public {
+        vm.chainId(11_155_111);
+        MockBold sepoliaBold = new MockBold(); // code present, symbol() == "BOLD"
+        address tok = address(sepoliaBold);
+        assertTrue(tok != BOLD, "companion must use a NON-pin address");
+        KnomosisBridge b = _deploy(0, 5000, 1, 1, tok, type(uint256).max);
+        assertTrue(b.boldEnabled(), "BOLD enabled off-mainnet with an operator token");
+        assertEq(b.boldToken(), tok, "effective boldToken is the operator-supplied token");
+        assertEq(b.resourceToken(RESOURCE_BOLD), tok, "BOLD resource bound to the operator token");
+    }
+
+    /// @notice The mainnet ACCEPT branch: at chainid 1 the canonical
+    ///         BOLD_TOKEN_ADDRESS pin is REQUIRED, and a construction WITH the
+    ///         pinned token succeeds.  The effective `boldToken` IS the pin, so
+    ///         every runtime BOLD path on mainnet is byte-identical to the
+    ///         pre-amendment contract.  (`setUp()` already etched a conformant
+    ///         MockBold at the pinned address.)
+    function test_constructor_boldAcceptsPinnedTokenOnMainnet() public {
+        vm.chainId(1);
+        KnomosisBridge b = _deployBold(0, 5000, 1, type(uint256).max);
+        assertTrue(b.boldEnabled(), "BOLD enabled at chainid 1 with the canonical pin");
+        assertEq(b.boldToken(), BOLD, "effective boldToken is the canonical pin on mainnet");
+        assertEq(b.resourceToken(RESOURCE_BOLD), BOLD, "BOLD resource bound to the pin on mainnet");
     }
 
     function test_revert_constructor_boldSymbolMismatch() public {

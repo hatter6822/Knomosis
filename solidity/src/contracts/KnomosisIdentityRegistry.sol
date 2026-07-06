@@ -57,6 +57,12 @@ contract KnomosisIdentityRegistry is IKnomosisIdentityRegistry {
     /// @notice Cannot revoke when not registered (defensive; UX).
     error NotRegistered(address actor);
 
+    /// @notice Constructor guard: the deployment version tag must be
+    ///         non-zero; a zero tag signals an uninitialised/misconfigured
+    ///         deploy and would strip the tag's namespacing entropy from the
+    ///         derived `deploymentId`.
+    error ZeroVersionTag();
+
     // ------------------------------------------------------------------
     // Immutable deployment metadata
     // ------------------------------------------------------------------
@@ -78,6 +84,7 @@ contract KnomosisIdentityRegistry is IKnomosisIdentityRegistry {
     ///        the deploymentId derivation.  Constant for the lifetime
     ///        of this contract.
     constructor(bytes32 _knomosisVersionTag) {
+        if (_knomosisVersionTag == bytes32(0)) revert ZeroVersionTag();
         deploymentId =
             keccak256(abi.encode(block.chainid, address(this), _knomosisVersionTag));
     }

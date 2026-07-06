@@ -1165,12 +1165,14 @@ contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
         signers[2] = DR_COMMUNITY_B;
         signers[3] = DR_AUDITOR;
         signers[4] = DR_BACKUP;
-        // Production predicted-address wiring: multisig first, bridge
-        // second (nonce + 1).
-        address predictedBridge =
+        // Production predicted-address wiring, cycle broken BRIDGE-FIRST so
+        // the multisig sees a code-bearing bridge (it now rejects a codeless
+        // bridge): the multisig lands at nonce + 1 and the bridge binds that
+        // predicted multisig address as `ammDisasterRecovery`.
+        address predictedMultisig =
             vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        multisig = new KnomosisAmmDisasterRecoveryMultisig(predictedBridge, signers, 3);
-        bridge = _deployBridgeWithRecovery(address(0), address(multisig));
+        bridge = _deployBridgeWithRecovery(address(0), predictedMultisig);
+        multisig = new KnomosisAmmDisasterRecoveryMultisig(address(bridge), signers, 3);
         _seedPool(bridge);
         // Stage the FIRST confirmation, so the non-final benchmark
         // measures the recurring (second-signature) shape and the

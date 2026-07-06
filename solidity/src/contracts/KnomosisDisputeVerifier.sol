@@ -51,6 +51,15 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
     error ZeroAddress();
     error QuorumThresholdOutOfRange();
     error VerdictReplay();
+    /// @notice Constructor guard: `bridge` has no deployed code.  The bridge
+    ///         is deployed before this verifier in the cluster-A cycle
+    ///         (Bridge -> DisputeVerifier -> SequencerStake), so a codeless
+    ///         bridge is a wiring mistake, not a deployable forward reference.
+    error BridgeNotContract();
+    /// @notice Constructor guard: `identityRegistry` has no deployed code.
+    ///         The registry is the leaf deployed first in every order, so a
+    ///         codeless registry here is a wiring mistake.
+    error IdentityRegistryNotContract();
 
     // ------------------------------------------------------------------
     // Constitutional / immutable parameters
@@ -196,6 +205,11 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
         if (args.bridge == address(0)) revert ZeroAddress();
         if (args.sequencerStake == address(0)) revert ZeroAddress();
         if (args.identityRegistry == address(0)) revert ZeroAddress();
+        // Defence-in-depth code checks on the BACKWARD references (both are
+        // deployed before this verifier).  `sequencerStake` is a FORWARD
+        // reference in the cycle and stays covered by `assertConsistent()`.
+        if (args.bridge.code.length == 0) revert BridgeNotContract();
+        if (args.identityRegistry.code.length == 0) revert IdentityRegistryNotContract();
         if (args.approvedAdjudicators.length == 0) revert QuorumThresholdOutOfRange();
         if (
             args.quorumThreshold == 0

@@ -6201,12 +6201,16 @@ inventory lives in `solidity/README.md` and `docs/abi.md` §13 +
     `msg.value` into a user credit + a gas-pool fee and grants
     action budget at the immutable `weiPerBudgetUnitEth` rate)
     and `depositBoldWithFee(uint256 amount, uint16 chosenFeeBps)`
-    (GP.5.4; the opt-in BOLD-currency mirror — pulls the
-    constitutionally-pinned `BOLD_TOKEN_ADDRESS` ERC-20 via
-    `transferFrom` with a balance-delta check, credits the pool at
-    `RESOURCE_ID_BOLD`, and grants budget at `weiPerBudgetUnitBold`;
-    a non-BOLD deployment passes `boldTokenAddress = address(0)` to
-    disable it), `submitStateRoot(...)` (attestor-signed), and
+    (GP.5.4; the opt-in BOLD-currency mirror — pulls the effective
+    BOLD ERC-20 (the `boldToken` immutable) via `transferFrom` with a
+    balance-delta check, credits the pool at `RESOURCE_ID_BOLD`, and
+    grants budget at `weiPerBudgetUnitBold`; a non-BOLD deployment
+    passes `boldTokenAddress = address(0)` to disable it.  The BOLD
+    token is **chain-conditional** (a §13.6 amendment): on mainnet
+    (chainid 1) it must equal the constitutional `BOLD_TOKEN_ADDRESS`
+    pin, off-mainnet it is an operator-supplied `symbol()=="BOLD"`
+    token — see `docs/deployment_parameters.md` §5),
+    `submitStateRoot(...)` (attestor-signed), and
     `withdrawWithProof(uint64, bytes, bytes)`.  Four automatic
     circuit-breakers (`AttestationStale`, `DisputeCooldown`,
     `TvlCapReached`, `MigrationActivated`) fire on

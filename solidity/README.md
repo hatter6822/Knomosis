@@ -404,14 +404,17 @@ rejects a fee-on-transfer / rebase token, reverting
 `weiPerBudgetUnitBold` rate.  BOLD support is **opt-in**: the
 constructor takes a `boldTokenAddress` that is either `address(0)`
 (BOLD disabled — the bridge still deploys on chains without BOLD, and
-the entry point reverts `BoldNotEnabled`) or equals the constitutional
-pin `BOLD_TOKEN_ADDRESS`
-(`0x6440f144b7e50D6a8439336510312d2F54beB01D`), in which case the
-constructor additionally cross-checks
-`BOLD_TOKEN.symbol() == EXPECTED_BOLD_SYMBOL` (defence-in-depth behind
-the address pin — a reverting, absent, or mismatched symbol fails
+the entry point reverts `BoldNotEnabled`) or a valid BOLD token.  The
+token is **chain-conditional** (a §13.6 amendment): on **mainnet**
+(chainid 1) it must equal the constitutional pin `BOLD_TOKEN_ADDRESS`
+(`0x6440f144b7e50D6a8439336510312d2F54beB01D`); on **any other chain**
+(a testnet such as Sepolia, or a local devnet) it is an
+operator-supplied chain-native BOLD token.  In either case the
+constructor cross-checks `boldToken.symbol() == EXPECTED_BOLD_SYMBOL`
+(defence-in-depth — a reverting, absent, or mismatched symbol fails
 construction) and requires `weiPerBudgetUnitBold >=
-MIN_WEI_PER_BUDGET_UNIT`.  Coverage:
+MIN_WEI_PER_BUDGET_UNIT`.  The effective token is exposed via the
+`boldToken()` immutable.  Coverage:
 `test/BridgeFeeSplitBold.t.sol` (behavioural mirror of the ETH suite
 plus the non-conformant BOLD mocks — fee-on-transfer,
 false-returning transfer, wrong / reverting / absent symbol, opt-out)
@@ -421,10 +424,10 @@ fixture, including a live-contract per-entry deposit check), with the
 BOLD mocks in `test/utils/MockBold.sol`, and a full end-to-end deposit
 -> escrow -> attested-state-root -> finalise -> `withdrawWithProof` ->
 replay-rejection lifecycle test.  When BOLD is enabled the constructor
-AUTO-BINDS `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)` in the resource map
+AUTO-BINDS `(RESOURCE_ID_BOLD -> boldToken)` in the resource map
 and reserves both from the deployer's map (`BoldResourceReserved`), so
-BOLD withdrawals via `withdrawWithProof` always resolve to the canonical
-token with no deployer action and no way to misconfigure (the
+BOLD withdrawals via `withdrawWithProof` always resolve to the effective
+BOLD token with no deployer action and no way to misconfigure (the
 `resourceToken(uint64)` getter exposes the binding).  The two BOLD
 constitutional pins are guarded both at runtime (`test_boldConstants_pinned`)
 and source-level (the GP.5.2 `audit_compile_time_caps.sh` gate, extended

@@ -166,6 +166,60 @@ testnet-acceptance-dryrun:
 devnet:
 	./scripts/local_devnet.sh
 
+# ---------------------------------------------------------------------------
+# Unified public-testnet deployment (Sepolia) — see
+# docs/sepolia_deployment_runbook.md.
+#
+# `DeploySepolia.s.sol` deploys the FULL production suite (9 genesis
+# contracts) as individual transactions via plain-nonce CREATE prediction —
+# no `test/utils/Deployer` bundler, so NO `--disable-code-size-limit` — and
+# emits a machine-readable manifest at `deployments/<network>.json` that the
+# L2 daemon stack, the gateway, and the Licio client consume.
+#
+# Required env for a real broadcast:
+#   SEPOLIA_RPC_URL   — Sepolia JSON-RPC endpoint (resolved by the `sepolia`
+#                       rpc alias in foundry.toml)
+#   PRIVATE_KEY       — funded deployer EOA key (or edit for --account/--ledger)
+#   ETHERSCAN_API_KEY — for --verify source-verification
+# Actor addresses (attestor/sequencer/treasury/adjudicator/BOLD roles) and the
+# economic parameters are env-driven with testnet-sane defaults; size them per
+# docs/deployment_parameters.md.  Set KNOMOSIS_BOLD_TOKEN to the Sepolia BOLD
+# test token to enable the BOLD + AMM legs (off-mainnet the chain-conditional
+# bridge accepts an operator-supplied symbol-validated token).
+.PHONY: deploy-sepolia-dryrun
+deploy-sepolia-dryrun:
+	mkdir -p deployments
+	forge script script/DeploySepolia.s.sol
+
+# Signer selection keeps the funded key OUT of argv / `ps` / `/proc`:
+#   KNOMOSIS_DEPLOYER_ACCOUNT — a Foundry keystore account name (RECOMMENDED;
+#     import once with `cast wallet import <name> --interactive`; forge prompts
+#     for the password, so the key never enters the process listing).
+#   PRIVATE_KEY — a raw hex key.  FALLBACK for a NO-VALUE shadow testnet ONLY
+#     (it is visible via `ps`/`/proc` for the duration of the broadcast) —
+#     never use it for a key holding real value.
+.PHONY: deploy-sepolia
+deploy-sepolia:
+	@if [ -z "$$SEPOLIA_RPC_URL" ]; then echo "error: SEPOLIA_RPC_URL not set" >&2; exit 1; fi
+	mkdir -p deployments
+	@if [ -n "$$KNOMOSIS_DEPLOYER_ACCOUNT" ]; then \
+		forge script script/DeploySepolia.s.sol --rpc-url sepolia --broadcast --verify --slow --account "$$KNOMOSIS_DEPLOYER_ACCOUNT"; \
+	elif [ -n "$$PRIVATE_KEY" ]; then \
+		echo "WARNING: PRIVATE_KEY is passed on the command line (ps/proc-visible). Prefer KNOMOSIS_DEPLOYER_ACCOUNT (a forge keystore) for a funded key." >&2; \
+		forge script script/DeploySepolia.s.sol --rpc-url sepolia --broadcast --verify --slow --private-key "$$PRIVATE_KEY"; \
+	else \
+		echo "error: set KNOMOSIS_DEPLOYER_ACCOUNT (a forge keystore, recommended) or PRIVATE_KEY (raw key, shadow-testnet only)" >&2; exit 1; \
+	fi
+
+# Local live-anvil deploy of the FULL BOLD+AMM suite against an in-script
+# MockBold (non-mainnet only).  Requires a running `anvil` on 127.0.0.1:8545.
+.PHONY: deploy-local
+deploy-local:
+	mkdir -p deployments
+	forge script script/DeploySepoliaLocal.s.sol \
+		--rpc-url anvil --broadcast \
+		--private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
 .PHONY: clean
 clean:
 	forge clean

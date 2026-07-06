@@ -166,6 +166,14 @@ crates against `Cargo.lock`. An outbound network policy must permit
 `index.crates.io`, and `static.crates.io` (see
 [§5.7](#57-remote--claude-code-on-the-web-environments)).
 
+**For a public-testnet deployment ([§10.5](#105-deploying-to-a-public-testnet-sepolia)).**
+The build/test stacks above need nothing extra, but *broadcasting* to Sepolia
+additionally requires a **funded Sepolia deployer EOA** private key (~0.5
+test-ETH covers the nine deploys), a **Sepolia RPC endpoint**
+(`SEPOLIA_RPC_URL`), and — for source-verification — an **Etherscan API key**
+(`ETHERSCAN_API_KEY`). See [§5.8](#58-deploy-time-environment-variables) for the
+env vars and `docs/sepolia_deployment_runbook.md` for the full procedure.
+
 **Editor.** Any editor works, but the Lean experience is best with the official
 **Lean 4 VS Code extension** (or the JetBrains/Emacs/Neovim LSP clients). The
 language server consumes the same `lake`-built `.olean` files as the CLI, so a
@@ -292,6 +300,23 @@ The environment's **network policy** (chosen when the environment was created)
 governs outbound access; the toolchain hosts above must be permitted. The
 options, triggers, and configuration are documented at
 <https://code.claude.com/docs/en/claude-code-on-the-web>.
+
+### 5.8 Deploy-time environment variables
+
+`make deploy-sepolia` (and the L2 stack launcher) are driven by environment
+variables so no endpoint or secret is committed. The `foundry.toml`
+`[rpc_endpoints]` / `[etherscan]` tables resolve the aliases:
+
+| Variable | Used by | Meaning |
+|----------|---------|---------|
+| `SEPOLIA_RPC_URL` | `--rpc-url sepolia` | Sepolia JSON-RPC endpoint |
+| `MAINNET_RPC_URL` | `--rpc-url mainnet` | Mainnet endpoint (mainnet deploys) |
+| `ETHERSCAN_API_KEY` | `--verify` | Etherscan v2 key (verifies on every chain) |
+| `KNOMOSIS_DEPLOYER_ACCOUNT` / `PRIVATE_KEY` | `make deploy-sepolia` | signer: a forge keystore account name (recommended — key stays off argv) or a raw key (fallback, `ps`-visible; shadow testnet only) |
+| `KNOMOSIS_ATTESTOR` / `_SEQUENCER` / `_TREASURY` / `_ADJUDICATOR` / `_BOLD_TOKEN` / … | `DeploySepolia.s.sol` | actor addresses + economics (all have testnet-sane defaults; see the runbook §4.4) |
+
+The full parameter reference is `docs/sepolia_deployment_runbook.md` §4.4 and
+the sizing guidance is `docs/deployment_parameters.md`.
 
 ## 6. The Lean inner development loop
 
@@ -559,6 +584,54 @@ fail-closed property. The two gates differ in strength:
 
 The on-disk frame formats and the full CLI ABI are specified in
 [`abi.md`](abi.md).
+
+### 10.5 Deploying to a public testnet (Sepolia)
+
+`solidity/script/DeploySepolia.s.sol` (via `make deploy-sepolia`) deploys the
+**full nine-contract genesis suite** to Sepolia as individual transactions —
+unlike the F.3 `TestnetAcceptance.s.sol`, which uses the `test/utils/Deployer`
+CREATE3 *bundler* (a 42 KB harness over EIP-170 that needs
+`--disable-code-size-limit`). Every production contract is under the
+24 576-byte cap (largest: `KnomosisBridge`, 17 195 B), so `DeploySepolia` needs
+no code-size accommodation against a real RPC. It breaks the two immutable
+constructor cycles with plain-nonce CREATE prediction, verifies the post-deploy
+invariants (`assertConsistent()` on both clusters, `bridge.migration() ==
+address(0)`, `deploymentId` self-consistency), source-verifies on Etherscan
+(`--verify`), and emits a machine-readable manifest at
+`solidity/deployments/<network>.json`.
+
+```bash
+cd solidity
+make deploy-sepolia-dryrun     # in-memory simulation; writes the manifest
+# real broadcast (needs SEPOLIA_RPC_URL, a signer [KNOMOSIS_DEPLOYER_ACCOUNT keystore
+# or PRIVATE_KEY], ETHERSCAN_API_KEY + actors):
+make deploy-sepolia
+make deploy-local              # full BOLD+AMM suite vs a live anvil (MockBold)
+```
+
+Run the F-1/F-2 trust-binding gates
+([§10.3](#103-deploy-readiness-gates-f-1--f-2--fail-closed-by-design)) in the
+deploy pipeline first, and size the immutable economics with
+`scripts/economic_simulation.py` (see `docs/deployment_parameters.md`). BOLD is
+**chain-conditional**: mainnet requires the canonical `BOLD_TOKEN_ADDRESS` pin;
+Sepolia accepts an operator-supplied `symbol()=="BOLD"` token
+(`KNOMOSIS_BOLD_TOKEN`); unset ⇒ ETH-only.
+
+### 10.6 L2 stack + Licio gateway bring-up
+
+`scripts/knomosis_l2_sepolia_stack.sh` reads the manifest and launches the L2
+daemons (`knomosis-host` → `knomosis-event-subscribe` → `knomosis-indexer` →
+`knomosis-gateway`, plus optional `knomosis-l1-ingest` /
+`knomosis-faultproof-observer`), then prints the gateway URL + bearer token for
+the [Licio](https://github.com/hatter6822/Licio) BFF. Licio (a React PWA + Hono
+BFF, no chain of its own) integrates against the **gateway** HTTP/JSON + SSE API
+(`docs/api/gateway.openapi.yaml`) — reads, `POST /v1/actions` (opaque
+client-signed `SignedAction`s, no key custody), and the `/v1/events/stream` SSE
+feed — server-to-server with the token held in the BFF.
+
+The end-to-end operator procedure, the manifest schema, the gateway endpoint
+map, and the Licio integration checklist live in
+**`docs/sepolia_deployment_runbook.md`**.
 
 ## 11. Coding conventions
 

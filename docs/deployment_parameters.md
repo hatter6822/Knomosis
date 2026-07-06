@@ -122,8 +122,17 @@ Wiring/identity fields (`knomosisVersionTag`, `deploymentId`, `attestor`,
 `maxRedemptionWindowBlocks` / `maxAttestationStaleBlocks` / `cooldownBlocks`
 windows) are correctness/topology parameters — set them per the deployment
 topology in `docs/testnet_readiness.md` §2, not by economic sizing.  The
-`boldTokenAddress` must be `address(0)` (BOLD opt-out) or the canonical
-`BOLD_TOKEN_ADDRESS` pin.
+`boldTokenAddress` is **chain-conditional** (a Genesis-Plan §13.6 amendment):
+on **mainnet** (chainid 1) it must be `address(0)` (BOLD opt-out) or the
+canonical `BOLD_TOKEN_ADDRESS` pin — the mainnet authenticity guard is
+unconditional; on **any other chain** (a testnet such as Sepolia, or a local
+devnet) it may be `address(0)` **or** an operator-supplied chain-native BOLD
+token, authenticated by the retained code-presence + `symbol() == "BOLD"`
+cross-check (there is no canonical mainnet BOLD to pin off-chain).  The
+effective token is exposed by the bridge's `boldToken()` immutable and every
+runtime BOLD path resolves through it; the Liquity auto-trigger stays off
+off-mainnet (its TroveManager oracles are mainnet-only).  See
+`docs/sepolia_deployment_runbook.md` §4.3 for the Sepolia BOLD workflow.
 
 ## 6. KnomosisAmmDisasterRecoveryMultisig — the AMM kill switch (§5)
 

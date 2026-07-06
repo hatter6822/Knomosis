@@ -148,6 +148,11 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     error DisputeInProgress();
     error ZeroAddress();
     error WindowTooShort();
+    /// @notice Constructor guard: the `sequencer` (posts roots) and the
+    ///         `faultProofGame` (privileged `markDisputed` caller) must be
+    ///         distinct principals; collapsing them would let one address
+    ///         both submit and adjudicate its own roots.
+    error SequencerIsFaultProofGame();
 
     /* ---------------------------------------------------------- */
     /* Constructor                                                */
@@ -165,6 +170,9 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
     ) {
         if (_sequencer == address(0)) revert ZeroAddress();
         if (_faultProofGame == address(0)) revert ZeroAddress();
+        // Privilege separation: the sequencer and the fault-proof game are
+        // distinct principals (one submits roots, the other adjudicates).
+        if (_sequencer == _faultProofGame) revert SequencerIsFaultProofGame();
         // Bond must be > 0 — otherwise slashing is meaningless and
         // a misbehaving sequencer pays no cost on detection.
         if (_bond == 0) revert InvalidBond();

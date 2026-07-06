@@ -23,6 +23,7 @@ and `docs/economic_incentive_analysis.md`.
 | **L1 ingest** | `knomosis-l1-ingest` | L1 event watcher; ABI decoder; re-org tolerance; raw-TCP submitter |
 | **Event subscription** | `knomosis-event-subscribe` | log-tail reader → `extract-events`; bounded-lag eviction |
 | **Indexer** | `knomosis-indexer` | SQLite event indexer; balance / budget / pool views |
+| **Gateway** | `knomosis-gateway` | HTTP/JSON + SSE BFF fronting host+subscribe+indexer for the Licio client (reads / submit / event stream); fail-closed bearer auth |
 | **L1 contracts** | `solidity/src/contracts/` (11) | bridge custody, state-root submission, fault-proof game, sequencer stake, identity registry, step-VM, disaster-recovery multisig, migration |
 | **Runtime CLI** | `knomosis` / `knomosis-replay` | bootstrap, replay, event extraction |
 
@@ -98,9 +99,15 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       margin, FaultProofGame 7 551 B, all others well under), so the
       production contracts are genuinely deployable; only the test
       bundler needs the accommodation.
-- [ ] `make testnet-acceptance` passes against the *deployed* contracts
-      on a real RPC (not just the local devnet) — see the `Deployer`
-      bundler note above.
+- [ ] `make deploy-sepolia` (the unified non-bundling `DeploySepolia.s.sol`)
+      deploys the full nine-contract suite, source-verifies on Etherscan, and
+      emits `deployments/sepolia.json` against a real Sepolia RPC.  This is the
+      recommended path: unlike the F.3 `TestnetAcceptance` `Deployer` bundler it
+      needs **no** `--disable-code-size-limit` (every production contract is
+      under EIP-170).  See `docs/sepolia_deployment_runbook.md`.
+- [ ] `make testnet-acceptance` (the F.3 acceptance-assertion script) passes
+      against the deployed contracts (needs `--disable-code-size-limit` for the
+      CREATE3 bundler harness — see the `Deployer` note above).
 - [ ] The F.1.x cross-stack equivalence + SVC step-VM + SC SMT corpora
       pass against the deployed step-VM / verifiers.
 - [ ] `knomosis-bench` throughput on the target hardware meets the
@@ -130,6 +137,18 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       *enable* it before the pool holds material value (economic
       analysis §4 / IC-6).
 - [ ] Decentralised sequencing path (OQ-H-2) evaluated.
+
+### 3.7 Client integration (Licio / gateway)
+- [ ] `knomosis-gateway` fronting host + event-subscribe + indexer for the
+      Licio BFF (`scripts/knomosis_l2_sepolia_stack.sh` brings up the stack
+      from the deployment manifest).
+- [ ] Gateway auth-token file present + **not** world-readable (fail-closed
+      deny-all without it); reads open the indexer SQLite `SQLITE_OPEN_READ_ONLY`.
+- [ ] Server-to-server via the Licio Hono BFF (bearer token held server-side),
+      OR browser-direct with `--cors-origin http://localhost:5173` + `--tls-listen`.
+- [ ] `/readyz` green (host + event-subscribe + indexer probes) before Licio
+      points at it.  See `docs/sepolia_deployment_runbook.md` §7–§8 and
+      `docs/gateway_runbook.md`.
 
 ## 4. Status & gaps
 

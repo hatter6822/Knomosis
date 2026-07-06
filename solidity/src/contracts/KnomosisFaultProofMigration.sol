@@ -81,6 +81,11 @@ contract KnomosisFaultProofMigration {
     error PredecessorDoesNotReferenceThisMigration();
     error PredecessorEqualsSuccessor();
     error SuccessorNotContract();
+    /// @notice Constructor guard: a zero `deploymentId` would weaken the
+    ///         cross-deployment-replay protection this contract threads into
+    ///         V2's hash-chain bootstrap.  A real handoff always carries the
+    ///         predecessor's non-zero deployment id.
+    error ZeroDeploymentId();
 
     /* ---------------------------------------------------------- */
     /* Constructor                                                */
@@ -104,6 +109,7 @@ contract KnomosisFaultProofMigration {
         // successor; if they're the same address, the migration
         // is degenerate.
         if (_predecessor == _successor) revert PredecessorEqualsSuccessor();
+        if (_deploymentId == bytes32(0)) revert ZeroDeploymentId();
         // Defensive: successor must be a contract.  An EOA
         // successor would mean post-activation, no contract
         // handles disputes — silent failure mode.

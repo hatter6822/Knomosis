@@ -130,14 +130,16 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     // ---- Workstream GP.5.4: BOLD-currency fee-split deposits ----
 
-    /// @notice Constructor guard: a BOLD-enabled deployment passed a
-    ///         `boldTokenAddress` other than the canonical
-    ///         `BOLD_TOKEN_ADDRESS` compile-time pin.  (A deployment
-    ///         that does not support BOLD passes `address(0)`, which
-    ///         disables the BOLD entry point and skips this check.)
+    /// @notice Constructor guard: on MAINNET (chainid 1) a BOLD-enabled
+    ///         deployment passed a `boldTokenAddress` other than the canonical
+    ///         `BOLD_TOKEN_ADDRESS` compile-time pin.  (Off-mainnet an
+    ///         operator-supplied `symbol()`-validated token is accepted
+    ///         instead — see `boldToken`.  A deployment that does not support
+    ///         BOLD passes `address(0)`, which disables the entry point and
+    ///         skips this check.)
     error BoldTokenAddressMismatch(address provided);
-    /// @notice Constructor guard: the pinned BOLD token's `symbol()`
-    ///         returned a string other than `EXPECTED_BOLD_SYMBOL`.
+    /// @notice Constructor guard: the BOLD token's `symbol()` returned a
+    ///         string other than `EXPECTED_BOLD_SYMBOL`.
     ///         Defence-in-depth secondary check behind the address pin.
     error BoldTokenSymbolMismatch(string actualSymbol);
     /// @notice Constructor guard: the pinned BOLD token's `symbol()`
@@ -157,10 +159,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     error BoldNotEnabled();
     /// @notice Constructor guard: on a BOLD-enabled deployment the
     ///         resource map may not register `RESOURCE_ID_BOLD` nor the
-    ///         `BOLD_TOKEN_ADDRESS` — both are auto-bound by the
-    ///         constructor (the `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)`
-    ///         entry is installed automatically), so the deployer's map is
-    ///         for OTHER tokens only.
+    ///         effective BOLD token (`boldToken`) — both are auto-bound by
+    ///         the constructor (the `(RESOURCE_ID_BOLD -> boldToken)` entry
+    ///         is installed automatically), so the deployer's map is for
+    ///         OTHER tokens only.
     error BoldResourceReserved();
     /// @notice Reverts when the generic `depositERC20` entry point is
     ///         called for `RESOURCE_ID_BOLD` on a BOLD-enabled deployment.
@@ -297,11 +299,24 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     uint64 public immutable weiPerBudgetUnitBold;
     /// @notice Whether this deployment opted into the BOLD entry point.
     ///         `true` iff the constructor received a non-zero
-    ///         `boldTokenAddress` (which must then equal the canonical
-    ///         `BOLD_TOKEN_ADDRESS` pin and pass the symbol cross-check).
-    ///         When `false`, `depositBoldWithFee` reverts `BoldNotEnabled`.
-    ///         Workstream GP.5.4.
+    ///         `boldTokenAddress` (which on mainnet must equal the canonical
+    ///         `BOLD_TOKEN_ADDRESS` pin, and on any other chain must be an
+    ///         operator-supplied token that passes the code + symbol
+    ///         cross-check; see `boldToken`).  When `false`,
+    ///         `depositBoldWithFee` reverts `BoldNotEnabled`.  Workstream GP.5.4.
     bool public immutable boldEnabled;
+
+    /// @notice The effective BOLD ERC-20 token this deployment settles on.
+    ///         `address(0)` when BOLD is disabled.  On Ethereum mainnet
+    ///         (chainid 1) this is constrained by the constructor to equal
+    ///         the canonical `BOLD_TOKEN_ADDRESS` pin; on any other chain (a
+    ///         testnet such as Sepolia, or a local devnet) it is the
+    ///         operator-supplied, `symbol()`-validated chain-native BOLD
+    ///         token.  Every runtime BOLD path (deposit, swap, withdrawal,
+    ///         resource binding) resolves the token through this immutable so
+    ///         the contract is chain-portable without weakening the mainnet
+    ///         authenticity pin.  Workstream GP.5.4.
+    address public immutable boldToken;
 
     /// @notice Compile-time fraction (in basis points) of every pool-fee
     ///         deposit that flows to AMM liquidity rather than the free
@@ -330,13 +345,15 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         `depositBoldWithFee` entry point credits the user and the
     ///         gas pool at this resource id.  Workstream GP.5.4.
     /// @dev    When BOLD is enabled the constructor AUTO-BINDS
-    ///         `(RESOURCE_ID_BOLD -> BOLD_TOKEN_ADDRESS)` in the resource
-    ///         map (and reserves both from the deployer's map), so L1 BOLD
+    ///         `(RESOURCE_ID_BOLD -> boldToken)` in the resource map (and
+    ///         reserves both from the deployer's map), so L1 BOLD
     ///         withdrawals via `withdrawWithProof` — which reads
     ///         `_resourceTokens[resourceId]` — always resolve to the
-    ///         canonical BOLD token with no deployer action and no way to
-    ///         misconfigure.  The deposit path itself uses the
-    ///         constant-pinned `BOLD_TOKEN_ADDRESS` directly.
+    ///         effective BOLD token (the `boldToken` immutable) with no
+    ///         deployer action and no way to misconfigure.  The deposit path
+    ///         itself also reads the `boldToken` immutable directly.  (On
+    ///         mainnet `boldToken == BOLD_TOKEN_ADDRESS`; off-mainnet it is
+    ///         the operator-supplied token — see `boldToken`.)
     uint64 public constant RESOURCE_ID_BOLD = 1;
 
     // ---- Fee-split compile-time caps (Workstreams GP.5.1 / GP.5.2).
@@ -407,20 +424,30 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     // ---- BOLD constitutional pins (Workstream GP.5.4) ----
 
-    /// @notice Compile-time pin on the canonical Liquity V2 BOLD token
-    ///         address.  A BOLD-enabled deployment's constructor reverts
-    ///         (`BoldTokenAddressMismatch`) if the deployer passes any
-    ///         other address; the `depositBoldWithFee` entry point only
-    ///         ever pulls from / credits this address.
-    /// @dev    Constitutional pin; changing it is a Genesis-Plan §13.6
-    ///         amendment (two-reviewer rule) and is pinned at runtime by
-    ///         `BridgeFeeSplitBold.t.sol::test_boldConstants_pinned`.
+    /// @notice Compile-time pin on the canonical Ethereum-MAINNET Liquity V2
+    ///         BOLD token address.  On mainnet (chainid 1) a BOLD-enabled
+    ///         deployment's constructor reverts (`BoldTokenAddressMismatch`)
+    ///         if the deployer passes any other address — the mainnet
+    ///         authenticity guard is unconditional.  On any OTHER chain (a
+    ///         testnet such as Sepolia, or a local devnet) there is no
+    ///         canonical mainnet BOLD, so the operator supplies a chain-native
+    ///         BOLD token that is authenticated by the code-presence +
+    ///         `symbol() == "BOLD"` cross-check instead; the effective token
+    ///         is then held in the `boldToken` immutable and every runtime
+    ///         BOLD path resolves through it.
+    /// @dev    Constitutional MAINNET pin; changing the VALUE is a Genesis-Plan
+    ///         §13.6 amendment (two-reviewer rule) and is pinned at runtime by
+    ///         `BridgeFeeSplitBold.t.sol::test_boldConstants_pinned`.  The
+    ///         chain-conditional relaxation (mainnet-pinned, testnet
+    ///         operator-supplied) is itself a §13.6 amendment; see
+    ///         `docs/deployment_parameters.md` §5.
     address public constant BOLD_TOKEN_ADDRESS = 0x6440f144b7e50D6a8439336510312d2F54beB01D;
 
     /// @notice Compile-time pin on the expected BOLD token symbol.  A
-    ///         BOLD-enabled deployment's constructor cross-checks
-    ///         `BOLD_TOKEN_ADDRESS.symbol()` against this string
-    ///         (defence-in-depth behind the address pin).
+    ///         BOLD-enabled deployment's constructor cross-checks the
+    ///         effective `boldToken.symbol()` against this string
+    ///         (defence-in-depth behind the address check — and the sole
+    ///         authenticity check off-mainnet, where there is no address pin).
     /// @dev    Constitutional pin; changing it is a Genesis-Plan §13.6
     ///         amendment (two-reviewer rule) and is pinned at runtime by
     ///         `BridgeFeeSplitBold.t.sol::test_boldConstants_pinned`.
@@ -628,7 +655,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         returns `address(0)`).  Read-only introspection of the
     ///         immutable resource map; also lets off-chain consumers
     ///         confirm the GP.5.4 auto-bound `(RESOURCE_ID_BOLD ->
-    ///         BOLD_TOKEN_ADDRESS)` entry on a BOLD-enabled deployment.
+    ///         boldToken)` entry on a BOLD-enabled deployment.
     function resourceToken(uint64 resourceId) external view returns (address) {
         return _resourceTokens[resourceId];
     }
@@ -678,8 +705,10 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint64 weiPerBudgetUnitEth;
         // Workstream GP.5.4 BOLD parameters.  `boldTokenAddress ==
         // address(0)` opts OUT of BOLD (disables the entry point and
-        // skips the BOLD construction checks); any non-zero value must
-        // equal the canonical `BOLD_TOKEN_ADDRESS` pin.  `weiPerBudgetUnitBold`
+        // skips the BOLD construction checks); a non-zero value is
+        // chain-conditional (§13.6): on mainnet it must equal the canonical
+        // `BOLD_TOKEN_ADDRESS` pin, off-mainnet it is an operator-supplied
+        // `symbol()`-validated token (see `boldToken`).  `weiPerBudgetUnitBold`
         // is validated (and used) only when BOLD is enabled.
         uint64 weiPerBudgetUnitBold;
         address boldTokenAddress;
@@ -724,15 +753,27 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         that the test suite would not catch until a slash
     ///         was attempted.
     error ZeroSequencerStake();
+    /// @notice Constructor guard: `disputeWindowBlocks` is zero.  A zero
+    ///         window finalises every state root in its submission block and
+    ///         neuters the open-dispute stake lock, removing the fault-proof
+    ///         challenge window entirely.
+    error ZeroDisputeWindow();
+    /// @notice Constructor guard: `maxAttestationStaleBlocks` is zero.  A
+    ///         zero staleness window trips the `AttestationStale` automatic
+    ///         circuit breaker on the block after the first state-root
+    ///         submission, bricking every state-shaping entry point.
+    error ZeroMaxAttestationStaleBlocks();
 
     constructor(ConstructorArgs memory args) {
         // ---- Sanity: dispute window must dominate redemption window
         if (args.disputeWindowBlocks < args.maxRedemptionWindowBlocks) {
             revert InvariantViolation_DisputeWindowVsRedemption();
         }
+        if (args.disputeWindowBlocks == 0) revert ZeroDisputeWindow();
         if (args.attestor == address(0)) revert NotAttestor();
         if (args.disputeVerifier == address(0)) revert NotDisputeVerifier();
         if (args.sequencerStake == address(0)) revert ZeroSequencerStake();
+        if (args.maxAttestationStaleBlocks == 0) revert ZeroMaxAttestationStaleBlocks();
 
         // ---- Fee-split parameter validation (Workstream GP.5.1) ----
         // All three immutables are validated at deploy time; once past
@@ -763,10 +804,12 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         if (args.ammDisasterRecovery == address(this)) revert AmmRoleIsBridge();
 
         // ---- BOLD opt-in validation (Workstream GP.5.4) ----
-        // A deployment opts into the BOLD entry point by passing the
-        // canonical BOLD_TOKEN_ADDRESS; passing address(0) disables BOLD
-        // (so the bridge still deploys on chains without BOLD, and every
-        // pre-GP.5.4 ETH-only deployment shape keeps working unchanged).
+        // A deployment opts into the BOLD entry point by passing a non-zero
+        // BOLD token (on mainnet the canonical BOLD_TOKEN_ADDRESS, off-mainnet
+        // an operator-supplied symbol-validated token); passing address(0)
+        // disables BOLD (so the bridge still deploys on chains without BOLD,
+        // and every pre-GP.5.4 ETH-only deployment shape keeps working
+        // unchanged).
         // When BOLD is enabled, the address pin is the primary
         // authenticity check and the symbol() cross-check is the
         // secondary defence-in-depth check; both must pass, and the
@@ -778,7 +821,18 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // assigning an immutable inside an `if`.
         bool boldEnabled_ = (args.boldTokenAddress != address(0));
         if (boldEnabled_) {
-            if (args.boldTokenAddress != BOLD_TOKEN_ADDRESS) {
+            // Chain-conditional authenticity pin.  On Ethereum mainnet
+            // (chainid 1) the BOLD token MUST be the canonical constitutional
+            // `BOLD_TOKEN_ADDRESS` — the production guard is preserved
+            // byte-for-byte (on mainnet `boldToken == BOLD_TOKEN_ADDRESS` and
+            // every BOLD path is identical to the pre-amendment contract).
+            // On any OTHER chain (a testnet such as Sepolia, or a local
+            // devnet) there is no canonical mainnet BOLD, so the operator
+            // supplies a chain-native BOLD token, authenticated by the
+            // retained code-presence + `symbol() == "BOLD"` cross-check
+            // below.  This keeps the contract chain-portable without weakening
+            // the mainnet pin.  See docs/deployment_parameters.md §5.
+            if (block.chainid == 1 && args.boldTokenAddress != BOLD_TOKEN_ADDRESS) {
                 revert BoldTokenAddressMismatch(args.boldTokenAddress);
             }
             if (args.weiPerBudgetUnitBold < MIN_WEI_PER_BUDGET_UNIT) {
@@ -896,6 +950,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // deployment this is whatever the deployer passed (typically 0).
         weiPerBudgetUnitBold = args.weiPerBudgetUnitBold;
         boldEnabled = boldEnabled_;
+        // The effective BOLD token (address(0) when disabled).  On mainnet
+        // this equals BOLD_TOKEN_ADDRESS (enforced above); off-mainnet it is
+        // the operator-supplied, symbol-validated token.  Every runtime BOLD
+        // path reads this immutable rather than the mainnet constant.
+        boldToken = args.boldTokenAddress;
         // Workstream GP.11.1 — validated `<= MAX_AMM_SEED_RATIO_BPS` above.
         // `ammReserveEth` / `ammReserveBold` are mutable state and start at
         // 0 (the implicit default); they are seeded only on deposit
@@ -942,7 +1001,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
                     revert DuplicateResourceToken(tok);
                 }
             }
-            // BOLD reserves RESOURCE_ID_BOLD + BOLD_TOKEN_ADDRESS
+            // BOLD reserves RESOURCE_ID_BOLD + the effective `boldToken`
             // (Workstream GP.5.4).  On a BOLD-enabled deployment both are
             // auto-bound below, so the deployer's map is for OTHER tokens
             // only: registering resourceId 1 (any token) or BOLD at any id
@@ -952,7 +1011,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             // token) and BOLD -> id != 1 (two ids mapping to BOLD).  (When
             // BOLD is disabled, resourceId 1 is an ordinary ERC-20 slot and
             // this guard is inert.)
-            if (boldEnabled_ && (rid == RESOURCE_ID_BOLD || tok == BOLD_TOKEN_ADDRESS)) {
+            if (boldEnabled_ && (rid == RESOURCE_ID_BOLD || tok == args.boldTokenAddress)) {
                 revert BoldResourceReserved();
             }
             _resourceTokens[rid] = tok;
@@ -963,10 +1022,11 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // guard above guarantees the deployer left resourceId 1 free, so
         // this is the sole writer of that slot: BOLD withdrawals via
         // `withdrawWithProof` (which reads `_resourceTokens[resourceId]`)
-        // always resolve to the canonical BOLD token, with no deployer
-        // action required and no way to misconfigure.
+        // always resolve to the effective BOLD token (the `boldToken`
+        // immutable), with no deployer action required and no way to
+        // misconfigure.
         if (boldEnabled_) {
-            _resourceTokens[RESOURCE_ID_BOLD] = BOLD_TOKEN_ADDRESS;
+            _resourceTokens[RESOURCE_ID_BOLD] = args.boldTokenAddress;
             _resourceRegistered[RESOURCE_ID_BOLD] = true;
         }
     }
@@ -1263,7 +1323,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         resource-generic `_registerDepositWithFee` verbatim, so the
     ///         BOLD receipt is byte-identical in shape to the ETH receipt
     ///         save for `resourceId = RESOURCE_ID_BOLD` and
-    ///         `token = BOLD_TOKEN_ADDRESS`.  Carries `nonReentrant` +
+    ///         `token = boldToken`.  Carries `nonReentrant` +
     ///         `circuitOpen` + the per-currency `boldCircuitOpen` breaker
     ///         (GP.5.5), and `_registerDepositWithFee` additionally enforces
     ///         the per-BOLD `boldTvlCap`.
@@ -1287,7 +1347,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // transfers.  This transfer is the only external call and is
         // guarded by `nonReentrant`; it precedes every state mutation
         // (mirroring `depositERC20`).
-        IERC20 bold = IERC20(BOLD_TOKEN_ADDRESS);
+        IERC20 bold = IERC20(boldToken);
         uint256 balBefore = bold.balanceOf(address(this));
         bold.safeTransferFrom(msg.sender, address(this), amount);
         uint256 balAfter = bold.balanceOf(address(this));
@@ -1332,7 +1392,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         }
 
         _registerDepositWithFee(
-            RESOURCE_ID_BOLD, BOLD_TOKEN_ADDRESS, userAmount, poolAmount, budgetGrant
+            RESOURCE_ID_BOLD, boldToken, userAmount, poolAmount, budgetGrant
         );
     }
 
@@ -1720,7 +1780,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
             // mirroring `depositBoldWithFee`.  This `safeTransferFrom` is the
             // only call before the reserve update and is `nonReentrant`-
             // guarded; the post-pull reserve read is therefore stable.
-            IERC20 bold = IERC20(BOLD_TOKEN_ADDRESS);
+            IERC20 bold = IERC20(boldToken);
             uint256 balBefore = bold.balanceOf(address(this));
             bold.safeTransferFrom(msg.sender, address(this), amountIn);
             uint256 balAfter = bold.balanceOf(address(this));
@@ -1784,7 +1844,7 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         // ---- Interactions ----
         if (ethIn) {
             // Send the BOLD output to the caller.
-            IERC20(BOLD_TOKEN_ADDRESS).safeTransfer(msg.sender, amountOut);
+            IERC20(boldToken).safeTransfer(msg.sender, amountOut);
         } else {
             // Send the ETH output to the caller.  Reserves are already
             // updated and `nonReentrant` is held, so a re-entrant recipient
