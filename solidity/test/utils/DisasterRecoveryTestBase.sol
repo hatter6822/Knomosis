@@ -32,25 +32,28 @@ abstract contract DisasterRecoveryTestBase is AmmTestBase {
         s[4] = SIGNER_BACKUP;
     }
 
-    /// @notice Deploy the production wiring: the multisig is constructed
-    ///         FIRST against the bridge's predicted CREATE address, then
-    ///         the bridge pins `ammDisasterRecovery = address(multisig)` —
-    ///         the same predicted-address pre-wiring pattern production
-    ///         deployments use for `KnomosisMigration`.
+    /// @notice Deploy the production wiring with the immutable cycle broken
+    ///         BRIDGE-FIRST: the bridge is constructed first (so the multisig
+    ///         sees a code-bearing bridge — the multisig now rejects a codeless
+    ///         bridge via `BridgeHasNoCode`), binding the multisig's PREDICTED
+    ///         CREATE address as `ammDisasterRecovery` (the bridge does not
+    ///         code-check that role), then the multisig binds the real bridge.
+    ///         This is the same predicted-address pre-wiring pattern
+    ///         production deployments (`DeploySepolia.s.sol`) use.
     function _deployWired()
         internal
         returns (KnomosisAmmDisasterRecoveryMultisig multisig, KnomosisBridge bridge)
     {
         _etchBold();
-        // The multisig deploy consumes one nonce, so the bridge lands at
-        // nonce + 1.
-        address predictedBridge =
+        // The bridge deploy consumes one nonce, so the multisig lands at
+        // nonce + 1; the bridge binds that predicted multisig address.
+        address predictedMultisig =
             vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        multisig = new KnomosisAmmDisasterRecoveryMultisig(predictedBridge, _signerSet(), 3);
         KnomosisBridge.ConstructorArgs memory args = _boldEnabledArgs();
-        args.ammDisasterRecovery = address(multisig);
+        args.ammDisasterRecovery = predictedMultisig;
         bridge = new KnomosisBridge(args);
-        assertEq(address(bridge), predictedBridge, "bridge landed at the predicted address");
+        multisig = new KnomosisAmmDisasterRecoveryMultisig(address(bridge), _signerSet(), 3);
+        assertEq(address(multisig), predictedMultisig, "multisig landed at the predicted address");
         assertEq(bridge.ammDisasterRecovery(), address(multisig), "multisig holds the role");
     }
 

@@ -30,6 +30,16 @@ contract KnomosisAmmDisasterRecoveryMultisigTest is DisasterRecoveryTestBase {
     /// @dev Local copy of the bridge event for `vm.expectEmit`.
     event AmmDisabled(uint256 timestamp, uint256 reserveEth, uint256 reserveBold);
 
+    /// @dev The constructor-validation cases pass the placeholder bridge
+    ///      `address(0xB81D6E)`; give it code so the multisig's new
+    ///      `BridgeHasNoCode` guard passes and each case still exercises its
+    ///      intended threshold / signer-hygiene revert (or success).  A real
+    ///      bridge is not needed here — these cases never CALL the bridge.
+    function setUp() public override {
+        super.setUp();
+        vm.etch(address(0xB81D6E), hex"00");
+    }
+
     // ------------------------------------------------------------------
     // Constructor validation (the 3-of-N floor and signer-set hygiene)
     // ------------------------------------------------------------------

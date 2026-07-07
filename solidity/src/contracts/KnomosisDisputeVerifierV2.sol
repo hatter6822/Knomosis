@@ -157,6 +157,11 @@ contract KnomosisDisputeVerifierV2 is ReentrancyGuard {
         if (_faultProofGame == address(0)) revert ZeroAddress();
         if (_stateRootSubmission == address(0)) revert ZeroAddress();
         if (_bridge == address(0)) revert ZeroAddress();
+        // `sequencerStake` is the slash target (V1 zero-checks the same
+        // field) and `attestor` is the bridge's off-chain signer; both are
+        // stored immutably, so a zero here is a permanent wiring fault.
+        if (_sequencerStake == address(0)) revert ZeroAddress();
+        if (_attestor == address(0)) revert ZeroAddress();
         if (_quorumThreshold == 0) revert QuorumThresholdZero();
         if (_quorumThreshold > _approvedAdjudicators.length)
             revert QuorumThresholdAboveSetSize();
@@ -377,6 +382,8 @@ contract KnomosisDisputeVerifierV2 is ReentrancyGuard {
         require(faultProofGame != address(0), "ZeroFaultProofGame");
         require(stateRootSubmission != address(0), "ZeroStateRootSubmission");
         require(bridge != address(0), "ZeroBridge");
+        require(sequencerStake != address(0), "ZeroSequencerStake");
+        require(attestor != address(0), "ZeroAttestor");
         require(quorumThreshold > 0, "QuorumThresholdZero");
         require(quorumThreshold <= approvedAdjudicators.length,
                 "QuorumThresholdAboveSetSize");

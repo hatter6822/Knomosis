@@ -11,6 +11,11 @@ optimizer_runs = 200
 via_ir = true
 fs_permissions = [
     { access = "read-write", path = "./test/fixtures" },
+    # DeploySepolia.s.sol writes the deployment manifest (addresses +
+    # chainId + deploymentId + params) here for the L2 daemon stack, the
+    # gateway, and the Licio client to consume.  See
+    # docs/sepolia_deployment_runbook.md.
+    { access = "read-write", path = "./deployments" },
     { access = "read", path = "./test/CrossCheck/fixtures" },
     { access = "read", path = "./test/goldens" }
 ]
@@ -33,3 +38,24 @@ bracket_spacing = false
 int_types = "long"
 quote_style = "double"
 number_underscore = "thousands"
+
+# ---------------------------------------------------------------------------
+# Public-testnet deployment (Sepolia) — see docs/sepolia_deployment_runbook.md.
+#
+# RPC aliases resolved from the environment so no endpoint/secret is
+# committed.  `forge script --rpc-url sepolia ...` expands `sepolia` to
+# $SEPOLIA_RPC_URL.  The `anvil` alias is the local live-node fallback for
+# `make deploy-local`.
+# ---------------------------------------------------------------------------
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"
+sepolia = "${SEPOLIA_RPC_URL}"
+anvil = "http://127.0.0.1:8545"
+
+# Source-verification on Etherscan.  A single Etherscan v2 API key
+# ($ETHERSCAN_API_KEY) verifies on every chain; the chain id selects the
+# network.  Used by `forge script --verify` and `forge verify-contract
+# --chain sepolia`.
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}", chain = 1 }
+sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 11155111 }

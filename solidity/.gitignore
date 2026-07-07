@@ -29,6 +29,13 @@ test/fixtures/*.json
 snapshots/
 .gas-snapshot
 
+# Deployment manifests written by DeploySepolia.s.sol.  Local / dry-run
+# manifests (anvil, unknown chains) are scratch and never committed; a real
+# testnet/mainnet manifest may be committed (`git add -f deployments/sepolia.json`)
+# or published to your ops store — see docs/sepolia_deployment_runbook.md §5.
+deployments/*.json
+!deployments/.gitkeep
+
 # Editor / OS noise
 .vscode/
 .idea/

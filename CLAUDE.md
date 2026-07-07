@@ -103,6 +103,22 @@ cd solidity && make snapshot-gas-selftest     # self-tests for the GP.11.9 gate
 cd solidity && make testnet-acceptance-dryrun # F.3 in-memory dry-run
 cd solidity && make devnet                    # F.3 LIVE anvil deploy +
                                               # verify vs deployed contracts
+cd solidity && make deploy-sepolia-dryrun     # unified full-suite deploy
+                                              # (in-memory; emits the manifest)
+cd solidity && make deploy-sepolia            # REAL Sepolia broadcast + Etherscan
+                                              # verify (needs SEPOLIA_RPC_URL /
+                                              # a signer [KNOMOSIS_DEPLOYER_ACCOUNT
+                                              # keystore, or PRIVATE_KEY] /
+                                              # ETHERSCAN_API_KEY);
+                                              # non-bundling, no
+                                              # --disable-code-size-limit; emits
+                                              # deployments/sepolia.json.  See
+                                              # docs/sepolia_deployment_runbook.md
+cd solidity && make deploy-local              # full BOLD+AMM suite vs live anvil
+
+# Bring up the L2 daemon stack against a Sepolia manifest + expose the gateway
+# for the Licio BFF (docs/sepolia_deployment_runbook.md).
+./scripts/knomosis_l2_sepolia_stack.sh
 
 # Keccak-linked cross-stack verification (Lean <-> EVM byte-equivalence).
 ./scripts/verify_keccak_crossstack.sh
@@ -729,7 +745,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.9.1`) — the single
+the `lakefile.lean` `version` field (currently `0.10.0`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -745,7 +761,7 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 050 | ~150 | `lake test` |
 | Rust | ~1 990 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~867 passed | 58 forge suites | `cd solidity && forge test` |
+| Solidity | ~878 passed | 58 forge suites | `cd solidity && forge test` |
 
 Only monotonic growth is enforced — no global gate pins the count.
 

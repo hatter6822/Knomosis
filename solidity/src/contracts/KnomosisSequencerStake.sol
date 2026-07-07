@@ -34,6 +34,12 @@ contract KnomosisSequencerStake is IKnomosisSequencerStake, ReentrancyGuard {
     error SlashRatioOutOfRange();
     error ZeroAddress();
     error EthSendFailed();
+    /// @notice Constructor guard: a peer address (`disputeVerifier` /
+    ///         `bridge`) has no deployed code.  Both are deployed before
+    ///         this contract in every legitimate order (backward refs), so a
+    ///         codeless peer is a wiring mistake — reject it at construction
+    ///         (defence-in-depth beyond the post-deploy `assertConsistent()`).
+    error NotAContract();
 
     // ------------------------------------------------------------------
     // Immutable parameters
@@ -94,6 +100,14 @@ contract KnomosisSequencerStake is IKnomosisSequencerStake, ReentrancyGuard {
         ) {
             revert ZeroAddress();
         }
+        // Defence-in-depth: `disputeVerifier` and `bridge` are both deployed
+        // BEFORE this contract in every legitimate order (the cluster-A cycle
+        // deploys Bridge -> DisputeVerifier -> SequencerStake), so a codeless
+        // peer here is a wiring mistake, not a deployable cycle.  Reject it at
+        // construction.  (The `sequencer` and `burnAddress` are EOAs, so only
+        // the zero-check above applies to them.)
+        if (_disputeVerifier.code.length == 0) revert NotAContract();
+        if (_bridge.code.length == 0) revert NotAContract();
         // Cross-contract back-reference (verifier.sequencerStake() ==
         // address(this)) is checked via the post-deploy
         // `assertConsistent()` view, not in the constructor.  Same

@@ -221,22 +221,93 @@ compute_sha256() {
   fi
 }
 
+# Is `dir` writable, or — if it does not exist yet — creatable under its
+# nearest existing ancestor?  Walks up to the first path that exists and
+# reports whether THAT is writable.  Used to choose a system (/usr/local,
+# needs root) vs. a user-writable install location, so a non-root host never
+# silently fails a `mkdir /usr/local/...` and drifts to a stray toolchain.
+_path_writable_or_creatable() {
+  local d="$1"
+  while [ ! -e "${d}" ] && [ -n "${d}" ] && [ "${d}" != "/" ]; do
+    d="$(dirname "${d}")"
+  done
+  [ -w "${d}" ]
+}
+
+# -------- Persist toolchain PATH (the anti-drift core) --------
+#
+# The toolchains are installed above, but on a LOCAL checkout nothing puts
+# them on the agent's / a new shell's PATH (the SessionStart hook only
+# persists via $CLAUDE_ENV_FILE, which is set on Claude-Code-on-the-web but
+# NOT locally).  This function persists an AUTO-DETECTING activation block so
+# every new shell (and the Claude Code shell snapshot) has lake / forge /
+# cast / solc / cargo — regardless of whether the pinned toolchain landed
+# under /usr/local (root) or $HOME/.local (non-root), and preferring the
+# pinned Foundry over any stray foundryup.  Mirrors how rustup / foundryup
+# modify the profile.
+KNX_ENV_MARKER="# >>> Knomosis toolchains (managed by scripts/setup.sh) >>>"
+
+_toolchain_activation_block() {
+  cat <<'BLOCK'
+# >>> Knomosis toolchains (managed by scripts/setup.sh) >>>
+[ -f "$HOME/.elan/env" ] && . "$HOME/.elan/env"      # Lean: lake / lean / elan
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"    # Rust: cargo / rustup
+# Foundry (forge/cast/anvil/chisel) — prefer the pinned setup.sh install over
+# any stray foundryup; the LAST prepend wins, so iterate lowest-priority first.
+for _knx_fb in "$HOME/.foundry/bin" "$HOME/.local/foundry/bin" /usr/local/foundry/bin; do
+  [ -d "$_knx_fb" ] && case ":$PATH:" in *":$_knx_fb:"*) ;; *) PATH="$_knx_fb:$PATH" ;; esac
+done
+export PATH; unset _knx_fb
+# solc: foundry.toml pins /usr/local/bin/solc; FOUNDRY_SOLC overrides it when
+# the user-local ($HOME/.local/bin/solc) fallback was used.
+for _knx_solc in "$HOME/.local/bin/solc" /usr/local/bin/solc; do
+  [ -x "$_knx_solc" ] && { export FOUNDRY_SOLC="$_knx_solc"; break; }
+done
+unset _knx_solc
+# <<< Knomosis toolchains <<<
+BLOCK
+}
+
+persist_toolchain_env() {
+  local block; block="$(_toolchain_activation_block)"
+  # Web sandbox: append to the session env file (sourced per tool shell).
+  if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    printf '%s\n' "${block}" >> "${CLAUDE_ENV_FILE}"
+    log_elapsed "toolchain PATH persisted to \$CLAUDE_ENV_FILE"
+  fi
+  # Local: idempotently add to ~/.bashrc (skip if the marker is already there,
+  # or if the operator opts out via KNX_SETUP_NO_MODIFY_PATH=1).
+  if [ "${KNX_SETUP_NO_MODIFY_PATH:-0}" != "1" ] && [ -w "${HOME}" ]; then
+    local rc="${HOME}/.bashrc"
+    if [ ! -f "${rc}" ] || ! grep -qF "${KNX_ENV_MARKER}" "${rc}" 2>/dev/null; then
+      printf '\n%s\n' "${block}" >> "${rc}"
+      log_elapsed "toolchain PATH persisted to ${rc} (open a new shell to pick it up)"
+    fi
+  fi
+}
+
 # -------- Solidity toolchain install --------
 #
 # Idempotently installs the Foundry binaries (forge / cast / anvil /
 # chisel) and the solc compiler, then runs the project's
 # `vendor-deps.sh` to fetch the OpenZeppelin + forge-std submodules.
 #
+# Install location: /usr/local (matches the README + CI, needs root) when
+# writable; otherwise a user-writable fallback under $HOME/.local so a
+# NON-ROOT host still gets the EXACT pinned toolchain (this is the class of
+# drift where the user's own foundryup shadows a never-completed system
+# install).  The persisted PATH (see persist_toolchain_env) prepends the
+# pinned dir so it wins over any stray foundryup.
+#
 # Each artefact is content-pinned via SHA-256: a network MITM, an
 # upstream release re-write, or a partial download all surface as a
 # fatal error before the binary is moved into `${install_dir}`.
 #
-# Layout:
-#   /usr/local/foundry/bin/{forge,cast,anvil,chisel}  (matches the
-#                                                       project README)
-#   /usr/local/bin/solc                                 (system PATH)
-#   ${ROOT_DIR}/solidity/lib/{openzeppelin-contracts,forge-std}
-#                                                       (vendored)
+# Layout (system paths when /usr/local is writable — root/CI; else the
+# $HOME/.local user-writable fallback, wired onto PATH by persist_toolchain_env):
+#   {/usr/local | $HOME/.local}/foundry/bin/{forge,cast,anvil,chisel}
+#   {/usr/local/bin | $HOME/.local/bin}/solc
+#   ${ROOT_DIR}/solidity/lib/{openzeppelin-contracts,forge-std}  (vendored)
 #
 # Idempotency: a fast-path check verifies the installed binary's
 # `--version` matches the pinned version.  If yes, the install is
@@ -262,9 +333,20 @@ do_solidity_install() {
       ;;
   esac
   local foundry_url="https://github.com/foundry-rs/foundry/releases/download/${FOUNDRY_VERSION}/foundry_${FOUNDRY_VERSION}_linux_${foundry_archive_arch}.tar.gz"
-  local foundry_install_dir="/usr/local/foundry/bin"
   local solc_url="https://github.com/ethereum/solidity/releases/download/${SOLC_VERSION}/solc-static-linux"
-  local solc_install_path="/usr/local/bin/solc"
+
+  # System paths (root) when writable — matches the README + the CI's
+  # `/usr/local/bin/solc` pin; else a user-writable fallback (no root).
+  local foundry_install_dir solc_install_path
+  if _path_writable_or_creatable "/usr/local/foundry/bin" \
+     && _path_writable_or_creatable "/usr/local/bin"; then
+    foundry_install_dir="/usr/local/foundry/bin"
+    solc_install_path="/usr/local/bin/solc"
+  else
+    foundry_install_dir="${HOME}/.local/foundry/bin"
+    solc_install_path="${HOME}/.local/bin/solc"
+    log_elapsed "note: /usr/local not writable — installing the pinned toolchain under ${HOME}/.local (no root needed)"
+  fi
 
   # ---- Foundry fast-path check ----
   if [ -x "${foundry_install_dir}/forge" ] && \
@@ -342,6 +424,11 @@ do_solidity_install() {
         echo "  got:      ${got_solc_sha}" >&2
         return 1
       fi
+      if ! mkdir -p "$(dirname "${solc_install_path}")"; then
+        rm -f "${tmp_solc}"
+        echo "error: failed to create $(dirname "${solc_install_path}")" >&2
+        return 1
+      fi
       mv "${tmp_solc}" "${solc_install_path}"
       chmod +x "${solc_install_path}"
       log_elapsed "solc ${SOLC_VERSION} installed at ${solc_install_path}"
@@ -350,6 +437,32 @@ do_solidity_install() {
     echo "warning: solc static binary is x86_64-only; ARM users must" >&2
     echo "         build solc from source or install via system pkg" >&2
     echo "         manager (e.g. ethereum/ethereum PPA on Debian)." >&2
+  fi
+
+  # ---- Verify the freshly-installed toolchain runs + is the pin ----
+  # `forge --version` for v1.7.0 prints "... -v1.7.0", so grep the pin string.
+  if ! "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION}"; then
+    echo "error: forge at ${foundry_install_dir} is not the pinned ${FOUNDRY_VERSION} (or fails to run)" >&2
+    return 1
+  fi
+  if [ -x "${solc_install_path}" ] \
+     && ! "${solc_install_path}" --version 2>/dev/null | grep -q "${SOLC_VERSION#v}"; then
+    echo "error: solc at ${solc_install_path} is not ${SOLC_VERSION} (or fails to run)" >&2
+    return 1
+  fi
+
+  # ---- anvil / glibc capability check ----
+  # anvil (modern Foundry) links glibc >= 2.35.  On an older host (e.g. RHEL 9
+  # / glibc 2.34) forge / cast / solc still work, but anvil — and the
+  # anvil-backed `make devnet` / `deploy-local` — will not run.  Detect it once
+  # and warn, rather than let it surface later as a cryptic runtime error.
+  if [ -x "${foundry_install_dir}/anvil" ] \
+     && ! "${foundry_install_dir}/anvil" --version >/dev/null 2>&1; then
+    log_elapsed "warning: anvil does not run on this host (its glibc is < 2.35)."
+    log_elapsed "         forge / cast / solc are UNAFFECTED — only 'make devnet' and"
+    log_elapsed "         'make deploy-local' (which spawn anvil) are unavailable here."
+    log_elapsed "         Use 'make deploy-sepolia-dryrun' / 'forge script' (in-memory),"
+    log_elapsed "         or a glibc >= 2.35 host / container, for anvil-backed flows."
   fi
 
   # ---- Vendor OpenZeppelin + forge-std ----
@@ -363,6 +476,11 @@ do_solidity_install() {
   else
     log_elapsed "skipping vendor-deps.sh (script not found or not executable)"
   fi
+
+  # Persist the toolchain PATH so a NEW shell / the Claude Code snapshot picks
+  # up lake / forge / cast / solc / cargo without a manual `source` (the core
+  # fix for setup drift on a local checkout).
+  persist_toolchain_env
 
   log_elapsed "Solidity environment is ready"
 }

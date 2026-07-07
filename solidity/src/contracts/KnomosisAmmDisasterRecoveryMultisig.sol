@@ -130,6 +130,13 @@ contract KnomosisAmmDisasterRecoveryMultisig {
 
     /// @notice Constructor guard: the bridge address is zero.
     error ZeroBridge();
+    /// @notice Constructor guard: the bridge address has no deployed code.
+    ///         The multisig is useless against an EOA/undeployed bridge (its
+    ///         only action, `bridge.emergencyDisableAmm()`, would silently
+    ///         succeed against a codeless address), and the bridge is deployed
+    ///         before this multisig in every legitimate order, so reject a
+    ///         codeless bridge at construction.
+    error BridgeHasNoCode();
     /// @notice Constructor guard: the threshold is below the GP.11.10
     ///         3-of-N floor (`MIN_DISABLE_THRESHOLD`).
     error ThresholdBelowMinimum(uint256 threshold);
@@ -199,6 +206,7 @@ contract KnomosisAmmDisasterRecoveryMultisig {
     ///                   `MIN_DISABLE_THRESHOLD <= threshold_ <= signers_.length`.
     constructor(address bridge_, address[] memory signers_, uint256 threshold_) {
         if (bridge_ == address(0)) revert ZeroBridge();
+        if (bridge_.code.length == 0) revert BridgeHasNoCode();
         if (threshold_ < MIN_DISABLE_THRESHOLD) revert ThresholdBelowMinimum(threshold_);
         if (threshold_ > signers_.length) {
             revert ThresholdExceedsSignerCount(threshold_, signers_.length);

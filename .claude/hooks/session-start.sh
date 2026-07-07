@@ -72,21 +72,18 @@ else
   exit 1
 fi
 
-# ---- Persist PATH for the session ------------------------------------
-# Done BEFORE the network-dependent Rust fetch so every toolchain is on
-# the agent's $PATH even if `cargo fetch` later fails on a transient
-# network issue (the agent can re-fetch on demand).  `lake` / `lean`
-# come from elan's env file; `forge` is at /usr/local/foundry/bin (the
-# pinned location in `solidity/README.md`); `cargo` / `rustup` are at
-# $HOME/.cargo/bin.
-if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  cat >> "${CLAUDE_ENV_FILE}" <<EOF
-export PATH="/usr/local/foundry/bin:\${HOME}/.cargo/bin:\$PATH"
-if [ -f "\${HOME}/.elan/env" ]; then
-  source "\${HOME}/.elan/env"
-fi
-EOF
-fi
+# ---- PATH persistence is handled inside setup.sh ---------------------
+# `setup.sh` (run above) persists an AUTO-DETECTING toolchain activation to
+# BOTH `$CLAUDE_ENV_FILE` (this web session, when set) AND `~/.bashrc`
+# (idempotently — for a LOCAL checkout + the Claude Code shell snapshot),
+# picking up `lake` / `lean` (elan), `forge` / `cast` / `solc` (Foundry,
+# under /usr/local OR $HOME/.local), and `cargo` / `rustup`, and setting
+# `FOUNDRY_SOLC` for the user-local fallback.  See `persist_toolchain_env`
+# there.  This closes the drift where `$CLAUDE_ENV_FILE` is unset on a local
+# checkout, so nothing put the toolchains on the agent's `$PATH`.
+#
+# (The hook's own shell already has cargo on PATH from the export above, so
+# the `cargo fetch` below runs regardless of the persisted profile.)
 
 # ---- Rust ------------------------------------------------------------
 # `cargo` inside runtime/ honours runtime/rust-toolchain.toml (stable

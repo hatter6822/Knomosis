@@ -166,6 +166,14 @@ crates against `Cargo.lock`. An outbound network policy must permit
 `index.crates.io`, and `static.crates.io` (see
 [§5.7](#57-remote--claude-code-on-the-web-environments)).
 
+**For a public-testnet deployment ([§10.5](#105-deploying-to-a-public-testnet-sepolia)).**
+The build/test stacks above need nothing extra, but *broadcasting* to Sepolia
+additionally requires a **funded Sepolia deployer EOA** private key (~0.5
+test-ETH covers the nine deploys), a **Sepolia RPC endpoint**
+(`SEPOLIA_RPC_URL`), and — for source-verification — an **Etherscan API key**
+(`ETHERSCAN_API_KEY`). See [§5.8](#58-deploy-time-environment-variables) for the
+env vars and `docs/sepolia_deployment_runbook.md` for the full procedure.
+
 **Editor.** Any editor works, but the Lean experience is best with the official
 **Lean 4 VS Code extension** (or the JetBrains/Emacs/Neovim LSP clients). The
 language server consumes the same `lake`-built `.olean` files as the CLI, so a
@@ -206,7 +214,22 @@ trust story:
    you can switch toolchains later.
 5. Installs the Solidity toolchain: Foundry v1.7.0 + solc 0.8.20 (each
    checksum-pinned) and vendors OpenZeppelin + forge-std via
-   `solidity/scripts/vendor-deps.sh`.
+   `solidity/scripts/vendor-deps.sh`.  These install to `/usr/local`
+   (matching the README + CI) when it is writable, and otherwise fall back to
+   `$HOME/.local` — so a **non-root** host still gets the exact pinned
+   toolchain instead of silently failing on `mkdir /usr/local/...` and
+   drifting to whatever a stray `foundryup` left behind.
+6. **Persists the toolchain PATH** (the anti-drift step): it writes an
+   auto-detecting activation block to `$CLAUDE_ENV_FILE` (the web session,
+   when set) **and** idempotently to `~/.bashrc` (local + the Claude Code
+   shell snapshot), so `lake` / `forge` / `cast` / `solc` / `cargo` are on
+   `PATH` in every new shell — and sets `FOUNDRY_SOLC` when the user-local
+   solc fallback is used.  Opt out with `KNX_SETUP_NO_MODIFY_PATH=1`.
+7. Warns if `anvil` cannot run because its glibc requirement (≥ 2.35) exceeds
+   the host's (e.g. RHEL 9 / glibc 2.34).  `forge` / `cast` / `solc` are
+   unaffected; only the anvil-backed `make devnet` / `make deploy-local` need
+   a newer host — use `make deploy-sepolia-dryrun` / `forge script`
+   (in-memory) otherwise.
 6. Records the binary-integrity snapshot for step 2's future fast-paths.
 
 Every pinned URL/version has a matching SHA-256 constant; **bumping any version
@@ -231,16 +254,22 @@ commands are documented inline in the script next to each constant).
 
 ### 5.4 Activating the toolchains in your shell
 
-After setup, make the tools visible in your current shell:
+`setup.sh` **persists this for you** — it appends an auto-detecting activation
+block to `~/.bashrc` (and to `$CLAUDE_ENV_FILE` on the web env), so a **new**
+shell already has `lake` / `forge` / `cast` / `solc` / `cargo` on `PATH`.  To
+activate them in your *current* shell without opening a new one:
 
 ```bash
-source ~/.elan/env                          # lean, lake, leanc, leanmake
-export PATH="/usr/local/foundry/bin:$PATH"  # forge, cast, anvil, chisel
-# cargo / rustup are at ~/.cargo/bin (add to PATH if not already there)
+source ~/.bashrc     # picks up the setup.sh-managed toolchain block
+# (equivalently, individually: `source ~/.elan/env` + `source ~/.cargo/env`)
 ```
 
-Add the `source ~/.elan/env` line to your shell profile for persistence. On the
-web/remote environment this is handled for you by the SessionStart hook.
+The managed block prepends the pinned Foundry install
+(`/usr/local/foundry/bin` when installed as root, else
+`$HOME/.local/foundry/bin`) ahead of any `foundryup` at `~/.foundry/bin`, and
+sets `FOUNDRY_SOLC` when the user-local solc fallback was used.  On the
+web/remote environment the same persistence is applied via the SessionStart
+hook + `$CLAUDE_ENV_FILE`.
 
 ### 5.5 Per-stack manual setup (when you skip `setup.sh`)
 
@@ -292,6 +321,23 @@ The environment's **network policy** (chosen when the environment was created)
 governs outbound access; the toolchain hosts above must be permitted. The
 options, triggers, and configuration are documented at
 <https://code.claude.com/docs/en/claude-code-on-the-web>.
+
+### 5.8 Deploy-time environment variables
+
+`make deploy-sepolia` (and the L2 stack launcher) are driven by environment
+variables so no endpoint or secret is committed. The `foundry.toml`
+`[rpc_endpoints]` / `[etherscan]` tables resolve the aliases:
+
+| Variable | Used by | Meaning |
+|----------|---------|---------|
+| `SEPOLIA_RPC_URL` | `--rpc-url sepolia` | Sepolia JSON-RPC endpoint |
+| `MAINNET_RPC_URL` | `--rpc-url mainnet` | Mainnet endpoint (mainnet deploys) |
+| `ETHERSCAN_API_KEY` | `--verify` | Etherscan v2 key (verifies on every chain) |
+| `KNOMOSIS_DEPLOYER_ACCOUNT` / `PRIVATE_KEY` | `make deploy-sepolia` | signer: a forge keystore account name (recommended — key stays off argv) or a raw key (fallback, `ps`-visible; shadow testnet only) |
+| `KNOMOSIS_ATTESTOR` / `_SEQUENCER` / `_TREASURY` / `_ADJUDICATOR` / `_BOLD_TOKEN` / … | `DeploySepolia.s.sol` | actor addresses + economics (all have testnet-sane defaults; see the runbook §4.4) |
+
+The full parameter reference is `docs/sepolia_deployment_runbook.md` §4.4 and
+the sizing guidance is `docs/deployment_parameters.md`.
 
 ## 6. The Lean inner development loop
 
@@ -559,6 +605,54 @@ fail-closed property. The two gates differ in strength:
 
 The on-disk frame formats and the full CLI ABI are specified in
 [`abi.md`](abi.md).
+
+### 10.5 Deploying to a public testnet (Sepolia)
+
+`solidity/script/DeploySepolia.s.sol` (via `make deploy-sepolia`) deploys the
+**full nine-contract genesis suite** to Sepolia as individual transactions —
+unlike the F.3 `TestnetAcceptance.s.sol`, which uses the `test/utils/Deployer`
+CREATE3 *bundler* (a 42 KB harness over EIP-170 that needs
+`--disable-code-size-limit`). Every production contract is under the
+24 576-byte cap (largest: `KnomosisBridge`, 17 195 B), so `DeploySepolia` needs
+no code-size accommodation against a real RPC. It breaks the two immutable
+constructor cycles with plain-nonce CREATE prediction, verifies the post-deploy
+invariants (`assertConsistent()` on both clusters, `bridge.migration() ==
+address(0)`, `deploymentId` self-consistency), source-verifies on Etherscan
+(`--verify`), and emits a machine-readable manifest at
+`solidity/deployments/<network>.json`.
+
+```bash
+cd solidity
+make deploy-sepolia-dryrun     # in-memory simulation; writes the manifest
+# real broadcast (needs SEPOLIA_RPC_URL, a signer [KNOMOSIS_DEPLOYER_ACCOUNT keystore
+# or PRIVATE_KEY], ETHERSCAN_API_KEY + actors):
+make deploy-sepolia
+make deploy-local              # full BOLD+AMM suite vs a live anvil (MockBold)
+```
+
+Run the F-1/F-2 trust-binding gates
+([§10.3](#103-deploy-readiness-gates-f-1--f-2--fail-closed-by-design)) in the
+deploy pipeline first, and size the immutable economics with
+`scripts/economic_simulation.py` (see `docs/deployment_parameters.md`). BOLD is
+**chain-conditional**: mainnet requires the canonical `BOLD_TOKEN_ADDRESS` pin;
+Sepolia accepts an operator-supplied `symbol()=="BOLD"` token
+(`KNOMOSIS_BOLD_TOKEN`); unset ⇒ ETH-only.
+
+### 10.6 L2 stack + Licio gateway bring-up
+
+`scripts/knomosis_l2_sepolia_stack.sh` reads the manifest and launches the L2
+daemons (`knomosis-host` → `knomosis-event-subscribe` → `knomosis-indexer` →
+`knomosis-gateway`, plus optional `knomosis-l1-ingest` /
+`knomosis-faultproof-observer`), then prints the gateway URL + bearer token for
+the [Licio](https://github.com/hatter6822/Licio) BFF. Licio (a React PWA + Hono
+BFF, no chain of its own) integrates against the **gateway** HTTP/JSON + SSE API
+(`docs/api/gateway.openapi.yaml`) — reads, `POST /v1/actions` (opaque
+client-signed `SignedAction`s, no key custody), and the `/v1/events/stream` SSE
+feed — server-to-server with the token held in the BFF.
+
+The end-to-end operator procedure, the manifest schema, the gateway endpoint
+map, and the Licio integration checklist live in
+**`docs/sepolia_deployment_runbook.md`**.
 
 ## 11. Coding conventions
 
@@ -936,7 +1030,7 @@ follow the standard tracker workflow.
 
 | Symptom | Likely cause & fix |
 |---------|--------------------|
-| `lake: command not found` | You didn't activate elan: `source ~/.elan/env`. |
+| `lake: command not found`, or `forge` is the wrong version | The toolchain isn't activated in this shell (or a stray `foundryup` is shadowing the pin). `setup.sh` persists an activation block to `~/.bashrc`; run `source ~/.bashrc` or open a new shell. If it was never installed, run `./scripts/setup.sh`. |
 | `setup.sh` aborts with a SHA-256 mismatch on the toolchain | Possible tampering or a partial download. `rm -rf ~/.elan/toolchains/<toolchain-dir>` and re-run `./scripts/setup.sh` to reinstall from a verified archive. |
 | `lake build` link errors about `crti.o` / `crt1.o` | The Lean archive shipped without CRT startup stubs. `setup.sh` tries to repair this; otherwise install your system `libc-dev`. |
 | CI fails the strict-warnings gate but the build "succeeded" locally | A Lean `warning:` (often a missing docstring on a public surface, or an unused variable). Re-run `lake build` and read the warnings — they are merge-blocking. |
@@ -946,7 +1040,8 @@ follow the standard tracker workflow.
 | `deferral_audit` fails | A `TODO:`/`DEFERRED`/`PARTIAL`-class marker. Implement it, or lift it into the debt register and rewrite the comment without deferral language. |
 | `lex_codegen --check` fails | You hand-edited a generated fence or forgot to regenerate. Run `lake exe lex_codegen` and commit. |
 | codemap gate fails | Run `python3 scripts/regenerate_codemaps.py` and commit the result. |
-| `forge build` can't find the pinned solc | `foundry.toml` pins `/usr/local/bin/solc`; install solc 0.8.20 there (or re-run `./scripts/setup.sh`). |
+| `forge build` can't find the pinned solc | `foundry.toml` pins `/usr/local/bin/solc`. Re-run `./scripts/setup.sh` — it installs solc (under `~/.local/bin/solc` on a non-root host) and sets `FOUNDRY_SOLC` to it — then `source ~/.bashrc`. |
+| `anvil` fails: `version 'GLIBC_2.35' not found` | The host glibc is < 2.35 (e.g. RHEL 9 / glibc 2.34); modern Foundry's `anvil` needs ≥ 2.35. `forge` / `cast` / `solc` still work — use `make deploy-sepolia-dryrun` / `forge script` (in-memory) instead of `make devnet` / `deploy-local`, or run anvil on a glibc ≥ 2.35 host / container. |
 | `cargo` builds a different toolchain | Run from inside `runtime/` so `rust-toolchain.toml` (1.83) applies; use `--locked`. |
 | `hash-check` / `verify-check` exit 1 | **Expected** on the default build — they fail closed on the fallback primitives. They flip to 0 only with the production adaptors linked (§10.2/§10.3). |
 | Cross-stack keccak assertions are "skipped" | Expected under the FNV fallback; run `./scripts/verify_keccak_crossstack.sh` to execute them against real keccak. |

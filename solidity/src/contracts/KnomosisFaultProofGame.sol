@@ -201,6 +201,12 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
     /// @notice A pull-payment withdrawal was attempted with nothing
     ///         credited, or its transfer failed.
     error NothingToWithdraw();
+    /// @notice The constructor's `_minChallengeBond` is zero.  A zero
+    ///         minimum bond lets a challenger open a game with nothing at
+    ///         risk (`initiateChallenge` accepts `msg.value == 0`) while
+    ///         still `markDisputed`-locking the honest sequencer's bond —
+    ///         making frivolous challenges free.  Reject it at deploy time.
+    error InvalidBondConfig();
 
     /* ---------------------------------------------------------- */
     /* Constructor                                                */
@@ -235,6 +241,9 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // forces `_bisectionResponseTimeout > 0`).
         if (_bisectionResponseTimeout <= _minBisectionStepInterval)
             revert InvalidTimeoutConfig();
+        // The challenge bond exists to make opening a dispute costly; a zero
+        // minimum would make frivolous challenges free.
+        if (_minChallengeBond == 0) revert InvalidBondConfig();
 
         BISECTION_RESPONSE_TIMEOUT = _bisectionResponseTimeout;
         MIN_CHALLENGE_BOND = _minChallengeBond;
