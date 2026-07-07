@@ -214,7 +214,22 @@ trust story:
    you can switch toolchains later.
 5. Installs the Solidity toolchain: Foundry v1.7.0 + solc 0.8.20 (each
    checksum-pinned) and vendors OpenZeppelin + forge-std via
-   `solidity/scripts/vendor-deps.sh`.
+   `solidity/scripts/vendor-deps.sh`.  These install to `/usr/local`
+   (matching the README + CI) when it is writable, and otherwise fall back to
+   `$HOME/.local` — so a **non-root** host still gets the exact pinned
+   toolchain instead of silently failing on `mkdir /usr/local/...` and
+   drifting to whatever a stray `foundryup` left behind.
+6. **Persists the toolchain PATH** (the anti-drift step): it writes an
+   auto-detecting activation block to `$CLAUDE_ENV_FILE` (the web session,
+   when set) **and** idempotently to `~/.bashrc` (local + the Claude Code
+   shell snapshot), so `lake` / `forge` / `cast` / `solc` / `cargo` are on
+   `PATH` in every new shell — and sets `FOUNDRY_SOLC` when the user-local
+   solc fallback is used.  Opt out with `KNX_SETUP_NO_MODIFY_PATH=1`.
+7. Warns if `anvil` cannot run because its glibc requirement (≥ 2.35) exceeds
+   the host's (e.g. RHEL 9 / glibc 2.34).  `forge` / `cast` / `solc` are
+   unaffected; only the anvil-backed `make devnet` / `make deploy-local` need
+   a newer host — use `make deploy-sepolia-dryrun` / `forge script`
+   (in-memory) otherwise.
 6. Records the binary-integrity snapshot for step 2's future fast-paths.
 
 Every pinned URL/version has a matching SHA-256 constant; **bumping any version
@@ -239,16 +254,22 @@ commands are documented inline in the script next to each constant).
 
 ### 5.4 Activating the toolchains in your shell
 
-After setup, make the tools visible in your current shell:
+`setup.sh` **persists this for you** — it appends an auto-detecting activation
+block to `~/.bashrc` (and to `$CLAUDE_ENV_FILE` on the web env), so a **new**
+shell already has `lake` / `forge` / `cast` / `solc` / `cargo` on `PATH`.  To
+activate them in your *current* shell without opening a new one:
 
 ```bash
-source ~/.elan/env                          # lean, lake, leanc, leanmake
-export PATH="/usr/local/foundry/bin:$PATH"  # forge, cast, anvil, chisel
-# cargo / rustup are at ~/.cargo/bin (add to PATH if not already there)
+source ~/.bashrc     # picks up the setup.sh-managed toolchain block
+# (equivalently, individually: `source ~/.elan/env` + `source ~/.cargo/env`)
 ```
 
-Add the `source ~/.elan/env` line to your shell profile for persistence. On the
-web/remote environment this is handled for you by the SessionStart hook.
+The managed block prepends the pinned Foundry install
+(`/usr/local/foundry/bin` when installed as root, else
+`$HOME/.local/foundry/bin`) ahead of any `foundryup` at `~/.foundry/bin`, and
+sets `FOUNDRY_SOLC` when the user-local solc fallback was used.  On the
+web/remote environment the same persistence is applied via the SessionStart
+hook + `$CLAUDE_ENV_FILE`.
 
 ### 5.5 Per-stack manual setup (when you skip `setup.sh`)
 
@@ -1009,7 +1030,7 @@ follow the standard tracker workflow.
 
 | Symptom | Likely cause & fix |
 |---------|--------------------|
-| `lake: command not found` | You didn't activate elan: `source ~/.elan/env`. |
+| `lake: command not found`, or `forge` is the wrong version | The toolchain isn't activated in this shell (or a stray `foundryup` is shadowing the pin). `setup.sh` persists an activation block to `~/.bashrc`; run `source ~/.bashrc` or open a new shell. If it was never installed, run `./scripts/setup.sh`. |
 | `setup.sh` aborts with a SHA-256 mismatch on the toolchain | Possible tampering or a partial download. `rm -rf ~/.elan/toolchains/<toolchain-dir>` and re-run `./scripts/setup.sh` to reinstall from a verified archive. |
 | `lake build` link errors about `crti.o` / `crt1.o` | The Lean archive shipped without CRT startup stubs. `setup.sh` tries to repair this; otherwise install your system `libc-dev`. |
 | CI fails the strict-warnings gate but the build "succeeded" locally | A Lean `warning:` (often a missing docstring on a public surface, or an unused variable). Re-run `lake build` and read the warnings — they are merge-blocking. |
@@ -1019,7 +1040,8 @@ follow the standard tracker workflow.
 | `deferral_audit` fails | A `TODO:`/`DEFERRED`/`PARTIAL`-class marker. Implement it, or lift it into the debt register and rewrite the comment without deferral language. |
 | `lex_codegen --check` fails | You hand-edited a generated fence or forgot to regenerate. Run `lake exe lex_codegen` and commit. |
 | codemap gate fails | Run `python3 scripts/regenerate_codemaps.py` and commit the result. |
-| `forge build` can't find the pinned solc | `foundry.toml` pins `/usr/local/bin/solc`; install solc 0.8.20 there (or re-run `./scripts/setup.sh`). |
+| `forge build` can't find the pinned solc | `foundry.toml` pins `/usr/local/bin/solc`. Re-run `./scripts/setup.sh` — it installs solc (under `~/.local/bin/solc` on a non-root host) and sets `FOUNDRY_SOLC` to it — then `source ~/.bashrc`. |
+| `anvil` fails: `version 'GLIBC_2.35' not found` | The host glibc is < 2.35 (e.g. RHEL 9 / glibc 2.34); modern Foundry's `anvil` needs ≥ 2.35. `forge` / `cast` / `solc` still work — use `make deploy-sepolia-dryrun` / `forge script` (in-memory) instead of `make devnet` / `deploy-local`, or run anvil on a glibc ≥ 2.35 host / container. |
 | `cargo` builds a different toolchain | Run from inside `runtime/` so `rust-toolchain.toml` (1.83) applies; use `--locked`. |
 | `hash-check` / `verify-check` exit 1 | **Expected** on the default build — they fail closed on the fallback primitives. They flip to 0 only with the production adaptors linked (§10.2/§10.3). |
 | Cross-stack keccak assertions are "skipped" | Expected under the FNV fallback; run `./scripts/verify_keccak_crossstack.sh` to execute them against real keccak. |
