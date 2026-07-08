@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "677744a7f640d88c6f8b0f005cd5040af9a456f99b84a0d5d82e6593cab01da9"
+    "source_digest": "735951343904d58b2d81b0e7ba3ccb2e6d2089bf0f0bb97ca85441401d7de338"
   },
   "summary": {
-    "module_count": 86,
-    "declaration_count": 1919
+    "module_count": 87,
+    "declaration_count": 1921
   },
   "modules": [
     {
@@ -4289,6 +4289,25 @@
             "FactoryDeployFailed",
             "TargetDeployFailed"
           ]
+        }
+      ]
+    },
+    {
+      "module": "KnomosisChainId",
+      "path": "solidity/src/lib/KnomosisChainId.sol",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "KnomosisChainId",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "l2ChainId",
+          "line": 43,
+          "called": []
         }
       ]
     },

@@ -51,15 +51,26 @@ const INVALID_REQUEST: i64 = -32_600;
 /// JSON-RPC 2.0 error code: the method does not exist / is not supported.
 const METHOD_NOT_FOUND: i64 = -32_601;
 
+/// Maximum request objects in a single JSON-RPC batch.  `/rpc` is auth- and
+/// rate-limit-exempt (a wallet cannot present the bearer credential), so an
+/// unbounded batch would fan one request out into an unbounded number of
+/// response objects — a cheap memory/CPU amplification.  A wallet's
+/// Add-Network probe sends single requests or tiny batches, so a small cap
+/// removes the amplification with no practical impact (the request body is
+/// additionally bounded by `--max-frame-size`).
+const MAX_BATCH: usize = 100;
+
 /// Dispatch a `POST /rpc` request.  Reads the request body (the JSON-RPC
-/// envelope) and the L2 chain id + indexer cursor from [`AppState`].  A
-/// JSON-RPC call always answers HTTP `200`; any protocol-level failure is
-/// carried in the JSON-RPC `error` member of the body (per the JSON-RPC 2.0
-/// transport convention), never as a non-2xx status.
+/// envelope) and — only for `eth_blockNumber` — the indexer cursor from
+/// [`AppState`].  A request is answered HTTP `200` with the JSON-RPC response
+/// envelope; a well-formed **Notification** (a request carrying no `id`, and
+/// an all-notification batch) is answered `204 No Content` with no body
+/// (JSON-RPC 2.0 §4.1: a Notification is not replied to).  Protocol-level
+/// failures are carried in the JSON-RPC `error` member, never as a non-2xx
+/// status.
 #[must_use]
 pub fn handle(state: &AppState, payload: &RequestPayload) -> RouteOutcome {
     let l2_chain_id = state.config.l2_chain_id;
-    let block = current_block(state);
 
     let parsed: Value = match serde_json::from_slice(payload.body) {
         Ok(v) => v,
@@ -72,48 +83,75 @@ pub fn handle(state: &AppState, payload: &RequestPayload) -> RouteOutcome {
         }
     };
 
-    let response = match parsed {
-        // A batch: answer each member in order (JSON-RPC 2.0 §6).  An empty
-        // batch is itself an invalid request.
+    let response: Option<Value> = match parsed {
+        // A batch: answer each non-notification member in order (JSON-RPC 2.0
+        // §6).  An empty or over-cap batch is itself an invalid request.
         Value::Array(requests) => {
             if requests.is_empty() {
-                error_response(Value::Null, INVALID_REQUEST, "empty batch")
+                Some(error_response(Value::Null, INVALID_REQUEST, "empty batch"))
+            } else if requests.len() > MAX_BATCH {
+                Some(error_response(
+                    Value::Null,
+                    INVALID_REQUEST,
+                    &format!("batch too large (max {MAX_BATCH} requests)"),
+                ))
             } else {
-                Value::Array(
-                    requests
-                        .iter()
-                        .map(|req| handle_one(req, l2_chain_id, block))
-                        .collect(),
-                )
+                let responses: Vec<Value> = requests
+                    .iter()
+                    .filter_map(|req| handle_one(req, l2_chain_id, state))
+                    .collect();
+                // A batch consisting solely of notifications gets no reply.
+                if responses.is_empty() {
+                    None
+                } else {
+                    Some(Value::Array(responses))
+                }
             }
         }
-        obj @ Value::Object(_) => handle_one(&obj, l2_chain_id, block),
-        _ => error_response(
+        obj @ Value::Object(_) => handle_one(&obj, l2_chain_id, state),
+        _ => Some(error_response(
             Value::Null,
             INVALID_REQUEST,
             "request must be a JSON object or a batch array",
-        ),
+        )),
     };
 
-    json_response(&response)
+    match response {
+        Some(v) => json_response(&v),
+        // A Notification (or an all-notification batch): 204, no body.
+        None => RouteOutcome::no_content(),
+    }
 }
 
-/// Answer a single JSON-RPC request object, returning its response object.
-fn handle_one(req: &Value, l2_chain_id: u64, block: u64) -> Value {
-    // The response id echoes the request id when present (JSON-RPC 2.0 §5);
-    // an absent / malformed id is echoed as `null`.
-    let id = req.get("id").cloned().unwrap_or(Value::Null);
+/// Answer a single JSON-RPC request object.  Returns `None` for a well-formed
+/// **Notification** (a request that carries a valid `method` but no `id`),
+/// which JSON-RPC 2.0 §4.1 says must not be replied to; otherwise
+/// `Some(response)`.  A malformed request (no / non-string `method`) is always
+/// answered (with the echoed or `null` id) — it is not a valid Notification.
+fn handle_one(req: &Value, l2_chain_id: u64, state: &AppState) -> Option<Value> {
+    let id_field = req.get("id");
     let Some(method) = req.get("method").and_then(Value::as_str) else {
-        return error_response(id, INVALID_REQUEST, "missing or non-string \"method\"");
+        // Invalid request: always answered, id echoed (or null).
+        return Some(error_response(
+            id_field.cloned().unwrap_or(Value::Null),
+            INVALID_REQUEST,
+            "missing or non-string \"method\"",
+        ));
     };
-    match method {
+    // A well-formed request with no `id` is a Notification — not replied to.
+    let id = id_field?.clone();
+    Some(match method {
         // The `0x`-hex quantity encoding (no leading zeros) MetaMask expects
         // for eth_chainId; e.g. 8357 -> "0x20a5", 83572 -> "0x14674".
         "eth_chainId" => result_response(id, Value::String(format!("0x{l2_chain_id:x}"))),
         // The legacy decimal-string network id.
         "net_version" => result_response(id, Value::String(l2_chain_id.to_string())),
-        // The L2 advance counter as a `0x`-hex quantity.
-        "eth_blockNumber" => result_response(id, Value::String(format!("0x{block:x}"))),
+        // The L2 advance counter as a `0x`-hex quantity.  The indexer cursor is
+        // read lazily here — only this method needs it, so the other methods
+        // (and malformed requests) never touch SQLite.
+        "eth_blockNumber" => {
+            result_response(id, Value::String(format!("0x{:x}", current_block(state))))
+        }
         "web3_clientVersion" => result_response(
             id,
             Value::String(format!("knomosis-gateway/{}", crate::VERSION)),
@@ -127,7 +165,7 @@ fn handle_one(req: &Value, l2_chain_id: u64, block: u64) -> Value {
                  web3_clientVersion (submit L2 actions via POST /v1/actions)"
             ),
         ),
-    }
+    })
 }
 
 /// The current L2 advance height: the indexer cursor (event `seq`) when an
@@ -180,6 +218,7 @@ mod tests {
     use super::handle;
     use crate::config::Config;
     use crate::dispatch::RequestPayload;
+    use crate::http::RouteOutcome;
     use crate::state::AppState;
 
     /// A minimal state with the given L2 chain id and no indexer.
@@ -189,14 +228,20 @@ mod tests {
         AppState::new(cfg).expect("open state")
     }
 
-    /// Build a `POST /rpc` payload from a JSON body string.
-    fn call(state: &AppState, body: &str) -> serde_json::Value {
+    /// Dispatch a `POST /rpc` body and return the raw [`RouteOutcome`].
+    fn raw_call(state: &AppState, body: &str) -> RouteOutcome {
         let payload = RequestPayload {
             content_type: Some("application/json"),
             body: body.as_bytes(),
             idempotency_key: None,
         };
-        let o = handle(state, &payload);
+        handle(state, &payload)
+    }
+
+    /// Dispatch a `POST /rpc` body, asserting a `200 application/json`
+    /// envelope, and return the parsed JSON.
+    fn call(state: &AppState, body: &str) -> serde_json::Value {
+        let o = raw_call(state, body);
         assert_eq!(o.status, 200);
         assert_eq!(o.content_type, "application/json");
         serde_json::from_str(&o.body).expect("json body")
@@ -295,5 +340,70 @@ mod tests {
     fn empty_batch_is_invalid_request() {
         let v = call(&state_with_chain_id(8357), "[]");
         assert_eq!(v["error"]["code"], -32600);
+    }
+
+    #[test]
+    fn oversized_batch_is_rejected_without_per_element_work() {
+        // A batch above MAX_BATCH is a single invalid-request error — the
+        // endpoint is auth- and rate-limit-exempt, so an unbounded batch must
+        // not fan out into an unbounded response (memory-amplification DoS).
+        let body = format!(
+            "[{}]",
+            vec![r#"{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}"#; super::MAX_BATCH + 1]
+                .join(",")
+        );
+        let v = call(&state_with_chain_id(8357), &body);
+        assert_eq!(v["error"]["code"], -32600);
+        // A single error object, not an array of MAX_BATCH+1 responses.
+        assert!(v.is_object());
+    }
+
+    #[test]
+    fn notification_gets_no_reply() {
+        // A well-formed request with no `id` is a Notification (JSON-RPC 2.0
+        // §4.1): answered 204 with no body, not an id:null response.
+        let o = raw_call(
+            &state_with_chain_id(8357),
+            r#"{"jsonrpc":"2.0","method":"eth_chainId"}"#,
+        );
+        assert_eq!(o.status, 204);
+        assert!(o.body.is_empty());
+    }
+
+    #[test]
+    fn all_notification_batch_gets_no_reply() {
+        // A batch of only notifications yields no reply (204), not an array.
+        let o = raw_call(
+            &state_with_chain_id(8357),
+            r#"[{"jsonrpc":"2.0","method":"eth_chainId"},
+                {"jsonrpc":"2.0","method":"net_version"}]"#,
+        );
+        assert_eq!(o.status, 204);
+        assert!(o.body.is_empty());
+    }
+
+    #[test]
+    fn mixed_batch_replies_only_to_non_notifications() {
+        // One request (id) + one notification (no id) → a one-element array.
+        let v = call(
+            &state_with_chain_id(8357),
+            r#"[{"jsonrpc":"2.0","id":1,"method":"eth_chainId"},
+                {"jsonrpc":"2.0","method":"net_version"}]"#,
+        );
+        let arr = v.as_array().expect("array response");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], 1);
+        assert_eq!(arr[0]["result"], "0x20a5");
+    }
+
+    #[test]
+    fn null_id_request_still_gets_a_reply() {
+        // `id: null` is present (a request, not a notification) → answered.
+        let v = call(
+            &state_with_chain_id(8357),
+            r#"{"jsonrpc":"2.0","id":null,"method":"eth_chainId"}"#,
+        );
+        assert_eq!(v["result"], "0x20a5");
+        assert!(v["id"].is_null());
     }
 }

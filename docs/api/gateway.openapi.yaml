@@ -422,8 +422,12 @@ paths:
         L2 chain id as a decimal string), eth_blockNumber (the indexer
         cursor as a 0x-hex advance height), and web3_clientVersion. Any
         other method returns JSON-RPC error -32601. A single request or a
-        batch array is accepted; the HTTP status is always 200 (protocol
-        errors are carried in the JSON-RPC `error` member).
+        batch array (up to 100 members; a larger batch is rejected -32600)
+        is accepted; a request carrying a `result`/`error` is answered 200
+        with the JSON-RPC envelope (protocol errors are carried in the
+        `error` member, not the HTTP status). A well-formed Notification (a
+        request with no `id`, and an all-notification batch) is answered
+        204 with no body (JSON-RPC 2.0 §4.1).
       security: []
       requestBody:
         required: true
@@ -440,6 +444,10 @@ paths:
                   - $ref: '#/components/schemas/JsonRpcResponse'
                   - type: array
                     items: { $ref: '#/components/schemas/JsonRpcResponse' }
+        '204':
+          description: >-
+            The request was a Notification (no `id`) or an all-notification
+            batch; per JSON-RPC 2.0 there is no response body.
 
 components:
   securitySchemes:

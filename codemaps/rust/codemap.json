@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f38780cdeb2e8394c2f87f8382935661d2b1d56dcf56dfdc64e815205c4f24a0"
+    "source_digest": "14e4c528673a9354f68e724663a0f8be16a734750ebc2f22659164457b7c5eaf"
   },
   "summary": {
-    "module_count": 190,
-    "declaration_count": 5846
+    "module_count": 191,
+    "declaration_count": 5875
   },
   "modules": [
     {
@@ -21284,7 +21284,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 335,
+          "line": 336,
           "called": [
             "FixtureConfig",
             "RunParams",
@@ -21296,7 +21296,7 @@
         {
           "kind": "fn",
           "name": "small_run_succeeds_end_to_end",
-          "line": 343,
+          "line": 344,
           "called": [
             "FixtureConfig",
             "RunParams",
@@ -21310,7 +21310,7 @@
         {
           "kind": "fn",
           "name": "warmup_only_run_has_no_samples",
-          "line": 373,
+          "line": 374,
           "called": [
             "FixtureConfig",
             "RunParams",
@@ -29321,6 +29321,298 @@
             "pool_view",
             "reads",
             "seeded"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "runtime::knomosis-gateway::src::rpc",
+      "path": "runtime/knomosis-gateway/src/rpc.rs",
+      "declaration_count": 29,
+      "declarations": [
+        {
+          "kind": "const",
+          "name": "PARSE_ERROR",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "INVALID_REQUEST",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "METHOD_NOT_FOUND",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MAX_BATCH",
+          "line": 60,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "handle",
+          "line": 71,
+          "called": [
+            "AppState",
+            "Err",
+            "INVALID_REQUEST",
+            "MAX_BATCH",
+            "PARSE_ERROR",
+            "RequestPayload",
+            "RouteOutcome",
+            "_",
+            "config",
+            "error_response",
+            "handle_one",
+            "is_empty",
+            "iter",
+            "json_response",
+            "len",
+            "req",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "handle_one",
+          "line": 130,
+          "called": [
+            "AppState",
+            "INVALID_REQUEST",
+            "METHOD_NOT_FOUND",
+            "clone",
+            "current_block",
+            "error_response",
+            "get",
+            "id",
+            "req",
+            "result_response",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "current_block",
+          "line": 174,
+          "called": [
+            "AppState",
+            "ok",
+            "read_cursor",
+            "reads",
+            "state",
+            "storage"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "result_response",
+          "line": 185,
+          "called": [
+            "id",
+            "insert"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "error_response",
+          "line": 194,
+          "called": [
+            "id",
+            "insert"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "json_response",
+          "line": 208,
+          "called": [
+            "RouteOutcome",
+            "_"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "state_with_chain_id",
+          "line": 224,
+          "called": [
+            "AppState"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_call",
+          "line": 231,
+          "called": [
+            "AppState",
+            "RequestPayload",
+            "RouteOutcome",
+            "as_bytes",
+            "handle",
+            "idempotency_key",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "call",
+          "line": 242,
+          "called": [
+            "AppState",
+            "raw_call",
+            "state"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "eth_chain_id_is_hex_of_configured_l2_chain_id",
+          "line": 250,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "eth_chain_id_testnet_hex",
+          "line": 262,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "net_version_is_decimal_string",
+          "line": 273,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "eth_block_number_is_zero_without_indexer",
+          "line": 282,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "web3_client_version_names_the_gateway",
+          "line": 291,
+          "called": [
+            "as_str",
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "unknown_method_is_method_not_found",
+          "line": 301,
+          "called": [
+            "call",
+            "get",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "parse_error_on_invalid_json",
+          "line": 312,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "missing_method_is_invalid_request",
+          "line": 319,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "batch_answers_each_member_in_order",
+          "line": 326,
+          "called": [
+            "call",
+            "len",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "empty_batch_is_invalid_request",
+          "line": 339,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "oversized_batch_is_rejected_without_per_element_work",
+          "line": 345,
+          "called": [
+            "call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "notification_gets_no_reply",
+          "line": 361,
+          "called": [
+            "is_empty",
+            "raw_call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "all_notification_batch_gets_no_reply",
+          "line": 373,
+          "called": [
+            "is_empty",
+            "raw_call",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "mixed_batch_replies_only_to_non_notifications",
+          "line": 385,
+          "called": [
+            "call",
+            "len",
+            "state_with_chain_id"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "null_id_request_still_gets_a_reply",
+          "line": 399,
+          "called": [
+            "call",
+            "state_with_chain_id"
           ]
         }
       ]
