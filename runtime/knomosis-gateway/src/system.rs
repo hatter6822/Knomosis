@@ -49,6 +49,8 @@ const READINESS_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 struct InfoDto {
     #[serde(rename = "deploymentId")]
     deployment_id: String,
+    #[serde(rename = "l2ChainId")]
+    l2_chain_id: u64,
     #[serde(rename = "okAdmissionStage")]
     ok_admission_stage: &'static str,
     #[serde(rename = "submitProtocolVersion")]
@@ -103,6 +105,7 @@ pub fn info_view(state: &AppState) -> RouteOutcome {
     };
     let dto = InfoDto {
         deployment_id: state.config.deployment_id.clone(),
+        l2_chain_id: state.config.l2_chain_id,
         ok_admission_stage: state.config.ok_admission_stage.as_str(),
         submit_protocol_version: knomosis_host::PROTOCOL_VERSION,
         events_protocol_version: knomosis_event_subscribe::PROTOCOL_VERSION,
@@ -218,6 +221,7 @@ mod tests {
             log_format: crate::config::LogFormat::Json,
             dev: false,
             upstream_subscriptions: 1,
+            l2_chain_id: 83572,
         }
     }
 
@@ -238,6 +242,7 @@ mod tests {
         let mut cfg = config();
         cfg.indexer_db = Some(path);
         cfg.deployment_id = "knx-devnet".to_string();
+        cfg.l2_chain_id = 8357;
         cfg.ok_admission_stage = AdmissionStage::Sequenced;
         cfg.free_tier = 1000;
         cfg.action_cost = 5;
@@ -250,6 +255,7 @@ mod tests {
         assert_eq!(o.content_type, "application/json");
         let v: serde_json::Value = serde_json::from_str(&o.body).unwrap();
         assert_eq!(v["deploymentId"], "knx-devnet");
+        assert_eq!(v["l2ChainId"], 8357);
         assert_eq!(v["okAdmissionStage"], "Sequenced");
         // The real wire constants (host = 2, event-subscribe = 1).
         assert_eq!(v["submitProtocolVersion"], knomosis_host::PROTOCOL_VERSION);
@@ -279,7 +285,8 @@ mod tests {
         assert_eq!(v["indexerSeq"], "0");
         assert_eq!(v["okAdmissionStage"], "Finalized"); // the default
         assert_eq!(v["deploymentId"], "");
-        // No indexer → null schema version; the budget echo defaults to 0s.
+        assert_eq!(v["l2ChainId"], 83572); // the test-default L2 chain id
+                                           // No indexer → null schema version; the budget echo defaults to 0s.
         assert!(v["indexerSchemaVersion"].is_null());
         assert_eq!(v["budgetPolicy"]["freeTier"], "0");
         assert_eq!(v["budgetPolicy"]["actionCost"], "0");

@@ -2549,12 +2549,27 @@ signerHint)` reconstructs the digest the user signed when
 producing the impugned `LogEntry`:
 
   domainSeparator = keccak256(EIP712Domain(
-      "KnomosisAction", "1", chainId, 0,
+      "KnomosisAction", "1", l2ChainId, 0,
       bridgeAddress
   ))
   structHash = `actionStructHash(actionHash, signer, nonce,
       bridge.deploymentId())`
   digest = keccak256(0x1901 ‖ domainSeparator ‖ structHash)
+
+The `KnomosisAction` domain's `chainId` is the Knomosis **L2**
+chain id — `l2ChainId = KnomosisChainId.l2ChainId(block.chainid)`
+(`8357` when the bridge settles to mainnet, `83572` otherwise),
+NOT `block.chainid`.  This is the domain a wallet targets: a user
+signs an L2 action against the L2's own EIP-155 id (see §13.10),
+so the on-chain reconstruction binds the same L2 chain id (derived
+deterministically from the L1 the verifier runs on, so it matches
+the off-chain signer with no extra config).  This is the **only**
+EIP-712 domain that uses the L2 chain id; the verdict (§13.5),
+migration (§13.7), and state-root (§13.8) domains are genuinely
+L1-scoped and keep `block.chainid`.  Mirrors Lean
+`LegalKernel.Bridge.Eip712` (the `DomainParams.chainId` field
+carries the L2 chain id for this domain) and the Solidity
+`KnomosisChainId` library.
 
 The `signerHint` argument is the L1 address corresponding
 to the LogEntry's `uint64 signer` actor-id.  The runtime
@@ -2615,6 +2630,49 @@ salts `keccak256("knomosis-bridge-salt")`,
 `keccak256("knomosis-sequencer-stake-salt")`.  Mainnet deployments
 should pick deployment-specific salts (e.g.
 `keccak256(abi.encode(deploymentId, "bridge"))`).
+
+### 13.10 L2 chain id and the wallet network-discovery shim
+
+The Knomosis **L2** has its own EIP-155 chain id, distinct from the
+L1 settlement chain and from `deploymentId`:
+
+| Chain            | id       | Selected when             |
+|------------------|----------|---------------------------|
+| Knomosis L2 (production) | `8357`   | the bridge settles to Ethereum mainnet (L1 chainid 1) |
+| Knomosis L2 (test)       | `83572`  | any other L1 (Sepolia 11155111, Holesky, a local devnet) |
+
+The value is derived deterministically from the L1 the bridge is
+deployed on — `l2ChainId(l1) = l1 == 1 ? 8357 : 83572` — with a
+single source of truth per stack: Solidity
+`solidity/src/lib/KnomosisChainId.sol`, Lean
+`LegalKernel.Bridge.Eip712` (`knomosisL2ChainIdMainnet` /
+`knomosisL2ChainIdTestnet` / `l2ChainIdForL1`), and the deploy
+manifest's `l2ChainId` field (`deployments/<network>.json`).  The
+L2 chain id is CONSTANT across L1 settlement layers of the same
+tier: settling to a different L1 changes `deploymentId` (which folds
+in `block.chainid`) but not the L2 chain id.
+
+**Where it is used.**  (1) The EIP-712 `KnomosisAction` domain
+(§13.6) — a wallet signs L2 actions against the L2 chain id.  (2)
+Wallet network-discovery: the gateway exposes it in `GET /v1/info`
+(`l2ChainId`) and answers a **minimal read-only Ethereum JSON-RPC
+shim** at `POST /rpc` so a browser wallet can "Add Network":
+
+  * `eth_chainId`        → the L2 chain id as a `0x`-hex quantity
+    (`0x20a5` = 8357, `0x14674` = 83572)
+  * `net_version`        → the L2 chain id as a decimal string
+  * `eth_blockNumber`    → the indexer cursor (event `seq`) as a
+    `0x`-hex advance height
+  * `web3_clientVersion` → the gateway build string
+
+Knomosis is **not** an EVM chain: there is no `eth_sendTransaction`
+or state/account surface.  Every other RPC method returns JSON-RPC
+error `-32601`; L2 actions are submitted via `POST /v1/actions` (a
+client-signed EIP-712 `SignedAction`).  The `/rpc` endpoint is
+auth-exempt (a wallet cannot present the gateway's bearer
+credential; every value it returns is public).  See the gateway
+contract `docs/api/gateway.openapi.yaml` and
+`docs/sepolia_deployment_runbook.md` §7.4 (wallet connection).
 
 ## 14. References
 

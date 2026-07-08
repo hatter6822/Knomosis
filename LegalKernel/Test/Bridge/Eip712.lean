@@ -56,12 +56,14 @@ open LegalKernel.Test
 
 /-! ## Test fixtures -/
 
-/-- A canonical test domain.  Used as the default in fixture
-    construction. -/
+/-- A canonical test domain: the production Knomosis `KnomosisAction`
+    domain, whose `chainId` is the **L2** chain id
+    (`knomosisL2ChainIdMainnet` = 8357), not an L1 chain id.  Used as
+    the default in fixture construction. -/
 def testDomain : DomainParams := {
   name := ByteArray.mk "Knomosis".toUTF8.data
   version := ByteArray.mk "1".toUTF8.data
-  chainId := 1  -- Ethereum mainnet
+  chainId := knomosisL2ChainIdMainnet  -- Knomosis L2 (mainnet-settled) = 8357
   rollupId := 42
   verifyingContract := ByteArray.mk #[
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -70,10 +72,13 @@ def testDomain : DomainParams := {
   ]
 }
 
-/-- An alternative domain (different chainId).  Used for cross-
-    deployment distinguishability tests. -/
+/-- An alternative domain (different chainId): the **test** Knomosis L2
+    (`knomosisL2ChainIdTestnet` = 83572).  Used for cross-deployment
+    distinguishability tests — the production L2 and the test L2 must
+    produce distinct domain separators / wraps so an action signed for
+    one cannot be replayed on the other. -/
 def altDomain : DomainParams :=
-  { testDomain with chainId := 11155111 }  -- Sepolia
+  { testDomain with chainId := knomosisL2ChainIdTestnet }  -- Knomosis L2 (test) = 83572
 
 /-- A canonical test message. -/
 def testMessage : Eip712Message := {
@@ -599,6 +604,46 @@ def dsSizeAPI : TestCase := {
     pure ()
 }
 
+/-! ## Canonical L2 chain-id tests
+
+Value-level pins on the frozen L2 chain identifiers + the L1→L2
+selector, plus term-level API stability for the injectivity-bound
+lemma.  These guard the magic numbers (8357 / 83572) and the
+byte-for-byte agreement with the Solidity `KnomosisChainId` mirror. -/
+
+/-- The production L2 chain id is exactly 8357. -/
+def l2ChainIdMainnetValue : TestCase := {
+  name := "knomosisL2ChainIdMainnet = 8357"
+  body := assertEq (expected := 8357) (actual := knomosisL2ChainIdMainnet) "mainnet L2 chain id"
+}
+
+/-- The test L2 chain id is exactly 83572. -/
+def l2ChainIdTestnetValue : TestCase := {
+  name := "knomosisL2ChainIdTestnet = 83572"
+  body := assertEq (expected := 83572) (actual := knomosisL2ChainIdTestnet) "test L2 chain id"
+}
+
+/-- `l2ChainIdForL1` maps Ethereum mainnet (L1 = 1) to the production
+    L2 (8357) and every other L1 to the test L2 (83572). -/
+def l2ChainIdSelectorValues : TestCase := {
+  name := "l2ChainIdForL1 selects 8357 for L1=1, 83572 otherwise"
+  body := do
+    assertEq (expected := 8357) (actual := l2ChainIdForL1 1) "mainnet-L1 → production L2"
+    assertEq (expected := 83572) (actual := l2ChainIdForL1 11155111) "Sepolia-L1 → test L2"
+    assertEq (expected := 83572) (actual := l2ChainIdForL1 31337) "anvil-L1 → test L2"
+}
+
+/-- `l2ChainIdForL1_lt_two_pow_64` API stability: the selector's
+    output always fits in `uint64`, discharging the injectivity-bound
+    side conditions of the domain-separator theorems. -/
+def l2ChainIdBoundAPI : TestCase := {
+  name := "l2ChainIdForL1_lt_two_pow_64 API stability"
+  body := do
+    let _proof : ∀ (l1 : Nat), l2ChainIdForL1 l1 < 2 ^ 64 :=
+      l2ChainIdForL1_lt_two_pow_64
+    pure ()
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [ -- Prefix shape (3)
@@ -630,7 +675,10 @@ def tests : List TestCase :=
     domainPreHashInjectiveAPI, encodeUintInjectiveAPI, encodeUintSizeAPI,
     wrapSizeAPI, prefixSizeAPI,
     -- Stability size APIs (2)
-    structHashSizeAPI, dsSizeAPI ]
+    structHashSizeAPI, dsSizeAPI,
+    -- Canonical L2 chain-id (4)
+    l2ChainIdMainnetValue, l2ChainIdTestnetValue,
+    l2ChainIdSelectorValues, l2ChainIdBoundAPI ]
 
 end Eip712Tests
 end LegalKernel.Test.Bridge

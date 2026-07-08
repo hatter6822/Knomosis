@@ -400,6 +400,47 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Readiness' }
 
+  /rpc:
+    # A minimal, READ-ONLY Ethereum JSON-RPC shim so a browser wallet can
+    # "Add Network" and target the Knomosis L2 chain id. Knomosis is NOT an
+    # EVM chain: L2 actions are submitted via POST /v1/actions (a client-
+    # signed EIP-712 SignedAction), so this endpoint answers ONLY the read-
+    # only methods a wallet calls when adding + probing a network. Served at
+    # the process ROOT (not under /v1), and auth-exempt (a wallet cannot
+    # present the bearer service credential; every value here is public).
+    servers:
+      - url: https://gateway.dev.example
+        description: Development gateway root (the RPC shim is not under /v1).
+      - url: https://gateway.example
+        description: Production gateway root.
+    post:
+      tags: [system]
+      operationId: rpc
+      summary: Read-only Ethereum JSON-RPC shim for wallet network discovery.
+      description: >-
+        Supports eth_chainId (the L2 chain id as 0x-hex), net_version (the
+        L2 chain id as a decimal string), eth_blockNumber (the indexer
+        cursor as a 0x-hex advance height), and web3_clientVersion. Any
+        other method returns JSON-RPC error -32601. A single request or a
+        batch array is accepted; the HTTP status is always 200 (protocol
+        errors are carried in the JSON-RPC `error` member).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JsonRpcRequest' }
+      responses:
+        '200':
+          description: The JSON-RPC response (or a batch array of responses).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/JsonRpcResponse'
+                  - type: array
+                    items: { $ref: '#/components/schemas/JsonRpcResponse' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -782,10 +823,20 @@ components:
     Info:
       type: object
       required:
-        [deploymentId, okAdmissionStage, submitProtocolVersion, eventsProtocolVersion,
-         indexerSeq, indexerSchemaVersion, budgetPolicy]
+        [deploymentId, l2ChainId, okAdmissionStage, submitProtocolVersion,
+         eventsProtocolVersion, indexerSeq, indexerSchemaVersion, budgetPolicy]
       properties:
         deploymentId: { type: string }
+        l2ChainId:
+          type: integer
+          minimum: 1
+          description: >-
+            The canonical Knomosis L2 chain id (EIP-155): 8357 =
+            production (mainnet-settled), 83572 = test. Distinct from the L1
+            settlement chain; constant across L1s of the same tier. This is
+            the chain id a wallet adds (see POST /rpc) and signs L2 actions
+            against (the EIP-712 KnomosisAction domain). MUST match the
+            deploy manifest's l2ChainId (--l2-chain-id).
         okAdmissionStage:
           type: string
           enum: [Received, LocallyAdmitted, Sequenced, Finalized]
@@ -826,6 +877,38 @@ components:
         host: { type: boolean }
         subscribe: { type: boolean }
         indexer: { type: boolean }
+    JsonRpcRequest:
+      type: object
+      required: [method]
+      description: >-
+        A JSON-RPC 2.0 request. Only the read-only network-discovery methods
+        are supported: eth_chainId, net_version, eth_blockNumber,
+        web3_clientVersion.
+      properties:
+        jsonrpc: { type: string, enum: ['2.0'] }
+        id:
+          description: The request id, echoed on the response (number, string, or null).
+        method: { type: string }
+        params: { type: array, items: {} }
+    JsonRpcResponse:
+      type: object
+      required: [jsonrpc, id]
+      properties:
+        jsonrpc: { type: string, enum: ['2.0'] }
+        id:
+          description: The echoed request id (number, string, or null).
+        result:
+          description: >-
+            The method result (present on success): a 0x-hex quantity
+            (eth_chainId / eth_blockNumber) or a string (net_version /
+            web3_clientVersion).
+        error:
+          type: object
+          required: [code, message]
+          description: Present instead of `result` on a JSON-RPC error.
+          properties:
+            code: { type: integer }
+            message: { type: string }
 
     Problem:
       type: object

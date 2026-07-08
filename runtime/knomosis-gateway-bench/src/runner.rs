@@ -329,6 +329,7 @@ fn bench_config(fixture: &Fixture, max_connections: usize) -> Config {
         log_format: LogFormat::Json,
         dev: false,
         upstream_subscriptions: 1,
+        l2_chain_id: 83572,
     }
 }
 

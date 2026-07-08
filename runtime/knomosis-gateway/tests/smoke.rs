@@ -105,6 +105,7 @@ fn test_state() -> Arc<AppState> {
             log_format: knomosis_gateway::config::LogFormat::Json,
             dev: false,
             upstream_subscriptions: 1,
+            l2_chain_id: 83572,
         })
         .expect("load token file"),
     )

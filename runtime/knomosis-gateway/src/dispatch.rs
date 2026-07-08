@@ -69,6 +69,7 @@ pub fn dispatch(route: &Route, state: &AppState, payload: &RequestPayload) -> Ro
         Route::Ready => crate::system::readyz(state),
         Route::Info => crate::system::info_view(state),
         Route::SubmitAction => crate::submit::handler::handle(state, payload),
+        Route::Rpc => crate::rpc::handle(state, payload),
         Route::ActorBalances { actor } => with_reads(state, |reads| {
             crate::reads::balances::actor_balances(reads, *actor)
         }),
@@ -223,6 +224,7 @@ mod tests {
             log_format: crate::config::LogFormat::Json,
             dev: false,
             upstream_subscriptions: 1,
+            l2_chain_id: 83572,
         })
         .expect("no DB to open")
     }
@@ -386,6 +388,7 @@ mod tests {
             log_format: crate::config::LogFormat::Json,
             dev: false,
             upstream_subscriptions: 1,
+            l2_chain_id: 83572,
         })
         .expect("open read-only state");
 

@@ -851,10 +851,13 @@ foundation + routing surface), and the read endpoints G1.6b (balances)
 + G1.7 (budget + pools — `GET /v1/actors/{id}/budget` and
 `GET /v1/pools/{pool}?resource={0|1}`, with a `--gas-pool-actor` `net`
 echo), G1.8 (the typed `/v1/info` — admission stage + wire protocol
-versions + indexer cursor/schema + budget-policy echo — and `/readyz`
+versions + indexer cursor/schema + budget-policy echo + the L2 chain id
+(`l2ChainId`, `--l2-chain-id`) — and `/readyz`
 indexer + upstream TCP probes), G1.4 (the fail-closed
 `subtle::ConstantTimeEq` bearer-token gate, applied before routing;
-`/healthz` + `/readyz` exempt), G1.9 (the read-path integration
+`/healthz` + `/readyz` + the public wallet-discovery `/rpc` shim
+(`eth_chainId`/`net_version`/`eth_blockNumber` for a browser wallet's
+Add-Network) exempt), G1.9 (the read-path integration
 harness — read endpoints end-to-end behind auth, `ETag`/`304`
 revalidation, a concurrent-write chaos case), G1.3 (read-path
 hardening — per-credential token-bucket rate limiting → `429` +

@@ -10,6 +10,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {CBEDecode} from "src/lib/CBEDecode.sol";
 import {KnomosisEip712} from "src/lib/KnomosisEip712.sol";
+import {KnomosisChainId} from "src/lib/KnomosisChainId.sol";
 
 /// @title KnomosisDisputeVerifier
 /// @notice The L1 dispute pipeline.  Per workstream E.2 of the
@@ -365,8 +366,22 @@ contract KnomosisDisputeVerifier is IKnomosisDisputeVerifier, ReentrancyGuard {
         // per-action signing domain (`ACTION_DOMAIN_NAME`), NOT the
         // verdict domain — the user signed against the action
         // domain at submission time.
+        //
+        // The `chainId` bound into this domain is the Knomosis **L2**
+        // chain id (8357 mainnet / 83572 test, per
+        // `KnomosisChainId.l2ChainId`), NOT `block.chainid` (the L1 this
+        // dispute verifier runs on).  A wallet signs an L2 action against
+        // the L2 it targets, so the reconstruction must use the L2 chain
+        // id — derived deterministically from the L1 the bridge settles to,
+        // so it matches the off-chain signer without an extra config knob.
+        // (The verdict + state-root + migration domains stay on
+        // `block.chainid`: those signatures ARE genuinely L1-scoped.)
         bytes32 ds = KnomosisEip712.domainSeparator(
-            ACTION_DOMAIN_NAME, ACTION_DOMAIN_VERSION, block.chainid, uint256(0), bridge
+            ACTION_DOMAIN_NAME,
+            ACTION_DOMAIN_VERSION,
+            KnomosisChainId.l2ChainId(block.chainid),
+            uint256(0),
+            bridge
         );
         bytes32 sh =
             KnomosisEip712.actionStructHash(actionHash, signer, nonce, bridgeDid);

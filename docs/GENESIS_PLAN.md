@@ -6145,9 +6145,19 @@ domainPreHash p =
 
 The five `DomainParams` fields (`name`, `version`, `chainId`,
 `rollupId`, `verifyingContract`) collectively pin the signature
-to one specific Knomosis deployment on one specific L1 chain.  The
-`rollupId` field allows multiple Knomosis rollups to share an L1
-chain without cross-rollup signature replay.
+to one specific Knomosis deployment.  The `chainId` field's
+meaning is domain-specific: for the **`KnomosisAction`** domain —
+the wallet-facing domain a user signs an L2 action against,
+reconstructed on L1 by
+`KnomosisDisputeVerifier.checkSignatureInvalid` — it is the
+Knomosis **L2** chain id (see §15D.7.1), so a wallet targets the
+L2's own chain; for the genuinely-L1 domains (state-root
+attestations, verdict signatures, migration attestations) it is
+the L1 chain id (1 mainnet / 11155111 Sepolia), keeping their
+replay protection scoped to the L1 the verifying contract lives
+on.  The `rollupId` field allows multiple Knomosis rollups to
+share an L1 chain without cross-rollup signature replay (`0`
+today, since the L2 chain id already distinguishes the L2).
 
 **Struct hash construction.**  For a Knomosis action payload
 `(action, signer, nonce, deploymentId)`:
@@ -6184,6 +6194,50 @@ unconstrained ECDSA otherwise admits.
 **L1 mirror.**  `solidity/src/lib/KnomosisEip712.sol` implements
 the same domain-separator + struct-hash construction; the F.1.x
 cross-stack corpus ratifies byte-for-byte agreement.
+
+#### 15D.7.1 The L2 chain id and wallet connection
+
+The Knomosis L2 has its own **EIP-155 chain id**, distinct from
+the L1 settlement chain and from `deploymentId`:
+
+| Chain | id | Selected when |
+|-------|----|---------------|
+| Knomosis L2 (production) | `8357` | the bridge settles to Ethereum mainnet (L1 chainid 1) |
+| Knomosis L2 (test) | `83572` | any other L1 (Sepolia 11155111, Holesky, a local devnet) |
+
+`l2ChainId(l1) = (l1 == 1) ? 8357 : 83572` is derived
+deterministically from the L1 the bridge is deployed on, with one
+source of truth per stack — Solidity
+`solidity/src/lib/KnomosisChainId.sol`, Lean
+`LegalKernel.Bridge.Eip712` (`knomosisL2ChainIdMainnet` /
+`knomosisL2ChainIdTestnet` / `l2ChainIdForL1`, with
+`l2ChainIdForL1_lt_two_pow_64` discharging the injectivity-bound
+side conditions), and the deploy manifest's `l2ChainId` field.  It
+is **constant across L1 settlement layers of the same tier**:
+migrating the bridge to a different L1 changes `deploymentId`
+(which folds in `block.chainid`, §15D.8.1) but not the L2 chain
+id, so an L2 remains the same chain to a wallet across an L1
+migration.  The L2 chain id does **not** enter `deploymentId` or
+the kernel's `signedActionDomain` sign-input (§8.8.5) — those axes
+stay orthogonal; it lives only at the Ethereum/wallet boundary
+(the `KnomosisAction` EIP-712 domain).
+
+**Wallet connection.**  Knomosis is not an EVM chain — a wallet
+interacts with the L2 purely by **EIP-712 typed-data signing**
+(`eth_signTypedData_v4` over the `KnomosisAction` domain, whose
+`chainId` is the L2 chain id); the signed `SignedAction` is
+submitted through the gateway `POST /v1/actions`.  So a wallet can
+"connect to the L2" and sign coherently against chain `8357` /
+`83572` whether the bridge currently settles to Sepolia or to
+mainnet.  For network discovery the gateway surfaces the L2 chain
+id in `GET /v1/info` (`l2ChainId`) and answers a minimal
+read-only Ethereum JSON-RPC shim at `POST /rpc` (`eth_chainId`,
+`net_version`, `eth_blockNumber`, `web3_clientVersion`) — enough
+for a browser wallet's "Add Network".  There is deliberately no
+`eth_sendTransaction` / account surface (`-32601` for any other
+method): the L2's write path is the signed-action submission, not
+EVM transactions.  See `docs/abi.md` §13.6 / §13.10 and
+`docs/sepolia_deployment_runbook.md` §7.4.
 
 ### 15D.8 Solidity contract surface
 

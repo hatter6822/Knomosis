@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "151e80839d484fda629993fa8c1d770715a5f1834c41bd55fe5e2acecfd39f1c"
+    "source_digest": "f38780cdeb2e8394c2f87f8382935661d2b1d56dcf56dfdc64e815205c4f24a0"
   },
   "summary": {
     "module_count": 190,
-    "declaration_count": 5839
+    "declaration_count": 5846
   },
   "modules": [
     {
@@ -21330,7 +21330,7 @@
         {
           "kind": "enum",
           "name": "AuthLoadError",
-          "line": 36,
+          "line": 37,
           "called": [
             "error",
             "path",
@@ -21340,13 +21340,13 @@
         {
           "kind": "struct",
           "name": "Auth",
-          "line": 63,
+          "line": 64,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Debug for Auth",
-          "line": 67,
+          "line": 68,
           "called": [
             "Auth"
           ]
@@ -21354,7 +21354,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 71,
+          "line": 72,
           "called": [
             "_",
             "len"
@@ -21363,25 +21363,25 @@
         {
           "kind": "enum",
           "name": "AuthOutcome",
-          "line": 80,
+          "line": 81,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Auth",
-          "line": 90,
+          "line": 91,
           "called": []
         },
         {
           "kind": "fn",
           "name": "empty",
-          "line": 94,
+          "line": 95,
           "called": []
         },
         {
           "kind": "fn",
           "name": "load",
-          "line": 108,
+          "line": 109,
           "called": [
             "AuthLoadError",
             "as_bytes",
@@ -21395,7 +21395,7 @@
         {
           "kind": "fn",
           "name": "token_count",
-          "line": 128,
+          "line": 129,
           "called": [
             "len"
           ]
@@ -21403,7 +21403,7 @@
         {
           "kind": "fn",
           "name": "authorize",
-          "line": 140,
+          "line": 141,
           "called": [
             "AuthOutcome",
             "as_bytes",
@@ -21414,7 +21414,7 @@
         {
           "kind": "fn",
           "name": "bearer_token",
-          "line": 165,
+          "line": 166,
           "called": [
             "header"
           ]
@@ -21422,7 +21422,7 @@
         {
           "kind": "fn",
           "name": "credential_key",
-          "line": 174,
+          "line": 175,
           "called": [
             "hash"
           ]
@@ -21430,7 +21430,7 @@
         {
           "kind": "fn",
           "name": "is_exempt_path",
-          "line": 186,
+          "line": 191,
           "called": [
             "path"
           ]
@@ -21438,7 +21438,7 @@
         {
           "kind": "fn",
           "name": "gate",
-          "line": 198,
+          "line": 203,
           "called": [
             "Auth",
             "RouteOutcome",
@@ -21455,7 +21455,7 @@
         {
           "kind": "fn",
           "name": "rate_limit_check",
-          "line": 224,
+          "line": 229,
           "called": [
             "Err",
             "RateLimiter",
@@ -21473,7 +21473,7 @@
         {
           "kind": "fn",
           "name": "rate_limited",
-          "line": 243,
+          "line": 248,
           "called": [
             "RouteOutcome",
             "into_outcome",
@@ -21487,7 +21487,7 @@
         {
           "kind": "fn",
           "name": "check_token_file_permissions",
-          "line": 258,
+          "line": 263,
           "called": [
             "AuthLoadError",
             "Err",
@@ -21499,7 +21499,7 @@
         {
           "kind": "fn",
           "name": "check_token_file_permissions",
-          "line": 276,
+          "line": 281,
           "called": [
             "AuthLoadError"
           ]
@@ -21507,7 +21507,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 281,
+          "line": 286,
           "called": [
             "Auth",
             "AuthLoadError",
@@ -21519,7 +21519,7 @@
         {
           "kind": "fn",
           "name": "write_secure",
-          "line": 288,
+          "line": 293,
           "called": [
             "path",
             "unix"
@@ -21528,7 +21528,7 @@
         {
           "kind": "fn",
           "name": "auth_with",
-          "line": 299,
+          "line": 304,
           "called": [
             "Auth",
             "path",
@@ -21538,7 +21538,7 @@
         {
           "kind": "fn",
           "name": "load_parses_lines_skipping_blanks_and_comments",
-          "line": 306,
+          "line": 311,
           "called": [
             "auth",
             "authorize",
@@ -21551,7 +21551,7 @@
         {
           "kind": "fn",
           "name": "world_readable_token_file_is_rejected",
-          "line": 324,
+          "line": 329,
           "called": [
             "Err",
             "path"
@@ -21560,7 +21560,7 @@
         {
           "kind": "fn",
           "name": "rate_limit_check_throttles_per_credential",
-          "line": 340,
+          "line": 345,
           "called": [
             "_",
             "iter",
@@ -21570,7 +21570,7 @@
         {
           "kind": "fn",
           "name": "empty_token_set_is_fail_closed",
-          "line": 364,
+          "line": 369,
           "called": [
             "auth",
             "authorize"
@@ -21579,7 +21579,7 @@
         {
           "kind": "fn",
           "name": "missing_or_non_bearer_credential_is_missing",
-          "line": 376,
+          "line": 381,
           "called": [
             "auth",
             "auth_with",
@@ -21589,7 +21589,7 @@
         {
           "kind": "fn",
           "name": "correct_token_authorizes_wrong_token_is_invalid",
-          "line": 392,
+          "line": 397,
           "called": [
             "auth",
             "auth_with",
@@ -21599,7 +21599,7 @@
         {
           "kind": "fn",
           "name": "bearer_scheme_is_case_insensitive",
-          "line": 410,
+          "line": 415,
           "called": [
             "auth",
             "auth_with",
@@ -21609,7 +21609,7 @@
         {
           "kind": "fn",
           "name": "any_configured_token_authorizes",
-          "line": 423,
+          "line": 428,
           "called": [
             "auth",
             "auth_with",
@@ -21618,8 +21618,8 @@
         },
         {
           "kind": "fn",
-          "name": "gate_exempts_health_and_ready_only",
-          "line": 438,
+          "name": "gate_exempts_health_ready_and_rpc_only",
+          "line": 443,
           "called": [
             "auth",
             "gate",
@@ -21629,7 +21629,7 @@
         {
           "kind": "fn",
           "name": "gate_maps_wrong_token_to_403",
-          "line": 456,
+          "line": 464,
           "called": [
             "auth",
             "auth_with",
@@ -21641,7 +21641,7 @@
     {
       "module": "runtime::knomosis-gateway::src::config",
       "path": "runtime/knomosis-gateway/src/config.rs",
-      "declaration_count": 143,
+      "declaration_count": 148,
       "declarations": [
         {
           "kind": "const",
@@ -21711,272 +21711,284 @@
         },
         {
           "kind": "const",
-          "name": "OK_ADMISSION_STAGE_ENV",
+          "name": "L2_CHAIN_ID_ENV",
           "line": 75,
           "called": []
         },
         {
           "kind": "const",
+          "name": "DEFAULT_L2_CHAIN_ID",
+          "line": 84,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "OK_ADMISSION_STAGE_ENV",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "const",
           "name": "HOST_ADDR_ENV",
-          "line": 78,
+          "line": 90,
           "called": []
         },
         {
           "kind": "const",
           "name": "EVENT_SUBSCRIBE_ADDR_ENV",
-          "line": 81,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "AUTH_TOKEN_FILE_ENV",
-          "line": 86,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "RATE_LIMIT_RPS_ENV",
-          "line": 89,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "DEFAULT_RATE_LIMIT_RPS",
           "line": 93,
           "called": []
         },
         {
           "kind": "const",
+          "name": "AUTH_TOKEN_FILE_ENV",
+          "line": 98,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "RATE_LIMIT_RPS_ENV",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "DEFAULT_RATE_LIMIT_RPS",
+          "line": 105,
+          "called": []
+        },
+        {
+          "kind": "const",
           "name": "HOST_POOL_SIZE_ENV",
-          "line": 96,
+          "line": 108,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_HOST_POOL_SIZE",
-          "line": 99,
+          "line": 111,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_HOST_POOL_SIZE",
-          "line": 103,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "HOST_MAX_INFLIGHT_ENV",
-          "line": 106,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "REQUEST_DEADLINE_MS_ENV",
-          "line": 109,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "DEFAULT_REQUEST_DEADLINE_MS",
-          "line": 112,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "MAX_FRAME_SIZE_ENV",
           "line": 115,
           "called": []
         },
         {
           "kind": "const",
-          "name": "DEFAULT_MAX_FRAME_SIZE",
-          "line": 119,
+          "name": "HOST_MAX_INFLIGHT_ENV",
+          "line": 118,
           "called": []
         },
         {
           "kind": "const",
-          "name": "MAX_FRAME_SIZE_CEILING",
+          "name": "REQUEST_DEADLINE_MS_ENV",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "DEFAULT_REQUEST_DEADLINE_MS",
           "line": 124,
           "called": []
         },
         {
           "kind": "const",
-          "name": "IDEMPOTENCY_TTL_SECS_ENV",
+          "name": "MAX_FRAME_SIZE_ENV",
           "line": 127,
           "called": []
         },
         {
           "kind": "const",
-          "name": "DEFAULT_IDEMPOTENCY_TTL_SECS",
+          "name": "DEFAULT_MAX_FRAME_SIZE",
           "line": 131,
           "called": []
         },
         {
           "kind": "const",
+          "name": "MAX_FRAME_SIZE_CEILING",
+          "line": 136,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "IDEMPOTENCY_TTL_SECS_ENV",
+          "line": 139,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "DEFAULT_IDEMPOTENCY_TTL_SECS",
+          "line": 143,
+          "called": []
+        },
+        {
+          "kind": "const",
           "name": "IDEMPOTENCY_MAX_ENTRIES",
-          "line": 135,
+          "line": 147,
           "called": []
         },
         {
           "kind": "const",
           "name": "TLS_LISTEN_ENV",
-          "line": 140,
+          "line": 152,
           "called": []
         },
         {
           "kind": "const",
           "name": "TLS_CERT_ENV",
-          "line": 144,
+          "line": 156,
           "called": []
         },
         {
           "kind": "const",
           "name": "TLS_KEY_ENV",
-          "line": 149,
+          "line": 161,
           "called": []
         },
         {
           "kind": "const",
           "name": "MTLS_CLIENT_CA_ENV",
-          "line": 153,
+          "line": 165,
           "called": []
         },
         {
           "kind": "const",
           "name": "MTLS_CRL_ENV",
-          "line": 159,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "TLS_MAX_CONNECTIONS_ENV",
-          "line": 162,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "DEFAULT_TLS_MAX_CONNECTIONS",
-          "line": 167,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "MAX_TLS_MAX_CONNECTIONS",
           "line": 171,
           "called": []
         },
         {
           "kind": "const",
-          "name": "SSE_RING_CAPACITY_ENV",
+          "name": "TLS_MAX_CONNECTIONS_ENV",
           "line": 174,
           "called": []
         },
         {
           "kind": "const",
-          "name": "SSE_MAX_STREAMS_ENV",
-          "line": 177,
+          "name": "DEFAULT_TLS_MAX_CONNECTIONS",
+          "line": 179,
           "called": []
         },
         {
           "kind": "const",
-          "name": "SSE_MAX_CLIENT_LAG_ENV",
-          "line": 180,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "SSE_HEARTBEAT_SECS_ENV",
+          "name": "MAX_TLS_MAX_CONNECTIONS",
           "line": 183,
           "called": []
         },
         {
           "kind": "const",
-          "name": "SSE_STALE_SECS_ENV",
+          "name": "SSE_RING_CAPACITY_ENV",
           "line": 186,
           "called": []
         },
         {
           "kind": "const",
-          "name": "SSE_WRITE_TIMEOUT_MS_ENV",
+          "name": "SSE_MAX_STREAMS_ENV",
           "line": 189,
           "called": []
         },
         {
           "kind": "const",
+          "name": "SSE_MAX_CLIENT_LAG_ENV",
+          "line": 192,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "SSE_HEARTBEAT_SECS_ENV",
+          "line": 195,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "SSE_STALE_SECS_ENV",
+          "line": 198,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "SSE_WRITE_TIMEOUT_MS_ENV",
+          "line": 201,
+          "called": []
+        },
+        {
+          "kind": "const",
           "name": "DEFAULT_SSE_WRITE_TIMEOUT_MS",
-          "line": 196,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "MAX_SSE_RING_CAPACITY",
-          "line": 200,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "MAX_SSE_MAX_STREAMS",
-          "line": 204,
-          "called": []
-        },
-        {
-          "kind": "const",
-          "name": "MAX_SSE_SECS",
           "line": 208,
           "called": []
         },
         {
           "kind": "const",
+          "name": "MAX_SSE_RING_CAPACITY",
+          "line": 212,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MAX_SSE_MAX_STREAMS",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MAX_SSE_SECS",
+          "line": 220,
+          "called": []
+        },
+        {
+          "kind": "const",
           "name": "MAX_SSE_WRITE_TIMEOUT_MS",
-          "line": 211,
+          "line": 223,
           "called": []
         },
         {
           "kind": "const",
           "name": "CORS_ORIGIN_ENV",
-          "line": 214,
+          "line": 226,
           "called": []
         },
         {
           "kind": "const",
           "name": "LOG_FORMAT_ENV",
-          "line": 217,
+          "line": 229,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEV_ENV",
-          "line": 221,
+          "line": 233,
           "called": []
         },
         {
           "kind": "const",
           "name": "UPSTREAM_SUBSCRIPTIONS_ENV",
-          "line": 224,
+          "line": 236,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_UPSTREAM_SUBSCRIPTIONS",
-          "line": 230,
+          "line": 242,
           "called": []
         },
         {
           "kind": "const",
           "name": "MAX_UPSTREAM_SUBSCRIPTIONS",
-          "line": 234,
+          "line": 246,
           "called": []
         },
         {
           "kind": "const",
           "name": "HELP_TEXT",
-          "line": 237,
+          "line": 249,
           "called": []
         },
         {
           "kind": "enum",
           "name": "ConfigError",
-          "line": 385,
+          "line": 403,
           "called": [
             "error",
             "reason"
@@ -21985,25 +21997,25 @@
         {
           "kind": "enum",
           "name": "AdmissionStage",
-          "line": 420,
+          "line": 438,
           "called": []
         },
         {
           "kind": "impl",
           "name": "AdmissionStage",
-          "line": 431,
+          "line": 449,
           "called": []
         },
         {
           "kind": "fn",
           "name": "as_str",
-          "line": 435,
+          "line": 453,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::str::FromStr for AdmissionStage",
-          "line": 445,
+          "line": 463,
           "called": [
             "AdmissionStage"
           ]
@@ -22011,13 +22023,13 @@
         {
           "kind": "type",
           "name": "Err",
-          "line": 446,
+          "line": 464,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_str",
-          "line": 450,
+          "line": 468,
           "called": [
             "Err",
             "_"
@@ -22026,7 +22038,7 @@
         {
           "kind": "enum",
           "name": "LogFormat",
-          "line": 464,
+          "line": 482,
           "called": [
             "default"
           ]
@@ -22034,7 +22046,7 @@
         {
           "kind": "impl",
           "name": "std::str::FromStr for LogFormat",
-          "line": 473,
+          "line": 491,
           "called": [
             "LogFormat"
           ]
@@ -22042,13 +22054,13 @@
         {
           "kind": "type",
           "name": "Err",
-          "line": 474,
+          "line": 492,
           "called": []
         },
         {
           "kind": "fn",
           "name": "from_str",
-          "line": 477,
+          "line": 495,
           "called": [
             "Err",
             "_",
@@ -22058,13 +22070,13 @@
         {
           "kind": "struct",
           "name": "SseConfig",
-          "line": 493,
+          "line": 511,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Default for SseConfig",
-          "line": 514,
+          "line": 532,
           "called": [
             "SseConfig"
           ]
@@ -22072,13 +22084,13 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 515,
+          "line": 533,
           "called": []
         },
         {
           "kind": "struct",
           "name": "TlsConfig",
-          "line": 533,
+          "line": 551,
           "called": [
             "key"
           ]
@@ -22086,7 +22098,7 @@
         {
           "kind": "struct",
           "name": "Config",
-          "line": 557,
+          "line": 575,
           "called": [
             "AdmissionStage",
             "LogFormat",
@@ -22104,13 +22116,13 @@
         {
           "kind": "impl",
           "name": "Config",
-          "line": 672,
+          "line": 698,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse",
-          "line": 685,
+          "line": 711,
           "called": [
             "ACTION_COST_ENV",
             "AUTH_TOKEN_FILE_ENV",
@@ -22145,6 +22157,7 @@
             "resolve_dev",
             "resolve_host_max_inflight",
             "resolve_host_pool_size",
+            "resolve_l2_chain_id",
             "resolve_log_format",
             "resolve_max_connections",
             "resolve_max_frame_size",
@@ -22157,9 +22170,31 @@
           ]
         },
         {
+          "kind": "impl",
+          "name": "Config",
+          "line": 822,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "test_default",
+          "line": 828,
+          "called": [
+            "DEFAULT_L2_CHAIN_ID",
+            "action_cost",
+            "dev",
+            "epoch_length",
+            "free_tier",
+            "gas_pool_actor",
+            "ok_admission_stage",
+            "parse",
+            "tls"
+          ]
+        },
+        {
           "kind": "fn",
           "name": "resolve_tls",
-          "line": 802,
+          "line": 868,
           "called": [
             "ConfigError",
             "Err",
@@ -22181,7 +22216,7 @@
         {
           "kind": "fn",
           "name": "resolve_host_max_inflight",
-          "line": 882,
+          "line": 948,
           "called": [
             "ConfigError",
             "Err",
@@ -22194,7 +22229,7 @@
         {
           "kind": "fn",
           "name": "resolve_request_deadline_ms",
-          "line": 899,
+          "line": 965,
           "called": [
             "ConfigError",
             "DEFAULT_REQUEST_DEADLINE_MS",
@@ -22207,7 +22242,7 @@
         {
           "kind": "fn",
           "name": "resolve_sse",
-          "line": 917,
+          "line": 983,
           "called": [
             "ConfigError",
             "Err",
@@ -22232,7 +22267,7 @@
         {
           "kind": "fn",
           "name": "resolve_bounded_usize",
-          "line": 996,
+          "line": 1062,
           "called": [
             "ConfigError",
             "Err",
@@ -22248,7 +22283,7 @@
         {
           "kind": "fn",
           "name": "resolve_bounded_u64",
-          "line": 1026,
+          "line": 1092,
           "called": [
             "ConfigError",
             "Err",
@@ -22264,7 +22299,7 @@
         {
           "kind": "fn",
           "name": "resolve_tls_max_connections",
-          "line": 1054,
+          "line": 1120,
           "called": [
             "ConfigError",
             "DEFAULT_TLS_MAX_CONNECTIONS",
@@ -22278,7 +22313,7 @@
         {
           "kind": "fn",
           "name": "resolve_max_frame_size",
-          "line": 1077,
+          "line": 1143,
           "called": [
             "ConfigError",
             "DEFAULT_MAX_FRAME_SIZE",
@@ -22294,7 +22329,7 @@
         {
           "kind": "fn",
           "name": "resolve_host_pool_size",
-          "line": 1102,
+          "line": 1168,
           "called": [
             "ConfigError",
             "DEFAULT_HOST_POOL_SIZE",
@@ -22310,7 +22345,7 @@
         {
           "kind": "fn",
           "name": "parse_optional_usize_flag",
-          "line": 1127,
+          "line": 1193,
           "called": [
             "ConfigError",
             "ok",
@@ -22321,7 +22356,7 @@
         {
           "kind": "fn",
           "name": "resolve_rate_limit_rps",
-          "line": 1148,
+          "line": 1214,
           "called": [
             "ConfigError",
             "DEFAULT_RATE_LIMIT_RPS",
@@ -22334,7 +22369,7 @@
         {
           "kind": "fn",
           "name": "resolve_admission_stage",
-          "line": 1162,
+          "line": 1228,
           "called": [
             "AdmissionStage",
             "ConfigError",
@@ -22346,8 +22381,23 @@
         },
         {
           "kind": "fn",
+          "name": "resolve_l2_chain_id",
+          "line": 1244,
+          "called": [
+            "ConfigError",
+            "DEFAULT_L2_CHAIN_ID",
+            "Err",
+            "L2_CHAIN_ID_ENV",
+            "clone",
+            "ok",
+            "parse",
+            "reason"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "resolve_cors_origin",
-          "line": 1179,
+          "line": 1267,
           "called": [
             "CORS_ORIGIN_ENV",
             "ConfigError",
@@ -22363,7 +22413,7 @@
         {
           "kind": "fn",
           "name": "is_valid_origin",
-          "line": 1215,
+          "line": 1303,
           "called": [
             "close",
             "is_empty",
@@ -22374,7 +22424,7 @@
         {
           "kind": "fn",
           "name": "resolve_log_format",
-          "line": 1257,
+          "line": 1345,
           "called": [
             "ConfigError",
             "LOG_FORMAT_ENV",
@@ -22387,7 +22437,7 @@
         {
           "kind": "fn",
           "name": "resolve_dev",
-          "line": 1272,
+          "line": 1360,
           "called": [
             "DEV_ENV",
             "Err",
@@ -22398,7 +22448,7 @@
         {
           "kind": "fn",
           "name": "resolve_upstream_subscriptions",
-          "line": 1287,
+          "line": 1375,
           "called": [
             "ConfigError",
             "DEFAULT_UPSTREAM_SUBSCRIPTIONS",
@@ -22414,7 +22464,7 @@
         {
           "kind": "fn",
           "name": "parse_optional_socket_addr_flag",
-          "line": 1312,
+          "line": 1400,
           "called": [
             "ConfigError",
             "ok",
@@ -22425,7 +22475,7 @@
         {
           "kind": "struct",
           "name": "RawArgs",
-          "line": 1336,
+          "line": 1424,
           "called": [
             "action_cost",
             "dev",
@@ -22438,13 +22488,13 @@
         {
           "kind": "impl",
           "name": "RawArgs",
-          "line": 1373,
+          "line": 1462,
           "called": []
         },
         {
           "kind": "fn",
           "name": "scan",
-          "line": 1380,
+          "line": 1469,
           "called": [
             "ConfigError",
             "Err",
@@ -22463,7 +22513,7 @@
         {
           "kind": "fn",
           "name": "take_value",
-          "line": 1489,
+          "line": 1581,
           "called": [
             "ConfigError",
             "args",
@@ -22474,7 +22524,7 @@
         {
           "kind": "fn",
           "name": "resolve_max_connections",
-          "line": 1499,
+          "line": 1591,
           "called": [
             "ConfigError",
             "DEFAULT_MAX_CONNECTIONS",
@@ -22490,7 +22540,7 @@
         {
           "kind": "fn",
           "name": "parse_u128_flag",
-          "line": 1524,
+          "line": 1616,
           "called": [
             "ConfigError",
             "ok",
@@ -22501,7 +22551,7 @@
         {
           "kind": "fn",
           "name": "parse_u64_flag",
-          "line": 1541,
+          "line": 1633,
           "called": [
             "ConfigError",
             "ok",
@@ -22512,7 +22562,7 @@
         {
           "kind": "fn",
           "name": "parse_optional_u64_flag",
-          "line": 1556,
+          "line": 1648,
           "called": [
             "ConfigError",
             "ok",
@@ -22523,7 +22573,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1575,
+          "line": 1667,
           "called": [
             "Config",
             "ConfigError",
@@ -22533,7 +22583,7 @@
         {
           "kind": "fn",
           "name": "argv",
-          "line": 1578,
+          "line": 1670,
           "called": [
             "iter"
           ]
@@ -22541,7 +22591,7 @@
         {
           "kind": "fn",
           "name": "defaults_to_loopback",
-          "line": 1586,
+          "line": 1678,
           "called": [
             "DEFAULT_LISTEN",
             "argv"
@@ -22550,7 +22600,7 @@
         {
           "kind": "fn",
           "name": "listen_flag_parsed",
-          "line": 1595,
+          "line": 1687,
           "called": [
             "argv"
           ]
@@ -22558,7 +22608,7 @@
         {
           "kind": "fn",
           "name": "help_and_version_sentinels",
-          "line": 1602,
+          "line": 1694,
           "called": [
             "Err",
             "argv"
@@ -22567,7 +22617,7 @@
         {
           "kind": "fn",
           "name": "listen_missing_value",
-          "line": 1623,
+          "line": 1715,
           "called": [
             "Err",
             "argv"
@@ -22576,7 +22626,7 @@
         {
           "kind": "fn",
           "name": "listen_invalid_value",
-          "line": 1632,
+          "line": 1724,
           "called": [
             "Err",
             "argv"
@@ -22585,7 +22635,7 @@
         {
           "kind": "fn",
           "name": "unknown_argument_rejected",
-          "line": 1641,
+          "line": 1733,
           "called": [
             "Err",
             "_",
@@ -22595,7 +22645,7 @@
         {
           "kind": "fn",
           "name": "max_connections_default_and_override",
-          "line": 1651,
+          "line": 1743,
           "called": [
             "argv"
           ]
@@ -22603,7 +22653,7 @@
         {
           "kind": "fn",
           "name": "max_connections_zero_rejected",
-          "line": 1661,
+          "line": 1753,
           "called": [
             "Err",
             "argv"
@@ -22612,7 +22662,7 @@
         {
           "kind": "fn",
           "name": "max_connections_above_ceiling_rejected",
-          "line": 1670,
+          "line": 1762,
           "called": [
             "Err",
             "argv"
@@ -22621,7 +22671,7 @@
         {
           "kind": "fn",
           "name": "max_connections_non_numeric_rejected",
-          "line": 1680,
+          "line": 1772,
           "called": [
             "Err",
             "argv"
@@ -22630,7 +22680,7 @@
         {
           "kind": "fn",
           "name": "indexer_db_optional",
-          "line": 1689,
+          "line": 1781,
           "called": [
             "argv"
           ]
@@ -22638,7 +22688,7 @@
         {
           "kind": "fn",
           "name": "budget_knobs_default_and_parse",
-          "line": 1702,
+          "line": 1794,
           "called": [
             "action_cost",
             "argv",
@@ -22649,7 +22699,7 @@
         {
           "kind": "fn",
           "name": "budget_knob_non_numeric_rejected",
-          "line": 1726,
+          "line": 1818,
           "called": [
             "Err",
             "argv"
@@ -22658,7 +22708,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_actor_optional_and_parsed",
-          "line": 1736,
+          "line": 1828,
           "called": [
             "argv",
             "gas_pool_actor"
@@ -22667,7 +22717,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_actor_non_numeric_rejected",
-          "line": 1746,
+          "line": 1838,
           "called": [
             "Err",
             "argv"
@@ -22676,7 +22726,7 @@
         {
           "kind": "fn",
           "name": "deployment_id_default_and_override",
-          "line": 1755,
+          "line": 1847,
           "called": [
             "argv"
           ]
@@ -22684,7 +22734,7 @@
         {
           "kind": "fn",
           "name": "ok_admission_stage_default_parse_and_reject",
-          "line": 1765,
+          "line": 1857,
           "called": [
             "Err",
             "argv",
@@ -22694,7 +22744,7 @@
         {
           "kind": "fn",
           "name": "upstream_addrs_optional_and_validated",
-          "line": 1783,
+          "line": 1875,
           "called": [
             "Err",
             "argv"
@@ -22703,7 +22753,7 @@
         {
           "kind": "fn",
           "name": "rate_limit_rps_default_parse_and_reject",
-          "line": 1810,
+          "line": 1902,
           "called": [
             "Err",
             "argv"
@@ -22712,7 +22762,7 @@
         {
           "kind": "fn",
           "name": "host_pool_knobs",
-          "line": 1837,
+          "line": 1929,
           "called": [
             "Err",
             "argv"
@@ -22721,7 +22771,7 @@
         {
           "kind": "fn",
           "name": "idempotency_ttl_default_and_parse",
-          "line": 1889,
+          "line": 1981,
           "called": [
             "Err",
             "argv"
@@ -22730,7 +22780,7 @@
         {
           "kind": "fn",
           "name": "auth_token_file_optional",
-          "line": 1909,
+          "line": 2001,
           "called": [
             "argv"
           ]
@@ -22738,7 +22788,7 @@
         {
           "kind": "fn",
           "name": "admission_stage_str_roundtrip",
-          "line": 1922,
+          "line": 2014,
           "called": [
             "as_str",
             "parse"
@@ -22747,13 +22797,13 @@
         {
           "kind": "fn",
           "name": "clear_tls_env",
-          "line": 1931,
+          "line": 2023,
           "called": []
         },
         {
           "kind": "fn",
           "name": "tls_disabled_by_default",
-          "line": 1946,
+          "line": 2038,
           "called": [
             "argv",
             "clear_tls_env",
@@ -22763,7 +22813,7 @@
         {
           "kind": "fn",
           "name": "tls_full_config_parsed",
-          "line": 1954,
+          "line": 2046,
           "called": [
             "argv",
             "clear_tls_env",
@@ -22774,7 +22824,7 @@
         {
           "kind": "fn",
           "name": "tls_mtls_and_max_connections_parsed",
-          "line": 1983,
+          "line": 2075,
           "called": [
             "argv",
             "clear_tls_env",
@@ -22784,7 +22834,7 @@
         {
           "kind": "fn",
           "name": "mtls_crl_requires_client_ca",
-          "line": 2009,
+          "line": 2101,
           "called": [
             "Err",
             "argv",
@@ -22794,7 +22844,7 @@
         {
           "kind": "fn",
           "name": "tls_listen_requires_cert_and_key",
-          "line": 2028,
+          "line": 2120,
           "called": [
             "Err",
             "argv",
@@ -22804,7 +22854,7 @@
         {
           "kind": "fn",
           "name": "tls_knob_without_listen_rejected",
-          "line": 2049,
+          "line": 2141,
           "called": [
             "Err",
             "argv",
@@ -22814,13 +22864,13 @@
         {
           "kind": "fn",
           "name": "clear_sse_env",
-          "line": 2069,
+          "line": 2161,
           "called": []
         },
         {
           "kind": "fn",
           "name": "sse_defaults_match_struct_default",
-          "line": 2084,
+          "line": 2176,
           "called": [
             "argv",
             "clear_sse_env"
@@ -22829,7 +22879,7 @@
         {
           "kind": "fn",
           "name": "sse_flags_override_each_field",
-          "line": 2094,
+          "line": 2186,
           "called": [
             "argv",
             "clear_sse_env"
@@ -22838,7 +22888,7 @@
         {
           "kind": "fn",
           "name": "sse_lag_invariant_enforced_and_default_auto_adjusts",
-          "line": 2120,
+          "line": 2212,
           "called": [
             "Err",
             "argv",
@@ -22848,7 +22898,7 @@
         {
           "kind": "fn",
           "name": "sse_ranges_validated",
-          "line": 2142,
+          "line": 2234,
           "called": [
             "Err",
             "argv",
@@ -22858,7 +22908,7 @@
         {
           "kind": "fn",
           "name": "tls_invalid_values_rejected",
-          "line": 2165,
+          "line": 2257,
           "called": [
             "Err",
             "argv",
@@ -22869,7 +22919,7 @@
         {
           "kind": "fn",
           "name": "sse_write_timeout_default_override_and_reject",
-          "line": 2198,
+          "line": 2290,
           "called": [
             "Err",
             "argv",
@@ -22879,7 +22929,7 @@
         {
           "kind": "fn",
           "name": "cors_origin_parsing",
-          "line": 2221,
+          "line": 2313,
           "called": [
             "Err",
             "argv"
@@ -22888,7 +22938,7 @@
         {
           "kind": "fn",
           "name": "valid_origin_predicate",
-          "line": 2267,
+          "line": 2359,
           "called": [
             "ok"
           ]
@@ -22896,7 +22946,7 @@
         {
           "kind": "fn",
           "name": "log_format_parsing",
-          "line": 2294,
+          "line": 2386,
           "called": [
             "Err",
             "argv"
@@ -22905,7 +22955,7 @@
         {
           "kind": "fn",
           "name": "dev_flag_parsing",
-          "line": 2321,
+          "line": 2413,
           "called": [
             "argv",
             "dev"
@@ -22914,7 +22964,7 @@
         {
           "kind": "fn",
           "name": "upstream_subscriptions_parsing",
-          "line": 2330,
+          "line": 2422,
           "called": [
             "Err",
             "argv"
@@ -23468,7 +23518,7 @@
         {
           "kind": "fn",
           "name": "events_backfill",
-          "line": 123,
+          "line": 124,
           "called": [
             "AppState",
             "BACKFILL_IDLE_TIMEOUT",
@@ -23495,7 +23545,7 @@
         {
           "kind": "fn",
           "name": "with_reads",
-          "line": 173,
+          "line": 174,
           "called": [
             "AppState",
             "RouteOutcome",
@@ -23508,7 +23558,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 186,
+          "line": 187,
           "called": [
             "RequestPayload",
             "Route",
@@ -23519,7 +23569,7 @@
         {
           "kind": "fn",
           "name": "dispatch",
-          "line": 195,
+          "line": 196,
           "called": [
             "AppState",
             "Route",
@@ -23531,7 +23581,7 @@
         {
           "kind": "fn",
           "name": "state",
-          "line": 199,
+          "line": 200,
           "called": [
             "AppState",
             "Config",
@@ -23548,7 +23598,7 @@
         {
           "kind": "fn",
           "name": "health_is_text_200",
-          "line": 230,
+          "line": 232,
           "called": [
             "dispatch",
             "is_empty",
@@ -23558,7 +23608,7 @@
         {
           "kind": "fn",
           "name": "info_dispatches_to_typed_view",
-          "line": 239,
+          "line": 241,
           "called": [
             "dispatch",
             "state"
@@ -23567,7 +23617,7 @@
         {
           "kind": "fn",
           "name": "ready_dispatches_to_readiness_probe",
-          "line": 251,
+          "line": 253,
           "called": [
             "dispatch",
             "state"
@@ -23576,7 +23626,7 @@
         {
           "kind": "fn",
           "name": "method_not_allowed_carries_allow_header",
-          "line": 261,
+          "line": 263,
           "called": [
             "dispatch",
             "iter",
@@ -23586,7 +23636,7 @@
         {
           "kind": "fn",
           "name": "not_found_is_problem_json_404_with_path",
-          "line": 269,
+          "line": 271,
           "called": [
             "dispatch",
             "path",
@@ -23596,7 +23646,7 @@
         {
           "kind": "fn",
           "name": "read_route_without_indexer_db_is_503",
-          "line": 282,
+          "line": 284,
           "called": [
             "actor",
             "dispatch",
@@ -23608,7 +23658,7 @@
         {
           "kind": "fn",
           "name": "events_route_without_upstream_is_503",
-          "line": 308,
+          "line": 310,
           "called": [
             "dispatch",
             "state"
@@ -23617,7 +23667,7 @@
         {
           "kind": "fn",
           "name": "bad_request_is_problem_json_400",
-          "line": 327,
+          "line": 329,
           "called": [
             "dispatch",
             "state"
@@ -23626,7 +23676,7 @@
         {
           "kind": "fn",
           "name": "pool_net_flag_follows_configured_gas_pool_actor",
-          "line": 345,
+          "line": 347,
           "called": [
             "CURSOR_KEY",
             "Config",
@@ -27327,7 +27377,7 @@
     {
       "module": "runtime::knomosis-gateway::src::http::router",
       "path": "runtime/knomosis-gateway/src/http/router.rs",
-      "declaration_count": 49,
+      "declaration_count": 50,
       "declarations": [
         {
           "kind": "enum",
@@ -27344,43 +27394,43 @@
         {
           "kind": "struct",
           "name": "RouteOutcome",
-          "line": 121,
+          "line": 127,
           "called": []
         },
         {
           "kind": "const",
           "name": "TEXT_PLAIN",
-          "line": 133,
+          "line": 139,
           "called": []
         },
         {
           "kind": "const",
           "name": "APPLICATION_JSON",
-          "line": 135,
+          "line": 141,
           "called": []
         },
         {
           "kind": "const",
           "name": "APPLICATION_PROBLEM_JSON",
-          "line": 137,
+          "line": 143,
           "called": []
         },
         {
           "kind": "const",
           "name": "TEXT_EVENT_STREAM",
-          "line": 140,
+          "line": 146,
           "called": []
         },
         {
           "kind": "impl",
           "name": "RouteOutcome",
-          "line": 142,
+          "line": 148,
           "called": []
         },
         {
           "kind": "fn",
           "name": "text",
-          "line": 144,
+          "line": 150,
           "called": [
             "TEXT_PLAIN"
           ]
@@ -27388,7 +27438,7 @@
         {
           "kind": "fn",
           "name": "no_content",
-          "line": 156,
+          "line": 162,
           "called": [
             "TEXT_PLAIN"
           ]
@@ -27396,7 +27446,7 @@
         {
           "kind": "fn",
           "name": "event_stream_head",
-          "line": 168,
+          "line": 174,
           "called": [
             "TEXT_EVENT_STREAM"
           ]
@@ -27404,7 +27454,7 @@
         {
           "kind": "fn",
           "name": "json",
-          "line": 178,
+          "line": 184,
           "called": [
             "APPLICATION_JSON"
           ]
@@ -27412,7 +27462,7 @@
         {
           "kind": "fn",
           "name": "problem",
-          "line": 189,
+          "line": 195,
           "called": [
             "APPLICATION_PROBLEM_JSON"
           ]
@@ -27420,7 +27470,7 @@
         {
           "kind": "fn",
           "name": "with_header",
-          "line": 201,
+          "line": 207,
           "called": [
             "name",
             "push"
@@ -27429,7 +27479,7 @@
         {
           "kind": "fn",
           "name": "apply_conditional",
-          "line": 215,
+          "line": 221,
           "called": [
             "RouteOutcome",
             "_",
@@ -27441,7 +27491,7 @@
         {
           "kind": "fn",
           "name": "route",
-          "line": 256,
+          "line": 262,
           "called": [
             "Route",
             "_",
@@ -27457,7 +27507,7 @@
         {
           "kind": "fn",
           "name": "route_v1_actors",
-          "line": 281,
+          "line": 288,
           "called": [
             "Err",
             "Route",
@@ -27474,7 +27524,7 @@
         {
           "kind": "fn",
           "name": "route_v1_pools",
-          "line": 337,
+          "line": 344,
           "called": [
             "Route",
             "is_empty",
@@ -27490,7 +27540,7 @@
         {
           "kind": "fn",
           "name": "route_v1_events",
-          "line": 370,
+          "line": 377,
           "called": [
             "Route",
             "parse",
@@ -27501,7 +27551,7 @@
         {
           "kind": "fn",
           "name": "route_v1_event_stream",
-          "line": 403,
+          "line": 410,
           "called": [
             "Err",
             "Route",
@@ -27514,7 +27564,7 @@
         {
           "kind": "fn",
           "name": "query_param",
-          "line": 431,
+          "line": 438,
           "called": [
             "key",
             "split"
@@ -27523,7 +27573,7 @@
         {
           "kind": "fn",
           "name": "query_param_all",
-          "line": 442,
+          "line": 449,
           "called": [
             "is_empty",
             "key",
@@ -27533,7 +27583,7 @@
         {
           "kind": "fn",
           "name": "get_only",
-          "line": 456,
+          "line": 463,
           "called": [
             "Route",
             "route"
@@ -27542,7 +27592,7 @@
         {
           "kind": "fn",
           "name": "post_only",
-          "line": 466,
+          "line": 473,
           "called": [
             "Route",
             "route"
@@ -27551,7 +27601,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 475,
+          "line": 482,
           "called": [
             "Route",
             "RouteOutcome",
@@ -27564,7 +27614,7 @@
         {
           "kind": "fn",
           "name": "r",
-          "line": 481,
+          "line": 488,
           "called": [
             "Route",
             "path",
@@ -27574,7 +27624,7 @@
         {
           "kind": "fn",
           "name": "static_get_routes",
-          "line": 486,
+          "line": 493,
           "called": [
             "r"
           ]
@@ -27582,7 +27632,7 @@
         {
           "kind": "fn",
           "name": "head_routes_identically_to_get",
-          "line": 493,
+          "line": 500,
           "called": [
             "actor",
             "r",
@@ -27592,7 +27642,7 @@
         {
           "kind": "fn",
           "name": "unknown_path_is_not_found_with_path",
-          "line": 509,
+          "line": 516,
           "called": [
             "path",
             "r"
@@ -27601,7 +27651,7 @@
         {
           "kind": "fn",
           "name": "non_get_on_known_path_is_method_not_allowed",
-          "line": 519,
+          "line": 526,
           "called": [
             "r"
           ]
@@ -27609,7 +27659,7 @@
         {
           "kind": "fn",
           "name": "actor_balances_list_route",
-          "line": 530,
+          "line": 537,
           "called": [
             "actor",
             "r"
@@ -27618,7 +27668,7 @@
         {
           "kind": "fn",
           "name": "actor_balance_single_route",
-          "line": 543,
+          "line": 550,
           "called": [
             "actor",
             "r",
@@ -27628,7 +27678,7 @@
         {
           "kind": "fn",
           "name": "malformed_id_is_bad_request",
-          "line": 554,
+          "line": 561,
           "called": [
             "r"
           ]
@@ -27636,7 +27686,7 @@
         {
           "kind": "fn",
           "name": "non_get_balances_is_method_not_allowed",
-          "line": 566,
+          "line": 573,
           "called": [
             "r"
           ]
@@ -27644,7 +27694,7 @@
         {
           "kind": "fn",
           "name": "unrelated_or_overlong_actors_path_is_not_found",
-          "line": 574,
+          "line": 581,
           "called": [
             "r"
           ]
@@ -27652,7 +27702,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_route",
-          "line": 588,
+          "line": 595,
           "called": [
             "actor",
             "r"
@@ -27661,7 +27711,7 @@
         {
           "kind": "fn",
           "name": "pool_route_defaults_to_eth",
-          "line": 611,
+          "line": 618,
           "called": [
             "pool",
             "resource",
@@ -27671,7 +27721,7 @@
         {
           "kind": "fn",
           "name": "pool_route_resource_selector",
-          "line": 623,
+          "line": 630,
           "called": [
             "pool",
             "resource",
@@ -27681,7 +27731,7 @@
         {
           "kind": "fn",
           "name": "pool_route_malformed_id_or_selector_is_bad_request",
-          "line": 649,
+          "line": 656,
           "called": [
             "route"
           ]
@@ -27689,7 +27739,7 @@
         {
           "kind": "fn",
           "name": "pool_route_method_and_shape",
-          "line": 663,
+          "line": 670,
           "called": [
             "route"
           ]
@@ -27697,7 +27747,15 @@
         {
           "kind": "fn",
           "name": "submit_action_route",
-          "line": 678,
+          "line": 685,
+          "called": [
+            "r"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rpc_route_is_post_only",
+          "line": 695,
           "called": [
             "r"
           ]
@@ -27705,7 +27763,7 @@
         {
           "kind": "fn",
           "name": "events_route_defaults",
-          "line": 688,
+          "line": 702,
           "called": [
             "route"
           ]
@@ -27713,7 +27771,7 @@
         {
           "kind": "fn",
           "name": "events_route_parses_since_limit_and_types",
-          "line": 701,
+          "line": 715,
           "called": [
             "route"
           ]
@@ -27721,7 +27779,7 @@
         {
           "kind": "fn",
           "name": "events_route_validates_since_and_limit",
-          "line": 726,
+          "line": 740,
           "called": [
             "route"
           ]
@@ -27729,7 +27787,7 @@
         {
           "kind": "fn",
           "name": "events_route_method_discipline",
-          "line": 749,
+          "line": 763,
           "called": [
             "route"
           ]
@@ -27737,7 +27795,7 @@
         {
           "kind": "fn",
           "name": "event_stream_route_parses_optional_since_and_types",
-          "line": 757,
+          "line": 771,
           "called": [
             "route"
           ]
@@ -27745,7 +27803,7 @@
         {
           "kind": "fn",
           "name": "query_param_all_collects_repeats",
-          "line": 790,
+          "line": 804,
           "called": [
             "is_empty",
             "query_param_all"
@@ -27754,7 +27812,7 @@
         {
           "kind": "fn",
           "name": "query_param_extraction",
-          "line": 804,
+          "line": 818,
           "called": [
             "query_param"
           ]
@@ -27762,7 +27820,7 @@
         {
           "kind": "fn",
           "name": "conditional_collapses_matching_etag_to_304",
-          "line": 816,
+          "line": 830,
           "called": [
             "apply_conditional",
             "clone",
@@ -27775,7 +27833,7 @@
         {
           "kind": "fn",
           "name": "conditional_ignores_non_200_and_etagless",
-          "line": 838,
+          "line": 852,
           "called": [
             "apply_conditional",
             "not_found"
@@ -28062,7 +28120,7 @@
         {
           "kind": "struct",
           "name": "TlsServer",
-          "line": 513,
+          "line": 514,
           "called": [
             "addr",
             "handle"
@@ -28071,7 +28129,7 @@
         {
           "kind": "impl",
           "name": "Drop for TlsServer",
-          "line": 519,
+          "line": 520,
           "called": [
             "TlsServer"
           ]
@@ -28079,7 +28137,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 520,
+          "line": 521,
           "called": [
             "_",
             "handle",
@@ -28089,7 +28147,7 @@
         {
           "kind": "fn",
           "name": "serve",
-          "line": 532,
+          "line": 533,
           "called": [
             "AppState",
             "SharedConfig",
@@ -28109,7 +28167,7 @@
         {
           "kind": "fn",
           "name": "roots",
-          "line": 561,
+          "line": 562,
           "called": [
             "path"
           ]
@@ -28117,7 +28175,7 @@
         {
           "kind": "fn",
           "name": "request",
-          "line": 573,
+          "line": 574,
           "called": [
             "Err",
             "addr",
@@ -28137,7 +28195,7 @@
         {
           "kind": "fn",
           "name": "text",
-          "line": 623,
+          "line": 624,
           "called": [
             "bytes"
           ]
@@ -28145,7 +28203,7 @@
         {
           "kind": "fn",
           "name": "server_tls",
-          "line": 628,
+          "line": 629,
           "called": [
             "TlsConfig",
             "at",
@@ -28156,7 +28214,7 @@
         {
           "kind": "fn",
           "name": "native_tls_server_auth_surface",
-          "line": 644,
+          "line": 645,
           "called": [
             "addr",
             "as_bytes",
@@ -28176,7 +28234,7 @@
         {
           "kind": "fn",
           "name": "native_tls_body_and_stream_surface",
-          "line": 702,
+          "line": 703,
           "called": [
             "addr",
             "as_bytes",
@@ -28199,7 +28257,7 @@
         {
           "kind": "fn",
           "name": "native_tls_mutual_auth_enforced",
-          "line": 809,
+          "line": 810,
           "called": [
             "TlsConfig",
             "addr",
@@ -28220,7 +28278,7 @@
         {
           "kind": "fn",
           "name": "native_tls_revoked_client_cert_is_rejected",
-          "line": 855,
+          "line": 856,
           "called": [
             "TlsConfig",
             "addr",
@@ -28241,7 +28299,7 @@
         {
           "kind": "fn",
           "name": "make_crl_revoking_client",
-          "line": 896,
+          "line": 897,
           "called": [
             "at",
             "openssl"
@@ -28250,7 +28308,7 @@
         {
           "kind": "fn",
           "name": "cert_reload_swaps_on_success_keeps_on_failure",
-          "line": 955,
+          "line": 956,
           "called": [
             "SharedConfig",
             "TlsConfig",
@@ -28267,7 +28325,7 @@
         {
           "kind": "fn",
           "name": "cert_hot_reload_serves_the_new_certificate",
-          "line": 990,
+          "line": 991,
           "called": [
             "addr",
             "b",
@@ -28289,114 +28347,120 @@
     {
       "module": "runtime::knomosis-gateway::src::lib",
       "path": "runtime/knomosis-gateway/src/lib.rs",
-      "declaration_count": 20,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "const",
           "name": "VERSION",
-          "line": 57,
+          "line": 62,
           "called": []
         },
         {
           "kind": "const",
           "name": "GATEWAY_IDENTIFIER",
-          "line": 63,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "auth",
-          "line": 65,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "config",
-          "line": 66,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "cors",
-          "line": 67,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "dev",
           "line": 68,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "dispatch",
-          "line": 69,
-          "called": []
-        },
-        {
-          "kind": "mod",
-          "name": "events",
+          "name": "auth",
           "line": 70,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "http",
+          "name": "config",
           "line": 71,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "logging",
+          "name": "cors",
           "line": 72,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "observability",
+          "name": "dev",
           "line": 73,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "problem",
+          "name": "dispatch",
           "line": 74,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "rate_limit",
+          "name": "events",
           "line": 75,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "reads",
+          "name": "http",
           "line": 76,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "state",
+          "name": "logging",
           "line": 77,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "submit",
+          "name": "observability",
           "line": 78,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "system",
+          "name": "problem",
           "line": 79,
           "called": []
         },
         {
           "kind": "mod",
-          "name": "tests",
+          "name": "rate_limit",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "reads",
+          "line": 81,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "rpc",
           "line": 82,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "state",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "submit",
+          "line": 84,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "system",
+          "line": 85,
+          "called": []
+        },
+        {
+          "kind": "mod",
+          "name": "tests",
+          "line": 88,
           "called": [
             "GATEWAY_IDENTIFIER",
             "VERSION"
@@ -28405,7 +28469,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 87,
+          "line": 93,
           "called": [
             "GATEWAY_IDENTIFIER"
           ]
@@ -28413,7 +28477,7 @@
         {
           "kind": "fn",
           "name": "version_constant_non_empty",
-          "line": 94,
+          "line": 100,
           "called": [
             "VERSION",
             "next"
@@ -29365,7 +29429,7 @@
         {
           "kind": "fn",
           "name": "no_indexer_db_disables_reads",
-          "line": 253,
+          "line": 254,
           "called": [
             "config",
             "reads",
@@ -29375,7 +29439,7 @@
         {
           "kind": "fn",
           "name": "nonexistent_indexer_db_fails_fast",
-          "line": 261,
+          "line": 262,
           "called": [
             "Err",
             "config"
@@ -30623,7 +30687,7 @@
         {
           "kind": "struct",
           "name": "BudgetPolicyEcho",
-          "line": 71,
+          "line": 73,
           "called": [
             "action_cost",
             "epoch_length",
@@ -30634,7 +30698,7 @@
         {
           "kind": "fn",
           "name": "info_view",
-          "line": 84,
+          "line": 86,
           "called": [
             "AppState",
             "BudgetPolicyEcho",
@@ -30662,7 +30726,7 @@
         {
           "kind": "struct",
           "name": "ReadinessDto",
-          "line": 128,
+          "line": 131,
           "called": [
             "indexer",
             "subscribe"
@@ -30671,7 +30735,7 @@
         {
           "kind": "fn",
           "name": "readyz",
-          "line": 139,
+          "line": 142,
           "called": [
             "AppState",
             "ReadinessDto",
@@ -30688,7 +30752,7 @@
         {
           "kind": "fn",
           "name": "probe_indexer",
-          "line": 158,
+          "line": 161,
           "called": [
             "AppState",
             "read_cursor",
@@ -30700,7 +30764,7 @@
         {
           "kind": "fn",
           "name": "probe_tcp",
-          "line": 168,
+          "line": 171,
           "called": [
             "READINESS_PROBE_TIMEOUT",
             "addr"
@@ -30709,7 +30773,7 @@
         {
           "kind": "fn",
           "name": "read_failed",
-          "line": 176,
+          "line": 179,
           "called": [
             "RouteOutcome",
             "into_outcome",
@@ -30719,7 +30783,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 183,
+          "line": 186,
           "called": [
             "AdmissionStage",
             "CURSOR_KEY",
@@ -30733,7 +30797,7 @@
         {
           "kind": "fn",
           "name": "config",
-          "line": 194,
+          "line": 197,
           "called": [
             "Config",
             "action_cost",
@@ -30749,7 +30813,7 @@
         {
           "kind": "fn",
           "name": "seeded_indexer",
-          "line": 225,
+          "line": 229,
           "called": [
             "CURSOR_KEY",
             "INDEXER_IDENTIFIER",
@@ -30763,7 +30827,7 @@
         {
           "kind": "fn",
           "name": "info_reports_config_and_protocol_versions",
-          "line": 235,
+          "line": 239,
           "called": [
             "action_cost",
             "config",
@@ -30781,7 +30845,7 @@
         {
           "kind": "fn",
           "name": "info_without_indexer_reports_zero_seq_and_finalized_default",
-          "line": 274,
+          "line": 280,
           "called": [
             "config",
             "drop",
@@ -30792,7 +30856,7 @@
         {
           "kind": "fn",
           "name": "readyz_with_no_upstreams_is_ready",
-          "line": 290,
+          "line": 297,
           "called": [
             "config",
             "drop",
@@ -30803,7 +30867,7 @@
         {
           "kind": "fn",
           "name": "readyz_probes_configured_indexer",
-          "line": 305,
+          "line": 312,
           "called": [
             "config",
             "drop",
@@ -30816,7 +30880,7 @@
         {
           "kind": "fn",
           "name": "readyz_live_host_probe_succeeds_dead_one_fails",
-          "line": 319,
+          "line": 326,
           "called": [
             "config",
             "drop",
@@ -31065,19 +31129,19 @@
         {
           "kind": "struct",
           "name": "Resp",
-          "line": 181,
+          "line": 182,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Resp",
-          "line": 187,
+          "line": 188,
           "called": []
         },
         {
           "kind": "fn",
           "name": "header",
-          "line": 189,
+          "line": 190,
           "called": [
             "_",
             "as_str",
@@ -31088,13 +31152,13 @@
         {
           "kind": "fn",
           "name": "json",
-          "line": 197,
+          "line": 198,
           "called": []
         },
         {
           "kind": "fn",
           "name": "http_get",
-          "line": 209,
+          "line": 210,
           "called": [
             "Resp",
             "addr",
@@ -31109,7 +31173,7 @@
         {
           "kind": "fn",
           "name": "http_post",
-          "line": 227,
+          "line": 228,
           "called": [
             "Resp",
             "addr",
@@ -31120,7 +31184,7 @@
         {
           "kind": "fn",
           "name": "http_post_idem",
-          "line": 238,
+          "line": 239,
           "called": [
             "Resp",
             "addr",
@@ -31131,7 +31195,7 @@
         {
           "kind": "fn",
           "name": "http_post_full",
-          "line": 251,
+          "line": 252,
           "called": [
             "Resp",
             "addr",
@@ -31147,7 +31211,7 @@
         {
           "kind": "fn",
           "name": "read_http_response",
-          "line": 283,
+          "line": 284,
           "called": [
             "Err",
             "Resp",
@@ -31160,7 +31224,7 @@
         {
           "kind": "fn",
           "name": "try_parse",
-          "line": 301,
+          "line": 302,
           "called": [
             "Resp",
             "_",
@@ -31175,7 +31239,7 @@
         {
           "kind": "fn",
           "name": "get",
-          "line": 332,
+          "line": 333,
           "called": [
             "Resp",
             "TOKEN",
@@ -31187,7 +31251,7 @@
         {
           "kind": "fn",
           "name": "balance_list_endpoint_serves_contract_json",
-          "line": 337,
+          "line": 338,
           "called": [
             "addr",
             "as_str",
@@ -31205,7 +31269,7 @@
         {
           "kind": "fn",
           "name": "single_balance_and_budget_and_pool_endpoints",
-          "line": 357,
+          "line": 358,
           "called": [
             "addr",
             "get",
@@ -31217,7 +31281,7 @@
         {
           "kind": "fn",
           "name": "etag_revalidation_returns_304",
-          "line": 387,
+          "line": 388,
           "called": [
             "TOKEN",
             "addr",
@@ -31232,7 +31296,7 @@
         {
           "kind": "fn",
           "name": "auth_gate_enforced_on_reads",
-          "line": 413,
+          "line": 414,
           "called": [
             "addr",
             "http_get",
@@ -31242,7 +31306,7 @@
         {
           "kind": "fn",
           "name": "concurrent_writer_keeps_reads_well_formed_and_monotonic",
-          "line": 442,
+          "line": 443,
           "called": [
             "CURSOR_KEY",
             "_",
@@ -31267,7 +31331,7 @@
         {
           "kind": "struct",
           "name": "MockHost",
-          "line": 490,
+          "line": 491,
           "called": [
             "addr",
             "handle",
@@ -31277,13 +31341,13 @@
         {
           "kind": "impl",
           "name": "MockHost",
-          "line": 497,
+          "line": 498,
           "called": []
         },
         {
           "kind": "fn",
           "name": "start",
-          "line": 498,
+          "line": 499,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -31309,7 +31373,7 @@
         {
           "kind": "impl",
           "name": "Drop for MockHost",
-          "line": 550,
+          "line": 551,
           "called": [
             "MockHost"
           ]
@@ -31317,7 +31381,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 551,
+          "line": 552,
           "called": [
             "_",
             "handle",
@@ -31328,7 +31392,7 @@
         {
           "kind": "fn",
           "name": "submit_octet_stream_round_trips_to_host",
-          "line": 560,
+          "line": 561,
           "called": [
             "TOKEN",
             "addr",
@@ -31342,7 +31406,7 @@
         {
           "kind": "fn",
           "name": "submit_json_base64_round_trips_and_maps_not_admissible",
-          "line": 579,
+          "line": 580,
           "called": [
             "TOKEN",
             "addr",
@@ -31355,7 +31419,7 @@
         {
           "kind": "fn",
           "name": "submit_without_host_is_503",
-          "line": 594,
+          "line": 595,
           "called": [
             "TOKEN",
             "addr",
@@ -31367,7 +31431,7 @@
         {
           "kind": "fn",
           "name": "submit_unsupported_content_type_is_415",
-          "line": 608,
+          "line": 609,
           "called": [
             "TOKEN",
             "addr",
@@ -31380,7 +31444,7 @@
         {
           "kind": "fn",
           "name": "submit_oversize_body_is_413",
-          "line": 616,
+          "line": 617,
           "called": [
             "TOKEN",
             "addr",
@@ -31392,7 +31456,7 @@
         {
           "kind": "fn",
           "name": "submit_requires_auth",
-          "line": 633,
+          "line": 634,
           "called": [
             "addr",
             "b",
@@ -31404,7 +31468,7 @@
         {
           "kind": "fn",
           "name": "idempotency_key_replays_cached_response_without_resubmit",
-          "line": 648,
+          "line": 649,
           "called": [
             "TOKEN",
             "addr",
@@ -31419,7 +31483,7 @@
         {
           "kind": "fn",
           "name": "rate_limit_returns_429_with_retry_after",
-          "line": 680,
+          "line": 681,
           "called": [
             "_",
             "addr",
@@ -31433,7 +31497,7 @@
         {
           "kind": "fn",
           "name": "event_frame",
-          "line": 712,
+          "line": 713,
           "called": [
             "KIND_EVENT",
             "actor",
@@ -31445,7 +31509,7 @@
         {
           "kind": "struct",
           "name": "MockEventSubscribe",
-          "line": 732,
+          "line": 733,
           "called": [
             "addr",
             "handle",
@@ -31455,13 +31519,13 @@
         {
           "kind": "impl",
           "name": "MockEventSubscribe",
-          "line": 738,
+          "line": 739,
           "called": []
         },
         {
           "kind": "fn",
           "name": "start",
-          "line": 739,
+          "line": 740,
           "called": [
             "Err",
             "_",
@@ -31480,7 +31544,7 @@
         {
           "kind": "impl",
           "name": "Drop for MockEventSubscribe",
-          "line": 780,
+          "line": 781,
           "called": [
             "MockEventSubscribe"
           ]
@@ -31488,7 +31552,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 781,
+          "line": 782,
           "called": [
             "_",
             "handle",
@@ -31499,7 +31563,7 @@
         {
           "kind": "fn",
           "name": "events_backfill_endpoint_serves_a_group_complete_page",
-          "line": 790,
+          "line": 791,
           "called": [
             "addr",
             "event_frame",
@@ -31516,7 +31580,7 @@
         {
           "kind": "fn",
           "name": "events_backfill_requires_auth_and_validates_query",
-          "line": 818,
+          "line": 819,
           "called": [
             "addr",
             "event_frame",
@@ -31530,7 +31594,7 @@
         {
           "kind": "struct",
           "name": "SseHarness",
-          "line": 836,
+          "line": 837,
           "called": [
             "AppState",
             "addr",
@@ -31540,7 +31604,7 @@
         {
           "kind": "impl",
           "name": "Drop for SseHarness",
-          "line": 843,
+          "line": 844,
           "called": [
             "SseHarness"
           ]
@@ -31548,7 +31612,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 844,
+          "line": 845,
           "called": [
             "_",
             "handle",
@@ -31559,7 +31623,7 @@
         {
           "kind": "fn",
           "name": "start_sse_harness",
-          "line": 857,
+          "line": 858,
           "called": [
             "SseHarness",
             "start_sse_harness_cfg"
@@ -31568,7 +31632,7 @@
         {
           "kind": "fn",
           "name": "start_sse_harness_cfg",
-          "line": 861,
+          "line": 862,
           "called": [
             "Config",
             "SseConfig",
@@ -31596,7 +31660,7 @@
         {
           "kind": "fn",
           "name": "ring_len",
-          "line": 918,
+          "line": 920,
           "called": [
             "SseHarness",
             "fanout",
@@ -31609,7 +31673,7 @@
         {
           "kind": "fn",
           "name": "event_stream_serves_live_records_over_sse",
-          "line": 930,
+          "line": 932,
           "called": [
             "Err",
             "_",
@@ -31627,7 +31691,7 @@
         {
           "kind": "fn",
           "name": "event_stream_without_upstream_is_503",
-          "line": 998,
+          "line": 1000,
           "called": [
             "addr",
             "get",
@@ -31639,7 +31703,7 @@
         {
           "kind": "fn",
           "name": "responses_carry_a_request_id_and_problem_instance",
-          "line": 1009,
+          "line": 1011,
           "called": [
             "addr",
             "get",
@@ -31652,7 +31716,7 @@
         {
           "kind": "fn",
           "name": "open_sse_stream",
-          "line": 1038,
+          "line": 1040,
           "called": [
             "addr",
             "as_bytes",
@@ -31662,7 +31726,7 @@
         {
           "kind": "fn",
           "name": "read_until",
-          "line": 1053,
+          "line": 1055,
           "called": [
             "Err",
             "_",
@@ -31674,7 +31738,7 @@
         {
           "kind": "fn",
           "name": "active_streams",
-          "line": 1072,
+          "line": 1074,
           "called": [
             "SseHarness",
             "load",
@@ -31684,7 +31748,7 @@
         {
           "kind": "fn",
           "name": "wait_active_streams",
-          "line": 1077,
+          "line": 1079,
           "called": [
             "SseHarness",
             "active_streams",
@@ -31694,7 +31758,7 @@
         {
           "kind": "fn",
           "name": "wait_ring_len",
-          "line": 1089,
+          "line": 1091,
           "called": [
             "SseHarness",
             "end",
@@ -31704,7 +31768,7 @@
         {
           "kind": "fn",
           "name": "concurrent_sse_clients_all_receive_the_fan_out",
-          "line": 1101,
+          "line": 1103,
           "called": [
             "_",
             "active_streams",
@@ -31722,7 +31786,7 @@
         {
           "kind": "fn",
           "name": "repeated_stream_open_close_releases_every_slot_no_leak",
-          "line": 1128,
+          "line": 1130,
           "called": [
             "SseConfig",
             "_",
@@ -31821,7 +31885,7 @@
         {
           "kind": "fn",
           "name": "healthz_returns_200",
-          "line": 114,
+          "line": 115,
           "called": [
             "fetch"
           ]
@@ -31829,7 +31893,7 @@
         {
           "kind": "fn",
           "name": "info_returns_json",
-          "line": 127,
+          "line": 128,
           "called": [
             "one_shot_get"
           ]
@@ -31837,7 +31901,7 @@
         {
           "kind": "fn",
           "name": "readyz_returns_json_ready",
-          "line": 147,
+          "line": 148,
           "called": [
             "fetch"
           ]
@@ -31845,7 +31909,7 @@
         {
           "kind": "fn",
           "name": "protected_endpoint_without_token_is_401",
-          "line": 164,
+          "line": 165,
           "called": [
             "fetch"
           ]
@@ -31853,7 +31917,7 @@
         {
           "kind": "fn",
           "name": "protected_endpoint_with_wrong_token_is_403",
-          "line": 182,
+          "line": 183,
           "called": [
             "fetch"
           ]
@@ -31861,7 +31925,7 @@
         {
           "kind": "fn",
           "name": "unknown_path_returns_404",
-          "line": 193,
+          "line": 194,
           "called": [
             "one_shot_get"
           ]
@@ -31869,7 +31933,7 @@
         {
           "kind": "fn",
           "name": "unauthenticated_post_with_body_is_denied_before_the_body_and_closes",
-          "line": 202,
+          "line": 203,
           "called": [
             "addr",
             "as_bytes",
@@ -31884,7 +31948,7 @@
         {
           "kind": "fn",
           "name": "head_returns_headers_with_no_body",
-          "line": 227,
+          "line": 228,
           "called": [
             "addr",
             "as_bytes",
@@ -31901,7 +31965,7 @@
         {
           "kind": "fn",
           "name": "listener_serves_concurrent_requests",
-          "line": 264,
+          "line": 265,
           "called": [
             "_",
             "addr",

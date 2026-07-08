@@ -504,6 +504,7 @@ mod handshake_tests {
             log_format: crate::config::LogFormat::Json,
             dev: false,
             upstream_subscriptions: 1,
+            l2_chain_id: 83572,
             sse: SseConfig::default(),
             tls: None,
         };

@@ -36,6 +36,11 @@
 //!     `SignedAction` bytes opaquely to the host.
 //!   * the events track — `GET /v1/events` backfill + `GET /v1/events/stream`
 //!     SSE fan-out (G3).
+//!   * `POST /rpc` — a minimal, read-only Ethereum JSON-RPC shim
+//!     ([`rpc`]): `eth_chainId` / `net_version` / `eth_blockNumber` /
+//!     `web3_clientVersion`, so a browser wallet can "Add Network" and sign
+//!     L2 actions against the Knomosis L2 chain id (auth-exempt; Knomosis is
+//!     not an EVM chain, so there is no transaction surface here).
 //!   * the G4 hardening — auth (G1.4), rate limiting (G1.3), observability
 //!     (G4.3), graceful shutdown (G4.4), native TLS + mTLS (+ CRL revocation)
 //!     (G4.2), browser CORS ([`cors`]), and the `--dev` mock-upstream profile
@@ -75,6 +80,7 @@ pub mod observability;
 pub mod problem;
 pub mod rate_limit;
 pub mod reads;
+pub mod rpc;
 pub mod state;
 pub mod submit;
 pub mod system;

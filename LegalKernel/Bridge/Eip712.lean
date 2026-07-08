@@ -304,16 +304,76 @@ structure DomainParams where
   name : ByteArray
   /-- Protocol version, e.g. `"1"`.  Hashed for canonicalisation. -/
   version : ByteArray
-  /-- L1 chain id (1 for mainnet, 11155111 for Sepolia, etc.). -/
+  /-- The chain id bound into this domain.  Its meaning depends on
+      which domain this is:
+
+        * For the **`KnomosisAction`** domain — the wallet-facing
+          domain a user signs an L2 action against, reconstructed on
+          L1 by `KnomosisDisputeVerifier.checkSignatureInvalid` — this
+          is the Knomosis **L2** chain id (`knomosisL2ChainIdMainnet`
+          = 8357 / `knomosisL2ChainIdTestnet` = 83572, selected by
+          `l2ChainIdForL1`).  A wallet targets the L2, so its
+          signatures bind the L2's own chain id.
+        * For the genuinely-L1 domains (state-root attestations,
+          verdict signatures, migration attestations) this is the
+          **L1** chain id (1 mainnet / 11155111 Sepolia), keeping
+          their replay protection scoped to the L1 the verifying
+          contract lives on. -/
   chainId : Nat
   /-- Deployment-specific rollup id.  Lets multiple Knomosis rollups
-      share an L1 chain without collision. -/
+      share an L1 chain without collision.  With the L2 chain id
+      carried by `chainId` on the `KnomosisAction` domain, this stays
+      `0` today; a future multi-rollup deployment would populate it. -/
   rollupId : Nat
   /-- L1 contract address that verifies signatures (the
       `KnomosisBridge.sol` deployment).  Hashed in our canonical
       form (deviation from EIP-712 spec, which left-pads). -/
   verifyingContract : ByteArray
   deriving DecidableEq
+
+/-! ## Canonical Knomosis L2 chain identifiers
+
+The Knomosis L2 has its own EIP-155 chain id, distinct from the L1
+settlement chain.  It is what a wallet signs L2 actions against (the
+`KnomosisAction` domain — `chainId` above) and adds as a network.  It
+is CONSTANT across L1 settlement layers of the same tier: settling to
+a different L1 does not change the L2's identity; only the tier
+(production vs test) selects the value.  `l2ChainIdForL1` derives it
+deterministically from the L1 the bridge settles to, so every stack —
+the Solidity `KnomosisChainId` mirror, the deploy manifest, and the
+gateway `/v1/info` + JSON-RPC shim — obtains the same value with no
+separately-configured knob that could drift. -/
+
+/-- The Knomosis L2 chain id when the bridge settles to Ethereum
+    mainnet (L1 chain id 1): the production Knomosis L2. -/
+def knomosisL2ChainIdMainnet : Nat := 8357
+
+/-- The Knomosis L2 chain id when the bridge settles to any
+    non-mainnet L1 (Sepolia 11155111, Holesky, a local devnet): the
+    test Knomosis L2.  `mainnet * 10 + 2` (the Base 8453/84532
+    convention) so a wallet never confuses the test L2 with the
+    production L2. -/
+def knomosisL2ChainIdTestnet : Nat := 83572
+
+/-- The canonical Knomosis L2 chain id for a bridge deployed on the L1
+    identified by `l1ChainId`: mainnet L1 (1) selects
+    `knomosisL2ChainIdMainnet` (8357); every other L1 selects
+    `knomosisL2ChainIdTestnet` (83572).  Byte-for-byte mirror of the
+    Solidity `KnomosisChainId.l2ChainId`. -/
+def l2ChainIdForL1 (l1ChainId : Nat) : Nat :=
+  if l1ChainId = 1 then knomosisL2ChainIdMainnet else knomosisL2ChainIdTestnet
+
+/-- Every canonical L2 chain id fits in `uint64`.  This discharges the
+    `< 2 ^ 64` precondition of `encodeUint256BE_injective_uint64` (and
+    hence, via `pow_2_64_le_pow_256_32`, the `< 256 ^ 32` side
+    conditions of `domainPreHash_injective` /
+    `eip712DomainSeparator_distinguishes`), so binding the L2 chain id
+    into the `KnomosisAction` domain preserves every EIP-712
+    distinguishability theorem with no re-proof. -/
+theorem l2ChainIdForL1_lt_two_pow_64 (l1ChainId : Nat) :
+    l2ChainIdForL1 l1ChainId < 2 ^ 64 := by
+  unfold l2ChainIdForL1 knomosisL2ChainIdMainnet knomosisL2ChainIdTestnet
+  split <;> decide
 
 /-- The canonical pre-hash bytes for the domain separator.
     Concatenates the six 32-byte fields in EIP-712 order. -/

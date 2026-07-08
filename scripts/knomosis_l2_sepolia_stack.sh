@@ -114,6 +114,11 @@ done
 mf() { jq -er "$1" "${MANIFEST}"; }
 DEPLOYMENT_ID="$(mf '.deploymentId')" || die "manifest missing .deploymentId"
 CHAIN_ID="$(mf '.chainId')"           || die "manifest missing .chainId"
+# The canonical Knomosis L2 chain id (8357 production / 83572 test) the gateway
+# advertises via /v1/info + /rpc for wallet "Add Network".  Optional (older
+# manifests predate it): tolerate absence, letting the gateway apply its own
+# default rather than failing the launch.
+L2_CHAIN_ID="$(jq -er '.l2ChainId // empty' "${MANIFEST}" 2>/dev/null || true)"
 BRIDGE_ADDR="$(mf '.contracts.KnomosisBridge')"
 REGISTRY_ADDR="$(mf '.contracts.KnomosisIdentityRegistry')"
 GAME_ADDR="$(mf '.contracts.KnomosisFaultProofGame')"
@@ -246,6 +251,7 @@ GW_ARGS=(
 if [ ${#GW_BUDGET[@]} -gt 0 ]; then GW_ARGS+=("${GW_BUDGET[@]}"); fi
 [ -n "${GAS_POOL_ACTOR}" ] && GW_ARGS+=(--gas-pool-actor "${GAS_POOL_ACTOR}")
 [ -n "${GW_CORS_ORIGIN}" ] && GW_ARGS+=(--cors-origin "${GW_CORS_ORIGIN}")
+[ -n "${L2_CHAIN_ID}" ] && GW_ARGS+=(--l2-chain-id "${L2_CHAIN_ID}")
 spawn gateway "${RUST_BIN_DIR}/knomosis-gateway" "${GW_ARGS[@]}"
 wait_tcp "${GW_LISTEN}" || die "gateway did not open ${GW_LISTEN}"
 
@@ -289,6 +295,7 @@ fi
 echo
 log "================= L2 stack up ================="
 log "Gateway (for the Licio BFF):  http://${GW_LISTEN}"
+[ -n "${L2_CHAIN_ID}" ] && log "  L2 chain id (wallet):       ${L2_CHAIN_ID} (add-network RPC: http://${GW_LISTEN}/rpc)"
 log "  Bearer token file (0600):   ${TOKEN_FILE}"
 log "                              (read it with:  cat ${TOKEN_FILE})"
 [ -n "${GW_CORS_ORIGIN}" ] && log "  Browser CORS origin:        ${GW_CORS_ORIGIN}"
