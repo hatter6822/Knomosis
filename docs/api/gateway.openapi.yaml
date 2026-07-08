@@ -433,7 +433,12 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/JsonRpcRequest' }
+            # A single request or a batch array (the handler accepts both).
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/JsonRpcRequest'
+                - type: array
+                  items: { $ref: '#/components/schemas/JsonRpcRequest' }
       responses:
         '200':
           description: The JSON-RPC response (or a batch array of responses).
