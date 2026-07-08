@@ -115,10 +115,14 @@ mf() { jq -er "$1" "${MANIFEST}"; }
 DEPLOYMENT_ID="$(mf '.deploymentId')" || die "manifest missing .deploymentId"
 CHAIN_ID="$(mf '.chainId')"           || die "manifest missing .chainId"
 # The canonical Knomosis L2 chain id (8357 production / 83572 test) the gateway
-# advertises via /v1/info + /rpc for wallet "Add Network".  Optional (older
-# manifests predate it): tolerate absence, letting the gateway apply its own
-# default rather than failing the launch.
-L2_CHAIN_ID="$(jq -er '.l2ChainId // empty' "${MANIFEST}" 2>/dev/null || true)"
+# advertises via /v1/info + /rpc for wallet "Add Network".  REQUIRED: a manifest
+# without it predates the L2-chain-id scheme, so its deployed
+# KnomosisDisputeVerifier reconstructs the KnomosisAction domain with
+# block.chainid (the L1 id) rather than the L2 chain id.  Letting the gateway
+# fall back to its 83572 default there would make it advertise a chain id the
+# on-chain verifier does NOT expect, so a wallet-signed action could be
+# mis-verified as invalid during a dispute.  Fail closed on that version skew.
+L2_CHAIN_ID="$(mf '.l2ChainId')" || die "manifest missing .l2ChainId: it predates the L2 chain-id scheme, and its deployed KnomosisDisputeVerifier reconstructs the KnomosisAction domain with block.chainid (not the L2 chain id) — incompatible with the gateway's advertised L2 chain id.  Redeploy with the current contracts (make deploy-sepolia)."
 BRIDGE_ADDR="$(mf '.contracts.KnomosisBridge')"
 REGISTRY_ADDR="$(mf '.contracts.KnomosisIdentityRegistry')"
 GAME_ADDR="$(mf '.contracts.KnomosisFaultProofGame')"
@@ -251,7 +255,7 @@ GW_ARGS=(
 if [ ${#GW_BUDGET[@]} -gt 0 ]; then GW_ARGS+=("${GW_BUDGET[@]}"); fi
 [ -n "${GAS_POOL_ACTOR}" ] && GW_ARGS+=(--gas-pool-actor "${GAS_POOL_ACTOR}")
 [ -n "${GW_CORS_ORIGIN}" ] && GW_ARGS+=(--cors-origin "${GW_CORS_ORIGIN}")
-[ -n "${L2_CHAIN_ID}" ] && GW_ARGS+=(--l2-chain-id "${L2_CHAIN_ID}")
+GW_ARGS+=(--l2-chain-id "${L2_CHAIN_ID}")   # required (validated at manifest parse)
 spawn gateway "${RUST_BIN_DIR}/knomosis-gateway" "${GW_ARGS[@]}"
 wait_tcp "${GW_LISTEN}" || die "gateway did not open ${GW_LISTEN}"
 
