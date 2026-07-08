@@ -17,8 +17,9 @@
 //! **Fail-closed posture (§8 / §220).**  When no token file is configured
 //! the token set is empty and *every* non-exempt request is denied — the
 //! gateway never serves protected data without a credential.  Only the
-//! liveness / readiness probes (`/healthz`, `/readyz`, the contract's
-//! `security: []` operations) are exempt.
+//! liveness / readiness probes (`/healthz`, `/readyz`) and the wallet-facing
+//! JSON-RPC shim (`/rpc`, whose values are all public) — the contract's
+//! `security: []` operations — are exempt.
 //!
 //! **Status mapping** (the G1.4 acceptance): a request with **no** bearer
 //! credential → `401` (+ `WWW-Authenticate: Bearer`); a **well-formed but
@@ -180,12 +181,16 @@ pub fn credential_key(token: &str) -> u64 {
 }
 
 /// Whether `path` is exempt from authentication (the liveness / readiness
-/// probes, the contract's `security: []` operations).  Exemption is
-/// **path-based**, so a wrong-method request to an exempt path still
-/// skips auth (and is answered `405` by the router) rather than `401`.
+/// probes and the wallet-facing JSON-RPC shim — the contract's `security:
+/// []` operations).  `/rpc` is exempt because a browser wallet adding the
+/// network cannot present the gateway's bearer service credential, and every
+/// value it returns is public (the L2 chain id, the build string, a monotone
+/// advance counter).  Exemption is **path-based**, so a wrong-method request
+/// to an exempt path still skips auth (and is answered `405` by the router)
+/// rather than `401`.
 #[must_use]
 pub fn is_exempt_path(path: &str) -> bool {
-    matches!(path, "/healthz" | "/readyz")
+    matches!(path, "/healthz" | "/readyz" | "/rpc")
 }
 
 /// The auth gate applied before routing: `None` when the request is
@@ -219,8 +224,8 @@ pub fn gate(auth: &Auth, path: &str, header: Option<&str>) -> Option<RouteOutcom
 /// The per-credential rate-limit gate, applied **after** [`gate`] admits
 /// a request: `None` when the request may proceed, or `Some(429)` (with a
 /// `Retry-After` header + `retryAfterMs` extension) when the credential's
-/// token bucket is exhausted.  Exempt paths (`/healthz`, `/readyz`) and a
-/// disabled limiter are never throttled.
+/// token bucket is exhausted.  Exempt paths (`/healthz`, `/readyz`, `/rpc`)
+/// and a disabled limiter are never throttled.
 #[must_use]
 pub fn rate_limit_check(
     limiter: &RateLimiter,
@@ -436,11 +441,14 @@ mod tests {
     }
 
     #[test]
-    fn gate_exempts_health_and_ready_only() {
+    fn gate_exempts_health_ready_and_rpc_only() {
         let auth = Auth::empty(); // fail-closed: nothing authorizes
                                   // Exempt paths pass with no credential.
         assert!(gate(&auth, "/healthz", None).is_none());
         assert!(gate(&auth, "/readyz", None).is_none());
+        // The wallet-facing JSON-RPC shim is exempt (a wallet cannot present
+        // the service credential; its values are public).
+        assert!(gate(&auth, "/rpc", None).is_none());
         // Everything else is gated — even an unknown path (no enumeration)
         // and /v1/info — and answers 401 with no credential.
         let denied = gate(&auth, "/v1/info", None).expect("gated");

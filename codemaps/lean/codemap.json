@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "641051d2633c6bdd118e73bc43d9f427383f93debac074555e411f4b416183e5"
+    "source_digest": "380dba226692bccff450a58f4a7c407dd7b11e011307fe63c5bb790eedb69a48"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5170
+    "declaration_count": 5178
   },
   "modules": [
     {
@@ -8481,7 +8481,7 @@
     {
       "module": "LegalKernel.Bridge.Eip712",
       "path": "LegalKernel/Bridge/Eip712.lean",
-      "declaration_count": 36,
+      "declaration_count": 40,
       "declarations": [
         {
           "kind": "namespace",
@@ -8621,8 +8621,39 @@
         },
         {
           "kind": "def",
+          "name": "knomosisL2ChainIdMainnet",
+          "line": 348,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "knomosisL2ChainIdTestnet",
+          "line": 355,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "l2ChainIdForL1",
+          "line": 362,
+          "called": [
+            "knomosisL2ChainIdMainnet",
+            "knomosisL2ChainIdTestnet"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "l2ChainIdForL1_lt_two_pow_64",
+          "line": 372,
+          "called": [
+            "knomosisL2ChainIdMainnet",
+            "knomosisL2ChainIdTestnet",
+            "l2ChainIdForL1"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "domainPreHash",
-          "line": 319,
+          "line": 379,
           "called": [
             "DomainParams",
             "eip712DomainTypeHash",
@@ -8633,7 +8664,7 @@
         {
           "kind": "def",
           "name": "eip712DomainSeparator",
-          "line": 329,
+          "line": 389,
           "called": [
             "DomainParams",
             "domainPreHash",
@@ -8643,7 +8674,7 @@
         {
           "kind": "theorem",
           "name": "eip712DomainSeparator_size",
-          "line": 333,
+          "line": 393,
           "called": [
             "DomainParams",
             "eip712DomainSeparator",
@@ -8653,7 +8684,7 @@
         {
           "kind": "structure",
           "name": "Eip712Message",
-          "line": 343,
+          "line": 403,
           "called": [
             "Action",
             "ActorId",
@@ -8664,7 +8695,7 @@
         {
           "kind": "def",
           "name": "Eip712Message.signInput",
-          "line": 355,
+          "line": 415,
           "called": [
             "Eip712Message"
           ]
@@ -8672,7 +8703,7 @@
         {
           "kind": "def",
           "name": "Eip712Message.actionHash",
-          "line": 362,
+          "line": 422,
           "called": [
             "Eip712Message",
             "hashBytes"
@@ -8681,7 +8712,7 @@
         {
           "kind": "theorem",
           "name": "Eip712Message.actionHash_size",
-          "line": 368,
+          "line": 428,
           "called": [
             "Eip712Message",
             "Eip712Message.actionHash",
@@ -8691,7 +8722,7 @@
         {
           "kind": "def",
           "name": "structPreHash",
-          "line": 376,
+          "line": 436,
           "called": [
             "Eip712Message",
             "encodeUint256BE",
@@ -8702,7 +8733,7 @@
         {
           "kind": "def",
           "name": "eip712StructHash",
-          "line": 404,
+          "line": 464,
           "called": [
             "Eip712Message",
             "hashBytes",
@@ -8712,7 +8743,7 @@
         {
           "kind": "theorem",
           "name": "eip712StructHash_size",
-          "line": 408,
+          "line": 468,
           "called": [
             "Eip712Message",
             "eip712StructHash",
@@ -8722,7 +8753,7 @@
         {
           "kind": "theorem",
           "name": "structPreHash_size",
-          "line": 413,
+          "line": 473,
           "called": [
             "Eip712Message",
             "Eip712Message.actionHash_size",
@@ -8738,7 +8769,7 @@
         {
           "kind": "def",
           "name": "eip712Wrap",
-          "line": 423,
+          "line": 483,
           "called": [
             "Eip712Message",
             "eip712Prefix",
@@ -8748,7 +8779,7 @@
         {
           "kind": "theorem",
           "name": "eip712Wrap_size",
-          "line": 434,
+          "line": 494,
           "called": [
             "Eip712Message",
             "eip712Prefix",
@@ -8761,7 +8792,7 @@
         {
           "kind": "theorem",
           "name": "eip712Wrap_deterministic",
-          "line": 441,
+          "line": 501,
           "called": [
             "Eip712Message",
             "eip712Wrap"
@@ -8770,7 +8801,7 @@
         {
           "kind": "theorem",
           "name": "eip712Wrap_injective",
-          "line": 500,
+          "line": 560,
           "called": [
             "CollisionFree",
             "Eip712Message",
@@ -8792,7 +8823,7 @@
         {
           "kind": "theorem",
           "name": "domainPreHash_injective",
-          "line": 604,
+          "line": 664,
           "called": [
             "CollisionFree",
             "DomainParams",
@@ -8810,7 +8841,7 @@
         {
           "kind": "theorem",
           "name": "eip712DomainSeparator_distinguishes",
-          "line": 677,
+          "line": 737,
           "called": [
             "CollisionFree",
             "DomainParams",
@@ -8823,7 +8854,7 @@
         {
           "kind": "theorem",
           "name": "eip712Wrap_distinguishes",
-          "line": 711,
+          "line": 771,
           "called": [
             "CollisionFree",
             "Eip712Message",
@@ -40394,7 +40425,7 @@
     {
       "module": "LegalKernel.Test.Bridge.Eip712",
       "path": "LegalKernel/Test/Bridge/Eip712.lean",
-      "declaration_count": 49,
+      "declaration_count": 53,
       "declarations": [
         {
           "kind": "namespace",
@@ -40416,24 +40447,26 @@
         {
           "kind": "def",
           "name": "testDomain",
-          "line": 60,
+          "line": 62,
           "called": [
-            "DomainParams"
+            "DomainParams",
+            "knomosisL2ChainIdMainnet"
           ]
         },
         {
           "kind": "def",
           "name": "altDomain",
-          "line": 74,
+          "line": 79,
           "called": [
             "DomainParams",
+            "knomosisL2ChainIdTestnet",
             "testDomain"
           ]
         },
         {
           "kind": "def",
           "name": "testMessage",
-          "line": 78,
+          "line": 83,
           "called": [
             "Eip712Message",
             "deploymentId",
@@ -40443,7 +40476,7 @@
         {
           "kind": "def",
           "name": "altMessage",
-          "line": 86,
+          "line": 91,
           "called": [
             "Eip712Message",
             "mint",
@@ -40453,7 +40486,7 @@
         {
           "kind": "def",
           "name": "prefixIsTwoBytes",
-          "line": 92,
+          "line": 97,
           "called": [
             "TestCase",
             "assertEq"
@@ -40462,7 +40495,7 @@
         {
           "kind": "def",
           "name": "prefixFirstByte",
-          "line": 98,
+          "line": 103,
           "called": [
             "TestCase",
             "assertEq"
@@ -40471,7 +40504,7 @@
         {
           "kind": "def",
           "name": "prefixSecondByte",
-          "line": 107,
+          "line": 112,
           "called": [
             "TestCase",
             "assertEq"
@@ -40480,7 +40513,7 @@
         {
           "kind": "def",
           "name": "domainTypeStringExact",
-          "line": 127,
+          "line": 132,
           "called": [
             "TestCase",
             "assertEq",
@@ -40490,7 +40523,7 @@
         {
           "kind": "def",
           "name": "actionTypeStringExact",
-          "line": 138,
+          "line": 143,
           "called": [
             "TestCase",
             "assertEq",
@@ -40500,7 +40533,7 @@
         {
           "kind": "def",
           "name": "actionTypeStringDeploymentIsBytes",
-          "line": 154,
+          "line": 159,
           "called": [
             "TestCase",
             "assertEq",
@@ -40510,7 +40543,7 @@
         {
           "kind": "def",
           "name": "domainTypeStringContractIsBytes",
-          "line": 164,
+          "line": 169,
           "called": [
             "TestCase",
             "assertEq",
@@ -40520,7 +40553,7 @@
         {
           "kind": "def",
           "name": "domainSeparatorSize",
-          "line": 176,
+          "line": 181,
           "called": [
             "TestCase",
             "assertEq",
@@ -40531,7 +40564,7 @@
         {
           "kind": "def",
           "name": "domainPreHashSize",
-          "line": 183,
+          "line": 188,
           "called": [
             "TestCase",
             "assertEq",
@@ -40542,7 +40575,7 @@
         {
           "kind": "def",
           "name": "domainTypeHashSize",
-          "line": 190,
+          "line": 195,
           "called": [
             "TestCase",
             "assertEq"
@@ -40551,7 +40584,7 @@
         {
           "kind": "def",
           "name": "actionTypeHashSize",
-          "line": 196,
+          "line": 201,
           "called": [
             "TestCase",
             "assertEq"
@@ -40560,7 +40593,7 @@
         {
           "kind": "def",
           "name": "wrapSize",
-          "line": 204,
+          "line": 209,
           "called": [
             "TestCase",
             "assertEq",
@@ -40573,7 +40606,7 @@
         {
           "kind": "def",
           "name": "wrapBeginsWithPrefix",
-          "line": 213,
+          "line": 218,
           "called": [
             "TestCase",
             "assertEq",
@@ -40586,7 +40619,7 @@
         {
           "kind": "def",
           "name": "structHashSize",
-          "line": 227,
+          "line": 232,
           "called": [
             "TestCase",
             "assertEq",
@@ -40597,7 +40630,7 @@
         {
           "kind": "def",
           "name": "structPreHashSize",
-          "line": 238,
+          "line": 243,
           "called": [
             "TestCase",
             "assertEq",
@@ -40608,7 +40641,7 @@
         {
           "kind": "def",
           "name": "structPreHashContainsSigner",
-          "line": 251,
+          "line": 256,
           "called": [
             "TestCase",
             "assertEq",
@@ -40619,7 +40652,7 @@
         {
           "kind": "def",
           "name": "structPreHashSignerLSBLayout",
-          "line": 270,
+          "line": 275,
           "called": [
             "TestCase",
             "assertEq",
@@ -40630,7 +40663,7 @@
         {
           "kind": "def",
           "name": "structPreHashNonceLSBLayout",
-          "line": 284,
+          "line": 289,
           "called": [
             "TestCase",
             "assertEq",
@@ -40641,7 +40674,7 @@
         {
           "kind": "def",
           "name": "actionHashSize",
-          "line": 297,
+          "line": 302,
           "called": [
             "TestCase",
             "assertEq"
@@ -40650,7 +40683,7 @@
         {
           "kind": "def",
           "name": "wrapDeterministic",
-          "line": 305,
+          "line": 310,
           "called": [
             "TestCase",
             "eip712DomainSeparator",
@@ -40662,7 +40695,7 @@
         {
           "kind": "def",
           "name": "dsDeterministic",
-          "line": 316,
+          "line": 321,
           "called": [
             "TestCase",
             "eip712DomainSeparator",
@@ -40672,7 +40705,7 @@
         {
           "kind": "def",
           "name": "crossDomainsDistinguishable",
-          "line": 331,
+          "line": 336,
           "called": [
             "TestCase",
             "altDomain",
@@ -40683,7 +40716,7 @@
         {
           "kind": "def",
           "name": "crossMessagesDistinguishable",
-          "line": 344,
+          "line": 349,
           "called": [
             "TestCase",
             "altMessage",
@@ -40696,7 +40729,7 @@
         {
           "kind": "def",
           "name": "crossDomainsWrapsDistinguishable",
-          "line": 356,
+          "line": 361,
           "called": [
             "TestCase",
             "altDomain",
@@ -40709,7 +40742,7 @@
         {
           "kind": "def",
           "name": "crossNonceDistinguishable",
-          "line": 369,
+          "line": 374,
           "called": [
             "TestCase",
             "eip712DomainSeparator",
@@ -40721,7 +40754,7 @@
         {
           "kind": "def",
           "name": "crossSignerDistinguishable",
-          "line": 383,
+          "line": 388,
           "called": [
             "TestCase",
             "eip712DomainSeparator",
@@ -40733,7 +40766,7 @@
         {
           "kind": "def",
           "name": "crossDeploymentIdDistinguishable",
-          "line": 397,
+          "line": 402,
           "called": [
             "TestCase",
             "deploymentId",
@@ -40746,7 +40779,7 @@
         {
           "kind": "def",
           "name": "crossProtocolDistinguishable",
-          "line": 422,
+          "line": 427,
           "called": [
             "TestCase",
             "eip712DomainSeparator",
@@ -40759,7 +40792,7 @@
         {
           "kind": "def",
           "name": "encodeUintSize",
-          "line": 441,
+          "line": 446,
           "called": [
             "TestCase",
             "assertEq",
@@ -40769,7 +40802,7 @@
         {
           "kind": "def",
           "name": "encodeUintZero",
-          "line": 450,
+          "line": 455,
           "called": [
             "TestCase",
             "encodeUint256BE"
@@ -40778,7 +40811,7 @@
         {
           "kind": "def",
           "name": "encodeUintOne",
-          "line": 465,
+          "line": 470,
           "called": [
             "TestCase",
             "assertEq",
@@ -40788,7 +40821,7 @@
         {
           "kind": "def",
           "name": "encodeUintInjectiveValueLevel",
-          "line": 483,
+          "line": 488,
           "called": [
             "TestCase",
             "encodeUint256BE"
@@ -40797,7 +40830,7 @@
         {
           "kind": "def",
           "name": "wrapInjectiveAPI",
-          "line": 493,
+          "line": 498,
           "called": [
             "CollisionFree",
             "Eip712Message",
@@ -40811,7 +40844,7 @@
         {
           "kind": "def",
           "name": "dsDistinguishesAPI",
-          "line": 504,
+          "line": 509,
           "called": [
             "CollisionFree",
             "DomainParams",
@@ -40824,7 +40857,7 @@
         {
           "kind": "def",
           "name": "wrapDistinguishesAPI",
-          "line": 519,
+          "line": 524,
           "called": [
             "CollisionFree",
             "Eip712Message",
@@ -40838,7 +40871,7 @@
         {
           "kind": "def",
           "name": "domainPreHashInjectiveAPI",
-          "line": 532,
+          "line": 537,
           "called": [
             "CollisionFree",
             "DomainParams",
@@ -40851,7 +40884,7 @@
         {
           "kind": "def",
           "name": "encodeUintInjectiveAPI",
-          "line": 545,
+          "line": 550,
           "called": [
             "TestCase",
             "encodeUint256BE",
@@ -40861,7 +40894,7 @@
         {
           "kind": "def",
           "name": "encodeUintSizeAPI",
-          "line": 556,
+          "line": 561,
           "called": [
             "TestCase",
             "encodeUint256BE",
@@ -40871,7 +40904,7 @@
         {
           "kind": "def",
           "name": "wrapSizeAPI",
-          "line": 565,
+          "line": 570,
           "called": [
             "Eip712Message",
             "TestCase",
@@ -40882,7 +40915,7 @@
         {
           "kind": "def",
           "name": "prefixSizeAPI",
-          "line": 576,
+          "line": 581,
           "called": [
             "TestCase",
             "eip712Prefix_size"
@@ -40891,7 +40924,7 @@
         {
           "kind": "def",
           "name": "structHashSizeAPI",
-          "line": 584,
+          "line": 589,
           "called": [
             "Eip712Message",
             "TestCase",
@@ -40902,7 +40935,7 @@
         {
           "kind": "def",
           "name": "dsSizeAPI",
-          "line": 593,
+          "line": 598,
           "called": [
             "DomainParams",
             "TestCase",
@@ -40912,8 +40945,48 @@
         },
         {
           "kind": "def",
+          "name": "l2ChainIdMainnetValue",
+          "line": 614,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "knomosisL2ChainIdMainnet"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "l2ChainIdTestnetValue",
+          "line": 620,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "knomosisL2ChainIdTestnet"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "l2ChainIdSelectorValues",
+          "line": 627,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "l2ChainIdForL1"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "l2ChainIdBoundAPI",
+          "line": 638,
+          "called": [
+            "TestCase",
+            "l2ChainIdForL1",
+            "l2ChainIdForL1_lt_two_pow_64"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 602,
+          "line": 647,
           "called": [
             "Eip712Tests",
             "LegalKernel.Test.Bridge",
@@ -40944,6 +41017,10 @@
             "encodeUintSize",
             "encodeUintSizeAPI",
             "encodeUintZero",
+            "l2ChainIdBoundAPI",
+            "l2ChainIdMainnetValue",
+            "l2ChainIdSelectorValues",
+            "l2ChainIdTestnetValue",
             "prefixFirstByte",
             "prefixIsTwoBytes",
             "prefixSecondByte",

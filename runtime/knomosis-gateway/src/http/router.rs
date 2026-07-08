@@ -70,6 +70,12 @@ pub enum Route {
     /// `POST /v1/actions` — submit a client-signed `SignedAction` to the
     /// host (the dispatcher reads the request body + `Content-Type`).
     SubmitAction,
+    /// `POST /rpc` — the minimal read-only Ethereum JSON-RPC shim
+    /// (`eth_chainId` / `net_version` / `eth_blockNumber` /
+    /// `web3_clientVersion`) so a browser wallet can "Add Network" and target
+    /// the Knomosis L2 chain id.  Auth-exempt; the dispatcher reads the
+    /// request body (the JSON-RPC envelope).
+    Rpc,
     /// `GET /v1/pools/{pool}?resource={0|1}` — one gas-pool resource
     /// view (a single `PoolView`).  `resource` defaults to `0` (ETH)
     /// when the query parameter is absent.
@@ -265,6 +271,7 @@ pub fn route(method: &str, path: &str, query: &str) -> Route {
         "/readyz" => get_only(method, Route::Ready),
         "/v1/info" => get_only(method, Route::Info),
         "/v1/actions" => post_only(method, Route::SubmitAction),
+        "/rpc" => post_only(method, Route::Rpc),
         "/v1/events" => route_v1_events(method, query),
         "/v1/events/stream" => route_v1_event_stream(method, query),
         _ => route_v1_actors(method, path)
@@ -683,6 +690,13 @@ mod tests {
             r("GET", "/v1/actions"),
             Route::MethodNotAllowed { allow: "POST" }
         );
+    }
+
+    #[test]
+    fn rpc_route_is_post_only() {
+        // The JSON-RPC shim is POST-only (the JSON-RPC envelope is the body).
+        assert_eq!(r("POST", "/rpc"), Route::Rpc);
+        assert_eq!(r("GET", "/rpc"), Route::MethodNotAllowed { allow: "POST" });
     }
 
     #[test]

@@ -134,6 +134,14 @@ runtime BOLD path resolves through it; the Liquity auto-trigger stays off
 off-mainnet (its TroveManager oracles are mainnet-only).  See
 `docs/sepolia_deployment_runbook.md` §4.3 for the Sepolia BOLD workflow.
 
+The **L2 chain id** (`8357` production / `83572` test) is *not* a sized or
+operator-set parameter: it is derived deterministically from the L1 the bridge
+settles to (`KnomosisChainId.l2ChainId(block.chainid)`), emitted in the deploy
+manifest (`l2ChainId`), and advertised by the gateway for wallet connection.
+It is a chain-conditional identity constant like the `boldTokenAddress` guard,
+not an economic knob — see `docs/abi.md` §13.10 and
+`docs/sepolia_deployment_runbook.md` §7.4.
+
 ## 6. KnomosisAmmDisasterRecoveryMultisig — the AMM kill switch (§5)
 
 `constructor(address bridge, address[] signers, uint256 threshold)`

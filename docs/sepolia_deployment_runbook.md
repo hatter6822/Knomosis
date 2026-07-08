@@ -9,9 +9,14 @@
 # Knomosis — Sepolia Deployment + Licio Gateway Integration Runbook
 
 **Status:** operator runbook for a **shadow / test** deployment of the full
-Knomosis stack to the **Ethereum Sepolia testnet** (chain id `11155111`), so
+Knomosis stack to the **Ethereum Sepolia testnet** (L1 chain id `11155111`), so
 the [Licio](https://github.com/hatter6822/Licio) client (a React 19 PWA + Hono
 BFF) can implement full integration testing against the Knomosis **gateway**.
+
+The **Knomosis L2** itself has a distinct EIP-155 chain id — `83572` on a
+Sepolia-settled (test) deployment, `8357` on the mainnet-settled (production)
+one — that wallets add and sign L2 actions against; do not confuse it with the
+L1 settlement chain id above.  See §7.4 for the wallet-connection procedure.
 
 This runbook is a sibling of `docs/fault_proof_runbook.md`,
 `docs/gas_pool_runbook.md`, and `docs/gateway_runbook.md`.  It owns the
@@ -202,6 +207,7 @@ in the repo consumed contract addresses from a file before):
 {
   "network": "sepolia",
   "chainId": 11155111,
+  "l2ChainId": 83572,
   "deploymentId": "0x…",
   "knomosisVersionTag": "0x…",
   "deployedAtBlock": 1234567,
@@ -224,10 +230,19 @@ in the repo consumed contract addresses from a file before):
 }
 ```
 
+The `chainId` field is the **L1** settlement chain (Sepolia 11155111 /
+mainnet 1); `l2ChainId` is the canonical Knomosis **L2** chain id — `83572`
+here (test), `8357` on a mainnet-settled deployment — that wallets add and
+sign L2 actions against (see §7.4).  It is emitted by
+`KnomosisChainId.l2ChainId(block.chainid)`, so it never drifts from the
+on-chain `KnomosisAction` action-domain value.
+
 Consumers: `knomosis-l1-ingest` reads `.contracts.KnomosisBridge` +
 `.contracts.KnomosisIdentityRegistry` + `.deploymentId`;
 `knomosis-faultproof-observer` reads `.contracts.KnomosisFaultProofGame` +
-`.contracts.KnomosisStateRootSubmission` + `.deploymentId`; every
+`.contracts.KnomosisStateRootSubmission` + `.deploymentId`; the
+`knomosis_l2_sepolia_stack.sh` launcher passes `.l2ChainId` to the gateway
+(`--l2-chain-id`) so `/v1/info` + `/rpc` advertise it; every
 deploymentId-scoped daemon reads `.deploymentId`. Commit the manifest (or
 publish it to your ops store) so the whole team wires to the same addresses.
 
@@ -322,7 +337,8 @@ server-to-server topology (§7.1) is preferred.
 | Method + path | Purpose |
 |---------------|---------|
 | `GET /readyz` | readiness (auth-exempt) — 200 once host+subscribe+indexer are reachable |
-| `GET /v1/info` | deploymentId, admission stage, wire-protocol versions, indexer cursor, budget policy |
+| `GET /v1/info` | deploymentId, **`l2ChainId`**, admission stage, wire-protocol versions, indexer cursor, budget policy |
+| `POST /rpc` | read-only Ethereum JSON-RPC shim (auth-exempt) for wallet "Add Network": `eth_chainId` / `net_version` / `eth_blockNumber` / `web3_clientVersion` (§7.4) |
 | `GET /v1/actors/{id}/balances` · `…/balances/{resource}` | per-actor balances (ETag/304 revalidation) |
 | `GET /v1/actors/{id}/budget` | current-epoch budget view |
 | `GET /v1/pools/{pool}?resource={0\|1}` | gas-pool ledger (0=ETH, 1=BOLD) |
@@ -337,12 +353,46 @@ protocol; verdict → HTTP mapping is in the OpenAPI (`Ok`/`NotAdmissible` → 2
 `ParseError` → 400, `Busy` → 503+`Retry-After`, deadline → 504, oversize →
 413).
 
-### 7.4 Smoke test
+### 7.4 Connect a wallet to the L2
+
+The Knomosis **L2** has its own EIP-155 chain id — `83572` on a
+Sepolia-settled (test) deployment, `8357` on a mainnet-settled (production)
+one — distinct from the L1 the bridge settles to. The manifest's `l2ChainId`
+(§5) is the source of truth; the launcher passes it to the gateway
+(`--l2-chain-id`), which advertises it in `GET /v1/info` and answers a
+minimal read-only Ethereum JSON-RPC shim at `POST /rpc` (auth-exempt) so a
+browser wallet can add the network:
+
+```bash
+GW=http://127.0.0.1:8080
+# The chain id a wallet's "Add Network" validates against (0x14674 = 83572).
+curl -s $GW/rpc -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}'
+# → {"jsonrpc":"2.0","id":1,"result":"0x14674"}
+```
+
+**Add Network (MetaMask / Rabby):** point the wallet's custom-network RPC
+URL at the gateway (`https://<gateway-host>/rpc`; a public browser-direct
+setup needs TLS + `GW_CORS_ORIGIN`, §7.2), chain id `83572` (test) / `8357`
+(production), a currency symbol of your choice, and the gateway (or a block
+explorer) as the "Block Explorer URL".
+
+**How a wallet actually signs.** Knomosis is **not** an EVM chain — there is
+no `eth_sendTransaction`. A wallet signs an L2 action as **EIP-712 typed
+data** (`eth_signTypedData_v4` over the `KnomosisAction` domain, whose
+`chainId` is the L2 chain id — `docs/abi.md` §13.6), and the client submits
+the signed `SignedAction` to `POST /v1/actions`. The `/rpc` shim exists only
+so the wallet accepts + displays the L2 network; every non-discovery method
+returns JSON-RPC `-32601`.
+
+### 7.5 Smoke test
 
 ```bash
 GW=http://127.0.0.1:8080 ; TOK=<printed-token>
 curl -s $GW/readyz                                             # {"ready":true,...}
-curl -s -H "Authorization: Bearer $TOK" $GW/v1/info | jq .
+curl -s $GW/rpc -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}'         # {"result":"0x14674",...}
+curl -s -H "Authorization: Bearer $TOK" $GW/v1/info | jq .     # includes "l2ChainId"
 curl -s -H "Authorization: Bearer $TOK" "$GW/v1/events?since=0&limit=10" | jq .
 curl -sN -H "Authorization: Bearer $TOK" $GW/v1/events/stream   # live SSE (Ctrl-C)
 ```

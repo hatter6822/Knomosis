@@ -122,6 +122,15 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       challenges, pool drain vs cap, bridge TVL vs cap, indexer lag.
 
 ### 3.6 Pre-mainnet (beyond testnet)
+- [x] L2 network identity + wallet onboarding: the canonical L2 chain
+      id is published (`8357` production / `83572` test), emitted in the
+      deploy manifest (`l2ChainId`), advertised by the gateway
+      (`/v1/info` + the `/rpc` `eth_chainId` shim), and the
+      add-network + typed-data-signing flow is documented
+      (`docs/sepolia_deployment_runbook.md` §7.4, `docs/abi.md` §13.10).
+      **Before a public launch:** verify `8357` (and `83572`) are not
+      already registered on `chainlist.org` / `ethereum-lists` and, if
+      claiming them, submit the registry PRs.
 - [ ] Independent external audit complete (scope:
       `docs/audits/20-…`); findings remediated.  An **internal** deep
       review (`docs/audits/21-…`) is done: it found + fixed 5 real

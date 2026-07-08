@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "160adf272f101f630732d60cea63348bfc80d2a2f3c2726d29f3cd066e11ba16"
+    "source_digest": "735951343904d58b2d81b0e7ba3ccb2e6d2089bf0f0bb97ca85441401d7de338"
   },
   "summary": {
-    "module_count": 86,
-    "declaration_count": 1919
+    "module_count": 87,
+    "declaration_count": 1921
   },
   "modules": [
     {
@@ -76,13 +76,13 @@
         {
           "kind": "contract",
           "name": "DeploySepolia",
-          "line": 68,
+          "line": 69,
           "called": []
         },
         {
           "kind": "struct",
           "name": "DeployConfig",
-          "line": 86,
+          "line": 87,
           "called": [
             "attestor",
             "disputeWindowBlocks",
@@ -93,7 +93,7 @@
         {
           "kind": "struct",
           "name": "Deployed",
-          "line": 130,
+          "line": 131,
           "called": [
             "bridge",
             "deploymentId",
@@ -104,7 +104,7 @@
         {
           "kind": "function",
           "name": "run",
-          "line": 145,
+          "line": 146,
           "called": [
             "_deployAll",
             "_readConfig"
@@ -113,7 +113,7 @@
         {
           "kind": "function",
           "name": "_readConfig",
-          "line": 157,
+          "line": 158,
           "called": [
             "DeployConfig",
             "_deriveSet",
@@ -123,19 +123,19 @@
         {
           "kind": "function",
           "name": "_deriveSet",
-          "line": 233,
+          "line": 234,
           "called": []
         },
         {
           "kind": "function",
           "name": "_networkName",
-          "line": 243,
+          "line": 244,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deployAll",
-          "line": 258,
+          "line": 259,
           "called": [
             "DeployConfig",
             "Deployed",
@@ -164,7 +164,7 @@
         {
           "kind": "function",
           "name": "_logSummary",
-          "line": 436,
+          "line": 437,
           "called": [
             "Deployed"
           ]
@@ -172,7 +172,7 @@
         {
           "kind": "function",
           "name": "_writeManifest",
-          "line": 454,
+          "line": 455,
           "called": [
             "DeployConfig",
             "Deployed"
@@ -1370,7 +1370,7 @@
         {
           "kind": "contract",
           "name": "KnomosisDisputeVerifier",
-          "line": 32,
+          "line": 33,
           "called": [
             "IKnomosisDisputeVerifier"
           ]
@@ -1378,109 +1378,109 @@
         {
           "kind": "error",
           "name": "NotApprovedAdjudicator",
-          "line": 37,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "UnknownDispute",
           "line": 38,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AlreadyDecided",
+          "name": "UnknownDispute",
           "line": 39,
           "called": []
         },
         {
           "kind": "error",
-          "name": "NotOpen",
+          "name": "AlreadyDecided",
           "line": 40,
           "called": []
         },
         {
           "kind": "error",
-          "name": "QuorumNotMet",
+          "name": "NotOpen",
           "line": 41,
           "called": []
         },
         {
           "kind": "error",
-          "name": "EvidenceNotUpheld",
+          "name": "QuorumNotMet",
           "line": 42,
           "called": []
         },
         {
           "kind": "error",
-          "name": "EvidenceNotRejected",
+          "name": "EvidenceNotUpheld",
           "line": 43,
           "called": []
         },
         {
           "kind": "error",
-          "name": "SelfClaimInvalid",
+          "name": "EvidenceNotRejected",
           "line": 44,
           "called": []
         },
         {
           "kind": "error",
-          "name": "InvalidClaimVariant",
+          "name": "SelfClaimInvalid",
           "line": 45,
           "called": []
         },
         {
           "kind": "error",
-          "name": "MaxPrefixLenExceeded",
+          "name": "InvalidClaimVariant",
           "line": 46,
           "called": []
         },
         {
           "kind": "error",
-          "name": "PrefixSignerMissing",
+          "name": "MaxPrefixLenExceeded",
           "line": 47,
           "called": []
         },
         {
           "kind": "error",
-          "name": "InvalidSignatureLength",
+          "name": "PrefixSignerMissing",
           "line": 48,
           "called": []
         },
         {
           "kind": "error",
-          "name": "VerifierBridgeMismatch",
+          "name": "InvalidSignatureLength",
           "line": 49,
           "called": []
         },
         {
           "kind": "error",
-          "name": "ZeroAddress",
+          "name": "VerifierBridgeMismatch",
           "line": 50,
           "called": []
         },
         {
           "kind": "error",
-          "name": "QuorumThresholdOutOfRange",
+          "name": "ZeroAddress",
           "line": 51,
           "called": []
         },
         {
           "kind": "error",
-          "name": "VerdictReplay",
+          "name": "QuorumThresholdOutOfRange",
           "line": 52,
           "called": []
         },
         {
           "kind": "error",
+          "name": "VerdictReplay",
+          "line": 53,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "BridgeNotContract",
-          "line": 57,
+          "line": 58,
           "called": []
         },
         {
           "kind": "error",
           "name": "IdentityRegistryNotContract",
-          "line": 61,
+          "line": 62,
           "called": [
             "bridge",
             "deploymentId",
@@ -1493,31 +1493,31 @@
         {
           "kind": "struct",
           "name": "DisputeRecord",
-          "line": 163,
+          "line": 164,
           "called": []
         },
         {
           "kind": "event",
           "name": "DisputeFiled",
-          "line": 178,
+          "line": 179,
           "called": []
         },
         {
           "kind": "event",
           "name": "DisputeUpheld",
-          "line": 186,
+          "line": 187,
           "called": []
         },
         {
           "kind": "event",
           "name": "DisputeRejected",
-          "line": 187,
+          "line": 188,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ConstructorArgs",
-          "line": 193,
+          "line": 194,
           "called": [
             "bridge",
             "identityRegistry",
@@ -1529,7 +1529,7 @@
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 203,
+          "line": 204,
           "called": [
             "BridgeNotContract",
             "ConstructorArgs",
@@ -1547,13 +1547,13 @@
         {
           "kind": "error",
           "name": "EvidenceBlobTooLarge",
-          "line": 264,
+          "line": 265,
           "called": []
         },
         {
           "kind": "function",
           "name": "fileDispute",
-          "line": 266,
+          "line": 267,
           "called": [
             "DisputeFiled",
             "DisputeRecord",
@@ -1564,7 +1564,7 @@
         {
           "kind": "function",
           "name": "checkSignatureInvalid",
-          "line": 331,
+          "line": 332,
           "called": [
             "IKnomosisBridge",
             "IKnomosisIdentityRegistry",
@@ -1578,7 +1578,7 @@
         {
           "kind": "function",
           "name": "tryRecover",
-          "line": 420,
+          "line": 435,
           "called": [
             "digest"
           ]
@@ -1586,7 +1586,7 @@
         {
           "kind": "function",
           "name": "checkNonceMismatch",
-          "line": 439,
+          "line": 454,
           "called": [
             "MaxPrefixLenExceeded"
           ]
@@ -1594,7 +1594,7 @@
         {
           "kind": "function",
           "name": "checkDoubleApply",
-          "line": 511,
+          "line": 526,
           "called": [
             "SelfClaimInvalid",
             "_readSignerNonce"
@@ -1603,25 +1603,25 @@
         {
           "kind": "function",
           "name": "_readSignerNonce",
-          "line": 526,
+          "line": 541,
           "called": []
         },
         {
           "kind": "error",
           "name": "TooManySigners",
-          "line": 544,
+          "line": 559,
           "called": []
         },
         {
           "kind": "error",
           "name": "MissingSignerHint",
-          "line": 549,
+          "line": 564,
           "called": []
         },
         {
           "kind": "function",
           "name": "verdictDigest",
-          "line": 557,
+          "line": 572,
           "called": [
             "deploymentId"
           ]
@@ -1629,7 +1629,7 @@
         {
           "kind": "function",
           "name": "finalizeUpheld",
-          "line": 585,
+          "line": 600,
           "called": [
             "AlreadyDecided",
             "DisputeRecord",
@@ -1655,7 +1655,7 @@
         {
           "kind": "function",
           "name": "finalizeRejected",
-          "line": 631,
+          "line": 646,
           "called": [
             "AlreadyDecided",
             "DisputeRecord",
@@ -1675,7 +1675,7 @@
         {
           "kind": "function",
           "name": "_countVerifiedSignatures",
-          "line": 662,
+          "line": 677,
           "called": [
             "signers"
           ]
@@ -1683,7 +1683,7 @@
         {
           "kind": "function",
           "name": "_runClaimVerifier",
-          "line": 697,
+          "line": 712,
           "called": [
             "DisputeRecord",
             "InvalidClaimVariant",
@@ -1694,13 +1694,13 @@
         {
           "kind": "error",
           "name": "DoubleApplyConcatBadCount",
-          "line": 726,
+          "line": 741,
           "called": []
         },
         {
           "kind": "function",
           "name": "_runDoubleApplyFromConcat",
-          "line": 728,
+          "line": 743,
           "called": [
             "DoubleApplyConcatBadCount"
           ]
@@ -1708,7 +1708,7 @@
         {
           "kind": "function",
           "name": "checkDoubleApplyFromBytes",
-          "line": 758,
+          "line": 773,
           "called": [
             "SelfClaimInvalid",
             "_readSignerNonce"
@@ -1717,7 +1717,7 @@
         {
           "kind": "function",
           "name": "disputeAt",
-          "line": 777,
+          "line": 792,
           "called": [
             "DisputeRecord"
           ]
@@ -1725,19 +1725,19 @@
         {
           "kind": "function",
           "name": "isDisputeOpen",
-          "line": 792,
+          "line": 807,
           "called": []
         },
         {
           "kind": "function",
           "name": "isApprovedAdjudicator",
-          "line": 797,
+          "line": 812,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 809,
+          "line": 824,
           "called": [
             "IKnomosisBridge",
             "bridge",
@@ -4289,6 +4289,25 @@
             "FactoryDeployFailed",
             "TargetDeployFailed"
           ]
+        }
+      ]
+    },
+    {
+      "module": "KnomosisChainId",
+      "path": "solidity/src/lib/KnomosisChainId.sol",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "KnomosisChainId",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "l2ChainId",
+          "line": 43,
+          "called": []
         }
       ]
     },
@@ -12670,7 +12689,7 @@
         {
           "kind": "contract",
           "name": "KnomosisDisputeVerifierTest",
-          "line": 16,
+          "line": 17,
           "called": [
             "Deployer",
             "KnomosisBridge",
@@ -12685,13 +12704,13 @@
         {
           "kind": "event",
           "name": "DisputeFiled",
-          "line": 35,
+          "line": 36,
           "called": []
         },
         {
           "kind": "function",
           "name": "setUp",
-          "line": 43,
+          "line": 44,
           "called": [
             "Deployer",
             "attestor",
@@ -12702,7 +12721,7 @@
         {
           "kind": "function",
           "name": "test_constructor_pins_immutables",
-          "line": 75,
+          "line": 76,
           "called": [
             "bridge"
           ]
@@ -12710,25 +12729,25 @@
         {
           "kind": "function",
           "name": "test_assertConsistent",
-          "line": 82,
+          "line": 83,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_no_admin_surface",
-          "line": 86,
+          "line": 87,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_approved_adjudicator_set_immutable",
-          "line": 100,
+          "line": 101,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_quorum_zero",
-          "line": 106,
+          "line": 107,
           "called": [
             "Deployer",
             "attestor",
@@ -12738,7 +12757,7 @@
         {
           "kind": "function",
           "name": "test_constructor_reverts_on_quorum_above_set_size",
-          "line": 118,
+          "line": 119,
           "called": [
             "Deployer",
             "attestor",
@@ -12748,7 +12767,7 @@
         {
           "kind": "function",
           "name": "test_fileDispute_assigns_id_and_records_record",
-          "line": 134,
+          "line": 135,
           "called": [
             "DisputeFiled"
           ]
@@ -12756,31 +12775,31 @@
         {
           "kind": "function",
           "name": "test_fileDispute_increments_disputeId",
-          "line": 157,
+          "line": 158,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_fileDispute_rejects_unsupported_claim_variant",
-          "line": 169,
+          "line": 170,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_fileDispute_rejects_oracle_misreported_in_mvp",
-          "line": 175,
+          "line": 176,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_isDisputeOpen",
-          "line": 181,
+          "line": 182,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_checkDoubleApply_revert_on_self_claim",
-          "line": 192,
+          "line": 193,
           "called": [
             "_logEntryBlob"
           ]
@@ -12788,7 +12807,7 @@
         {
           "kind": "function",
           "name": "test_checkDoubleApply_upheld_when_signer_and_nonce_match",
-          "line": 198,
+          "line": 199,
           "called": [
             "_logEntryBlob"
           ]
@@ -12796,7 +12815,7 @@
         {
           "kind": "function",
           "name": "test_checkDoubleApply_rejected_on_distinct_signers",
-          "line": 206,
+          "line": 207,
           "called": [
             "_logEntryBlob"
           ]
@@ -12804,7 +12823,7 @@
         {
           "kind": "function",
           "name": "test_checkDoubleApply_rejected_on_distinct_nonces",
-          "line": 213,
+          "line": 214,
           "called": [
             "_logEntryBlob"
           ]
@@ -12812,7 +12831,7 @@
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_upheld_when_nonce_does_not_match_expected",
-          "line": 224,
+          "line": 225,
           "called": [
             "_arrayHead",
             "_logEntryBlob"
@@ -12821,7 +12840,7 @@
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_rejected_when_nonce_matches_expected",
-          "line": 235,
+          "line": 236,
           "called": [
             "_arrayHead",
             "_logEntryBlob"
@@ -12830,7 +12849,7 @@
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_rejected_on_two_entry_legitimate_chain",
-          "line": 244,
+          "line": 245,
           "called": [
             "_arrayHead",
             "_logEntryBlob"
@@ -12839,7 +12858,7 @@
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_upheld_on_replay",
-          "line": 254,
+          "line": 255,
           "called": [
             "_arrayHead",
             "_logEntryBlob"
@@ -12848,7 +12867,7 @@
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_revert_on_oversized_prefix",
-          "line": 264,
+          "line": 265,
           "called": [
             "_arrayHead"
           ]
@@ -12856,7 +12875,7 @@
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_inconclusive_when_index_past_prefix",
-          "line": 271,
+          "line": 272,
           "called": [
             "_arrayHead",
             "_logEntryBlob"
@@ -12865,7 +12884,7 @@
         {
           "kind": "function",
           "name": "test_checkNonceMismatch_per_signer_isolation",
-          "line": 279,
+          "line": 280,
           "called": [
             "_arrayHead",
             "_logEntryBlob"
@@ -12874,7 +12893,7 @@
         {
           "kind": "function",
           "name": "_cborBytesEncoding",
-          "line": 295,
+          "line": 296,
           "called": [
             "_cborHead"
           ]
@@ -12882,13 +12901,13 @@
         {
           "kind": "function",
           "name": "_cborHead",
-          "line": 305,
+          "line": 306,
           "called": []
         },
         {
           "kind": "function",
           "name": "_cborUint",
-          "line": 314,
+          "line": 315,
           "called": [
             "_cborHead"
           ]
@@ -12896,7 +12915,7 @@
         {
           "kind": "function",
           "name": "_arrayHead",
-          "line": 318,
+          "line": 319,
           "called": [
             "_cborHead"
           ]
@@ -12904,7 +12923,7 @@
         {
           "kind": "function",
           "name": "_cborBytes32",
-          "line": 324,
+          "line": 325,
           "called": [
             "_cborBytesEncoding"
           ]
@@ -12912,7 +12931,7 @@
         {
           "kind": "function",
           "name": "_logEntryBlob",
-          "line": 330,
+          "line": 331,
           "called": [
             "_cborBytes32",
             "_cborBytesEncoding",
@@ -12922,7 +12941,7 @@
         {
           "kind": "function",
           "name": "_logEntryBlobWithActionHash",
-          "line": 348,
+          "line": 349,
           "called": [
             "_cborBytes32",
             "_cborBytesEncoding",
@@ -12932,7 +12951,7 @@
         {
           "kind": "function",
           "name": "test_audit_checkSignatureInvalid_inconclusive_on_zero_address",
-          "line": 369,
+          "line": 370,
           "called": [
             "_logEntryBlob"
           ]
@@ -12940,7 +12959,7 @@
         {
           "kind": "function",
           "name": "test_audit_checkSignatureInvalid_inconclusive_on_unregistered_address",
-          "line": 375,
+          "line": 376,
           "called": [
             "_logEntryBlob"
           ]
@@ -12948,7 +12967,7 @@
         {
           "kind": "function",
           "name": "test_audit_checkSignatureInvalid_upheld_on_invalid_signature_length",
-          "line": 385,
+          "line": 386,
           "called": [
             "_logEntryBlob",
             "_vmAddrPubkey"
@@ -12957,7 +12976,7 @@
         {
           "kind": "function",
           "name": "test_audit3_checkSignatureInvalid_rejected_when_signature_is_valid",
-          "line": 408,
+          "line": 409,
           "called": [
             "_actionDomainSeparator",
             "_actionStructHash",
@@ -12969,7 +12988,7 @@
         {
           "kind": "function",
           "name": "test_audit3_checkSignatureInvalid_upheld_on_signature_for_wrong_signer",
-          "line": 445,
+          "line": 446,
           "called": [
             "_actionDomainSeparator",
             "_actionStructHash",
@@ -12981,7 +13000,7 @@
         {
           "kind": "function",
           "name": "_actionDomainSeparator",
-          "line": 483,
+          "line": 484,
           "called": [
             "bridge"
           ]
@@ -12989,7 +13008,7 @@
         {
           "kind": "function",
           "name": "_actionStructHash",
-          "line": 498,
+          "line": 501,
           "called": [
             "deploymentId"
           ]
@@ -12997,49 +13016,49 @@
         {
           "kind": "function",
           "name": "test_audit_verdictDigest_distinguishes_disputeId",
-          "line": 519,
+          "line": 522,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit_verdictDigest_distinguishes_outcome",
-          "line": 525,
+          "line": 528,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit_verdictDigest_deterministic",
-          "line": 533,
+          "line": 536,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit_finalize_reverts_on_too_many_signers",
-          "line": 541,
+          "line": 544,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit_fileDispute_reverts_on_oversized_evidence",
-          "line": 568,
+          "line": 571,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit_fileDispute_accepts_evidence_at_max",
-          "line": 586,
+          "line": 589,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_audit_evidenceBlob_not_stored_in_state",
-          "line": 597,
+          "line": 600,
           "called": []
         },
         {
           "kind": "function",
           "name": "_vmAddrPubkey",
-          "line": 626,
+          "line": 629,
           "called": [
             "dummy"
           ]

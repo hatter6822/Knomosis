@@ -17,6 +17,7 @@ import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisDisputeVerifierV2} from "src/contracts/KnomosisDisputeVerifierV2.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
+import {KnomosisChainId} from "src/lib/KnomosisChainId.sol";
 
 /// @title DeploySepolia
 /// @notice Unified, production-shaped deployment of the FULL Knomosis L1
@@ -479,7 +480,13 @@ contract DeploySepolia is Script {
         // Top-level manifest.
         string memory root = "manifest";
         vm.serializeString(root, "network", cfg.network);
+        // `chainId` is the L1 settlement chain (mainnet 1 / Sepolia 11155111);
+        // `l2ChainId` is the canonical Knomosis L2 chain id (8357 mainnet /
+        // 83572 test) that wallets add + sign L2 actions against, and that the
+        // L2 daemon stack + gateway echo (via `--l2-chain-id`).  Derived from
+        // the L1 so it never drifts from the on-chain action-domain value.
         vm.serializeUint(root, "chainId", block.chainid);
+        vm.serializeUint(root, "l2ChainId", KnomosisChainId.l2ChainId(block.chainid));
         vm.serializeBytes32(root, "deploymentId", d.deploymentId);
         vm.serializeBytes32(root, "knomosisVersionTag", cfg.versionTag);
         vm.serializeUint(root, "deployedAtBlock", block.number);

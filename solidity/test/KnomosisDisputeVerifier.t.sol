@@ -8,6 +8,7 @@ import {KnomosisSequencerStake} from "src/contracts/KnomosisSequencerStake.sol";
 import {KnomosisIdentityRegistry} from "src/contracts/KnomosisIdentityRegistry.sol";
 
 import {CBEDecode} from "src/lib/CBEDecode.sol";
+import {KnomosisChainId} from "src/lib/KnomosisChainId.sol";
 import {Deployer} from "test/utils/Deployer.sol";
 
 /// @title KnomosisDisputeVerifierTest
@@ -489,7 +490,9 @@ contract KnomosisDisputeVerifierTest is Test {
                 ),
                 keccak256("KnomosisAction"),
                 keccak256("1"),
-                block.chainid,
+                // The action domain binds the L2 chain id (not block.chainid),
+                // matching KnomosisDisputeVerifier.checkSignatureInvalid.
+                KnomosisChainId.l2ChainId(block.chainid),
                 uint256(0),
                 keccak256(abi.encodePacked(address(bridge)))
             )

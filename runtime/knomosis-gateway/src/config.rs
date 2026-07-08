@@ -72,6 +72,18 @@ pub const GAS_POOL_ACTOR_ENV: &str = "KNX_GW_GAS_POOL_ACTOR";
 /// Environment variable mirroring `--deployment-id`.
 pub const DEPLOYMENT_ID_ENV: &str = "KNX_GW_DEPLOYMENT_ID";
 
+/// Environment variable mirroring `--l2-chain-id`.
+pub const L2_CHAIN_ID_ENV: &str = "KNX_GW_L2_CHAIN_ID";
+
+/// Default Knomosis L2 chain id when `--l2-chain-id` is unset: the **test**
+/// L2 (`83572`).  An unconfigured gateway is a dev / test instance, so it
+/// under-claims (test id) rather than falsely advertising the production id;
+/// a production deployment passes the manifest's `l2ChainId` (8357) via
+/// `--l2-chain-id` explicitly (the `knomosis_l2_sepolia_stack.sh` launcher
+/// wires this from `deployments/<network>.json`).  Mirrors the Solidity
+/// `KnomosisChainId.L2_CHAIN_ID_TESTNET` / Lean `knomosisL2ChainIdTestnet`.
+pub const DEFAULT_L2_CHAIN_ID: u64 = 83_572;
+
 /// Environment variable mirroring `--ok-admission-stage`.
 pub const OK_ADMISSION_STAGE_ENV: &str = "KNX_GW_OK_ADMISSION_STAGE";
 
@@ -270,6 +282,12 @@ OPTIONS:
     --deployment-id <ID>
                        Deployment identifier echoed in /v1/info
                        (env KNX_GW_DEPLOYMENT_ID) [default: empty]
+    --l2-chain-id <N>  Canonical Knomosis L2 chain id (EIP-155), echoed in
+                       /v1/info and served by the read-only /rpc JSON-RPC
+                       shim (eth_chainId) so a wallet can Add Network + sign
+                       L2 actions.  8357 = production (mainnet-settled),
+                       83572 = test.  MUST match the deploy manifest's
+                       l2ChainId (env KNX_GW_L2_CHAIN_ID) [default: 83572]
     --ok-admission-stage <STAGE>
                        Kernel Verdict::Ok admission stage echoed in
                        /v1/info; one of Received|LocallyAdmitted|
@@ -593,6 +611,14 @@ pub struct Config {
     /// The deployment identifier echoed in `/v1/info` (`--deployment-id`).
     /// Operator-supplied metadata; defaults to the empty string.
     pub deployment_id: String,
+    /// The canonical Knomosis **L2** chain id (`--l2-chain-id`), echoed in
+    /// `/v1/info` (`l2ChainId`) and served by the read-only `POST /rpc`
+    /// JSON-RPC shim (`eth_chainId` / `net_version`) so a browser wallet can
+    /// "Add Network" and sign L2 actions against the L2's own EIP-155 id
+    /// (`8357` production / `83572` test).  Distinct from the L1 settlement
+    /// chain; MUST match the deploy manifest's `l2ChainId`.  Default
+    /// [`DEFAULT_L2_CHAIN_ID`].
+    pub l2_chain_id: u64,
     /// The kernel's declared `Verdict::Ok` admission stage echoed in
     /// `/v1/info` (`--ok-admission-stage`).  An operator config echo
     /// (the gateway cannot introspect the host's stage), defaulting to
@@ -716,6 +742,7 @@ impl Config {
             .deployment_id
             .or_else(|| std::env::var(DEPLOYMENT_ID_ENV).ok())
             .unwrap_or_default();
+        let l2_chain_id = resolve_l2_chain_id(raw.l2_chain_id)?;
         let ok_admission_stage = resolve_admission_stage(raw.ok_admission_stage)?;
         let host_addr =
             parse_optional_socket_addr_flag("--host-addr", raw.host_addr, HOST_ADDR_ENV)?;
@@ -771,6 +798,7 @@ impl Config {
             epoch_length,
             gas_pool_actor,
             deployment_id,
+            l2_chain_id,
             ok_admission_stage,
             host_addr,
             event_subscribe_addr,
@@ -788,6 +816,44 @@ impl Config {
             dev,
             upstream_subscriptions,
         })
+    }
+}
+
+#[cfg(test)]
+impl Config {
+    /// A minimal, valid [`Config`] for unit tests: loopback listen, reads +
+    /// upstreams disabled, auth off, and the default L2 chain id.  Tests
+    /// mutate individual fields on the returned value rather than repeating
+    /// the full literal.
+    #[must_use]
+    pub fn test_default() -> Self {
+        Self {
+            listen: "127.0.0.1:0".parse().expect("loopback addr"),
+            max_connections: 1,
+            indexer_db: None,
+            free_tier: 0,
+            action_cost: 0,
+            epoch_length: 0,
+            gas_pool_actor: None,
+            deployment_id: String::new(),
+            l2_chain_id: DEFAULT_L2_CHAIN_ID,
+            ok_admission_stage: AdmissionStage::Finalized,
+            host_addr: None,
+            event_subscribe_addr: None,
+            auth_token_file: None,
+            rate_limit_rps: 0,
+            host_pool_size: 8,
+            host_max_inflight: 8,
+            request_deadline_ms: 5000,
+            max_frame_size: 1024 * 1024,
+            idempotency_ttl_secs: 0,
+            sse: SseConfig::default(),
+            tls: None,
+            cors_origin: None,
+            log_format: LogFormat::Json,
+            dev: false,
+            upstream_subscriptions: 1,
+        }
     }
 }
 
@@ -1173,6 +1239,28 @@ fn resolve_admission_stage(cli_raw: Option<String>) -> Result<AdmissionStage, Co
     }
 }
 
+/// Resolve `--l2-chain-id`: CLI value > env var > the default
+/// [`DEFAULT_L2_CHAIN_ID`].  Parsed as a decimal `u64`; `0` is rejected
+/// (EIP-155 reserves chain id 0, and a wallet cannot add a zero-id network).
+fn resolve_l2_chain_id(cli_raw: Option<String>) -> Result<u64, ConfigError> {
+    let Some(raw) = cli_raw.or_else(|| std::env::var(L2_CHAIN_ID_ENV).ok()) else {
+        return Ok(DEFAULT_L2_CHAIN_ID);
+    };
+    let n = raw.parse::<u64>().map_err(|e| ConfigError::InvalidValue {
+        flag: "--l2-chain-id".to_string(),
+        value: raw.clone(),
+        reason: e.to_string(),
+    })?;
+    if n == 0 {
+        return Err(ConfigError::InvalidValue {
+            flag: "--l2-chain-id".to_string(),
+            value: raw,
+            reason: "must be non-zero (EIP-155 reserves chain id 0)".to_string(),
+        });
+    }
+    Ok(n)
+}
+
 /// Resolve `--cors-origin`: CLI value > env var > `None` (no CORS).  Validates
 /// that the value is `*` (any origin), or a comma-separated allowlist in which
 /// every entry is a well-formed origin (`scheme://host[:port]`, no path).  The
@@ -1343,6 +1431,7 @@ struct RawArgs {
     epoch_length: Option<String>,
     gas_pool_actor: Option<String>,
     deployment_id: Option<String>,
+    l2_chain_id: Option<String>,
     ok_admission_stage: Option<String>,
     host_addr: Option<String>,
     event_subscribe_addr: Option<String>,
@@ -1402,6 +1491,9 @@ impl RawArgs {
                 }
                 "--deployment-id" => {
                     raw.deployment_id = Some(take_value(args, &mut i, "--deployment-id")?);
+                }
+                "--l2-chain-id" => {
+                    raw.l2_chain_id = Some(take_value(args, &mut i, "--l2-chain-id")?);
                 }
                 "--ok-admission-stage" => {
                     raw.ok_admission_stage =

@@ -164,6 +164,7 @@ fn start_harness_cfg(
         log_format: LogFormat::Json,
         dev: false,
         upstream_subscriptions: 1,
+        l2_chain_id: 83572,
     };
     let state = Arc::new(AppState::new(config).expect("open read-only state + load tokens"));
     let (addr, accept) =
@@ -894,6 +895,7 @@ fn start_sse_harness_cfg(event_subscribe_addr: SocketAddr, sse: SseConfig) -> Ss
         log_format: LogFormat::Json,
         dev: false,
         upstream_subscriptions: 1,
+        l2_chain_id: 83572,
     };
     let state = Arc::new(AppState::new(config).expect("open SSE state"));
     // Start the mux (mirrors `serve`), with a long staleness timeout so the
