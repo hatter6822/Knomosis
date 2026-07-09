@@ -21,18 +21,12 @@ version = 2
 # (vulnerability / unmaintained / unsound / notice) is a hard failure under the
 # v2 schema unless explicitly ignored below.
 yanked = "deny"
-ignore = [
-    # rustls-pemfile is unmaintained (archived Aug 2025).  It is NOT a
-    # vulnerability: rustls-pemfile 2.x is a thin wrapper around the SAME PEM
-    # parsing code now exported by the maintained `rustls-pki-types` (>= 1.9,
-    # the workspace already pins 1.10) via its `PemObject` trait, so there is no
-    # security or correctness exposure.  The crate enters the tree through
-    # `knomosis-host`'s cert/key loaders (and the gateway's `--mtls-crl` CRL
-    # parser); migrating both to `rustls_pki_types::pem::PemObject` removes the
-    # dependency entirely and is tracked as follow-up
-    # (docs/audits/gateway_dependency_audit.md).
-    "RUSTSEC-2025-0134",
-]
+# No advisories are ignored.  (The former RUSTSEC-2025-0134 ignore —
+# `rustls-pemfile` unmaintained — was retired by migrating the
+# `knomosis-host` cert/key loaders and the gateway `--mtls-crl` CRL
+# parser to `rustls_pki_types::pem::PemObject`, dropping the crate
+# from the tree entirely; see docs/audits/gateway_dependency_audit.md.)
+ignore = []
 
 [licenses]
 version = 2

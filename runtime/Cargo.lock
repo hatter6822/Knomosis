@@ -304,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-bench"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "knomosis-cli-common",
  "knomosis-host",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cli-common"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cross-stack"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-event-subscribe"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "hex",
  "knomosis-cli-common",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-faultproof-observer"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "hex",
  "k256",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-gateway"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "knomosis-cli-common",
  "knomosis-event-subscribe",
@@ -383,7 +383,6 @@ dependencies = [
  "knomosis-storage",
  "proptest",
  "rustls",
- "rustls-pemfile",
  "serde",
  "serde_json",
  "signal-hook",
@@ -396,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-gateway-bench"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "knomosis-bench",
  "knomosis-cli-common",
@@ -413,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-hash-keccak256"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "cc",
  "hex",
@@ -424,12 +423,11 @@ dependencies = [
 
 [[package]]
 name = "knomosis-host"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "knomosis-cli-common",
  "proptest",
  "rustls",
- "rustls-pemfile",
  "rustls-pki-types",
  "tempfile",
  "thiserror",
@@ -439,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-indexer"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "hex",
  "knomosis-cli-common",
@@ -455,7 +453,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-l1-ingest"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "hex",
  "k256",
@@ -475,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-storage"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "proptest",
  "rusqlite",
@@ -486,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-verify-secp256k1"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "cc",
  "hex",
@@ -739,15 +737,6 @@ dependencies = [
  "rustls-webpki",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "rustls-pemfile"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
-dependencies = [
- "rustls-pki-types",
 ]
 
 [[package]]

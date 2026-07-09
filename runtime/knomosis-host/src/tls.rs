@@ -28,11 +28,12 @@
 //! with older clients is required.
 
 use std::fs::File;
-use std::io::{self, BufReader};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use rustls::{ServerConfig, SupportedProtocolVersion};
+use rustls_pki_types::pem::{self, PemObject};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 
 /// Errors during TLS configuration loading.
@@ -158,6 +159,23 @@ impl TlsConfigBuilder {
     }
 }
 
+/// Map a [`pem::Error`] from the `rustls-pki-types` PEM parser into
+/// this module's [`TlsConfigError::Io`] shape: an underlying
+/// `io::Error` is preserved as-is, and a syntactic PEM error is
+/// wrapped as `InvalidData` — the same shape the retired
+/// `rustls-pemfile` loaders produced (RUSTSEC-2025-0134 migration),
+/// so callers observe identical error semantics.
+fn pem_io_error(path: &Path, err: pem::Error) -> TlsConfigError {
+    let source = match err {
+        pem::Error::Io(source) => source,
+        other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
+    };
+    TlsConfigError::Io {
+        path: path.to_path_buf(),
+        source,
+    }
+}
+
 /// Load PEM-encoded certificates from a file.  Returns the
 /// certificates in the order they appear in the file (leaf first,
 /// per convention).
@@ -172,14 +190,12 @@ pub fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsConfig
         path: path.to_path_buf(),
         source,
     })?;
-    let mut reader = BufReader::new(file);
+    // `pem_reader_iter` yields every CERTIFICATE section in file
+    // order, skipping PEM sections of other kinds — the same section
+    // discipline as the retired `rustls_pemfile::certs`.
     let mut certs: Vec<CertificateDer<'static>> = Vec::new();
-    for cert_result in rustls_pemfile::certs(&mut reader) {
-        let cert = cert_result.map_err(|source| TlsConfigError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        certs.push(cert);
+    for cert_result in CertificateDer::pem_reader_iter(file) {
+        certs.push(cert_result.map_err(|e| pem_io_error(path, e))?);
     }
     if certs.is_empty() {
         return Err(TlsConfigError::NoCertificates(path.to_path_buf()));
@@ -201,16 +217,15 @@ pub fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>, TlsConfig
         path: path.to_path_buf(),
         source,
     })?;
-    let mut reader = BufReader::new(file);
-    // `rustls_pemfile::private_key` tries every supported PEM key
-    // type (PKCS#8, RSA, SEC1) and returns the first match.
-    let key = rustls_pemfile::private_key(&mut reader)
-        .map_err(|source| TlsConfigError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?
-        .ok_or_else(|| TlsConfigError::NoPrivateKey(path.to_path_buf()))?;
-    Ok(key)
+    // `PrivateKeyDer::from_pem_reader` accepts the same key kinds as
+    // the retired `rustls_pemfile::private_key` (PKCS#8, PKCS#1/RSA,
+    // SEC1) and returns the first key section found;
+    // `Error::NoItemsFound` is its "no recognised key block" signal.
+    match PrivateKeyDer::from_pem_reader(file) {
+        Ok(key) => Ok(key),
+        Err(pem::Error::NoItemsFound) => Err(TlsConfigError::NoPrivateKey(path.to_path_buf())),
+        Err(e) => Err(pem_io_error(path, e)),
+    }
 }
 
 #[cfg(test)]

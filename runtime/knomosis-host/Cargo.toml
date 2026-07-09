@@ -77,14 +77,11 @@ tempfile = { workspace = true }
 # level so operators can opt into TLS 1.2 for interop; default
 # minimum is still 1.3 per the plan §RH-C.3 recommendation.
 rustls = { workspace = true }
-# `rustls-pemfile` parses PEM-encoded certificate / private key
-# files into the `rustls`-compatible types.  Tiny dependency
-# (parser only, no crypto).
-rustls-pemfile = { workspace = true }
 # `rustls-pki-types` is `rustls`'s shared certificate / private-key
-# type vocabulary.  Required for the `PrivateKeyDer` /
-# `CertificateDer` types we marshal between `rustls-pemfile` and
-# `rustls::ServerConfig`.
+# type vocabulary AND the PEM parser (`pem::PemObject`) the cert /
+# key loaders use.  It replaced the unmaintained `rustls-pemfile`
+# wrapper (RUSTSEC-2025-0134) — same parsing code, one fewer
+# dependency.
 rustls-pki-types = { workspace = true }
 
 [dev-dependencies]

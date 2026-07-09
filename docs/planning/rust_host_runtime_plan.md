@@ -2242,6 +2242,10 @@ the original lump estimate implied).
     with `ring` + `tls12` + `std` features (no
     `aws-lc-rs`, no logging, no `default-features`),
     `rustls-pemfile = "2"`, `rustls-pki-types = "1.10"`.
+    (`rustls-pemfile` has since been retired: the PEM cert /
+    key / CRL loaders now use `rustls-pki-types`' own
+    `pem::PemObject` parser — the same code `rustls-pemfile`
+    wrapped — closing RUSTSEC-2025-0134.)
     `tempfile` promoted from dev-dep to runtime dep for
     `knomosis-host` (the symlink-TOCTOU defence per audit #3).
     All pinned at the workspace level so any future

@@ -60,10 +60,11 @@ knomosis-event-subscribe = { path = "../knomosis-event-subscribe" }
 # cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders.  No new
 # crate enters the graph (knomosis-host already pulls rustls 0.23).
 rustls = { workspace = true }
-# PEM certificate-revocation-list parsing for the mTLS `--mtls-crl` gate
-# (`rustls_pemfile::crls`).  The same workspace-pinned loader `knomosis-host`
-# uses for certs/keys; shares rustls 0.23's `pki_types` vocabulary.
-rustls-pemfile = { workspace = true }
+# PEM certificate-revocation-list parsing for the mTLS `--mtls-crl` gate goes
+# through rustls 0.23's re-exported `pki_types::pem::PemObject` — the same
+# maintained parser `knomosis-host` uses for certs/keys — so no separate PEM
+# crate is needed (the unmaintained `rustls-pemfile` was dropped,
+# RUSTSEC-2025-0134).
 # Structured-log formatter the gateway installs itself (G4.3 / `--log-format`):
 # the workspace `tracing-subscriber` PLUS the `json` feature, because the
 # gateway is the first WU that needs JSON output (its `--log-format` default).
