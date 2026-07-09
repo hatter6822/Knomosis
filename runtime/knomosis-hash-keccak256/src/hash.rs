@@ -83,6 +83,12 @@ pub fn keccak256_vec(input: &[u8]) -> Vec<u8> {
 // Their signatures use raw pointers; safety contracts live in each
 // function's docstring.
 
+/// Largest length `core::slice::from_raw_parts` accepts
+/// (`isize::MAX`).  Spelled `usize::MAX >> 1`, which equals
+/// `isize::MAX` on every two's-complement platform Rust supports,
+/// to keep the comparison cast-free.
+const MAX_SLICE_LEN: usize = usize::MAX >> 1;
+
 /// One-shot Keccak-256 with C-compatible signature.
 ///
 /// Reads `in_len` bytes starting at `in_ptr`, computes the
@@ -98,6 +104,16 @@ pub fn keccak256_vec(input: &[u8]) -> Vec<u8> {
 ///   * The two regions need not be disjoint (we read first, then
 ///     write).
 ///
+/// As defence-in-depth, the two contract violations detectable
+/// in-process never dereference: a null `out_ptr` makes the call a
+/// no-op, and a null `in_ptr` with `in_len > 0` (or an `in_len`
+/// exceeding `isize::MAX`) zero-fills `out_ptr` — a deterministic
+/// "poison" digest no real Keccak-256 output ever equals, so any
+/// downstream commitment comparison fails closed instead of reading
+/// stale buffer bytes.  The contract above remains binding: a
+/// *dangling non-null* pointer is still undefined behaviour (no
+/// in-process check can detect it).
+///
 /// Never panics in well-typed inputs.  The workspace's release
 /// profile sets `panic = "abort"` as a defence-in-depth measure
 /// against unwinding into Lean's runtime.
@@ -108,6 +124,13 @@ pub unsafe extern "C" fn knomosis_hash_keccak256_bytes_raw(
     in_len: usize,
     out_ptr: *mut u8,
 ) {
+    if out_ptr.is_null() {
+        return;
+    }
+    if (in_len > 0 && in_ptr.is_null()) || in_len > MAX_SLICE_LEN {
+        core::ptr::write_bytes(out_ptr, 0, DIGEST_LEN);
+        return;
+    }
     let input = if in_len == 0 {
         &[][..]
     } else {
@@ -152,10 +175,15 @@ pub extern "C" fn knomosis_hash_keccak256_init() -> *mut c_void {
 ///   * `ctx` must be a pointer returned by
 ///     [`knomosis_hash_keccak256_init`] and not yet passed to
 ///     [`knomosis_hash_keccak256_finalize`].
-///   * `ctx` must not be null.
+///   * `ctx` must not be null.  (Defence-in-depth: a null `ctx` is
+///     ignored — a no-op — rather than dereferenced; a dangling
+///     non-null `ctx` remains undefined behaviour.)
 #[no_mangle]
 #[allow(unsafe_code)]
 pub unsafe extern "C" fn knomosis_hash_keccak256_update_byte(ctx: *mut c_void, byte: u8) {
+    if ctx.is_null() {
+        return;
+    }
     let hasher: &mut Keccak256 = &mut *ctx.cast::<Keccak256>();
     hasher.update([byte]);
 }
@@ -170,6 +198,11 @@ pub unsafe extern "C" fn knomosis_hash_keccak256_update_byte(ctx: *mut c_void, b
 ///     [`knomosis_hash_keccak256_init`] and not yet finalised.
 ///   * `in_ptr` must point to `in_len` initialised bytes (or
 ///     `in_len == 0` with a dangling pointer).
+///
+/// Defence-in-depth: a null `ctx`, a null `in_ptr` with
+/// `in_len > 0`, or an `in_len` exceeding `isize::MAX` is ignored —
+/// the hash state is left unchanged rather than dereferencing.  A
+/// dangling non-null pointer remains undefined behaviour.
 #[no_mangle]
 #[allow(unsafe_code)]
 pub unsafe extern "C" fn knomosis_hash_keccak256_update_bulk(
@@ -177,6 +210,9 @@ pub unsafe extern "C" fn knomosis_hash_keccak256_update_bulk(
     in_ptr: *const u8,
     in_len: usize,
 ) {
+    if ctx.is_null() || (in_len > 0 && in_ptr.is_null()) || in_len > MAX_SLICE_LEN {
+        return;
+    }
     let hasher: &mut Keccak256 = &mut *ctx.cast::<Keccak256>();
     let input = if in_len == 0 {
         &[][..]
@@ -197,11 +233,28 @@ pub unsafe extern "C" fn knomosis_hash_keccak256_update_bulk(
 ///     memory.
 ///   * The context is FREED by this call; the caller must NOT
 ///     use `ctx` afterwards.
+///
+/// Defence-in-depth: a null `ctx` zero-fills `out_ptr` (when
+/// writable) instead of dereferencing — the deterministic "poison"
+/// digest of [`knomosis_hash_keccak256_bytes_raw`]; a null `out_ptr`
+/// still frees the context (no leak) and discards the digest.  A
+/// dangling non-null pointer remains undefined behaviour.
 #[no_mangle]
 #[allow(unsafe_code)]
 pub unsafe extern "C" fn knomosis_hash_keccak256_finalize(ctx: *mut c_void, out_ptr: *mut u8) {
-    // Reclaim ownership and consume.
+    if ctx.is_null() {
+        if !out_ptr.is_null() {
+            core::ptr::write_bytes(out_ptr, 0, DIGEST_LEN);
+        }
+        return;
+    }
+    // Reclaim ownership and consume (frees the context even when
+    // `out_ptr` is null, so a contract-violating caller leaks
+    // nothing).
     let hasher: Box<Keccak256> = Box::from_raw(ctx.cast::<Keccak256>());
+    if out_ptr.is_null() {
+        return;
+    }
     let digest = hasher.finalize();
     core::ptr::copy_nonoverlapping(digest.as_ptr(), out_ptr, DIGEST_LEN);
 }
@@ -534,6 +587,83 @@ mod tests {
             let h1 = keccak256(&input);
             let h2 = keccak256(&input);
             assert_eq!(h1, h2, "non-deterministic at size {size}");
+        }
+    }
+
+    /// Defence-in-depth: a null `out_ptr` makes the one-shot raw
+    /// entry point a no-op instead of undefined behaviour.
+    #[test]
+    fn raw_null_out_ptr_is_a_no_op() {
+        unsafe {
+            knomosis_hash_keccak256_bytes_raw(b"abc".as_ptr(), 3, std::ptr::null_mut());
+        }
+    }
+
+    /// Defence-in-depth: a null `in_ptr` with `in_len > 0` (a caller
+    /// contract violation) zero-fills the output — the deterministic
+    /// poison digest — instead of dereferencing.
+    #[test]
+    fn raw_null_input_zero_fills_out() {
+        let mut out = [0xffu8; DIGEST_LEN];
+        unsafe {
+            knomosis_hash_keccak256_bytes_raw(std::ptr::null(), 5, out.as_mut_ptr());
+        }
+        assert_eq!(out, [0u8; DIGEST_LEN]);
+    }
+
+    /// Defence-in-depth: an `in_len` above `isize::MAX` (the
+    /// `from_raw_parts` bound) zero-fills the output without
+    /// dereferencing the (valid, small) input pointer.
+    #[test]
+    fn raw_oversize_len_zero_fills_out() {
+        let input = [0u8; 4];
+        let mut out = [0xffu8; DIGEST_LEN];
+        unsafe {
+            knomosis_hash_keccak256_bytes_raw(input.as_ptr(), usize::MAX, out.as_mut_ptr());
+        }
+        assert_eq!(out, [0u8; DIGEST_LEN]);
+    }
+
+    /// Defence-in-depth: streaming calls on a null context are
+    /// no-ops, and finalising a null context poisons the output.
+    #[test]
+    fn streaming_null_ctx_calls_are_no_ops() {
+        let mut out = [0xffu8; DIGEST_LEN];
+        unsafe {
+            knomosis_hash_keccak256_update_byte(std::ptr::null_mut(), 0xaa);
+            knomosis_hash_keccak256_update_bulk(std::ptr::null_mut(), b"abc".as_ptr(), 3);
+            knomosis_hash_keccak256_finalize(std::ptr::null_mut(), out.as_mut_ptr());
+        }
+        assert_eq!(out, [0u8; DIGEST_LEN]);
+    }
+
+    /// Defence-in-depth: a null-input bulk update with `in_len > 0`
+    /// leaves the hash state UNCHANGED (deterministic), so the
+    /// surrounding stream still matches the one-shot digest of the
+    /// bytes that were actually delivered.
+    #[test]
+    fn streaming_null_input_bulk_leaves_state_unchanged() {
+        let one_shot = keccak256(b"abc");
+        let ctx = knomosis_hash_keccak256_init();
+        let mut streamed = [0u8; DIGEST_LEN];
+        unsafe {
+            knomosis_hash_keccak256_update_bulk(ctx, b"ab".as_ptr(), 2);
+            knomosis_hash_keccak256_update_bulk(ctx, std::ptr::null(), 3);
+            knomosis_hash_keccak256_update_byte(ctx, b'c');
+            knomosis_hash_keccak256_finalize(ctx, streamed.as_mut_ptr());
+        }
+        assert_eq!(one_shot, streamed);
+    }
+
+    /// Defence-in-depth: finalising into a null `out_ptr` still
+    /// consumes (frees) the context without crashing; the digest is
+    /// discarded.
+    #[test]
+    fn finalize_null_out_still_frees_ctx() {
+        let ctx = knomosis_hash_keccak256_init();
+        unsafe {
+            knomosis_hash_keccak256_update_byte(ctx, 0x01);
+            knomosis_hash_keccak256_finalize(ctx, std::ptr::null_mut());
         }
     }
 }

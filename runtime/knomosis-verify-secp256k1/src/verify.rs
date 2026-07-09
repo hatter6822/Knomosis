@@ -203,6 +203,14 @@ pub fn verify(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
 /// otherwise.  Never panics (the release profile sets
 /// `panic = "abort"` as a defence-in-depth measure against
 /// unwinding into Lean's runtime).
+///
+/// As defence-in-depth, the two contract violations detectable
+/// in-process — a null pointer with a non-zero length, or a length
+/// exceeding `isize::MAX` — are never dereferenced: the call
+/// **rejects the signature** (returns `0`, fail closed) instead.
+/// The contract above remains binding: a *dangling non-null*
+/// pointer is still undefined behaviour (no in-process check can
+/// detect it).
 #[no_mangle]
 #[allow(unsafe_code)]
 pub unsafe extern "C" fn knomosis_verify_ecdsa_raw(
@@ -213,6 +221,20 @@ pub unsafe extern "C" fn knomosis_verify_ecdsa_raw(
     sig_ptr: *const u8,
     sig_len: usize,
 ) -> u8 {
+    // Defence-in-depth: never dereference a null pointer or build a
+    // slice longer than `isize::MAX` (the `from_raw_parts` bound,
+    // spelled cast-free as `usize::MAX >> 1`).  A verifier that can
+    // only answer valid / invalid fails CLOSED on a malformed call.
+    const MAX_SLICE_LEN: usize = usize::MAX >> 1;
+    if (pk_len > 0 && pk_ptr.is_null())
+        || (msg_len > 0 && msg_ptr.is_null())
+        || (sig_len > 0 && sig_ptr.is_null())
+        || pk_len > MAX_SLICE_LEN
+        || msg_len > MAX_SLICE_LEN
+        || sig_len > MAX_SLICE_LEN
+    {
+        return 0;
+    }
     // `core::slice::from_raw_parts` requires:
     //   * the pointer is non-null (or `len == 0` with a
     //     dangling pointer — both cases produce a valid empty
@@ -221,9 +243,9 @@ pub unsafe extern "C" fn knomosis_verify_ecdsa_raw(
     //     `isize::MAX`.
     //
     // For `len > 0`, we accept a non-null pointer (the caller's
-    // contract).  For `len == 0`, we substitute a known-good
-    // dangling pointer so we always have a valid empty slice
-    // regardless of the caller's pointer value.
+    // contract, plus the null guard above).  For `len == 0`, we
+    // substitute a known-good dangling pointer so we always have a
+    // valid empty slice regardless of the caller's pointer value.
     let pk = make_slice(pk_ptr, pk_len);
     let msg = make_slice(msg_ptr, msg_len);
     let sig = make_slice(sig_ptr, sig_len);
@@ -601,5 +623,51 @@ mod tests {
         pk[0] = 0x02;
         pk[1..33].copy_from_slice(&GX);
         pk
+    }
+
+    /// Defence-in-depth: the raw C-ABI entry point REJECTS (returns
+    /// `0`, fail closed) on a null pointer with a non-zero length —
+    /// for each of the three `(ptr, len)` pairs independently —
+    /// instead of dereferencing.  (The positive control that
+    /// well-formed calls reach the verifier and return `1` on valid
+    /// signatures is the `tests/cross_stack.rs` corpus.)
+    #[test]
+    #[allow(unsafe_code)] // exercises the raw C-ABI guard itself
+    fn raw_null_pointer_inputs_rejected() {
+        let pk = make_valid_pk();
+        let msg = [0u8; 32];
+        let sig = [1u8; 64];
+        let cases: [(*const u8, *const u8, *const u8); 3] = [
+            (std::ptr::null(), msg.as_ptr(), sig.as_ptr()),
+            (pk.as_ptr(), std::ptr::null(), sig.as_ptr()),
+            (pk.as_ptr(), msg.as_ptr(), std::ptr::null()),
+        ];
+        for (i, (pk_ptr, msg_ptr, sig_ptr)) in cases.into_iter().enumerate() {
+            let r =
+                unsafe { super::knomosis_verify_ecdsa_raw(pk_ptr, 33, msg_ptr, 32, sig_ptr, 64) };
+            assert_eq!(r, 0, "null-pointer case {i} must be rejected fail-closed");
+        }
+    }
+
+    /// Defence-in-depth: a length above `isize::MAX` (the
+    /// `from_raw_parts` bound) is rejected fail-closed without
+    /// dereferencing the (valid, small) buffers.
+    #[test]
+    #[allow(unsafe_code)] // exercises the raw C-ABI guard itself
+    fn raw_oversize_len_rejected() {
+        let pk = make_valid_pk();
+        let msg = [0u8; 32];
+        let sig = [1u8; 64];
+        let r = unsafe {
+            super::knomosis_verify_ecdsa_raw(
+                pk.as_ptr(),
+                33,
+                msg.as_ptr(),
+                usize::MAX,
+                sig.as_ptr(),
+                64,
+            )
+        };
+        assert_eq!(r, 0, "oversize length must be rejected fail-closed");
     }
 }
