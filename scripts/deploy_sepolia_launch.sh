@@ -214,9 +214,36 @@ log "dry-run: simulating the full deploy against a Sepolia fork (no broadcast)�
 # still honours the operator's `KNOMOSIS_MANIFEST_OUT` (or the default).
 dryrun_manifest_rel="deployments/.sepolia-dryrun.$$.json"
 trap 'rm -f "${ROOT}/solidity/${dryrun_manifest_rel}"' EXIT
+
+# Match the broadcast's msg.sender in the simulation.  DeploySepolia sets
+# `deployer = msg.sender` and predicts EVERY CREATE address (bridge / verifier /
+# stake / multisig) from it via `computeCreateAddress(deployer, nonce)`; the
+# multisig constructor also rejects a signer equal to the bridge or to itself.
+# A fork run under forge's DEFAULT sender (and that sender's fork nonce) predicts
+# DIFFERENT addresses than the real broadcast, so a config that would revert on
+# the real predicted addresses could pass here and then revert mid-broadcast,
+# after the registry/bridge/verifier/stake are already on-chain.  Pin --sender to
+# the real deployer so the fork reads its true nonce and predicts the broadcast's
+# addresses.  A simulation needs only the ADDRESS (never the key), so prefer an
+# explicit KNOMOSIS_DEPLOYER_ADDRESS (keeps the dry-run keystore-unlock-free) and
+# otherwise derive it from the same signer the broadcast uses.
+if [ -n "${KNOMOSIS_DEPLOYER_ADDRESS:-}" ]; then
+  dryrun_sender="${KNOMOSIS_DEPLOYER_ADDRESS}"
+else
+  command -v cast >/dev/null 2>&1 \
+    || die "cast (Foundry) not found on PATH — needed to derive the dry-run sender. Set KNOMOSIS_DEPLOYER_ADDRESS to the deployer's public address to skip derivation, or install Foundry."
+  if [ -n "${KNOMOSIS_DEPLOYER_ACCOUNT:-}" ]; then
+    dryrun_sender="$(cast wallet address --account "${KNOMOSIS_DEPLOYER_ACCOUNT}")" \
+      || die "could not derive the deployer address from keystore account '${KNOMOSIS_DEPLOYER_ACCOUNT}'. Set KNOMOSIS_DEPLOYER_ADDRESS to the deployer's public address to skip the keystore unlock."
+  else
+    dryrun_sender="$(cast wallet address --private-key "${PRIVATE_KEY}")" \
+      || die "could not derive the deployer address from PRIVATE_KEY."
+  fi
+fi
+log "dry-run sender: ${dryrun_sender} (pinned to match the broadcast's msg.sender)"
 ( cd "${ROOT}/solidity" \
     && KNOMOSIS_MANIFEST_OUT="${dryrun_manifest_rel}" \
-       forge script script/DeploySepolia.s.sol --fork-url "${SEPOLIA_RPC_URL}" ) \
+       forge script script/DeploySepolia.s.sol --fork-url "${SEPOLIA_RPC_URL}" --sender "${dryrun_sender}" ) \
   || die "dry-run FAILED — fix the reported config error before broadcasting."
 rm -f "${ROOT}/solidity/${dryrun_manifest_rel}"
 log "dry-run: PASSED — the config produces a consistent deployment on a Sepolia fork."
