@@ -144,6 +144,31 @@ mod read_deadline_tests {
             now + MAX_CONNECTION_TIMEOUT
         );
     }
+
+    /// `bounded_connection_timeout` clamps the value used for `set_read_timeout`
+    /// too — not just the deadline math — so a directly-constructed
+    /// `HandlerConfig { connection_timeout: Duration::MAX, .. }` cannot leave a
+    /// socket read effectively unbounded (an idle peer blocking inside the first
+    /// `Read::read` past the intended ceiling).
+    #[test]
+    fn bounded_connection_timeout_clamps_socket_timeout() {
+        use super::HandlerConfig;
+        let cfg = HandlerConfig {
+            connection_timeout: Duration::MAX,
+            ..Default::default()
+        };
+        assert_eq!(cfg.bounded_connection_timeout(), MAX_CONNECTION_TIMEOUT);
+
+        let normal = HandlerConfig {
+            connection_timeout: Duration::from_secs(10),
+            ..Default::default()
+        };
+        assert_eq!(
+            normal.bounded_connection_timeout(),
+            Duration::from_secs(10),
+            "a sub-ceiling timeout is passed through unchanged"
+        );
+    }
 }
 
 /// Maximum time the connection handler will block waiting for the
@@ -209,6 +234,27 @@ impl Default for HandlerConfig {
             max_concurrent_connections: DEFAULT_MAX_CONCURRENT_CONNECTIONS,
             persistent_connections: false,
         }
+    }
+}
+
+impl HandlerConfig {
+    /// The connection timeout clamped to [`MAX_CONNECTION_TIMEOUT`].
+    ///
+    /// Every socket-timeout (`set_read_timeout` / `set_write_timeout`) and
+    /// deadline computation MUST read the timeout through this accessor, never
+    /// the raw `connection_timeout` field.  The CLI path caps the field in
+    /// `Config::validate`, but a library embedder that builds a `HandlerConfig`
+    /// directly (e.g. `ServerConfigBuilder::handler(HandlerConfig {
+    /// connection_timeout: Duration::MAX, .. })`) bypasses that ceiling.  An
+    /// unclamped `Duration::MAX` would (a) overflow `Instant::now() + timeout`
+    /// and panic the deadline math, and (b) reach `set_read_timeout` as an
+    /// effectively-unbounded socket read — so an idle peer could block inside
+    /// the first `Read::read`, past which the pre-read deadline is never
+    /// rechecked, holding the handler slot indefinitely.  Clamping to a full
+    /// day — already pathological for one request — bounds both uses.
+    #[must_use]
+    pub fn bounded_connection_timeout(&self) -> Duration {
+        self.connection_timeout.min(MAX_CONNECTION_TIMEOUT)
     }
 }
 
@@ -376,7 +422,7 @@ pub fn handle_connection<S: Read + Write>(
     //    slow-loris defence: the socket's per-read timeout resets on
     //    every delivered byte, so a trickling client would otherwise
     //    hold this handler slot indefinitely.
-    let read_deadline = read_deadline_from(Instant::now(), config.connection_timeout);
+    let read_deadline = read_deadline_from(Instant::now(), config.bounded_connection_timeout());
     let (signer_hint, payload) =
         match read_request_with_deadline(stream, config.max_frame_size, read_deadline) {
             Ok(p) => p,
@@ -562,7 +608,7 @@ where
         // (`WouldBlock`/`TimedOut` → graceful close): the deadline
         // only fires when reads keep making progress too slowly, which
         // is a protocol error (`ParseError`), not a clean close.
-        let read_deadline = read_deadline_from(Instant::now(), config.connection_timeout);
+        let read_deadline = read_deadline_from(Instant::now(), config.bounded_connection_timeout());
         match reader.read_next_with_deadline(&mut read_half, config.max_frame_size, read_deadline) {
             Ok((signer_hint, payload)) => {
                 let pending = match handle.submit(conn_id, signer_hint, payload) {
@@ -736,7 +782,8 @@ pub mod tcp {
                                     "max_concurrent_connections reached; responding Busy"
                                 );
                                 let mut stream = stream;
-                                let _ = stream.set_write_timeout(Some(config.connection_timeout));
+                                let _ = stream
+                                    .set_write_timeout(Some(config.bounded_connection_timeout()));
                                 let bytes = VerdictResponse::from_verdict(Verdict::Busy).encode();
                                 let _ = stream.write_all(&bytes);
                                 let _ = stream.flush();
@@ -774,8 +821,8 @@ pub mod tcp {
         // _slot is held for the lifetime of this function; the
         // RAII Drop releases the connection-counter slot when
         // the handler exits, regardless of panic / early return.
-        let _ = stream.set_read_timeout(Some(config.connection_timeout));
-        let _ = stream.set_write_timeout(Some(config.connection_timeout));
+        let _ = stream.set_read_timeout(Some(config.bounded_connection_timeout()));
+        let _ = stream.set_write_timeout(Some(config.bounded_connection_timeout()));
         let span = tracing::info_span!("conn", proto = "tcp", peer = %peer, conn = conn_id);
         let _enter = span.enter();
         let outcome = if config.persistent_connections {
@@ -786,7 +833,7 @@ pub mod tcp {
             // back to the one-shot path (correct, just not pipelined).
             match stream.try_clone() {
                 Ok(write_half) => {
-                    let _ = write_half.set_write_timeout(Some(config.connection_timeout));
+                    let _ = write_half.set_write_timeout(Some(config.bounded_connection_timeout()));
                     super::run_persistent(stream, write_half, &handle, &config, conn_id, &stop)
                 }
                 Err(e) => {
@@ -986,8 +1033,8 @@ pub mod tls {
         conn_id: ConnId,
     ) {
         // _slot RAII releases the connection-counter slot.
-        let _ = stream.set_read_timeout(Some(config.connection_timeout));
-        let _ = stream.set_write_timeout(Some(config.connection_timeout));
+        let _ = stream.set_read_timeout(Some(config.bounded_connection_timeout()));
+        let _ = stream.set_write_timeout(Some(config.bounded_connection_timeout()));
         // Required to switch the socket back to blocking mode for
         // the synchronous `rustls::StreamOwned` adapter.
         let _ = stream.set_nonblocking(false);
@@ -1014,8 +1061,8 @@ pub mod tls {
         // `DeadlineStream` shrinks the socket read timeout to the remaining
         // budget on every raw read, so the whole connection is bounded by
         // `connection_timeout`.
-        let deadline = read_deadline_from(Instant::now(), config.connection_timeout);
-        let bounded = DeadlineStream::new(stream, deadline, config.connection_timeout);
+        let deadline = read_deadline_from(Instant::now(), config.bounded_connection_timeout());
+        let bounded = DeadlineStream::new(stream, deadline, config.bounded_connection_timeout());
         let mut tls_stream = StreamOwned::new(connection, bounded);
         let outcome = handle_connection(&mut tls_stream, &handle, &config, conn_id);
         tracing::info!(outcome = outcome.name(), "request handled");
@@ -1244,7 +1291,8 @@ pub mod unix {
                                     "Unix: max_concurrent_connections reached; responding Busy"
                                 );
                                 let mut stream = stream;
-                                let _ = stream.set_write_timeout(Some(config.connection_timeout));
+                                let _ = stream
+                                    .set_write_timeout(Some(config.bounded_connection_timeout()));
                                 let bytes = VerdictResponse::from_verdict(Verdict::Busy).encode();
                                 let _ = stream.write_all(&bytes);
                                 let _ = stream.flush();
@@ -1287,15 +1335,15 @@ pub mod unix {
         stop: Arc<AtomicBool>,
     ) {
         // _slot RAII releases the connection-counter slot.
-        let _ = stream.set_read_timeout(Some(config.connection_timeout));
-        let _ = stream.set_write_timeout(Some(config.connection_timeout));
+        let _ = stream.set_read_timeout(Some(config.bounded_connection_timeout()));
+        let _ = stream.set_write_timeout(Some(config.bounded_connection_timeout()));
         let span = tracing::info_span!("conn", proto = "unix", conn = conn_id);
         let _enter = span.enter();
         let outcome = if config.persistent_connections {
             // Persistent + pipelined (see the TCP handler / `run_persistent`).
             match stream.try_clone() {
                 Ok(write_half) => {
-                    let _ = write_half.set_write_timeout(Some(config.connection_timeout));
+                    let _ = write_half.set_write_timeout(Some(config.bounded_connection_timeout()));
                     super::run_persistent(stream, write_half, &handle, &config, conn_id, &stop)
                 }
                 Err(e) => {

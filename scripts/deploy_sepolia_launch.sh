@@ -145,14 +145,21 @@ case "${KNOMOSIS_AMM_SEED_RATIO_BPS}" in
   decimal integer number of basis points (e.g. 500).  DeploySepolia parses it as a
   uint, so a non-numeric value (including a 0x-hex spelling) is a config error." ;;
 esac
-# `10#` forces base-10 so leading-zero spellings (`00`, `007`) are read as decimal,
-# not octal.  Arithmetic expansion never affects exit status, so `set -e` is safe.
-if [ "$((10#${KNOMOSIS_AMM_SEED_RATIO_BPS}))" -le 0 ]; then
+# Bound the value WITHOUT fixed-width shell arithmetic: `$((10#$x))` wraps for a
+# decimal string past bash's 64-bit width (e.g. 18446744073709552116 -> 500),
+# which would let an oversized typo slip past both guards while DeploySepolia
+# reads the full uint256 and narrows to uint16.  Operate on the digit string:
+# strip leading zeros, reject an all-zero value, then bound by digit-count plus a
+# lexicographic compare against the uint16 max (65535).  With leading zeros
+# removed the string length is the true digit count and, at equal length, an
+# ASCII compare of digits equals the numeric compare.
+_bps_stripped="${KNOMOSIS_AMM_SEED_RATIO_BPS#"${KNOMOSIS_AMM_SEED_RATIO_BPS%%[!0]*}"}"
+if [ -z "${_bps_stripped}" ]; then
   die "KNOMOSIS_AMM_SEED_RATIO_BPS is '${KNOMOSIS_AMM_SEED_RATIO_BPS}' (numerically
   0) — the AMM (and its disaster-recovery multisig) would NOT be deployed.  Set it
   > 0 for the full BOLD+AMM suite, or use an ETH-only env if that is intended."
 fi
-if [ "$((10#${KNOMOSIS_AMM_SEED_RATIO_BPS}))" -gt 65535 ]; then
+if [ "${#_bps_stripped}" -gt 5 ] || { [ "${#_bps_stripped}" -eq 5 ] && [[ "${_bps_stripped}" > "65535" ]]; }; then
   die "KNOMOSIS_AMM_SEED_RATIO_BPS is '${KNOMOSIS_AMM_SEED_RATIO_BPS}', above the
   uint16 basis-points field (max 65535): it would truncate mod 65536, and a multiple
   of 65536 narrows to 0 and silently drops the AMM.  Use a value in (0, 65535] (and

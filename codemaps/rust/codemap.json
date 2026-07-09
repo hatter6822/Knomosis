@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7681daf12e42b18011f5c153355a7c4ab43a7ebf5176471e32e44e36cd575416"
+    "source_digest": "d3cceaa127477dc28a1a75d4f2f7b4d43eaac49892f8cbde2193998f34b19f34"
   },
   "summary": {
     "module_count": 192,
-    "declaration_count": 5948
+    "declaration_count": 5951
   },
   "modules": [
     {
@@ -40199,7 +40199,7 @@
     {
       "module": "runtime::knomosis-host::src::listener",
       "path": "runtime/knomosis-host/src/listener.rs",
-      "declaration_count": 62,
+      "declaration_count": 65,
       "declarations": [
         {
           "kind": "const",
@@ -40258,33 +40258,43 @@
           ]
         },
         {
+          "kind": "fn",
+          "name": "bounded_connection_timeout_clamps_socket_timeout",
+          "line": 153,
+          "called": [
+            "HandlerConfig",
+            "MAX_CONNECTION_TIMEOUT",
+            "bounded_connection_timeout"
+          ]
+        },
+        {
           "kind": "const",
           "name": "DEFAULT_KERNEL_REPLY_TIMEOUT",
-          "line": 151,
+          "line": 176,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_MAX_CONCURRENT_CONNECTIONS",
-          "line": 164,
+          "line": 189,
           "called": []
         },
         {
           "kind": "const",
           "name": "HARD_MAX_CONCURRENT_CONNECTIONS",
-          "line": 170,
+          "line": 195,
           "called": []
         },
         {
           "kind": "struct",
           "name": "HandlerConfig",
-          "line": 176,
+          "line": 201,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Default for HandlerConfig",
-          "line": 202,
+          "line": 227,
           "called": [
             "HandlerConfig"
           ]
@@ -40292,7 +40302,7 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 203,
+          "line": 228,
           "called": [
             "DEFAULT_CONNECTION_TIMEOUT",
             "DEFAULT_KERNEL_REPLY_TIMEOUT",
@@ -40300,21 +40310,36 @@
           ]
         },
         {
+          "kind": "impl",
+          "name": "HandlerConfig",
+          "line": 239,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "bounded_connection_timeout",
+          "line": 255,
+          "called": [
+            "MAX_CONNECTION_TIMEOUT",
+            "min"
+          ]
+        },
+        {
           "kind": "struct",
           "name": "ConnectionSlot",
-          "line": 219,
+          "line": 265,
           "called": []
         },
         {
           "kind": "impl",
           "name": "ConnectionSlot",
-          "line": 223,
+          "line": 269,
           "called": []
         },
         {
           "kind": "fn",
           "name": "try_acquire",
-          "line": 237,
+          "line": 283,
           "called": [
             "Err",
             "HARD_MAX_CONCURRENT_CONNECTIONS",
@@ -40326,7 +40351,7 @@
         {
           "kind": "fn",
           "name": "active_count",
-          "line": 268,
+          "line": 314,
           "called": [
             "load"
           ]
@@ -40334,7 +40359,7 @@
         {
           "kind": "impl",
           "name": "Drop for ConnectionSlot",
-          "line": 273,
+          "line": 319,
           "called": [
             "ConnectionSlot"
           ]
@@ -40342,13 +40367,13 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 274,
+          "line": 320,
           "called": []
         },
         {
           "kind": "fn",
           "name": "backoff_on_accept_error",
-          "line": 292,
+          "line": 338,
           "called": [
             "min"
           ]
@@ -40356,7 +40381,7 @@
         {
           "kind": "enum",
           "name": "HandleOutcome",
-          "line": 307,
+          "line": 353,
           "called": [
             "Verdict"
           ]
@@ -40364,19 +40389,19 @@
         {
           "kind": "impl",
           "name": "HandleOutcome",
-          "line": 324,
+          "line": 370,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 328,
+          "line": 374,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_connection",
-          "line": 364,
+          "line": 410,
           "called": [
             "ConnId",
             "Err",
@@ -40384,6 +40409,7 @@
             "HandlerConfig",
             "QueueHandle",
             "_",
+            "bounded_connection_timeout",
             "bytes",
             "config",
             "encode",
@@ -40401,7 +40427,7 @@
         {
           "kind": "enum",
           "name": "PendingResponse",
-          "line": 449,
+          "line": 495,
           "called": [
             "KernelResponse",
             "VerdictResponse"
@@ -40410,7 +40436,7 @@
         {
           "kind": "fn",
           "name": "run_persistent",
-          "line": 515,
+          "line": 561,
           "called": [
             "ConnId",
             "Err",
@@ -40419,6 +40445,7 @@
             "PendingResponse",
             "QueueHandle",
             "_",
+            "bounded_connection_timeout",
             "config",
             "drop",
             "error",
@@ -40439,7 +40466,7 @@
         {
           "kind": "fn",
           "name": "persistent_writer_loop",
-          "line": 618,
+          "line": 664,
           "called": [
             "Err",
             "PendingResponse",
@@ -40454,7 +40481,7 @@
         {
           "kind": "mod",
           "name": "tcp",
-          "line": 648,
+          "line": 694,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40470,19 +40497,19 @@
         {
           "kind": "struct",
           "name": "TcpListener",
-          "line": 666,
+          "line": 712,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TcpListener",
-          "line": 670,
+          "line": 716,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 676,
+          "line": 722,
           "called": [
             "addr"
           ]
@@ -40490,19 +40517,20 @@
         {
           "kind": "fn",
           "name": "local_addr",
-          "line": 684,
+          "line": 730,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 697,
+          "line": 743,
           "called": [
             "Err",
             "HandlerConfig",
             "QueueHandle",
             "_",
             "backoff_on_accept_error",
+            "bounded_connection_timeout",
             "bytes",
             "clone",
             "config",
@@ -40520,7 +40548,7 @@
         {
           "kind": "fn",
           "name": "handle_single_connection",
-          "line": 764,
+          "line": 811,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40528,6 +40556,7 @@
             "HandlerConfig",
             "QueueHandle",
             "_",
+            "bounded_connection_timeout",
             "config",
             "conn",
             "error",
@@ -40541,7 +40570,7 @@
         {
           "kind": "mod",
           "name": "tls",
-          "line": 805,
+          "line": 852,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40556,7 +40585,7 @@
         {
           "kind": "struct",
           "name": "TlsListener",
-          "line": 822,
+          "line": 869,
           "called": [
             "ServerConfig"
           ]
@@ -40564,13 +40593,13 @@
         {
           "kind": "impl",
           "name": "TlsListener",
-          "line": 827,
+          "line": 874,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 833,
+          "line": 880,
           "called": [
             "ServerConfig",
             "addr"
@@ -40579,13 +40608,13 @@
         {
           "kind": "fn",
           "name": "local_addr",
-          "line": 843,
+          "line": 890,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 852,
+          "line": 899,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40606,25 +40635,25 @@
         {
           "kind": "struct",
           "name": "DeadlineStream",
-          "line": 927,
+          "line": 974,
           "called": []
         },
         {
           "kind": "impl",
           "name": "DeadlineStream",
-          "line": 933,
+          "line": 980,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 936,
+          "line": 983,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Read for DeadlineStream",
-          "line": 945,
+          "line": 992,
           "called": [
             "DeadlineStream"
           ]
@@ -40632,7 +40661,7 @@
         {
           "kind": "fn",
           "name": "read",
-          "line": 946,
+          "line": 993,
           "called": [
             "Err",
             "_",
@@ -40644,7 +40673,7 @@
         {
           "kind": "impl",
           "name": "Write for DeadlineStream",
-          "line": 969,
+          "line": 1016,
           "called": [
             "DeadlineStream"
           ]
@@ -40652,19 +40681,19 @@
         {
           "kind": "fn",
           "name": "write",
-          "line": 970,
+          "line": 1017,
           "called": []
         },
         {
           "kind": "fn",
           "name": "flush",
-          "line": 973,
+          "line": 1020,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_tls_connection",
-          "line": 978,
+          "line": 1025,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40673,6 +40702,7 @@
             "QueueHandle",
             "ServerConfig",
             "_",
+            "bounded_connection_timeout",
             "config",
             "conn",
             "error",
@@ -40686,7 +40716,7 @@
         {
           "kind": "mod",
           "name": "deadline_tests",
-          "line": 1024,
+          "line": 1071,
           "called": [
             "TcpListener"
           ]
@@ -40694,7 +40724,7 @@
         {
           "kind": "fn",
           "name": "idle_server_stream",
-          "line": 1033,
+          "line": 1080,
           "called": [
             "_",
             "addr",
@@ -40707,7 +40737,7 @@
         {
           "kind": "fn",
           "name": "read_past_the_deadline_is_timed_out_without_blocking",
-          "line": 1043,
+          "line": 1090,
           "called": [
             "idle_server_stream",
             "kind",
@@ -40718,7 +40748,7 @@
         {
           "kind": "fn",
           "name": "an_idle_socket_read_is_bounded_by_the_deadline",
-          "line": 1059,
+          "line": 1106,
           "called": [
             "idle_server_stream",
             "read",
@@ -40729,7 +40759,7 @@
         {
           "kind": "mod",
           "name": "unix",
-          "line": 1084,
+          "line": 1131,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40745,7 +40775,7 @@
         {
           "kind": "struct",
           "name": "UnixListener",
-          "line": 1141,
+          "line": 1188,
           "called": [
             "path"
           ]
@@ -40753,13 +40783,13 @@
         {
           "kind": "impl",
           "name": "UnixListener",
-          "line": 1146,
+          "line": 1193,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 1165,
+          "line": 1212,
           "called": [
             "Err",
             "kind",
@@ -40769,19 +40799,20 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 1204,
+          "line": 1251,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 1213,
+          "line": 1260,
           "called": [
             "Err",
             "HandlerConfig",
             "QueueHandle",
             "_",
             "backoff_on_accept_error",
+            "bounded_connection_timeout",
             "bytes",
             "clone",
             "config",
@@ -40799,7 +40830,7 @@
         {
           "kind": "impl",
           "name": "Drop for UnixListener",
-          "line": 1267,
+          "line": 1315,
           "called": [
             "UnixListener"
           ]
@@ -40807,7 +40838,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 1268,
+          "line": 1316,
           "called": [
             "Err",
             "error",
@@ -40818,7 +40849,7 @@
         {
           "kind": "fn",
           "name": "handle_single_unix_connection",
-          "line": 1280,
+          "line": 1328,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40826,6 +40857,7 @@
             "HandlerConfig",
             "QueueHandle",
             "_",
+            "bounded_connection_timeout",
             "config",
             "conn",
             "error",
