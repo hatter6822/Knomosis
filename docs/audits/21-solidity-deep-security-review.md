@@ -253,17 +253,27 @@ gated off under the FNV hash default (it runs under
 been caught by an end-to-end "honest sequencer wins a single-step
 termination" test.
 
-**Partially remediated (this PR).**  The first adjudication-outcome
-tests now exist: `test_terminate_single_step_honest_sequencer_wins` (a)
+**Remediated.**  The first adjudication-outcome tests landed with the
+1.1 fix: `test_terminate_single_step_honest_sequencer_wins` (a)
 drives `terminateOnSingleStep` to a `SequencerWon` against a
 correctly-anchored `low` *and* asserts the 1.2 lock clears under
 `disputedLogIndex`, and
 `test_terminate_single_step_invalid_root_challenger_wins` (b) drives a
 `ChallengerWon` against an invalid published root.  Both execute the
-real step VM (reusing the verified Transfer recipe).  **Remaining
-follow-up:** a multi-round bisection-then-terminate path and an explicit
-"re-challenge succeeds after a prior game settles" test exercising the
-1.2 fix across a `disagree`-reassigned `high`.
+real step VM (reusing the verified Transfer recipe).  The two
+extended-coverage follow-ups have since **also landed**:
+`test_multi_round_bisection_then_terminate_sequencer_wins` (c) narrows
+a genuine 4-entry trace (every commit a real chained `executeStep`)
+through TWO full midpoint/`disagree` rounds to a single step and
+settles `SequencerWon` on the real step VM — exercising depth
+accounting, turn alternation, the step-interval gate across rounds,
+and the 1.2 lock clearing under `disputedLogIndex` while `high.idx`
+ends at a midpoint; and
+`test_rechallenge_succeeds_after_settled_game_with_reassigned_high`
+(d) settles a game whose `high` was `disagree`-reassigned to a
+midpoint, then asserts a fresh `initiateChallenge` on the SAME
+disputed index succeeds (pre-1.2 this reverted `GameAlreadyExists`
+forever).  No adjudication-coverage follow-up remains.
 
 ---
 
@@ -302,6 +312,7 @@ follow-up:** a multi-round bisection-then-terminate path and an explicit
 | Coverage | End-to-end `SequencerWon` / `ChallengerWon` adjudication tests | **this PR** (with 1.1) |
 | 1.3 | Pull-payment settlement escrow + brick-resistance test | **this PR** |
 | 1.4 | Constructor `responseTimeout > stepInterval` guard | **this PR** |
+| Coverage (extended) | Multi-round bisection-then-terminate + re-challenge-after-settle tests (§4 c/d) | **landed** (follow-up) |
 | B.2 / 2.1 | Multisig roles / per-dispute slash | follow-up / deployment |
 
 ## 7. Post-remediation verification
