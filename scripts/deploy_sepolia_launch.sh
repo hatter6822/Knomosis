@@ -87,7 +87,13 @@ log "loading deploy env: ${ENV_FILE}"
 set -a; source "${ENV_FILE}"; set +a
 
 # Required for a value-bearing BOLD+AMM broadcast.  Each must be set AND must
-# not still carry a `SET-THIS…` placeholder.
+# not still carry a `SET-THIS…` placeholder.  The two economic knobs are
+# required because DeploySepolia's defaults for them are explicitly launch-UNSAFE
+# and immutable after construction: MIN_CHALLENGE_BOND defaults to 0.05 ETH (too
+# low — cheap to grief the fault proof) and TVL_CAP defaults to 100000 ETH (far
+# too high — unbounded bridged-value exposure).  Requiring them here stops a
+# minimal env from silently deploying on those defaults (the template ships
+# sized starting values).
 REQUIRED_VARS=(
   SEPOLIA_RPC_URL ETHERSCAN_API_KEY
   KNOMOSIS_ATTESTOR KNOMOSIS_SEQUENCER KNOMOSIS_TREASURY
@@ -95,6 +101,7 @@ REQUIRED_VARS=(
   KNOMOSIS_BOLD_TOKEN KNOMOSIS_AMM_SEED_RATIO_BPS
   KNOMOSIS_BOLD_CIRCUIT_BREAKER KNOMOSIS_BOLD_ADMIN
   KNOMOSIS_AMM_MULTISIG_SIGNERS
+  KNOMOSIS_MIN_CHALLENGE_BOND KNOMOSIS_TVL_CAP
 )
 
 missing=()
@@ -222,15 +229,20 @@ fi
 # --- step 3: confirm, then broadcast ---------------------------------------
 if [ "${ASSUME_YES}" -eq 0 ]; then
   printf '\033[1;33m[launch]\033[0m About to BROADCAST a value-bearing deploy to Sepolia and spend real test-ETH.\n'
-  # Redact the RPC credential before printing.  Infura/Alchemy-style URLs carry
-  # the API key in the PATH (`/v3/<key>`, `/v2/<key>`), not only the query string,
-  # so stripping `?…` alone still leaks it in a captured terminal / CI log.  Print
-  # scheme+host only and mask everything after the authority.
+  # Redact the RPC credential before printing.  A credential can live in three
+  # places in the URL: the PATH (`/v3/<key>`, `/v2/<key>` — Infura/Alchemy), the
+  # userinfo (`user:pass@host`), or a query/fragment stuck straight to the
+  # authority (`host?token=…`).  Print scheme+host[:port] ONLY: take the
+  # authority, drop a trailing query/fragment, then drop userinfo up to the last
+  # `@`.  Everything after the authority is masked.
   _rpc_rest="${SEPOLIA_RPC_URL#*://}"
+  _rpc_auth="${_rpc_rest%%/*}"    # authority (+ ?query/#frag when there is no path)
+  _rpc_auth="${_rpc_auth%%[?#]*}" # drop a query/fragment attached to the authority
+  _rpc_auth="${_rpc_auth##*@}"    # drop userinfo up to and including the last '@'
   if [ "${_rpc_rest}" != "${SEPOLIA_RPC_URL}" ]; then
-    _rpc_display="${SEPOLIA_RPC_URL%%://*}://${_rpc_rest%%/*}/<redacted>"
+    _rpc_display="${SEPOLIA_RPC_URL%%://*}://${_rpc_auth}/<redacted>"
   else
-    _rpc_display="${SEPOLIA_RPC_URL%%/*}/<redacted>"
+    _rpc_display="${_rpc_auth}/<redacted>"
   fi
   printf '        RPC: %s\n' "${_rpc_display}"
   read -r -p "        Type 'deploy' to proceed: " confirm
@@ -241,7 +253,15 @@ log "broadcasting to Sepolia + verifying sources on Etherscan…"
 ( cd "${ROOT}/solidity" && make deploy-sepolia ) \
   || die "deploy FAILED during broadcast/verify — inspect the forge output above."
 
-MANIFEST="${ROOT}/solidity/${KNOMOSIS_MANIFEST_OUT:-deployments/sepolia.json}"
+# Resolve the manifest path the way forge does: DeploySepolia writes an ABSOLUTE
+# KNOMOSIS_MANIFEST_OUT as-is, and a relative one under the solidity project root.
+# Prepending ${ROOT}/solidity/ unconditionally would mis-report an absolute path
+# and point --with-l2-stack at a file that was never written.
+_manifest_out="${KNOMOSIS_MANIFEST_OUT:-deployments/sepolia.json}"
+case "${_manifest_out}" in
+  /*) MANIFEST="${_manifest_out}" ;;
+  *)  MANIFEST="${ROOT}/solidity/${_manifest_out}" ;;
+esac
 log "deploy COMPLETE."
 if [ -f "${MANIFEST}" ]; then
   log "addresses manifest: ${MANIFEST}"
