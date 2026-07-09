@@ -26,6 +26,17 @@ the go/no-go gate in `docs/testnet_readiness.md`, and the gateway API in
 `docs/api/gateway.openapi.yaml`.  `docs/DEVELOPMENT.md` §11 is the short
 overview that points here.
 
+> **Launch kit (the fast path).**  For a value-bearing BOLD+AMM launch the
+> only manual inputs are: fund the deployer EOA, fill
+> `solidity/deploy.sepolia.env.example` with your custodied addresses /
+> signer, and provide `SEPOLIA_RPC_URL` + `ETHERSCAN_API_KEY`.  Then
+> `./scripts/deploy_sepolia_launch.sh` runs the whole flow (F-1/F-2 gate →
+> dry-run → confirm → broadcast + verify → manifest → optional L2 stack).
+> The execution-ordered checklist — including the post-deploy verification,
+> monitoring/alerting, key-custody/rotation, and watchtower ops — is
+> `docs/launch_execution_checklist.md`.  The sections below remain the
+> reference detail the kit automates.
+
 ---
 
 ## 0. Topology — what talks to what
