@@ -109,7 +109,8 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       dry-run → confirm → broadcast+verify → manifest; `docs/launch_execution_checklist.md`
       is the execution checklist.  **Toolchain caveat (deploy-tooling, not the
       deploy logic):** use a **stable** `foundry` release — some dev builds (the
-      `1.6.0-v1.7.0` build in this repo's CI containers) regress on assembling the
+      `1.6.0-v1.7.0` build this repo previously pinned; now v1.7.1, unverified on
+      this path in the sandbox) regress on assembling the
       `--broadcast` for `KnomosisDisputeVerifier`'s `constructor(tuple)`
       (`type check failed for "offset (usize)"`, *before any tx is sent*); the
       deploy logic is proven (dry-run + F.3 acceptance pass), so preflight the

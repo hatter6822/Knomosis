@@ -75,7 +75,7 @@ contract InactiveMigration {
 ///            hundred gas" of the small-call operations.
 ///         3. NO fuzz / invariant tests — every benchmark is a fixed
 ///            scenario, so the recorded values are byte-stable for the
-///            pinned (forge 1.7.0, solc 0.8.20, foundry.toml) toolchain.
+///            pinned (forge 1.7.1, solc 0.8.20, foundry.toml) toolchain.
 ///         4. Scenario state is staged entirely in `setUp`; scenarios
 ///            needing different pre-staged state (circuit already closed,
 ///            a Liquity branch in shutdown, a migration-wired bridge, a

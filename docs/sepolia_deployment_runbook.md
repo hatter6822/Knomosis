@@ -163,7 +163,8 @@ make deploy-sepolia                   # broadcasts + verifies on Etherscan
 ```
 
 > **Foundry version.** Use a **stable** `foundry` release for the broadcast.
-> Some dev builds (the `1.6.0-v1.7.0` build in this repo's CI containers)
+> Some dev builds (the `1.6.0-v1.7.0` build this repo previously pinned; now
+> bumped to v1.7.1, unverified on this path in the sandbox)
 > regress on decoding `KnomosisDisputeVerifier`'s `constructor(tuple)` when
 > assembling the `--broadcast` (`type check failed for "offset (usize)"`,
 > **before any tx is sent**); the deploy logic itself is proven (the dry-run +

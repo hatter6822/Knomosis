@@ -698,7 +698,7 @@ backed by the existing Phase-6 fraud-proof pipeline.
     `"knomosis-ethereum-workstream-f-cross-stack-verification"`.
 
     **Toolchain bootstrap.**  `scripts/setup.sh` extended to
-    install Foundry v1.7.0 (SHA-256 pinned for x86_64 +
+    install Foundry v1.7.1 (SHA-256 pinned for x86_64 +
     aarch64) and solc v0.8.20 (SHA-256 pinned for x86_64;
     upstream v0.8.20 doesn't ship an ARM static binary).  New
     flags `--skip-solidity` and `--solidity-only`.  A

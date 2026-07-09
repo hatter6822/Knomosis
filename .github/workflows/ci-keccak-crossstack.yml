@@ -171,17 +171,19 @@ jobs:
           workspaces: runtime
           shared-key: keccak-crossstack
 
-      - name: Install Foundry v1.7.0
+      - name: Install Foundry v1.7.1
         # Version-pinned release tarball (matches ci-solidity.yml /
-        # solidity/README.md); avoids a third-party action that cannot be
-        # SHA-pinned here.  `--retry` guards transient release-CDN
-        # hiccups; the full-path `forge --version` verifies the binary
+        # solidity/README.md / scripts/setup.sh's FOUNDRY_SHA256_X86); avoids a
+        # third-party action that cannot be SHA-pinned here.  `--retry` guards
+        # transient release-CDN hiccups; the SHA-256 check pins the exact
+        # artifact, and the full-path `forge --version` verifies the binary
         # runs before any PATH dependence.
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.foundry/bin"
-          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_amd64.tar.gz -o /tmp/foundry.tar.gz
+          curl -sSfL --retry 5 --retry-delay 3 --retry-connrefused https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_amd64.tar.gz -o /tmp/foundry.tar.gz
+          echo "cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b  /tmp/foundry.tar.gz" | sha256sum -c -
           tar xzf /tmp/foundry.tar.gz -C "$HOME/.foundry/bin"
           "$HOME/.foundry/bin/forge" --version
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"

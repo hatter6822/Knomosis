@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "35169e47648bf43ddc81f46a31a44802ef1c7e374751e34ffb5f7f7a36cc262f"
+    "source_digest": "24b5c5beef22583d041382f0b2dfb9643de994f224e0ccff0048097beea91755"
   },
   "summary": {
     "module_count": 87,

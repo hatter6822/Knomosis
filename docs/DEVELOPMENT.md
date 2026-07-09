@@ -74,7 +74,7 @@ topic:
 | Project version | `v0.8.4` (Lean + Rust in lockstep; `kernelVersion` in `LegalKernel.lean`) |
 | Lean toolchain | `leanprover/lean4:v4.29.1` (pinned in [`../lean-toolchain`](../lean-toolchain)) |
 | Rust toolchain | stable **1.97** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.97`) |
-| Solidity toolchain | Foundry **v1.7.0** + solc **0.8.20** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
+| Solidity toolchain | Foundry **v1.7.1** + solc **0.8.20** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
 | Vendored Solidity deps | OpenZeppelin **v5.0.2**, forge-std **v1.9.4** |
 | Kernel TCB | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` (Lean core + Std core only) |
 | Kernel axioms | exactly `propext`, `Classical.choice`, `Quot.sound` — **no custom axioms** |
@@ -212,7 +212,7 @@ trust story:
    baked into the script.
 4. Installs `elan` (also SHA-256-pinned to a specific commit, never `master`) so
    you can switch toolchains later.
-5. Installs the Solidity toolchain: Foundry v1.7.0 + solc 0.8.20 (each
+5. Installs the Solidity toolchain: Foundry v1.7.1 + solc 0.8.20 (each
    checksum-pinned) and vendors OpenZeppelin + forge-std via
    `solidity/scripts/vendor-deps.sh`.  These install to `/usr/local`
    (matching the README + CI) when it is writable, and otherwise fall back to
@@ -660,7 +660,8 @@ references a real on-chain token (the bridge constructor cross-checks its
 
 > **Foundry version — `--broadcast` constructor-arg decoding.** Use a **stable
 > `foundry` release** for the real broadcast. Some foundry **dev builds** (e.g.
-> the `1.6.0-v1.7.0` build pinned in this repo's CI containers) carry a
+> the `1.6.0-v1.7.0` build this repo previously pinned — now bumped to v1.7.1,
+> whose behaviour on this exact path is not re-verified in the sandbox) carry a
 > regression that, under `via_ir`, mis-locates the init-code/args boundary when
 > assembling the broadcast for a `constructor(tuple)` carrying a non-empty
 > dynamic array *plus* immutables (here `KnomosisDisputeVerifier`) — it aborts

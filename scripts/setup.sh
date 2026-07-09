@@ -165,15 +165,15 @@ LEAN_TOOLCHAIN_SHA256_ZIP_ARM="171cd3426c3f43ca49b5affad15633e4d9f1e983df536a208
 
 # Foundry (forge / cast / anvil / chisel) toolchain.  Workstream E (the
 # Solidity mirror of the kernel) needs `forge` to build / test the
-# contracts under `solidity/`.  Pinned to v1.7.0; bumping requires
+# contracts under `solidity/`.  Pinned to v1.7.1; bumping requires
 # recomputing the SHAs in the same commit.  Regenerate via:
 #   for arch in amd64 arm64; do
-#     curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_${arch}.tar.gz" \
+#     curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_${arch}.tar.gz" \
 #       | sha256sum
 #   done
-FOUNDRY_VERSION="v1.7.0"
-FOUNDRY_SHA256_X86="88501301c43e2cb3231009e68bd76af17cc0f7e9981f9d37ceabc6b857febb2f"
-FOUNDRY_SHA256_ARM="4be51b29d81f46f5f8913caf9b458db4b6f04f51565fbd59a0d11f69a4be2f77"
+FOUNDRY_VERSION="v1.7.1"
+FOUNDRY_SHA256_X86="cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b"
+FOUNDRY_SHA256_ARM="c8fe8fa09ae3aba2c81b510c6f9da3a9d468029b9580e690b245b3f0aea687ae"
 
 # solc 0.8.20 static binary (linux x86_64 only — the upstream v0.8.20
 # release does not ship an ARM static binary; ARM users must build
@@ -349,7 +349,7 @@ do_solidity_install() {
 
   # ---- Foundry fast-path check ----
   if [ -x "${foundry_install_dir}/forge" ] && \
-     "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION}"; then
+     "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION#v}"; then
     log_elapsed "Foundry ${FOUNDRY_VERSION} is already installed (fast-path)"
   else
     log_elapsed "installing Foundry ${FOUNDRY_VERSION}"
@@ -439,8 +439,10 @@ do_solidity_install() {
   fi
 
   # ---- Verify the freshly-installed toolchain runs + is the pin ----
-  # `forge --version` for v1.7.0 prints "... -v1.7.0", so grep the pin string.
-  if ! "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION}"; then
+  # `forge --version` embeds the release tag but the exact format varies by
+  # build (e.g. "...-v1.7.1" vs "1.7.1-stable"), so grep the v-stripped version
+  # — a substring of every format — consistent with the solc check below.
+  if ! "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION#v}"; then
     echo "error: forge at ${foundry_install_dir} is not the pinned ${FOUNDRY_VERSION} (or fails to run)" >&2
     return 1
   fi

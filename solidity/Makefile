@@ -1,5 +1,5 @@
 # Knomosis Solidity contracts — operator-facing build / test / deploy targets.
-# Pinned toolchain: Foundry v1.7.0, solc 0.8.20.
+# Pinned toolchain: Foundry v1.7.1, solc 0.8.20.
 
 .PHONY: all
 all: build test
@@ -79,7 +79,7 @@ coverage-lcov:
 # `FORGE_SNAPSHOT_CHECK=false` guards against an exported environment
 # override flipping forge's cheatcode snapshots from record mode into its
 # built-in exact-match compare mode.  Baselines are stable for the pinned
-# (forge 1.7.0, solc 0.8.20, foundry.toml) toolchain; regenerating with a
+# (forge 1.7.1, solc 0.8.20, foundry.toml) toolchain; regenerating with a
 # different toolchain may shift numbers and fail the check.
 SNAPSHOT_GAS_BASELINE = test/BenchmarkGasV1_3.gas-baseline.json
 SNAPSHOT_GAS_FRESH    = snapshots/BenchmarkGasV1_3.json
