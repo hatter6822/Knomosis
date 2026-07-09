@@ -115,14 +115,13 @@ LAKE_BUILD_TARGETS=(
   lex_lint lex_codegen lex_diff lex_format
 )
 
-# Build every target above with explicit `-j` parallelism.  The job
-# count defaults to the core count (nproc on Linux, sysctl on macOS),
-# falling back to 4 if neither is available.
+# Build every target above.  The pinned toolchain's Lake (5.0.0 /
+# Lean 4.29.1) has no `-j` / `--jobs` flag — it parallelises across
+# the machine's logical cores automatically — so no job count is (or
+# can be) passed.
 run_full_lake_build() {
-  local jobs
-  jobs="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-  log_elapsed "running full lake build (-j ${jobs}, ${#LAKE_BUILD_TARGETS[@]} targets)"
-  (cd "${ROOT_DIR}" && lake build -j "${jobs}" "${LAKE_BUILD_TARGETS[@]}")
+  log_elapsed "running full lake build (${#LAKE_BUILD_TARGETS[@]} targets)"
+  (cd "${ROOT_DIR}" && lake build "${LAKE_BUILD_TARGETS[@]}")
 }
 
 ELAN_HOME_DEFAULT="${HOME}/.elan"

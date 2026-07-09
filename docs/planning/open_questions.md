@@ -1169,10 +1169,12 @@ authors should opt into manual instances explicitly.
 
 ## §9A GW (Gateway, Workstream GW) — design questions
 
-The gateway's design questions `OQ-GW-1 … OQ-GW-12` are specified in
+The gateway's design questions `OQ-GW-1 … OQ-GW-15` are specified in
 full (Context / Options / Trade-offs / Recommendation) in
 `docs/planning/gateway_integration_plan.md` §14; this is their index in
-the master registry so PR descriptions can cite them by id.
+the master registry so PR descriptions can cite them by id.  (OQ-GW-13
+… OQ-GW-15 are the G4-era transport questions; OQ-GW-14 / OQ-GW-15 were
+closed by the G4.2 own-HTTP-stack unification — see the table below.)
 
 | ID | Question | Status / recommendation |
 |----|----------|-------------------------|
@@ -1189,12 +1191,12 @@ the master registry so PR descriptions can cite them by id.
 | OQ-GW-11 | Licio contract surface | **RESOLVED** — §1.4 reconciliation (read-first behind a fail-closed flag) |
 | OQ-GW-12 | Seamless SSE catch-up (dedicated upstream sub vs backfill-then-reconnect) | OPEN — backfill-then-reconnect for v1 |
 | OQ-GW-13 | Read-only-WAL snapshot consistency under concurrent indexer checkpointing | OPEN — accept §3.6 eventual consistency for v1 (the kernel is authoritative; reads self-correct). A read-only SQLite connection cannot take WAL read-locks / participate in checkpointing, so under heavy concurrent writes a `BEGIN DEFERRED` list snapshot can briefly lag or tear. The G1.9 concurrency test asserts the **actual** guarantee (availability + well-formedness + cursor monotonicity), not strict intra-snapshot atomicity. Strict consistency is a **storage-layer** hardening item (e.g. a checkpoint-coordination or read-lock fix in `knomosis-storage`'s read-only path), out of the gateway's scope. |
-| OQ-GW-14 | Concurrent-SSE-stream ceiling under `tiny_http` (G4.6) | OPEN (plaintext path) — accept the `tiny_http` bound for v1. `tiny_http` services each connection on an internal task thread iterating `for rq in client`, which blocks until the *current* request's writer is dropped; a long-lived (hijacked) SSE stream therefore pins one such task for its lifetime, so the **effective** number of simultaneously-live SSE streams is bounded by tiny_http's connection handling — *below* the `--sse` `max_streams` ceiling (empirically it does not scale 1:1 with `--handler-threads`). For a browser-BFF fan-out (a handful of dashboards) this is sufficient. Raising the ceiling is a **transport** change (a `tiny_http` connection-handling patch, an alternate sync HTTP server for the stream endpoint, or a dedicated SSE listener) — out of scope for v1; the G4.6 soak validates the *correctness* (no slot/thread leak across open/close cycles), not a high-concurrency target. **Update (G4.2):** the native in-process HTTPS path (`--tls-listen`, `src/http/tls.rs`) is precisely that "alternate sync server / dedicated listener" — it services each connection on its **own dedicated thread** outside `tiny_http`'s connection-task model, so a TLS SSE stream is **not** subject to this ceiling (it is bounded only by `--sse-max-streams` and `--tls-max-connections`). The ceiling stands only for the plaintext `tiny_http` path. |
-| OQ-GW-15 | Plaintext SSE stalled-reader write-deadline | OPEN (plaintext path) — the plaintext `tiny_http` stream path **cannot** set a per-write socket timeout: `Request::into_writer` yields a type-erased `Box<dyn Write + Send>` with no socket handle, and `tiny_http` itself sets no socket write timeout. So a client that opens an SSE stream and then stops reading blocks that stream's writer thread (wedged in `write_all` once the kernel/peer buffers fill) until it disconnects — holding one thread **and** one `--sse-max-streams` slot meanwhile (the `lag_exceeded` eviction cannot fire, since the loop is stuck *inside* the write, never reaching the lag check). For a trusted browser-BFF this is acceptable. **Mitigation (G4.2):** the native-TLS path owns its `TcpStream` and applies a per-connection write timeout, so a stalled reader there surfaces as a write error → the stream is dropped and its slot released; **prefer `--tls-listen` for untrusted / public SSE clients.** Lifting the plaintext bound is the same transport change as OQ-GW-14. |
+| OQ-GW-14 | Concurrent-SSE-stream ceiling under `tiny_http` (G4.6) | **RESOLVED** (G4.2 own-HTTP-stack unification) — the ceiling was a property of `tiny_http`'s connection-task model, and `tiny_http` was **retired entirely**: the gateway now owns its whole HTTP/1.1 stack (`src/http/{conn,plain,tls}.rs`), servicing **every** connection — plaintext (`--listen`) and native-TLS (`--tls-listen`) alike — on its **own dedicated thread** via the shared transport-neutral `http::conn` handler. A live SSE stream therefore pins only its own thread + slot, so the effective concurrent-stream count is bounded exactly by `--sse-max-streams` (and `--tls-max-connections` on the TLS path), on BOTH transports. The plaintext-only caveat this row carried no longer exists. |
+| OQ-GW-15 | Plaintext SSE stalled-reader write-deadline | **RESOLVED** (G4.2 own-HTTP-stack unification) — the plaintext path no longer goes through `tiny_http`'s type-erased `Box<dyn Write>` (which exposed no socket handle); the gateway's own `http::conn` handler owns the `TcpStream` on **both** transports and applies a per-connection socket write timeout plus the `--sse-write-timeout-ms` deadline. A client that opens an SSE stream and stops reading now surfaces as a write error → the stream is dropped and its `--sse-max-streams` slot released, identically on plaintext and TLS. |
 
-The two **RESOLVED** entries (OQ-GW-8, OQ-GW-11) carry their resolution
-inline above; the remaining OPEN entries carry their full trade-offs in the
-plan's §14 and are tracked here for citation.
+The **RESOLVED** entries above (OQ-GW-8, OQ-GW-11, OQ-GW-14, OQ-GW-15) carry
+their resolution inline; the remaining OPEN entries carry their full
+trade-offs in the plan's §14 and are tracked here for citation.
 
 ---
 
