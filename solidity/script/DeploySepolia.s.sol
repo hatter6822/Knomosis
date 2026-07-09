@@ -163,20 +163,31 @@ contract DeploySepolia is Script {
         cfg.sequencer = vm.envOr("KNOMOSIS_SEQUENCER", PLACEHOLDER_SEQUENCER);
         cfg.treasury = vm.envOr("KNOMOSIS_TREASURY", PLACEHOLDER_TREASURY);
 
-        address adjBase = vm.envOr("KNOMOSIS_ADJUDICATOR", PLACEHOLDER_ADJUDICATOR);
-        uint256 adjCount = vm.envOr("KNOMOSIS_ADJUDICATOR_COUNT", uint256(3));
-        uint256 adjQuorum = vm.envOr("KNOMOSIS_ADJUDICATOR_QUORUM", adjCount);
+        // Adjudicator set.  A REAL (value-bearing) deployment MUST supply an
+        // explicit, distinct, independently-custodied set via
+        // `KNOMOSIS_ADJUDICATORS` (a comma-separated address list) — it takes
+        // precedence.  The `KNOMOSIS_ADJUDICATOR` base + `_COUNT` derivation is
+        // a SEQUENTIAL-PLACEHOLDER fallback (base, base+1, ... — addresses with
+        // no known private keys) for in-memory dry-runs / tests ONLY; it must
+        // never be used for a deployment that adjudicates real disputes.
+        address[] memory adjSet = vm.envOr("KNOMOSIS_ADJUDICATORS", ",", new address[](0));
+        if (adjSet.length == 0) {
+            address adjBase = vm.envOr("KNOMOSIS_ADJUDICATOR", PLACEHOLDER_ADJUDICATOR);
+            uint256 adjCount = vm.envOr("KNOMOSIS_ADJUDICATOR_COUNT", uint256(3));
+            adjSet = _deriveSet(adjBase, adjCount);
+        }
+        uint256 adjQuorum = vm.envOr("KNOMOSIS_ADJUDICATOR_QUORUM", adjSet.length);
         // Validate BEFORE the uint8 narrowing so a mis-sized value fails fast
         // with a clear message instead of silently truncating mod 256 (e.g.
         // count/quorum 256 -> 0, which would revert QuorumThresholdOutOfRange
         // and brick the deploy, or 260 -> a weaker-than-intended 4-of-N quorum).
-        require(adjCount >= 1 && adjCount <= 255, "adjudicator count must be 1..255");
-        require(adjQuorum >= 1 && adjQuorum <= adjCount, "adjudicator quorum out of range");
-        // `adjQuorum <= adjCount <= 255` is enforced above, so the uint8
+        require(adjSet.length >= 1 && adjSet.length <= 255, "adjudicator count must be 1..255");
+        require(adjQuorum >= 1 && adjQuorum <= adjSet.length, "adjudicator quorum out of range");
+        // `adjQuorum <= adjSet.length <= 255` is enforced above, so the uint8
         // narrowing cannot truncate.
         // forge-lint: disable-next-line(unsafe-typecast)
         cfg.quorum = uint8(adjQuorum);
-        cfg.adjudicators = _deriveSet(adjBase, adjCount);
+        cfg.adjudicators = adjSet;
 
         cfg.disputeWindowBlocks = uint64(vm.envOr("KNOMOSIS_DISPUTE_WINDOW", uint256(50_400)));
         cfg.maxRedemptionWindowBlocks = uint64(vm.envOr("KNOMOSIS_MAX_REDEMPTION", uint256(36_000)));
@@ -199,10 +210,23 @@ contract DeploySepolia is Script {
         cfg.enableLiquityAutoTrigger = vm.envOr("KNOMOSIS_ENABLE_LIQUITY_AUTOTRIGGER", false);
         cfg.ammSeedRatioBps = uint16(vm.envOr("KNOMOSIS_AMM_SEED_RATIO_BPS", uint256(0)));
 
-        address sigBase = vm.envOr("KNOMOSIS_AMM_MULTISIG_SIGNER", PLACEHOLDER_MULTISIG_SIGNER);
-        uint256 sigCount = vm.envOr("KNOMOSIS_AMM_MULTISIG_COUNT", uint256(5));
+        // AMM disaster-recovery multisig signers.  As with the adjudicators, a
+        // REAL deployment MUST supply an explicit, distinct, independently-
+        // custodied set via `KNOMOSIS_AMM_MULTISIG_SIGNERS` (comma-separated) —
+        // it takes precedence.  A 3-of-N kill switch whose signers are
+        // sequential `base+i` placeholders has no controlling keys and can
+        // never be fired, so the base + `_COUNT` derivation is a dry-run / test
+        // fallback ONLY.  (The multisig constructor still enforces distinctness,
+        // non-zero, not-bridge/self, and threshold >= MIN_DISABLE_THRESHOLD.)
+        address[] memory sigSet =
+            vm.envOr("KNOMOSIS_AMM_MULTISIG_SIGNERS", ",", new address[](0));
+        if (sigSet.length == 0) {
+            address sigBase = vm.envOr("KNOMOSIS_AMM_MULTISIG_SIGNER", PLACEHOLDER_MULTISIG_SIGNER);
+            uint256 sigCount = vm.envOr("KNOMOSIS_AMM_MULTISIG_COUNT", uint256(5));
+            sigSet = _deriveSet(sigBase, sigCount);
+        }
         cfg.ammMultisigThreshold = vm.envOr("KNOMOSIS_AMM_MULTISIG_THRESHOLD", uint256(3));
-        cfg.ammMultisigSigners = _deriveSet(sigBase, sigCount);
+        cfg.ammMultisigSigners = sigSet;
 
         cfg.slashRatioBps = vm.envOr("KNOMOSIS_SLASH_BPS", uint256(5_000));
 
@@ -230,8 +254,12 @@ contract DeploySepolia is Script {
 
     /// @notice Derive `count` distinct addresses from a base (base, base+1,
     ///         ...).  Mirrors the F.3 `TestnetAcceptance` adjudicator
-    ///         convention; a real deployment sets an explicit, independent set
-    ///         per `docs/deployment_parameters.md`.
+    ///         convention.  These are SEQUENTIAL PLACEHOLDERS with no known
+    ///         private keys — for in-memory dry-runs / tests ONLY.  A real
+    ///         deployment supplies an explicit, independently-custodied set via
+    ///         `KNOMOSIS_ADJUDICATORS` / `KNOMOSIS_AMM_MULTISIG_SIGNERS`
+    ///         (comma-separated lists that take precedence), per
+    ///         `docs/deployment_parameters.md`.
     function _deriveSet(address base, uint256 count) internal pure returns (address[] memory set) {
         set = new address[](count);
         for (uint256 i = 0; i < count; ++i) {
