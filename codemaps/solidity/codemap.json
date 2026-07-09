@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "735951343904d58b2d81b0e7ba3ccb2e6d2089bf0f0bb97ca85441401d7de338"
+    "source_digest": "839b0402dd1c50c9fa369029e44c57828182bba2481e9eff51bde73a2f9ec59a"
   },
   "summary": {
     "module_count": 87,
-    "declaration_count": 1921
+    "declaration_count": 1923
   },
   "modules": [
     {
@@ -13386,7 +13386,7 @@
     {
       "module": "KnomosisFaultProofGame.t",
       "path": "solidity/test/KnomosisFaultProofGame.t.sol",
-      "declaration_count": 46,
+      "declaration_count": 48,
       "declarations": [
         {
           "kind": "contract",
@@ -13646,20 +13646,38 @@
         },
         {
           "kind": "function",
+          "name": "test_multi_round_bisection_then_terminate_sequencer_wins",
+          "line": 517,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rechallenge_succeeds_after_settled_game_with_reassigned_high",
+          "line": 609,
+          "called": [
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_claimTimeout_after_window_settles_against_sequencer",
-          "line": 507,
+          "line": 657,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_distributes_bonds_95_5_split",
-          "line": 521,
+          "line": 671,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_settlement_not_bricked_by_reverting_treasury",
-          "line": 562,
+          "line": 712,
           "called": [
             "KnomosisFaultProofGame",
             "RevertingReceiver"
@@ -13668,31 +13686,31 @@
         {
           "kind": "function",
           "name": "test_withdraw_nothing_credited_reverts",
-          "line": 595,
+          "line": 745,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_slashSequencerBond_on_challenger_wins",
-          "line": 601,
+          "line": 751,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins",
-          "line": 620,
+          "line": 770,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_rejects_already_settled_game",
-          "line": 634,
+          "line": 784,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_sequencer_first_round",
-          "line": 649,
+          "line": 799,
           "called": [
             "sequencer"
           ]
@@ -13700,13 +13718,13 @@
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_wrong_caller",
-          "line": 659,
+          "line": 809,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_after_deadline",
-          "line": 669,
+          "line": 819,
           "called": [
             "sequencer"
           ]
@@ -13714,7 +13732,7 @@
         {
           "kind": "function",
           "name": "test_respondToMidpoint_rejects_without_pending",
-          "line": 679,
+          "line": 829,
           "called": []
         }
       ]

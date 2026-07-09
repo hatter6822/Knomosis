@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "14e4c528673a9354f68e724663a0f8be16a734750ebc2f22659164457b7c5eaf"
+    "source_digest": "79e137c826927e5af3d3e5b44587a49f1d7e94319b9c72f48188f853e4c10950"
   },
   "summary": {
     "module_count": 191,
-    "declaration_count": 5875
+    "declaration_count": 5909
   },
   "modules": [
     {
@@ -10147,7 +10147,7 @@
     {
       "module": "runtime::knomosis-faultproof-observer::src::config",
       "path": "runtime/knomosis-faultproof-observer/src/config.rs",
-      "declaration_count": 47,
+      "declaration_count": 49,
       "declarations": [
         {
           "kind": "const",
@@ -10192,7 +10192,7 @@
         {
           "kind": "enum",
           "name": "CliError",
-          "line": 133,
+          "line": 140,
           "called": [
             "error",
             "reason"
@@ -10201,13 +10201,13 @@
         {
           "kind": "impl",
           "name": "CliConfig",
-          "line": 159,
+          "line": 166,
           "called": []
         },
         {
           "kind": "fn",
           "name": "parse_args",
-          "line": 169,
+          "line": 176,
           "called": [
             "CliError",
             "DEFAULT_BLOCKS_PER_ITER",
@@ -10236,7 +10236,7 @@
         {
           "kind": "fn",
           "name": "validate",
-          "line": 311,
+          "line": 318,
           "called": [
             "CliError",
             "Err",
@@ -10247,7 +10247,7 @@
         {
           "kind": "fn",
           "name": "read_value",
-          "line": 386,
+          "line": 413,
           "called": [
             "CliError",
             "args",
@@ -10258,7 +10258,7 @@
         {
           "kind": "fn",
           "name": "parse_address",
-          "line": 396,
+          "line": 423,
           "called": [
             "CliError",
             "EthAddress",
@@ -10270,7 +10270,7 @@
         {
           "kind": "fn",
           "name": "parse_32_byte_hex",
-          "line": 409,
+          "line": 436,
           "called": [
             "CliError",
             "Err",
@@ -10282,7 +10282,7 @@
         {
           "kind": "fn",
           "name": "parse_turn_side",
-          "line": 427,
+          "line": 454,
           "called": [
             "CliError",
             "Err",
@@ -10294,7 +10294,7 @@
         {
           "kind": "fn",
           "name": "parse_u32",
-          "line": 439,
+          "line": 466,
           "called": [
             "CliError",
             "parse",
@@ -10304,7 +10304,7 @@
         {
           "kind": "fn",
           "name": "parse_u64",
-          "line": 447,
+          "line": 474,
           "called": [
             "CliError",
             "parse",
@@ -10314,19 +10314,19 @@
         {
           "kind": "fn",
           "name": "print_help",
-          "line": 455,
+          "line": 482,
           "called": []
         },
         {
           "kind": "fn",
           "name": "print_version",
-          "line": 513,
+          "line": 544,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 522,
+          "line": 553,
           "called": [
             "CliConfig",
             "CliError",
@@ -10340,7 +10340,7 @@
         {
           "kind": "fn",
           "name": "args",
-          "line": 530,
+          "line": 561,
           "called": [
             "iter"
           ]
@@ -10348,7 +10348,7 @@
         {
           "kind": "fn",
           "name": "help_short_and_long",
-          "line": 538,
+          "line": 569,
           "called": [
             "args"
           ]
@@ -10356,7 +10356,7 @@
         {
           "kind": "fn",
           "name": "version_short_and_long",
-          "line": 547,
+          "line": 578,
           "called": [
             "args"
           ]
@@ -10364,7 +10364,7 @@
         {
           "kind": "fn",
           "name": "parse_address_happy",
-          "line": 556,
+          "line": 587,
           "called": [
             "addr",
             "parse_address"
@@ -10373,7 +10373,7 @@
         {
           "kind": "fn",
           "name": "parse_address_wrong_length",
-          "line": 564,
+          "line": 595,
           "called": [
             "parse_address"
           ]
@@ -10381,7 +10381,7 @@
         {
           "kind": "fn",
           "name": "parse_address_invalid_hex",
-          "line": 571,
+          "line": 602,
           "called": [
             "parse_address"
           ]
@@ -10389,7 +10389,7 @@
         {
           "kind": "fn",
           "name": "parse_address_no_0x_prefix",
-          "line": 578,
+          "line": 609,
           "called": [
             "addr",
             "parse_address"
@@ -10398,7 +10398,7 @@
         {
           "kind": "fn",
           "name": "parse_32_byte_hex_happy",
-          "line": 585,
+          "line": 616,
           "called": [
             "parse_32_byte_hex"
           ]
@@ -10406,7 +10406,7 @@
         {
           "kind": "fn",
           "name": "parse_32_byte_hex_wrong_length",
-          "line": 592,
+          "line": 623,
           "called": [
             "parse_32_byte_hex"
           ]
@@ -10414,7 +10414,7 @@
         {
           "kind": "fn",
           "name": "parse_turn_side_happy",
-          "line": 599,
+          "line": 630,
           "called": [
             "parse_turn_side"
           ]
@@ -10422,7 +10422,7 @@
         {
           "kind": "fn",
           "name": "parse_turn_side_rejects_unknown",
-          "line": 608,
+          "line": 639,
           "called": [
             "parse_turn_side"
           ]
@@ -10430,7 +10430,7 @@
         {
           "kind": "fn",
           "name": "parse_integers_happy",
-          "line": 615,
+          "line": 646,
           "called": [
             "parse_u32",
             "parse_u64"
@@ -10439,7 +10439,7 @@
         {
           "kind": "fn",
           "name": "parse_integers_reject_negatives",
-          "line": 622,
+          "line": 653,
           "called": [
             "parse_u32",
             "parse_u64"
@@ -10448,7 +10448,7 @@
         {
           "kind": "fn",
           "name": "full_parse_happy",
-          "line": 629,
+          "line": 660,
           "called": [
             "args"
           ]
@@ -10456,7 +10456,7 @@
         {
           "kind": "fn",
           "name": "missing_required_flag",
-          "line": 653,
+          "line": 684,
           "called": [
             "args"
           ]
@@ -10464,7 +10464,7 @@
         {
           "kind": "fn",
           "name": "unknown_flag",
-          "line": 673,
+          "line": 704,
           "called": [
             "_",
             "args"
@@ -10473,7 +10473,7 @@
         {
           "kind": "fn",
           "name": "missing_value_after_flag",
-          "line": 680,
+          "line": 711,
           "called": [
             "args"
           ]
@@ -10481,7 +10481,7 @@
         {
           "kind": "fn",
           "name": "cross_flag_validation_rejects_inconsistent",
-          "line": 687,
+          "line": 718,
           "called": [
             "_",
             "args"
@@ -10489,8 +10489,25 @@
         },
         {
           "kind": "fn",
+          "name": "chain_id_without_truth_oracle_rejected",
+          "line": 746,
+          "called": [
+            "args"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "chain_id_with_truth_oracle_accepted",
+          "line": 773,
+          "called": [
+            "args",
+            "knomosis_binary"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "custom_options_override_defaults",
-          "line": 712,
+          "line": 808,
           "called": [
             "args"
           ]
@@ -10498,7 +10515,7 @@
         {
           "kind": "fn",
           "name": "zero_confirmation_depth_rejected",
-          "line": 753,
+          "line": 849,
           "called": [
             "_",
             "args"
@@ -10507,7 +10524,7 @@
         {
           "kind": "fn",
           "name": "chain_id_parses_decimal_value",
-          "line": 778,
+          "line": 874,
           "called": [
             "args"
           ]
@@ -10515,7 +10532,7 @@
         {
           "kind": "fn",
           "name": "chain_id_omitted_defaults_to_none",
-          "line": 800,
+          "line": 904,
           "called": [
             "args"
           ]
@@ -10523,7 +10540,7 @@
         {
           "kind": "fn",
           "name": "chain_id_zero_rejected_per_eip155",
-          "line": 820,
+          "line": 924,
           "called": [
             "_",
             "args"
@@ -10532,7 +10549,7 @@
         {
           "kind": "fn",
           "name": "chain_id_hex_rejected_decimal_only_parser",
-          "line": 845,
+          "line": 949,
           "called": [
             "args"
           ]
@@ -10540,7 +10557,7 @@
         {
           "kind": "fn",
           "name": "knomosis_binary_and_log_parse_together",
-          "line": 874,
+          "line": 978,
           "called": [
             "args",
             "knomosis_binary"
@@ -10549,7 +10566,7 @@
         {
           "kind": "fn",
           "name": "knomosis_binary_and_log_omitted_defaults_to_none",
-          "line": 905,
+          "line": 1009,
           "called": [
             "args",
             "knomosis_binary"
@@ -10558,7 +10575,7 @@
         {
           "kind": "fn",
           "name": "knomosis_binary_without_log_rejected",
-          "line": 926,
+          "line": 1030,
           "called": [
             "args"
           ]
@@ -10566,7 +10583,7 @@
         {
           "kind": "fn",
           "name": "knomosis_log_without_binary_rejected",
-          "line": 952,
+          "line": 1056,
           "called": [
             "args"
           ]
@@ -13371,7 +13388,7 @@
         {
           "kind": "fn",
           "name": "build_truth_oracle",
-          "line": 259,
+          "line": 267,
           "called": [
             "CliConfig",
             "TruthOracle",
@@ -13384,7 +13401,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_bundle_oracle",
-          "line": 289,
+          "line": 297,
           "called": [
             "CliConfig",
             "TerminateBundleOracle",
@@ -13397,7 +13414,7 @@
         {
           "kind": "fn",
           "name": "parse_tracing_level",
-          "line": 305,
+          "line": 313,
           "called": [
             "as_str"
           ]
@@ -28003,7 +28020,7 @@
         {
           "kind": "fn",
           "name": "load_crls",
-          "line": 219,
+          "line": 223,
           "called": [
             "Err",
             "TlsSetupError",
@@ -28015,7 +28032,7 @@
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 243,
+          "line": 247,
           "called": [
             "AppState",
             "SharedConfig",
@@ -28036,7 +28053,7 @@
         {
           "kind": "fn",
           "name": "handle_connection",
-          "line": 291,
+          "line": 295,
           "called": [
             "AppState",
             "Err",
@@ -28050,7 +28067,7 @@
         {
           "kind": "mod",
           "name": "handshake_tests",
-          "line": 324,
+          "line": 328,
           "called": [
             "AdmissionStage",
             "Config",
@@ -28066,13 +28083,13 @@
         {
           "kind": "const",
           "name": "TOKEN",
-          "line": 338,
+          "line": 342,
           "called": []
         },
         {
           "kind": "fn",
           "name": "openssl",
-          "line": 341,
+          "line": 345,
           "called": [
             "Err",
             "_",
@@ -28082,7 +28099,7 @@
         {
           "kind": "fn",
           "name": "at",
-          "line": 356,
+          "line": 360,
           "called": [
             "name"
           ]
@@ -28090,7 +28107,7 @@
         {
           "kind": "fn",
           "name": "gen_pki",
-          "line": 366,
+          "line": 370,
           "called": [
             "at",
             "ok",
@@ -28100,7 +28117,7 @@
         {
           "kind": "fn",
           "name": "make_state",
-          "line": 475,
+          "line": 479,
           "called": [
             "AppState",
             "Config",
@@ -28120,7 +28137,7 @@
         {
           "kind": "struct",
           "name": "TlsServer",
-          "line": 514,
+          "line": 518,
           "called": [
             "addr",
             "handle"
@@ -28129,7 +28146,7 @@
         {
           "kind": "impl",
           "name": "Drop for TlsServer",
-          "line": 520,
+          "line": 524,
           "called": [
             "TlsServer"
           ]
@@ -28137,7 +28154,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 521,
+          "line": 525,
           "called": [
             "_",
             "handle",
@@ -28147,7 +28164,7 @@
         {
           "kind": "fn",
           "name": "serve",
-          "line": 533,
+          "line": 537,
           "called": [
             "AppState",
             "SharedConfig",
@@ -28167,7 +28184,7 @@
         {
           "kind": "fn",
           "name": "roots",
-          "line": 562,
+          "line": 566,
           "called": [
             "path"
           ]
@@ -28175,7 +28192,7 @@
         {
           "kind": "fn",
           "name": "request",
-          "line": 574,
+          "line": 578,
           "called": [
             "Err",
             "addr",
@@ -28195,7 +28212,7 @@
         {
           "kind": "fn",
           "name": "text",
-          "line": 624,
+          "line": 628,
           "called": [
             "bytes"
           ]
@@ -28203,7 +28220,7 @@
         {
           "kind": "fn",
           "name": "server_tls",
-          "line": 629,
+          "line": 633,
           "called": [
             "TlsConfig",
             "at",
@@ -28214,7 +28231,7 @@
         {
           "kind": "fn",
           "name": "native_tls_server_auth_surface",
-          "line": 645,
+          "line": 649,
           "called": [
             "addr",
             "as_bytes",
@@ -28234,7 +28251,7 @@
         {
           "kind": "fn",
           "name": "native_tls_body_and_stream_surface",
-          "line": 703,
+          "line": 707,
           "called": [
             "addr",
             "as_bytes",
@@ -28257,7 +28274,7 @@
         {
           "kind": "fn",
           "name": "native_tls_mutual_auth_enforced",
-          "line": 810,
+          "line": 814,
           "called": [
             "TlsConfig",
             "addr",
@@ -28278,7 +28295,7 @@
         {
           "kind": "fn",
           "name": "native_tls_revoked_client_cert_is_rejected",
-          "line": 856,
+          "line": 860,
           "called": [
             "TlsConfig",
             "addr",
@@ -28299,7 +28316,7 @@
         {
           "kind": "fn",
           "name": "make_crl_revoking_client",
-          "line": 897,
+          "line": 901,
           "called": [
             "at",
             "openssl"
@@ -28308,7 +28325,7 @@
         {
           "kind": "fn",
           "name": "cert_reload_swaps_on_success_keeps_on_failure",
-          "line": 956,
+          "line": 960,
           "called": [
             "SharedConfig",
             "TlsConfig",
@@ -28325,7 +28342,7 @@
         {
           "kind": "fn",
           "name": "cert_hot_reload_serves_the_new_certificate",
-          "line": 991,
+          "line": 995,
           "called": [
             "addr",
             "b",
@@ -32365,7 +32382,7 @@
     {
       "module": "runtime::knomosis-hash-keccak256::src::hash",
       "path": "runtime/knomosis-hash-keccak256/src/hash.rs",
-      "declaration_count": 32,
+      "declaration_count": 39,
       "declarations": [
         {
           "kind": "const",
@@ -32392,36 +32409,45 @@
           ]
         },
         {
+          "kind": "const",
+          "name": "MAX_SLICE_LEN",
+          "line": 89,
+          "called": []
+        },
+        {
           "kind": "fn",
           "name": "knomosis_hash_keccak256_bytes_raw",
-          "line": 105,
+          "line": 121,
           "called": [
             "DIGEST_LEN",
+            "MAX_SLICE_LEN",
             "keccak256"
           ]
         },
         {
           "kind": "fn",
           "name": "knomosis_hash_keccak256_init",
-          "line": 137,
+          "line": 160,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_hash_keccak256_update_byte",
-          "line": 157,
+          "line": 182,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_hash_keccak256_update_bulk",
-          "line": 174,
-          "called": []
+          "line": 207,
+          "called": [
+            "MAX_SLICE_LEN"
+          ]
         },
         {
           "kind": "fn",
           "name": "knomosis_hash_keccak256_finalize",
-          "line": 201,
+          "line": 243,
           "called": [
             "DIGEST_LEN",
             "finalize"
@@ -32430,7 +32456,7 @@
         {
           "kind": "const",
           "name": "IDENTIFIER_BYTES",
-          "line": 226,
+          "line": 279,
           "called": [
             "b"
           ]
@@ -32438,19 +32464,19 @@
         {
           "kind": "fn",
           "name": "knomosis_lean_sarray_size",
-          "line": 232,
+          "line": 285,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_sarray_cptr",
-          "line": 234,
+          "line": 287,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_alloc_byte_array",
-          "line": 236,
+          "line": 289,
           "called": [
             "capacity"
           ]
@@ -32458,43 +32484,43 @@
         {
           "kind": "fn",
           "name": "knomosis_lean_dec",
-          "line": 238,
+          "line": 291,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_inc",
-          "line": 240,
+          "line": 293,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_obj_tag",
-          "line": 242,
+          "line": 295,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_ctor_get",
-          "line": 244,
+          "line": 297,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_unbox",
-          "line": 246,
+          "line": 299,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_mk_string_from_bytes",
-          "line": 248,
+          "line": 301,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_hash_bytes",
-          "line": 265,
+          "line": 318,
           "called": [
             "knomosis_hash_keccak256_bytes_raw",
             "knomosis_lean_alloc_byte_array",
@@ -32506,7 +32532,7 @@
         {
           "kind": "fn",
           "name": "knomosis_hash_stream",
-          "line": 302,
+          "line": 355,
           "called": [
             "head",
             "knomosis_hash_keccak256_finalize",
@@ -32525,7 +32551,7 @@
         {
           "kind": "fn",
           "name": "knomosis_hash_identifier",
-          "line": 347,
+          "line": 400,
           "called": [
             "IDENTIFIER_BYTES",
             "knomosis_lean_dec",
@@ -32537,7 +32563,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 354,
+          "line": 407,
           "called": [
             "DIGEST_LEN",
             "keccak256",
@@ -32551,7 +32577,7 @@
         {
           "kind": "fn",
           "name": "empty_input_canonical",
-          "line": 365,
+          "line": 418,
           "called": [
             "b",
             "keccak256"
@@ -32560,7 +32586,7 @@
         {
           "kind": "fn",
           "name": "abc_canonical",
-          "line": 377,
+          "line": 430,
           "called": [
             "b",
             "keccak256"
@@ -32569,7 +32595,7 @@
         {
           "kind": "fn",
           "name": "digest_len_constant",
-          "line": 389,
+          "line": 442,
           "called": [
             "DIGEST_LEN",
             "b",
@@ -32580,7 +32606,7 @@
         {
           "kind": "fn",
           "name": "raw_matches_safe",
-          "line": 399,
+          "line": 452,
           "called": [
             "b",
             "keccak256",
@@ -32591,7 +32617,7 @@
         {
           "kind": "fn",
           "name": "streaming_matches_oneshot_byte_by_byte",
-          "line": 423,
+          "line": 476,
           "called": [
             "b",
             "keccak256",
@@ -32603,7 +32629,7 @@
         {
           "kind": "fn",
           "name": "streaming_bulk_matches_oneshot",
-          "line": 444,
+          "line": 497,
           "called": [
             "keccak256",
             "knomosis_hash_keccak256_finalize",
@@ -32615,7 +32641,7 @@
         {
           "kind": "fn",
           "name": "mixed_streaming_matches_concatenated",
-          "line": 464,
+          "line": 517,
           "called": [
             "b",
             "keccak256",
@@ -32629,7 +32655,7 @@
         {
           "kind": "fn",
           "name": "empty_stream_matches_empty_oneshot",
-          "line": 494,
+          "line": 547,
           "called": [
             "b",
             "keccak256",
@@ -32640,7 +32666,7 @@
         {
           "kind": "fn",
           "name": "empty_bulk_update_is_noop",
-          "line": 507,
+          "line": 560,
           "called": [
             "b",
             "keccak256",
@@ -32652,9 +32678,72 @@
         {
           "kind": "fn",
           "name": "deterministic",
-          "line": 528,
+          "line": 581,
           "called": [
             "keccak256"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_null_out_ptr_is_a_no_op",
+          "line": 595,
+          "called": [
+            "b",
+            "knomosis_hash_keccak256_bytes_raw"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_null_input_zero_fills_out",
+          "line": 605,
+          "called": [
+            "DIGEST_LEN",
+            "knomosis_hash_keccak256_bytes_raw"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_oversize_len_zero_fills_out",
+          "line": 617,
+          "called": [
+            "DIGEST_LEN",
+            "knomosis_hash_keccak256_bytes_raw"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "streaming_null_ctx_calls_are_no_ops",
+          "line": 629,
+          "called": [
+            "DIGEST_LEN",
+            "b",
+            "knomosis_hash_keccak256_finalize",
+            "knomosis_hash_keccak256_update_bulk",
+            "knomosis_hash_keccak256_update_byte"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "streaming_null_input_bulk_leaves_state_unchanged",
+          "line": 644,
+          "called": [
+            "DIGEST_LEN",
+            "b",
+            "keccak256",
+            "knomosis_hash_keccak256_finalize",
+            "knomosis_hash_keccak256_init",
+            "knomosis_hash_keccak256_update_bulk",
+            "knomosis_hash_keccak256_update_byte"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "finalize_null_out_still_frees_ctx",
+          "line": 661,
+          "called": [
+            "knomosis_hash_keccak256_finalize",
+            "knomosis_hash_keccak256_init",
+            "knomosis_hash_keccak256_update_byte"
           ]
         }
       ]
@@ -37088,30 +37177,30 @@
     {
       "module": "runtime::knomosis-host::src::frame",
       "path": "runtime/knomosis-host/src/frame.rs",
-      "declaration_count": 67,
+      "declaration_count": 85,
       "declarations": [
         {
           "kind": "const",
           "name": "DEFAULT_MAX_FRAME_SIZE",
-          "line": 70,
+          "line": 87,
           "called": []
         },
         {
           "kind": "const",
           "name": "HARD_MAX_FRAME_SIZE",
-          "line": 78,
+          "line": 95,
           "called": []
         },
         {
           "kind": "const",
           "name": "HEADER_LEN",
-          "line": 82,
+          "line": 99,
           "called": []
         },
         {
           "kind": "const",
           "name": "KNH2_PREAMBLE",
-          "line": 93,
+          "line": 110,
           "called": [
             "HEADER_LEN",
             "b"
@@ -37120,7 +37209,7 @@
         {
           "kind": "const",
           "name": "KNH2_MAGIC",
-          "line": 102,
+          "line": 119,
           "called": [
             "KNH2_PREAMBLE"
           ]
@@ -37128,13 +37217,13 @@
         {
           "kind": "const",
           "name": "SIGNER_HINT_LEN",
-          "line": 106,
+          "line": 123,
           "called": []
         },
         {
           "kind": "const",
           "name": "_",
-          "line": 117,
+          "line": 134,
           "called": [
             "HARD_MAX_FRAME_SIZE",
             "KNH2_MAGIC"
@@ -37143,7 +37232,7 @@
         {
           "kind": "enum",
           "name": "FrameError",
-          "line": 128,
+          "line": 145,
           "called": [
             "HEADER_LEN",
             "SIGNER_HINT_LEN",
@@ -37155,7 +37244,25 @@
         {
           "kind": "fn",
           "name": "read_frame",
-          "line": 226,
+          "line": 254,
+          "called": [
+            "FrameError",
+            "read_frame_bounded"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_frame_with_deadline",
+          "line": 273,
+          "called": [
+            "FrameError",
+            "read_frame_bounded"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_frame_bounded",
+          "line": 283,
           "called": [
             "FrameError",
             "HARD_MAX_FRAME_SIZE",
@@ -37169,7 +37276,17 @@
         {
           "kind": "fn",
           "name": "read_frame_with_prefix",
-          "line": 250,
+          "line": 311,
+          "called": [
+            "FrameError",
+            "HEADER_LEN",
+            "read_frame_with_prefix_bounded"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_frame_with_prefix_bounded",
+          "line": 322,
           "called": [
             "FrameError",
             "HARD_MAX_FRAME_SIZE",
@@ -37181,7 +37298,17 @@
         {
           "kind": "fn",
           "name": "read_hinted_frame",
-          "line": 284,
+          "line": 357,
+          "called": [
+            "FrameError",
+            "SignerHint",
+            "read_hinted_frame_bounded"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_hinted_frame_bounded",
+          "line": 368,
           "called": [
             "Err",
             "FrameError",
@@ -37189,6 +37316,7 @@
             "HEADER_LEN",
             "SIGNER_HINT_LEN",
             "SignerHint",
+            "check_deadline",
             "header",
             "min",
             "read",
@@ -37199,7 +37327,7 @@
         {
           "kind": "enum",
           "name": "Negotiation",
-          "line": 331,
+          "line": 418,
           "called": [
             "HEADER_LEN"
           ]
@@ -37207,7 +37335,17 @@
         {
           "kind": "fn",
           "name": "negotiate_connection",
-          "line": 362,
+          "line": 449,
+          "called": [
+            "FrameError",
+            "Negotiation",
+            "negotiate_connection_bounded"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "negotiate_connection_bounded",
+          "line": 456,
           "called": [
             "FrameError",
             "HEADER_LEN",
@@ -37220,7 +37358,7 @@
         {
           "kind": "struct",
           "name": "ConnReader",
-          "line": 387,
+          "line": 484,
           "called": [
             "hinted"
           ]
@@ -37228,40 +37366,60 @@
         {
           "kind": "impl",
           "name": "ConnReader",
-          "line": 394,
+          "line": 491,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 397,
+          "line": 494,
           "called": []
         },
         {
           "kind": "fn",
           "name": "hinted",
-          "line": 405,
+          "line": 502,
           "called": []
         },
         {
           "kind": "fn",
           "name": "read_next",
-          "line": 421,
+          "line": 518,
+          "called": [
+            "FrameError",
+            "SignerHint",
+            "read_next_bounded"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_next_with_deadline",
+          "line": 537,
+          "called": [
+            "FrameError",
+            "SignerHint",
+            "read_next_bounded"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_next_bounded",
+          "line": 549,
           "called": [
             "FrameError",
             "LEGACY_SIGNER_HINT",
             "SignerHint",
             "hinted",
-            "negotiate_connection",
-            "read_frame",
-            "read_frame_with_prefix",
-            "read_hinted_frame"
+            "negotiate_connection_bounded",
+            "read_frame_bounded",
+            "read_frame_with_prefix_bounded",
+            "read_hinted_frame_bounded"
           ]
         },
         {
           "kind": "fn",
           "name": "read_request",
-          "line": 468,
+          "line": 598,
           "called": [
             "FrameError",
             "SignerHint",
@@ -37270,11 +37428,32 @@
         },
         {
           "kind": "fn",
-          "name": "read_header_bytes",
-          "line": 479,
+          "name": "read_request_with_deadline",
+          "line": 615,
+          "called": [
+            "FrameError",
+            "SignerHint",
+            "read_next_with_deadline"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "check_deadline",
+          "line": 630,
           "called": [
             "Err",
             "FrameError",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_header_bytes",
+          "line": 641,
+          "called": [
+            "Err",
+            "FrameError",
+            "check_deadline",
             "len",
             "read"
           ]
@@ -37282,10 +37461,11 @@
         {
           "kind": "fn",
           "name": "read_payload",
-          "line": 503,
+          "line": 670,
           "called": [
             "Err",
             "FrameError",
+            "check_deadline",
             "max",
             "read"
           ]
@@ -37293,7 +37473,7 @@
         {
           "kind": "enum",
           "name": "WriteFrameError",
-          "line": 535,
+          "line": 704,
           "called": [
             "error",
             "from"
@@ -37302,7 +37482,7 @@
         {
           "kind": "fn",
           "name": "write_frame",
-          "line": 558,
+          "line": 727,
           "called": [
             "WriteFrameError",
             "_",
@@ -37313,7 +37493,7 @@
         {
           "kind": "fn",
           "name": "encode_frame",
-          "line": 576,
+          "line": 745,
           "called": [
             "HEADER_LEN",
             "WriteFrameError",
@@ -37324,7 +37504,7 @@
         {
           "kind": "fn",
           "name": "encode_hinted_frame",
-          "line": 602,
+          "line": 771,
           "called": [
             "HEADER_LEN",
             "SIGNER_HINT_LEN",
@@ -37338,7 +37518,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 613,
+          "line": 782,
           "called": [
             "ConnReader",
             "DEFAULT_MAX_FRAME_SIZE",
@@ -37353,16 +37533,18 @@
             "encode_hinted_frame",
             "negotiate_connection",
             "read_frame",
+            "read_frame_with_deadline",
             "read_frame_with_prefix",
             "read_hinted_frame",
             "read_request",
+            "read_request_with_deadline",
             "write_frame"
           ]
         },
         {
           "kind": "fn",
           "name": "round_trip_basic",
-          "line": 625,
+          "line": 796,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HEADER_LEN",
@@ -37378,7 +37560,7 @@
         {
           "kind": "fn",
           "name": "write_frame_matches_encode",
-          "line": 637,
+          "line": 808,
           "called": [
             "encode_frame",
             "write_frame"
@@ -37387,7 +37569,7 @@
         {
           "kind": "fn",
           "name": "header_is_big_endian_u32",
-          "line": 646,
+          "line": 817,
           "called": [
             "_",
             "bytes",
@@ -37397,7 +37579,7 @@
         {
           "kind": "fn",
           "name": "empty_input_returns_eof_before_header",
-          "line": 664,
+          "line": 835,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37409,7 +37591,7 @@
         {
           "kind": "fn",
           "name": "partial_header_returns_truncated_header",
-          "line": 675,
+          "line": 846,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37421,7 +37603,7 @@
         {
           "kind": "fn",
           "name": "partial_payload_returns_truncated_payload",
-          "line": 689,
+          "line": 860,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37433,7 +37615,7 @@
         {
           "kind": "fn",
           "name": "oversize_header_returns_oversize_frame",
-          "line": 710,
+          "line": 881,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37446,7 +37628,7 @@
         {
           "kind": "fn",
           "name": "huge_length_does_not_allocate",
-          "line": 731,
+          "line": 902,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37459,7 +37641,7 @@
         {
           "kind": "fn",
           "name": "zero_length_frame_rejected",
-          "line": 756,
+          "line": 927,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37472,7 +37654,7 @@
         {
           "kind": "fn",
           "name": "one_byte_payload_roundtrip",
-          "line": 767,
+          "line": 938,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "bytes",
@@ -37484,7 +37666,7 @@
         {
           "kind": "fn",
           "name": "payload_at_exact_max_accepted",
-          "line": 777,
+          "line": 948,
           "called": [
             "bytes",
             "cursor",
@@ -37496,7 +37678,7 @@
         {
           "kind": "fn",
           "name": "payload_above_max_rejected",
-          "line": 788,
+          "line": 959,
           "called": [
             "Err",
             "bytes",
@@ -37509,7 +37691,7 @@
         {
           "kind": "fn",
           "name": "multiple_frames_sequential",
-          "line": 809,
+          "line": 980,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37524,13 +37706,13 @@
         {
           "kind": "fn",
           "name": "fragmented_reader",
-          "line": 835,
+          "line": 1006,
           "called": []
         },
         {
           "kind": "struct",
           "name": "OneByteReader",
-          "line": 836,
+          "line": 1007,
           "called": [
             "pos"
           ]
@@ -37538,7 +37720,7 @@
         {
           "kind": "impl",
           "name": "std::io::Read for OneByteReader<'_>",
-          "line": 840,
+          "line": 1011,
           "called": [
             "OneByteReader",
             "_"
@@ -37547,7 +37729,7 @@
         {
           "kind": "fn",
           "name": "read",
-          "line": 841,
+          "line": 1012,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "OneByteReader",
@@ -37564,7 +37746,7 @@
         {
           "kind": "fn",
           "name": "payload_too_large_for_u32_returns_error",
-          "line": 866,
+          "line": 1037,
           "called": [
             "encode_frame",
             "r"
@@ -37573,7 +37755,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 877,
+          "line": 1048,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HARD_MAX_FRAME_SIZE",
@@ -37583,13 +37765,13 @@
         {
           "kind": "fn",
           "name": "frame_error_is_send_sync",
-          "line": 887,
+          "line": 1058,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 888,
+          "line": 1059,
           "called": [
             "FrameError"
           ]
@@ -37597,19 +37779,19 @@
         {
           "kind": "fn",
           "name": "would_block_propagates",
-          "line": 897,
+          "line": 1068,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WouldBlockReader",
-          "line": 898,
+          "line": 1069,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::io::Read for WouldBlockReader",
-          "line": 899,
+          "line": 1070,
           "called": [
             "WouldBlockReader"
           ]
@@ -37617,7 +37799,7 @@
         {
           "kind": "fn",
           "name": "read",
-          "line": 900,
+          "line": 1071,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37629,7 +37811,7 @@
         {
           "kind": "fn",
           "name": "rung1_constants_stable",
-          "line": 921,
+          "line": 1092,
           "called": [
             "KNH2_MAGIC",
             "KNH2_PREAMBLE",
@@ -37640,7 +37822,7 @@
         {
           "kind": "fn",
           "name": "hard_max_frame_size_below_magic",
-          "line": 933,
+          "line": 1104,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HARD_MAX_FRAME_SIZE",
@@ -37650,7 +37832,7 @@
         {
           "kind": "fn",
           "name": "negotiate_detects_v2_preamble",
-          "line": 946,
+          "line": 1117,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "KNH2_PREAMBLE",
@@ -37665,7 +37847,7 @@
         {
           "kind": "fn",
           "name": "negotiate_legacy_preserves_first_frame",
-          "line": 965,
+          "line": 1136,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "b",
@@ -37680,7 +37862,7 @@
         {
           "kind": "fn",
           "name": "no_valid_v1_length_collides_with_magic",
-          "line": 986,
+          "line": 1157,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HARD_MAX_FRAME_SIZE",
@@ -37695,7 +37877,7 @@
         {
           "kind": "fn",
           "name": "negotiate_eof_and_partial",
-          "line": 1014,
+          "line": 1185,
           "called": [
             "Err",
             "empty",
@@ -37705,7 +37887,7 @@
         {
           "kind": "fn",
           "name": "hinted_frame_round_trips",
-          "line": 1031,
+          "line": 1202,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "HEADER_LEN",
@@ -37723,7 +37905,7 @@
         {
           "kind": "fn",
           "name": "hinted_frame_eof_and_truncated_hint",
-          "line": 1058,
+          "line": 1229,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37733,7 +37915,7 @@
         {
           "kind": "fn",
           "name": "hinted_frame_body_errors_are_independent_of_hint",
-          "line": 1081,
+          "line": 1252,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37745,7 +37927,7 @@
         {
           "kind": "fn",
           "name": "read_request_v1_and_v2",
-          "line": 1102,
+          "line": 1273,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "KNH2_PREAMBLE",
@@ -37760,7 +37942,7 @@
         {
           "kind": "fn",
           "name": "v2_multiple_hinted_frames_sequential",
-          "line": 1123,
+          "line": 1294,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37777,7 +37959,7 @@
         {
           "kind": "fn",
           "name": "hinted_frame_committed_then_truncated_is_dedicated_variant",
-          "line": 1149,
+          "line": 1320,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37789,7 +37971,7 @@
         {
           "kind": "fn",
           "name": "conn_reader_one_shot_classifies",
-          "line": 1173,
+          "line": 1344,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "KNH2_PREAMBLE",
@@ -37806,7 +37988,7 @@
         {
           "kind": "fn",
           "name": "conn_reader_persistent_multi_frame",
-          "line": 1199,
+          "line": 1370,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -37825,7 +38007,7 @@
         {
           "kind": "fn",
           "name": "encode_hinted_frame_inverse_of_read",
-          "line": 1247,
+          "line": 1418,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "LEGACY_SIGNER_HINT",
@@ -37838,7 +38020,7 @@
         {
           "kind": "fn",
           "name": "negotiate_fuzz_never_panics_or_misclassifies",
-          "line": 1269,
+          "line": 1440,
           "called": [
             "Err",
             "KNH2_PREAMBLE",
@@ -37852,6 +38034,121 @@
             "state",
             "tail",
             "to_vec"
+          ]
+        },
+        {
+          "kind": "struct",
+          "name": "TrickleReader",
+          "line": 1475,
+          "called": [
+            "pos"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "std::io::Read for TrickleReader<'_>",
+          "line": 1480,
+          "called": [
+            "TrickleReader",
+            "_"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read",
+          "line": 1481,
+          "called": [
+            "is_empty",
+            "len",
+            "pos"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deadline_expired_before_first_byte_fails_immediately",
+          "line": 1498,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "Err",
+            "b",
+            "bytes",
+            "cursor",
+            "encode_frame",
+            "read_frame_with_deadline"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deadline_exceeded_for_slow_fragmented_reader",
+          "line": 1512,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "Err",
+            "TrickleReader",
+            "bytes",
+            "encode_frame",
+            "pos",
+            "read_frame_with_deadline"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deadline_generous_fragmented_reader_succeeds",
+          "line": 1532,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "TrickleReader",
+            "b",
+            "bytes",
+            "encode_frame",
+            "pos",
+            "read_frame_with_deadline",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "deadline_less_read_frame_still_unbounded",
+          "line": 1550,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "TrickleReader",
+            "bytes",
+            "encode_frame",
+            "pos",
+            "read_frame"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_request_deadline_covers_negotiation_and_hint",
+          "line": 1566,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "Err",
+            "KNH2_PREAMBLE",
+            "TrickleReader",
+            "b",
+            "bytes",
+            "encode_hinted_frame",
+            "pos",
+            "read_request_with_deadline",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_next_deadline_is_per_request",
+          "line": 1586,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "Err",
+            "LEGACY_SIGNER_HINT",
+            "b",
+            "bytes",
+            "cursor",
+            "encode_frame",
+            "read_next_with_deadline"
           ]
         }
       ]
@@ -39688,37 +39985,37 @@
         {
           "kind": "const",
           "name": "DEFAULT_CONNECTION_TIMEOUT",
-          "line": 67,
+          "line": 77,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_KERNEL_REPLY_TIMEOUT",
-          "line": 72,
+          "line": 82,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_MAX_CONCURRENT_CONNECTIONS",
-          "line": 85,
+          "line": 95,
           "called": []
         },
         {
           "kind": "const",
           "name": "HARD_MAX_CONCURRENT_CONNECTIONS",
-          "line": 91,
+          "line": 101,
           "called": []
         },
         {
           "kind": "struct",
           "name": "HandlerConfig",
-          "line": 97,
+          "line": 107,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Default for HandlerConfig",
-          "line": 121,
+          "line": 133,
           "called": [
             "HandlerConfig"
           ]
@@ -39726,7 +40023,7 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 122,
+          "line": 134,
           "called": [
             "DEFAULT_CONNECTION_TIMEOUT",
             "DEFAULT_KERNEL_REPLY_TIMEOUT",
@@ -39736,19 +40033,19 @@
         {
           "kind": "struct",
           "name": "ConnectionSlot",
-          "line": 138,
+          "line": 150,
           "called": []
         },
         {
           "kind": "impl",
           "name": "ConnectionSlot",
-          "line": 142,
+          "line": 154,
           "called": []
         },
         {
           "kind": "fn",
           "name": "try_acquire",
-          "line": 156,
+          "line": 168,
           "called": [
             "Err",
             "HARD_MAX_CONCURRENT_CONNECTIONS",
@@ -39760,7 +40057,7 @@
         {
           "kind": "fn",
           "name": "active_count",
-          "line": 187,
+          "line": 199,
           "called": [
             "load"
           ]
@@ -39768,7 +40065,7 @@
         {
           "kind": "impl",
           "name": "Drop for ConnectionSlot",
-          "line": 192,
+          "line": 204,
           "called": [
             "ConnectionSlot"
           ]
@@ -39776,13 +40073,13 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 193,
+          "line": 205,
           "called": []
         },
         {
           "kind": "fn",
           "name": "backoff_on_accept_error",
-          "line": 211,
+          "line": 223,
           "called": [
             "min"
           ]
@@ -39790,7 +40087,7 @@
         {
           "kind": "enum",
           "name": "HandleOutcome",
-          "line": 226,
+          "line": 238,
           "called": [
             "Verdict"
           ]
@@ -39798,19 +40095,19 @@
         {
           "kind": "impl",
           "name": "HandleOutcome",
-          "line": 243,
+          "line": 255,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 247,
+          "line": 259,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_connection",
-          "line": 282,
+          "line": 295,
           "called": [
             "ConnId",
             "Err",
@@ -39825,7 +40122,7 @@
             "flush",
             "handle",
             "r",
-            "read_request",
+            "read_request_with_deadline",
             "stream",
             "submit",
             "verdict"
@@ -39834,7 +40131,7 @@
         {
           "kind": "enum",
           "name": "PendingResponse",
-          "line": 361,
+          "line": 380,
           "called": [
             "KernelResponse",
             "VerdictResponse"
@@ -39843,7 +40140,7 @@
         {
           "kind": "fn",
           "name": "run_persistent",
-          "line": 423,
+          "line": 446,
           "called": [
             "ConnId",
             "Err",
@@ -39862,7 +40159,7 @@
             "name",
             "persistent_writer_loop",
             "pipeline_capacity",
-            "read_next",
+            "read_next_with_deadline",
             "spawn",
             "stop",
             "submit"
@@ -39871,7 +40168,7 @@
         {
           "kind": "fn",
           "name": "persistent_writer_loop",
-          "line": 516,
+          "line": 549,
           "called": [
             "Err",
             "PendingResponse",
@@ -39886,7 +40183,7 @@
         {
           "kind": "mod",
           "name": "tcp",
-          "line": 546,
+          "line": 579,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -39902,19 +40199,19 @@
         {
           "kind": "struct",
           "name": "TcpListener",
-          "line": 564,
+          "line": 597,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TcpListener",
-          "line": 568,
+          "line": 601,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 574,
+          "line": 607,
           "called": [
             "addr"
           ]
@@ -39922,13 +40219,13 @@
         {
           "kind": "fn",
           "name": "local_addr",
-          "line": 582,
+          "line": 615,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 595,
+          "line": 628,
           "called": [
             "Err",
             "HandlerConfig",
@@ -39952,7 +40249,7 @@
         {
           "kind": "fn",
           "name": "handle_single_connection",
-          "line": 662,
+          "line": 695,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -39973,7 +40270,7 @@
         {
           "kind": "mod",
           "name": "tls",
-          "line": 703,
+          "line": 736,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -39988,7 +40285,7 @@
         {
           "kind": "struct",
           "name": "TlsListener",
-          "line": 717,
+          "line": 750,
           "called": [
             "ServerConfig"
           ]
@@ -39996,13 +40293,13 @@
         {
           "kind": "impl",
           "name": "TlsListener",
-          "line": 722,
+          "line": 755,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 728,
+          "line": 761,
           "called": [
             "ServerConfig",
             "addr"
@@ -40011,13 +40308,13 @@
         {
           "kind": "fn",
           "name": "local_addr",
-          "line": 738,
+          "line": 771,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 747,
+          "line": 780,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40038,7 +40335,7 @@
         {
           "kind": "fn",
           "name": "handle_tls_connection",
-          "line": 807,
+          "line": 840,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40060,7 +40357,7 @@
         {
           "kind": "mod",
           "name": "unix",
-          "line": 844,
+          "line": 877,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40076,7 +40373,7 @@
         {
           "kind": "struct",
           "name": "UnixListener",
-          "line": 901,
+          "line": 934,
           "called": [
             "path"
           ]
@@ -40084,13 +40381,13 @@
         {
           "kind": "impl",
           "name": "UnixListener",
-          "line": 906,
+          "line": 939,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 925,
+          "line": 958,
           "called": [
             "Err",
             "kind",
@@ -40100,13 +40397,13 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 964,
+          "line": 997,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 973,
+          "line": 1006,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40130,7 +40427,7 @@
         {
           "kind": "impl",
           "name": "Drop for UnixListener",
-          "line": 1027,
+          "line": 1060,
           "called": [
             "UnixListener"
           ]
@@ -40138,7 +40435,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 1028,
+          "line": 1061,
           "called": [
             "Err",
             "error",
@@ -40149,7 +40446,7 @@
         {
           "kind": "fn",
           "name": "handle_single_unix_connection",
-          "line": 1040,
+          "line": 1073,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -41579,12 +41876,12 @@
     {
       "module": "runtime::knomosis-host::src::tls",
       "path": "runtime/knomosis-host/src/tls.rs",
-      "declaration_count": 20,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "enum",
           "name": "TlsConfigError",
-          "line": 39,
+          "line": 40,
           "called": [
             "error",
             "path",
@@ -41594,7 +41891,7 @@
         {
           "kind": "struct",
           "name": "TlsConfigBuilder",
-          "line": 76,
+          "line": 77,
           "called": [
             "allow_tls12"
           ]
@@ -41602,25 +41899,25 @@
         {
           "kind": "impl",
           "name": "TlsConfigBuilder",
-          "line": 80,
+          "line": 81,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 83,
+          "line": 84,
           "called": []
         },
         {
           "kind": "fn",
           "name": "allow_tls12",
-          "line": 91,
+          "line": 92,
           "called": []
         },
         {
           "kind": "fn",
           "name": "load_pem_files",
-          "line": 106,
+          "line": 107,
           "called": [
             "ServerConfig",
             "TlsConfigError",
@@ -41633,7 +41930,7 @@
         {
           "kind": "fn",
           "name": "build",
-          "line": 123,
+          "line": 124,
           "called": [
             "ServerConfig",
             "TlsConfigError",
@@ -41644,13 +41941,24 @@
         },
         {
           "kind": "fn",
+          "name": "pem_io_error",
+          "line": 167,
+          "called": [
+            "TlsConfigError",
+            "path",
+            "source"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "load_certs",
-          "line": 169,
+          "line": 187,
           "called": [
             "Err",
             "TlsConfigError",
             "is_empty",
             "path",
+            "pem_io_error",
             "push",
             "source"
           ]
@@ -41658,18 +41966,20 @@
         {
           "kind": "fn",
           "name": "load_private_key",
-          "line": 198,
+          "line": 214,
           "called": [
+            "Err",
             "TlsConfigError",
             "key",
             "path",
+            "pem_io_error",
             "source"
           ]
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 216,
+          "line": 231,
           "called": [
             "TlsConfigBuilder",
             "TlsConfigError",
@@ -41680,7 +41990,7 @@
         {
           "kind": "fn",
           "name": "default_builder_disallows_tls12",
-          "line": 222,
+          "line": 237,
           "called": [
             "allow_tls12",
             "b"
@@ -41689,7 +41999,7 @@
         {
           "kind": "fn",
           "name": "allow_tls12_flips_flag",
-          "line": 229,
+          "line": 244,
           "called": [
             "allow_tls12",
             "b"
@@ -41698,7 +42008,7 @@
         {
           "kind": "fn",
           "name": "missing_cert_file_returns_io",
-          "line": 236,
+          "line": 251,
           "called": [
             "Err",
             "load_certs",
@@ -41708,7 +42018,7 @@
         {
           "kind": "fn",
           "name": "missing_key_file_returns_io",
-          "line": 246,
+          "line": 261,
           "called": [
             "Err",
             "load_private_key",
@@ -41718,7 +42028,7 @@
         {
           "kind": "fn",
           "name": "empty_cert_file_returns_no_certificates",
-          "line": 256,
+          "line": 271,
           "called": [
             "Err",
             "load_certs",
@@ -41728,7 +42038,7 @@
         {
           "kind": "fn",
           "name": "empty_key_file_returns_no_private_key",
-          "line": 266,
+          "line": 281,
           "called": [
             "Err",
             "load_private_key",
@@ -41738,13 +42048,13 @@
         {
           "kind": "fn",
           "name": "tls_config_error_is_send_sync",
-          "line": 277,
+          "line": 292,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 278,
+          "line": 293,
           "called": [
             "TlsConfigError"
           ]
@@ -41752,7 +42062,7 @@
         {
           "kind": "fn",
           "name": "garbage_file_returns_no_certificates",
-          "line": 287,
+          "line": 302,
           "called": [
             "Err",
             "_",
@@ -41765,7 +42075,7 @@
         {
           "kind": "fn",
           "name": "garbage_file_returns_no_private_key",
-          "line": 300,
+          "line": 315,
           "called": [
             "Err",
             "_",
@@ -43613,12 +43923,12 @@
     {
       "module": "runtime::knomosis-host::tests::property",
       "path": "runtime/knomosis-host/tests/property.rs",
-      "declaration_count": 11,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "fn",
           "name": "frame_roundtrip",
-          "line": 22,
+          "line": 24,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "bytes",
@@ -43630,7 +43940,7 @@
         {
           "kind": "fn",
           "name": "read_frame_never_panics_on_arbitrary_input",
-          "line": 33,
+          "line": 35,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "_",
@@ -43641,8 +43951,35 @@
         },
         {
           "kind": "fn",
+          "name": "read_request_never_panics_on_arbitrary_input",
+          "line": 49,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "_",
+            "bytes",
+            "cursor",
+            "read_request"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_request_hinted_path_never_panics",
+          "line": 64,
+          "called": [
+            "DEFAULT_MAX_FRAME_SIZE",
+            "KNH2_PREAMBLE",
+            "_",
+            "bytes",
+            "cursor",
+            "read_request",
+            "tail",
+            "to_vec"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "truncation_always_errors",
-          "line": 43,
+          "line": 77,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "bytes",
@@ -43655,7 +43992,7 @@
         {
           "kind": "fn",
           "name": "oversize_always_rejected",
-          "line": 61,
+          "line": 95,
           "called": [
             "Err",
             "bytes",
@@ -43667,7 +44004,7 @@
         {
           "kind": "fn",
           "name": "verdict_round_trip",
-          "line": 80,
+          "line": 114,
           "called": [
             "b",
             "to_byte"
@@ -43676,7 +44013,7 @@
         {
           "kind": "fn",
           "name": "verdict_out_of_range_returns_none",
-          "line": 87,
+          "line": 121,
           "called": [
             "b"
           ]
@@ -43684,7 +44021,7 @@
         {
           "kind": "fn",
           "name": "verdict_response_encoding_deterministic",
-          "line": 94,
+          "line": 128,
           "called": [
             "encode",
             "reason",
@@ -43694,7 +44031,7 @@
         {
           "kind": "fn",
           "name": "verdict_response_prefix_layout",
-          "line": 107,
+          "line": 141,
           "called": [
             "as_bytes",
             "bytes",
@@ -43707,7 +44044,7 @@
         {
           "kind": "fn",
           "name": "queue_capacity_admits_exactly_n",
-          "line": 126,
+          "line": 160,
           "called": [
             "_",
             "capacity",
@@ -43718,7 +44055,7 @@
         {
           "kind": "fn",
           "name": "drain_dispatches_every_enqueue",
-          "line": 141,
+          "line": 175,
           "called": [
             "_",
             "drain_one",
@@ -43731,7 +44068,7 @@
         {
           "kind": "fn",
           "name": "verdict_response_length_matches_payload",
-          "line": 171,
+          "line": 205,
           "called": [
             "as_bytes",
             "bytes",
@@ -59480,7 +59817,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::tests::property",
       "path": "runtime/knomosis-l1-ingest/tests/property.rs",
-      "declaration_count": 18,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "fn",
@@ -59686,6 +60023,20 @@
             "_",
             "block_number",
             "decode_event"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "decode_event_with_valid_topic0_never_panics_on_adversarial_payload",
+          "line": 456,
+          "called": [
+            "EthAddress",
+            "IngestedEvent",
+            "RawLog",
+            "_",
+            "block_number",
+            "decode_event",
+            "hash"
           ]
         }
       ]
@@ -64224,7 +64575,7 @@
     {
       "module": "runtime::knomosis-verify-secp256k1::src::verify",
       "path": "runtime/knomosis-verify-secp256k1/src/verify.rs",
-      "declaration_count": 40,
+      "declaration_count": 43,
       "declarations": [
         {
           "kind": "const",
@@ -64273,7 +64624,13 @@
         {
           "kind": "fn",
           "name": "knomosis_verify_ecdsa_raw",
-          "line": 207,
+          "line": 215,
+          "called": []
+        },
+        {
+          "kind": "const",
+          "name": "MAX_SLICE_LEN",
+          "line": 227,
           "called": [
             "make_slice",
             "verify"
@@ -64282,7 +64639,7 @@
         {
           "kind": "fn",
           "name": "make_slice",
-          "line": 243,
+          "line": 265,
           "called": [
             "len"
           ]
@@ -64290,31 +64647,31 @@
         {
           "kind": "fn",
           "name": "knomosis_lean_sarray_size",
-          "line": 286,
+          "line": 308,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_sarray_cptr",
-          "line": 288,
+          "line": 310,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_dec",
-          "line": 290,
+          "line": 312,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_lean_mk_string_from_bytes",
-          "line": 293,
+          "line": 315,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_verify_ecdsa",
-          "line": 321,
+          "line": 343,
           "called": [
             "knomosis_lean_dec",
             "knomosis_lean_sarray_cptr",
@@ -64325,7 +64682,7 @@
         {
           "kind": "const",
           "name": "IDENTIFIER_BYTES",
-          "line": 349,
+          "line": 371,
           "called": [
             "as_bytes"
           ]
@@ -64333,7 +64690,7 @@
         {
           "kind": "fn",
           "name": "knomosis_verify_identifier",
-          "line": 366,
+          "line": 388,
           "called": [
             "IDENTIFIER_BYTES",
             "knomosis_lean_dec",
@@ -64345,7 +64702,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 372,
+          "line": 394,
           "called": [
             "MESSAGE_LEN",
             "PUBKEY_LEN",
@@ -64358,7 +64715,7 @@
         {
           "kind": "fn",
           "name": "length_constants_match_contract",
-          "line": 378,
+          "line": 400,
           "called": [
             "MESSAGE_LEN",
             "PUBKEY_LEN",
@@ -64368,7 +64725,7 @@
         {
           "kind": "fn",
           "name": "rejects_short_pubkey",
-          "line": 386,
+          "line": 408,
           "called": [
             "verify"
           ]
@@ -64376,30 +64733,6 @@
         {
           "kind": "fn",
           "name": "rejects_long_pubkey",
-          "line": 392,
-          "called": [
-            "verify"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "rejects_short_message",
-          "line": 398,
-          "called": [
-            "verify"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "rejects_long_message",
-          "line": 406,
-          "called": [
-            "verify"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "rejects_short_signature",
           "line": 414,
           "called": [
             "verify"
@@ -64407,8 +64740,32 @@
         },
         {
           "kind": "fn",
+          "name": "rejects_short_message",
+          "line": 420,
+          "called": [
+            "verify"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rejects_long_message",
+          "line": 428,
+          "called": [
+            "verify"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rejects_short_signature",
+          "line": 436,
+          "called": [
+            "verify"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "rejects_65byte_signature",
-          "line": 424,
+          "line": 446,
           "called": [
             "verify"
           ]
@@ -64416,7 +64773,7 @@
         {
           "kind": "fn",
           "name": "rejects_empty_inputs",
-          "line": 432,
+          "line": 454,
           "called": [
             "verify"
           ]
@@ -64424,7 +64781,7 @@
         {
           "kind": "fn",
           "name": "rejects_uncompressed_prefix_at_compressed_length",
-          "line": 441,
+          "line": 463,
           "called": [
             "verify"
           ]
@@ -64432,7 +64789,7 @@
         {
           "kind": "fn",
           "name": "rejects_hybrid_even_prefix",
-          "line": 448,
+          "line": 470,
           "called": [
             "verify"
           ]
@@ -64440,7 +64797,7 @@
         {
           "kind": "fn",
           "name": "rejects_hybrid_odd_prefix",
-          "line": 455,
+          "line": 477,
           "called": [
             "verify"
           ]
@@ -64448,7 +64805,7 @@
         {
           "kind": "fn",
           "name": "rejects_zero_r",
-          "line": 462,
+          "line": 484,
           "called": [
             "make_valid_pk",
             "verify"
@@ -64457,7 +64814,7 @@
         {
           "kind": "fn",
           "name": "rejects_zero_s",
-          "line": 472,
+          "line": 494,
           "called": [
             "make_valid_pk",
             "verify"
@@ -64466,7 +64823,7 @@
         {
           "kind": "fn",
           "name": "rejects_r_equals_order",
-          "line": 482,
+          "line": 504,
           "called": [
             "make_valid_pk",
             "verify"
@@ -64475,7 +64832,7 @@
         {
           "kind": "fn",
           "name": "rejects_s_equals_order",
-          "line": 498,
+          "line": 520,
           "called": [
             "make_valid_pk",
             "verify"
@@ -64484,7 +64841,7 @@
         {
           "kind": "fn",
           "name": "rejects_pubkey_with_zero_x",
-          "line": 519,
+          "line": 541,
           "called": [
             "verify"
           ]
@@ -64492,30 +64849,6 @@
         {
           "kind": "fn",
           "name": "rejects_arbitrary_x_with_random_signature",
-          "line": 530,
-          "called": [
-            "verify"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "rejects_zero_prefix",
-          "line": 537,
-          "called": [
-            "verify"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "rejects_prefix_one",
-          "line": 544,
-          "called": [
-            "verify"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "rejects_prefix_five",
           "line": 552,
           "called": [
             "verify"
@@ -64523,7 +64856,7 @@
         },
         {
           "kind": "fn",
-          "name": "rejects_prefix_max",
+          "name": "rejects_zero_prefix",
           "line": 559,
           "called": [
             "verify"
@@ -64531,8 +64864,32 @@
         },
         {
           "kind": "fn",
+          "name": "rejects_prefix_one",
+          "line": 566,
+          "called": [
+            "verify"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rejects_prefix_five",
+          "line": 574,
+          "called": [
+            "verify"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "rejects_prefix_max",
+          "line": 581,
+          "called": [
+            "verify"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "rejects_every_invalid_prefix_exhaustively",
-          "line": 573,
+          "line": 595,
           "called": [
             "SEC1_TAG_EVEN",
             "SEC1_TAG_ODD",
@@ -64542,14 +64899,32 @@
         {
           "kind": "fn",
           "name": "make_valid_pk",
-          "line": 591,
+          "line": 613,
           "called": []
         },
         {
           "kind": "const",
           "name": "GX",
-          "line": 594,
+          "line": 616,
           "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "raw_null_pointer_inputs_rejected",
+          "line": 635,
+          "called": [
+            "make_valid_pk",
+            "r"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "raw_oversize_len_rejected",
+          "line": 656,
+          "called": [
+            "make_valid_pk",
+            "r"
+          ]
         }
       ]
     },

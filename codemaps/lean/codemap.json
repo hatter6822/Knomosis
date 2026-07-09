@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "380dba226692bccff450a58f4a7c407dd7b11e011307fe63c5bb790eedb69a48"
+    "source_digest": "9123da9a7a961c8da8c6f9b9bc73d43f8c6237d5df03a60c691cba56f08f04a9"
   },
   "summary": {
     "module_count": 308,
@@ -27961,7 +27961,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_other_resource_untouched",
-          "line": 141,
+          "line": 150,
           "called": [
             "ActorId",
             "ResourceId",
@@ -27972,7 +27972,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_excluded_untouched",
-          "line": 158,
+          "line": 167,
           "called": [
             "ActorId",
             "ResourceId",
@@ -27984,7 +27984,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_other_resource_untouched",
-          "line": 183,
+          "line": 192,
           "called": [
             "ActorId",
             "Amount",
@@ -27998,7 +27998,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_does_not_touch_other_resources",
-          "line": 198,
+          "line": 207,
           "called": [
             "ActorId",
             "Amount",
@@ -28013,7 +28013,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_conserves_other_resource",
-          "line": 207,
+          "line": 216,
           "called": [
             "ActorId",
             "Amount",
@@ -28028,7 +28028,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_excluded_unchanged",
-          "line": 218,
+          "line": 227,
           "called": [
             "ActorId",
             "Amount",
@@ -28043,7 +28043,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_proportional_totalSupply",
-          "line": 242,
+          "line": 251,
           "called": [
             "ActorId",
             "ResourceId",
@@ -28057,7 +28057,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_proportionalDilute",
-          "line": 268,
+          "line": 277,
           "called": [
             "ActorId",
             "Amount",
@@ -28073,7 +28073,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_supply_nondecreasing",
-          "line": 291,
+          "line": 300,
           "called": [
             "ActorId",
             "Amount",
@@ -28088,7 +28088,7 @@
         {
           "kind": "theorem",
           "name": "list_div_sum_mul_le",
-          "line": 309,
+          "line": 318,
           "called": [
             "ActorId"
           ]
@@ -28096,7 +28096,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_distributed_le_totalReward",
-          "line": 345,
+          "line": 354,
           "called": [
             "ActorId",
             "Amount",
@@ -28114,7 +28114,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_isMonotonic",
-          "line": 370,
+          "line": 379,
           "called": [
             "ActorId",
             "Amount",
@@ -28128,7 +28128,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_not_conservative",
-          "line": 394,
+          "line": 403,
           "called": [
             "ActorId",
             "Amount",
@@ -28151,7 +28151,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_localTo",
-          "line": 491,
+          "line": 500,
           "called": [
             "ActorId",
             "Amount",
@@ -28164,7 +28164,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_freezePreserving",
-          "line": 506,
+          "line": 515,
           "called": [
             "ActorId",
             "Amount",
@@ -28177,7 +28177,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_freezePreserving_empty",
-          "line": 523,
+          "line": 532,
           "called": [
             "ActorId",
             "Amount",
