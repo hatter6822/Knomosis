@@ -195,7 +195,7 @@ deployment-instance pattern; RH does not change it.
 ```
 runtime/                          (project-relative root)
 ├── Cargo.toml                    -- workspace manifest
-├── rust-toolchain.toml           -- pinned (stable 1.83+)
+├── rust-toolchain.toml           -- pinned (stable 1.97+)
 ├── knomosis-host/                   -- RH-C network adaptor binary
 │   ├── Cargo.toml
 │   ├── src/main.rs               -- TCP/Unix-socket listener
@@ -390,10 +390,10 @@ extension; cross-stack fixture corpus packaging for Rust.
     dev-dep crate rather than inlining it into every consumer (a
     fidelity-preserving expansion of §4 RH-H step 4's "thin Rust
     helper that other crates import as a dev-dependency").
-  * `runtime/rust-toolchain.toml` pinning stable 1.83 with
+  * `runtime/rust-toolchain.toml` pinning stable 1.97 with
     `clippy` and `rustfmt` components.  Workspace's
-    `rust-version = "1.83"` documents the MSRV at the package
-    level so cargo rejects pre-1.83 toolchains before any
+    `rust-version = "1.97"` documents the MSRV at the package
+    level so cargo rejects pre-1.97 toolchains before any
     compilation begins.
   * Two **fully-implemented** crates:
     - `knomosis-cli-common` — `OperatorExitCode` exit-code

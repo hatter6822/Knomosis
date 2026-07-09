@@ -319,7 +319,7 @@ pub mod mock {
             }
         }
 
-        fn identifier(&self) -> &str {
+        fn identifier(&self) -> &'static str {
             "mock"
         }
     }

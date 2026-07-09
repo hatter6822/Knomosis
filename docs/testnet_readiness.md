@@ -181,7 +181,7 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       PR + a bounded per-target `fuzz-smoke`, longer on a weekly
       schedule; crash/OOM/hang reproducers uploaded as artifacts).  The
       libFuzzer crate is a separate workspace, `exclude`d from the pinned
-      stable `1.83` workspace so `cargo …--workspace` stays green.
+      stable `1.97` workspace so `cargo …--workspace` stays green.
 - [x] v2 receipt-verified reimbursement (GP.8.5) — the gate is shipped
       (`LegalKernel.Bridge.ReceiptVerifiedClaim` + the Rust mirror);
       *enable* it before the pool holds material value (economic

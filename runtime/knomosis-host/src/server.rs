@@ -365,7 +365,7 @@ fn worker_loop(
         match drain_one(&receiver, poll_timeout, |bytes| {
             catch_unwinding_submit(&*kernel, bytes)
         }) {
-            DrainOutcome::Dispatched | DrainOutcome::Timeout => continue,
+            DrainOutcome::Dispatched | DrainOutcome::Timeout => {}
             DrainOutcome::Disconnected => break,
         }
     }
@@ -425,7 +425,7 @@ fn fair_worker_loop(queue: FairQueue, kernel: Box<dyn Kernel>, stop: Arc<AtomicB
                 let response = catch_unwinding_submit(&*kernel, &req.payload);
                 let _ = req.reply.try_send(response);
             }
-            NextOutcome::Idle => continue,
+            NextOutcome::Idle => {}
         }
     }
     // FQ.6: final aggregate summary on shutdown (always emitted so the

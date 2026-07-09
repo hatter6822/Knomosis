@@ -204,7 +204,7 @@ impl Kernel for RecordingKernel {
         KernelResponse::from_verdict(Verdict::Ok)
     }
 
-    fn identifier(&self) -> &str {
+    fn identifier(&self) -> &'static str {
         "recording-test-kernel/v1"
     }
 }

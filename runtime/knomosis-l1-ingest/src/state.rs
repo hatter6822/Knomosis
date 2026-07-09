@@ -294,7 +294,7 @@ fn hex_value(c: u8) -> Option<u8> {
 }
 
 /// The reconstructed in-memory state from a state file.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct WatcherState {
     /// Block number up to and including which the watcher has
     /// processed all events.  Resumed-from on startup.
@@ -308,17 +308,6 @@ pub struct WatcherState {
     /// successful submission; persisted via
     /// [`StateRecord::NonceProgressed`].
     pub next_nonce: u128,
-}
-
-impl Default for WatcherState {
-    fn default() -> Self {
-        Self {
-            last_confirmed_block: None,
-            forwarded: HashSet::new(),
-            address_book: AddressBook::new(),
-            next_nonce: 0,
-        }
-    }
 }
 
 /// Key in the forwarded-events set.

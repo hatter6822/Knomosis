@@ -395,7 +395,7 @@ fn parse_address(s: &str) -> Result<EthAddress, String> {
 
 fn parse_hex_bytes(s: &str) -> Result<Vec<u8>, String> {
     let stripped = s.strip_prefix("0x").unwrap_or(s);
-    if stripped.len() % 2 != 0 {
+    if !stripped.len().is_multiple_of(2) {
         return Err(format!("hex '{s}' has odd length"));
     }
     let mut out = Vec::with_capacity(stripped.len() / 2);

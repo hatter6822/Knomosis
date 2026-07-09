@@ -249,7 +249,7 @@ fn render_record(seq: u64, index: u32, payload: &[u8]) -> Result<EventRecord, De
 fn sleep_interruptible(dur: Duration, shutdown: &AtomicBool) {
     let mut slept = Duration::ZERO;
     while slept < dur && !shutdown.load(Ordering::Relaxed) {
-        let step = SHUTDOWN_POLL.min(dur - slept);
+        let step = SHUTDOWN_POLL.min(dur.checked_sub(slept).unwrap());
         std::thread::sleep(step);
         slept += step;
     }

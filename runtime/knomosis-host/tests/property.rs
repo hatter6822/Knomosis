@@ -217,6 +217,6 @@ proptest! {
         let bytes = response.encode();
         let declared = u32::from_be_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]) as usize;
         prop_assert_eq!(declared, bytes.len() - 5);
-        prop_assert_eq!(declared, reason.as_bytes().len());
+        prop_assert_eq!(declared, reason.len());
     }
 }

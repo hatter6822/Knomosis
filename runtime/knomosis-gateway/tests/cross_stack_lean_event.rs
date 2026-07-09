@@ -103,7 +103,8 @@ fn load_fixture() -> Option<Fixture> {
         eprintln!("[SKIP] event_subscribe_cbe.json not found; run `lake test`.");
         return None;
     };
-    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("cannot read {path:?}: {e}"));
+    let bytes =
+        std::fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     Some(serde_json::from_slice(&bytes).unwrap_or_else(|e| panic!("malformed fixture: {e}")))
 }
 
@@ -113,7 +114,7 @@ fn decode_hex(s: &str) -> Vec<u8> {
     let stripped = s
         .strip_prefix("0x")
         .unwrap_or_else(|| panic!("expectedCbe not 0x-prefixed: {s}"));
-    assert!(stripped.len() % 2 == 0, "odd-length hex: {s}");
+    assert!(stripped.len().is_multiple_of(2), "odd-length hex: {s}");
     (0..stripped.len())
         .step_by(2)
         .map(|i| {

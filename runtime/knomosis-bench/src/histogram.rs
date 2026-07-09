@@ -417,8 +417,8 @@ mod tests {
         assert_eq!(s.p50(), Duration::from_nanos(1_500));
         assert_eq!(s.p99(), Duration::from_nanos(1_950));
         assert_eq!(s.p999(), Duration::from_nanos(1_990));
-        assert_eq!(s.min(), Duration::from_nanos(1_000));
-        assert_eq!(s.max(), Duration::from_nanos(2_000));
+        assert_eq!(s.min(), Duration::from_micros(1));
+        assert_eq!(s.max(), Duration::from_micros(2));
     }
 
     /// JSON round-trip preserves every field byte-for-byte.

@@ -153,7 +153,7 @@ Work-unit status (per `docs/planning/rust_host_runtime_plan.md`):
 ```
 runtime/
 ├── Cargo.toml                       — workspace manifest
-├── rust-toolchain.toml              — pinned Rust channel (1.83)
+├── rust-toolchain.toml              — pinned Rust channel (1.97)
 ├── README.md                        — this file
 ├── knomosis-hash-fallback.c            — pre-existing AR.10 fallback
 │                                       (lake-built static library; not
@@ -315,7 +315,7 @@ runtime/
 cd runtime/
 
 # Build every member crate.  Reads rust-toolchain.toml; first run
-# downloads the pinned 1.83 stable channel via rustup.
+# downloads the pinned 1.97 stable channel via rustup.
 cargo build --workspace --all-targets
 
 # Run every member crate's tests (~1 960 across the 11 crates).
@@ -468,7 +468,7 @@ for the file format and the downstream-consumer pattern.
 
 ## Pinned toolchain
 
-The Rust channel is pinned in `rust-toolchain.toml` to **1.83
+The Rust channel is pinned in `rust-toolchain.toml` to **1.97
 stable**, matching the workspace's `rust-version` MSRV.  Bumping
 the channel is a workspace-level PR per the engineering plan §7
 risk register; sub-streams cannot silently drift the toolchain.

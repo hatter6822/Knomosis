@@ -112,7 +112,7 @@ edition = "2021"
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
 # field gates `cargo` itself before any compilation begins.  Bumping
 # the MSRV is a workspace-level PR, not a per-crate one.
-rust-version = "1.83"
+rust-version = "1.97"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/hatter6822/Knomosis"
 publish = false

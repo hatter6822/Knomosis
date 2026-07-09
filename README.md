@@ -64,7 +64,7 @@ The canonical design specification is [`docs/GENESIS_PLAN.md`](docs/GENESIS_PLAN
 | Lean toolchain | `v4.29.1` (pinned in `lean-toolchain`) |
 | TCB core | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` |
 | Lean ecosystem dependency policy | Lean core + Std core only in kernel TCB |
-| Primary language stacks | Lean 4, Solidity (Foundry), Rust (stable 1.83 in `runtime/`) |
+| Primary language stacks | Lean 4, Solidity (Foundry), Rust (stable 1.97 in `runtime/`) |
 
 ## Architecture overview
 

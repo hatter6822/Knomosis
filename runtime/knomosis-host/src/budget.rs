@@ -778,54 +778,33 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
     let tag = cur.read_uint()?;
     let kind = match tag {
         // transfer(0): r, sender, receiver, amount.
-        0 => {
+        // deposit(13): r, recipient, amount, depositId.
+        0 | 13 => {
             for _ in 0..4 {
                 cur.skip_uint()?;
             }
             ActionBudgetKind::Ordinary
         }
         // mint(1) / burn(2): r, x, amount.
-        1 | 2 => {
+        // reward(5) / distributeOthers(6) / proportionalDilute(7):
+        // r, x, amount.
+        1 | 2 | 5..=7 => {
             for _ in 0..3 {
                 cur.skip_uint()?;
             }
             ActionBudgetKind::Ordinary
         }
         // freezeResource(3): r.
-        3 => {
+        // disputeWithdraw(9): idx.  rollback(11): targetIdx.
+        3 | 9 | 11 => {
             cur.skip_uint()?;
             ActionBudgetKind::Ordinary
         }
         // replaceKey(4): actor, newKey(bytes).
-        4 => {
-            cur.skip_uint()?;
-            cur.skip_bytes()?;
-            ActionBudgetKind::Ordinary
-        }
-        // reward(5) / distributeOthers(6) / proportionalDilute(7):
-        // r, x, amount.
-        5..=7 => {
-            for _ in 0..3 {
-                cur.skip_uint()?;
-            }
-            ActionBudgetKind::Ordinary
-        }
-        // disputeWithdraw(9): idx.  rollback(11): targetIdx.
-        9 | 11 => {
-            cur.skip_uint()?;
-            ActionBudgetKind::Ordinary
-        }
         // registerIdentity(12): actor, pk(bytes).
-        12 => {
+        4 | 12 => {
             cur.skip_uint()?;
             cur.skip_bytes()?;
-            ActionBudgetKind::Ordinary
-        }
-        // deposit(13): r, recipient, amount, depositId.
-        13 => {
-            for _ in 0..4 {
-                cur.skip_uint()?;
-            }
             ActionBudgetKind::Ordinary
         }
         // withdraw(14): r, sender, amount, recipientL1(bytes).
@@ -1151,13 +1130,9 @@ impl BudgetGate {
     /// `policy.current_epoch()` when advancement is disabled).
     #[must_use]
     pub fn effective_epoch(&self) -> u64 {
-        if self.epoch_length == 0 {
-            self.policy.current_epoch()
-        } else {
-            self.policy
-                .current_epoch()
-                .saturating_add(self.admitted / self.epoch_length)
-        }
+        self.policy
+            .current_epoch()
+            .saturating_add(self.admitted.checked_div(self.epoch_length).unwrap_or(0))
     }
 
     /// Set the strict-mode balance for `(gas_resource, actor)`.

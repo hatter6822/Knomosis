@@ -174,11 +174,12 @@ pub fn write_current_epoch(
 /// epoch 0 defensively.
 #[must_use]
 pub const fn epoch_for_seq(seq: u64, epoch_length: u64) -> u64 {
-    if epoch_length == 0 {
-        0
-    } else {
-        // logIndex = seq - 1; kernel epoch = logIndex / epochLength.
-        seq.saturating_sub(1) / epoch_length
+    // logIndex = seq - 1; kernel epoch = logIndex / epochLength.
+    // A zero `epoch_length` (advancement disabled) has no defined
+    // quotient, so `checked_div` yields `None`, mapped to epoch 0.
+    match seq.saturating_sub(1).checked_div(epoch_length) {
+        Some(epoch) => epoch,
+        None => 0,
     }
 }
 

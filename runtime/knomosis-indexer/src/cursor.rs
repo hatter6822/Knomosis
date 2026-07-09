@@ -55,6 +55,8 @@
 //!   * Indexer level: strict-greater (prevents double-applying
 //!     events to the balance view).
 
+use std::fmt::Write as _;
+
 use knomosis_storage::storage::{Storage, StorageError, StorageTransaction};
 
 /// Key for the cursor cell.
@@ -122,7 +124,7 @@ fn hex_preview(bytes: &[u8]) -> String {
     for b in &bytes[..n] {
         // Two-digit lowercase hex per byte.  ASCII-only — safe
         // for tracing logs.
-        out.push_str(&format!("{b:02x}"));
+        let _ = write!(out, "{b:02x}");
     }
     if bytes.len() > PREVIEW_MAX {
         out.push_str("...");

@@ -105,8 +105,8 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
     // Open the persistence layer.
     let persistence = Persistence::open(&cfg.storage_path).map_err(|e| {
         ObserverError::Storage(knomosis_storage::storage::StorageError::Other(format!(
-            "opening persistence at {:?}: {e}",
-            cfg.storage_path
+            "opening persistence at {}: {e}",
+            cfg.storage_path.display()
         )))
     })?;
 
@@ -175,7 +175,10 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             // JsonRpcSubmitter, cross-check chain_id with the
             // live RPC, then run.
             let signing_key = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
-                ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
+                ObserverError::Crypto(format!(
+                    "loading keystore at {}: {e}",
+                    cfg.keystore_path.display()
+                ))
             })?;
             let submitter_cfg =
                 JsonRpcSubmitterConfig::new(chain_id, cfg.game_contract.0, &signing_key)
@@ -224,7 +227,10 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             // end of scope) so the private bytes don't sit in
             // memory for the whole observer.run() duration.
             let _ = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
-                ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
+                ObserverError::Crypto(format!(
+                    "loading keystore at {}: {e}",
+                    cfg.keystore_path.display()
+                ))
             })?;
             info!(
                 "running with MockSubmitter (no --chain-id supplied; moves \

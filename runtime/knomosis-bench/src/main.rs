@@ -265,16 +265,19 @@ fn regression_verdict_to_result(verdict: RegressionVerdict) -> Result<(), Benchm
     match verdict {
         RegressionVerdict::WithinTolerance => Ok(()),
         RegressionVerdict::Regression { details } => {
+            use std::fmt::Write as _;
             let mut msg = String::from("regression details:");
             for detail in &details {
-                msg.push_str(&format!(
+                // Writes to a `String` are infallible, so the result is discarded.
+                let _ = write!(
+                    msg,
                     "\n  {} : baseline {:.3}, candidate {:.3} (drift {:+.2}%; threshold {:.0}%)",
                     detail.metric.name(),
                     detail.baseline,
                     detail.candidate,
                     detail.relative_drift * 100.0,
                     detail.threshold * 100.0,
-                ));
+                );
             }
             Err(BenchmarkRunError::Regression(msg))
         }

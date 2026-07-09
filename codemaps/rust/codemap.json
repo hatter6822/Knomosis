@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "50fbb8691d30d522e2ae136669273f26a8bda846d755ac46f98b8351dfc48d78"
+    "source_digest": "7681daf12e42b18011f5c153355a7c4ab43a7ebf5176471e32e44e36cd575416"
   },
   "summary": {
     "module_count": 192,
-    "declaration_count": 5945
+    "declaration_count": 5948
   },
   "modules": [
     {
@@ -1563,15 +1563,17 @@
             "BenchmarkRunError",
             "Err",
             "RegressionVerdict",
+            "_",
             "hinted",
             "name",
-            "verdict"
+            "verdict",
+            "write"
           ]
         },
         {
           "kind": "fn",
           "name": "exit_code_for",
-          "line": 312,
+          "line": 315,
           "called": [
             "BenchmarkRunError",
             "OperatorExitCode",
@@ -1581,7 +1583,7 @@
         {
           "kind": "fn",
           "name": "spawn_standalone",
-          "line": 325,
+          "line": 328,
           "called": [
             "BenchmarkRunError",
             "CliConfig",
@@ -1608,7 +1610,7 @@
         {
           "kind": "fn",
           "name": "resolve_unix_socket_path",
-          "line": 404,
+          "line": 407,
           "called": [
             "path"
           ]
@@ -1616,7 +1618,7 @@
         {
           "kind": "fn",
           "name": "connect_endpoint",
-          "line": 426,
+          "line": 429,
           "called": [
             "Endpoint",
             "StandaloneServer",
@@ -1630,7 +1632,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 443,
+          "line": 446,
           "called": [
             "BenchmarkRunError",
             "RegressionDetail",
@@ -1643,7 +1645,7 @@
         {
           "kind": "fn",
           "name": "within_tolerance_maps_to_ok",
-          "line": 450,
+          "line": 453,
           "called": [
             "regression_verdict_to_result"
           ]
@@ -1651,7 +1653,7 @@
         {
           "kind": "fn",
           "name": "regression_maps_to_regression_error",
-          "line": 456,
+          "line": 459,
           "called": [
             "Err",
             "RegressionDetail",
@@ -1663,7 +1665,7 @@
         {
           "kind": "fn",
           "name": "not_comparable_maps_to_operator_action_exit",
-          "line": 476,
+          "line": 479,
           "called": [
             "Err",
             "_",
@@ -1676,7 +1678,7 @@
         {
           "kind": "fn",
           "name": "exit_code_for_all_variants",
-          "line": 493,
+          "line": 496,
           "called": [
             "exit_code_for"
           ]
@@ -1816,6 +1818,7 @@
           "name": "to_human_summary",
           "line": 382,
           "called": [
+            "_",
             "identifier",
             "name",
             "throughput_ops_per_sec"
@@ -1824,7 +1827,7 @@
         {
           "kind": "enum",
           "name": "RegressionVerdict",
-          "line": 457,
+          "line": 472,
           "called": [
             "RegressionDetail"
           ]
@@ -1832,7 +1835,7 @@
         {
           "kind": "struct",
           "name": "RegressionDetail",
-          "line": 491,
+          "line": 506,
           "called": [
             "RegressionMetric"
           ]
@@ -1840,25 +1843,25 @@
         {
           "kind": "enum",
           "name": "RegressionMetric",
-          "line": 508,
+          "line": 523,
           "called": []
         },
         {
           "kind": "impl",
           "name": "RegressionMetric",
-          "line": 519,
+          "line": 534,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 522,
+          "line": 537,
           "called": []
         },
         {
           "kind": "fn",
           "name": "compare_against_baseline",
-          "line": 563,
+          "line": 578,
           "called": [
             "BenchmarkReport",
             "RegressionDetail",
@@ -1872,7 +1875,7 @@
         {
           "kind": "fn",
           "name": "check_finite_nonneg",
-          "line": 641,
+          "line": 656,
           "called": [
             "Err",
             "ReportError",
@@ -1882,7 +1885,7 @@
         {
           "kind": "fn",
           "name": "check_latency_ceiling",
-          "line": 654,
+          "line": 669,
           "called": [
             "RegressionDetail",
             "RegressionMetric",
@@ -1892,7 +1895,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 681,
+          "line": 696,
           "called": [
             "BenchmarkReport",
             "RegressionDetail",
@@ -1907,7 +1910,7 @@
         {
           "kind": "fn",
           "name": "make_report",
-          "line": 691,
+          "line": 706,
           "called": [
             "BenchmarkReport",
             "LatencySummary",
@@ -1921,13 +1924,13 @@
         {
           "kind": "fn",
           "name": "fixture_config_hex_encodes_deployment_id",
-          "line": 728,
+          "line": 743,
           "called": []
         },
         {
           "kind": "fn",
           "name": "transport_kind_names",
-          "line": 737,
+          "line": 752,
           "called": [
             "name"
           ]
@@ -1935,7 +1938,7 @@
         {
           "kind": "fn",
           "name": "within_tolerance_for_identical_reports",
-          "line": 744,
+          "line": 759,
           "called": [
             "clone",
             "compare_against_baseline",
@@ -1945,7 +1948,7 @@
         {
           "kind": "fn",
           "name": "throughput_drop_within_threshold",
-          "line": 753,
+          "line": 768,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -1954,7 +1957,7 @@
         {
           "kind": "fn",
           "name": "throughput_drop_beyond_threshold",
-          "line": 763,
+          "line": 778,
           "called": [
             "_",
             "compare_against_baseline",
@@ -1965,7 +1968,7 @@
         {
           "kind": "fn",
           "name": "throughput_improvement_no_regression",
-          "line": 780,
+          "line": 795,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -1974,7 +1977,7 @@
         {
           "kind": "fn",
           "name": "p99_latency_growth_triggers_regression",
-          "line": 789,
+          "line": 804,
           "called": [
             "_",
             "compare_against_baseline",
@@ -1985,7 +1988,7 @@
         {
           "kind": "fn",
           "name": "p50_latency_improvement_no_regression",
-          "line": 805,
+          "line": 820,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -1994,7 +1997,7 @@
         {
           "kind": "fn",
           "name": "multiple_regressions",
-          "line": 814,
+          "line": 829,
           "called": [
             "_",
             "compare_against_baseline",
@@ -2005,7 +2008,7 @@
         {
           "kind": "fn",
           "name": "save_load_round_trip",
-          "line": 828,
+          "line": 843,
           "called": [
             "make_report",
             "path",
@@ -2016,7 +2019,7 @@
         {
           "kind": "fn",
           "name": "save_uses_atomic_rename",
-          "line": 843,
+          "line": 858,
           "called": [
             "_",
             "len",
@@ -2029,7 +2032,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_missing_parent_directory",
-          "line": 865,
+          "line": 880,
           "called": [
             "Err",
             "make_report",
@@ -2040,7 +2043,7 @@
         {
           "kind": "fn",
           "name": "save_no_filename_falls_back_to_direct_write",
-          "line": 878,
+          "line": 893,
           "called": [
             "Err",
             "make_report",
@@ -2052,7 +2055,7 @@
         {
           "kind": "fn",
           "name": "load_refuses_future_protocol_version",
-          "line": 892,
+          "line": 907,
           "called": [
             "Err",
             "make_report",
@@ -2064,7 +2067,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_malformed_json",
-          "line": 904,
+          "line": 919,
           "called": [
             "Err",
             "path"
@@ -2073,7 +2076,7 @@
         {
           "kind": "fn",
           "name": "load_reports_io_for_missing",
-          "line": 914,
+          "line": 929,
           "called": [
             "Err",
             "path"
@@ -2082,7 +2085,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_infinity_overflow_via_serde",
-          "line": 932,
+          "line": 947,
           "called": [
             "Err",
             "json",
@@ -2092,7 +2095,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_negative_throughput",
-          "line": 980,
+          "line": 995,
           "called": [
             "Err",
             "json",
@@ -2102,7 +2105,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_negative_mean_ns",
-          "line": 1027,
+          "line": 1042,
           "called": [
             "Err",
             "json",
@@ -2112,7 +2115,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_infinity_throughput",
-          "line": 1078,
+          "line": 1093,
           "called": [
             "Err",
             "make_report",
@@ -2125,7 +2128,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_nan_stddev",
-          "line": 1101,
+          "line": 1116,
           "called": [
             "Err",
             "make_report",
@@ -2137,7 +2140,7 @@
         {
           "kind": "fn",
           "name": "save_rejects_negative_mean_ns",
-          "line": 1119,
+          "line": 1134,
           "called": [
             "Err",
             "make_report",
@@ -2149,7 +2152,7 @@
         {
           "kind": "fn",
           "name": "load_rejects_negative_stddev",
-          "line": 1138,
+          "line": 1153,
           "called": [
             "Err",
             "json",
@@ -2159,7 +2162,7 @@
         {
           "kind": "fn",
           "name": "compare_with_nan_threshold_returns_within_tolerance",
-          "line": 1186,
+          "line": 1201,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -2168,7 +2171,7 @@
         {
           "kind": "fn",
           "name": "compare_with_inf_threshold_returns_within_tolerance",
-          "line": 1196,
+          "line": 1211,
           "called": [
             "compare_against_baseline",
             "make_report"
@@ -2177,16 +2180,6 @@
         {
           "kind": "fn",
           "name": "human_summary_contains_key_fields",
-          "line": 1205,
-          "called": [
-            "make_report",
-            "report",
-            "to_human_summary"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "human_summary_shows_hinted_wire_mode",
           "line": 1220,
           "called": [
             "make_report",
@@ -2196,8 +2189,18 @@
         },
         {
           "kind": "fn",
+          "name": "human_summary_shows_hinted_wire_mode",
+          "line": 1235,
+          "called": [
+            "make_report",
+            "report",
+            "to_human_summary"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "wire_mode_mismatch_is_not_comparable",
-          "line": 1232,
+          "line": 1247,
           "called": [
             "clone",
             "compare_against_baseline",
@@ -2207,7 +2210,7 @@
         {
           "kind": "fn",
           "name": "persistent_mode_mismatch_is_not_comparable",
-          "line": 1259,
+          "line": 1274,
           "called": [
             "clone",
             "compare_against_baseline",
@@ -2217,7 +2220,7 @@
         {
           "kind": "fn",
           "name": "same_wire_mode_compares_normally",
-          "line": 1281,
+          "line": 1296,
           "called": [
             "compare_against_baseline",
             "iter",
@@ -2227,7 +2230,7 @@
         {
           "kind": "fn",
           "name": "legacy_baseline_without_emit_hints_loads_as_false",
-          "line": 1302,
+          "line": 1317,
           "called": [
             "json",
             "path"
@@ -2236,7 +2239,7 @@
         {
           "kind": "fn",
           "name": "emit_hints_round_trips",
-          "line": 1347,
+          "line": 1362,
           "called": [
             "make_report",
             "path",
@@ -2247,7 +2250,7 @@
         {
           "kind": "fn",
           "name": "regression_detail_fields",
-          "line": 1360,
+          "line": 1375,
           "called": [
             "RegressionDetail",
             "name"
@@ -2256,7 +2259,7 @@
         {
           "kind": "fn",
           "name": "regression_metric_names_distinct",
-          "line": 1374,
+          "line": 1389,
           "called": [
             "insert",
             "name"
@@ -2753,6 +2756,7 @@
           "name": "read_exact_with_eof_truncated_reason",
           "line": 1169,
           "called": [
+            "b",
             "read_exact_with_eof"
           ]
         },
@@ -9267,13 +9271,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 129,
+          "line": 134,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lean_event_corpus_header_consistent",
-          "line": 139,
+          "line": 144,
           "called": [
             "EXPECTED_FIXTURE_IDENTIFIER",
             "KNOWN_EVENT_TAG_COUNT",
@@ -9287,7 +9291,7 @@
         {
           "kind": "fn",
           "name": "lean_event_peek_tag_matches_for_all_entries",
-          "line": 161,
+          "line": 166,
           "called": [
             "bytes",
             "decode_hex",
@@ -9301,7 +9305,7 @@
         {
           "kind": "fn",
           "name": "lean_event_classify_known_matches_name",
-          "line": 182,
+          "line": 187,
           "called": [
             "bytes",
             "decode_hex",
@@ -9314,7 +9318,7 @@
         {
           "kind": "fn",
           "name": "lean_event_canonical_covers_all_known_tags",
-          "line": 215,
+          "line": 220,
           "called": [
             "KNOWN_EVENT_TAG_COUNT",
             "iter",
@@ -9325,7 +9329,7 @@
         {
           "kind": "fn",
           "name": "lean_event_gas_pool_family_classified",
-          "line": 241,
+          "line": 246,
           "called": [
             "bytes",
             "decode_hex",
@@ -13420,7 +13424,7 @@
         {
           "kind": "fn",
           "name": "build_truth_oracle",
-          "line": 267,
+          "line": 273,
           "called": [
             "CliConfig",
             "TruthOracle",
@@ -13433,7 +13437,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_bundle_oracle",
-          "line": 297,
+          "line": 303,
           "called": [
             "CliConfig",
             "TerminateBundleOracle",
@@ -13446,7 +13450,7 @@
         {
           "kind": "fn",
           "name": "parse_tracing_level",
-          "line": 313,
+          "line": 319,
           "called": [
             "as_str"
           ]
@@ -13962,7 +13966,7 @@
         {
           "kind": "fn",
           "name": "run",
-          "line": 1521,
+          "line": 1518,
           "called": [
             "Err",
             "ObserverError",
@@ -13979,7 +13983,7 @@
         {
           "kind": "fn",
           "name": "seed_watcher_for_tests",
-          "line": 1561,
+          "line": 1558,
           "called": [
             "L1Source",
             "Observer",
@@ -13992,7 +13996,7 @@
         {
           "kind": "fn",
           "name": "interruptible_sleep",
-          "line": 1570,
+          "line": 1567,
           "called": [
             "load",
             "min",
@@ -14002,7 +14006,7 @@
         {
           "kind": "fn",
           "name": "pivot_for_move",
-          "line": 1592,
+          "line": 1589,
           "called": [
             "GameState",
             "HonestMove",
@@ -14013,19 +14017,19 @@
         {
           "kind": "enum",
           "name": "EventHandling",
-          "line": 1605,
+          "line": 1602,
           "called": []
         },
         {
           "kind": "struct",
           "name": "IterationOutcome",
-          "line": 1617,
+          "line": 1614,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1631,
+          "line": 1628,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14051,7 +14055,7 @@
         {
           "kind": "fn",
           "name": "make_contract_addr",
-          "line": 1650,
+          "line": 1647,
           "called": [
             "EthAddress",
             "seed"
@@ -14060,7 +14064,7 @@
         {
           "kind": "fn",
           "name": "make_block_hash",
-          "line": 1656,
+          "line": 1653,
           "called": [
             "TopicHash",
             "seed"
@@ -14069,7 +14073,7 @@
         {
           "kind": "fn",
           "name": "commit",
-          "line": 1663,
+          "line": 1660,
           "called": [
             "StateCommit",
             "seed"
@@ -14078,7 +14082,7 @@
         {
           "kind": "fn",
           "name": "header",
-          "line": 1669,
+          "line": 1666,
           "called": [
             "BlockHeader",
             "TopicHash",
@@ -14088,7 +14092,7 @@
         {
           "kind": "fn",
           "name": "topic_from_u128",
-          "line": 1677,
+          "line": 1674,
           "called": [
             "TopicHash"
           ]
@@ -14096,7 +14100,7 @@
         {
           "kind": "fn",
           "name": "topic_from_u64",
-          "line": 1683,
+          "line": 1680,
           "called": [
             "TopicHash"
           ]
@@ -14104,7 +14108,7 @@
         {
           "kind": "fn",
           "name": "fresh_observer",
-          "line": 1693,
+          "line": 1690,
           "called": [
             "InMemoryL1Source",
             "MemoryTruthOracle",
@@ -14121,7 +14125,7 @@
         {
           "kind": "fn",
           "name": "iteration_no_op_on_empty_source",
-          "line": 1717,
+          "line": 1714,
           "called": [
             "fresh_observer",
             "run_iteration"
@@ -14130,7 +14134,7 @@
         {
           "kind": "fn",
           "name": "adopt_game_opened_event",
-          "line": 1733,
+          "line": 1730,
           "called": [
             "RawLog",
             "block_number",
@@ -14160,7 +14164,7 @@
         {
           "kind": "fn",
           "name": "cold_start_midpoint_event_on_settled_game_skipped",
-          "line": 1788,
+          "line": 1785,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14184,7 +14188,7 @@
         {
           "kind": "fn",
           "name": "cold_start_response_event_on_settled_game_skipped",
-          "line": 1841,
+          "line": 1838,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14208,7 +14212,7 @@
         {
           "kind": "fn",
           "name": "pivot_dedup_helper_populates_from_persistence_at_startup",
-          "line": 1895,
+          "line": 1892,
           "called": [
             "ResponseRecord",
             "WatcherConfig",
@@ -14226,7 +14230,7 @@
         {
           "kind": "fn",
           "name": "pivot_dedup_in_memory_cache_blocks_resubmission",
-          "line": 1939,
+          "line": 1936,
           "called": [
             "fresh_observer",
             "has_submitted_for_pivot",
@@ -14236,7 +14240,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_transitions_cold_start_game",
-          "line": 1952,
+          "line": 1949,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14261,7 +14265,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_unknown_game_is_noop",
-          "line": 2023,
+          "line": 2020,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14276,7 +14280,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_mismatched_deployment_id",
-          "line": 2055,
+          "line": 2052,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14299,7 +14303,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_refuses_to_resurrect_settled_game",
-          "line": 2123,
+          "line": 2120,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14322,7 +14326,7 @@
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_re_broadcasts",
-          "line": 2189,
+          "line": 2186,
           "called": [
             "ResponseRecord",
             "_",
@@ -14341,7 +14345,7 @@
         {
           "kind": "fn",
           "name": "h1_intent_record_recovery_marks_failed_on_broadcast_error",
-          "line": 2227,
+          "line": 2224,
           "called": [
             "ResponseRecord",
             "_",
@@ -14360,7 +14364,7 @@
         {
           "kind": "fn",
           "name": "iteration_pivot_rollback_clears_cache_on_failed_iteration",
-          "line": 2273,
+          "line": 2270,
           "called": [
             "fresh_observer",
             "insert",
@@ -14371,7 +14375,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_is_idempotent",
-          "line": 2297,
+          "line": 2294,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14393,7 +14397,7 @@
         {
           "kind": "fn",
           "name": "mark_state_known_rejects_degenerate_range",
-          "line": 2365,
+          "line": 2362,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14414,7 +14418,7 @@
         {
           "kind": "fn",
           "name": "stop_signal_halts_run_loop",
-          "line": 2424,
+          "line": 2421,
           "called": [
             "config",
             "fresh_observer",
@@ -14427,13 +14431,13 @@
         {
           "kind": "fn",
           "name": "iteration_outcome_fields",
-          "line": 2441,
+          "line": 2438,
           "called": []
         },
         {
           "kind": "fn",
           "name": "game_settled_updates_state",
-          "line": 2457,
+          "line": 2454,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14456,7 +14460,7 @@
         {
           "kind": "fn",
           "name": "settled_for_unknown_game_skipped",
-          "line": 2508,
+          "line": 2505,
           "called": [
             "block_number",
             "event",
@@ -14468,7 +14472,7 @@
         {
           "kind": "fn",
           "name": "midpoint_for_unknown_game_skipped",
-          "line": 2527,
+          "line": 2524,
           "called": [
             "block_number",
             "commit",
@@ -14481,7 +14485,7 @@
         {
           "kind": "fn",
           "name": "response_for_unknown_game_skipped",
-          "line": 2546,
+          "line": 2543,
           "called": [
             "block_number",
             "event",
@@ -14493,7 +14497,7 @@
         {
           "kind": "fn",
           "name": "state_root_submitted_skipped",
-          "line": 2564,
+          "line": 2561,
           "called": [
             "block_number",
             "commit",
@@ -14505,7 +14509,7 @@
         {
           "kind": "fn",
           "name": "resume_from_persistence",
-          "line": 2582,
+          "line": 2579,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14533,7 +14537,7 @@
         {
           "kind": "fn",
           "name": "duplicate_game_opened_idempotent",
-          "line": 2651,
+          "line": 2648,
           "called": [
             "block_number",
             "commit",
@@ -14546,7 +14550,7 @@
         {
           "kind": "fn",
           "name": "pivot_for_move_correct",
-          "line": 2672,
+          "line": 2669,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14560,7 +14564,7 @@
         {
           "kind": "fn",
           "name": "interruptible_sleep_responds_to_stop",
-          "line": 2731,
+          "line": 2728,
           "called": [
             "MemoryTerminateBundleOracle",
             "TerminateBundle",
@@ -14572,7 +14576,7 @@
         {
           "kind": "fn",
           "name": "make_terminate_bundle",
-          "line": 2755,
+          "line": 2752,
           "called": [
             "TerminateBundle",
             "commit",
@@ -14582,7 +14586,7 @@
         {
           "kind": "fn",
           "name": "observer_attaches_terminate_bundle_oracle",
-          "line": 2769,
+          "line": 2766,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14602,7 +14606,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_without_oracle_defers",
-          "line": 2819,
+          "line": 2816,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14621,7 +14625,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_with_matching_bundle_succeeds",
-          "line": 2858,
+          "line": 2855,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14645,7 +14649,7 @@
         {
           "kind": "fn",
           "name": "build_terminate_calldata_refuses_on_commit_mismatch",
-          "line": 2916,
+          "line": 2913,
           "called": [
             "Claim",
             "DisputedRange",
@@ -14667,7 +14671,7 @@
         {
           "kind": "fn",
           "name": "build_calldata_for_move_delegates_non_terminate",
-          "line": 2964,
+          "line": 2961,
           "called": [
             "Claim",
             "DisputedRange",
@@ -19275,19 +19279,21 @@
           "name": "bytes32_to_hex",
           "line": 229,
           "called": [
-            "b"
+            "_",
+            "b",
+            "write"
           ]
         },
         {
           "kind": "impl",
           "name": "FixtureGameState",
-          "line": 237,
+          "line": 239,
           "called": []
         },
         {
           "kind": "fn",
           "name": "decode",
-          "line": 238,
+          "line": 240,
           "called": [
             "DisputedRange",
             "Err",
@@ -19301,7 +19307,7 @@
         {
           "kind": "fn",
           "name": "encode",
-          "line": 272,
+          "line": 274,
           "called": [
             "FixtureGameState",
             "FixtureRange",
@@ -19314,13 +19320,13 @@
         {
           "kind": "impl",
           "name": "FixtureTransition",
-          "line": 300,
+          "line": 302,
           "called": []
         },
         {
           "kind": "fn",
           "name": "decode",
-          "line": 301,
+          "line": 303,
           "called": [
             "GameTransition",
             "hex_to_bytes32"
@@ -19329,7 +19335,7 @@
         {
           "kind": "fn",
           "name": "locate_fixture",
-          "line": 318,
+          "line": 320,
           "called": [
             "fixture"
           ]
@@ -19337,7 +19343,7 @@
         {
           "kind": "fn",
           "name": "load_corpus",
-          "line": 340,
+          "line": 342,
           "called": [
             "Fixture",
             "bytes",
@@ -19349,7 +19355,7 @@
         {
           "kind": "fn",
           "name": "rust_outcome_to_fixture",
-          "line": 353,
+          "line": 360,
           "called": [
             "Err",
             "FixtureOutcome",
@@ -19362,7 +19368,7 @@
         {
           "kind": "fn",
           "name": "fixture_outcome_to_canonical_form",
-          "line": 364,
+          "line": 371,
           "called": [
             "FixtureOutcome",
             "GameState",
@@ -19374,7 +19380,7 @@
         {
           "kind": "fn",
           "name": "rust_outcome_to_canonical_form",
-          "line": 373,
+          "line": 380,
           "called": [
             "Err",
             "GameError",
@@ -19386,7 +19392,7 @@
         {
           "kind": "fn",
           "name": "error_tag",
-          "line": 380,
+          "line": 387,
           "called": [
             "GameError"
           ]
@@ -19394,7 +19400,7 @@
         {
           "kind": "fn",
           "name": "corpus_loads_and_has_minimum_size",
-          "line": 395,
+          "line": 402,
           "called": [
             "count",
             "identifier",
@@ -19405,7 +19411,7 @@
         {
           "kind": "fn",
           "name": "every_trace_id_is_unique",
-          "line": 413,
+          "line": 420,
           "called": [
             "clone",
             "id",
@@ -19416,7 +19422,7 @@
         {
           "kind": "fn",
           "name": "every_trace_initial_state_decodes",
-          "line": 429,
+          "line": 436,
           "called": [
             "decode",
             "id",
@@ -19426,7 +19432,7 @@
         {
           "kind": "fn",
           "name": "every_step_outcome_byte_equals_lean_reference",
-          "line": 443,
+          "line": 450,
           "called": [
             "Err",
             "apply_transition",
@@ -19445,7 +19451,7 @@
         {
           "kind": "fn",
           "name": "rust_outcome_round_trips_through_fixture_encoding",
-          "line": 522,
+          "line": 529,
           "called": [
             "Claim",
             "DisputedRange",
@@ -19459,7 +19465,7 @@
         {
           "kind": "fn",
           "name": "outcome_encoder_recognises_ok_and_err",
-          "line": 557,
+          "line": 564,
           "called": [
             "Claim",
             "DisputedRange",
@@ -23878,7 +23884,6 @@
             "events",
             "flush",
             "is_empty",
-            "iter",
             "len",
             "push",
             "render_event"
@@ -28757,7 +28762,7 @@
         {
           "kind": "fn",
           "name": "next_request_id",
-          "line": 51,
+          "line": 50,
           "called": [
             "REQUEST_COUNTER",
             "process_nonce"
@@ -28766,13 +28771,13 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 57,
+          "line": 56,
           "called": []
         },
         {
           "kind": "fn",
           "name": "request_ids_are_unique_and_well_formed",
-          "line": 61,
+          "line": 60,
           "called": [
             "b",
             "id",
@@ -28785,7 +28790,7 @@
         {
           "kind": "fn",
           "name": "ids_share_a_stable_process_nonce",
-          "line": 77,
+          "line": 76,
           "called": [
             "b",
             "id",
@@ -31446,7 +31451,7 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 111,
+          "line": 112,
           "called": [
             "len"
           ]
@@ -31454,7 +31459,7 @@
         {
           "kind": "fn",
           "name": "lean_event_fixture_header_ok",
-          "line": 127,
+          "line": 128,
           "called": [
             "EXPECTED_FIXTURE_IDENTIFIER",
             "count",
@@ -31467,7 +31472,7 @@
         {
           "kind": "fn",
           "name": "gateway_renders_every_frozen_lean_event_type",
-          "line": 137,
+          "line": 138,
           "called": [
             "MAX_KNOWN_TAG",
             "_",
@@ -31487,7 +31492,7 @@
         {
           "kind": "fn",
           "name": "gateway_event_envelope_value_rules",
-          "line": 202,
+          "line": 203,
           "called": [
             "actor",
             "decode_hex",
@@ -31509,13 +31514,13 @@
         {
           "kind": "const",
           "name": "TOKEN",
-          "line": 46,
+          "line": 47,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Harness",
-          "line": 50,
+          "line": 51,
           "called": [
             "AppState",
             "SqliteStorage",
@@ -31526,7 +31531,7 @@
         {
           "kind": "impl",
           "name": "Drop for Harness",
-          "line": 61,
+          "line": 62,
           "called": [
             "Harness"
           ]
@@ -31534,7 +31539,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 62,
+          "line": 63,
           "called": [
             "_",
             "handle",
@@ -31545,7 +31550,7 @@
         {
           "kind": "fn",
           "name": "start_harness",
-          "line": 72,
+          "line": 73,
           "called": [
             "Harness",
             "start_harness_full"
@@ -31554,7 +31559,7 @@
         {
           "kind": "fn",
           "name": "start_harness_rps",
-          "line": 77,
+          "line": 78,
           "called": [
             "Harness",
             "start_harness_full"
@@ -31563,7 +31568,7 @@
         {
           "kind": "fn",
           "name": "start_harness_full",
-          "line": 85,
+          "line": 86,
           "called": [
             "Harness",
             "start_harness_cfg"
@@ -31572,7 +31577,7 @@
         {
           "kind": "fn",
           "name": "start_harness_events",
-          "line": 92,
+          "line": 93,
           "called": [
             "Harness",
             "start_harness_cfg"
@@ -31581,7 +31586,7 @@
         {
           "kind": "fn",
           "name": "start_harness_cfg",
-          "line": 98,
+          "line": 99,
           "called": [
             "CURRENT_EPOCH_KEY",
             "CURSOR_KEY",
@@ -31616,19 +31621,19 @@
         {
           "kind": "struct",
           "name": "Resp",
-          "line": 182,
+          "line": 183,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Resp",
-          "line": 188,
+          "line": 189,
           "called": []
         },
         {
           "kind": "fn",
           "name": "header",
-          "line": 190,
+          "line": 191,
           "called": [
             "_",
             "as_str",
@@ -31639,28 +31644,30 @@
         {
           "kind": "fn",
           "name": "json",
-          "line": 198,
+          "line": 199,
           "called": []
         },
         {
           "kind": "fn",
           "name": "http_get",
-          "line": 210,
+          "line": 211,
           "called": [
             "Resp",
+            "_",
             "addr",
             "as_bytes",
             "ok",
             "path",
             "read_http_response",
             "req",
-            "stream"
+            "stream",
+            "write"
           ]
         },
         {
           "kind": "fn",
           "name": "http_post",
-          "line": 228,
+          "line": 229,
           "called": [
             "Resp",
             "addr",
@@ -31671,7 +31678,7 @@
         {
           "kind": "fn",
           "name": "http_post_idem",
-          "line": 239,
+          "line": 240,
           "called": [
             "Resp",
             "addr",
@@ -31682,9 +31689,10 @@
         {
           "kind": "fn",
           "name": "http_post_full",
-          "line": 252,
+          "line": 253,
           "called": [
             "Resp",
+            "_",
             "addr",
             "bytes",
             "head",
@@ -31692,13 +31700,14 @@
             "ok",
             "path",
             "read_http_response",
-            "stream"
+            "stream",
+            "write"
           ]
         },
         {
           "kind": "fn",
           "name": "read_http_response",
-          "line": 284,
+          "line": 285,
           "called": [
             "Err",
             "Resp",
@@ -31711,7 +31720,7 @@
         {
           "kind": "fn",
           "name": "try_parse",
-          "line": 302,
+          "line": 303,
           "called": [
             "Resp",
             "_",
@@ -31726,7 +31735,7 @@
         {
           "kind": "fn",
           "name": "get",
-          "line": 333,
+          "line": 334,
           "called": [
             "Resp",
             "TOKEN",
@@ -31738,7 +31747,7 @@
         {
           "kind": "fn",
           "name": "balance_list_endpoint_serves_contract_json",
-          "line": 338,
+          "line": 339,
           "called": [
             "addr",
             "as_str",
@@ -31756,7 +31765,7 @@
         {
           "kind": "fn",
           "name": "single_balance_and_budget_and_pool_endpoints",
-          "line": 358,
+          "line": 359,
           "called": [
             "addr",
             "get",
@@ -31768,7 +31777,7 @@
         {
           "kind": "fn",
           "name": "etag_revalidation_returns_304",
-          "line": 388,
+          "line": 389,
           "called": [
             "TOKEN",
             "addr",
@@ -31783,7 +31792,7 @@
         {
           "kind": "fn",
           "name": "auth_gate_enforced_on_reads",
-          "line": 414,
+          "line": 415,
           "called": [
             "addr",
             "http_get",
@@ -31793,7 +31802,7 @@
         {
           "kind": "fn",
           "name": "concurrent_writer_keeps_reads_well_formed_and_monotonic",
-          "line": 443,
+          "line": 444,
           "called": [
             "CURSOR_KEY",
             "_",
@@ -31818,7 +31827,7 @@
         {
           "kind": "struct",
           "name": "MockHost",
-          "line": 491,
+          "line": 492,
           "called": [
             "addr",
             "handle",
@@ -31828,13 +31837,13 @@
         {
           "kind": "impl",
           "name": "MockHost",
-          "line": 498,
+          "line": 499,
           "called": []
         },
         {
           "kind": "fn",
           "name": "start",
-          "line": 499,
+          "line": 500,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE",
             "Err",
@@ -31860,7 +31869,7 @@
         {
           "kind": "impl",
           "name": "Drop for MockHost",
-          "line": 551,
+          "line": 552,
           "called": [
             "MockHost"
           ]
@@ -31868,7 +31877,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 552,
+          "line": 553,
           "called": [
             "_",
             "handle",
@@ -31879,7 +31888,7 @@
         {
           "kind": "fn",
           "name": "submit_octet_stream_round_trips_to_host",
-          "line": 561,
+          "line": 562,
           "called": [
             "TOKEN",
             "addr",
@@ -31893,7 +31902,7 @@
         {
           "kind": "fn",
           "name": "submit_json_base64_round_trips_and_maps_not_admissible",
-          "line": 580,
+          "line": 581,
           "called": [
             "TOKEN",
             "addr",
@@ -31906,7 +31915,7 @@
         {
           "kind": "fn",
           "name": "submit_without_host_is_503",
-          "line": 595,
+          "line": 596,
           "called": [
             "TOKEN",
             "addr",
@@ -31918,7 +31927,7 @@
         {
           "kind": "fn",
           "name": "submit_unsupported_content_type_is_415",
-          "line": 609,
+          "line": 610,
           "called": [
             "TOKEN",
             "addr",
@@ -31931,7 +31940,7 @@
         {
           "kind": "fn",
           "name": "submit_oversize_body_is_413",
-          "line": 617,
+          "line": 618,
           "called": [
             "TOKEN",
             "addr",
@@ -31943,7 +31952,7 @@
         {
           "kind": "fn",
           "name": "submit_requires_auth",
-          "line": 634,
+          "line": 635,
           "called": [
             "addr",
             "b",
@@ -31955,7 +31964,7 @@
         {
           "kind": "fn",
           "name": "idempotency_key_replays_cached_response_without_resubmit",
-          "line": 649,
+          "line": 650,
           "called": [
             "TOKEN",
             "addr",
@@ -31970,7 +31979,7 @@
         {
           "kind": "fn",
           "name": "rate_limit_returns_429_with_retry_after",
-          "line": 681,
+          "line": 682,
           "called": [
             "_",
             "addr",
@@ -31984,7 +31993,7 @@
         {
           "kind": "fn",
           "name": "event_frame",
-          "line": 713,
+          "line": 714,
           "called": [
             "KIND_EVENT",
             "actor",
@@ -31996,7 +32005,7 @@
         {
           "kind": "struct",
           "name": "MockEventSubscribe",
-          "line": 733,
+          "line": 734,
           "called": [
             "addr",
             "handle",
@@ -32006,13 +32015,13 @@
         {
           "kind": "impl",
           "name": "MockEventSubscribe",
-          "line": 739,
+          "line": 740,
           "called": []
         },
         {
           "kind": "fn",
           "name": "start",
-          "line": 740,
+          "line": 741,
           "called": [
             "Err",
             "_",
@@ -32031,7 +32040,7 @@
         {
           "kind": "impl",
           "name": "Drop for MockEventSubscribe",
-          "line": 781,
+          "line": 782,
           "called": [
             "MockEventSubscribe"
           ]
@@ -32039,7 +32048,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 782,
+          "line": 783,
           "called": [
             "_",
             "handle",
@@ -32050,7 +32059,7 @@
         {
           "kind": "fn",
           "name": "events_backfill_endpoint_serves_a_group_complete_page",
-          "line": 791,
+          "line": 792,
           "called": [
             "addr",
             "event_frame",
@@ -32067,7 +32076,7 @@
         {
           "kind": "fn",
           "name": "events_backfill_requires_auth_and_validates_query",
-          "line": 819,
+          "line": 820,
           "called": [
             "addr",
             "event_frame",
@@ -32081,7 +32090,7 @@
         {
           "kind": "struct",
           "name": "SseHarness",
-          "line": 837,
+          "line": 838,
           "called": [
             "AppState",
             "addr",
@@ -32091,7 +32100,7 @@
         {
           "kind": "impl",
           "name": "Drop for SseHarness",
-          "line": 844,
+          "line": 845,
           "called": [
             "SseHarness"
           ]
@@ -32099,7 +32108,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 845,
+          "line": 846,
           "called": [
             "_",
             "handle",
@@ -32110,7 +32119,7 @@
         {
           "kind": "fn",
           "name": "start_sse_harness",
-          "line": 858,
+          "line": 859,
           "called": [
             "SseHarness",
             "start_sse_harness_cfg"
@@ -32119,7 +32128,7 @@
         {
           "kind": "fn",
           "name": "start_sse_harness_cfg",
-          "line": 862,
+          "line": 863,
           "called": [
             "Config",
             "SseConfig",
@@ -32147,7 +32156,7 @@
         {
           "kind": "fn",
           "name": "ring_len",
-          "line": 920,
+          "line": 921,
           "called": [
             "SseHarness",
             "fanout",
@@ -32160,7 +32169,7 @@
         {
           "kind": "fn",
           "name": "event_stream_serves_live_records_over_sse",
-          "line": 932,
+          "line": 933,
           "called": [
             "Err",
             "_",
@@ -32178,7 +32187,7 @@
         {
           "kind": "fn",
           "name": "event_stream_without_upstream_is_503",
-          "line": 1000,
+          "line": 1001,
           "called": [
             "addr",
             "get",
@@ -32190,7 +32199,7 @@
         {
           "kind": "fn",
           "name": "responses_carry_a_request_id_and_problem_instance",
-          "line": 1011,
+          "line": 1012,
           "called": [
             "addr",
             "get",
@@ -32203,7 +32212,7 @@
         {
           "kind": "fn",
           "name": "open_sse_stream",
-          "line": 1040,
+          "line": 1041,
           "called": [
             "addr",
             "as_bytes",
@@ -32213,7 +32222,7 @@
         {
           "kind": "fn",
           "name": "read_until",
-          "line": 1055,
+          "line": 1056,
           "called": [
             "Err",
             "_",
@@ -32225,7 +32234,7 @@
         {
           "kind": "fn",
           "name": "active_streams",
-          "line": 1074,
+          "line": 1075,
           "called": [
             "SseHarness",
             "load",
@@ -32235,7 +32244,7 @@
         {
           "kind": "fn",
           "name": "wait_active_streams",
-          "line": 1079,
+          "line": 1080,
           "called": [
             "SseHarness",
             "active_streams",
@@ -32245,7 +32254,7 @@
         {
           "kind": "fn",
           "name": "wait_ring_len",
-          "line": 1091,
+          "line": 1092,
           "called": [
             "SseHarness",
             "end",
@@ -32255,7 +32264,7 @@
         {
           "kind": "fn",
           "name": "concurrent_sse_clients_all_receive_the_fan_out",
-          "line": 1103,
+          "line": 1104,
           "called": [
             "_",
             "active_streams",
@@ -32273,7 +32282,7 @@
         {
           "kind": "fn",
           "name": "repeated_stream_open_close_releases_every_slot_no_leak",
-          "line": 1130,
+          "line": 1131,
           "called": [
             "SseConfig",
             "_",
@@ -32524,7 +32533,7 @@
         {
           "kind": "fn",
           "name": "default_output_path",
-          "line": 94,
+          "line": 100,
           "called": [
             "push"
           ]
@@ -32532,7 +32541,7 @@
         {
           "kind": "fn",
           "name": "build_corpus",
-          "line": 104,
+          "line": 110,
           "called": [
             "FixtureRecord",
             "_",
@@ -32548,7 +32557,7 @@
         {
           "kind": "fn",
           "name": "make_record",
-          "line": 192,
+          "line": 198,
           "called": [
             "FixtureRecord",
             "keccak256",
@@ -34071,7 +34080,7 @@
         {
           "kind": "enum",
           "name": "GateRejection",
-          "line": 944,
+          "line": 923,
           "called": [
             "error"
           ]
@@ -34079,19 +34088,19 @@
         {
           "kind": "impl",
           "name": "GateRejection",
-          "line": 1024,
+          "line": 1003,
           "called": []
         },
         {
           "kind": "fn",
           "name": "reason",
-          "line": 1029,
+          "line": 1008,
           "called": []
         },
         {
           "kind": "struct",
           "name": "BudgetGate",
-          "line": 1055,
+          "line": 1034,
           "called": [
             "BudgetPolicy",
             "EpochBudgetState",
@@ -34104,13 +34113,13 @@
         {
           "kind": "impl",
           "name": "BudgetGate",
-          "line": 1087,
+          "line": 1066,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 1091,
+          "line": 1070,
           "called": [
             "BudgetPolicy",
             "balances",
@@ -34122,7 +34131,7 @@
         {
           "kind": "fn",
           "name": "with_ledger",
-          "line": 1106,
+          "line": 1085,
           "called": [
             "BudgetPolicy",
             "EpochBudgetState",
@@ -34135,13 +34144,13 @@
         {
           "kind": "fn",
           "name": "with_strict_checks",
-          "line": 1126,
+          "line": 1105,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with_epoch_length",
-          "line": 1137,
+          "line": 1116,
           "called": [
             "epoch_length"
           ]
@@ -34149,13 +34158,13 @@
         {
           "kind": "fn",
           "name": "is_strict",
-          "line": 1144,
+          "line": 1123,
           "called": []
         },
         {
           "kind": "fn",
           "name": "effective_epoch",
-          "line": 1152,
+          "line": 1131,
           "called": [
             "current_epoch",
             "epoch_length",
@@ -34165,7 +34174,7 @@
         {
           "kind": "fn",
           "name": "set_balance",
-          "line": 1163,
+          "line": 1138,
           "called": [
             "actor",
             "balance",
@@ -34176,7 +34185,7 @@
         {
           "kind": "fn",
           "name": "allow_delegate",
-          "line": 1169,
+          "line": 1144,
           "called": [
             "insert",
             "signer"
@@ -34185,7 +34194,7 @@
         {
           "kind": "fn",
           "name": "policy",
-          "line": 1175,
+          "line": 1150,
           "called": [
             "BudgetPolicy"
           ]
@@ -34193,7 +34202,7 @@
         {
           "kind": "fn",
           "name": "ledger",
-          "line": 1181,
+          "line": 1156,
           "called": [
             "EpochBudgetState"
           ]
@@ -34201,7 +34210,7 @@
         {
           "kind": "fn",
           "name": "current_budget",
-          "line": 1189,
+          "line": 1164,
           "called": [
             "actor",
             "effective_epoch",
@@ -34213,7 +34222,7 @@
         {
           "kind": "fn",
           "name": "balance_of",
-          "line": 1196,
+          "line": 1171,
           "called": [
             "actor",
             "balances",
@@ -34223,7 +34232,7 @@
         {
           "kind": "fn",
           "name": "evaluate",
-          "line": 1219,
+          "line": 1194,
           "called": [
             "BRIDGE_ACTOR",
             "EpochBudgetState",
@@ -34248,7 +34257,7 @@
         {
           "kind": "fn",
           "name": "admit",
-          "line": 1397,
+          "line": 1372,
           "called": [
             "GateRejection",
             "SignedActionBudgetView",
@@ -34261,7 +34270,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1409,
+          "line": 1384,
           "called": [
             "ActionBudgetKind",
             "ActorBudget",
@@ -34280,7 +34289,7 @@
         {
           "kind": "fn",
           "name": "u",
-          "line": 1420,
+          "line": 1395,
           "called": [
             "CBE_TAG_UINT"
           ]
@@ -34288,7 +34297,7 @@
         {
           "kind": "fn",
           "name": "bytes",
-          "line": 1427,
+          "line": 1402,
           "called": [
             "len"
           ]
@@ -34296,13 +34305,13 @@
         {
           "kind": "fn",
           "name": "cat",
-          "line": 1435,
+          "line": 1410,
           "called": []
         },
         {
           "kind": "fn",
           "name": "signed",
-          "line": 1441,
+          "line": 1416,
           "called": [
             "action",
             "bytes",
@@ -34314,7 +34323,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_encode_known_vector",
-          "line": 1456,
+          "line": 1431,
           "called": [
             "ActorBudget",
             "b",
@@ -34324,7 +34333,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_encode_known_vector",
-          "line": 1472,
+          "line": 1447,
           "called": [
             "encode"
           ]
@@ -34332,7 +34341,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_encode_known_vector",
-          "line": 1488,
+          "line": 1463,
           "called": [
             "ActorBudget",
             "CBE_TAG_MAP",
@@ -34344,7 +34353,7 @@
         {
           "kind": "fn",
           "name": "empty_epoch_budget_state_encode",
-          "line": 1582,
+          "line": 1557,
           "called": [
             "CBE_TAG_MAP",
             "encode"
@@ -34353,7 +34362,7 @@
         {
           "kind": "fn",
           "name": "encode_deterministic",
-          "line": 1589,
+          "line": 1564,
           "called": [
             "ActorBudget",
             "b",
@@ -34363,7 +34372,7 @@
         {
           "kind": "fn",
           "name": "mk_bounded_clamps_action_cost",
-          "line": 1603,
+          "line": 1578,
           "called": [
             "action_cost"
           ]
@@ -34371,7 +34380,7 @@
         {
           "kind": "fn",
           "name": "policy_accessors",
-          "line": 1611,
+          "line": 1586,
           "called": [
             "action_cost",
             "current_epoch",
@@ -34381,7 +34390,7 @@
         {
           "kind": "fn",
           "name": "normalise_noop_if_current",
-          "line": 1624,
+          "line": 1599,
           "called": [
             "ActorBudget",
             "b",
@@ -34391,7 +34400,7 @@
         {
           "kind": "fn",
           "name": "normalise_floors_stale_cell",
-          "line": 1636,
+          "line": 1611,
           "called": [
             "ActorBudget",
             "b",
@@ -34401,7 +34410,7 @@
         {
           "kind": "fn",
           "name": "consume_semantics",
-          "line": 1656,
+          "line": 1631,
           "called": [
             "ActorBudget",
             "b",
@@ -34411,7 +34420,7 @@
         {
           "kind": "fn",
           "name": "top_up_semantics",
-          "line": 1680,
+          "line": 1655,
           "called": [
             "ActorBudget",
             "b",
@@ -34421,7 +34430,7 @@
         {
           "kind": "fn",
           "name": "top_up_saturates",
-          "line": 1698,
+          "line": 1673,
           "called": [
             "ActorBudget",
             "b",
@@ -34431,7 +34440,7 @@
         {
           "kind": "fn",
           "name": "current_budget_missing_cell",
-          "line": 1711,
+          "line": 1686,
           "called": [
             "current_budget"
           ]
@@ -34439,7 +34448,7 @@
         {
           "kind": "fn",
           "name": "consume_locality",
-          "line": 1721,
+          "line": 1696,
           "called": [
             "consume_in_place",
             "current_budget"
@@ -34448,7 +34457,7 @@
         {
           "kind": "fn",
           "name": "consume_insufficient_no_mutation",
-          "line": 1731,
+          "line": 1706,
           "called": [
             "consume_in_place",
             "is_empty"
@@ -34457,7 +34466,7 @@
         {
           "kind": "fn",
           "name": "decode_transfer_ordinary",
-          "line": 1742,
+          "line": 1717,
           "called": [
             "action",
             "cat",
@@ -34472,7 +34481,7 @@
         {
           "kind": "fn",
           "name": "decode_simple_variants",
-          "line": 1753,
+          "line": 1728,
           "called": [
             "action",
             "bytes",
@@ -34489,7 +34498,7 @@
         {
           "kind": "fn",
           "name": "decode_deposit_with_fee",
-          "line": 1787,
+          "line": 1762,
           "called": [
             "BRIDGE_ACTOR",
             "action",
@@ -34505,7 +34514,7 @@
         {
           "kind": "fn",
           "name": "decode_top_up_action_budget",
-          "line": 1804,
+          "line": 1779,
           "called": [
             "action",
             "cat",
@@ -34520,7 +34529,7 @@
         {
           "kind": "fn",
           "name": "decode_top_up_action_budget_for",
-          "line": 1823,
+          "line": 1798,
           "called": [
             "action",
             "cat",
@@ -34535,7 +34544,7 @@
         {
           "kind": "fn",
           "name": "decode_unsupported_tags",
-          "line": 1844,
+          "line": 1819,
           "called": [
             "Err",
             "action",
@@ -34549,7 +34558,7 @@
         {
           "kind": "fn",
           "name": "decode_unknown_tag",
-          "line": 1859,
+          "line": 1834,
           "called": [
             "Err",
             "action",
@@ -34563,7 +34572,7 @@
         {
           "kind": "fn",
           "name": "decode_truncated_no_signer",
-          "line": 1871,
+          "line": 1846,
           "called": [
             "Err",
             "action",
@@ -34575,7 +34584,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_missing_nonce_sig",
-          "line": 1884,
+          "line": 1859,
           "called": [
             "Err",
             "cat",
@@ -34586,7 +34595,7 @@
         {
           "kind": "fn",
           "name": "decode_view_rejects_trailing_after_sig",
-          "line": 1906,
+          "line": 1881,
           "called": [
             "Err",
             "action",
@@ -34599,7 +34608,7 @@
         {
           "kind": "fn",
           "name": "decode_wrong_tag",
-          "line": 1918,
+          "line": 1893,
           "called": [
             "Err",
             "bytes",
@@ -34611,7 +34620,7 @@
         {
           "kind": "fn",
           "name": "decode_never_panics",
-          "line": 1933,
+          "line": 1908,
           "called": [
             "_",
             "decode_budget_view",
@@ -34622,7 +34631,7 @@
         {
           "kind": "fn",
           "name": "view",
-          "line": 1945,
+          "line": 1920,
           "called": [
             "ActionBudgetKind",
             "SignedActionBudgetView",
@@ -34633,7 +34642,7 @@
         {
           "kind": "fn",
           "name": "gate_consume_then_exhaust",
-          "line": 1954,
+          "line": 1929,
           "called": [
             "Err",
             "admit",
@@ -34645,7 +34654,7 @@
         {
           "kind": "fn",
           "name": "gate_genesis_default_denies",
-          "line": 1969,
+          "line": 1944,
           "called": [
             "Err",
             "admit",
@@ -34656,7 +34665,7 @@
         {
           "kind": "fn",
           "name": "gate_bridge_actor_exempt",
-          "line": 1981,
+          "line": 1956,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -34669,7 +34678,7 @@
         {
           "kind": "fn",
           "name": "gate_per_actor_isolation",
-          "line": 1993,
+          "line": 1968,
           "called": [
             "admit",
             "current_budget",
@@ -34680,7 +34689,7 @@
         {
           "kind": "fn",
           "name": "gate_top_up_grants_signer",
-          "line": 2004,
+          "line": 1979,
           "called": [
             "admit",
             "current_budget",
@@ -34691,7 +34700,7 @@
         {
           "kind": "fn",
           "name": "gate_refund_consumes_action_cost_plus_units",
-          "line": 2024,
+          "line": 1999,
           "called": [
             "admit",
             "current_budget",
@@ -34702,7 +34711,7 @@
         {
           "kind": "fn",
           "name": "gate_refund_rejections",
-          "line": 2043,
+          "line": 2018,
           "called": [
             "BRIDGE_ACTOR",
             "Err",
@@ -34714,7 +34723,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_refund_enforces_pool_solvency",
-          "line": 2092,
+          "line": 2067,
           "called": [
             "Err",
             "admit",
@@ -34729,7 +34738,7 @@
         {
           "kind": "fn",
           "name": "gate_deposit_with_fee_grants_recipient",
-          "line": 2116,
+          "line": 2091,
           "called": [
             "BRIDGE_ACTOR",
             "admit",
@@ -34741,7 +34750,7 @@
         {
           "kind": "fn",
           "name": "gate_delegated_top_up_grants_recipient",
-          "line": 2132,
+          "line": 2107,
           "called": [
             "admit",
             "current_budget",
@@ -34752,7 +34761,7 @@
         {
           "kind": "fn",
           "name": "gate_safety_conjuncts",
-          "line": 2152,
+          "line": 2127,
           "called": [
             "BRIDGE_ACTOR",
             "Err",
@@ -34764,7 +34773,7 @@
         {
           "kind": "fn",
           "name": "gate_reject_does_not_mutate",
-          "line": 2234,
+          "line": 2209,
           "called": [
             "admit",
             "clone",
@@ -34776,7 +34785,7 @@
         {
           "kind": "fn",
           "name": "rejection_reason_strings",
-          "line": 2258,
+          "line": 2233,
           "called": [
             "reason"
           ]
@@ -34784,7 +34793,7 @@
         {
           "kind": "fn",
           "name": "permissive_gate_admits_topup_without_balance",
-          "line": 2299,
+          "line": 2274,
           "called": [
             "admit",
             "gate",
@@ -34795,7 +34804,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_enforces_gas_balance",
-          "line": 2318,
+          "line": 2293,
           "called": [
             "Err",
             "admit",
@@ -34811,7 +34820,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_gas_balance_is_resource_keyed",
-          "line": 2344,
+          "line": 2319,
           "called": [
             "Err",
             "admit",
@@ -34825,7 +34834,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_enforces_delegated_consent",
-          "line": 2365,
+          "line": 2340,
           "called": [
             "Err",
             "admit",
@@ -34841,7 +34850,7 @@
         {
           "kind": "fn",
           "name": "strict_gate_keeps_balance_independent_conjuncts",
-          "line": 2397,
+          "line": 2372,
           "called": [
             "Err",
             "evaluate",
@@ -34854,7 +34863,7 @@
         {
           "kind": "fn",
           "name": "gate_drives_decoded_view",
-          "line": 2414,
+          "line": 2389,
           "called": [
             "Err",
             "action",
@@ -34869,7 +34878,7 @@
         {
           "kind": "fn",
           "name": "gate_with_ledger_preseeds",
-          "line": 2426,
+          "line": 2401,
           "called": [
             "current_budget",
             "gate",
@@ -34880,13 +34889,13 @@
         {
           "kind": "fn",
           "name": "types_are_send_sync",
-          "line": 2436,
+          "line": 2411,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 2437,
+          "line": 2412,
           "called": [
             "ActorBudget",
             "BudgetGate",
@@ -34897,7 +34906,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_encode_multibyte_le",
-          "line": 2452,
+          "line": 2427,
           "called": [
             "ActorBudget",
             "b",
@@ -34907,7 +34916,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_encode_multibyte_le",
-          "line": 2475,
+          "line": 2450,
           "called": [
             "cat",
             "encode",
@@ -34917,7 +34926,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_encode_multikey_ascending",
-          "line": 2487,
+          "line": 2462,
           "called": [
             "ActorBudget",
             "CBE_TAG_MAP",
@@ -34931,7 +34940,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_orders_keys_unsigned",
-          "line": 2528,
+          "line": 2503,
           "called": [
             "CBE_TAG_UINT",
             "encode",
@@ -34941,7 +34950,7 @@
         {
           "kind": "fn",
           "name": "decode_recovers_large_signer",
-          "line": 2544,
+          "line": 2519,
           "called": [
             "action",
             "cat",
@@ -34956,7 +34965,7 @@
         {
           "kind": "fn",
           "name": "gate_multi_actor_trace",
-          "line": 2559,
+          "line": 2534,
           "called": [
             "BRIDGE_ACTOR",
             "Err",
@@ -34971,7 +34980,7 @@
         {
           "kind": "fn",
           "name": "gate_epoch_advancement_replenishes",
-          "line": 2609,
+          "line": 2584,
           "called": [
             "Err",
             "admit",
@@ -34984,7 +34993,7 @@
         {
           "kind": "fn",
           "name": "gate_epoch_advancement_boundary_paces_free_tier",
-          "line": 2632,
+          "line": 2607,
           "called": [
             "admit",
             "effective_epoch",
@@ -34996,7 +35005,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_round_trip",
-          "line": 2649,
+          "line": 2624,
           "called": [
             "ActorBudget",
             "b",
@@ -35006,7 +35015,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_round_trip",
-          "line": 2667,
+          "line": 2642,
           "called": [
             "encode"
           ]
@@ -35014,7 +35023,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_round_trip",
-          "line": 2680,
+          "line": 2655,
           "called": [
             "ActorBudget",
             "empty",
@@ -35025,7 +35034,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_bad_policy_tag",
-          "line": 2710,
+          "line": 2685,
           "called": [
             "Err",
             "bytes",
@@ -35036,7 +35045,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_zero_action_cost",
-          "line": 2721,
+          "line": 2696,
           "called": [
             "Err",
             "bytes",
@@ -35047,7 +35056,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_unsorted_keys",
-          "line": 2732,
+          "line": 2707,
           "called": [
             "CBE_TAG_MAP",
             "Err",
@@ -35062,7 +35071,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_trailing_bytes",
-          "line": 2750,
+          "line": 2725,
           "called": [
             "Err",
             "bytes",
@@ -35073,7 +35082,7 @@
         {
           "kind": "fn",
           "name": "decode_truncated_is_unexpected_end",
-          "line": 2761,
+          "line": 2736,
           "called": [
             "Err"
           ]
@@ -35081,7 +35090,7 @@
         {
           "kind": "fn",
           "name": "decode_rejects_non_map_head",
-          "line": 2770,
+          "line": 2745,
           "called": [
             "Err",
             "bytes",
@@ -35092,7 +35101,7 @@
         {
           "kind": "fn",
           "name": "encode_view_bytes",
-          "line": 2782,
+          "line": 2757,
           "called": [
             "ActionBudgetKind",
             "action",
@@ -35106,7 +35115,7 @@
         {
           "kind": "fn",
           "name": "decode_view_round_trip_unit",
-          "line": 2843,
+          "line": 2818,
           "called": [
             "SignedActionBudgetView",
             "bytes",
@@ -35119,7 +35128,7 @@
         {
           "kind": "mod",
           "name": "prop",
-          "line": 2881,
+          "line": 2856,
           "called": [
             "ActionBudgetKind",
             "ActorBudget",
@@ -35132,7 +35141,7 @@
         {
           "kind": "fn",
           "name": "actor_budget_round_trip",
-          "line": 2892,
+          "line": 2867,
           "called": [
             "ActorBudget",
             "b",
@@ -35143,7 +35152,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_round_trip",
-          "line": 2899,
+          "line": 2874,
           "called": [
             "encode"
           ]
@@ -35151,7 +35160,7 @@
         {
           "kind": "fn",
           "name": "epoch_budget_state_round_trip",
-          "line": 2906,
+          "line": 2881,
           "called": [
             "ActorBudget",
             "b",
@@ -35162,7 +35171,7 @@
         {
           "kind": "fn",
           "name": "encode_deterministic",
-          "line": 2919,
+          "line": 2894,
           "called": [
             "ActorBudget",
             "b",
@@ -35173,7 +35182,7 @@
         {
           "kind": "fn",
           "name": "decode_view_ordinary",
-          "line": 2926,
+          "line": 2901,
           "called": [
             "SignedActionBudgetView",
             "bytes",
@@ -35186,7 +35195,7 @@
         {
           "kind": "fn",
           "name": "decode_view_topupfor",
-          "line": 2936,
+          "line": 2911,
           "called": [
             "SignedActionBudgetView",
             "bytes",
@@ -38660,7 +38669,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 523,
+          "line": 522,
           "called": [
             "Verdict",
             "VerdictResponse"
@@ -38669,7 +38678,7 @@
         {
           "kind": "fn",
           "name": "default_ok_stage_is_finalized",
-          "line": 533,
+          "line": 532,
           "called": [
             "ok_admission_stage"
           ]
@@ -38677,7 +38686,7 @@
         {
           "kind": "fn",
           "name": "set_ok_stage_overrides",
-          "line": 540,
+          "line": 539,
           "called": [
             "ok_admission_stage",
             "set_ok_stage"
@@ -38686,7 +38695,7 @@
         {
           "kind": "fn",
           "name": "set_ok_stage_doesnt_change_wire_verdict",
-          "line": 555,
+          "line": 554,
           "called": [
             "b",
             "r",
@@ -38699,7 +38708,7 @@
         {
           "kind": "fn",
           "name": "default_always_ok",
-          "line": 565,
+          "line": 564,
           "called": [
             "b",
             "len",
@@ -38710,7 +38719,7 @@
         {
           "kind": "fn",
           "name": "records_in_order",
-          "line": 576,
+          "line": 575,
           "called": [
             "b",
             "recorded",
@@ -38721,7 +38730,7 @@
         {
           "kind": "fn",
           "name": "responses_cycle",
-          "line": 589,
+          "line": 588,
           "called": [
             "b",
             "set_responses",
@@ -38732,7 +38741,7 @@
         {
           "kind": "fn",
           "name": "reason_survives",
-          "line": 607,
+          "line": 606,
           "called": [
             "b",
             "r",
@@ -38745,7 +38754,7 @@
         {
           "kind": "fn",
           "name": "empty_responses_reverts_to_ok",
-          "line": 621,
+          "line": 620,
           "called": [
             "b",
             "set_responses",
@@ -38756,7 +38765,7 @@
         {
           "kind": "fn",
           "name": "is_empty_flips",
-          "line": 631,
+          "line": 630,
           "called": [
             "b",
             "is_empty",
@@ -38766,7 +38775,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 640,
+          "line": 639,
           "called": [
             "identifier"
           ]
@@ -38774,13 +38783,13 @@
         {
           "kind": "fn",
           "name": "is_send_sync",
-          "line": 647,
+          "line": 646,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 648,
+          "line": 647,
           "called": [
             "MockKernel"
           ]
@@ -38788,7 +38797,7 @@
         {
           "kind": "fn",
           "name": "raw_bytes_preserved",
-          "line": 655,
+          "line": 654,
           "called": [
             "recorded",
             "submit"
@@ -38797,7 +38806,7 @@
         {
           "kind": "fn",
           "name": "transfer_sa",
-          "line": 663,
+          "line": 662,
           "called": [
             "signer"
           ]
@@ -38805,13 +38814,13 @@
         {
           "kind": "fn",
           "name": "u",
-          "line": 664,
+          "line": 663,
           "called": []
         },
         {
           "kind": "fn",
           "name": "b",
-          "line": 669,
+          "line": 668,
           "called": [
             "len",
             "signer",
@@ -38821,7 +38830,7 @@
         {
           "kind": "fn",
           "name": "budget_gate_set_then_clear",
-          "line": 687,
+          "line": 686,
           "called": [
             "budget_for",
             "clear_budget_gate",
@@ -38836,7 +38845,7 @@
         {
           "kind": "fn",
           "name": "non_ok_response_short_circuits_budget_gate",
-          "line": 705,
+          "line": 704,
           "called": [
             "budget_for",
             "r",
@@ -38851,13 +38860,13 @@
         {
           "kind": "fn",
           "name": "budget_gate_strict_mode_via_set_budget_gate",
-          "line": 725,
+          "line": 724,
           "called": []
         },
         {
           "kind": "fn",
           "name": "u",
-          "line": 729,
+          "line": 728,
           "called": [
             "r",
             "reason",
@@ -38870,7 +38879,7 @@
         {
           "kind": "mod",
           "name": "command",
-          "line": 755,
+          "line": 754,
           "called": [
             "Kernel",
             "KernelResponse"
@@ -38879,19 +38888,19 @@
         {
           "kind": "const",
           "name": "MAX_SUBPROCESS_OUTPUT",
-          "line": 770,
+          "line": 769,
           "called": []
         },
         {
           "kind": "const",
           "name": "KNOMOSIS_REASON_MARKER",
-          "line": 776,
+          "line": 775,
           "called": []
         },
         {
           "kind": "fn",
           "name": "budget_reason_from_stderr",
-          "line": 782,
+          "line": 781,
           "called": [
             "KNOMOSIS_REASON_MARKER",
             "is_empty"
@@ -38900,19 +38909,19 @@
         {
           "kind": "const",
           "name": "DEFAULT_TIMEOUT",
-          "line": 797,
+          "line": 796,
           "called": []
         },
         {
           "kind": "const",
           "name": "WAIT_POLL_INTERVAL",
-          "line": 804,
+          "line": 803,
           "called": []
         },
         {
           "kind": "struct",
           "name": "CommandKernel",
-          "line": 850,
+          "line": 849,
           "called": [
             "BudgetPolicy",
             "budget_policy",
@@ -38927,7 +38936,7 @@
         {
           "kind": "enum",
           "name": "CommandKernelError",
-          "line": 920,
+          "line": 919,
           "called": [
             "error",
             "path",
@@ -38937,13 +38946,13 @@
         {
           "kind": "impl",
           "name": "CommandKernel",
-          "line": 934,
+          "line": 933,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 946,
+          "line": 945,
           "called": [
             "CommandKernelError",
             "DEFAULT_TIMEOUT",
@@ -38962,7 +38971,7 @@
         {
           "kind": "fn",
           "name": "with_deployment_id",
-          "line": 984,
+          "line": 983,
           "called": [
             "hex"
           ]
@@ -38970,7 +38979,7 @@
         {
           "kind": "fn",
           "name": "with_budget_policy",
-          "line": 999,
+          "line": 998,
           "called": [
             "BudgetPolicy",
             "budget_policy",
@@ -38980,7 +38989,7 @@
         {
           "kind": "fn",
           "name": "with_epoch_length",
-          "line": 1009,
+          "line": 1008,
           "called": [
             "epoch_length"
           ]
@@ -38988,13 +38997,13 @@
         {
           "kind": "fn",
           "name": "epoch_length",
-          "line": 1020,
+          "line": 1019,
           "called": []
         },
         {
           "kind": "fn",
           "name": "budget_policy",
-          "line": 1026,
+          "line": 1025,
           "called": [
             "BudgetPolicy"
           ]
@@ -39002,7 +39011,7 @@
         {
           "kind": "fn",
           "name": "with_gas_pool_policy",
-          "line": 1045,
+          "line": 1044,
           "called": [
             "gas_pool"
           ]
@@ -39010,13 +39019,13 @@
         {
           "kind": "fn",
           "name": "gas_pool",
-          "line": 1053,
+          "line": 1052,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with_refund_rate",
-          "line": 1067,
+          "line": 1066,
           "called": [
             "refund_rate"
           ]
@@ -39024,37 +39033,37 @@
         {
           "kind": "fn",
           "name": "refund_rate",
-          "line": 1075,
+          "line": 1074,
           "called": []
         },
         {
           "kind": "fn",
           "name": "with_timeout",
-          "line": 1081,
+          "line": 1080,
           "called": []
         },
         {
           "kind": "fn",
           "name": "knomosis_binary",
-          "line": 1088,
+          "line": 1087,
           "called": []
         },
         {
           "kind": "fn",
           "name": "log_path",
-          "line": 1094,
+          "line": 1093,
           "called": []
         },
         {
           "kind": "fn",
           "name": "work_dir",
-          "line": 1101,
+          "line": 1100,
           "called": []
         },
         {
           "kind": "fn",
           "name": "frame_input",
-          "line": 1110,
+          "line": 1109,
           "called": [
             "to_vec"
           ]
@@ -39062,7 +39071,7 @@
         {
           "kind": "impl",
           "name": "Kernel for CommandKernel",
-          "line": 1115,
+          "line": 1114,
           "called": [
             "CommandKernel",
             "Kernel"
@@ -39071,7 +39080,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 1116,
+          "line": 1115,
           "called": [
             "Err",
             "KernelResponse",
@@ -39104,19 +39113,19 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 1344,
+          "line": 1343,
           "called": []
         },
         {
           "kind": "enum",
           "name": "WaitOutcome",
-          "line": 1350,
+          "line": 1349,
           "called": []
         },
         {
           "kind": "fn",
           "name": "wait_with_timeout",
-          "line": 1364,
+          "line": 1363,
           "called": [
             "Err",
             "WAIT_POLL_INTERVAL",
@@ -39127,7 +39136,7 @@
         {
           "kind": "fn",
           "name": "take_with_limit",
-          "line": 1396,
+          "line": 1395,
           "called": [
             "Err",
             "_",
@@ -39140,7 +39149,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1416,
+          "line": 1415,
           "called": [
             "CommandKernel",
             "CommandKernelError",
@@ -39153,7 +39162,7 @@
         {
           "kind": "fn",
           "name": "submit_retrying_spawn",
-          "line": 1445,
+          "line": 1444,
           "called": [
             "CommandKernel",
             "KernelResponse",
@@ -39167,7 +39176,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 1458,
+          "line": 1457,
           "called": [
             "MAX_SUBPROCESS_OUTPUT"
           ]
@@ -39175,7 +39184,7 @@
         {
           "kind": "fn",
           "name": "missing_binary_returns_error",
-          "line": 1464,
+          "line": 1463,
           "called": [
             "Err",
             "clone",
@@ -39185,7 +39194,7 @@
         {
           "kind": "fn",
           "name": "construct_with_existing_binary",
-          "line": 1480,
+          "line": 1479,
           "called": [
             "clone",
             "kernel",
@@ -39198,7 +39207,7 @@
         {
           "kind": "fn",
           "name": "work_dir_created",
-          "line": 1498,
+          "line": 1497,
           "called": [
             "clone",
             "path"
@@ -39207,7 +39216,7 @@
         {
           "kind": "fn",
           "name": "submit_with_true_returns_ok",
-          "line": 1513,
+          "line": 1512,
           "called": [
             "b",
             "kernel",
@@ -39219,7 +39228,7 @@
         {
           "kind": "fn",
           "name": "submit_with_false_returns_not_admissible",
-          "line": 1528,
+          "line": 1527,
           "called": [
             "b",
             "kernel",
@@ -39231,7 +39240,7 @@
         {
           "kind": "fn",
           "name": "submit_surfaces_knomosis_reason_marker",
-          "line": 1548,
+          "line": 1547,
           "called": [
             "b",
             "kernel",
@@ -39244,7 +39253,7 @@
         {
           "kind": "fn",
           "name": "submit_keeps_generic_reason_without_marker",
-          "line": 1569,
+          "line": 1568,
           "called": [
             "b",
             "kernel",
@@ -39257,7 +39266,7 @@
         {
           "kind": "fn",
           "name": "submit_cleans_up_temp_file",
-          "line": 1592,
+          "line": 1591,
           "called": [
             "_",
             "b",
@@ -39271,7 +39280,7 @@
         {
           "kind": "fn",
           "name": "with_deployment_id_succeeds",
-          "line": 1614,
+          "line": 1613,
           "called": [
             "b",
             "kernel",
@@ -39284,7 +39293,7 @@
         {
           "kind": "fn",
           "name": "with_timeout_succeeds",
-          "line": 1630,
+          "line": 1629,
           "called": [
             "path",
             "unix",
@@ -39294,7 +39303,7 @@
         {
           "kind": "fn",
           "name": "write_argv_capture_script",
-          "line": 1647,
+          "line": 1646,
           "called": [
             "unix"
           ]
@@ -39302,7 +39311,7 @@
         {
           "kind": "fn",
           "name": "budget_policy_flags_passed_to_subprocess",
-          "line": 1664,
+          "line": 1663,
           "called": [
             "argv",
             "b",
@@ -39320,7 +39329,7 @@
         {
           "kind": "fn",
           "name": "epoch_length_flag_passed_to_subprocess",
-          "line": 1705,
+          "line": 1704,
           "called": [
             "argv",
             "b",
@@ -39340,7 +39349,7 @@
         {
           "kind": "fn",
           "name": "epoch_length_zero_forwards_no_flag",
-          "line": 1733,
+          "line": 1732,
           "called": [
             "argv",
             "b",
@@ -39356,7 +39365,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_caps_flags_passed_to_subprocess",
-          "line": 1753,
+          "line": 1752,
           "called": [
             "argv",
             "b",
@@ -39375,7 +39384,7 @@
         {
           "kind": "fn",
           "name": "refund_rate_flags_passed_to_subprocess",
-          "line": 1787,
+          "line": 1786,
           "called": [
             "argv",
             "b",
@@ -39394,7 +39403,7 @@
         {
           "kind": "fn",
           "name": "no_refund_rate_passes_no_flags",
-          "line": 1823,
+          "line": 1822,
           "called": [
             "argv",
             "b",
@@ -39409,7 +39418,7 @@
         {
           "kind": "fn",
           "name": "no_gas_pool_policy_passes_no_gas_pool_flags",
-          "line": 1841,
+          "line": 1840,
           "called": [
             "argv",
             "b",
@@ -39424,7 +39433,7 @@
         {
           "kind": "fn",
           "name": "no_budget_policy_passes_no_budget_flags",
-          "line": 1859,
+          "line": 1858,
           "called": [
             "argv",
             "b",
@@ -39438,7 +39447,7 @@
         {
           "kind": "fn",
           "name": "with_budget_policy_records",
-          "line": 1877,
+          "line": 1876,
           "called": [
             "budget_policy",
             "kernel",
@@ -39449,7 +39458,7 @@
         {
           "kind": "fn",
           "name": "identifier_constant",
-          "line": 1897,
+          "line": 1896,
           "called": [
             "identifier",
             "kernel",
@@ -39459,13 +39468,13 @@
         {
           "kind": "fn",
           "name": "is_send_sync",
-          "line": 1911,
+          "line": 1910,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1912,
+          "line": 1911,
           "called": [
             "CommandKernel"
           ]
@@ -39473,13 +39482,13 @@
         {
           "kind": "fn",
           "name": "error_is_send_sync",
-          "line": 1919,
+          "line": 1918,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1920,
+          "line": 1919,
           "called": [
             "CommandKernelError"
           ]
@@ -39487,7 +39496,7 @@
         {
           "kind": "fn",
           "name": "timeout_bounds_subprocess_wall_time",
-          "line": 1935,
+          "line": 1934,
           "called": [
             "b",
             "kernel",
@@ -39502,7 +39511,7 @@
         {
           "kind": "fn",
           "name": "temp_file_creation_doesnt_follow_symlinks",
-          "line": 1983,
+          "line": 1982,
           "called": [
             "b",
             "clone",
@@ -39515,7 +39524,7 @@
         {
           "kind": "fn",
           "name": "spawn_lock_poisoning_recovers",
-          "line": 2029,
+          "line": 2028,
           "called": [
             "_",
             "b",
@@ -39530,7 +39539,7 @@
         {
           "kind": "fn",
           "name": "concurrent_calls_serialise",
-          "line": 2058,
+          "line": 2057,
           "called": [
             "_",
             "b",
@@ -39544,7 +39553,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 2080,
+          "line": 2079,
           "called": [
             "AdmissionReceipt",
             "AdmissionStage",
@@ -39557,19 +39566,19 @@
         {
           "kind": "fn",
           "name": "kernel_trait_is_object_safe",
-          "line": 2086,
+          "line": 2085,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 2087,
+          "line": 2086,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 2088,
+          "line": 2087,
           "called": [
             "Kernel",
             "Stub"
@@ -39578,7 +39587,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2089,
+          "line": 2088,
           "called": [
             "KernelResponse",
             "_"
@@ -39587,7 +39596,7 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2092,
+          "line": 2091,
           "called": [
             "Kernel",
             "Stub"
@@ -39596,19 +39605,19 @@
         {
           "kind": "fn",
           "name": "default_ok_stage_is_finalized",
-          "line": 2104,
+          "line": 2103,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 2105,
+          "line": 2104,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 2106,
+          "line": 2105,
           "called": [
             "Kernel",
             "Stub"
@@ -39617,7 +39626,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2107,
+          "line": 2106,
           "called": [
             "KernelResponse",
             "_"
@@ -39626,7 +39635,7 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2110,
+          "line": 2109,
           "called": [
             "Stub",
             "ok_admission_stage"
@@ -39635,19 +39644,19 @@
         {
           "kind": "fn",
           "name": "subscribable_kernel_is_object_safe",
-          "line": 2121,
+          "line": 2120,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 2122,
+          "line": 2121,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 2123,
+          "line": 2122,
           "called": [
             "Kernel",
             "Stub"
@@ -39656,7 +39665,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2124,
+          "line": 2123,
           "called": [
             "KernelResponse",
             "_"
@@ -39665,13 +39674,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2127,
+          "line": 2126,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel for Stub",
-          "line": 2131,
+          "line": 2130,
           "called": [
             "Stub",
             "SubscribableKernel"
@@ -39680,7 +39689,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2132,
+          "line": 2131,
           "called": [
             "Stub",
             "SubscribableKernel",
@@ -39691,19 +39700,19 @@
         {
           "kind": "fn",
           "name": "default_action_id_is_empty",
-          "line": 2142,
+          "line": 2141,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 2143,
+          "line": 2142,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 2144,
+          "line": 2143,
           "called": [
             "Kernel",
             "Stub"
@@ -39712,7 +39721,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2145,
+          "line": 2144,
           "called": [
             "KernelResponse",
             "_"
@@ -39721,13 +39730,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2148,
+          "line": 2147,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SubscribableKernel for Stub",
-          "line": 2152,
+          "line": 2151,
           "called": [
             "Stub",
             "SubscribableKernel"
@@ -39736,7 +39745,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2153,
+          "line": 2152,
           "called": [
             "Stub",
             "Subscription",
@@ -39749,19 +39758,19 @@
         {
           "kind": "fn",
           "name": "default_receipt_matches_ok_stage_and_action_id",
-          "line": 2165,
+          "line": 2164,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Stub",
-          "line": 2166,
+          "line": 2165,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Kernel for Stub",
-          "line": 2167,
+          "line": 2166,
           "called": [
             "Kernel",
             "Stub"
@@ -39770,7 +39779,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2168,
+          "line": 2167,
           "called": [
             "KernelResponse",
             "_"
@@ -39779,13 +39788,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2171,
+          "line": 2170,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 2174,
+          "line": 2173,
           "called": [
             "AdmissionStage"
           ]
@@ -39793,7 +39802,7 @@
         {
           "kind": "impl",
           "name": "SubscribableKernel for Stub",
-          "line": 2178,
+          "line": 2177,
           "called": [
             "Stub",
             "SubscribableKernel"
@@ -39802,7 +39811,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2179,
+          "line": 2178,
           "called": [
             "Subscription",
             "_"
@@ -39811,7 +39820,7 @@
         {
           "kind": "fn",
           "name": "action_id_for",
-          "line": 2182,
+          "line": 2181,
           "called": [
             "Stub",
             "b",
@@ -39823,7 +39832,7 @@
         {
           "kind": "fn",
           "name": "subscription_try_recv_arm_semantics",
-          "line": 2198,
+          "line": 2197,
           "called": [
             "AdmissionStage",
             "Err",
@@ -39835,7 +39844,7 @@
         {
           "kind": "fn",
           "name": "subscription_drains_before_reporting_disconnected",
-          "line": 2225,
+          "line": 2224,
           "called": [
             "AdmissionStage",
             "Err",
@@ -39847,13 +39856,13 @@
         {
           "kind": "fn",
           "name": "staging_kernel_emits_strictly_monotonic_chain",
-          "line": 2261,
+          "line": 2260,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ActionSlot",
-          "line": 2270,
+          "line": 2269,
           "called": [
             "AdmissionStage"
           ]
@@ -39861,7 +39870,7 @@
         {
           "kind": "struct",
           "name": "StagingKernel",
-          "line": 2279,
+          "line": 2278,
           "called": [
             "ActionSlot"
           ]
@@ -39869,13 +39878,13 @@
         {
           "kind": "impl",
           "name": "StagingKernel",
-          "line": 2283,
+          "line": 2282,
           "called": []
         },
         {
           "kind": "fn",
           "name": "advance",
-          "line": 2288,
+          "line": 2287,
           "called": [
             "AdmissionStage",
             "lock",
@@ -39885,7 +39894,7 @@
         {
           "kind": "impl",
           "name": "Kernel for StagingKernel",
-          "line": 2302,
+          "line": 2301,
           "called": [
             "Kernel",
             "StagingKernel"
@@ -39894,7 +39903,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2303,
+          "line": 2302,
           "called": [
             "ActionSlot",
             "KernelResponse",
@@ -39907,13 +39916,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2316,
+          "line": 2315,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 2319,
+          "line": 2318,
           "called": [
             "AdmissionStage"
           ]
@@ -39921,7 +39930,7 @@
         {
           "kind": "impl",
           "name": "SubscribableKernel for StagingKernel",
-          "line": 2324,
+          "line": 2323,
           "called": [
             "StagingKernel",
             "SubscribableKernel"
@@ -39930,7 +39939,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2325,
+          "line": 2324,
           "called": [
             "Subscription",
             "events",
@@ -39941,7 +39950,7 @@
         {
           "kind": "fn",
           "name": "action_id_for",
-          "line": 2340,
+          "line": 2339,
           "called": [
             "StagingKernel",
             "advance",
@@ -39962,13 +39971,13 @@
         {
           "kind": "fn",
           "name": "subscribe_during_advance_no_duplicate_events",
-          "line": 2421,
+          "line": 2420,
           "called": []
         },
         {
           "kind": "struct",
           "name": "ActionSlot",
-          "line": 2427,
+          "line": 2426,
           "called": [
             "AdmissionStage"
           ]
@@ -39976,7 +39985,7 @@
         {
           "kind": "struct",
           "name": "StagingKernel",
-          "line": 2432,
+          "line": 2431,
           "called": [
             "ActionSlot"
           ]
@@ -39984,13 +39993,13 @@
         {
           "kind": "impl",
           "name": "StagingKernel",
-          "line": 2435,
+          "line": 2434,
           "called": []
         },
         {
           "kind": "fn",
           "name": "advance",
-          "line": 2436,
+          "line": 2435,
           "called": [
             "AdmissionStage",
             "_",
@@ -40001,7 +40010,7 @@
         {
           "kind": "impl",
           "name": "Kernel for StagingKernel",
-          "line": 2445,
+          "line": 2444,
           "called": [
             "Kernel",
             "StagingKernel"
@@ -40010,7 +40019,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 2446,
+          "line": 2445,
           "called": [
             "ActionSlot",
             "KernelResponse",
@@ -40023,13 +40032,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 2458,
+          "line": 2457,
           "called": []
         },
         {
           "kind": "fn",
           "name": "ok_admission_stage",
-          "line": 2461,
+          "line": 2460,
           "called": [
             "AdmissionStage"
           ]
@@ -40037,7 +40046,7 @@
         {
           "kind": "impl",
           "name": "SubscribableKernel for StagingKernel",
-          "line": 2465,
+          "line": 2464,
           "called": [
             "StagingKernel",
             "SubscribableKernel"
@@ -40046,7 +40055,7 @@
         {
           "kind": "fn",
           "name": "subscribe",
-          "line": 2466,
+          "line": 2465,
           "called": [
             "StagingKernel",
             "Subscription",
@@ -40190,7 +40199,7 @@
     {
       "module": "runtime::knomosis-host::src::listener",
       "path": "runtime/knomosis-host/src/listener.rs",
-      "declaration_count": 57,
+      "declaration_count": 62,
       "declarations": [
         {
           "kind": "const",
@@ -40205,33 +40214,77 @@
           "called": []
         },
         {
+          "kind": "fn",
+          "name": "read_deadline_from",
+          "line": 103,
+          "called": [
+            "MAX_CONNECTION_TIMEOUT",
+            "min"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "read_deadline_tests",
+          "line": 109,
+          "called": [
+            "MAX_CONNECTION_TIMEOUT",
+            "read_deadline_from"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "saturates_instead_of_panicking_on_extreme_timeout",
+          "line": 119,
+          "called": [
+            "MAX_CONNECTION_TIMEOUT",
+            "read_deadline_from"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "preserves_normal_timeouts_below_the_ceiling",
+          "line": 131,
+          "called": [
+            "read_deadline_from"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "preserves_the_ceiling_exactly",
+          "line": 139,
+          "called": [
+            "MAX_CONNECTION_TIMEOUT",
+            "read_deadline_from"
+          ]
+        },
+        {
           "kind": "const",
           "name": "DEFAULT_KERNEL_REPLY_TIMEOUT",
-          "line": 89,
+          "line": 151,
           "called": []
         },
         {
           "kind": "const",
           "name": "DEFAULT_MAX_CONCURRENT_CONNECTIONS",
-          "line": 102,
+          "line": 164,
           "called": []
         },
         {
           "kind": "const",
           "name": "HARD_MAX_CONCURRENT_CONNECTIONS",
-          "line": 108,
+          "line": 170,
           "called": []
         },
         {
           "kind": "struct",
           "name": "HandlerConfig",
-          "line": 114,
+          "line": 176,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Default for HandlerConfig",
-          "line": 140,
+          "line": 202,
           "called": [
             "HandlerConfig"
           ]
@@ -40239,7 +40292,7 @@
         {
           "kind": "fn",
           "name": "default",
-          "line": 141,
+          "line": 203,
           "called": [
             "DEFAULT_CONNECTION_TIMEOUT",
             "DEFAULT_KERNEL_REPLY_TIMEOUT",
@@ -40249,19 +40302,19 @@
         {
           "kind": "struct",
           "name": "ConnectionSlot",
-          "line": 157,
+          "line": 219,
           "called": []
         },
         {
           "kind": "impl",
           "name": "ConnectionSlot",
-          "line": 161,
+          "line": 223,
           "called": []
         },
         {
           "kind": "fn",
           "name": "try_acquire",
-          "line": 175,
+          "line": 237,
           "called": [
             "Err",
             "HARD_MAX_CONCURRENT_CONNECTIONS",
@@ -40273,7 +40326,7 @@
         {
           "kind": "fn",
           "name": "active_count",
-          "line": 206,
+          "line": 268,
           "called": [
             "load"
           ]
@@ -40281,7 +40334,7 @@
         {
           "kind": "impl",
           "name": "Drop for ConnectionSlot",
-          "line": 211,
+          "line": 273,
           "called": [
             "ConnectionSlot"
           ]
@@ -40289,13 +40342,13 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 212,
+          "line": 274,
           "called": []
         },
         {
           "kind": "fn",
           "name": "backoff_on_accept_error",
-          "line": 230,
+          "line": 292,
           "called": [
             "min"
           ]
@@ -40303,7 +40356,7 @@
         {
           "kind": "enum",
           "name": "HandleOutcome",
-          "line": 245,
+          "line": 307,
           "called": [
             "Verdict"
           ]
@@ -40311,19 +40364,19 @@
         {
           "kind": "impl",
           "name": "HandleOutcome",
-          "line": 262,
+          "line": 324,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 266,
+          "line": 328,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_connection",
-          "line": 302,
+          "line": 364,
           "called": [
             "ConnId",
             "Err",
@@ -40338,6 +40391,7 @@
             "flush",
             "handle",
             "r",
+            "read_deadline_from",
             "read_request_with_deadline",
             "stream",
             "submit",
@@ -40347,7 +40401,7 @@
         {
           "kind": "enum",
           "name": "PendingResponse",
-          "line": 387,
+          "line": 449,
           "called": [
             "KernelResponse",
             "VerdictResponse"
@@ -40356,7 +40410,7 @@
         {
           "kind": "fn",
           "name": "run_persistent",
-          "line": 453,
+          "line": 515,
           "called": [
             "ConnId",
             "Err",
@@ -40375,6 +40429,7 @@
             "name",
             "persistent_writer_loop",
             "pipeline_capacity",
+            "read_deadline_from",
             "read_next_with_deadline",
             "spawn",
             "stop",
@@ -40384,7 +40439,7 @@
         {
           "kind": "fn",
           "name": "persistent_writer_loop",
-          "line": 556,
+          "line": 618,
           "called": [
             "Err",
             "PendingResponse",
@@ -40399,7 +40454,7 @@
         {
           "kind": "mod",
           "name": "tcp",
-          "line": 586,
+          "line": 648,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40415,19 +40470,19 @@
         {
           "kind": "struct",
           "name": "TcpListener",
-          "line": 604,
+          "line": 666,
           "called": []
         },
         {
           "kind": "impl",
           "name": "TcpListener",
-          "line": 608,
+          "line": 670,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 614,
+          "line": 676,
           "called": [
             "addr"
           ]
@@ -40435,13 +40490,13 @@
         {
           "kind": "fn",
           "name": "local_addr",
-          "line": 622,
+          "line": 684,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 635,
+          "line": 697,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40465,7 +40520,7 @@
         {
           "kind": "fn",
           "name": "handle_single_connection",
-          "line": 702,
+          "line": 764,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40486,7 +40541,7 @@
         {
           "kind": "mod",
           "name": "tls",
-          "line": 743,
+          "line": 805,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40501,7 +40556,7 @@
         {
           "kind": "struct",
           "name": "TlsListener",
-          "line": 759,
+          "line": 822,
           "called": [
             "ServerConfig"
           ]
@@ -40509,13 +40564,13 @@
         {
           "kind": "impl",
           "name": "TlsListener",
-          "line": 764,
+          "line": 827,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 770,
+          "line": 833,
           "called": [
             "ServerConfig",
             "addr"
@@ -40524,13 +40579,13 @@
         {
           "kind": "fn",
           "name": "local_addr",
-          "line": 780,
+          "line": 843,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 789,
+          "line": 852,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40551,25 +40606,25 @@
         {
           "kind": "struct",
           "name": "DeadlineStream",
-          "line": 864,
+          "line": 927,
           "called": []
         },
         {
           "kind": "impl",
           "name": "DeadlineStream",
-          "line": 870,
+          "line": 933,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 873,
+          "line": 936,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Read for DeadlineStream",
-          "line": 882,
+          "line": 945,
           "called": [
             "DeadlineStream"
           ]
@@ -40577,7 +40632,7 @@
         {
           "kind": "fn",
           "name": "read",
-          "line": 883,
+          "line": 946,
           "called": [
             "Err",
             "_",
@@ -40589,7 +40644,7 @@
         {
           "kind": "impl",
           "name": "Write for DeadlineStream",
-          "line": 906,
+          "line": 969,
           "called": [
             "DeadlineStream"
           ]
@@ -40597,19 +40652,19 @@
         {
           "kind": "fn",
           "name": "write",
-          "line": 907,
+          "line": 970,
           "called": []
         },
         {
           "kind": "fn",
           "name": "flush",
-          "line": 910,
+          "line": 973,
           "called": []
         },
         {
           "kind": "fn",
           "name": "handle_tls_connection",
-          "line": 915,
+          "line": 978,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40624,13 +40679,14 @@
             "handle",
             "handle_connection",
             "name",
+            "read_deadline_from",
             "stream"
           ]
         },
         {
           "kind": "mod",
           "name": "deadline_tests",
-          "line": 961,
+          "line": 1024,
           "called": [
             "TcpListener"
           ]
@@ -40638,7 +40694,7 @@
         {
           "kind": "fn",
           "name": "idle_server_stream",
-          "line": 970,
+          "line": 1033,
           "called": [
             "_",
             "addr",
@@ -40651,7 +40707,7 @@
         {
           "kind": "fn",
           "name": "read_past_the_deadline_is_timed_out_without_blocking",
-          "line": 980,
+          "line": 1043,
           "called": [
             "idle_server_stream",
             "kind",
@@ -40662,7 +40718,7 @@
         {
           "kind": "fn",
           "name": "an_idle_socket_read_is_bounded_by_the_deadline",
-          "line": 996,
+          "line": 1059,
           "called": [
             "idle_server_stream",
             "read",
@@ -40673,7 +40729,7 @@
         {
           "kind": "mod",
           "name": "unix",
-          "line": 1021,
+          "line": 1084,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40689,7 +40745,7 @@
         {
           "kind": "struct",
           "name": "UnixListener",
-          "line": 1078,
+          "line": 1141,
           "called": [
             "path"
           ]
@@ -40697,13 +40753,13 @@
         {
           "kind": "impl",
           "name": "UnixListener",
-          "line": 1083,
+          "line": 1146,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 1102,
+          "line": 1165,
           "called": [
             "Err",
             "kind",
@@ -40713,13 +40769,13 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 1141,
+          "line": 1204,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 1150,
+          "line": 1213,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40743,7 +40799,7 @@
         {
           "kind": "impl",
           "name": "Drop for UnixListener",
-          "line": 1204,
+          "line": 1267,
           "called": [
             "UnixListener"
           ]
@@ -40751,7 +40807,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 1205,
+          "line": 1268,
           "called": [
             "Err",
             "error",
@@ -40762,7 +40818,7 @@
         {
           "kind": "fn",
           "name": "handle_single_unix_connection",
-          "line": 1217,
+          "line": 1280,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -43208,7 +43264,7 @@
         {
           "kind": "fn",
           "name": "parse_response",
-          "line": 103,
+          "line": 102,
           "called": [
             "bytes",
             "len",
@@ -43218,7 +43274,7 @@
         {
           "kind": "fn",
           "name": "default_mock_returns_ok",
-          "line": 118,
+          "line": 117,
           "called": [
             "addr",
             "b",
@@ -43238,7 +43294,7 @@
         {
           "kind": "fn",
           "name": "mock_not_admissible_with_reason_round_trips",
-          "line": 133,
+          "line": 132,
           "called": [
             "addr",
             "b",
@@ -43258,7 +43314,7 @@
         {
           "kind": "fn",
           "name": "mock_busy_round_trips",
-          "line": 151,
+          "line": 150,
           "called": [
             "_",
             "addr",
@@ -43278,7 +43334,7 @@
         {
           "kind": "fn",
           "name": "mock_parse_error_round_trips",
-          "line": 165,
+          "line": 164,
           "called": [
             "addr",
             "b",
@@ -43298,7 +43354,7 @@
         {
           "kind": "fn",
           "name": "saturation_returns_busy",
-          "line": 185,
+          "line": 184,
           "called": [
             "_",
             "addr",
@@ -43325,7 +43381,7 @@
         {
           "kind": "fn",
           "name": "oversize_frame_rejected",
-          "line": 244,
+          "line": 243,
           "called": [
             "HandlerConfig",
             "build",
@@ -43350,7 +43406,7 @@
         {
           "kind": "fn",
           "name": "zero_length_frame_rejected",
-          "line": 281,
+          "line": 280,
           "called": [
             "_",
             "addr",
@@ -43369,7 +43425,7 @@
         {
           "kind": "fn",
           "name": "client_immediate_disconnect_handled",
-          "line": 303,
+          "line": 302,
           "called": [
             "_",
             "addr",
@@ -43390,7 +43446,7 @@
         {
           "kind": "fn",
           "name": "many_sequential_requests",
-          "line": 324,
+          "line": 323,
           "called": [
             "_",
             "addr",
@@ -43408,7 +43464,7 @@
         {
           "kind": "fn",
           "name": "boundary_frame_size_accepted",
-          "line": 340,
+          "line": 339,
           "called": [
             "HandlerConfig",
             "_",
@@ -43434,7 +43490,7 @@
         {
           "kind": "fn",
           "name": "default_max_frame_size_constant",
-          "line": 371,
+          "line": 370,
           "called": [
             "DEFAULT_MAX_FRAME_SIZE"
           ]
@@ -43442,25 +43498,25 @@
         {
           "kind": "struct",
           "name": "SlowMockKernel",
-          "line": 377,
+          "line": 376,
           "called": []
         },
         {
           "kind": "impl",
           "name": "SlowMockKernel",
-          "line": 381,
+          "line": 380,
           "called": []
         },
         {
           "kind": "fn",
           "name": "new",
-          "line": 382,
+          "line": 381,
           "called": []
         },
         {
           "kind": "impl",
           "name": "knomosis_host::kernel::Kernel for SlowMockKernel",
-          "line": 387,
+          "line": 386,
           "called": [
             "SlowMockKernel"
           ]
@@ -43468,7 +43524,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 388,
+          "line": 387,
           "called": [
             "KernelResponse"
           ]
@@ -43476,13 +43532,13 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 393,
+          "line": 392,
           "called": []
         },
         {
           "kind": "fn",
           "name": "connection_limit_returns_busy_overflow",
-          "line": 407,
+          "line": 406,
           "called": [
             "Err",
             "HandlerConfig",
@@ -43512,7 +43568,7 @@
         {
           "kind": "fn",
           "name": "shutdown_drains_inflight_requests",
-          "line": 488,
+          "line": 487,
           "called": [
             "SHUTDOWN_DRAIN_SECS",
             "_",
@@ -43536,19 +43592,19 @@
         {
           "kind": "fn",
           "name": "kernel_panic_does_not_stall_host",
-          "line": 555,
+          "line": 554,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PanicOnceKernel",
-          "line": 559,
+          "line": 558,
           "called": []
         },
         {
           "kind": "impl",
           "name": "knomosis_host::kernel::Kernel for PanicOnceKernel",
-          "line": 562,
+          "line": 561,
           "called": [
             "PanicOnceKernel"
           ]
@@ -43556,7 +43612,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 563,
+          "line": 562,
           "called": [
             "KernelResponse"
           ]
@@ -43564,7 +43620,7 @@
         {
           "kind": "fn",
           "name": "identifier",
-          "line": 568,
+          "line": 567,
           "called": [
             "PanicOnceKernel",
             "_",
@@ -43589,7 +43645,7 @@
         {
           "kind": "fn",
           "name": "fixture_replay_pattern",
-          "line": 618,
+          "line": 617,
           "called": [
             "Verdict",
             "_",
@@ -43612,13 +43668,13 @@
         {
           "kind": "fn",
           "name": "cbe_uint",
-          "line": 657,
+          "line": 656,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cbe_bytes",
-          "line": 664,
+          "line": 663,
           "called": [
             "len"
           ]
@@ -43626,7 +43682,7 @@
         {
           "kind": "fn",
           "name": "transfer_signed_action",
-          "line": 674,
+          "line": 673,
           "called": [
             "cbe_bytes",
             "cbe_uint",
@@ -43636,7 +43692,7 @@
         {
           "kind": "fn",
           "name": "budget_gate_admits_then_rejects_over_wire",
-          "line": 692,
+          "line": 691,
           "called": [
             "addr",
             "handle",
@@ -43655,7 +43711,7 @@
         {
           "kind": "fn",
           "name": "budget_gate_per_actor_isolation_over_wire",
-          "line": 715,
+          "line": 714,
           "called": [
             "addr",
             "handle",
@@ -43673,7 +43729,7 @@
         {
           "kind": "fn",
           "name": "budget_gate_genesis_default_denies_over_wire",
-          "line": 743,
+          "line": 742,
           "called": [
             "addr",
             "handle",
@@ -43692,7 +43748,7 @@
         {
           "kind": "fn",
           "name": "budget_gate_unsupported_action_fails_closed_over_wire",
-          "line": 761,
+          "line": 760,
           "called": [
             "addr",
             "cbe_uint",
@@ -43711,7 +43767,7 @@
         {
           "kind": "fn",
           "name": "budget_gate_malformed_yields_parse_error_over_wire",
-          "line": 780,
+          "line": 779,
           "called": [
             "_",
             "addr",
@@ -43729,7 +43785,7 @@
         {
           "kind": "fn",
           "name": "budget_gate_bridge_actor_exempt_over_wire",
-          "line": 798,
+          "line": 797,
           "called": [
             "_",
             "addr",
@@ -44386,7 +44442,6 @@
           "name": "verdict_response_length_matches_payload",
           "line": 205,
           "called": [
-            "as_bytes",
             "bytes",
             "encode",
             "len",
@@ -45236,7 +45291,7 @@
         {
           "kind": "fn",
           "name": "dispatch_epoch_if_crossed",
-          "line": 202,
+          "line": 203,
           "called": [
             "BudgetDispatchError",
             "CombinedTransactionOps",
@@ -45250,7 +45305,7 @@
         {
           "kind": "fn",
           "name": "dispatch_event",
-          "line": 239,
+          "line": 240,
           "called": [
             "ActorId",
             "BudgetDispatchError",
@@ -45273,7 +45328,7 @@
         {
           "kind": "fn",
           "name": "credit_pool_inflow",
-          "line": 323,
+          "line": 324,
           "called": [
             "ActorId",
             "Amount",
@@ -45291,7 +45346,7 @@
         {
           "kind": "fn",
           "name": "drain_pool",
-          "line": 350,
+          "line": 351,
           "called": [
             "ActorId",
             "BudgetDispatchError",
@@ -45309,7 +45364,7 @@
         {
           "kind": "struct",
           "name": "BudgetReadView",
-          "line": 379,
+          "line": 380,
           "called": [
             "SqliteStorage",
             "storage"
@@ -45318,7 +45373,7 @@
         {
           "kind": "impl",
           "name": "BudgetReadView<'a>",
-          "line": 383,
+          "line": 384,
           "called": [
             "BudgetReadView"
           ]
@@ -45326,7 +45381,7 @@
         {
           "kind": "fn",
           "name": "new",
-          "line": 386,
+          "line": 387,
           "called": [
             "SqliteStorage",
             "storage"
@@ -45335,7 +45390,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget",
-          "line": 395,
+          "line": 396,
           "called": [
             "ActorId",
             "BudgetUnits",
@@ -45346,7 +45401,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget_current_epoch_grants",
-          "line": 408,
+          "line": 409,
           "called": [
             "ActorId",
             "BudgetUnits",
@@ -45357,7 +45412,7 @@
         {
           "kind": "fn",
           "name": "get_actor_budget_current_epoch_consumed",
-          "line": 421,
+          "line": 422,
           "called": [
             "ActorId",
             "BudgetUnits",
@@ -45368,7 +45423,7 @@
         {
           "kind": "fn",
           "name": "get_pool_eth",
-          "line": 434,
+          "line": 435,
           "called": [
             "ActorId",
             "Amount",
@@ -45378,7 +45433,7 @@
         {
           "kind": "fn",
           "name": "get_pool_bold",
-          "line": 447,
+          "line": 448,
           "called": [
             "ActorId",
             "Amount",
@@ -45388,7 +45443,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch",
-          "line": 516,
+          "line": 517,
           "called": [
             "ActorId",
             "BudgetUnits",
@@ -45406,7 +45461,7 @@
         {
           "kind": "fn",
           "name": "combined_to_budget_err",
-          "line": 546,
+          "line": 547,
           "called": [
             "CombinedTransactionError",
             "b"
@@ -45415,7 +45470,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 557,
+          "line": 558,
           "called": [
             "BudgetReadView",
             "CURRENT_EPOCH_KEY",
@@ -45433,7 +45488,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 568,
+          "line": 569,
           "called": [
             "CURRENT_EPOCH_KEY",
             "CURRENT_EPOCH_VALUE_LEN",
@@ -45443,7 +45498,7 @@
         {
           "kind": "fn",
           "name": "epoch_for_seq_disabled",
-          "line": 575,
+          "line": 576,
           "called": [
             "epoch_for_seq"
           ]
@@ -45451,7 +45506,7 @@
         {
           "kind": "fn",
           "name": "epoch_for_seq_enabled",
-          "line": 588,
+          "line": 589,
           "called": [
             "epoch_for_seq"
           ]
@@ -45459,13 +45514,13 @@
         {
           "kind": "fn",
           "name": "epoch_for_seq_matches_kernel_logindex_formula",
-          "line": 608,
+          "line": 609,
           "called": []
         },
         {
           "kind": "const",
           "name": "EPOCH_LENGTH",
-          "line": 609,
+          "line": 610,
           "called": [
             "epoch_for_seq"
           ]
@@ -45473,7 +45528,7 @@
         {
           "kind": "fn",
           "name": "fresh_db_epoch_is_zero",
-          "line": 623,
+          "line": 624,
           "called": [
             "begin_combined_tx",
             "read_current_epoch"
@@ -45482,7 +45537,7 @@
         {
           "kind": "fn",
           "name": "write_then_read_current_epoch",
-          "line": 631,
+          "line": 632,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45493,7 +45548,7 @@
         {
           "kind": "fn",
           "name": "no_crossing_returns_false",
-          "line": 643,
+          "line": 644,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45505,7 +45560,7 @@
         {
           "kind": "fn",
           "name": "crossing_resets_per_epoch_tables",
-          "line": 657,
+          "line": 658,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45523,7 +45578,7 @@
         {
           "kind": "fn",
           "name": "no_epoch_length_never_crosses",
-          "line": 680,
+          "line": 681,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45533,7 +45588,7 @@
         {
           "kind": "fn",
           "name": "dispatch_deposit_with_fee_credits_both_lifetime_and_current_epoch",
-          "line": 693,
+          "line": 694,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -45549,7 +45604,7 @@
         {
           "kind": "fn",
           "name": "dispatch_action_budget_top_up_credits_signer",
-          "line": 720,
+          "line": 721,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -45565,7 +45620,7 @@
         {
           "kind": "fn",
           "name": "dispatch_delegated_top_up_credits_recipient_not_signer",
-          "line": 745,
+          "line": 746,
           "called": [
             "RESOURCE_ID_ETH",
             "begin_combined_tx",
@@ -45580,7 +45635,7 @@
         {
           "kind": "fn",
           "name": "dispatch_budget_consumed_credits_current_epoch_consumed",
-          "line": 771,
+          "line": 772,
           "called": [
             "actor",
             "amount",
@@ -45595,7 +45650,7 @@
         {
           "kind": "fn",
           "name": "dispatch_budget_consumed_widened_refund_amount",
-          "line": 798,
+          "line": 799,
           "called": [
             "actor",
             "amount",
@@ -45610,7 +45665,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_claim_no_actor_is_noop",
-          "line": 822,
+          "line": 823,
           "called": [
             "RESOURCE_ID_ETH",
             "amount",
@@ -45626,7 +45681,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_claim_with_actor_drains",
-          "line": 845,
+          "line": 846,
           "called": [
             "RESOURCE_ID_ETH",
             "amount",
@@ -45642,7 +45697,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_claim_drain_underflow_halts",
-          "line": 868,
+          "line": 869,
           "called": [
             "RESOURCE_ID_ETH",
             "amount",
@@ -45659,7 +45714,7 @@
         {
           "kind": "fn",
           "name": "non_gp_event_noop",
-          "line": 891,
+          "line": 892,
           "called": [
             "actor",
             "begin_combined_tx",
@@ -45673,7 +45728,7 @@
         {
           "kind": "fn",
           "name": "bold_resource_credits_bold_pool",
-          "line": 912,
+          "line": 913,
           "called": [
             "RESOURCE_ID_BOLD",
             "begin_combined_tx",
@@ -45688,7 +45743,7 @@
         {
           "kind": "fn",
           "name": "unknown_resource_pool_inflow_silently_skipped",
-          "line": 938,
+          "line": 939,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45703,7 +45758,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_arithmetic",
-          "line": 964,
+          "line": 965,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45716,7 +45771,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_saturates_at_zero",
-          "line": 979,
+          "line": 980,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45728,7 +45783,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_saturates_at_max_on_overflow",
-          "line": 992,
+          "line": 993,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45740,7 +45795,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_exact_for_free_tier_zero",
-          "line": 1009,
+          "line": 1010,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45753,7 +45808,7 @@
         {
           "kind": "fn",
           "name": "remaining_this_epoch_is_lower_bound_formula",
-          "line": 1034,
+          "line": 1035,
           "called": [
             "begin_combined_tx",
             "commit",
@@ -45766,7 +45821,7 @@
         {
           "kind": "fn",
           "name": "dispatch_event_total_on_all_tags",
-          "line": 1062,
+          "line": 1063,
           "called": [
             "Event",
             "_",
@@ -46550,7 +46605,7 @@
         {
           "kind": "const",
           "name": "CURSOR_KEY",
-          "line": 60,
+          "line": 62,
           "called": [
             "b"
           ]
@@ -46558,7 +46613,7 @@
         {
           "kind": "const",
           "name": "IDENTIFIER_KEY",
-          "line": 63,
+          "line": 65,
           "called": [
             "b"
           ]
@@ -46566,13 +46621,13 @@
         {
           "kind": "const",
           "name": "CURSOR_VALUE_LEN",
-          "line": 66,
+          "line": 68,
           "called": []
         },
         {
           "kind": "enum",
           "name": "CursorError",
-          "line": 70,
+          "line": 72,
           "called": [
             "Storage",
             "StorageError",
@@ -46583,7 +46638,7 @@
         {
           "kind": "fn",
           "name": "hex_preview",
-          "line": 117,
+          "line": 119,
           "called": [
             "bytes"
           ]
@@ -46591,18 +46646,20 @@
         {
           "kind": "const",
           "name": "PREVIEW_MAX",
-          "line": 118,
+          "line": 120,
           "called": [
+            "_",
             "b",
             "bytes",
             "len",
-            "min"
+            "min",
+            "write"
           ]
         },
         {
           "kind": "fn",
           "name": "read_cursor",
-          "line": 140,
+          "line": 142,
           "called": [
             "CURSOR_KEY",
             "CursorError",
@@ -46616,7 +46673,7 @@
         {
           "kind": "fn",
           "name": "write_cursor",
-          "line": 152,
+          "line": 154,
           "called": [
             "CURSOR_KEY",
             "CursorError",
@@ -46628,7 +46685,7 @@
         {
           "kind": "fn",
           "name": "advance_cursor",
-          "line": 168,
+          "line": 170,
           "called": [
             "CursorError",
             "Err",
@@ -46641,7 +46698,7 @@
         {
           "kind": "fn",
           "name": "advance_cursor_in_tx",
-          "line": 190,
+          "line": 192,
           "called": [
             "CURSOR_KEY",
             "CursorError",
@@ -46656,7 +46713,7 @@
         {
           "kind": "fn",
           "name": "decode_cursor",
-          "line": 207,
+          "line": 209,
           "called": [
             "CURSOR_VALUE_LEN",
             "CursorError",
@@ -46669,7 +46726,7 @@
         {
           "kind": "fn",
           "name": "ensure_identifier",
-          "line": 230,
+          "line": 232,
           "called": [
             "CursorError",
             "Err",
@@ -46689,7 +46746,7 @@
         {
           "kind": "fn",
           "name": "verify_identifier",
-          "line": 277,
+          "line": 279,
           "called": [
             "CursorError",
             "Err",
@@ -46706,7 +46763,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 306,
+          "line": 308,
           "called": [
             "CURSOR_KEY",
             "CURSOR_VALUE_LEN",
@@ -46722,7 +46779,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 316,
+          "line": 318,
           "called": [
             "CURSOR_KEY",
             "CURSOR_VALUE_LEN",
@@ -46733,7 +46790,7 @@
         {
           "kind": "fn",
           "name": "fresh_db_cursor_zero",
-          "line": 324,
+          "line": 326,
           "called": [
             "read_cursor"
           ]
@@ -46741,7 +46798,7 @@
         {
           "kind": "fn",
           "name": "write_then_read",
-          "line": 331,
+          "line": 333,
           "called": [
             "read_cursor",
             "write_cursor"
@@ -46750,7 +46807,7 @@
         {
           "kind": "fn",
           "name": "advance_monotone",
-          "line": 339,
+          "line": 341,
           "called": [
             "advance_cursor",
             "read_cursor"
@@ -46759,7 +46816,7 @@
         {
           "kind": "fn",
           "name": "advance_rejects_backwards",
-          "line": 349,
+          "line": 351,
           "called": [
             "Err",
             "advance_cursor",
@@ -46769,7 +46826,7 @@
         {
           "kind": "fn",
           "name": "tx_advance",
-          "line": 365,
+          "line": 367,
           "called": [
             "advance_cursor_in_tx",
             "commit",
@@ -46780,7 +46837,7 @@
         {
           "kind": "fn",
           "name": "tx_advance_rolls_back",
-          "line": 375,
+          "line": 377,
           "called": [
             "advance_cursor_in_tx",
             "read_cursor",
@@ -46792,7 +46849,7 @@
         {
           "kind": "fn",
           "name": "tx_advance_rejects_backwards",
-          "line": 386,
+          "line": 388,
           "called": [
             "Err",
             "advance_cursor_in_tx",
@@ -46804,7 +46861,7 @@
         {
           "kind": "fn",
           "name": "corrupt_cursor_surfaced",
-          "line": 402,
+          "line": 404,
           "called": [
             "CURSOR_KEY",
             "Err",
@@ -46815,7 +46872,7 @@
         {
           "kind": "fn",
           "name": "ensure_identifier_initialises",
-          "line": 416,
+          "line": 418,
           "called": [
             "IDENTIFIER_KEY",
             "b",
@@ -46828,7 +46885,7 @@
         {
           "kind": "fn",
           "name": "ensure_identifier_matches",
-          "line": 425,
+          "line": 427,
           "called": [
             "IDENTIFIER_KEY",
             "b",
@@ -46839,7 +46896,7 @@
         {
           "kind": "fn",
           "name": "ensure_identifier_rejects_mismatch",
-          "line": 433,
+          "line": 435,
           "called": [
             "Err",
             "IDENTIFIER_KEY",
@@ -46851,7 +46908,7 @@
         {
           "kind": "fn",
           "name": "ensure_identifier_rejects_non_utf8",
-          "line": 447,
+          "line": 449,
           "called": [
             "Err",
             "IDENTIFIER_KEY",
@@ -48263,7 +48320,7 @@
         {
           "kind": "fn",
           "name": "balance_key_bytes",
-          "line": 460,
+          "line": 455,
           "called": [
             "ActorId",
             "BALANCE_KEY_LEN",
@@ -48276,7 +48333,7 @@
         {
           "kind": "fn",
           "name": "balance_get",
-          "line": 469,
+          "line": 464,
           "called": [
             "ActorId",
             "Amount",
@@ -48300,7 +48357,7 @@
         {
           "kind": "fn",
           "name": "balance_set",
-          "line": 493,
+          "line": 488,
           "called": [
             "ActorId",
             "Amount",
@@ -48320,7 +48377,7 @@
         {
           "kind": "fn",
           "name": "balance_credit",
-          "line": 508,
+          "line": 503,
           "called": [
             "ActorId",
             "Amount",
@@ -48337,7 +48394,7 @@
         {
           "kind": "fn",
           "name": "balance_debit",
-          "line": 532,
+          "line": 527,
           "called": [
             "ActorId",
             "Amount",
@@ -48354,7 +48411,7 @@
         {
           "kind": "fn",
           "name": "advance_cursor_via_combined",
-          "line": 557,
+          "line": 552,
           "called": [
             "CURSOR_KEY",
             "CURSOR_VALUE_LEN",
@@ -48373,7 +48430,7 @@
         {
           "kind": "fn",
           "name": "map_combined_err",
-          "line": 597,
+          "line": 592,
           "called": [
             "CombinedTransactionError",
             "IndexerError",
@@ -48383,7 +48440,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 607,
+          "line": 602,
           "called": [
             "Event",
             "Indexer",
@@ -48395,7 +48452,7 @@
         {
           "kind": "fn",
           "name": "open_indexer",
-          "line": 616,
+          "line": 611,
           "called": [
             "SqliteStorage"
           ]
@@ -48403,7 +48460,7 @@
         {
           "kind": "fn",
           "name": "open_fresh_db",
-          "line": 623,
+          "line": 618,
           "called": [
             "cursor",
             "epoch_length",
@@ -48414,7 +48471,7 @@
         {
           "kind": "fn",
           "name": "open_with_config_records_settings",
-          "line": 634,
+          "line": 629,
           "called": [
             "epoch_length",
             "gas_pool_actor"
@@ -48423,7 +48480,7 @@
         {
           "kind": "fn",
           "name": "reopen_preserves_cursor",
-          "line": 643,
+          "line": 638,
           "called": [
             "actor",
             "apply_batch",
@@ -48436,7 +48493,7 @@
         {
           "kind": "fn",
           "name": "dispatch_balance_changed_combined_tx",
-          "line": 666,
+          "line": 661,
           "called": [
             "actor",
             "apply_batch",
@@ -48447,7 +48504,7 @@
         {
           "kind": "fn",
           "name": "dispatch_reward_issued_combined_tx",
-          "line": 685,
+          "line": 680,
           "called": [
             "amount",
             "apply_batch",
@@ -48458,7 +48515,7 @@
         {
           "kind": "fn",
           "name": "dispatch_withdrawal_underflow_halts",
-          "line": 703,
+          "line": 698,
           "called": [
             "Err",
             "_",
@@ -48473,7 +48530,7 @@
         {
           "kind": "fn",
           "name": "empty_batch_rejected",
-          "line": 737,
+          "line": 732,
           "called": [
             "Err",
             "apply_batch"
@@ -48482,7 +48539,7 @@
         {
           "kind": "fn",
           "name": "stale_seq_rejected",
-          "line": 748,
+          "line": 743,
           "called": [
             "Err",
             "actor",
@@ -48494,7 +48551,7 @@
         {
           "kind": "fn",
           "name": "transfer_shaped_batch_atomic",
-          "line": 779,
+          "line": 774,
           "called": [
             "actor",
             "apply_batch",
@@ -48505,7 +48562,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_credits_both_views_atomically",
-          "line": 818,
+          "line": 813,
           "called": [
             "RESOURCE_ID_ETH",
             "actor",
@@ -48521,7 +48578,7 @@
         {
           "kind": "fn",
           "name": "budget_consumed_credits_current_epoch_consumed",
-          "line": 863,
+          "line": 858,
           "called": [
             "actor",
             "amount",
@@ -48533,7 +48590,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_claim_drains_with_config",
-          "line": 884,
+          "line": 879,
           "called": [
             "RESOURCE_ID_ETH",
             "amount",
@@ -48547,7 +48604,7 @@
         {
           "kind": "fn",
           "name": "epoch_advancement_resets_per_epoch_tables",
-          "line": 917,
+          "line": 912,
           "called": [
             "RESOURCE_ID_ETH",
             "apply_batch",
@@ -48560,7 +48617,7 @@
         {
           "kind": "fn",
           "name": "budget_overflow_rolls_back_kv",
-          "line": 968,
+          "line": 963,
           "called": [
             "Err",
             "RESOURCE_ID_ETH",
@@ -48579,13 +48636,13 @@
         {
           "kind": "fn",
           "name": "sqlite_storage_implements_indexer_storage",
-          "line": 1010,
+          "line": 1005,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_indexer_storage",
-          "line": 1011,
+          "line": 1006,
           "called": [
             "IndexerStorage",
             "SqliteStorage"
@@ -48594,7 +48651,7 @@
         {
           "kind": "fn",
           "name": "identifier_mismatch_on_reopen",
-          "line": 1017,
+          "line": 1012,
           "called": [
             "Err",
             "b",
@@ -48605,7 +48662,7 @@
         {
           "kind": "fn",
           "name": "cursor_updates_on_commit_success",
-          "line": 1037,
+          "line": 1032,
           "called": [
             "actor",
             "apply_batch",
@@ -48976,7 +49033,7 @@
         {
           "kind": "fn",
           "name": "cross_epoch_if_needed",
-          "line": 99,
+          "line": 97,
           "called": [
             "clear",
             "current_epoch",
@@ -48986,7 +49043,7 @@
         {
           "kind": "fn",
           "name": "credit_grant",
-          "line": 114,
+          "line": 112,
           "called": [
             "actor"
           ]
@@ -48994,7 +49051,7 @@
         {
           "kind": "fn",
           "name": "credit_consumed",
-          "line": 122,
+          "line": 120,
           "called": [
             "actor"
           ]
@@ -49002,7 +49059,7 @@
         {
           "kind": "fn",
           "name": "credit_pool",
-          "line": 128,
+          "line": 126,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH",
@@ -49014,7 +49071,7 @@
         {
           "kind": "fn",
           "name": "debit_pool",
-          "line": 143,
+          "line": 141,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH",
@@ -49026,7 +49083,7 @@
         {
           "kind": "fn",
           "name": "apply",
-          "line": 162,
+          "line": 160,
           "called": [
             "Event",
             "_",
@@ -49045,13 +49102,13 @@
         {
           "kind": "fn",
           "name": "actor_strategy",
-          "line": 216,
+          "line": 214,
           "called": []
         },
         {
           "kind": "fn",
           "name": "resource_strategy",
-          "line": 220,
+          "line": 218,
           "called": [
             "RESOURCE_ID_BOLD",
             "RESOURCE_ID_ETH"
@@ -49060,13 +49117,13 @@
         {
           "kind": "fn",
           "name": "amount_strategy",
-          "line": 225,
+          "line": 223,
           "called": []
         },
         {
           "kind": "fn",
           "name": "gp_event_strategy",
-          "line": 230,
+          "line": 228,
           "called": [
             "Event",
             "actor",
@@ -49083,7 +49140,7 @@
         {
           "kind": "fn",
           "name": "batch_strategy",
-          "line": 304,
+          "line": 302,
           "called": [
             "Event",
             "gp_event_strategy"
@@ -49092,7 +49149,7 @@
         {
           "kind": "fn",
           "name": "assert_model_matches",
-          "line": 312,
+          "line": 310,
           "called": [
             "Event",
             "Indexer",
@@ -49118,7 +49175,7 @@
         {
           "kind": "fn",
           "name": "single_batch_matches_model_no_drain_no_epoch",
-          "line": 393,
+          "line": 391,
           "called": [
             "assert_model_matches",
             "batch_strategy"
@@ -49127,7 +49184,7 @@
         {
           "kind": "fn",
           "name": "multi_batch_matches_model_no_drain_no_epoch",
-          "line": 406,
+          "line": 404,
           "called": [
             "assert_model_matches",
             "batch_strategy"
@@ -49136,7 +49193,7 @@
         {
           "kind": "fn",
           "name": "multi_batch_matches_model_with_drain",
-          "line": 427,
+          "line": 425,
           "called": [
             "Err",
             "_",
@@ -49153,7 +49210,7 @@
         {
           "kind": "fn",
           "name": "epoch_advancement_matches_model",
-          "line": 466,
+          "line": 464,
           "called": [
             "assert_model_matches",
             "batch_strategy"
@@ -49228,13 +49285,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 104,
+          "line": 105,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lean_event_fixture_header_ok",
-          "line": 113,
+          "line": 114,
           "called": [
             "EXPECTED_FIXTURE_IDENTIFIER",
             "count",
@@ -49247,7 +49304,7 @@
         {
           "kind": "fn",
           "name": "lean_event_bytes_round_trip_through_indexer",
-          "line": 128,
+          "line": 129,
           "called": [
             "INDEXER_MAX_KNOWN_TAG",
             "bytes",
@@ -49262,7 +49319,7 @@
         {
           "kind": "fn",
           "name": "gp_family_field_projections_consistent",
-          "line": 205,
+          "line": 206,
           "called": [
             "actor",
             "bytes",
@@ -50216,7 +50273,6 @@
             "apply_batch",
             "apply_to_reference",
             "balance_event_strategy",
-            "clone",
             "event",
             "events",
             "get",
@@ -50236,7 +50292,6 @@
             "_",
             "apply_batch",
             "balance_event_strategy",
-            "clone",
             "cursor",
             "event",
             "events",
@@ -50252,7 +50307,6 @@
           "called": [
             "apply_batch",
             "balance_event_strategy",
-            "clone",
             "cursor",
             "event",
             "events",
@@ -50288,7 +50342,6 @@
           "called": [
             "_",
             "apply_batch",
-            "clone",
             "cursor",
             "event",
             "event_strategy",
@@ -50307,7 +50360,6 @@
             "actor",
             "adversarial_balance_event_strategy",
             "apply_batch",
-            "clone",
             "event",
             "events",
             "get",
@@ -51497,7 +51549,7 @@
         {
           "kind": "fn",
           "name": "encode_amount",
-          "line": 431,
+          "line": 426,
           "called": [
             "EncodeError",
             "amount",
@@ -51507,7 +51559,7 @@
         {
           "kind": "fn",
           "name": "encode_byte_string",
-          "line": 438,
+          "line": 433,
           "called": [
             "EncodeError",
             "bytes",
@@ -51518,7 +51570,7 @@
         {
           "kind": "fn",
           "name": "signing_input",
-          "line": 465,
+          "line": 460,
           "called": [
             "Action",
             "EncodeError",
@@ -51536,7 +51588,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action",
-          "line": 499,
+          "line": 494,
           "called": [
             "Action",
             "EncodeError",
@@ -51552,7 +51604,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address",
-          "line": 516,
+          "line": 511,
           "called": [
             "EthAddress",
             "addr",
@@ -51563,7 +51615,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 522,
+          "line": 517,
           "called": [
             "Action",
             "CBE_TAG_BYTES",
@@ -51585,7 +51637,7 @@
         {
           "kind": "fn",
           "name": "u64_le_zero",
-          "line": 532,
+          "line": 527,
           "called": [
             "write_u64_le"
           ]
@@ -51593,7 +51645,7 @@
         {
           "kind": "fn",
           "name": "u64_le_one",
-          "line": 540,
+          "line": 535,
           "called": [
             "write_u64_le"
           ]
@@ -51601,7 +51653,7 @@
         {
           "kind": "fn",
           "name": "u64_le_max",
-          "line": 548,
+          "line": 543,
           "called": [
             "write_u64_le"
           ]
@@ -51609,7 +51661,7 @@
         {
           "kind": "fn",
           "name": "u64_le_pattern",
-          "line": 556,
+          "line": 551,
           "called": [
             "write_u64_le"
           ]
@@ -51617,7 +51669,7 @@
         {
           "kind": "fn",
           "name": "encode_u64_layout",
-          "line": 565,
+          "line": 560,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51628,7 +51680,7 @@
         {
           "kind": "fn",
           "name": "encode_u128_rejects_overflow",
-          "line": 574,
+          "line": 569,
           "called": [
             "encode_u128_checked"
           ]
@@ -51636,7 +51688,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_empty",
-          "line": 582,
+          "line": 577,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -51647,7 +51699,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_short",
-          "line": 591,
+          "line": 586,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -51658,7 +51710,7 @@
         {
           "kind": "fn",
           "name": "encode_transfer_layout",
-          "line": 601,
+          "line": 596,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51672,7 +51724,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_layout",
-          "line": 632,
+          "line": 627,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -51686,7 +51738,7 @@
         {
           "kind": "fn",
           "name": "encode_replace_key_layout",
-          "line": 653,
+          "line": 648,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -51700,7 +51752,7 @@
         {
           "kind": "fn",
           "name": "encode_withdraw_layout",
-          "line": 674,
+          "line": 669,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51714,7 +51766,7 @@
         {
           "kind": "fn",
           "name": "encode_revoke_local_policy",
-          "line": 691,
+          "line": 686,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51726,7 +51778,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action_layout",
-          "line": 701,
+          "line": 696,
           "called": [
             "action",
             "encode_signed_action",
@@ -51737,7 +51789,7 @@
         {
           "kind": "fn",
           "name": "signing_input_starts_with_domain_prefix",
-          "line": 715,
+          "line": 710,
           "called": [
             "CBE_TAG_BYTES",
             "SIGNED_ACTION_DOMAIN",
@@ -51752,7 +51804,7 @@
         {
           "kind": "fn",
           "name": "signing_input_min_size",
-          "line": 731,
+          "line": 726,
           "called": [
             "action",
             "bytes",
@@ -51764,7 +51816,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_deployments",
-          "line": 744,
+          "line": 739,
           "called": [
             "action",
             "r",
@@ -51774,7 +51826,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_nonces",
-          "line": 753,
+          "line": 748,
           "called": [
             "action",
             "r",
@@ -51784,7 +51836,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_actions",
-          "line": 762,
+          "line": 757,
           "called": [
             "r",
             "signing_input"
@@ -51793,7 +51845,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address_layout",
-          "line": 772,
+          "line": 767,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -51805,7 +51857,7 @@
         {
           "kind": "fn",
           "name": "signed_action_domain_matches_lean",
-          "line": 784,
+          "line": 779,
           "called": [
             "SIGNED_ACTION_DOMAIN",
             "len"
@@ -51814,7 +51866,7 @@
         {
           "kind": "fn",
           "name": "encode_action_deterministic",
-          "line": 792,
+          "line": 787,
           "called": [
             "actor",
             "encode_action"
@@ -51823,7 +51875,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_known_vector",
-          "line": 815,
+          "line": 810,
           "called": [
             "actor",
             "encode_action"
@@ -51832,7 +51884,7 @@
         {
           "kind": "fn",
           "name": "signing_input_domain_prefix_known_vector",
-          "line": 844,
+          "line": 839,
           "called": [
             "b",
             "bytes",
@@ -51844,7 +51896,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_checked_empty_known_vector",
-          "line": 862,
+          "line": 857,
           "called": [
             "encode_bytes_checked"
           ]
@@ -51852,7 +51904,7 @@
         {
           "kind": "fn",
           "name": "encode_u64_zero_known_vector",
-          "line": 870,
+          "line": 865,
           "called": [
             "encode_u64"
           ]
@@ -51860,7 +51912,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_layout",
-          "line": 879,
+          "line": 874,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51873,7 +51925,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_layout",
-          "line": 921,
+          "line": 916,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51885,7 +51937,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_layout",
-          "line": 951,
+          "line": 946,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51897,7 +51949,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_known_vector",
-          "line": 1000,
+          "line": 995,
           "called": [
             "action",
             "encode_action",
@@ -51907,7 +51959,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_bold_known_vector",
-          "line": 1033,
+          "line": 1028,
           "called": [
             "encode_action",
             "len",
@@ -51917,7 +51969,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_known_vector",
-          "line": 1075,
+          "line": 1070,
           "called": [
             "action",
             "encode_action"
@@ -51926,7 +51978,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_known_vector",
-          "line": 1099,
+          "line": 1094,
           "called": [
             "action",
             "encode_action"
@@ -51935,7 +51987,7 @@
         {
           "kind": "fn",
           "name": "encode_claim_budget_refund_known_vector",
-          "line": 1125,
+          "line": 1120,
           "called": [
             "action",
             "encode_action"
@@ -51944,7 +51996,7 @@
         {
           "kind": "fn",
           "name": "encode_amm_swap_known_vector",
-          "line": 1150,
+          "line": 1145,
           "called": [
             "action",
             "encode_action"
@@ -51953,7 +52005,7 @@
         {
           "kind": "fn",
           "name": "encode_reclaim_amm_reserves_known_vector",
-          "line": 1180,
+          "line": 1175,
           "called": [
             "action",
             "amount",
@@ -51964,7 +52016,7 @@
         {
           "kind": "fn",
           "name": "encode_reclaim_amm_reserves_rejects_oversized_amount",
-          "line": 1203,
+          "line": 1198,
           "called": [
             "Err",
             "action",
@@ -51976,7 +52028,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_rejects_oversized_user_amount",
-          "line": 1221,
+          "line": 1216,
           "called": [
             "Err",
             "action",
@@ -51987,7 +52039,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_rejects_oversized_pool_amount",
-          "line": 1241,
+          "line": 1236,
           "called": [
             "Err",
             "action",
@@ -51998,7 +52050,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_rejects_oversized_gas_amount",
-          "line": 1261,
+          "line": 1256,
           "called": [
             "Err",
             "action",
@@ -52008,7 +52060,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_rejects_oversized_gas_amount",
-          "line": 1278,
+          "line": 1273,
           "called": [
             "Err",
             "action",
@@ -52018,7 +52070,7 @@
         {
           "kind": "fn",
           "name": "top_up_action_budget_variants_distinct_bytes",
-          "line": 1299,
+          "line": 1294,
           "called": [
             "HEAD_LEN",
             "encode_action",
@@ -52028,7 +52080,7 @@
         {
           "kind": "fn",
           "name": "signing_input_deposit_with_fee",
-          "line": 1328,
+          "line": 1323,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -52044,7 +52096,7 @@
         {
           "kind": "fn",
           "name": "encode_gp_actions_deterministic",
-          "line": 1360,
+          "line": 1355,
           "called": [
             "b",
             "encode_action",
@@ -53474,7 +53526,7 @@
         {
           "kind": "fn",
           "name": "public_key_compressed",
-          "line": 241,
+          "line": 239,
           "called": [
             "COMPRESSED_PUBKEY_LEN"
           ]
@@ -53482,7 +53534,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash",
-          "line": 262,
+          "line": 260,
           "called": [
             "Err",
             "KeyError",
@@ -53497,7 +53549,7 @@
         {
           "kind": "fn",
           "name": "sign_keccak256",
-          "line": 300,
+          "line": 298,
           "called": [
             "KeyError",
             "SIGNATURE_LEN",
@@ -53508,7 +53560,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 311,
+          "line": 309,
           "called": [
             "BridgeActorKey",
             "COMPRESSED_PUBKEY_LEN",
@@ -53521,7 +53573,7 @@
         {
           "kind": "fn",
           "name": "constants_stable",
-          "line": 319,
+          "line": 317,
           "called": [
             "COMPRESSED_PUBKEY_LEN",
             "PREHASH_LEN",
@@ -53532,7 +53584,7 @@
         {
           "kind": "fn",
           "name": "from_bytes_known_good_scalar",
-          "line": 329,
+          "line": 327,
           "called": [
             "COMPRESSED_PUBKEY_LEN",
             "PRIVATE_KEY_LEN",
@@ -53544,7 +53596,7 @@
         {
           "kind": "fn",
           "name": "from_bytes_rejects_wrong_length",
-          "line": 346,
+          "line": 344,
           "called": [
             "Err"
           ]
@@ -53552,7 +53604,7 @@
         {
           "kind": "fn",
           "name": "from_bytes_rejects_zero_scalar",
-          "line": 367,
+          "line": 365,
           "called": [
             "Err",
             "PRIVATE_KEY_LEN"
@@ -53561,7 +53613,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash_length",
-          "line": 377,
+          "line": 375,
           "called": [
             "PRIVATE_KEY_LEN",
             "SIGNATURE_LEN",
@@ -53573,7 +53625,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash_rejects_wrong_length",
-          "line": 387,
+          "line": 385,
           "called": [
             "Err",
             "PRIVATE_KEY_LEN",
@@ -53584,7 +53636,7 @@
         {
           "kind": "fn",
           "name": "sign_prehash_deterministic",
-          "line": 410,
+          "line": 408,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -53594,13 +53646,13 @@
         {
           "kind": "fn",
           "name": "sign_prehash_emits_low_s",
-          "line": 426,
+          "line": 424,
           "called": []
         },
         {
           "kind": "const",
           "name": "HALF_ORDER",
-          "line": 428,
+          "line": 426,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -53611,7 +53663,7 @@
         {
           "kind": "fn",
           "name": "sign_keccak256_deterministic",
-          "line": 451,
+          "line": 449,
           "called": [
             "PRIVATE_KEY_LEN",
             "b",
@@ -53622,7 +53674,7 @@
         {
           "kind": "fn",
           "name": "sign_keccak256_different_messages",
-          "line": 463,
+          "line": 461,
           "called": [
             "PRIVATE_KEY_LEN",
             "b",
@@ -53633,7 +53685,7 @@
         {
           "kind": "fn",
           "name": "from_file_round_trip",
-          "line": 474,
+          "line": 472,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -53644,7 +53696,7 @@
         {
           "kind": "fn",
           "name": "from_file_too_short",
-          "line": 487,
+          "line": 485,
           "called": [
             "Err",
             "path"
@@ -53653,7 +53705,7 @@
         {
           "kind": "fn",
           "name": "from_file_missing",
-          "line": 502,
+          "line": 500,
           "called": [
             "Err"
           ]
@@ -53661,7 +53713,7 @@
         {
           "kind": "fn",
           "name": "from_file_rejects_oversized_file",
-          "line": 513,
+          "line": 511,
           "called": [
             "Err",
             "PRIVATE_KEY_LEN",
@@ -53672,7 +53724,7 @@
         {
           "kind": "fn",
           "name": "from_file_accepts_exact_length",
-          "line": 532,
+          "line": 530,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -53683,7 +53735,7 @@
         {
           "kind": "fn",
           "name": "from_file_accepts_under_threshold",
-          "line": 548,
+          "line": 546,
           "called": [
             "PRIVATE_KEY_LEN",
             "key",
@@ -53694,7 +53746,7 @@
         {
           "kind": "fn",
           "name": "debug_redacts_secret",
-          "line": 562,
+          "line": 560,
           "called": [
             "PRIVATE_KEY_LEN",
             "key"
@@ -56549,7 +56601,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::state",
       "path": "runtime/knomosis-l1-ingest/src/state.rs",
-      "declaration_count": 53,
+      "declaration_count": 51,
       "declarations": [
         {
           "kind": "enum",
@@ -56680,27 +56732,9 @@
           ]
         },
         {
-          "kind": "impl",
-          "name": "Default for WatcherState",
-          "line": 312,
-          "called": [
-            "WatcherState"
-          ]
-        },
-        {
-          "kind": "fn",
-          "name": "default",
-          "line": 313,
-          "called": [
-            "address_book",
-            "last_confirmed_block",
-            "next_nonce"
-          ]
-        },
-        {
           "kind": "struct",
           "name": "ForwardedKey",
-          "line": 325,
+          "line": 314,
           "called": [
             "TopicHash",
             "block_hash"
@@ -56709,7 +56743,7 @@
         {
           "kind": "struct",
           "name": "StateStore",
-          "line": 347,
+          "line": 336,
           "called": [
             "BufWriter",
             "path"
@@ -56718,13 +56752,13 @@
         {
           "kind": "impl",
           "name": "StateStore",
-          "line": 352,
+          "line": 341,
           "called": []
         },
         {
           "kind": "fn",
           "name": "open",
-          "line": 363,
+          "line": 352,
           "called": [
             "StateError",
             "WatcherState",
@@ -56737,7 +56771,7 @@
         {
           "kind": "fn",
           "name": "replay",
-          "line": 387,
+          "line": 376,
           "called": [
             "ActorId",
             "Err",
@@ -56770,7 +56804,7 @@
         {
           "kind": "fn",
           "name": "append",
-          "line": 607,
+          "line": 596,
           "called": [
             "StateError",
             "StateRecord",
@@ -56786,13 +56820,13 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 633,
+          "line": 622,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 639,
+          "line": 628,
           "called": [
             "ActorId",
             "AddressAssignment",
@@ -56807,7 +56841,7 @@
         {
           "kind": "fn",
           "name": "hex_bytes_round_trip",
-          "line": 645,
+          "line": 634,
           "called": [
             "HexBytes"
           ]
@@ -56815,7 +56849,7 @@
         {
           "kind": "fn",
           "name": "hex_bytes_rejects_malformed",
-          "line": 655,
+          "line": 644,
           "called": [
             "HexBytes"
           ]
@@ -56823,7 +56857,7 @@
         {
           "kind": "fn",
           "name": "forwarded_record_round_trip",
-          "line": 663,
+          "line": 652,
           "called": [
             "HexBytes",
             "StateRecord",
@@ -56834,7 +56868,7 @@
         {
           "kind": "fn",
           "name": "confirmed_record_round_trip",
-          "line": 678,
+          "line": 667,
           "called": [
             "StateRecord",
             "block_number",
@@ -56844,7 +56878,7 @@
         {
           "kind": "fn",
           "name": "address_assigned_record_round_trip",
-          "line": 687,
+          "line": 676,
           "called": [
             "HexBytes",
             "StateRecord",
@@ -56854,7 +56888,7 @@
         {
           "kind": "fn",
           "name": "open_creates_new_file",
-          "line": 700,
+          "line": 689,
           "called": [
             "address_book",
             "is_empty",
@@ -56867,7 +56901,7 @@
         {
           "kind": "fn",
           "name": "append_replay_round_trip",
-          "line": 714,
+          "line": 703,
           "called": [
             "ForwardedKey",
             "HexBytes",
@@ -56889,7 +56923,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_reserved_actor_id",
-          "line": 768,
+          "line": 757,
           "called": [
             "Err",
             "HexBytes",
@@ -56901,7 +56935,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_newly_reserved_amm_actor_id",
-          "line": 809,
+          "line": 798,
           "called": [
             "Err",
             "HexBytes",
@@ -56913,7 +56947,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_reserved_actor_id_in_submitted_record",
-          "line": 848,
+          "line": 837,
           "called": [
             "AddressAssignment",
             "Err",
@@ -56928,7 +56962,7 @@
         {
           "kind": "fn",
           "name": "confirmed_overrides",
-          "line": 882,
+          "line": 871,
           "called": [
             "_",
             "append",
@@ -56941,7 +56975,7 @@
         {
           "kind": "fn",
           "name": "address_book_replay_order",
-          "line": 903,
+          "line": 892,
           "called": [
             "HexBytes",
             "_",
@@ -56956,7 +56990,7 @@
         {
           "kind": "fn",
           "name": "empty_lines_skipped",
-          "line": 954,
+          "line": 943,
           "called": [
             "_",
             "last_confirmed_block",
@@ -56967,7 +57001,7 @@
         {
           "kind": "fn",
           "name": "malformed_line_returns_error",
-          "line": 968,
+          "line": 957,
           "called": [
             "Err",
             "path"
@@ -56976,7 +57010,7 @@
         {
           "kind": "fn",
           "name": "wrong_size_block_hash_returns_error",
-          "line": 983,
+          "line": 972,
           "called": [
             "Err",
             "path"
@@ -56985,7 +57019,7 @@
         {
           "kind": "fn",
           "name": "forwarded_key_equality",
-          "line": 1003,
+          "line": 992,
           "called": [
             "ForwardedKey",
             "block_hash"
@@ -56994,7 +57028,7 @@
         {
           "kind": "fn",
           "name": "actor_id_type_check",
-          "line": 1019,
+          "line": 1008,
           "called": [
             "ActorId",
             "_"
@@ -57003,7 +57037,7 @@
         {
           "kind": "fn",
           "name": "nonce_progressed_round_trip",
-          "line": 1026,
+          "line": 1015,
           "called": [
             "StateRecord",
             "next_nonce",
@@ -57013,7 +57047,7 @@
         {
           "kind": "fn",
           "name": "nonce_progressed_large_value",
-          "line": 1039,
+          "line": 1028,
           "called": [
             "StateRecord",
             "next_nonce",
@@ -57023,7 +57057,7 @@
         {
           "kind": "fn",
           "name": "replay_rebuilds_next_nonce_from_nonce_progressed",
-          "line": 1050,
+          "line": 1039,
           "called": [
             "HexBytes",
             "_",
@@ -57038,7 +57072,7 @@
         {
           "kind": "fn",
           "name": "replay_takes_max_nonce_across_records",
-          "line": 1100,
+          "line": 1089,
           "called": [
             "_",
             "append",
@@ -57050,7 +57084,7 @@
         {
           "kind": "fn",
           "name": "submitted_record_round_trip",
-          "line": 1122,
+          "line": 1111,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -57063,7 +57097,7 @@
         {
           "kind": "fn",
           "name": "submitted_record_without_assignment_round_trip",
-          "line": 1143,
+          "line": 1132,
           "called": [
             "HexBytes",
             "StateRecord",
@@ -57075,7 +57109,7 @@
         {
           "kind": "fn",
           "name": "replay_applies_submitted_record_effects",
-          "line": 1160,
+          "line": 1149,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -57094,7 +57128,7 @@
         {
           "kind": "fn",
           "name": "replay_tolerates_legacy_and_submitted_mix",
-          "line": 1192,
+          "line": 1181,
           "called": [
             "AddressAssignment",
             "HexBytes",
@@ -57111,7 +57145,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_gapped_address_assignments",
-          "line": 1238,
+          "line": 1227,
           "called": [
             "Err",
             "HexBytes",
@@ -57121,7 +57155,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_duplicate_actor_id_with_different_addresses",
-          "line": 1272,
+          "line": 1261,
           "called": [
             "Err",
             "HexBytes",
@@ -57131,7 +57165,7 @@
         {
           "kind": "fn",
           "name": "replay_tolerates_duplicate_actor_id_with_same_address",
-          "line": 1302,
+          "line": 1291,
           "called": [
             "HexBytes",
             "_",
@@ -57145,7 +57179,7 @@
         {
           "kind": "fn",
           "name": "replay_rejects_submitted_records_with_duplicate_actor_id",
-          "line": 1320,
+          "line": 1309,
           "called": [
             "AddressAssignment",
             "Err",
@@ -58453,7 +58487,7 @@
         {
           "kind": "fn",
           "name": "process_block",
-          "line": 410,
+          "line": 407,
           "called": [
             "Err",
             "WatcherError",
@@ -58476,7 +58510,7 @@
         {
           "kind": "fn",
           "name": "process_event",
-          "line": 512,
+          "line": 509,
           "called": [
             "AddressAssignment",
             "Err",
@@ -58514,7 +58548,7 @@
         {
           "kind": "fn",
           "name": "sign",
-          "line": 650,
+          "line": 647,
           "called": [
             "SignedActionForSubmit",
             "UnsignedAction",
@@ -58533,7 +58567,7 @@
         {
           "kind": "impl",
           "name": "Clone for ReorgError",
-          "line": 672,
+          "line": 669,
           "called": [
             "ReorgError"
           ]
@@ -58541,13 +58575,13 @@
         {
           "kind": "fn",
           "name": "clone",
-          "line": 673,
+          "line": 670,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 697,
+          "line": 694,
           "called": [
             "EventTopic",
             "RawLog",
@@ -58558,7 +58592,7 @@
         {
           "kind": "struct",
           "name": "SharedSubmitter",
-          "line": 714,
+          "line": 711,
           "called": [
             "BufferingSubmitter"
           ]
@@ -58566,7 +58600,7 @@
         {
           "kind": "impl",
           "name": "crate::submitter::Submitter for SharedSubmitter",
-          "line": 715,
+          "line": 712,
           "called": [
             "SharedSubmitter"
           ]
@@ -58574,7 +58608,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 716,
+          "line": 713,
           "called": [
             "signed"
           ]
@@ -58582,7 +58616,7 @@
         {
           "kind": "fn",
           "name": "bridge_addr",
-          "line": 725,
+          "line": 722,
           "called": [
             "EthAddress"
           ]
@@ -58590,7 +58624,7 @@
         {
           "kind": "fn",
           "name": "identity_addr",
-          "line": 728,
+          "line": 725,
           "called": [
             "EthAddress"
           ]
@@ -58598,7 +58632,7 @@
         {
           "kind": "fn",
           "name": "test_key",
-          "line": 733,
+          "line": 730,
           "called": [
             "BridgeActorKey"
           ]
@@ -58606,7 +58640,7 @@
         {
           "kind": "fn",
           "name": "build_registered_ecdsa_log",
-          "line": 740,
+          "line": 737,
           "called": [
             "RawLog",
             "actor",
@@ -58619,7 +58653,7 @@
         {
           "kind": "fn",
           "name": "empty_source_no_blocks",
-          "line": 776,
+          "line": 773,
           "called": [
             "bridge_addr",
             "config",
@@ -58636,7 +58670,7 @@
         {
           "kind": "fn",
           "name": "confirmation_depth_holds_back",
-          "line": 791,
+          "line": 788,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -58655,7 +58689,7 @@
         {
           "kind": "fn",
           "name": "first_registration_submits_register_identity",
-          "line": 817,
+          "line": 814,
           "called": [
             "BlockHeader",
             "_",
@@ -58685,7 +58719,7 @@
         {
           "kind": "fn",
           "name": "idempotency_drops_duplicates",
-          "line": 877,
+          "line": 874,
           "called": [
             "BlockHeader",
             "SharedSubmitter",
@@ -58714,7 +58748,7 @@
         {
           "kind": "fn",
           "name": "backpressure_retries_on_busy",
-          "line": 944,
+          "line": 941,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -58737,7 +58771,7 @@
         {
           "kind": "fn",
           "name": "halts_on_not_admissible",
-          "line": 986,
+          "line": 983,
           "called": [
             "BlockHeader",
             "Err",
@@ -58760,7 +58794,7 @@
         {
           "kind": "fn",
           "name": "run_until_respects_stop_signal",
-          "line": 1030,
+          "line": 1027,
           "called": [
             "bridge_addr",
             "config",
@@ -58777,7 +58811,7 @@
         {
           "kind": "fn",
           "name": "revoked_records_forwarded_no_submission",
-          "line": 1049,
+          "line": 1046,
           "called": [
             "BlockHeader",
             "RawLog",
@@ -58802,7 +58836,7 @@
         {
           "kind": "fn",
           "name": "revoked_event_does_not_bump_nonce",
-          "line": 1096,
+          "line": 1093,
           "called": [
             "BlockHeader",
             "RawLog",
@@ -58827,7 +58861,7 @@
         {
           "kind": "fn",
           "name": "failed_submit_does_not_corrupt_address_book",
-          "line": 1146,
+          "line": 1143,
           "called": [
             "BlockHeader",
             "action",
@@ -58856,7 +58890,7 @@
         {
           "kind": "fn",
           "name": "state_records_use_atomic_submitted_record",
-          "line": 1223,
+          "line": 1220,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -58881,7 +58915,7 @@
         {
           "kind": "fn",
           "name": "blocks_per_iteration_zero_does_not_underflow",
-          "line": 1292,
+          "line": 1289,
           "called": [
             "BlockHeader",
             "bridge_addr",
@@ -58900,7 +58934,7 @@
         {
           "kind": "fn",
           "name": "last_confirmed_block_at_u64_max_does_not_wrap",
-          "line": 1323,
+          "line": 1320,
           "called": [
             "_",
             "block_number",
@@ -58919,19 +58953,19 @@
         {
           "kind": "fn",
           "name": "ok_not_admissible_verdict_maps_to_submit_error",
-          "line": 1364,
+          "line": 1361,
           "called": []
         },
         {
           "kind": "struct",
           "name": "OkNotAdmissibleSubmitter",
-          "line": 1365,
+          "line": 1362,
           "called": []
         },
         {
           "kind": "impl",
           "name": "crate::submitter::Submitter for OkNotAdmissibleSubmitter",
-          "line": 1366,
+          "line": 1363,
           "called": [
             "OkNotAdmissibleSubmitter"
           ]
@@ -58939,7 +58973,7 @@
         {
           "kind": "fn",
           "name": "submit",
-          "line": 1367,
+          "line": 1364,
           "called": [
             "BlockHeader",
             "Err",
@@ -59133,13 +59167,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 150,
+          "line": 155,
           "called": []
         },
         {
           "kind": "fn",
           "name": "mul_wide",
-          "line": 158,
+          "line": 163,
           "called": [
             "b"
           ]
@@ -59147,13 +59181,13 @@
         {
           "kind": "fn",
           "name": "div_u256_by_u128",
-          "line": 175,
+          "line": 180,
           "called": []
         },
         {
           "kind": "fn",
           "name": "get_amount_out_wide",
-          "line": 206,
+          "line": 211,
           "called": [
             "BPS_DENOMINATOR",
             "div_u256_by_u128",
@@ -59163,7 +59197,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_byte_equivalence",
-          "line": 226,
+          "line": 231,
           "called": [
             "action",
             "count",
@@ -59180,7 +59214,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_coverage",
-          "line": 263,
+          "line": 268,
           "called": [
             "count",
             "fixture",
@@ -59191,7 +59225,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_tag_pin",
-          "line": 285,
+          "line": 290,
           "called": [
             "action",
             "fixture",
@@ -59204,7 +59238,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_header_constants",
-          "line": 311,
+          "line": 316,
           "called": [
             "AMM_SWAP_FEE_BPS",
             "BPS_DENOMINATOR",
@@ -59216,7 +59250,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_formula_compliance",
-          "line": 326,
+          "line": 331,
           "called": [
             "fixture",
             "get_amount_out_wide",
@@ -59228,7 +59262,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_no_drain",
-          "line": 348,
+          "line": 353,
           "called": [
             "BPS_DENOMINATOR",
             "fixture",
@@ -59240,7 +59274,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_k_monotonicity",
-          "line": 378,
+          "line": 383,
           "called": [
             "fixture",
             "iter",
@@ -59252,7 +59286,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_slippage",
-          "line": 396,
+          "line": 401,
           "called": [
             "fixture",
             "iter",
@@ -59263,7 +59297,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_post_swap_reserves",
-          "line": 415,
+          "line": 420,
           "called": [
             "fixture",
             "iter",
@@ -59274,7 +59308,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_corpus_l2_balance_deltas",
-          "line": 444,
+          "line": 449,
           "called": [
             "credit",
             "debit",
@@ -59287,7 +59321,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_cxsf_consumer",
-          "line": 469,
+          "line": 474,
           "called": [
             "fixture",
             "iter",
@@ -59300,7 +59334,7 @@
         {
           "kind": "fn",
           "name": "amm_swap_cxsf_matches_json",
-          "line": 514,
+          "line": 519,
           "called": [
             "decode_hex",
             "fixture",
@@ -59314,7 +59348,7 @@
         {
           "kind": "fn",
           "name": "mul_wide_known_vectors",
-          "line": 559,
+          "line": 564,
           "called": [
             "mul_wide"
           ]
@@ -59322,7 +59356,7 @@
         {
           "kind": "fn",
           "name": "div_u256_by_u128_known_vectors",
-          "line": 587,
+          "line": 592,
           "called": [
             "b",
             "div_u256_by_u128",
@@ -59332,7 +59366,7 @@
         {
           "kind": "fn",
           "name": "get_amount_out_wide_known_vectors",
-          "line": 618,
+          "line": 623,
           "called": [
             "get_amount_out_wide"
           ]
@@ -59844,13 +59878,13 @@
         {
           "kind": "fn",
           "name": "decode_hex",
-          "line": 197,
+          "line": 202,
           "called": []
         },
         {
           "kind": "fn",
           "name": "entry_to_action",
-          "line": 220,
+          "line": 225,
           "called": [
             "Action",
             "Entry",
@@ -59864,7 +59898,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_byte_equivalence",
-          "line": 313,
+          "line": 318,
           "called": [
             "action",
             "count",
@@ -59881,7 +59915,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_coverage",
-          "line": 346,
+          "line": 351,
           "called": [
             "as_str",
             "fixture",
@@ -59893,7 +59927,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_identifier_matches",
-          "line": 395,
+          "line": 400,
           "called": [
             "EXPECTED_FIXTURE_IDENTIFIER",
             "fixture",
@@ -59905,7 +59939,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_max_budget_constant_agrees",
-          "line": 414,
+          "line": 419,
           "called": [
             "MAX_BUDGET_PER_DEPOSIT",
             "fixture",
@@ -59916,7 +59950,7 @@
         {
           "kind": "fn",
           "name": "lean_action_corpus_leading_tag_per_kind",
-          "line": 431,
+          "line": 436,
           "called": [
             "as_str",
             "bytes",
@@ -64690,7 +64724,7 @@
         {
           "kind": "fn",
           "name": "default_output_path",
-          "line": 146,
+          "line": 152,
           "called": [
             "push"
           ]
@@ -64698,7 +64732,7 @@
         {
           "kind": "fn",
           "name": "build_corpus",
-          "line": 169,
+          "line": 175,
           "called": [
             "FixtureRecord",
             "MESSAGE_LEN",
@@ -64713,7 +64747,7 @@
         {
           "kind": "struct",
           "name": "ValidVector",
-          "line": 221,
+          "line": 227,
           "called": [
             "MESSAGE_LEN",
             "PUBKEY_LEN",
@@ -64723,7 +64757,7 @@
         {
           "kind": "fn",
           "name": "build_valid_vectors",
-          "line": 234,
+          "line": 240,
           "called": [
             "KEY_COUNT",
             "MSGS_PER_KEY",
@@ -64743,7 +64777,7 @@
         {
           "kind": "fn",
           "name": "derive_key",
-          "line": 287,
+          "line": 293,
           "called": [
             "pos"
           ]
@@ -64751,7 +64785,7 @@
         {
           "kind": "fn",
           "name": "derive_msg",
-          "line": 309,
+          "line": 315,
           "called": [
             "MESSAGE_LEN",
             "pos"
@@ -64760,7 +64794,7 @@
         {
           "kind": "fn",
           "name": "to_high_s",
-          "line": 326,
+          "line": 332,
           "called": [
             "SECP256K1_N_BE",
             "SIGNATURE_LEN"
@@ -64769,7 +64803,7 @@
         {
           "kind": "fn",
           "name": "make_record",
-          "line": 358,
+          "line": 364,
           "called": [
             "FixtureRecord",
             "len"
@@ -64778,7 +64812,7 @@
         {
           "kind": "fn",
           "name": "parse_input",
-          "line": 377,
+          "line": 383,
           "called": [
             "cursor",
             "len",
@@ -64789,7 +64823,7 @@
         {
           "kind": "fn",
           "name": "read_u16_be",
-          "line": 392,
+          "line": 398,
           "called": [
             "bytes",
             "cursor",
@@ -64801,7 +64835,7 @@
         {
           "kind": "fn",
           "name": "read_slice",
-          "line": 400,
+          "line": 406,
           "called": [
             "bytes",
             "cursor",

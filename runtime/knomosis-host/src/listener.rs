@@ -82,12 +82,74 @@ pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 /// an unbounded operator value could overflow that `Instant` and **panic** the
 /// handler thread on the first connection.  A full day is already pathological
 /// for a single request, so cap far below any overflow.
-pub const MAX_CONNECTION_TIMEOUT: Duration = Duration::from_secs(86_400);
+pub const MAX_CONNECTION_TIMEOUT: Duration = Duration::from_hours(24);
+
+/// Construct the absolute per-request read deadline `now + timeout` in a way
+/// that can **never** panic on `Instant` overflow, no matter how `timeout`
+/// reached us.
+///
+/// The CLI path caps `--connection-timeout` at [`MAX_CONNECTION_TIMEOUT`]
+/// (`crate::config::Config::validate`), but a library embedder that builds a
+/// [`HandlerConfig`] directly — e.g. through
+/// [`crate::config::ServerConfigBuilder::handler`] — bypasses that ceiling.
+/// A pathological `Duration` (up to `Duration::MAX`) would then overflow the
+/// bare `Instant::now() + timeout` and abort the handler thread on its first
+/// accepted connection.  Clamping the addend to `MAX_CONNECTION_TIMEOUT` — a
+/// value already far past any legitimate single-request budget — makes the
+/// deadline construction total: it saturates rather than panicking.  The
+/// residual `checked_add` guards the (platform-dependent) case where even
+/// `now + 24 h` is unrepresentable, degrading fail-closed to an immediate
+/// deadline instead of a panic.
+#[must_use]
+fn read_deadline_from(now: Instant, timeout: Duration) -> Instant {
+    let bounded = timeout.min(MAX_CONNECTION_TIMEOUT);
+    now.checked_add(bounded).unwrap_or(now)
+}
+
+#[cfg(test)]
+mod read_deadline_tests {
+    use super::{read_deadline_from, MAX_CONNECTION_TIMEOUT};
+    use std::time::{Duration, Instant};
+
+    /// A library embedder that builds a `HandlerConfig` directly (bypassing
+    /// the CLI ceiling) can supply a pathological `connection_timeout`.  The
+    /// bare `now + Duration::MAX` overflows `Instant` and panics the handler
+    /// thread; `read_deadline_from` must clamp to the ceiling and return a
+    /// finite future deadline instead.
+    #[test]
+    fn saturates_instead_of_panicking_on_extreme_timeout() {
+        let now = Instant::now();
+        let deadline = read_deadline_from(now, Duration::MAX);
+        assert!(deadline > now, "deadline must be in the future");
+        assert!(
+            deadline <= now + MAX_CONNECTION_TIMEOUT,
+            "clamped deadline must not exceed the ceiling"
+        );
+    }
+
+    /// A normal sub-ceiling timeout is preserved exactly (no clamping).
+    #[test]
+    fn preserves_normal_timeouts_below_the_ceiling() {
+        let now = Instant::now();
+        let d = Duration::from_secs(10);
+        assert_eq!(read_deadline_from(now, d), now + d);
+    }
+
+    /// Exactly the ceiling is preserved (boundary case: `min` keeps it).
+    #[test]
+    fn preserves_the_ceiling_exactly() {
+        let now = Instant::now();
+        assert_eq!(
+            read_deadline_from(now, MAX_CONNECTION_TIMEOUT),
+            now + MAX_CONNECTION_TIMEOUT
+        );
+    }
+}
 
 /// Maximum time the connection handler will block waiting for the
 /// kernel's reply.  Bounded so a wedged kernel doesn't hold
 /// connection threads indefinitely.
-pub const DEFAULT_KERNEL_REPLY_TIMEOUT: Duration = Duration::from_secs(60);
+pub const DEFAULT_KERNEL_REPLY_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// Default cap on the number of simultaneously-active connection
 /// handler threads (across all listeners).  Defends against the
@@ -314,7 +376,7 @@ pub fn handle_connection<S: Read + Write>(
     //    slow-loris defence: the socket's per-read timeout resets on
     //    every delivered byte, so a trickling client would otherwise
     //    hold this handler slot indefinitely.
-    let read_deadline = Instant::now() + config.connection_timeout;
+    let read_deadline = read_deadline_from(Instant::now(), config.connection_timeout);
     let (signer_hint, payload) =
         match read_request_with_deadline(stream, config.max_frame_size, read_deadline) {
             Ok(p) => p,
@@ -500,7 +562,7 @@ where
         // (`WouldBlock`/`TimedOut` → graceful close): the deadline
         // only fires when reads keep making progress too slowly, which
         // is a protocol error (`ParseError`), not a clean close.
-        let read_deadline = Instant::now() + config.connection_timeout;
+        let read_deadline = read_deadline_from(Instant::now(), config.connection_timeout);
         match reader.read_next_with_deadline(&mut read_half, config.max_frame_size, read_deadline) {
             Ok((signer_hint, payload)) => {
                 let pending = match handle.submit(conn_id, signer_hint, payload) {
@@ -751,6 +813,7 @@ pub mod tls {
 
     use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
+    use super::read_deadline_from;
     use crate::queue::{ConnId, QueueHandle};
 
     use super::{backoff_on_accept_error, handle_connection, ConnectionSlot, HandlerConfig};
@@ -951,7 +1014,7 @@ pub mod tls {
         // `DeadlineStream` shrinks the socket read timeout to the remaining
         // budget on every raw read, so the whole connection is bounded by
         // `connection_timeout`.
-        let deadline = Instant::now() + config.connection_timeout;
+        let deadline = read_deadline_from(Instant::now(), config.connection_timeout);
         let bounded = DeadlineStream::new(stream, deadline, config.connection_timeout);
         let mut tls_stream = StreamOwned::new(connection, bounded);
         let outcome = handle_connection(&mut tls_stream, &handle, &config, conn_id);
@@ -1116,7 +1179,7 @@ pub mod unix {
                     if !meta.file_type().is_socket() {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::AlreadyExists,
-                            format!("path {path:?} exists and is not a Unix socket"),
+                            format!("path {} exists and is not a Unix socket", path.display()),
                         ));
                     }
                     std::fs::remove_file(&path)?;

@@ -418,16 +418,6 @@ fn apply_balance_semantic_event(
     bc_pairs: &HashSet<(ActorId, ResourceId)>,
 ) -> Result<(), IndexerError> {
     match event {
-        Event::RewardIssued {
-            resource,
-            recipient,
-            amount,
-        } => {
-            if bc_pairs.contains(&(*recipient, *resource)) {
-                return Ok(());
-            }
-            balance_credit(tx, *recipient, *resource, *amount)?;
-        }
         Event::WithdrawalRequested {
             resource,
             sender,
@@ -439,7 +429,12 @@ fn apply_balance_semantic_event(
             }
             balance_debit(tx, *sender, *resource, *amount)?;
         }
-        Event::DepositCredited {
+        Event::RewardIssued {
+            resource,
+            recipient,
+            amount,
+        }
+        | Event::DepositCredited {
             resource,
             recipient,
             amount,

@@ -186,7 +186,7 @@ fn concurrent_writers_serialise_via_mutex() {
         // The point is: NO panics, NO deadlocks, queries succeed.
         // Each thread credited in MULTIPLES of 10, so the result
         // is in {0, 10, 20, 30, 40, 50}.
-        assert!(v % 10 == 0, "tid {tid}: torn read {v}");
+        assert!(v.is_multiple_of(10), "tid {tid}: torn read {v}");
         assert!(v <= 50, "tid {tid}: over-credited {v}");
     }
 }

@@ -115,12 +115,17 @@ fn load_fixture() -> Option<Fixture> {
         eprintln!("[SKIP] event_subscribe_cbe.json not found.  Run `lake test` to generate it.");
         return None;
     };
-    let bytes = std::fs::read(&path)
-        .unwrap_or_else(|e| panic!("fixture exists at {path:?} but cannot be read: {e}"));
+    let bytes = std::fs::read(&path).unwrap_or_else(|e| {
+        panic!(
+            "fixture exists at {} but cannot be read: {e}",
+            path.display()
+        )
+    });
     let fixture: Fixture = serde_json::from_slice(&bytes).unwrap_or_else(|e| {
         panic!(
-            "fixture at {path:?} is malformed JSON or schema-drifted: {e}.  \
-             Rebuild via `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test`."
+            "fixture at {} is malformed JSON or schema-drifted: {e}.  \
+             Rebuild via `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test`.",
+            path.display()
         )
     });
     Some(fixture)

@@ -148,7 +148,7 @@ cd solidity && make deploy-local              # full BOLD+AMM suite vs live anvi
 python3 scripts/economic_simulation.py
 
 # Workstream RH (Rust host runtime) — see runtime/README.md.
-# Toolchain pin: runtime/rust-toolchain.toml (stable 1.83).
+# Toolchain pin: runtime/rust-toolchain.toml (stable 1.97).
 cd runtime && cargo build --workspace --all-targets
 cd runtime && cargo test --workspace
 cd runtime && cargo clippy --workspace --all-targets -- -D warnings
@@ -279,7 +279,7 @@ knomosis/
 │                                 (see solidity/README.md)
 ├── runtime/                   -- Workstream RH: Rust host runtime
 │   ├── Cargo.toml             --   workspace manifest
-│   ├── rust-toolchain.toml    --   pinned Rust channel (stable 1.83)
+│   ├── rust-toolchain.toml    --   pinned Rust channel (stable 1.97)
 │   ├── knomosis-hash-fallback.c  --   AR.10 default fallback (lake-built)
 │   ├── knomosis-cli-common/      --   shared CLI / logging helpers
 │   ├── knomosis-cross-stack/     --   dev-dep fixture loader
@@ -1000,7 +1000,7 @@ Plan: `docs/planning/rust_host_runtime_plan.md`
 | RH-G | `knomosis-faultproof-observer` | Complete | Game state machine; honest strategy; L1 watcher; EIP-1559 submitter; persistence; chaos suite; 50-trace cross-stack corpus |
 
 Workspace conventions: `unsafe_code = "forbid"` default;
-`clippy::pedantic`; no `tokio`; stable 1.83.
+`clippy::pedantic`; no `tokio`; stable 1.97.
 
 ### Unified gas pool / budgets / AMM (Workstream GP)
 

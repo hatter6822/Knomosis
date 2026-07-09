@@ -203,9 +203,7 @@ impl BridgeActorKey {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 // Determine actual file length for the error.
-                let actual = std::fs::metadata(path)
-                    .map(|m| m.len() as usize)
-                    .unwrap_or(0);
+                let actual = std::fs::metadata(path).map_or(0, |m| m.len() as usize);
                 return Err(KeyError::InvalidLength {
                     got: actual,
                     expected: PRIVATE_KEY_LEN,

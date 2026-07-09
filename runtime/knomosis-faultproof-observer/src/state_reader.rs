@@ -331,7 +331,7 @@ fn decode_hex_response(hex_str: &str) -> Result<Vec<u8>, GameStateReadError> {
             actual: trimmed.len() / 2,
         });
     }
-    if trimmed.len() % 2 != 0 {
+    if !trimmed.len().is_multiple_of(2) {
         return Err(GameStateReadError::Malformed(format!(
             "odd-length hex string: {}",
             trimmed.len()

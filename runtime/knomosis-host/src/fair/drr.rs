@@ -1037,7 +1037,7 @@ mod tests {
         }
         let served: Vec<u64> = std::iter::from_fn(|| t.pick().map(|r| tag_of(&r))).collect();
         assert_eq!(served, vec![0, 1, 2, 3]);
-        assert!(t.total_depth == 0);
+        assert_eq!(t.total_depth, 0);
         assert_leaf_invariants(&t);
     }
 
@@ -1097,7 +1097,7 @@ mod tests {
         // Flow 9 drained: evicted from both structures.
         assert_eq!(t.active_len(), 0);
         assert!(!t.flows.contains_key(&9), "drained flow not removed");
-        assert!(t.total_depth == 0);
+        assert_eq!(t.total_depth, 0);
         // Re-appearing key: brand-new flow, fresh (zero) deficit.
         leaf_enqueue(&mut t, caps, 9, req(9)).unwrap();
         assert_eq!(t.flows.get(&9).expect("re-created").deficit, 0);
@@ -1146,7 +1146,7 @@ mod tests {
         assert!(leaf_enqueue(&mut t, caps, 1, req(1)).is_err());
         // No empty flow was inserted (invariant 2 preserved).
         assert!(t.flows.is_empty());
-        assert!(t.total_depth == 0);
+        assert_eq!(t.total_depth, 0);
     }
 
     /// Single-flow saturation then drain: a lone flow can be filled to

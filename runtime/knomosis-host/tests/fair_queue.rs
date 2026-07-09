@@ -195,7 +195,7 @@ impl Kernel for SlowMockKernel {
         thread::sleep(self.delay);
         KernelResponse::from_verdict(Verdict::Ok)
     }
-    fn identifier(&self) -> &str {
+    fn identifier(&self) -> &'static str {
         "slow-mock/v1"
     }
 }
@@ -647,7 +647,7 @@ impl Kernel for PanickingKernel {
     fn submit(&self, _bytes: &[u8]) -> KernelResponse {
         panic!("boom in kernel");
     }
-    fn identifier(&self) -> &str {
+    fn identifier(&self) -> &'static str {
         "panicking-mock/v1"
     }
 }

@@ -35,7 +35,7 @@ CI-on-every-PR smoke; libFuzzer gives coverage-guided depth.
 ## Why a separate workspace
 
 `libfuzzer-sys` needs a **nightly** toolchain plus the LLVM sanitizer
-runtime, which the pinned stable `1.83` workspace toolchain
+runtime, which the pinned stable `1.97` workspace toolchain
 (`runtime/rust-toolchain.toml`) cannot build. So this crate carries its
 own (empty) `[workspace]` table and is `exclude`d from
 `runtime/Cargo.toml` — the stable gates (`cargo build/test/clippy

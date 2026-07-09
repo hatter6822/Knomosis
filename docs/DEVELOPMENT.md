@@ -73,7 +73,7 @@ topic:
 |-----------|-------|
 | Project version | `v0.8.4` (Lean + Rust in lockstep; `kernelVersion` in `LegalKernel.lean`) |
 | Lean toolchain | `leanprover/lean4:v4.29.1` (pinned in [`../lean-toolchain`](../lean-toolchain)) |
-| Rust toolchain | stable **1.83** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.83`) |
+| Rust toolchain | stable **1.97** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.97`) |
 | Solidity toolchain | Foundry **v1.7.0** + solc **0.8.20** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
 | Vendored Solidity deps | OpenZeppelin **v5.0.2**, forge-std **v1.9.4** |
 | Kernel TCB | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` (Lean core + Std core only) |
@@ -152,7 +152,7 @@ toolchain are macOS-native (see
 - For the optional Solidity stack: nothing extra — `setup.sh` installs Foundry
   and solc for you.
 - For the Rust stack: `rustup` (the base container image ships it; otherwise
-  install from <https://rustup.rs>). The pinned 1.83 channel is auto-resolved
+  install from <https://rustup.rs>). The pinned 1.97 channel is auto-resolved
   from `runtime/rust-toolchain.toml`.
 
 **Disk / network.** A full three-stack setup downloads the Lean toolchain
@@ -248,7 +248,7 @@ commands are documented inline in the script next to each constant).
 | `-h` / `--help` | Print usage. |
 
 > The Rust toolchain is **not** installed by `setup.sh` — `cargo` resolves the
-> pinned 1.83 channel automatically from `runtime/rust-toolchain.toml` on first
+> pinned 1.97 channel automatically from `runtime/rust-toolchain.toml` on first
 > use. The web SessionStart hook additionally runs `cargo fetch --locked` to
 > warm the registry cache (see §5.7).
 
@@ -449,7 +449,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings   # every lint is
 
 Workspace conventions:
 
-- **Pinned channel:** stable 1.83 in `runtime/rust-toolchain.toml`; MSRV `1.83`
+- **Pinned channel:** stable 1.97 in `runtime/rust-toolchain.toml`; MSRV `1.97`
   in `runtime/Cargo.toml` `[workspace.package]`. Bumping the channel is a
   workspace-level PR — sub-streams cannot silently drift it.
 - **`--locked`** everywhere: builds use exactly the committed `Cargo.lock`
@@ -1076,7 +1076,7 @@ follow the standard tracker workflow.
 | codemap gate fails | Run `python3 scripts/regenerate_codemaps.py` and commit the result. |
 | `forge build` can't find the pinned solc | `foundry.toml` pins `/usr/local/bin/solc`. Re-run `./scripts/setup.sh` — it installs solc (under `~/.local/bin/solc` on a non-root host) and sets `FOUNDRY_SOLC` to it — then `source ~/.bashrc`. |
 | `anvil` fails: `version 'GLIBC_2.35' not found` | The host glibc is < 2.35 (e.g. RHEL 9 / glibc 2.34); modern Foundry's `anvil` needs ≥ 2.35. `forge` / `cast` / `solc` still work — use `make deploy-sepolia-dryrun` / `forge script` (in-memory) instead of `make devnet` / `deploy-local`, or run anvil on a glibc ≥ 2.35 host / container. |
-| `cargo` builds a different toolchain | Run from inside `runtime/` so `rust-toolchain.toml` (1.83) applies; use `--locked`. |
+| `cargo` builds a different toolchain | Run from inside `runtime/` so `rust-toolchain.toml` (1.97) applies; use `--locked`. |
 | `hash-check` / `verify-check` exit 1 | **Expected** on the default build — they fail closed on the fallback primitives. They flip to 0 only with the production adaptors linked (§10.2/§10.3). |
 | Cross-stack keccak assertions are "skipped" | Expected under the FNV fallback; run `./scripts/verify_keccak_crossstack.sh` to execute them against real keccak. |
 

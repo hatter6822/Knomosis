@@ -1538,7 +1538,7 @@ mod tests {
             pos: 0,
             delay: Duration::ZERO,
         };
-        let deadline = Instant::now() + Duration::from_secs(60);
+        let deadline = Instant::now() + Duration::from_mins(1);
         let decoded = read_frame_with_deadline(&mut reader, DEFAULT_MAX_FRAME_SIZE, deadline)
             .expect("timely fragmented read must succeed under a generous deadline");
         assert_eq!(decoded, payload);
@@ -1593,7 +1593,7 @@ mod tests {
             .read_next_with_deadline(
                 &mut cursor,
                 DEFAULT_MAX_FRAME_SIZE,
-                Instant::now() + Duration::from_secs(60),
+                Instant::now() + Duration::from_mins(1),
             )
             .unwrap();
         assert_eq!(h, LEGACY_SIGNER_HINT);

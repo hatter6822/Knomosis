@@ -84,8 +84,7 @@ fn try_submit_one(addr: std::net::SocketAddr, payload: &[u8]) -> std::io::Result
     let mut stream = TcpStream::connect(addr)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-    let frame = encode_frame(payload)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("encode: {e}")))?;
+    let frame = encode_frame(payload).map_err(|e| std::io::Error::other(format!("encode: {e}")))?;
     stream.write_all(&frame)?;
     stream.flush()?;
     // Tolerate shutdown error: the server may have already closed
@@ -391,7 +390,7 @@ impl knomosis_host::kernel::Kernel for SlowMockKernel {
         KernelResponse::from_verdict(Verdict::Ok)
     }
 
-    fn identifier(&self) -> &str {
+    fn identifier(&self) -> &'static str {
         "slow-mock/v1"
     }
 }
@@ -566,7 +565,7 @@ fn kernel_panic_does_not_stall_host() {
             assert!(n != 0, "intentional kernel panic for regression test");
             KernelResponse::from_verdict(Verdict::Ok)
         }
-        fn identifier(&self) -> &str {
+        fn identifier(&self) -> &'static str {
             "panic-once-kernel/v1"
         }
     }

@@ -1370,7 +1370,7 @@ mod tests {
         // Reads succeed before the deadline, fail (TimedOut) after — the
         // mechanism that bounds the cumulative request-read time.
         let mut s = DeadlineStream::new(&b"hello"[..]);
-        s.deadline = Instant::now() + Duration::from_secs(60);
+        s.deadline = Instant::now() + Duration::from_mins(1);
         let mut buf = [0u8; 5];
         assert_eq!(s.read(&mut buf).unwrap(), 5);
         // Now expire it: the next read errors regardless of available bytes.
