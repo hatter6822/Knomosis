@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "480079c2e96553eb1d6d1878775bbde6e0b80539df01e4cd7b9452802312fd4e"
+    "source_digest": "b9a44685c5d2b59a42e6eb72af6d182d16a51a734a400b2e7d79de34dc284a52"
   },
   "summary": {
     "module_count": 192,
@@ -40389,7 +40389,7 @@
         {
           "kind": "mod",
           "name": "unix",
-          "line": 877,
+          "line": 897,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40405,7 +40405,7 @@
         {
           "kind": "struct",
           "name": "UnixListener",
-          "line": 934,
+          "line": 954,
           "called": [
             "path"
           ]
@@ -40413,13 +40413,13 @@
         {
           "kind": "impl",
           "name": "UnixListener",
-          "line": 939,
+          "line": 959,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 958,
+          "line": 978,
           "called": [
             "Err",
             "kind",
@@ -40429,13 +40429,13 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 997,
+          "line": 1017,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 1006,
+          "line": 1026,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40459,7 +40459,7 @@
         {
           "kind": "impl",
           "name": "Drop for UnixListener",
-          "line": 1060,
+          "line": 1080,
           "called": [
             "UnixListener"
           ]
@@ -40467,7 +40467,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 1061,
+          "line": 1081,
           "called": [
             "Err",
             "error",
@@ -40478,7 +40478,7 @@
         {
           "kind": "fn",
           "name": "handle_single_unix_connection",
-          "line": 1073,
+          "line": 1093,
           "called": [
             "ConnId",
             "ConnectionSlot",
