@@ -123,6 +123,19 @@ jobs:
         # parses it — 1.83 errors "feature `edition2024` is required").
         run: cargo "+${RUST_NIGHTLY}" install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
 
+      - name: Verify the committed fuzz lockfile is up to date
+        shell: bash
+        # cargo-fuzz 0.13.2 exposes no `--locked`, and its internal `cargo
+        # build/run` runs WITHOUT it, so a `fuzz/Cargo.toml` change that forgot
+        # to regenerate `fuzz/Cargo.lock` would let this lane silently
+        # re-resolve a DIFFERENT dependency graph than the committed / reviewed
+        # one (defeating the lockfile-pinning intent).  `cargo metadata
+        # --locked` fails iff the lockfile is out of date vs. the manifest, so
+        # the build / run steps below always exercise exactly the committed
+        # lock.  Uses the pinned nightly cargo (the fuzz tree pulls edition2024
+        # crates the workspace's 1.83 cargo cannot parse).
+        run: cargo "+${RUST_NIGHTLY}" metadata --manifest-path fuzz/Cargo.toml --locked --format-version 1 > /dev/null
+
       - name: cargo fuzz build (compile all targets)
         # Compiles every `fuzz_targets/*.rs` with the sanitizer
         # instrumentation.  A decoder signature change the path-pinned
@@ -176,6 +189,19 @@ jobs:
         # cargo-fuzz's dep tree needs `edition2024` (only nightly's cargo
         # parses it — 1.83 errors "feature `edition2024` is required").
         run: cargo "+${RUST_NIGHTLY}" install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
+
+      - name: Verify the committed fuzz lockfile is up to date
+        shell: bash
+        # cargo-fuzz 0.13.2 exposes no `--locked`, and its internal `cargo
+        # build/run` runs WITHOUT it, so a `fuzz/Cargo.toml` change that forgot
+        # to regenerate `fuzz/Cargo.lock` would let this lane silently
+        # re-resolve a DIFFERENT dependency graph than the committed / reviewed
+        # one (defeating the lockfile-pinning intent).  `cargo metadata
+        # --locked` fails iff the lockfile is out of date vs. the manifest, so
+        # the build / run steps below always exercise exactly the committed
+        # lock.  Uses the pinned nightly cargo (the fuzz tree pulls edition2024
+        # crates the workspace's 1.83 cargo cannot parse).
+        run: cargo "+${RUST_NIGHTLY}" metadata --manifest-path fuzz/Cargo.toml --locked --format-version 1 > /dev/null
 
       - name: Fuzz ${{ matrix.target }}
         shell: bash
