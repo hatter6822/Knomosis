@@ -134,12 +134,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Dictionary paths are relative to the `runtime/` working-directory
+          # (where `cargo fuzz run` is invoked, so libFuzzer resolves `-dict`
+          # against it), hence the `fuzz/` prefix — matching the documented
+          # `cd runtime && cargo +nightly fuzz run … -dict=fuzz/dictionaries/…`.
           - target: host_read_request
-            dict: dictionaries/host.dict
+            dict: fuzz/dictionaries/host.dict
           - target: l1_ingest_decode_event
             dict: ''
           - target: indexer_decode_event
-            dict: dictionaries/indexer.dict
+            dict: fuzz/dictionaries/indexer.dict
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
