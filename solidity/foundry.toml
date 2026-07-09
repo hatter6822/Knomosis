@@ -9,6 +9,19 @@ evm_version = "shanghai"
 optimizer = true
 optimizer_runs = 200
 via_ir = true
+# Omit the trailing CBOR metadata (solc bytecode hash) from the compiled
+# output.  Under `via_ir`, forge script's `--broadcast` per-transaction
+# constructor-argument decoder mis-locates the init-code/args boundary for a
+# struct constructor carrying a non-empty dynamic array (e.g.
+# KnomosisDisputeVerifier's `ConstructorArgs.approvedAdjudicators`): it folds
+# the metadata trailer into the args and aborts with `type check failed for
+# "offset (usize)"`, so the WHOLE deploy fails before broadcasting a single
+# tx.  Dropping the metadata trailer removes what it trips on.  The runtime
+# LOGIC is unchanged (the metadata is non-executed appended data), so every
+# test / gas benchmark behaves identically, and Etherscan source-verification
+# still succeeds (it matches metadata-less bytecode + the constructor args).
+bytecode_hash = "none"
+cbor_metadata = false
 fs_permissions = [
     { access = "read-write", path = "./test/fixtures" },
     # DeploySepolia.s.sol writes the deployment manifest (addresses +
