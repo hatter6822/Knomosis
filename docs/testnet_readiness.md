@@ -135,20 +135,22 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       `docs/audits/20-…`); findings remediated.  An **internal** deep
       review (`docs/audits/21-…`) is done: it found + fixed 5 real
       contract defects (1 Critical, 1 High, 3 Medium/Low).
-- [ ] **Slow-loris hardening of the TLS handshake path.**  The
-      `knomosis-host` per-request frame-read deadline fully bounds the
-      TCP / Unix paths, but for the host's **TLS** listener the deadline
-      sits *over* rustls, so it does not bound the handshake / record I/O
-      driven inside a single `StreamOwned::read` (only the resettable
-      socket timeout does) — a slow-handshake TLS peer can hold a handler
-      past `connection_timeout`.  Low severity (the host TLS listener is
-      one-shot and, in the shipped topology, loopback behind the gateway,
-      which terminates public TLS), so it is deferred, but the complete
-      fix — a deadline-aware wrapper interposed **under** rustls
-      (`StreamOwned::new(conn, DeadlineStream::new(tcp, deadline))`) —
-      should be applied to **both** `knomosis-host` (`listener.rs`, see
-      the `KNOWN RESIDUAL` comment there) **and** the gateway's
-      `http::conn` before a value-bearing public TLS deployment.
+- [x] **Slow-loris hardening of the TLS handshake path.**  A
+      deadline-aware wrapper (`DeadlineStream`) is interposed **under**
+      rustls on **both** TLS terminators — `knomosis-host` (`listener.rs`
+      `mod tls`) and the gateway (`http::conn` + `http::tls`) — so the
+      per-request read deadline bounds the TLS handshake + record I/O (the
+      many raw socket reads a single `StreamOwned::read` performs), not
+      merely the decoded frames.  It shrinks the socket read timeout to the
+      *remaining* budget before every raw read, so a peer trickling
+      handshake / record bytes is bounded by `connection_timeout` (host) /
+      `REQUEST_READ_DEADLINE` (gateway) instead of held past it; on the
+      gateway the keep-alive loop resets that (now rustls-nested) deadline
+      per request via `ResetReadDeadline`.  Writes pass through, bounded by
+      the socket write timeout, so a long-lived SSE stream is unaffected.
+      Covered by unit tests (the deadline check + the shrinking per-read
+      cap, host and gateway) on top of the gateway's end-to-end rustls
+      handshake / keep-alive / mTLS / SSE suite.
 - [x] Adversarial fuzzing of the untrusted-input boundaries (security
       review §4.3).  **Two layers, both CI-wired:**
       (1) *stable proptest* (`ci-rust.yml`) — never-panics property fuzz

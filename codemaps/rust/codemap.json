@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "bbf971497382982699d6632aa8d8fdadbd24f9ef8c809336174b78a73e865a65"
+    "source_digest": "106072f58cc815c59f35074e64d6bcbc5eff0be4aafb9cf1ee40a7f83be72cf2"
   },
   "summary": {
     "module_count": 192,
-    "declaration_count": 5913
+    "declaration_count": 5943
   },
   "modules": [
     {
@@ -26403,7 +26403,7 @@
     {
       "module": "runtime::knomosis-gateway::src::http::conn",
       "path": "runtime/knomosis-gateway/src/http/conn.rs",
-      "declaration_count": 76,
+      "declaration_count": 92,
       "declarations": [
         {
           "kind": "const",
@@ -26524,13 +26524,73 @@
         {
           "kind": "struct",
           "name": "DeadlineStream",
-          "line": 190,
+          "line": 211,
+          "called": []
+        },
+        {
+          "kind": "trait",
+          "name": "BoundNextRead",
+          "line": 221,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "bound_next_read",
+          "line": 226,
+          "called": [
+            "budget"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "BoundNextRead for TcpStream",
+          "line": 229,
+          "called": [
+            "BoundNextRead"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bound_next_read",
+          "line": 230,
+          "called": [
+            "CONNECTION_TIMEOUT",
+            "_",
+            "budget",
+            "max",
+            "min"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "BoundNextRead for &[u8]",
+          "line": 240,
+          "called": [
+            "BoundNextRead"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bound_next_read",
+          "line": 241,
+          "called": []
+        },
+        {
+          "kind": "trait",
+          "name": "ResetReadDeadline",
+          "line": 249,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "reset_read_deadline",
+          "line": 251,
           "called": []
         },
         {
           "kind": "impl",
           "name": "DeadlineStream<S>",
-          "line": 195,
+          "line": 254,
           "called": [
             "DeadlineStream"
           ]
@@ -26538,29 +26598,48 @@
         {
           "kind": "fn",
           "name": "new",
-          "line": 198,
+          "line": 257,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "ResetReadDeadline for DeadlineStream<S>",
+          "line": 265,
+          "called": [
+            "DeadlineStream",
+            "ResetReadDeadline"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reset_read_deadline",
+          "line": 266,
           "called": []
         },
         {
           "kind": "impl",
           "name": "Read for DeadlineStream<S>",
-          "line": 206,
+          "line": 271,
           "called": [
+            "BoundNextRead",
             "DeadlineStream"
           ]
         },
         {
           "kind": "fn",
           "name": "read",
-          "line": 207,
+          "line": 272,
           "called": [
-            "Err"
+            "Err",
+            "_",
+            "bound_next_read",
+            "remaining"
           ]
         },
         {
           "kind": "impl",
           "name": "Write for DeadlineStream<S>",
-          "line": 218,
+          "line": 288,
           "called": [
             "DeadlineStream"
           ]
@@ -26568,19 +26647,19 @@
         {
           "kind": "fn",
           "name": "write",
-          "line": 219,
+          "line": 289,
           "called": []
         },
         {
           "kind": "fn",
           "name": "flush",
-          "line": 222,
+          "line": 292,
           "called": []
         },
         {
           "kind": "fn",
           "name": "lingering_drain",
-          "line": 244,
+          "line": 314,
           "called": [
             "Err",
             "LINGER_DRAIN_MAX_BYTES",
@@ -26592,12 +26671,12 @@
         {
           "kind": "fn",
           "name": "run_connection",
-          "line": 273,
+          "line": 343,
           "called": [
             "AppState",
-            "DeadlineStream",
             "Err",
             "REQUEST_READ_DEADLINE",
+            "ResetReadDeadline",
             "_",
             "config",
             "head",
@@ -26608,6 +26687,7 @@
             "next_request_id",
             "read_head",
             "reject_slug",
+            "reset_read_deadline",
             "serve_parsed",
             "start",
             "state",
@@ -26618,7 +26698,7 @@
         {
           "kind": "fn",
           "name": "write_continue",
-          "line": 331,
+          "line": 406,
           "called": [
             "b",
             "flush"
@@ -26627,17 +26707,16 @@
         {
           "kind": "enum",
           "name": "ConnControl",
-          "line": 338,
+          "line": 413,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serve_parsed",
-          "line": 356,
+          "line": 431,
           "called": [
             "AppState",
             "ConnControl",
-            "DeadlineStream",
             "Err",
             "RequestHead",
             "RequestParts",
@@ -26663,7 +26742,7 @@
         {
           "kind": "fn",
           "name": "body_unreadable_outcome",
-          "line": 475,
+          "line": 550,
           "called": [
             "RouteOutcome",
             "into_outcome",
@@ -26673,7 +26752,7 @@
         {
           "kind": "fn",
           "name": "stream_head_outcome",
-          "line": 485,
+          "line": 560,
           "called": [
             "RouteOutcome",
             "clone",
@@ -26684,13 +26763,13 @@
         {
           "kind": "struct",
           "name": "StreamArgs",
-          "line": 499,
+          "line": 574,
           "called": []
         },
         {
           "kind": "fn",
           "name": "serve_stream",
-          "line": 517,
+          "line": 592,
           "called": [
             "AppState",
             "StreamArgs",
@@ -26710,7 +26789,7 @@
         {
           "kind": "struct",
           "name": "ParsedRequest",
-          "line": 587,
+          "line": 662,
           "called": [
             "idempotency_key",
             "path"
@@ -26719,7 +26798,7 @@
         {
           "kind": "struct",
           "name": "RequestHead",
-          "line": 604,
+          "line": 679,
           "called": [
             "idempotency_key",
             "path"
@@ -26728,13 +26807,13 @@
         {
           "kind": "impl",
           "name": "RequestHead",
-          "line": 621,
+          "line": 696,
           "called": []
         },
         {
           "kind": "fn",
           "name": "into_request",
-          "line": 625,
+          "line": 700,
           "called": [
             "ParsedRequest",
             "idempotency_key",
@@ -26744,13 +26823,13 @@
         {
           "kind": "enum",
           "name": "RequestError",
-          "line": 644,
+          "line": 719,
           "called": []
         },
         {
           "kind": "fn",
           "name": "reject",
-          "line": 663,
+          "line": 738,
           "called": [
             "RequestError"
           ]
@@ -26758,13 +26837,13 @@
         {
           "kind": "enum",
           "name": "Version",
-          "line": 673,
+          "line": 748,
           "called": []
         },
         {
           "kind": "fn",
           "name": "read_head",
-          "line": 684,
+          "line": 759,
           "called": [
             "Err",
             "MAX_REQUEST_LINE_BYTES",
@@ -26782,7 +26861,7 @@
         {
           "kind": "fn",
           "name": "parse_request_line",
-          "line": 744,
+          "line": 819,
           "called": [
             "Err",
             "RequestError",
@@ -26801,7 +26880,7 @@
         {
           "kind": "struct",
           "name": "HeaderSet",
-          "line": 784,
+          "line": 859,
           "called": [
             "idempotency_key"
           ]
@@ -26809,7 +26888,7 @@
         {
           "kind": "fn",
           "name": "read_headers",
-          "line": 802,
+          "line": 877,
           "called": [
             "Err",
             "HeaderSet",
@@ -26833,7 +26912,7 @@
         {
           "kind": "fn",
           "name": "insert_header",
-          "line": 848,
+          "line": 923,
           "called": [
             "Err",
             "HeaderSet",
@@ -26851,13 +26930,13 @@
         {
           "kind": "fn",
           "name": "set_first",
-          "line": 909,
+          "line": 984,
           "called": []
         },
         {
           "kind": "fn",
           "name": "read_body",
-          "line": 919,
+          "line": 994,
           "called": [
             "Err",
             "RequestError",
@@ -26872,13 +26951,13 @@
         {
           "kind": "enum",
           "name": "LineRead",
-          "line": 939,
+          "line": 1014,
           "called": []
         },
         {
           "kind": "fn",
           "name": "read_line",
-          "line": 955,
+          "line": 1030,
           "called": [
             "Err",
             "LineRead",
@@ -26890,13 +26969,13 @@
         {
           "kind": "fn",
           "name": "strip_eol",
-          "line": 977,
+          "line": 1052,
           "called": []
         },
         {
           "kind": "fn",
           "name": "is_tchar",
-          "line": 983,
+          "line": 1058,
           "called": [
             "b"
           ]
@@ -26904,7 +26983,7 @@
         {
           "kind": "fn",
           "name": "write_response",
-          "line": 1013,
+          "line": 1088,
           "called": [
             "RouteOutcome",
             "as_bytes",
@@ -26919,7 +26998,7 @@
         {
           "kind": "fn",
           "name": "write_raw_problem",
-          "line": 1050,
+          "line": 1125,
           "called": [
             "clone",
             "into_outcome",
@@ -26935,7 +27014,7 @@
         {
           "kind": "fn",
           "name": "header_is_safe",
-          "line": 1075,
+          "line": 1150,
           "called": [
             "b",
             "bytes",
@@ -26946,7 +27025,7 @@
         {
           "kind": "fn",
           "name": "reason_phrase",
-          "line": 1083,
+          "line": 1158,
           "called": [
             "_"
           ]
@@ -26954,7 +27033,7 @@
         {
           "kind": "fn",
           "name": "reject_slug",
-          "line": 1112,
+          "line": 1187,
           "called": [
             "_"
           ]
@@ -26962,8 +27041,9 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1125,
+          "line": 1200,
           "called": [
+            "BoundNextRead",
             "ConnControl",
             "DeadlineStream",
             "RequestError",
@@ -26978,7 +27058,7 @@
         {
           "kind": "fn",
           "name": "parse",
-          "line": 1138,
+          "line": 1213,
           "called": [
             "RequestError",
             "head",
@@ -26990,7 +27070,7 @@
         {
           "kind": "fn",
           "name": "head",
-          "line": 1146,
+          "line": 1221,
           "called": [
             "RequestError",
             "read_head"
@@ -26999,7 +27079,7 @@
         {
           "kind": "fn",
           "name": "parses_a_simple_get",
-          "line": 1152,
+          "line": 1227,
           "called": [
             "b",
             "is_empty",
@@ -27011,7 +27091,7 @@
         {
           "kind": "fn",
           "name": "splits_path_and_query_and_reads_known_headers",
-          "line": 1162,
+          "line": 1237,
           "called": [
             "b",
             "idempotency_key",
@@ -27023,7 +27103,7 @@
         {
           "kind": "fn",
           "name": "reads_post_body_exactly",
-          "line": 1180,
+          "line": 1255,
           "called": [
             "b",
             "parse",
@@ -27033,7 +27113,7 @@
         {
           "kind": "fn",
           "name": "expect_100_continue_is_recognised_and_unknown_expectations_rejected",
-          "line": 1194,
+          "line": 1269,
           "called": [
             "Err",
             "b",
@@ -27044,7 +27124,7 @@
         {
           "kind": "fn",
           "name": "rejects_transfer_encoding",
-          "line": 1217,
+          "line": 1292,
           "called": [
             "Err",
             "b",
@@ -27054,7 +27134,7 @@
         {
           "kind": "fn",
           "name": "rejects_duplicate_content_length",
-          "line": 1226,
+          "line": 1301,
           "called": [
             "Err",
             "b",
@@ -27064,7 +27144,7 @@
         {
           "kind": "fn",
           "name": "rejects_comma_listed_content_length",
-          "line": 1236,
+          "line": 1311,
           "called": [
             "Err",
             "b",
@@ -27074,7 +27154,7 @@
         {
           "kind": "fn",
           "name": "rejects_oversized_body",
-          "line": 1245,
+          "line": 1320,
           "called": [
             "Err",
             "b",
@@ -27084,7 +27164,7 @@
         {
           "kind": "fn",
           "name": "rejects_obsolete_folding_and_bad_version_and_target",
-          "line": 1254,
+          "line": 1329,
           "called": [
             "Err",
             "b",
@@ -27094,7 +27174,7 @@
         {
           "kind": "fn",
           "name": "keep_alive_rules",
-          "line": 1273,
+          "line": 1348,
           "called": [
             "b",
             "close",
@@ -27104,7 +27184,7 @@
         {
           "kind": "fn",
           "name": "eof_and_truncation",
-          "line": 1283,
+          "line": 1358,
           "called": [
             "Err",
             "b",
@@ -27114,7 +27194,7 @@
         {
           "kind": "fn",
           "name": "deadline_stream_fails_reads_once_expired",
-          "line": 1293,
+          "line": 1368,
           "called": [
             "b",
             "kind",
@@ -27123,8 +27203,59 @@
         },
         {
           "kind": "fn",
+          "name": "deadline_stream_caps_each_read_to_the_remaining_budget",
+          "line": 1387,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Recorder",
+          "line": 1396,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "Read for Recorder",
+          "line": 1399,
+          "called": [
+            "Recorder"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read",
+          "line": 1400,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "BoundNextRead for Recorder",
+          "line": 1405,
+          "called": [
+            "BoundNextRead",
+            "Recorder"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "bound_next_read",
+          "line": 1406,
+          "called": [
+            "Recorder",
+            "_",
+            "b",
+            "budget",
+            "iter",
+            "kind",
+            "len",
+            "push",
+            "read"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "writes_a_framed_response",
-          "line": 1312,
+          "line": 1448,
           "called": [
             "text",
             "with_header",
@@ -27134,7 +27265,7 @@
         {
           "kind": "fn",
           "name": "head_only_omits_body_but_keeps_content_length",
-          "line": 1327,
+          "line": 1463,
           "called": [
             "text",
             "write_response"
@@ -27143,7 +27274,7 @@
         {
           "kind": "fn",
           "name": "response_writer_blocks_header_injection",
-          "line": 1346,
+          "line": 1482,
           "called": [
             "text",
             "with_header",
@@ -27153,7 +27284,7 @@
         {
           "kind": "fn",
           "name": "reason_and_slug_tables",
-          "line": 1357,
+          "line": 1493,
           "called": [
             "reason_phrase",
             "reject_slug"
@@ -27162,7 +27293,7 @@
         {
           "kind": "fn",
           "name": "enum_smoke",
-          "line": 1368,
+          "line": 1504,
           "called": []
         }
       ]
@@ -27960,7 +28091,7 @@
     {
       "module": "runtime::knomosis-gateway::src::http::tls",
       "path": "runtime/knomosis-gateway/src/http/tls.rs",
-      "declaration_count": 30,
+      "declaration_count": 32,
       "declarations": [
         {
           "kind": "type",
@@ -28097,9 +28228,24 @@
           ]
         },
         {
+          "kind": "impl",
+          "name": "ResetReadDeadline",
+          "line": 331,
+          "called": [
+            "BoundNextRead",
+            "DeadlineStream"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "reset_read_deadline",
+          "line": 334,
+          "called": []
+        },
+        {
           "kind": "mod",
           "name": "handshake_tests",
-          "line": 328,
+          "line": 345,
           "called": [
             "AdmissionStage",
             "Config",
@@ -28115,13 +28261,13 @@
         {
           "kind": "const",
           "name": "TOKEN",
-          "line": 342,
+          "line": 359,
           "called": []
         },
         {
           "kind": "fn",
           "name": "openssl",
-          "line": 345,
+          "line": 362,
           "called": [
             "Err",
             "_",
@@ -28131,7 +28277,7 @@
         {
           "kind": "fn",
           "name": "at",
-          "line": 360,
+          "line": 377,
           "called": [
             "name"
           ]
@@ -28139,7 +28285,7 @@
         {
           "kind": "fn",
           "name": "gen_pki",
-          "line": 370,
+          "line": 387,
           "called": [
             "at",
             "ok",
@@ -28149,7 +28295,7 @@
         {
           "kind": "fn",
           "name": "make_state",
-          "line": 479,
+          "line": 496,
           "called": [
             "AppState",
             "Config",
@@ -28169,7 +28315,7 @@
         {
           "kind": "struct",
           "name": "TlsServer",
-          "line": 518,
+          "line": 535,
           "called": [
             "addr",
             "handle"
@@ -28178,7 +28324,7 @@
         {
           "kind": "impl",
           "name": "Drop for TlsServer",
-          "line": 524,
+          "line": 541,
           "called": [
             "TlsServer"
           ]
@@ -28186,7 +28332,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 525,
+          "line": 542,
           "called": [
             "_",
             "handle",
@@ -28196,7 +28342,7 @@
         {
           "kind": "fn",
           "name": "serve",
-          "line": 537,
+          "line": 554,
           "called": [
             "AppState",
             "SharedConfig",
@@ -28216,7 +28362,7 @@
         {
           "kind": "fn",
           "name": "roots",
-          "line": 566,
+          "line": 583,
           "called": [
             "path"
           ]
@@ -28224,7 +28370,7 @@
         {
           "kind": "fn",
           "name": "request",
-          "line": 578,
+          "line": 595,
           "called": [
             "Err",
             "addr",
@@ -28244,7 +28390,7 @@
         {
           "kind": "fn",
           "name": "text",
-          "line": 628,
+          "line": 645,
           "called": [
             "bytes"
           ]
@@ -28252,7 +28398,7 @@
         {
           "kind": "fn",
           "name": "server_tls",
-          "line": 633,
+          "line": 650,
           "called": [
             "TlsConfig",
             "at",
@@ -28263,7 +28409,7 @@
         {
           "kind": "fn",
           "name": "native_tls_server_auth_surface",
-          "line": 649,
+          "line": 666,
           "called": [
             "addr",
             "as_bytes",
@@ -28283,7 +28429,7 @@
         {
           "kind": "fn",
           "name": "native_tls_body_and_stream_surface",
-          "line": 707,
+          "line": 724,
           "called": [
             "addr",
             "as_bytes",
@@ -28306,7 +28452,7 @@
         {
           "kind": "fn",
           "name": "native_tls_mutual_auth_enforced",
-          "line": 814,
+          "line": 831,
           "called": [
             "TlsConfig",
             "addr",
@@ -28327,7 +28473,7 @@
         {
           "kind": "fn",
           "name": "native_tls_revoked_client_cert_is_rejected",
-          "line": 860,
+          "line": 877,
           "called": [
             "TlsConfig",
             "addr",
@@ -28348,7 +28494,7 @@
         {
           "kind": "fn",
           "name": "make_crl_revoking_client",
-          "line": 901,
+          "line": 918,
           "called": [
             "at",
             "openssl"
@@ -28357,7 +28503,7 @@
         {
           "kind": "fn",
           "name": "cert_reload_swaps_on_success_keeps_on_failure",
-          "line": 960,
+          "line": 977,
           "called": [
             "SharedConfig",
             "TlsConfig",
@@ -28374,7 +28520,7 @@
         {
           "kind": "fn",
           "name": "cert_hot_reload_serves_the_new_certificate",
-          "line": 995,
+          "line": 1012,
           "called": [
             "addr",
             "b",
@@ -40033,7 +40179,7 @@
     {
       "module": "runtime::knomosis-host::src::listener",
       "path": "runtime/knomosis-host/src/listener.rs",
-      "declaration_count": 44,
+      "declaration_count": 56,
       "declarations": [
         {
           "kind": "const",
@@ -40338,7 +40484,7 @@
         {
           "kind": "struct",
           "name": "TlsListener",
-          "line": 750,
+          "line": 752,
           "called": [
             "ServerConfig"
           ]
@@ -40346,13 +40492,13 @@
         {
           "kind": "impl",
           "name": "TlsListener",
-          "line": 755,
+          "line": 757,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 761,
+          "line": 763,
           "called": [
             "ServerConfig",
             "addr"
@@ -40361,13 +40507,13 @@
         {
           "kind": "fn",
           "name": "local_addr",
-          "line": 771,
+          "line": 773,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 780,
+          "line": 782,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40386,9 +40532,67 @@
           ]
         },
         {
+          "kind": "struct",
+          "name": "DeadlineStream",
+          "line": 857,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "DeadlineStream",
+          "line": 863,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "new",
+          "line": 866,
+          "called": []
+        },
+        {
+          "kind": "impl",
+          "name": "Read for DeadlineStream",
+          "line": 875,
+          "called": [
+            "DeadlineStream"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read",
+          "line": 876,
+          "called": [
+            "Err",
+            "_",
+            "max",
+            "min",
+            "remaining"
+          ]
+        },
+        {
+          "kind": "impl",
+          "name": "Write for DeadlineStream",
+          "line": 899,
+          "called": [
+            "DeadlineStream"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "write",
+          "line": 900,
+          "called": []
+        },
+        {
+          "kind": "fn",
+          "name": "flush",
+          "line": 903,
+          "called": []
+        },
+        {
           "kind": "fn",
           "name": "handle_tls_connection",
-          "line": 840,
+          "line": 908,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40403,14 +40607,56 @@
             "handle",
             "handle_connection",
             "name",
-            "stream",
+            "stream"
+          ]
+        },
+        {
+          "kind": "mod",
+          "name": "deadline_tests",
+          "line": 954,
+          "called": [
+            "TcpListener"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "idle_server_stream",
+          "line": 963,
+          "called": [
+            "_",
+            "addr",
+            "client",
+            "listener",
+            "local_addr",
+            "server"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "read_past_the_deadline_is_timed_out_without_blocking",
+          "line": 973,
+          "called": [
+            "idle_server_stream",
+            "kind",
+            "read",
+            "server"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "an_idle_socket_read_is_bounded_by_the_deadline",
+          "line": 989,
+          "called": [
+            "idle_server_stream",
+            "read",
+            "server",
             "unix"
           ]
         },
         {
           "kind": "mod",
           "name": "unix",
-          "line": 897,
+          "line": 1014,
           "called": [
             "ConnId",
             "ConnectionSlot",
@@ -40426,7 +40672,7 @@
         {
           "kind": "struct",
           "name": "UnixListener",
-          "line": 954,
+          "line": 1071,
           "called": [
             "path"
           ]
@@ -40434,13 +40680,13 @@
         {
           "kind": "impl",
           "name": "UnixListener",
-          "line": 959,
+          "line": 1076,
           "called": []
         },
         {
           "kind": "fn",
           "name": "bind",
-          "line": 978,
+          "line": 1095,
           "called": [
             "Err",
             "kind",
@@ -40450,13 +40696,13 @@
         {
           "kind": "fn",
           "name": "path",
-          "line": 1017,
+          "line": 1134,
           "called": []
         },
         {
           "kind": "fn",
           "name": "accept_loop",
-          "line": 1026,
+          "line": 1143,
           "called": [
             "Err",
             "HandlerConfig",
@@ -40480,7 +40726,7 @@
         {
           "kind": "impl",
           "name": "Drop for UnixListener",
-          "line": 1080,
+          "line": 1197,
           "called": [
             "UnixListener"
           ]
@@ -40488,7 +40734,7 @@
         {
           "kind": "fn",
           "name": "drop",
-          "line": 1081,
+          "line": 1198,
           "called": [
             "Err",
             "error",
@@ -40499,7 +40745,7 @@
         {
           "kind": "fn",
           "name": "handle_single_unix_connection",
-          "line": 1093,
+          "line": 1210,
           "called": [
             "ConnId",
             "ConnectionSlot",

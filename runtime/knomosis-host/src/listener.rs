@@ -735,10 +735,12 @@ pub mod tcp {
 /// TLS-on-TCP listener.  Layered on top of [`tcp::TcpListener`]
 /// with `rustls` termination.
 pub mod tls {
+    use std::io::{Read, Write};
     use std::net::{TcpListener as StdTcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
+    use std::time::{Duration, Instant};
 
     use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
@@ -838,6 +840,72 @@ pub mod tls {
         }
     }
 
+    /// A `Read + Write` adapter that bounds every underlying socket **read**
+    /// by an absolute deadline, interposed UNDER `rustls` (it wraps the raw
+    /// `TcpStream`, not the `StreamOwned`) so the TLS handshake + record I/O —
+    /// the many raw socket reads a single `StreamOwned::read` performs — is
+    /// bounded.  Before each read the socket read timeout is shrunk to the
+    /// remaining budget, so the cumulative handshake + read time cannot exceed
+    /// the deadline (not `deadline + one socket timeout`).
+    ///
+    /// This closes the slow-loris TLS sub-case the frame-read deadline
+    /// [`handle_connection`] applies OVER `rustls` cannot catch: that deadline
+    /// is only checked *between* `StreamOwned::read` calls, so a peer trickling
+    /// handshake / record bytes inside one `read` evades it.  Writes pass
+    /// through, bounded by the socket write timeout the caller sets (a stalled
+    /// handshake write is a far weaker lever than a stalled read, and this
+    /// one-shot path writes only a tiny verdict response).
+    struct DeadlineStream {
+        inner: TcpStream,
+        deadline: Instant,
+        per_read_cap: Duration,
+    }
+
+    impl DeadlineStream {
+        /// Wrap `inner` with an absolute `deadline`; each read is additionally
+        /// capped to `per_read_cap` (the per-read backstop, never widened).
+        fn new(inner: TcpStream, deadline: Instant, per_read_cap: Duration) -> Self {
+            Self {
+                inner,
+                deadline,
+                per_read_cap,
+            }
+        }
+    }
+
+    impl Read for DeadlineStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            // Remaining budget; `None` (deadline in the past) or zero ⇒ expired.
+            match self.deadline.checked_duration_since(Instant::now()) {
+                Some(remaining) if !remaining.is_zero() => {
+                    // Cap this read to the remaining budget so it cannot
+                    // overshoot the deadline; clamp to the per-read backstop
+                    // (never widen it) and a >= 1ms floor (`Duration::ZERO`
+                    // reads as "block forever" to the OS, and `set_read_timeout`
+                    // rejects a zero value).
+                    let cap = remaining
+                        .min(self.per_read_cap)
+                        .max(Duration::from_millis(1));
+                    let _ = self.inner.set_read_timeout(Some(cap));
+                    self.inner.read(buf)
+                }
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "TLS connection read deadline exceeded",
+                )),
+            }
+        }
+    }
+
+    impl Write for DeadlineStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.inner.write(buf)
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
     fn handle_tls_connection(
         stream: TcpStream,
         peer: std::net::SocketAddr,
@@ -865,29 +933,78 @@ pub mod tls {
                 return;
             }
         };
-        // KNOWN RESIDUAL (slow-loris, TLS sub-case).  The per-request
-        // end-to-end deadline `handle_connection` applies bounds the
-        // decoded-FRAME reads (it is checked before each
-        // `tls_stream.read`).  It does NOT bound rustls's internal I/O:
-        // `StreamOwned::read` drives the TLS handshake + record
-        // decryption within a single `read` call, doing multiple raw
-        // socket reads — each only bounded by the socket read timeout set
-        // above, which a trickling peer resets on every byte.  So a
-        // slow-HANDSHAKE TLS peer can still hold this handler up to
-        // ~`connection_timeout` per inner socket read, longer than the
-        // TCP/Unix paths (where the deadline sits directly over the
-        // socket).  Fully closing it needs a deadline-aware wrapper
-        // interposed UNDER rustls — `StreamOwned::new(connection,
-        // DeadlineStream::new(stream, deadline))` — so every handshake
-        // socket read observes the absolute deadline.  Deferred, low
-        // severity: the host TLS listener is one-shot AND, in the shipped
-        // topology, bound to loopback behind the gateway (which terminates
-        // public TLS); the gateway's `http::conn` layer has the analogous
-        // pattern, so the complete fix spans both.  Tracked in
-        // `docs/testnet_readiness.md` §3.6.
-        let mut tls_stream = StreamOwned::new(connection, stream);
+        // Interpose the absolute deadline UNDER rustls (wrapping the raw
+        // socket) so the TLS handshake + record I/O is bounded, not merely the
+        // decoded frames `handle_connection` bounds OVER rustls.  Without this
+        // a peer trickling handshake / record bytes could hold the handler far
+        // past `connection_timeout`: `StreamOwned::read` drives many raw socket
+        // reads within one call, each only bounded by the (per-byte-resettable)
+        // socket read timeout, and the frame-read deadline is checked only
+        // *between* `StreamOwned::read` calls, so it never fires mid-handshake.
+        // `DeadlineStream` shrinks the socket read timeout to the remaining
+        // budget on every raw read, so the whole connection is bounded by
+        // `connection_timeout`.
+        let deadline = Instant::now() + config.connection_timeout;
+        let bounded = DeadlineStream::new(stream, deadline, config.connection_timeout);
+        let mut tls_stream = StreamOwned::new(connection, bounded);
         let outcome = handle_connection(&mut tls_stream, &handle, &config, conn_id);
         tracing::info!(outcome = outcome.name(), "request handled");
+    }
+
+    #[cfg(test)]
+    mod deadline_tests {
+        use super::DeadlineStream;
+        use std::io::Read;
+        use std::net::{TcpListener, TcpStream};
+        use std::time::{Duration, Instant};
+
+        /// A connected server-side `TcpStream`; the returned client end is kept
+        /// alive by the caller (dropping it would close the connection and let
+        /// `read` return `Ok(0)` instead of blocking).
+        fn idle_server_stream() -> (TcpStream, TcpStream) {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+            let addr = listener.local_addr().expect("local_addr");
+            let client = TcpStream::connect(addr).expect("connect loopback");
+            let (server, _) = listener.accept().expect("accept");
+            server.set_nonblocking(false).expect("blocking mode");
+            (server, client)
+        }
+
+        #[test]
+        fn read_past_the_deadline_is_timed_out_without_blocking() {
+            let (server, _client) = idle_server_stream();
+            let past = Instant::now()
+                .checked_sub(Duration::from_secs(1))
+                .expect("one second ago");
+            let mut s = DeadlineStream::new(server, past, Duration::from_secs(10));
+            let started = Instant::now();
+            let err = s
+                .read(&mut [0u8; 8])
+                .expect_err("a past deadline must fail");
+            assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+            // Fail-fast: no socket read is attempted once the deadline passed.
+            assert!(started.elapsed() < Duration::from_millis(500));
+        }
+
+        #[test]
+        fn an_idle_socket_read_is_bounded_by_the_deadline() {
+            // The tightening: a peer that connects then trickles nothing (the
+            // slow-loris limit case) is cut off at the deadline, NOT held for
+            // the full per-read backstop — the socket read timeout is shrunk to
+            // the remaining budget before the read.
+            let (server, _client) = idle_server_stream();
+            let deadline = Instant::now() + Duration::from_millis(200);
+            // Per-read backstop deliberately far LONGER than the deadline, so
+            // only the deadline-derived cap can bound the read.
+            let mut s = DeadlineStream::new(server, deadline, Duration::from_secs(30));
+            let started = Instant::now();
+            let result = s.read(&mut [0u8; 8]);
+            assert!(result.is_err(), "an idle read must not succeed");
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "the read must be bounded by the 200ms deadline, not the 30s backstop"
+            );
+        }
     }
 }
 
