@@ -141,7 +141,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
     // replay defence is enforced uniformly.  When the flags are
     // omitted, the observer falls back to the empty
     // `MemoryTruthOracle` (cannot play moves; passive event-
-    // watcher only).
+    // watcher only) — a combination `CliConfig::validate` permits
+    // ONLY without `--chain-id`: the production-submitter branch
+    // below can therefore rely on the oracle being armed (a
+    // broadcast-capable observer that could only defer moves is
+    // rejected fail-closed at CLI parse time).
     //
     // Audit-pass-4-round-6 fix: previously the `MemoryTruthOracle`
     // was hardcoded regardless of operator intent, making the
@@ -256,7 +260,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
 /// Otherwise returns an empty [`MemoryTruthOracle`] — the
 /// observer detects this via [`HonestMoveError::TruthOracleMissed`]
 /// at move time and logs a "deferring move" warning; no incorrect
-/// moves are submitted.  This is the dev / read-only mode.
+/// moves are submitted.  This is the dev / read-only mode, and it is
+/// only reachable WITHOUT `--chain-id`: `CliConfig::validate` rejects
+/// a production (broadcasting) observer with no truth oracle
+/// fail-closed, so the mock-submitter path is the only consumer of
+/// the empty-oracle fallback.
 fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
     if let (Some(knomosis), Some(log_path)) = (&cfg.knomosis_binary, &cfg.knomosis_log_path) {
         // Format the deployment-id as 64-char lowercase hex via
