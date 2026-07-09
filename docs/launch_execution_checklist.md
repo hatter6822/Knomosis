@@ -37,6 +37,13 @@ them.
 - [ ] **Toolchain present.** `foundry` (`forge`/`cast`), the Lean toolchain
       (`./scripts/setup.sh`), and the Rust workspace build
       (`cd runtime && cargo build --workspace`). See runbook §1.
+- [ ] **Foundry broadcast preflight.** Use a **stable** `foundry` release and
+      confirm it broadcasts the full suite: `make deploy-local` against a local
+      `anvil` must succeed. Some foundry *dev builds* regress on the
+      `KnomosisDisputeVerifier` `constructor(tuple)` broadcast decode
+      (`type check failed for "offset (usize)"`, before any tx is sent); the
+      deploy logic is unaffected but the broadcast aborts. See
+      `DEVELOPMENT.md` §10.5.
 - [ ] **Parameters sized.** Run `python3 scripts/economic_simulation.py`
       against YOUR target gas price × trace depth; confirm the IC-1/2/5/6
       asserts pass with the values you will use. Record them. See

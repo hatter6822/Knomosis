@@ -17,8 +17,10 @@
 #    2. F-1 / F-2 trust-binding gate (scripts/verify_release_crypto.sh) — a
 #       fallback hash / signature verifier must NEVER reach a value-bearing
 #       deploy.  REQUIRED; skippable only with --skip-crypto-gate.
-#    3. In-memory dry-run (make deploy-sepolia-dryrun) — catches every config
-#       error (bad quorum, cap ordering, missing role) WITHOUT spending gas.
+#    3. Dry-run against a Sepolia FORK (forge script --fork-url) — catches every
+#       config error (bad quorum, cap ordering, missing role, a BOLD token with
+#       no code) WITHOUT spending gas. A fork (not a bare in-memory chain) so
+#       the real on-chain BOLD token the bridge constructor checks is present.
 #    4. Confirm (interactive, unless --yes), then the REAL Sepolia broadcast +
 #       Etherscan source-verification (make deploy-sepolia).
 #    5. Print the emitted addresses manifest.

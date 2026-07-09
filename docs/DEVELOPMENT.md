@@ -621,9 +621,25 @@ address(0)`, `deploymentId` self-consistency), source-verifies on Etherscan
 (`--verify`), and emits a machine-readable manifest at
 `solidity/deployments/<network>.json`.
 
+**Launch kit (the fast path).** For a value-bearing BOLD+AMM launch the only
+manual inputs are: fund the deployer EOA, fill
+`solidity/deploy.sepolia.env.example` with your custodied addresses / signer,
+and provide `SEPOLIA_RPC_URL` + `ETHERSCAN_API_KEY`. Then one command runs the
+whole flow (F-1/F-2 gate → forked dry-run → confirm → broadcast + verify →
+manifest → optional L2 stack):
+
+```bash
+cp solidity/deploy.sepolia.env.example solidity/deploy.sepolia.env   # then fill SET-THIS…
+./scripts/deploy_sepolia_launch.sh solidity/deploy.sepolia.env
+```
+
+The execution-ordered checklist — pre-flight, post-deploy verification,
+monitoring/alerting, key-custody/rotation, and watchtower ops — is
+`docs/launch_execution_checklist.md`. The underlying make targets:
+
 ```bash
 cd solidity
-make deploy-sepolia-dryrun     # in-memory simulation; writes the manifest
+make deploy-sepolia-dryrun     # bare in-memory sim (ETH-only; writes the manifest)
 # real broadcast (needs SEPOLIA_RPC_URL, a signer [KNOMOSIS_DEPLOYER_ACCOUNT keystore
 # or PRIVATE_KEY], ETHERSCAN_API_KEY + actors):
 make deploy-sepolia
@@ -636,7 +652,25 @@ deploy pipeline first, and size the immutable economics with
 `scripts/economic_simulation.py` (see `docs/deployment_parameters.md`). BOLD is
 **chain-conditional**: mainnet requires the canonical `BOLD_TOKEN_ADDRESS` pin;
 Sepolia accepts an operator-supplied `symbol()=="BOLD"` token
-(`KNOMOSIS_BOLD_TOKEN`); unset ⇒ ETH-only.
+(`KNOMOSIS_BOLD_TOKEN`); unset ⇒ ETH-only. Because a value-bearing BOLD deploy
+references a real on-chain token (the bridge constructor cross-checks its
+`code`/`symbol()`), the wrapper's dry-run forks Sepolia (`forge script
+--fork-url $SEPOLIA_RPC_URL`) rather than using the bare in-memory
+`make deploy-sepolia-dryrun`, which has no BOLD token deployed.
+
+> **Foundry version — `--broadcast` constructor-arg decoding.** Use a **stable
+> `foundry` release** for the real broadcast. Some foundry **dev builds** (e.g.
+> the `1.6.0-v1.7.0` build pinned in this repo's CI containers) carry a
+> regression that, under `via_ir`, mis-locates the init-code/args boundary when
+> assembling the broadcast for a `constructor(tuple)` carrying a non-empty
+> dynamic array *plus* immutables (here `KnomosisDisputeVerifier`) — it aborts
+> `type check failed for "offset (usize)"` **before sending any transaction**.
+> The deploy *logic* is unaffected (the in-memory dry-run and the F.3
+> `TestnetAcceptance` suite pass), and a stable foundry decodes the args
+> correctly. **Preflight your toolchain** with `make deploy-local` against a
+> local `anvil` (a full `--broadcast` of the suite) before the real Sepolia
+> run; if it reproduces the `offset (usize)` abort, upgrade foundry
+> (`foundryup`) to a stable release.
 
 ### 10.6 L2 stack + Licio gateway bring-up
 

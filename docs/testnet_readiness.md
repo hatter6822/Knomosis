@@ -104,7 +104,17 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       emits `deployments/sepolia.json` against a real Sepolia RPC.  This is the
       recommended path: unlike the F.3 `TestnetAcceptance` `Deployer` bundler it
       needs **no** `--disable-code-size-limit` (every production contract is
-      under EIP-170).  See `docs/sepolia_deployment_runbook.md`.
+      under EIP-170).  See `docs/sepolia_deployment_runbook.md`.  The one-command
+      wrapper `scripts/deploy_sepolia_launch.sh` chains the F-1/F-2 gate → forked
+      dry-run → confirm → broadcast+verify → manifest; `docs/launch_execution_checklist.md`
+      is the execution checklist.  **Toolchain caveat (deploy-tooling, not the
+      deploy logic):** use a **stable** `foundry` release — some dev builds (the
+      `1.6.0-v1.7.0` build in this repo's CI containers) regress on assembling the
+      `--broadcast` for `KnomosisDisputeVerifier`'s `constructor(tuple)`
+      (`type check failed for "offset (usize)"`, *before any tx is sent*); the
+      deploy logic is proven (dry-run + F.3 acceptance pass), so preflight the
+      operator's foundry with `make deploy-local` against `anvil` (see
+      `DEVELOPMENT.md` §10.5).
 - [ ] `make testnet-acceptance` (the F.3 acceptance-assertion script) passes
       against the deployed contracts (needs `--disable-code-size-limit` for the
       CREATE3 bundler harness — see the `Deployer` note above).
