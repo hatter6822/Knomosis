@@ -103,8 +103,16 @@ for v in "${REQUIRED_VARS[@]}"; do
   fi
 done
 
+# Normalise the signer.  A leftover `SET-THIS…` placeholder in
+# KNOMOSIS_DEPLOYER_ACCOUNT must NOT shadow a real PRIVATE_KEY: `solidity/
+# Makefile`'s deploy-sepolia prefers ANY non-empty account, so it would run
+# `--account SET-THIS-…` and the documented raw-key fallback would fail after
+# the dry-run.  Unset the placeholder so PRIVATE_KEY is reachable.
+if [ -n "${KNOMOSIS_DEPLOYER_ACCOUNT:-}" ] && printf '%s' "${KNOMOSIS_DEPLOYER_ACCOUNT}" | grep -q 'SET-THIS'; then
+  unset KNOMOSIS_DEPLOYER_ACCOUNT
+fi
 # Exactly one signer path must be provided (keystore preferred).
-if [ -z "${KNOMOSIS_DEPLOYER_ACCOUNT:-}" ] || printf '%s' "${KNOMOSIS_DEPLOYER_ACCOUNT:-}" | grep -q 'SET-THIS'; then
+if [ -z "${KNOMOSIS_DEPLOYER_ACCOUNT:-}" ]; then
   if [ -z "${PRIVATE_KEY:-}" ] || printf '%s' "${PRIVATE_KEY:-}" | grep -q 'SET-THIS'; then
     missing+=("KNOMOSIS_DEPLOYER_ACCOUNT (keystore) or PRIVATE_KEY (raw)")
   fi
@@ -118,13 +126,23 @@ fi
 
 command -v forge >/dev/null 2>&1 || die "forge (Foundry) not found on PATH; install per docs/sepolia_deployment_runbook.md §1"
 
-# A functional AMM needs a non-zero seed ratio; a zero here silently drops the
-# multisig — catch it before the operator thinks they deployed the kill switch.
+# A functional AMM needs BOTH a non-zero seed ratio AND a non-zero BOLD token
+# (`functionalAmm = boldToken != 0 && ammSeedRatioBps > 0`).  A zero in either
+# silently drops the AMM + its disaster-recovery multisig even though this
+# wrapper required the AMM signer set — catch both before the operator thinks
+# they deployed the kill switch.
 if [ "${KNOMOSIS_AMM_SEED_RATIO_BPS}" = "0" ]; then
   die "KNOMOSIS_AMM_SEED_RATIO_BPS is 0 — the AMM (and its disaster-recovery
   multisig) would NOT be deployed.  Set it > 0 for the full BOLD+AMM suite, or
   use an ETH-only env if that is intended."
 fi
+case "${KNOMOSIS_BOLD_TOKEN}" in
+  0x0 | 0x0000000000000000000000000000000000000000 | 0X0* | "")
+    die "KNOMOSIS_BOLD_TOKEN is the zero address — this wrapper deploys the full
+  BOLD+AMM suite, but a zero token disables BOLD and silently drops the AMM +
+  its disaster-recovery multisig.  Set a real Sepolia BOLD token, or use an
+  ETH-only deploy path." ;;
+esac
 
 log "env validated — value-bearing BOLD+AMM deploy"
 log "  deployer:   ${KNOMOSIS_DEPLOYER_ACCOUNT:-<raw PRIVATE_KEY>}"
@@ -141,11 +159,17 @@ else
   warn "skipping the F-1/F-2 crypto gate (--skip-crypto-gate)"
 fi
 
-# --- step 2: in-memory dry-run ---------------------------------------------
-log "dry-run: simulating the full deploy in-memory (no broadcast)…"
-( cd "${ROOT}/solidity" && make deploy-sepolia-dryrun ) \
+# --- step 2: dry-run against a Sepolia FORK --------------------------------
+# A value-bearing BOLD deploy CANNOT dry-run on an empty in-memory chain: the
+# bridge constructor checks the BOLD token's `code.length` + `symbol()`, and a
+# real Sepolia BOLD address has no code off-fork — so `make deploy-sepolia-
+# dryrun` (a bare in-memory `forge script`) would abort here.  Fork Sepolia so
+# the token (and any other pre-existing state) is present; this simulates the
+# REAL value-bearing config end-to-end without broadcasting.
+log "dry-run: simulating the full deploy against a Sepolia fork (no broadcast)…"
+( cd "${ROOT}/solidity" && forge script script/DeploySepolia.s.sol --fork-url "${SEPOLIA_RPC_URL}" ) \
   || die "dry-run FAILED — fix the reported config error before broadcasting."
-log "dry-run: PASSED — the config produces a consistent deployment."
+log "dry-run: PASSED — the config produces a consistent deployment on a Sepolia fork."
 
 if [ "${DRY_RUN_ONLY}" -eq 1 ]; then
   log "--dry-run set: stopping before the real broadcast."

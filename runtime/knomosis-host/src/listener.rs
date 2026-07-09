@@ -77,6 +77,13 @@ use crate::verdict::{Verdict, VerdictResponse};
 /// frames or slower links tune `--connection-timeout`.
 pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Hard ceiling on `--connection-timeout`.  The per-request read deadline is
+/// `Instant::now() + connection_timeout` (here and in the TLS `DeadlineStream`);
+/// an unbounded operator value could overflow that `Instant` and **panic** the
+/// handler thread on the first connection.  A full day is already pathological
+/// for a single request, so cap far below any overflow.
+pub const MAX_CONNECTION_TIMEOUT: Duration = Duration::from_secs(86_400);
+
 /// Maximum time the connection handler will block waiting for the
 /// kernel's reply.  Bounded so a wedged kernel doesn't hold
 /// connection threads indefinitely.

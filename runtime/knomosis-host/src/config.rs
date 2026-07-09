@@ -438,6 +438,14 @@ impl Config {
         if self.connection_timeout.is_zero() {
             return Err(ConfigError::ConnectionTimeoutZero);
         }
+        // Cap the timeout well below the point where `Instant::now() +
+        // connection_timeout` (the per-request deadline in `listener.rs` and
+        // the TLS `DeadlineStream`) could overflow and panic a handler thread.
+        if self.connection_timeout > crate::listener::MAX_CONNECTION_TIMEOUT {
+            return Err(ConfigError::ConnectionTimeoutTooLarge(
+                self.connection_timeout.as_secs(),
+            ));
+        }
         // GP.6.2: the only recognised budget mode is `bounded`.  A
         // sub-flag without an explicit `--budget-policy` defaults to
         // bounded mode, so only an explicit non-`bounded` value is an
@@ -597,6 +605,11 @@ pub enum ConfigError {
     /// instantly via the per-request frame-read deadline).
     #[error("--connection-timeout cannot be zero")]
     ConnectionTimeoutZero,
+    /// `--connection-timeout` above the hard ceiling — an unbounded value
+    /// could overflow the `Instant::now() + connection_timeout` deadline and
+    /// panic a handler thread.
+    #[error("--connection-timeout {0}s exceeds the 86400s (1 day) ceiling")]
+    ConnectionTimeoutTooLarge(u64),
     /// `--max-concurrent-connections` above the hard ceiling.
     #[error("--max-concurrent-connections {0} exceeds hard ceiling")]
     ConcurrentConnectionsTooLarge(usize),
@@ -1390,6 +1403,46 @@ mod tests {
             Err(ConfigError::ConnectionTimeoutZero) => {}
             other => panic!("expected ConnectionTimeoutZero, got {other:?}"),
         }
+    }
+
+    /// A `--connection-timeout` above the 1-day ceiling is rejected before it
+    /// can overflow the `Instant::now() + connection_timeout` deadline math
+    /// and panic a handler thread.
+    #[test]
+    fn connection_timeout_too_large_rejected() {
+        let secs = crate::listener::MAX_CONNECTION_TIMEOUT.as_secs() + 1;
+        let secs_str = secs.to_string();
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--knomosis-binary",
+            "/bin/true",
+            "--knomosis-log",
+            "/tmp/log",
+            "--connection-timeout",
+            &secs_str,
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::ConnectionTimeoutTooLarge(v)) => assert_eq!(v, secs),
+            other => panic!("expected ConnectionTimeoutTooLarge, got {other:?}"),
+        }
+        // The ceiling itself is accepted.
+        let at_max = crate::listener::MAX_CONNECTION_TIMEOUT
+            .as_secs()
+            .to_string();
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--knomosis-binary",
+            "/bin/true",
+            "--knomosis-log",
+            "/tmp/log",
+            "--connection-timeout",
+            &at_max,
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
     }
 
     /// All flags exercised together.
