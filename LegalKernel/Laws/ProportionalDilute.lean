@@ -85,7 +85,16 @@ def proportionalDilute
         setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))
       s
 
-/-! ## LX-M2 (LX.29) Lex re-expression of `proportionalDilute` -/
+/-! ## LX-M2 (LX.29) Lex re-expression of `proportionalDilute`
+
+INVARIANT (AR.15 / i-9): the `lex_impl` below mirrors
+`proportionalDilute` byte-for-byte, INCLUDING the load-bearing `kv.2`
+pre-foldl snapshot read (see the INVARIANT comment on the production
+foldl above).  Do NOT swap `kv.2` for a live `getBalance s' r kv.1`
+read in the mirror either: it would silently diverge from the kernel
+law and break the dust-bound theorem the mirror inherits.  (The guard
+lives here, not inside the `lexlaw` block, so it does not leak into the
+codegen-input sidecar's captured `pre_expr` / `impl_expr` spans.) -/
 
 set_option linter.missingDocs false in
 lexlaw legalkernel_proportionalDilute where
