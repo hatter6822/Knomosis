@@ -67,9 +67,14 @@ cargo +nightly fuzz build
 
 A finding is written to `fuzz/artifacts/<target>/crash-<hash>` (a
 crash / OOM / hang reproducer) and `fuzz/corpus/<target>/` grows the
-coverage corpus. Both directories — plus `fuzz/target/` and the
-generated `Cargo.lock` — are git-ignored (scratch); only the targets,
-the dictionaries, and this manifest are tracked.
+coverage corpus. Both directories — plus `fuzz/target/` — are git-ignored
+(scratch); the targets, the dictionaries, this manifest, **and the
+`Cargo.lock`** are tracked. The lockfile is committed on purpose: this
+crate is a separate workspace (excluded from `runtime`), so a tracked
+lockfile is what pins `libfuzzer-sys` / `arbitrary` / the transitive
+deps for the CI runners — without it the fuzz gate would re-resolve
+afresh on every clean checkout and an unrelated upstream release could
+break it.
 
 ### Reproducing a finding
 
