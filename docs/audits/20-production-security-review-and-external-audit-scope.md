@@ -212,10 +212,15 @@ contracts (§4.1) and the deployment-discipline items above.
       `restart_preserves_state`,
       `indexer_apply_adversarial_amounts_never_panics`,
       `knomosis-indexer/tests/property.rs`) are all proptest-fuzzed for
-      never-panics; the observer has a chaos suite (RH-G).  A libFuzzer /
-      `cargo-fuzz` continuous-fuzzing lane over the same seams remains a
-      CI-infrastructure follow-up (it needs a nightly runner; the pinned
-      stable 1.83 workspace toolchain cannot build a libFuzzer harness).
+      never-panics; the observer has a chaos suite (RH-G).  A
+      coverage-guided **libFuzzer lane** now complements the proptests:
+      the `knomosis-fuzz` crate (`runtime/fuzz/`) drives `cargo-fuzz` at
+      the host frame reader, the l1-ingest ABI decoder, and the indexer
+      decoder — a separate nightly workspace (`exclude`d from the pinned
+      stable `1.83` runtime workspace) driven by the dedicated
+      `ci-fuzz.yml` lane (`fuzz-build` API-drift guard on every PR + a
+      bounded per-target `fuzz-smoke`, longer on a weekly schedule,
+      uploading any crash/OOM/hang reproducer).
 - [x] **Economic-incentive analysis** (§4.5) — shipped:
       `docs/economic_incentive_analysis.md` (+ the
       `scripts/economic_simulation.py` IC-1..IC-6 harness).

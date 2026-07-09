@@ -135,23 +135,27 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       `docs/audits/20-…`); findings remediated.  An **internal** deep
       review (`docs/audits/21-…`) is done: it found + fixed 5 real
       contract defects (1 Critical, 1 High, 3 Medium/Low).
-- [~] Adversarial fuzzing of the untrusted-input boundaries (security
-      review §4.3).  **Substantially covered (stable proptest):**
-      never-panics property fuzz covers the l1-ingest ABI decoder (both
-      the arbitrary-log path AND a targeted arm that seeds every real
-      event-signature `topic0` so the deeper per-event ABI decode —
-      fixed-word reads, dynamic-`bytes` length prefixes, indexed-topic
-      arity — is driven with truncated / over-long / wrong-arity
-      payloads, i.e. the deposit paths that credit L2 balances), the host
-      frame reader (the v1 body path AND the full Rung-1 negotiated +
-      hinted `read_request` state machine `handle_connection` actually
-      calls), and the indexer decoder + two-pass dispatch (all-tag +
-      overflow amounts); the SMT verifier has adversarial size-discipline
-      tests.  All run in CI on the pinned stable toolchain.
-      **Remaining (infrastructure):** a libFuzzer / `cargo-fuzz`
-      continuous-fuzzing lane — it needs a nightly CI runner (the pinned
-      stable 1.83 workspace toolchain cannot build a libFuzzer harness),
-      so it is a CI-infra follow-up, not a source gap.
+- [x] Adversarial fuzzing of the untrusted-input boundaries (security
+      review §4.3).  **Two layers, both CI-wired:**
+      (1) *stable proptest* (`ci-rust.yml`) — never-panics property fuzz
+      over the l1-ingest ABI decoder (both the arbitrary-log path AND a
+      targeted arm that seeds every real event-signature `topic0` so the
+      deeper per-event ABI decode — fixed-word reads, dynamic-`bytes`
+      length prefixes, indexed-topic arity — is driven with truncated /
+      over-long / wrong-arity payloads, i.e. the deposit paths that
+      credit L2 balances), the host frame reader (the v1 body path AND
+      the full Rung-1 negotiated + hinted `read_request` state machine
+      `handle_connection` actually calls), and the indexer decoder +
+      two-pass dispatch (all-tag + overflow amounts); the SMT verifier
+      has adversarial size-discipline tests.
+      (2) *coverage-guided libFuzzer* — the `knomosis-fuzz` crate
+      (`runtime/fuzz/`) drives `cargo-fuzz` at the host frame reader, the
+      l1-ingest ABI decoder, and the indexer decoder, on the dedicated
+      nightly `ci-fuzz.yml` lane (`fuzz-build` API-drift guard on every
+      PR + a bounded per-target `fuzz-smoke`, longer on a weekly
+      schedule; crash/OOM/hang reproducers uploaded as artifacts).  The
+      libFuzzer crate is a separate workspace, `exclude`d from the pinned
+      stable `1.83` workspace so `cargo …--workspace` stays green.
 - [x] v2 receipt-verified reimbursement (GP.8.5) — the gate is shipped
       (`LegalKernel.Bridge.ReceiptVerifiedClaim` + the Rust mirror);
       *enable* it before the pool holds material value (economic

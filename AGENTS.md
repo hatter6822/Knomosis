@@ -154,6 +154,19 @@ cd runtime && cargo test --workspace
 cd runtime && cargo clippy --workspace --all-targets -- -D warnings
 cd runtime && cargo fmt --all -- --check
 
+# Coverage-guided fuzzing of the untrusted-input boundaries — the
+# knomosis-fuzz crate (runtime/fuzz/; see runtime/fuzz/README.md).  A
+# SEPARATE workspace (excluded from the stable `runtime` workspace);
+# libFuzzer needs nightly + the LLVM sanitizer runtime, so it rides the
+# dedicated ci-fuzz.yml lane, NOT the --workspace gates above.  Its
+# stable-toolchain counterpart is the never-panics proptest fuzz in the
+# host / l1-ingest / indexer `tests/property.rs` (which DO ride --workspace).
+rustup toolchain install nightly --component rust-src   # one-time
+cargo install cargo-fuzz --locked                       # one-time (pin 0.13.2)
+cd runtime && cargo +nightly fuzz list                  # host / l1-ingest / indexer decoders
+cd runtime && cargo +nightly fuzz build                 # compile all targets (API-drift guard)
+cd runtime && cargo +nightly fuzz run l1_ingest_decode_event -- -max_total_time=60
+
 # Workstream GW (gateway) — synchronous HTTP/JSON + SSE service
 # (runtime/knomosis-gateway/; contract docs/api/gateway.openapi.yaml).
 # Its Rust gates ride the --workspace commands above; run/test directly:
@@ -281,6 +294,8 @@ knomosis/
 │   ├── knomosis-bench/           --   transfer-throughput benchmark
 │   ├── knomosis-gateway/         --   Workstream GW: HTTP/JSON + SSE service
 │   ├── knomosis-gateway-bench/   --   GW read-path throughput/latency bench (G4.6)
+│   ├── fuzz/                     --   cargo-fuzz harness (SEPARATE workspace,
+│   │                                 excluded; nightly libFuzzer, ci-fuzz.yml)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
@@ -292,6 +307,7 @@ knomosis/
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
 │   ├── ci-rust.yml            -- Rust workspace gates (runtime/**)
+│   ├── ci-fuzz.yml            -- nightly libFuzzer gate (runtime/fuzz/**)
 │   ├── ci-solidity.yml        -- Solidity cap gate + forge gates (solidity/**)
 │   ├── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
 │   ├── ci-verify-secp256k1.yml -- F-2 secp256k1-verifier production-link proof

@@ -84,6 +84,16 @@ members = [
     "knomosis-gateway",
     "knomosis-gateway-bench",
 ]
+# The `fuzz/` cargo-fuzz crate is a SEPARATE workspace (it carries its
+# own `[workspace]` table) and is excluded here so the stable-toolchain
+# gates never try to build it: its `libfuzzer-sys` targets require a
+# nightly toolchain + the LLVM sanitizer runtime and are driven ONLY by
+# `cargo +nightly fuzz` (the dedicated `ci-fuzz.yml` lane).  Keeping it
+# out of `--workspace` is what lets `cargo build/test/clippy --workspace`
+# stay green on pinned stable 1.83.
+exclude = [
+    "fuzz",
+]
 
 # Shared package metadata.  Per-crate manifests use
 # `package.<field>.workspace = true` to inherit.  Centralising the

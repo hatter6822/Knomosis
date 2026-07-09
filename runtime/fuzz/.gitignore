@@ -1,0 +1,8 @@
+# cargo-fuzz build output + the auto-grown corpus / crash artifacts.
+# The seed corpora and dictionaries that ARE committed live under
+# `seeds/` and `dictionaries/` (tracked); everything below is scratch.
+target/
+corpus/
+artifacts/
+coverage/
+Cargo.lock

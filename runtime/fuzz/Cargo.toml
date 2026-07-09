@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+#
+# cargo-fuzz harness for the untrusted-input boundaries named in the
+# production security review (docs/audits/20-… §4.3): the network /
+# on-chain-feed decoders that a hostile peer, RPC, or re-org can hand
+# arbitrary bytes.  Each target asserts the load-bearing property
+# "returns `Ok`/`Err` on ANY input, never panics / aborts / hangs" —
+# an unchecked index, slice, `unwrap`, or unbounded allocation on these
+# paths would be a DoS on the L2 daemons.
+#
+# This crate is DELIBERATELY its own workspace (the empty `[workspace]`
+# table below) and is `exclude`d from the parent `runtime` workspace, so
+# the pinned-stable gates (`cargo build/test/clippy --workspace`) never
+# touch it.  `libfuzzer-sys` needs a nightly toolchain + the LLVM
+# sanitizer runtime; it is driven ONLY by `cargo +nightly fuzz` and the
+# `ci-fuzz.yml` lane.  See `fuzz/README.md`.
+
+[package]
+name = "knomosis-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Standalone workspace: decouples this crate from the parent `runtime`
+# workspace so a nightly-only, sanitizer-instrumented build never
+# perturbs (or is perturbed by) the stable member crates' lockfile /
+# profiles.
+[workspace]
+
+[dependencies]
+# The libFuzzer bindings (`fuzz_target!` + the `#[no_main]` shim).
+libfuzzer-sys = "0.4"
+# Structured-input decoding for the targets that need a typed corpus
+# (the l1-ingest `RawLog`); `derive` for `#[derive(Arbitrary)]`.
+arbitrary = { version = "1", features = ["derive"] }
+
+# The crates under test, by path.  Pinned to the workspace crates so a
+# signature change breaks `cargo +nightly fuzz build` in CI (the
+# API-drift guard).
+knomosis-host = { path = "../knomosis-host" }
+knomosis-l1-ingest = { path = "../knomosis-l1-ingest" }
+knomosis-indexer = { path = "../knomosis-indexer" }
+
+# Release-profile debug symbols so a crash's stack trace is legible in
+# the CI artifact, without disabling optimisation (fuzzing throughput
+# matters).  `cargo-fuzz` also injects sanitizer/coverage flags.
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "host_read_request"
+path = "fuzz_targets/host_read_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "l1_ingest_decode_event"
+path = "fuzz_targets/l1_ingest_decode_event.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "indexer_decode_event"
+path = "fuzz_targets/indexer_decode_event.rs"
+test = false
+doc = false
+bench = false

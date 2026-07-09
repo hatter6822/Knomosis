@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+#
+# Continuous fuzzing of the untrusted-input boundaries (security review
+# docs/audits/20-… §4.3): the `knomosis-fuzz` cargo-fuzz crate
+# (`runtime/fuzz/`) drives libFuzzer at the host wire-frame reader, the
+# l1-ingest L1-log ABI decoder, and the indexer event decoder.  These are
+# the network / on-chain-feed decoders a hostile peer, RPC, or re-org can
+# hand arbitrary bytes; each target asserts "returns Ok/Err on ANY input,
+# never panics / over-allocates / hangs".
+#
+# This is the nightly-only counterpart to the STABLE proptest fuzz that
+# already rides `ci-rust.yml` (`read_request_*`, `decode_event_*`,
+# `decoder_fuzz_*`): the pinned stable 1.83 workspace toolchain cannot
+# build a libFuzzer harness (it needs nightly + the LLVM sanitizer
+# runtime), so the `fuzz/` crate is a SEPARATE workspace, `exclude`d from
+# `runtime/Cargo.toml`, and built ONLY here.  `cargo build/test/clippy
+# --workspace` on stable never touches it.
+#
+# Two roles:
+#   * build (every triggering PR / push): `cargo fuzz build` compiles all
+#     targets — the API-DRIFT GUARD.  A signature change to a fuzzed
+#     decoder that the path-pinned targets no longer match fails CI here.
+#   * smoke (matrix, per target): a short bounded libFuzzer run seeded by
+#     the committed dictionaries; a longer soak on the weekly schedule.
+#     A crash / OOM / hang uploads its reproducer artifact and fails.
+#
+# Third-party action pinning: every `uses:` is a full-length commit SHA
+# (Genesis Plan §13.6); the human-readable tag is in the adjacent comment.
+# Bump the SHA and the comment together.
+
+name: CI (Fuzz)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'runtime/**'
+      - '.github/workflows/ci-fuzz.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'runtime/**'
+      - '.github/workflows/ci-fuzz.yml'
+  # Weekly longer soak (Mondays 05:17 UTC — an off-peak, non-round minute
+  # so it does not contend with the top-of-hour scheduler crush).
+  schedule:
+    - cron: '17 5 * * 1'
+  # Manual dispatch for an on-demand run (e.g. after touching a decoder).
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# `contents: read` for actions/checkout; `actions: write` for the narrow
+# rust-cache save scope (NOT a repo-write permission).
+permissions:
+  contents: read
+  actions: write
+
+defaults:
+  run:
+    # cargo-fuzz is invoked from the project root that contains `fuzz/`.
+    working-directory: runtime
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+  # Pin cargo-fuzz so a silent upstream change cannot alter the harness
+  # semantics under us.
+  CARGO_FUZZ_VERSION: '0.13.2'
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Compile every fuzz target (the API-drift guard).  Runs on every
+  # trigger; the smoke matrix depends on it so a build break short-circuits
+  # before we burn time trying to run.
+  # ---------------------------------------------------------------------
+  fuzz-build:
+    name: cargo fuzz build (API-drift guard)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        # actions/checkout v4.3.1 (same SHA pinned across the CI suite).
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install nightly Rust (libFuzzer needs nightly + sanitizers)
+        shell: bash
+        run: |
+          rustup toolchain install nightly --profile minimal --component rust-src
+          rustup run nightly rustc --version
+
+      - name: Cache cargo artifacts
+        # Swatinem/rust-cache v2.7.7 (same SHA pinned across the CI suite).
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: runtime/fuzz
+          shared-key: fuzz-nightly
+
+      - name: Install cargo-fuzz (pinned)
+        shell: bash
+        run: cargo install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
+
+      - name: cargo +nightly fuzz build (compile all targets)
+        # Compiles every `fuzz_targets/*.rs` with the sanitizer
+        # instrumentation.  A decoder signature change the path-pinned
+        # targets no longer match fails HERE.
+        run: cargo +nightly fuzz build
+
+  # ---------------------------------------------------------------------
+  # Bounded smoke-fuzz per target.  Short on PR / push, longer on the
+  # weekly schedule.  Any crash / OOM / hang writes a reproducer under
+  # `fuzz/artifacts/<target>/` which is uploaded and fails the job.
+  # ---------------------------------------------------------------------
+  fuzz-smoke:
+    name: fuzz ${{ matrix.target }}
+    needs: fuzz-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: host_read_request
+            dict: dictionaries/host.dict
+          - target: l1_ingest_decode_event
+            dict: ''
+          - target: indexer_decode_event
+            dict: dictionaries/indexer.dict
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Install nightly Rust
+        shell: bash
+        run: |
+          rustup toolchain install nightly --profile minimal --component rust-src
+          rustup run nightly rustc --version
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: runtime/fuzz
+          shared-key: fuzz-nightly
+
+      - name: Install cargo-fuzz (pinned)
+        shell: bash
+        run: cargo install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
+
+      - name: Fuzz ${{ matrix.target }}
+        shell: bash
+        run: |
+          # 60s per target on PR / push; 600s on the weekly soak.  libFuzzer
+          # flags: `-timeout` fails a single input that hangs (a per-input
+          # DoS), `-rss_limit_mb` fails an input that balloons memory (an
+          # allocation DoS) — both are real findings, not just crashes.
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            DURATION=600
+          else
+            DURATION=60
+          fi
+          DICT_FLAG=""
+          if [ -n "${{ matrix.dict }}" ]; then
+            DICT_FLAG="-dict=${{ matrix.dict }}"
+          fi
+          echo "Fuzzing ${{ matrix.target }} for ${DURATION}s ${DICT_FLAG}"
+          cargo +nightly fuzz run "${{ matrix.target }}" -- \
+            ${DICT_FLAG} \
+            -max_total_time="${DURATION}" \
+            -timeout=25 \
+            -rss_limit_mb=2048 \
+            -print_final_stats=1
+
+      - name: Upload crash reproducer (on failure)
+        # actions/upload-artifact v4.6.2.
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: runtime/fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 30

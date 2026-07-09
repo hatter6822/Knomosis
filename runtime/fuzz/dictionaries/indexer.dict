@@ -1,0 +1,7 @@
+# libFuzzer dictionary for indexer_decode_event.
+# CBE uint head (tag 0x00 followed by 8 little-endian value bytes): the
+# indexer's event frames begin with a CBE-encoded constructor tag, so
+# seeding the head byte lets the coverage engine reach the tag-dispatch
+# arms far faster than random bytes.
+cbe_uint_head="\x00"
+cbe_tag_zero="\x00\x00\x00\x00\x00\x00\x00\x00\x00"
