@@ -238,6 +238,35 @@ contract DeploySepolia is Script {
         cfg.ammMultisigThreshold = vm.envOr("KNOMOSIS_AMM_MULTISIG_THRESHOLD", uint256(3));
         cfg.ammMultisigSigners = sigSet;
 
+        // When the AMM (and thus its disaster-recovery multisig) will actually be
+        // deployed, mirror the multisig constructor's threshold / signer-count
+        // bounds HERE — in the config pass, before any `vm.startBroadcast()` — so an
+        // operator typo (threshold below the 3-of-N floor, threshold above the
+        // signer count, or a signer set over the cap) fails preflight instead of
+        // reverting mid-broadcast, after the registry / bridge / verifier / stake
+        // contracts are already on-chain (wasted gas + an orphaned partial
+        // deployment on the direct `make deploy-sepolia` path).  This condition
+        // mirrors `functionalAmm` in `_deployAll`.  The constructor still re-checks
+        // these (plus non-zero / not-bridge / not-self, which need the deployed
+        // addresses), so this is a fail-fast, not a replacement — and remains the
+        // authority if the constants below ever drift.  The bounds are the
+        // `KnomosisAmmDisasterRecoveryMultisig` constants `MIN_DISABLE_THRESHOLD`
+        // (3) and `MAX_SIGNERS` (32), inlined because Solidity does not expose a
+        // contract's `public constant` through the type name.
+        uint256 minDisableThreshold = 3; // KnomosisAmmDisasterRecoveryMultisig.MIN_DISABLE_THRESHOLD
+        uint256 maxSigners = 32; // KnomosisAmmDisasterRecoveryMultisig.MAX_SIGNERS
+        if (cfg.boldToken != address(0) && cfg.ammSeedRatioBps > 0) {
+            require(
+                cfg.ammMultisigThreshold >= minDisableThreshold,
+                "AMM multisig threshold below the 3-of-N floor (MIN_DISABLE_THRESHOLD)"
+            );
+            require(
+                cfg.ammMultisigThreshold <= sigSet.length,
+                "AMM multisig threshold exceeds the signer count"
+            );
+            require(sigSet.length <= maxSigners, "AMM multisig signer count exceeds MAX_SIGNERS (32)");
+        }
+
         cfg.slashRatioBps = vm.envOr("KNOMOSIS_SLASH_BPS", uint256(5_000));
 
         cfg.stateRootBond = uint128(vm.envOr("KNOMOSIS_STATE_ROOT_BOND", uint256(1 ether)));
