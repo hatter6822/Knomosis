@@ -99,6 +99,7 @@ fn main() -> ExitCode {
         .handler(HandlerConfig {
             max_frame_size: cfg.max_frame_size,
             max_concurrent_connections: cfg.max_concurrent_connections,
+            connection_timeout: cfg.connection_timeout,
             persistent_connections: cfg.persistent_connections,
             ..HandlerConfig::default()
         });

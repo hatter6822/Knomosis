@@ -53,6 +53,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 
 use crate::budget::BudgetPolicy;
 use crate::fair::drr::{
@@ -145,6 +146,16 @@ pub struct Config {
     pub max_frame_size: usize,
     /// Maximum simultaneous connection handler threads (DoS cap).
     pub max_concurrent_connections: usize,
+    /// Per-connection socket read/write timeout AND the end-to-end
+    /// per-request frame-read deadline (the slow-loris bound).  The two
+    /// compose: the socket timeout bounds each individual read; the
+    /// deadline bounds the whole request so a trickling client that
+    /// resets the socket timer forever is still cut off.  Operator-tunable
+    /// via `--connection-timeout <SECONDS>` (default
+    /// [`crate::listener::DEFAULT_CONNECTION_TIMEOUT`], 10 s) so a
+    /// deployment expecting legitimately-slow links or large frames can
+    /// raise the ceiling instead of getting a `ParseError`.
+    pub connection_timeout: Duration,
     /// `--persistent-connections`: run TCP / Unix connections in
     /// persistent + pipelined mode (default `false` ⇒ one-shot per
     /// connection).  When enabled, a single connection may pipeline many
@@ -247,6 +258,7 @@ impl Config {
             max_queue_depth: crate::queue::DEFAULT_MAX_QUEUE_DEPTH,
             max_frame_size: crate::frame::DEFAULT_MAX_FRAME_SIZE,
             max_concurrent_connections: crate::listener::DEFAULT_MAX_CONCURRENT_CONNECTIONS,
+            connection_timeout: crate::listener::DEFAULT_CONNECTION_TIMEOUT,
             persistent_connections: false,
             use_mock_kernel: false,
             budget_mode: None,
@@ -419,6 +431,13 @@ impl Config {
                 self.max_concurrent_connections,
             ));
         }
+        // A zero connection timeout would make the per-request frame-read
+        // deadline reject every request instantly (the deadline is
+        // `now + connection_timeout`), and a zero socket timeout is
+        // "block forever" — neither is a meaningful operator intent.
+        if self.connection_timeout.is_zero() {
+            return Err(ConfigError::ConnectionTimeoutZero);
+        }
         // GP.6.2: the only recognised budget mode is `bounded`.  A
         // sub-flag without an explicit `--budget-policy` defaults to
         // bounded mode, so only an explicit non-`bounded` value is an
@@ -574,6 +593,10 @@ pub enum ConfigError {
     /// `--max-concurrent-connections 0` rejected.
     #[error("--max-concurrent-connections cannot be zero")]
     ConcurrentConnectionsZero,
+    /// `--connection-timeout 0` rejected (would reject every request
+    /// instantly via the per-request frame-read deadline).
+    #[error("--connection-timeout cannot be zero")]
+    ConnectionTimeoutZero,
     /// `--max-concurrent-connections` above the hard ceiling.
     #[error("--max-concurrent-connections {0} exceeds hard ceiling")]
     ConcurrentConnectionsTooLarge(usize),
@@ -919,6 +942,19 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                     })?;
                 cfg.max_frame_size = n;
             }
+            "--connection-timeout" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError::MissingValue("--connection-timeout".into()))?;
+                let secs = value
+                    .parse::<u64>()
+                    .map_err(|e| ParseError::InvalidValue {
+                        flag: "--connection-timeout".into(),
+                        value: value.clone(),
+                        reason: e.to_string(),
+                    })?;
+                cfg.connection_timeout = Duration::from_secs(secs);
+            }
             "--max-concurrent-connections" => {
                 let value = iter.next().ok_or_else(|| {
                     ParseError::MissingValue("--max-concurrent-connections".into())
@@ -992,6 +1028,8 @@ pub fn help_text(program_name: &str) -> String {
          \x20 --max-frame-size <N>      Max accepted frame size in bytes (default 1 MiB)\n\
          \x20 --max-concurrent-connections <N>\n\
          \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20Cap on simultaneous connection handlers (default 1024)\n\
+         \x20 --connection-timeout <SECS>\n\
+         \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20Per-request frame-read deadline + socket timeout in seconds (default 10; raise for slow links / large frames)\n\
          \n\
          Other:\n\
          \x20 --help / -h               Print this help text\n\
@@ -1294,6 +1332,65 @@ mod tests {
         match cfg.validate() {
             Err(ConfigError::NoKernelConfigured) => {}
             other => panic!("expected NoKernelConfigured, got {other:?}"),
+        }
+    }
+
+    /// `--connection-timeout` defaults to 10 s and is operator-overridable
+    /// (review follow-up: the frame-read deadline reuses this value, so it
+    /// must be tunable for legitimately-slow links / large frames).
+    #[test]
+    fn connection_timeout_default_and_override() {
+        let default_cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--knomosis-binary",
+            "/bin/true",
+            "--knomosis-log",
+            "/tmp/log",
+        ]))
+        .unwrap();
+        assert_eq!(
+            default_cfg.connection_timeout,
+            crate::listener::DEFAULT_CONNECTION_TIMEOUT
+        );
+        assert_eq!(
+            default_cfg.connection_timeout,
+            std::time::Duration::from_secs(10)
+        );
+
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--knomosis-binary",
+            "/bin/true",
+            "--knomosis-log",
+            "/tmp/log",
+            "--connection-timeout",
+            "45",
+        ]))
+        .unwrap();
+        cfg.validate().unwrap();
+        assert_eq!(cfg.connection_timeout, std::time::Duration::from_secs(45));
+    }
+
+    /// `--connection-timeout 0` is rejected (a zero end-to-end deadline
+    /// would reject every request instantly).
+    #[test]
+    fn connection_timeout_zero_rejected() {
+        let cfg = parse_args(&args(&[
+            "--listen",
+            "127.0.0.1:7654",
+            "--knomosis-binary",
+            "/bin/true",
+            "--knomosis-log",
+            "/tmp/log",
+            "--connection-timeout",
+            "0",
+        ]))
+        .unwrap();
+        match cfg.validate() {
+            Err(ConfigError::ConnectionTimeoutZero) => {}
+            other => panic!("expected ConnectionTimeoutZero, got {other:?}"),
         }
     }
 

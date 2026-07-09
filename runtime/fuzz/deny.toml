@@ -1,0 +1,89 @@
+# Knomosis  - A Societal Kernel
+# Copyright (C) 2026  Adam Hall
+# This program comes with ABSOLUTELY NO WARRANTY.
+# This is free software, and you are welcome to redistribute it
+# under certain conditions. See: https://github.com/hatter6822/Knomosis/blob/main/LICENSE
+
+# cargo-deny supply-chain policy for the `runtime/fuzz/` cargo-fuzz
+# workspace — a SEPARATE workspace, excluded from the parent `runtime/`
+# workspace (libFuzzer needs nightly + the LLVM sanitizer runtime, so it
+# rides the dedicated `ci-fuzz.yml` lane, not the stable `--workspace`
+# gates).  Run with `cargo deny --manifest-path runtime/fuzz/Cargo.toml
+# check`; enforced in CI by `.github/workflows/ci-cargo-deny.yml`.
+#
+# This file is a strict superset of the parent `runtime/deny.toml`: the
+# advisories / bans / sources stanzas are byte-identical, and the licence
+# allow-list is the parent set PLUS a single fuzz-tooling-only addition
+# (`NCSA`, see below).  Keeping the two policies aligned means a
+# never-shipped fuzz dependency can never silently relax the policy that
+# governs the crates the runtime actually links and ships.
+#
+# Schema: the `version = 2` opt-in (cargo-deny >= 0.14) — all RUSTSEC
+# advisories fail unless explicitly ignored, and the licence policy is a
+# strict allow-list.
+
+[advisories]
+version = 2
+# A yanked dependency version fails the check.  Every RUSTSEC advisory
+# (vulnerability / unmaintained / unsound / notice) is a hard failure under the
+# v2 schema unless explicitly ignored below.
+yanked = "deny"
+# No advisories are ignored — the fuzz tooling holds the same advisory bar
+# as the shipped runtime.
+ignore = []
+
+[licenses]
+version = 2
+# The allow-list is the parent `runtime/deny.toml` set, verified against
+# the fuzz workspace's actual dependency licences, PLUS `NCSA`:
+#   * MIT / Apache-2.0           — the overwhelming majority (dual-licensed).
+#   * ISC                        — `ring` (`Apache-2.0 AND ISC`),
+#                                  `rustls-webpki`, `untrusted`.
+#   * BSD-3-Clause               — `subtle` (sole licence).
+#   * Unicode-3.0                — `unicode-ident`
+#                                  (`(MIT OR Apache-2.0) AND Unicode-3.0`).
+#   * GPL-3.0-or-later           — the project's own workspace crates
+#                                  (`knomosis-fuzz` and the path crates it
+#                                  fuzzes: host / l1-ingest / indexer / …).
+#   * NCSA                       — `libfuzzer-sys` alone declares
+#                                  `(MIT OR Apache-2.0) AND NCSA`; the
+#                                  mandatory `AND NCSA` conjunct is the LLVM
+#                                  libFuzzer runtime it bundles.  NCSA (the
+#                                  University-of-Illinois/NCSA Open Source
+#                                  License) is a permissive, OSI-approved,
+#                                  GPL-compatible licence.  It is allowed
+#                                  HERE ONLY — this workspace is the nightly
+#                                  fuzz harness, never built into any shipped
+#                                  artefact — and deliberately NOT added to
+#                                  the parent `runtime/deny.toml`, so the
+#                                  runtime the project actually links and
+#                                  ships stays on the tighter allow-list.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "ISC",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "GPL-3.0-or-later",
+    "NCSA",
+]
+# Default detection confidence; a lower-confidence licence match is a
+# failure (surfaces an unexpected / unclear licence for review).
+confidence-threshold = 0.8
+
+[bans]
+# Duplicate versions are surfaced (benign but worth tracking) rather than
+# failing the build; a wildcard version requirement (`*`) is denied for
+# crates.io dependencies — but ALLOWED for the workspace-internal `path`
+# crates (`knomosis-*`), which are declared `{ path = "..." }` without a
+# version and would otherwise trip the wildcard ban.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# Only the canonical crates.io registry is permitted; an unknown registry
+# or any git source is denied (no out-of-band dependency provenance).
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

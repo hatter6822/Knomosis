@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b9a44685c5d2b59a42e6eb72af6d182d16a51a734a400b2e7d79de34dc284a52"
+    "source_digest": "ff211885c4bb017458f55ff5ca0577d0413bd6bab662604bc89a2392db7d258d"
   },
   "summary": {
     "module_count": 192,
-    "declaration_count": 5911
+    "declaration_count": 5913
   },
   "modules": [
     {
@@ -35056,12 +35056,12 @@
     {
       "module": "runtime::knomosis-host::src::config",
       "path": "runtime/knomosis-host/src/config.rs",
-      "declaration_count": 101,
+      "declaration_count": 103,
       "declarations": [
         {
           "kind": "enum",
           "name": "Scheduler",
-          "line": 72,
+          "line": 73,
           "called": [
             "default"
           ]
@@ -35069,19 +35069,19 @@
         {
           "kind": "impl",
           "name": "Scheduler",
-          "line": 83,
+          "line": 84,
           "called": []
         },
         {
           "kind": "fn",
           "name": "name",
-          "line": 88,
+          "line": 89,
           "called": []
         },
         {
           "kind": "impl",
           "name": "std::fmt::Display for Scheduler",
-          "line": 96,
+          "line": 97,
           "called": [
             "Scheduler"
           ]
@@ -35089,7 +35089,7 @@
         {
           "kind": "fn",
           "name": "fmt",
-          "line": 97,
+          "line": 98,
           "called": [
             "_",
             "error",
@@ -35099,13 +35099,13 @@
         {
           "kind": "struct",
           "name": "SchedulerParseError",
-          "line": 106,
+          "line": 107,
           "called": []
         },
         {
           "kind": "impl",
           "name": "FromStr for Scheduler",
-          "line": 108,
+          "line": 109,
           "called": [
             "Scheduler"
           ]
@@ -35113,7 +35113,7 @@
         {
           "kind": "type",
           "name": "Err",
-          "line": 109,
+          "line": 110,
           "called": [
             "SchedulerParseError"
           ]
@@ -35121,7 +35121,7 @@
         {
           "kind": "fn",
           "name": "from_str",
-          "line": 110,
+          "line": 111,
           "called": [
             "Err",
             "SchedulerParseError"
@@ -35130,7 +35130,7 @@
         {
           "kind": "struct",
           "name": "Config",
-          "line": 121,
+          "line": 122,
           "called": [
             "Scheduler",
             "knomosis_binary",
@@ -35141,13 +35141,13 @@
         {
           "kind": "impl",
           "name": "Config",
-          "line": 231,
+          "line": 242,
           "called": []
         },
         {
           "kind": "fn",
           "name": "defaults",
-          "line": 235,
+          "line": 246,
           "called": [
             "DEFAULT_MAX_FLOWS",
             "DEFAULT_MAX_SIGNERS_PER_CONN",
@@ -35160,7 +35160,7 @@
         {
           "kind": "fn",
           "name": "budget_policy",
-          "line": 278,
+          "line": 290,
           "called": [
             "BudgetPolicy",
             "_",
@@ -35170,7 +35170,7 @@
         {
           "kind": "fn",
           "name": "assemble_bounded",
-          "line": 301,
+          "line": 313,
           "called": [
             "BudgetPolicy"
           ]
@@ -35178,19 +35178,19 @@
         {
           "kind": "fn",
           "name": "gas_pool_caps",
-          "line": 317,
+          "line": 329,
           "called": []
         },
         {
           "kind": "fn",
           "name": "refund_rate",
-          "line": 333,
+          "line": 345,
           "called": []
         },
         {
           "kind": "fn",
           "name": "caps",
-          "line": 352,
+          "line": 364,
           "called": [
             "Caps",
             "max_queue_depth",
@@ -35201,13 +35201,13 @@
         {
           "kind": "fn",
           "name": "has_any_listener",
-          "line": 360,
+          "line": 372,
           "called": []
         },
         {
           "kind": "fn",
           "name": "has_kernel_choice",
-          "line": 368,
+          "line": 380,
           "called": [
             "knomosis_binary"
           ]
@@ -35215,7 +35215,7 @@
         {
           "kind": "fn",
           "name": "validate",
-          "line": 378,
+          "line": 390,
           "called": [
             "ConfigError",
             "Err",
@@ -35231,7 +35231,7 @@
         {
           "kind": "enum",
           "name": "ParseError",
-          "line": 510,
+          "line": 529,
           "called": [
             "error",
             "reason"
@@ -35240,7 +35240,7 @@
         {
           "kind": "enum",
           "name": "ConfigError",
-          "line": 539,
+          "line": 558,
           "called": [
             "error",
             "max_queue_depth"
@@ -35249,7 +35249,7 @@
         {
           "kind": "fn",
           "name": "parse_args",
-          "line": 654,
+          "line": 677,
           "called": [
             "Config",
             "Err",
@@ -35272,13 +35272,13 @@
         {
           "kind": "fn",
           "name": "help_text",
-          "line": 944,
+          "line": 980,
           "called": []
         },
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1005,
+          "line": 1043,
           "called": [
             "Config",
             "ConfigError",
@@ -35289,7 +35289,7 @@
         {
           "kind": "fn",
           "name": "args",
-          "line": 1008,
+          "line": 1046,
           "called": [
             "iter"
           ]
@@ -35297,7 +35297,7 @@
         {
           "kind": "fn",
           "name": "defaults_fail_validation",
-          "line": 1016,
+          "line": 1054,
           "called": [
             "Err",
             "validate"
@@ -35306,7 +35306,7 @@
         {
           "kind": "fn",
           "name": "listen_plus_mock_validates",
-          "line": 1026,
+          "line": 1064,
           "called": [
             "args",
             "parse_args",
@@ -35316,7 +35316,7 @@
         {
           "kind": "fn",
           "name": "unix_plus_mock_validates",
-          "line": 1035,
+          "line": 1073,
           "called": [
             "args",
             "parse_args",
@@ -35326,7 +35326,7 @@
         {
           "kind": "fn",
           "name": "help_returns_help_requested",
-          "line": 1046,
+          "line": 1084,
           "called": [
             "Err",
             "args",
@@ -35336,7 +35336,7 @@
         {
           "kind": "fn",
           "name": "h_short_returns_help_requested",
-          "line": 1055,
+          "line": 1093,
           "called": [
             "Err",
             "args",
@@ -35346,7 +35346,7 @@
         {
           "kind": "fn",
           "name": "version_returns_version_requested",
-          "line": 1064,
+          "line": 1102,
           "called": [
             "Err",
             "args",
@@ -35356,7 +35356,7 @@
         {
           "kind": "fn",
           "name": "unknown_flag_returns_error",
-          "line": 1073,
+          "line": 1111,
           "called": [
             "Err",
             "args",
@@ -35366,7 +35366,7 @@
         {
           "kind": "fn",
           "name": "epoch_duration_seconds_flag_does_not_exist",
-          "line": 1086,
+          "line": 1124,
           "called": [
             "Err",
             "args",
@@ -35376,7 +35376,7 @@
         {
           "kind": "fn",
           "name": "missing_value_returns_error",
-          "line": 1095,
+          "line": 1133,
           "called": [
             "Err",
             "args",
@@ -35386,7 +35386,7 @@
         {
           "kind": "fn",
           "name": "invalid_listen_returns_error",
-          "line": 1104,
+          "line": 1142,
           "called": [
             "Err",
             "args",
@@ -35396,7 +35396,7 @@
         {
           "kind": "fn",
           "name": "tls_listen_without_cert_key_fails",
-          "line": 1113,
+          "line": 1151,
           "called": [
             "Err",
             "args",
@@ -35407,7 +35407,7 @@
         {
           "kind": "fn",
           "name": "tls_cert_without_listen_fails",
-          "line": 1123,
+          "line": 1161,
           "called": [
             "Err",
             "args",
@@ -35418,7 +35418,7 @@
         {
           "kind": "fn",
           "name": "mock_plus_knomosis_binary_conflicts",
-          "line": 1140,
+          "line": 1178,
           "called": [
             "Err",
             "args",
@@ -35429,7 +35429,7 @@
         {
           "kind": "fn",
           "name": "queue_depth_zero_fails",
-          "line": 1159,
+          "line": 1197,
           "called": [
             "Err",
             "args",
@@ -35440,7 +35440,7 @@
         {
           "kind": "fn",
           "name": "queue_depth_too_large_fails",
-          "line": 1176,
+          "line": 1214,
           "called": [
             "Err",
             "_",
@@ -35452,7 +35452,7 @@
         {
           "kind": "fn",
           "name": "frame_size_zero_fails",
-          "line": 1193,
+          "line": 1231,
           "called": [
             "Err",
             "args",
@@ -35463,7 +35463,7 @@
         {
           "kind": "fn",
           "name": "concurrent_connections_zero_fails",
-          "line": 1210,
+          "line": 1248,
           "called": [
             "Err",
             "args",
@@ -35474,7 +35474,7 @@
         {
           "kind": "fn",
           "name": "concurrent_connections_too_large_fails",
-          "line": 1227,
+          "line": 1265,
           "called": [
             "Err",
             "_",
@@ -35486,7 +35486,7 @@
         {
           "kind": "fn",
           "name": "concurrent_connections_plumbed",
-          "line": 1244,
+          "line": 1282,
           "called": [
             "args",
             "parse_args",
@@ -35496,7 +35496,7 @@
         {
           "kind": "fn",
           "name": "frame_size_too_large_fails",
-          "line": 1259,
+          "line": 1297,
           "called": [
             "Err",
             "_",
@@ -35508,7 +35508,7 @@
         {
           "kind": "fn",
           "name": "knomosis_binary_plus_log_validates",
-          "line": 1276,
+          "line": 1314,
           "called": [
             "args",
             "parse_args",
@@ -35518,7 +35518,28 @@
         {
           "kind": "fn",
           "name": "no_kernel_choice_fails",
-          "line": 1291,
+          "line": 1329,
+          "called": [
+            "Err",
+            "args",
+            "parse_args",
+            "validate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "connection_timeout_default_and_override",
+          "line": 1341,
+          "called": [
+            "args",
+            "parse_args",
+            "validate"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "connection_timeout_zero_rejected",
+          "line": 1378,
           "called": [
             "Err",
             "args",
@@ -35529,7 +35550,7 @@
         {
           "kind": "fn",
           "name": "all_flags_together",
-          "line": 1301,
+          "line": 1398,
           "called": [
             "args",
             "max_queue_depth",
@@ -35540,7 +35561,7 @@
         {
           "kind": "fn",
           "name": "help_text_non_empty",
-          "line": 1327,
+          "line": 1424,
           "called": [
             "is_empty",
             "text"
@@ -35549,13 +35570,13 @@
         {
           "kind": "fn",
           "name": "errors_are_send_sync",
-          "line": 1338,
+          "line": 1435,
           "called": []
         },
         {
           "kind": "fn",
           "name": "assert_send_sync",
-          "line": 1339,
+          "line": 1436,
           "called": [
             "ConfigError",
             "ParseError"
@@ -35564,7 +35585,7 @@
         {
           "kind": "fn",
           "name": "budget_flags_parse_and_assemble",
-          "line": 1346,
+          "line": 1443,
           "called": [
             "args",
             "budget_policy",
@@ -35575,7 +35596,7 @@
         {
           "kind": "fn",
           "name": "no_budget_flags_no_policy",
-          "line": 1368,
+          "line": 1465,
           "called": [
             "args",
             "budget_policy",
@@ -35586,7 +35607,7 @@
         {
           "kind": "fn",
           "name": "budget_subflag_defaults_to_bounded",
-          "line": 1377,
+          "line": 1474,
           "called": [
             "args",
             "budget_policy",
@@ -35597,7 +35618,7 @@
         {
           "kind": "fn",
           "name": "budget_action_cost_clamped",
-          "line": 1394,
+          "line": 1491,
           "called": [
             "action_cost",
             "args",
@@ -35608,7 +35629,7 @@
         {
           "kind": "fn",
           "name": "unknown_budget_mode_fails",
-          "line": 1410,
+          "line": 1507,
           "called": [
             "Err",
             "args",
@@ -35619,7 +35640,7 @@
         {
           "kind": "fn",
           "name": "budget_free_tier_non_numeric_fails",
-          "line": 1427,
+          "line": 1524,
           "called": [
             "Err",
             "args",
@@ -35629,7 +35650,7 @@
         {
           "kind": "fn",
           "name": "help_text_mentions_budget_flags",
-          "line": 1442,
+          "line": 1539,
           "called": [
             "text"
           ]
@@ -35637,7 +35658,7 @@
         {
           "kind": "fn",
           "name": "refund_rate_flags_parse_and_assemble",
-          "line": 1457,
+          "line": 1554,
           "called": [
             "args",
             "parse_args",
@@ -35648,7 +35669,7 @@
         {
           "kind": "fn",
           "name": "no_refund_rate_flags_disabled",
-          "line": 1474,
+          "line": 1571,
           "called": [
             "args",
             "parse_args",
@@ -35659,7 +35680,7 @@
         {
           "kind": "fn",
           "name": "refund_rate_single_leg_defaults_other_to_zero",
-          "line": 1483,
+          "line": 1580,
           "called": [
             "args",
             "parse_args",
@@ -35670,7 +35691,7 @@
         {
           "kind": "fn",
           "name": "refund_rate_invalid_rejected",
-          "line": 1498,
+          "line": 1595,
           "called": [
             "Err",
             "args",
@@ -35680,7 +35701,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_flags_parse_and_assemble",
-          "line": 1516,
+          "line": 1613,
           "called": [
             "args",
             "gas_pool_caps",
@@ -35691,7 +35712,7 @@
         {
           "kind": "fn",
           "name": "no_gas_pool_flags_disabled",
-          "line": 1533,
+          "line": 1630,
           "called": [
             "args",
             "gas_pool_caps",
@@ -35702,7 +35723,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_single_cap_defaults_other_to_zero",
-          "line": 1542,
+          "line": 1639,
           "called": [
             "args",
             "gas_pool_caps",
@@ -35713,7 +35734,7 @@
         {
           "kind": "fn",
           "name": "gas_pool_invalid_cap_rejected",
-          "line": 1557,
+          "line": 1654,
           "called": [
             "Err",
             "args",
@@ -35723,7 +35744,7 @@
         {
           "kind": "fn",
           "name": "help_text_mentions_gas_pool_flags",
-          "line": 1572,
+          "line": 1669,
           "called": [
             "text"
           ]
@@ -35731,7 +35752,7 @@
         {
           "kind": "fn",
           "name": "epoch_length_parses",
-          "line": 1580,
+          "line": 1677,
           "called": [
             "args",
             "parse_args",
@@ -35741,7 +35762,7 @@
         {
           "kind": "fn",
           "name": "epoch_length_non_numeric_fails",
-          "line": 1601,
+          "line": 1698,
           "called": [
             "Err",
             "args",
@@ -35751,7 +35772,7 @@
         {
           "kind": "fn",
           "name": "scheduler_defaults_to_fifo",
-          "line": 1618,
+          "line": 1715,
           "called": [
             "args",
             "parse_args",
@@ -35762,7 +35783,7 @@
         {
           "kind": "fn",
           "name": "scheduler_flag_parses_both_values",
-          "line": 1627,
+          "line": 1724,
           "called": [
             "args",
             "drr",
@@ -35774,7 +35795,7 @@
         {
           "kind": "fn",
           "name": "scheduler_invalid_value_is_config_error",
-          "line": 1655,
+          "line": 1752,
           "called": [
             "Err",
             "args",
@@ -35786,7 +35807,7 @@
         {
           "kind": "fn",
           "name": "scheduler_last_valid_value_wins",
-          "line": 1676,
+          "line": 1773,
           "called": [
             "args",
             "parse_args",
@@ -35797,7 +35818,7 @@
         {
           "kind": "fn",
           "name": "scheduler_fromstr_display_roundtrip",
-          "line": 1694,
+          "line": 1791,
           "called": [
             "Scheduler",
             "name",
@@ -35807,7 +35828,7 @@
         {
           "kind": "fn",
           "name": "drr_caps_parse_and_assemble",
-          "line": 1707,
+          "line": 1804,
           "called": [
             "args",
             "caps",
@@ -35818,7 +35839,7 @@
         {
           "kind": "fn",
           "name": "drr_caps_have_documented_defaults",
-          "line": 1733,
+          "line": 1830,
           "called": [
             "DEFAULT_MAX_FLOWS",
             "DEFAULT_PER_FLOW_CAP",
@@ -35829,7 +35850,7 @@
         {
           "kind": "fn",
           "name": "drr_caps_non_numeric_are_parse_errors",
-          "line": 1742,
+          "line": 1839,
           "called": [
             "Err",
             "args",
@@ -35839,7 +35860,7 @@
         {
           "kind": "fn",
           "name": "drr_per_flow_cap_zero_fails",
-          "line": 1759,
+          "line": 1856,
           "called": [
             "Err",
             "args",
@@ -35850,7 +35871,7 @@
         {
           "kind": "fn",
           "name": "drr_per_flow_cap_above_queue_depth_fails",
-          "line": 1779,
+          "line": 1876,
           "called": [
             "Err",
             "args",
@@ -35862,7 +35883,7 @@
         {
           "kind": "fn",
           "name": "drr_max_flows_zero_fails",
-          "line": 1806,
+          "line": 1903,
           "called": [
             "Err",
             "args",
@@ -35873,7 +35894,7 @@
         {
           "kind": "fn",
           "name": "drr_max_flows_too_large_fails",
-          "line": 1825,
+          "line": 1922,
           "called": [
             "Err",
             "_",
@@ -35885,7 +35906,7 @@
         {
           "kind": "fn",
           "name": "fifo_small_queue_depth_unaffected_by_caps",
-          "line": 1846,
+          "line": 1943,
           "called": [
             "args",
             "max_queue_depth",
@@ -35896,7 +35917,7 @@
         {
           "kind": "fn",
           "name": "fifo_mode_skips_cross_field_cap_check",
-          "line": 1864,
+          "line": 1961,
           "called": [
             "args",
             "max_queue_depth",
@@ -35907,7 +35928,7 @@
         {
           "kind": "fn",
           "name": "intrinsic_per_flow_cap_zero_rejected_even_in_fifo",
-          "line": 1885,
+          "line": 1982,
           "called": [
             "Err",
             "args",
@@ -35918,7 +35939,7 @@
         {
           "kind": "fn",
           "name": "intrinsic_max_flows_zero_rejected_even_in_fifo",
-          "line": 1905,
+          "line": 2002,
           "called": [
             "Err",
             "args",
@@ -35929,7 +35950,7 @@
         {
           "kind": "fn",
           "name": "help_text_mentions_scheduler_flags",
-          "line": 1924,
+          "line": 2021,
           "called": [
             "text"
           ]
@@ -35937,7 +35958,7 @@
         {
           "kind": "fn",
           "name": "max_signers_per_conn_parses_and_assembles",
-          "line": 1937,
+          "line": 2034,
           "called": [
             "args",
             "caps",
@@ -35948,7 +35969,7 @@
         {
           "kind": "fn",
           "name": "max_signers_per_conn_default",
-          "line": 1955,
+          "line": 2052,
           "called": [
             "DEFAULT_MAX_SIGNERS_PER_CONN",
             "args",
@@ -35959,7 +35980,7 @@
         {
           "kind": "fn",
           "name": "max_signers_per_conn_non_numeric_is_parse_error",
-          "line": 1964,
+          "line": 2061,
           "called": [
             "Err",
             "args",
@@ -35969,7 +35990,7 @@
         {
           "kind": "fn",
           "name": "max_signers_per_conn_zero_rejected_even_in_fifo",
-          "line": 1983,
+          "line": 2080,
           "called": [
             "Err",
             "args",
@@ -35980,7 +36001,7 @@
         {
           "kind": "fn",
           "name": "max_signers_per_conn_too_large_fails",
-          "line": 2003,
+          "line": 2100,
           "called": [
             "Err",
             "args",
@@ -35991,7 +36012,7 @@
         {
           "kind": "fn",
           "name": "max_conn_backlog_parses_and_assembles",
-          "line": 2024,
+          "line": 2121,
           "called": [
             "args",
             "caps",
@@ -36002,7 +36023,7 @@
         {
           "kind": "fn",
           "name": "max_conn_backlog_default_is_per_flow_cap",
-          "line": 2045,
+          "line": 2142,
           "called": [
             "args",
             "caps",
@@ -36012,7 +36033,7 @@
         {
           "kind": "fn",
           "name": "max_conn_backlog_non_numeric_is_parse_error",
-          "line": 2056,
+          "line": 2153,
           "called": [
             "Err",
             "args",
@@ -36022,7 +36043,7 @@
         {
           "kind": "fn",
           "name": "max_conn_backlog_zero_rejected_even_in_fifo",
-          "line": 2075,
+          "line": 2172,
           "called": [
             "Err",
             "args",
@@ -36033,7 +36054,7 @@
         {
           "kind": "fn",
           "name": "max_conn_backlog_too_large_fails",
-          "line": 2095,
+          "line": 2192,
           "called": [
             "Err",
             "args",
@@ -36044,7 +36065,7 @@
         {
           "kind": "fn",
           "name": "max_conn_backlog_exceeds_queue_depth_under_drr",
-          "line": 2117,
+          "line": 2214,
           "called": [
             "Err",
             "args",
@@ -36056,7 +36077,7 @@
         {
           "kind": "fn",
           "name": "persistent_connections_flag_parses",
-          "line": 2147,
+          "line": 2244,
           "called": [
             "args",
             "default",
@@ -36067,7 +36088,7 @@
         {
           "kind": "fn",
           "name": "help_text_mentions_persistent_connections",
-          "line": 2164,
+          "line": 2261,
           "called": [
             "text"
           ]
@@ -36075,7 +36096,7 @@
         {
           "kind": "fn",
           "name": "max_conn_backlog_exceeds_queue_depth_ignored_under_fifo",
-          "line": 2173,
+          "line": 2270,
           "called": [
             "args",
             "parse_args",
@@ -40543,7 +40564,7 @@
         {
           "kind": "fn",
           "name": "build_kernel",
-          "line": 178,
+          "line": 179,
           "called": [
             "Config",
             "Kernel",
@@ -40570,13 +40591,13 @@
         {
           "kind": "fn",
           "name": "default_work_dir",
-          "line": 254,
+          "line": 255,
           "called": []
         },
         {
           "kind": "enum",
           "name": "KernelBuildError",
-          "line": 264,
+          "line": 265,
           "called": [
             "CommandKernel",
             "CommandKernelError",
@@ -40587,7 +40608,7 @@
         {
           "kind": "fn",
           "name": "_silence",
-          "line": 275,
+          "line": 276,
           "called": [
             "ConfigError",
             "_"
@@ -40596,19 +40617,19 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 278,
+          "line": 279,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cbe_uint",
-          "line": 284,
+          "line": 285,
           "called": []
         },
         {
           "kind": "fn",
           "name": "cbe_bytes",
-          "line": 291,
+          "line": 292,
           "called": [
             "len"
           ]
@@ -40616,7 +40637,7 @@
         {
           "kind": "fn",
           "name": "transfer_signed_action",
-          "line": 299,
+          "line": 300,
           "called": [
             "cbe_bytes",
             "cbe_uint",
@@ -40626,7 +40647,7 @@
         {
           "kind": "fn",
           "name": "mock_budget_config",
-          "line": 312,
+          "line": 313,
           "called": [
             "Config",
             "parse"
@@ -40635,7 +40656,7 @@
         {
           "kind": "fn",
           "name": "build_kernel_mock_with_budget_enforces_gate",
-          "line": 327,
+          "line": 328,
           "called": [
             "build_kernel",
             "kernel",
@@ -40651,7 +40672,7 @@
         {
           "kind": "fn",
           "name": "build_kernel_mock_epoch_advancement_replenishes",
-          "line": 342,
+          "line": 343,
           "called": [
             "_",
             "build_kernel",
@@ -40666,7 +40687,7 @@
         {
           "kind": "fn",
           "name": "build_kernel_mock_without_budget_always_ok",
-          "line": 356,
+          "line": 357,
           "called": [
             "budget_policy",
             "build_kernel",

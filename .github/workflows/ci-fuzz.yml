@@ -77,6 +77,15 @@ env:
   # Pin cargo-fuzz so a silent upstream change cannot alter the harness
   # semantics under us.
   CARGO_FUZZ_VERSION: '0.13.2'
+  # Pin the nightly toolchain to a DATED release rather than the floating
+  # `nightly` channel, so a future nightly regression (a libFuzzer /
+  # sanitizer-runtime change, or a std/compiler break) cannot turn this lane
+  # red on an unrelated PR — the fuzz build stays byte-reproducible until we
+  # deliberately bump it.  Dated nightlies are retained long-term on
+  # static.rust-lang.org.  To bump: pick a newer date, confirm `rustup
+  # toolchain install <date> --component rust-src` and a local `cargo
+  # +<date> fuzz build` both succeed, then update this one value.
+  RUST_NIGHTLY: 'nightly-2026-07-09'
 
 jobs:
   # ---------------------------------------------------------------------
@@ -96,8 +105,8 @@ jobs:
       - name: Install nightly Rust (libFuzzer needs nightly + sanitizers)
         shell: bash
         run: |
-          rustup toolchain install nightly --profile minimal --component rust-src
-          rustup run nightly rustc --version
+          rustup toolchain install "${RUST_NIGHTLY}" --profile minimal --component rust-src
+          rustup run "${RUST_NIGHTLY}" rustc --version
 
       - name: Cache cargo artifacts
         # Swatinem/rust-cache v2.7.7 (same SHA pinned across the CI suite).
@@ -112,13 +121,13 @@ jobs:
         # `runtime/` where `rust-toolchain.toml` pins stable 1.83, but
         # cargo-fuzz's dep tree needs `edition2024` (only nightly's cargo
         # parses it — 1.83 errors "feature `edition2024` is required").
-        run: cargo +nightly install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
+        run: cargo "+${RUST_NIGHTLY}" install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
 
-      - name: cargo +nightly fuzz build (compile all targets)
+      - name: cargo fuzz build (compile all targets)
         # Compiles every `fuzz_targets/*.rs` with the sanitizer
         # instrumentation.  A decoder signature change the path-pinned
         # targets no longer match fails HERE.
-        run: cargo +nightly fuzz build
+        run: cargo "+${RUST_NIGHTLY}" fuzz build
 
   # ---------------------------------------------------------------------
   # Bounded smoke-fuzz per target.  Short on PR / push, longer on the
@@ -151,8 +160,8 @@ jobs:
       - name: Install nightly Rust
         shell: bash
         run: |
-          rustup toolchain install nightly --profile minimal --component rust-src
-          rustup run nightly rustc --version
+          rustup toolchain install "${RUST_NIGHTLY}" --profile minimal --component rust-src
+          rustup run "${RUST_NIGHTLY}" rustc --version
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
@@ -166,7 +175,7 @@ jobs:
         # `runtime/` where `rust-toolchain.toml` pins stable 1.83, but
         # cargo-fuzz's dep tree needs `edition2024` (only nightly's cargo
         # parses it — 1.83 errors "feature `edition2024` is required").
-        run: cargo +nightly install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
+        run: cargo "+${RUST_NIGHTLY}" install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
 
       - name: Fuzz ${{ matrix.target }}
         shell: bash
@@ -185,7 +194,7 @@ jobs:
             DICT_FLAG="-dict=${{ matrix.dict }}"
           fi
           echo "Fuzzing ${{ matrix.target }} for ${DURATION}s ${DICT_FLAG}"
-          cargo +nightly fuzz run "${{ matrix.target }}" -- \
+          cargo "+${RUST_NIGHTLY}" fuzz run "${{ matrix.target }}" -- \
             ${DICT_FLAG} \
             -max_total_time="${DURATION}" \
             -timeout=25 \
