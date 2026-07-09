@@ -946,13 +946,11 @@ pub fn parse_args(args: &[String]) -> Result<Config, ParseError> {
                 let value = iter
                     .next()
                     .ok_or_else(|| ParseError::MissingValue("--connection-timeout".into()))?;
-                let secs = value
-                    .parse::<u64>()
-                    .map_err(|e| ParseError::InvalidValue {
-                        flag: "--connection-timeout".into(),
-                        value: value.clone(),
-                        reason: e.to_string(),
-                    })?;
+                let secs = value.parse::<u64>().map_err(|e| ParseError::InvalidValue {
+                    flag: "--connection-timeout".into(),
+                    value: value.clone(),
+                    reason: e.to_string(),
+                })?;
                 cfg.connection_timeout = Duration::from_secs(secs);
             }
             "--max-concurrent-connections" => {
