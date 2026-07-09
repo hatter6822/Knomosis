@@ -15,13 +15,45 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "79e137c826927e5af3d3e5b44587a49f1d7e94319b9c72f48188f853e4c10950"
+    "source_digest": "480079c2e96553eb1d6d1878775bbde6e0b80539df01e4cd7b9452802312fd4e"
   },
   "summary": {
-    "module_count": 191,
-    "declaration_count": 5909
+    "module_count": 192,
+    "declaration_count": 5911
   },
   "modules": [
+    {
+      "module": "runtime::fuzz::fuzz_targets::l1_ingest_decode_event",
+      "path": "runtime/fuzz/fuzz_targets/l1_ingest_decode_event.rs",
+      "declaration_count": 2,
+      "declarations": [
+        {
+          "kind": "struct",
+          "name": "FuzzLog",
+          "line": 32,
+          "called": [
+            "block_number"
+          ]
+        },
+        {
+          "kind": "const",
+          "name": "REAL_TOPICS",
+          "line": 51,
+          "called": [
+            "EthAddress",
+            "EventTopic",
+            "FuzzLog",
+            "RawLog",
+            "_",
+            "block_number",
+            "decode_event",
+            "get",
+            "hash",
+            "push"
+          ]
+        }
+      ]
+    },
     {
       "module": "runtime::knomosis-bench::src::config",
       "path": "runtime/knomosis-bench/src/config.rs",

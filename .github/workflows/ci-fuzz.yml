@@ -108,7 +108,11 @@ jobs:
 
       - name: Install cargo-fuzz (pinned)
         shell: bash
-        run: cargo install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
+        # Compile cargo-fuzz with NIGHTLY's cargo: this step runs under
+        # `runtime/` where `rust-toolchain.toml` pins stable 1.83, but
+        # cargo-fuzz's dep tree needs `edition2024` (only nightly's cargo
+        # parses it — 1.83 errors "feature `edition2024` is required").
+        run: cargo +nightly install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
 
       - name: cargo +nightly fuzz build (compile all targets)
         # Compiles every `fuzz_targets/*.rs` with the sanitizer
@@ -154,7 +158,11 @@ jobs:
 
       - name: Install cargo-fuzz (pinned)
         shell: bash
-        run: cargo install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
+        # Compile cargo-fuzz with NIGHTLY's cargo: this step runs under
+        # `runtime/` where `rust-toolchain.toml` pins stable 1.83, but
+        # cargo-fuzz's dep tree needs `edition2024` (only nightly's cargo
+        # parses it — 1.83 errors "feature `edition2024` is required").
+        run: cargo +nightly install cargo-fuzz --locked --version "${CARGO_FUZZ_VERSION}"
 
       - name: Fuzz ${{ matrix.target }}
         shell: bash
