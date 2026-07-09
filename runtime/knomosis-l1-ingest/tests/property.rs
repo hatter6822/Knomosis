@@ -14,7 +14,7 @@
 use knomosis_l1_ingest::action::{Action, EthAddress, PublicKey};
 use knomosis_l1_ingest::address_book::AddressBook;
 use knomosis_l1_ingest::encoding::{encode_action, encode_signed_action, signing_input};
-use knomosis_l1_ingest::events::{decode_event, IngestedEvent, RawLog};
+use knomosis_l1_ingest::events::{decode_event, EventTopic, IngestedEvent, RawLog};
 use knomosis_l1_ingest::fixture::{FeeSplitInput, MAX_BUDGET_PER_DEPOSIT};
 use knomosis_l1_ingest::reorg::{AdvanceOutcome, BlockHeader, ReorgWindow};
 use knomosis_l1_ingest::translation::ingest;
@@ -439,6 +439,65 @@ proptest! {
         };
         // The result is intentionally discarded: the property under test
         // is termination-without-panic, not a specific decode outcome.
+        let _: Result<Option<IngestedEvent>, _> = decode_event(&log);
+    }
+}
+
+// Targeted adversarial decode: seed a REAL event-signature `topic0` so
+// `EventTopic::from_hash` matches and decoding proceeds into the deeper
+// per-event ABI path (fixed-32-byte-word reads, dynamic-`bytes` length
+// prefixes, indexed-topic arity), then feed adversarial / boundary
+// `topics` arity + `data` payloads at that path.  Fully-random topics
+// (the fuzz above) almost never hit a valid `topic0`, so this is the
+// case that actually exercises the fund-relevant decoders — the deposit
+// paths that credit L2 balances (§4.2/§4.3).  The property is unchanged:
+// return `Ok`/`Err` on ANY input, never panic.
+proptest! {
+    #[test]
+    fn decode_event_with_valid_topic0_never_panics_on_adversarial_payload(
+        which in 0usize..6,
+        // Boundary payload lengths clustered around the ABI word size
+        // (32) and the indexed-parameter counts the decoders read, so a
+        // truncated / over-long / off-by-one data buffer is well
+        // represented rather than drowned out by uniform 0..1024.
+        data in prop_oneof![
+            proptest::collection::vec(any::<u8>(), 0..=1),
+            proptest::collection::vec(any::<u8>(), 30..=34),
+            proptest::collection::vec(any::<u8>(), 62..=66),
+            proptest::collection::vec(any::<u8>(), 0..=256),
+        ],
+        // Adversarial indexed-topic arity: a valid event has a fixed
+        // number of indexed params, so 0..=5 exercises both too-few
+        // (missing the actor/resource topic the decoder indexes) and
+        // too-many.
+        extra_topics in proptest::collection::vec(
+            proptest::array::uniform32(any::<u8>()), 0..5),
+        block_number in any::<u64>(),
+        tx_hash in proptest::array::uniform32(any::<u8>()),
+        log_index in any::<u64>(),
+    ) {
+        // Every canonical event topic0, so each event's decoder arm is
+        // driven with adversarial data + arity.
+        let variants = [
+            EventTopic::RegisteredEcdsa,
+            EventTopic::RegisteredEip1271,
+            EventTopic::Revoked,
+            EventTopic::DepositInitiated,
+            EventTopic::DepositWithFeeInitiated,
+            EventTopic::AmmDisabled,
+        ];
+        let mut topics = vec![variants[which].hash()];
+        topics.extend(extra_topics);
+        let log = RawLog {
+            address: EthAddress([0x11; 20]),
+            topics,
+            data,
+            block_number,
+            tx_hash,
+            log_index,
+        };
+        // Load-bearing property: the matched-topic0 decode path returns
+        // (never panics) on a truncated / over-long / wrong-arity log.
         let _: Result<Option<IngestedEvent>, _> = decode_event(&log);
     }
 }
