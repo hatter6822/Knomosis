@@ -133,10 +133,30 @@ command -v forge >/dev/null 2>&1 || die "forge (Foundry) not found on PATH; inst
 # silently drops the AMM + its disaster-recovery multisig even though this
 # wrapper required the AMM signer set — catch both before the operator thinks
 # they deployed the kill switch.
-if [ "${KNOMOSIS_AMM_SEED_RATIO_BPS}" = "0" ]; then
-  die "KNOMOSIS_AMM_SEED_RATIO_BPS is 0 — the AMM (and its disaster-recovery
-  multisig) would NOT be deployed.  Set it > 0 for the full BOLD+AMM suite, or
-  use an ETH-only env if that is intended."
+#
+# Validate the seed ratio NUMERICALLY, not by a literal "0" string compare.
+# DeploySepolia reads it with `vm.envOr(..., uint256)` and narrows to `uint16`,
+# so spellings like `00` / `000` / `0x0` parse to 0 (AMM silently dropped) yet
+# slip past `[ "$x" = "0" ]`, and any multiple of 65536 truncates to 0 via the
+# uint16 narrowing.  Require a plain decimal integer in `(0, 65535]`.
+case "${KNOMOSIS_AMM_SEED_RATIO_BPS}" in
+  '' | *[!0-9]*)
+    die "KNOMOSIS_AMM_SEED_RATIO_BPS ('${KNOMOSIS_AMM_SEED_RATIO_BPS}') must be a
+  decimal integer number of basis points (e.g. 500).  DeploySepolia parses it as a
+  uint, so a non-numeric value (including a 0x-hex spelling) is a config error." ;;
+esac
+# `10#` forces base-10 so leading-zero spellings (`00`, `007`) are read as decimal,
+# not octal.  Arithmetic expansion never affects exit status, so `set -e` is safe.
+if [ "$((10#${KNOMOSIS_AMM_SEED_RATIO_BPS}))" -le 0 ]; then
+  die "KNOMOSIS_AMM_SEED_RATIO_BPS is '${KNOMOSIS_AMM_SEED_RATIO_BPS}' (numerically
+  0) — the AMM (and its disaster-recovery multisig) would NOT be deployed.  Set it
+  > 0 for the full BOLD+AMM suite, or use an ETH-only env if that is intended."
+fi
+if [ "$((10#${KNOMOSIS_AMM_SEED_RATIO_BPS}))" -gt 65535 ]; then
+  die "KNOMOSIS_AMM_SEED_RATIO_BPS is '${KNOMOSIS_AMM_SEED_RATIO_BPS}', above the
+  uint16 basis-points field (max 65535): it would truncate mod 65536, and a multiple
+  of 65536 narrows to 0 and silently drops the AMM.  Use a value in (0, 65535] (and
+  <= MAX_AMM_SEED_RATIO_BPS — the fork dry-run enforces the contract cap)."
 fi
 case "${KNOMOSIS_BOLD_TOKEN}" in
   0x0 | 0x0000000000000000000000000000000000000000 | 0X0* | "")
@@ -169,8 +189,22 @@ fi
 # the token (and any other pre-existing state) is present; this simulates the
 # REAL value-bearing config end-to-end without broadcasting.
 log "dry-run: simulating the full deploy against a Sepolia fork (no broadcast)…"
-( cd "${ROOT}/solidity" && forge script script/DeploySepolia.s.sol --fork-url "${SEPOLIA_RPC_URL}" ) \
+# DeploySepolia's `_writeManifest` runs UNCONDITIONALLY — fork simulation still
+# executes `vm.writeJson`.  Point the dry-run at a throwaway manifest so it never
+# clobbers the canonical `deployments/<network>.json` that the L2 stack + ops
+# tooling consume: otherwise an aborted confirmation (below) or a failed broadcast
+# would leave that file pointing at fork-only addresses that were never deployed on
+# Sepolia.  `fs_permissions` grants the whole `deployments/` dir, so a temp file
+# there is writable; the EXIT trap removes it on any exit path (including `die`).
+# The override is scoped to this one subshell command, so the REAL broadcast below
+# still honours the operator's `KNOMOSIS_MANIFEST_OUT` (or the default).
+dryrun_manifest_rel="deployments/.sepolia-dryrun.$$.json"
+trap 'rm -f "${ROOT}/solidity/${dryrun_manifest_rel}"' EXIT
+( cd "${ROOT}/solidity" \
+    && KNOMOSIS_MANIFEST_OUT="${dryrun_manifest_rel}" \
+       forge script script/DeploySepolia.s.sol --fork-url "${SEPOLIA_RPC_URL}" ) \
   || die "dry-run FAILED — fix the reported config error before broadcasting."
+rm -f "${ROOT}/solidity/${dryrun_manifest_rel}"
 log "dry-run: PASSED — the config produces a consistent deployment on a Sepolia fork."
 
 if [ "${DRY_RUN_ONLY}" -eq 1 ]; then
@@ -181,7 +215,17 @@ fi
 # --- step 3: confirm, then broadcast ---------------------------------------
 if [ "${ASSUME_YES}" -eq 0 ]; then
   printf '\033[1;33m[launch]\033[0m About to BROADCAST a value-bearing deploy to Sepolia and spend real test-ETH.\n'
-  printf '        RPC: %s\n' "${SEPOLIA_RPC_URL%%\?*}"
+  # Redact the RPC credential before printing.  Infura/Alchemy-style URLs carry
+  # the API key in the PATH (`/v3/<key>`, `/v2/<key>`), not only the query string,
+  # so stripping `?…` alone still leaks it in a captured terminal / CI log.  Print
+  # scheme+host only and mask everything after the authority.
+  _rpc_rest="${SEPOLIA_RPC_URL#*://}"
+  if [ "${_rpc_rest}" != "${SEPOLIA_RPC_URL}" ]; then
+    _rpc_display="${SEPOLIA_RPC_URL%%://*}://${_rpc_rest%%/*}/<redacted>"
+  else
+    _rpc_display="${SEPOLIA_RPC_URL%%/*}/<redacted>"
+  fi
+  printf '        RPC: %s\n' "${_rpc_display}"
   read -r -p "        Type 'deploy' to proceed: " confirm
   [ "${confirm}" = "deploy" ] || die "aborted (no 'deploy' confirmation)."
 fi
