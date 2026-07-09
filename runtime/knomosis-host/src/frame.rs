@@ -48,6 +48,22 @@
 //! truncated body would otherwise cause the server to allocate
 //! 4 GiB before noticing the truncation.
 //!
+//! ## Bounded time
+//!
+//! A per-read socket timeout only bounds each *individual* `read`
+//! syscall — a slow-trickle ("slow-loris") client that delivers one
+//! byte per timeout window resets it indefinitely and can hold a
+//! connection-handler slot forever.  The `*_with_deadline` entry points
+//! ([`read_frame_with_deadline`], [`read_request_with_deadline`],
+//! [`ConnReader::read_next_with_deadline`]) therefore accept an
+//! **absolute deadline** for the whole request read; it is checked
+//! before every read syscall and an expired deadline fails with
+//! [`FrameError::DeadlineExceeded`].  An in-flight read is not
+//! interrupted (it is bounded separately by the socket's own read
+//! timeout), so the total wall clock is bounded by
+//! `deadline + one socket read timeout`.  The deadline-less entry
+//! points are unchanged compatibility wrappers.
+//!
 //! ## Why hand-rolled
 //!
 //! The plan §RH-C.1 mentions `tokio-util`'s `LengthDelimitedCodec`
@@ -57,6 +73,7 @@
 //! CBE encoder and HTTP submitter).
 
 use std::io::{self, Read, Write};
+use std::time::Instant;
 
 use crate::queue::{SignerHint, LEGACY_SIGNER_HINT};
 
@@ -203,6 +220,17 @@ pub enum FrameError {
     /// ParseError.
     #[error("zero-length frame rejected; minimum is 1 byte")]
     ZeroLengthFrame,
+    /// The end-to-end deadline for reading this request elapsed
+    /// before the frame completed (see the module-level "Bounded
+    /// time" section).  Defends against slow-trickle ("slow-loris")
+    /// clients: the per-read socket timeout resets on every byte, so
+    /// a trickling client would otherwise hold a connection-handler
+    /// slot indefinitely, whereas this bounds the *whole* request
+    /// read.  A committed-but-undelivered request is a protocol
+    /// error, so the host answers `ParseError` (mirroring the
+    /// truncation variants above).
+    #[error("frame read exceeded the end-to-end request deadline")]
+    DeadlineExceeded,
 }
 
 /// Read one complete frame from `reader`.
@@ -225,6 +253,39 @@ pub enum FrameError {
 ///
 /// See [`FrameError`].
 pub fn read_frame<R: Read>(reader: &mut R, max_frame_size: usize) -> Result<Vec<u8>, FrameError> {
+    read_frame_bounded(reader, max_frame_size, None)
+}
+
+/// [`read_frame`] with an **absolute end-to-end deadline** for the whole
+/// frame read (see the module-level "Bounded time" section).
+///
+/// The deadline is checked before every read syscall; once it has
+/// passed the read fails with [`FrameError::DeadlineExceeded`].  An
+/// in-flight read is not interrupted — it is bounded separately by the
+/// socket's own read timeout — so the total wall clock is bounded by
+/// `deadline + one socket read timeout`.  This is the slow-loris
+/// defence: a per-read socket timeout resets on every delivered byte,
+/// whereas this deadline bounds the request as a whole.
+///
+/// # Errors
+///
+/// See [`FrameError`]; additionally [`FrameError::DeadlineExceeded`]
+/// once `deadline` has passed.
+pub fn read_frame_with_deadline<R: Read>(
+    reader: &mut R,
+    max_frame_size: usize,
+    deadline: Instant,
+) -> Result<Vec<u8>, FrameError> {
+    read_frame_bounded(reader, max_frame_size, Some(deadline))
+}
+
+/// Shared body of [`read_frame`] / [`read_frame_with_deadline`]:
+/// `deadline = None` is the unbounded legacy behaviour.
+fn read_frame_bounded<R: Read>(
+    reader: &mut R,
+    max_frame_size: usize,
+    deadline: Option<Instant>,
+) -> Result<Vec<u8>, FrameError> {
     // Defence-in-depth: clamp to HARD_MAX_FRAME_SIZE.  The CLI
     // validation rejects oversize values up-front; library
     // consumers that bypass the CLI (e.g. RH-F's bench) might
@@ -234,9 +295,9 @@ pub fn read_frame<R: Read>(reader: &mut R, max_frame_size: usize) -> Result<Vec<
     // 1. Read the 4-byte length prefix.  EOF at byte 0 is a clean
     //    close; a partial header is a protocol error.
     let mut header = [0u8; HEADER_LEN];
-    read_header_bytes(reader, &mut header)?;
+    read_header_bytes(reader, &mut header, deadline)?;
     // 2. + 3. Bound the declared length and read the payload.
-    read_payload(reader, u32::from_be_bytes(header), max_frame_size)
+    read_payload(reader, u32::from_be_bytes(header), max_frame_size, deadline)
 }
 
 /// Read one v1 frame whose 4-byte length prefix has ALREADY been
@@ -253,8 +314,20 @@ pub fn read_frame_with_prefix<R: Read>(
     prefix: [u8; HEADER_LEN],
     max_frame_size: usize,
 ) -> Result<Vec<u8>, FrameError> {
+    read_frame_with_prefix_bounded(reader, prefix, max_frame_size, None)
+}
+
+/// Shared body of [`read_frame_with_prefix`] and the deadline-carrying
+/// [`ConnReader`] path: `deadline = None` is the unbounded legacy
+/// behaviour.
+fn read_frame_with_prefix_bounded<R: Read>(
+    reader: &mut R,
+    prefix: [u8; HEADER_LEN],
+    max_frame_size: usize,
+    deadline: Option<Instant>,
+) -> Result<Vec<u8>, FrameError> {
     let max_frame_size = max_frame_size.min(HARD_MAX_FRAME_SIZE);
-    read_payload(reader, u32::from_be_bytes(prefix), max_frame_size)
+    read_payload(reader, u32::from_be_bytes(prefix), max_frame_size, deadline)
 }
 
 /// Read one Rung-1 (v2) hinted frame: an 8-byte big-endian signer hint
@@ -286,6 +359,18 @@ pub fn read_hinted_frame<R: Read>(
     reader: &mut R,
     max_frame_size: usize,
 ) -> Result<(SignerHint, Vec<u8>), FrameError> {
+    read_hinted_frame_bounded(reader, max_frame_size, None)
+}
+
+/// Shared body of [`read_hinted_frame`] and the deadline-carrying
+/// [`ConnReader`] path: `deadline = None` is the unbounded legacy
+/// behaviour; a `Some` deadline is checked before every read syscall
+/// across the hint, the length header, and the payload.
+fn read_hinted_frame_bounded<R: Read>(
+    reader: &mut R,
+    max_frame_size: usize,
+    deadline: Option<Instant>,
+) -> Result<(SignerHint, Vec<u8>), FrameError> {
     let max_frame_size = max_frame_size.min(HARD_MAX_FRAME_SIZE);
     // 1. Read the bounded 8-byte hint.  EOF at byte 0 = clean close
     //    between frames; a partial hint is a protocol error.  No body
@@ -293,6 +378,7 @@ pub fn read_hinted_frame<R: Read>(
     let mut hint = [0u8; SIGNER_HINT_LEN];
     let mut bytes_read = 0usize;
     while bytes_read < SIGNER_HINT_LEN {
+        check_deadline(deadline)?;
         let n = reader.read(&mut hint[bytes_read..])?;
         if n == 0 {
             if bytes_read == 0 {
@@ -310,6 +396,7 @@ pub fn read_hinted_frame<R: Read>(
     let mut header = [0u8; HEADER_LEN];
     let mut header_read = 0usize;
     while header_read < HEADER_LEN {
+        check_deadline(deadline)?;
         let n = reader.read(&mut header[header_read..])?;
         if n == 0 {
             return Err(FrameError::TruncatedHintedFrame {
@@ -319,7 +406,7 @@ pub fn read_hinted_frame<R: Read>(
         header_read += n;
     }
     // 3. Bound the declared length and read the payload.
-    let payload = read_payload(reader, u32::from_be_bytes(header), max_frame_size)?;
+    let payload = read_payload(reader, u32::from_be_bytes(header), max_frame_size, deadline)?;
     Ok((signer, payload))
 }
 
@@ -361,8 +448,18 @@ pub enum Negotiation {
 ///
 /// See [`FrameError`].
 pub fn negotiate_connection<R: Read>(reader: &mut R) -> Result<Negotiation, FrameError> {
+    negotiate_connection_bounded(reader, None)
+}
+
+/// Shared body of [`negotiate_connection`] and the deadline-carrying
+/// [`ConnReader`] path: `deadline = None` is the unbounded legacy
+/// behaviour.
+fn negotiate_connection_bounded<R: Read>(
+    reader: &mut R,
+    deadline: Option<Instant>,
+) -> Result<Negotiation, FrameError> {
     let mut head = [0u8; HEADER_LEN];
-    read_header_bytes(reader, &mut head)?;
+    read_header_bytes(reader, &mut head, deadline)?;
     if head == KNH2_PREAMBLE {
         Ok(Negotiation::Hinted)
     } else {
@@ -424,21 +521,54 @@ impl ConnReader {
         reader: &mut R,
         max_frame_size: usize,
     ) -> Result<(SignerHint, Vec<u8>), FrameError> {
+        self.read_next_bounded(reader, max_frame_size, None)
+    }
+
+    /// [`ConnReader::read_next`] with an **absolute end-to-end
+    /// deadline** for this request's whole read (negotiation, hint,
+    /// header, and payload — see the module-level "Bounded time"
+    /// section).  A persistent-connection server computes a fresh
+    /// deadline per request, so each pipelined frame gets its own
+    /// bounded read while the connection itself may live indefinitely.
+    ///
+    /// # Errors
+    ///
+    /// See [`FrameError`]; additionally
+    /// [`FrameError::DeadlineExceeded`] once `deadline` has passed.
+    pub fn read_next_with_deadline<R: Read>(
+        &mut self,
+        reader: &mut R,
+        max_frame_size: usize,
+        deadline: Instant,
+    ) -> Result<(SignerHint, Vec<u8>), FrameError> {
+        self.read_next_bounded(reader, max_frame_size, Some(deadline))
+    }
+
+    /// Shared body of [`ConnReader::read_next`] /
+    /// [`ConnReader::read_next_with_deadline`]: `deadline = None` is
+    /// the unbounded legacy behaviour.
+    fn read_next_bounded<R: Read>(
+        &mut self,
+        reader: &mut R,
+        max_frame_size: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(SignerHint, Vec<u8>), FrameError> {
         match self.hinted {
-            None => match negotiate_connection(reader)? {
+            None => match negotiate_connection_bounded(reader, deadline)? {
                 Negotiation::Hinted => {
                     self.hinted = Some(true);
-                    read_hinted_frame(reader, max_frame_size)
+                    read_hinted_frame_bounded(reader, max_frame_size, deadline)
                 }
                 Negotiation::Legacy(prefix) => {
                     self.hinted = Some(false);
-                    let payload = read_frame_with_prefix(reader, prefix, max_frame_size)?;
+                    let payload =
+                        read_frame_with_prefix_bounded(reader, prefix, max_frame_size, deadline)?;
                     Ok((LEGACY_SIGNER_HINT, payload))
                 }
             },
-            Some(true) => read_hinted_frame(reader, max_frame_size),
+            Some(true) => read_hinted_frame_bounded(reader, max_frame_size, deadline),
             Some(false) => {
-                let payload = read_frame(reader, max_frame_size)?;
+                let payload = read_frame_bounded(reader, max_frame_size, deadline)?;
                 Ok((LEGACY_SIGNER_HINT, payload))
             }
         }
@@ -473,13 +603,50 @@ pub fn read_request<R: Read>(
     ConnReader::new().read_next(reader, max_frame_size)
 }
 
+/// [`read_request`] with an **absolute end-to-end deadline** for the
+/// whole request read — negotiation, hint, header, and payload (see the
+/// module-level "Bounded time" section).  The one-shot server computes
+/// `Instant::now() + connection_timeout` on accept and passes it here,
+/// so a slow-trickle client is bounded end-to-end rather than per read.
+///
+/// # Errors
+///
+/// See [`FrameError`]; additionally [`FrameError::DeadlineExceeded`]
+/// once `deadline` has passed.
+pub fn read_request_with_deadline<R: Read>(
+    reader: &mut R,
+    max_frame_size: usize,
+    deadline: Instant,
+) -> Result<(SignerHint, Vec<u8>), FrameError> {
+    ConnReader::new().read_next_with_deadline(reader, max_frame_size, deadline)
+}
+
+/// Fail with [`FrameError::DeadlineExceeded`] once `deadline` has
+/// passed; `None` never fails (the unbounded legacy entry points).
+///
+/// Called before every read syscall in the bounded read paths, so an
+/// expired deadline is detected *between* reads — an in-flight read is
+/// not interrupted (it is bounded separately by the socket's own read
+/// timeout, which the listener sets alongside the deadline).
+fn check_deadline(deadline: Option<Instant>) -> Result<(), FrameError> {
+    match deadline {
+        Some(d) if Instant::now() >= d => Err(FrameError::DeadlineExceeded),
+        _ => Ok(()),
+    }
+}
+
 /// Fill `buf` completely from `reader`, mapping a clean EOF at offset 0
 /// to [`FrameError::EofBeforeHeader`] and a partial read to
 /// [`FrameError::TruncatedHeader`].  Shared by [`read_frame`] and
 /// [`negotiate_connection`]'s 4-byte reads.
-fn read_header_bytes<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<(), FrameError> {
+fn read_header_bytes<R: Read>(
+    reader: &mut R,
+    buf: &mut [u8],
+    deadline: Option<Instant>,
+) -> Result<(), FrameError> {
     let mut bytes_read = 0usize;
     while bytes_read < buf.len() {
+        check_deadline(deadline)?;
         let n = reader.read(&mut buf[bytes_read..])?;
         if n == 0 {
             if bytes_read == 0 {
@@ -505,6 +672,7 @@ fn read_payload<R: Read>(
     reader: &mut R,
     declared: u32,
     max_frame_size: usize,
+    deadline: Option<Instant>,
 ) -> Result<Vec<u8>, FrameError> {
     if declared == 0 {
         return Err(FrameError::ZeroLengthFrame);
@@ -519,6 +687,7 @@ fn read_payload<R: Read>(
     let mut payload = vec![0u8; declared_usize];
     let mut filled = 0usize;
     while filled < declared_usize {
+        check_deadline(deadline)?;
         let n = reader.read(&mut payload[filled..])?;
         if n == 0 {
             return Err(FrameError::TruncatedPayload {
@@ -614,12 +783,14 @@ pub fn encode_hinted_frame(signer: SignerHint, payload: &[u8]) -> Result<Vec<u8>
 mod tests {
     use super::{
         encode_frame, encode_hinted_frame, negotiate_connection, read_frame,
-        read_frame_with_prefix, read_hinted_frame, read_request, write_frame, ConnReader,
-        FrameError, Negotiation, DEFAULT_MAX_FRAME_SIZE, HARD_MAX_FRAME_SIZE, HEADER_LEN,
-        KNH2_MAGIC, KNH2_PREAMBLE, SIGNER_HINT_LEN,
+        read_frame_with_deadline, read_frame_with_prefix, read_hinted_frame, read_request,
+        read_request_with_deadline, write_frame, ConnReader, FrameError, Negotiation,
+        DEFAULT_MAX_FRAME_SIZE, HARD_MAX_FRAME_SIZE, HEADER_LEN, KNH2_MAGIC, KNH2_PREAMBLE,
+        SIGNER_HINT_LEN,
     };
     use crate::queue::LEGACY_SIGNER_HINT;
     use std::io::Cursor;
+    use std::time::{Duration, Instant};
 
     /// Round-trip: encode then read.
     #[test]
@@ -1295,6 +1466,142 @@ mod tests {
                 }
                 Err(_) => { /* truncated peek on a < 4 byte buffer is fine */ }
             }
+        }
+    }
+
+    /// A `Read` impl that delivers one byte per call, sleeping `delay`
+    /// first — a deterministic stand-in for a slow-trickle
+    /// ("slow-loris") client whose every individual read makes
+    /// progress (so a per-read socket timeout would never fire).
+    struct TrickleReader<'a> {
+        data: &'a [u8],
+        pos: usize,
+        delay: Duration,
+    }
+    impl std::io::Read for TrickleReader<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.pos >= self.data.len() || buf.is_empty() {
+                return Ok(0);
+            }
+            if !self.delay.is_zero() {
+                std::thread::sleep(self.delay);
+            }
+            buf[0] = self.data[self.pos];
+            self.pos += 1;
+            Ok(1)
+        }
+    }
+
+    /// An already-expired deadline fails with `DeadlineExceeded`
+    /// before any byte is consumed — even when the full frame is
+    /// sitting in the buffer.
+    #[test]
+    fn deadline_expired_before_first_byte_fails_immediately() {
+        let bytes = encode_frame(b"payload").unwrap();
+        let past = Instant::now();
+        let mut cursor = Cursor::new(bytes);
+        match read_frame_with_deadline(&mut cursor, DEFAULT_MAX_FRAME_SIZE, past) {
+            Err(FrameError::DeadlineExceeded) => {}
+            other => panic!("expected DeadlineExceeded, got {other:?}"),
+        }
+    }
+
+    /// The slow-loris regression: a trickling client whose every read
+    /// makes progress (defeating a per-read socket timeout) is cut off
+    /// by the end-to-end deadline mid-frame.
+    #[test]
+    fn deadline_exceeded_for_slow_fragmented_reader() {
+        let payload = vec![0xabu8; 30];
+        let bytes = encode_frame(&payload).unwrap();
+        let mut reader = TrickleReader {
+            data: &bytes,
+            pos: 0,
+            delay: Duration::from_millis(2),
+        };
+        // 34 bytes × 2 ms ≈ 68 ms to deliver; the deadline fires long
+        // before the frame completes.
+        let deadline = Instant::now() + Duration::from_millis(10);
+        match read_frame_with_deadline(&mut reader, DEFAULT_MAX_FRAME_SIZE, deadline) {
+            Err(FrameError::DeadlineExceeded) => {}
+            other => panic!("expected DeadlineExceeded, got {other:?}"),
+        }
+    }
+
+    /// A fragmented-but-timely client is NOT cut off: the deadline
+    /// bounds wall clock, not fragmentation.
+    #[test]
+    fn deadline_generous_fragmented_reader_succeeds() {
+        let payload = b"fragmented but fast".to_vec();
+        let bytes = encode_frame(&payload).unwrap();
+        let mut reader = TrickleReader {
+            data: &bytes,
+            pos: 0,
+            delay: Duration::ZERO,
+        };
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let decoded = read_frame_with_deadline(&mut reader, DEFAULT_MAX_FRAME_SIZE, deadline)
+            .expect("timely fragmented read must succeed under a generous deadline");
+        assert_eq!(decoded, payload);
+    }
+
+    /// The deadline-less entry points stay unbounded (compatibility):
+    /// the same trickling reader that trips the deadline above
+    /// completes fine via plain `read_frame`.
+    #[test]
+    fn deadline_less_read_frame_still_unbounded() {
+        let payload = vec![0xcdu8; 30];
+        let bytes = encode_frame(&payload).unwrap();
+        let mut reader = TrickleReader {
+            data: &bytes,
+            pos: 0,
+            delay: Duration::from_millis(2),
+        };
+        let decoded = read_frame(&mut reader, DEFAULT_MAX_FRAME_SIZE).unwrap();
+        assert_eq!(decoded, payload);
+    }
+
+    /// `read_request_with_deadline` bounds the WHOLE request — the
+    /// Rung-1 negotiation peek and the per-frame signer hint included,
+    /// not just the length-prefixed body.
+    #[test]
+    fn read_request_deadline_covers_negotiation_and_hint() {
+        let mut bytes = KNH2_PREAMBLE.to_vec();
+        bytes.extend_from_slice(&encode_hinted_frame(42, b"hello").unwrap());
+        let mut reader = TrickleReader {
+            data: &bytes,
+            pos: 0,
+            delay: Duration::from_millis(2),
+        };
+        // 4 + 8 + 4 + 5 = 21 bytes × 2 ms ≈ 42 ms; the deadline fires
+        // during the preamble / hint reads.
+        let deadline = Instant::now() + Duration::from_millis(5);
+        match read_request_with_deadline(&mut reader, DEFAULT_MAX_FRAME_SIZE, deadline) {
+            Err(FrameError::DeadlineExceeded) => {}
+            other => panic!("expected DeadlineExceeded, got {other:?}"),
+        }
+    }
+
+    /// On a persistent connection the deadline is PER REQUEST: a fresh
+    /// deadline reads the next frame fine; an expired one fails it.
+    #[test]
+    fn read_next_deadline_is_per_request() {
+        let mut bytes = encode_frame(b"first").unwrap();
+        bytes.extend_from_slice(&encode_frame(b"second").unwrap());
+        let mut cursor = Cursor::new(bytes);
+        let mut reader = ConnReader::new();
+        let (h, p) = reader
+            .read_next_with_deadline(
+                &mut cursor,
+                DEFAULT_MAX_FRAME_SIZE,
+                Instant::now() + Duration::from_secs(60),
+            )
+            .unwrap();
+        assert_eq!(h, LEGACY_SIGNER_HINT);
+        assert_eq!(p, b"first");
+        let past = Instant::now();
+        match reader.read_next_with_deadline(&mut cursor, DEFAULT_MAX_FRAME_SIZE, past) {
+            Err(FrameError::DeadlineExceeded) => {}
+            other => panic!("expected DeadlineExceeded on the second frame, got {other:?}"),
         }
     }
 }

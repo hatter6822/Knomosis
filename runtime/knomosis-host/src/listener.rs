@@ -27,7 +27,10 @@
 //! **One-shot (default).**  HTTP-style — simpler, and matches the plan's
 //! §RH-C.3 "HTTP-style one-shot is also acceptable, simpler":
 //!
-//!   1. Read one wire frame via [`crate::frame::read_request`].
+//!   1. Read one wire frame via
+//!      [`crate::frame::read_request_with_deadline`] (the whole read
+//!      bounded by `connection_timeout` end-to-end — the slow-loris
+//!      defence).
 //!   2. Try to submit to the queue ([`crate::queue::QueueHandle`]).
 //!   3. If the queue is full: respond `Busy` immediately, close.
 //!   4. Otherwise: block on the reply channel (capacity 1).
@@ -54,17 +57,24 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::frame::{read_request, ConnReader, FrameError};
+use crate::frame::{read_request_with_deadline, ConnReader, FrameError};
 use crate::kernel::KernelResponse;
 use crate::queue::{ConnId, QueueHandle, SubmitOutcome};
 use crate::verdict::{Verdict, VerdictResponse};
 
-/// Default read / write timeout per connection.  10 seconds is
-/// generous — a slow client sending one byte every 9.9 seconds
-/// stays under the timeout, but a malicious "slow-loris" client
-/// is bounded.
+/// Default read / write timeout per connection — applied BOTH as the
+/// socket's per-read/write timeout AND as the end-to-end per-request
+/// frame-read deadline (see [`crate::frame::read_request_with_deadline`]).
+///
+/// The two limits compose: the socket timeout bounds each individual
+/// read (an idle client is cut off within one window), while the
+/// deadline bounds the request as a whole (a "slow-loris" client that
+/// trickles one byte per window — resetting the socket timer forever —
+/// is still cut off once the deadline passes).  10 seconds is generous
+/// for a ≤ 1 MiB frame on any realistic link; operators with larger
+/// frames or slower links tune `--connection-timeout`.
 pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Maximum time the connection handler will block waiting for the
@@ -99,7 +109,9 @@ pub struct HandlerConfig {
     /// Maximum frame size accepted from the client.  Forwarded to
     /// [`crate::frame::read_frame`].
     pub max_frame_size: usize,
-    /// Read / write timeout for the underlying socket.
+    /// Read / write timeout for the underlying socket, ALSO used as
+    /// the end-to-end per-request frame-read deadline (the slow-loris
+    /// bound; see [`DEFAULT_CONNECTION_TIMEOUT`]).
     pub connection_timeout: Duration,
     /// Maximum time to wait for the kernel's reply before
     /// responding `NotAdmissible` with a "timeout" reason.
@@ -275,11 +287,12 @@ impl HandleOutcome {
 /// *classification* hints only and never affect admissibility (`GP.8`
 /// §2.6 invariants 1 & 2).
 ///
-/// The Rung-1 negotiation ([`read_request`]) is performed on EVERY path
-/// (FIFO and DRR), because it is a wire-format concern, not a scheduler
-/// one: a v2 client's preamble + per-frame hint are stripped and the
-/// opaque payload submitted regardless of scheduler, so v2 clients
-/// interoperate with a FIFO host (gaining no fairness, but working).
+/// The Rung-1 negotiation ([`read_request_with_deadline`]) is performed
+/// on EVERY path (FIFO and DRR), because it is a wire-format concern,
+/// not a scheduler one: a v2 client's preamble + per-frame hint are
+/// stripped and the opaque payload submitted regardless of scheduler,
+/// so v2 clients interoperate with a FIFO host (gaining no fairness,
+/// but working).
 pub fn handle_connection<S: Read + Write>(
     stream: &mut S,
     handle: &QueueHandle,
@@ -290,26 +303,32 @@ pub fn handle_connection<S: Read + Write>(
     //    and its advisory signer hint.  A legacy connection yields
     //    `LEGACY_SIGNER_HINT`; its payload bytes are byte-identical to a
     //    plain v1 `read_frame`, so the FIFO path is unchanged for it.
-    let (signer_hint, payload) = match read_request(stream, config.max_frame_size) {
-        Ok(p) => p,
-        Err(FrameError::EofBeforeHeader) => {
-            // Clean close before a frame arrived.  No response
-            // owed; just bail.
-            tracing::debug!("client closed before sending frame");
-            return HandleOutcome::ClientClosedBeforeRequest;
-        }
-        Err(e) => {
-            // Any other frame error → respond `ParseError` if we
-            // can.  Failure to write the response is logged at
-            // debug; the connection will close anyway.
-            tracing::debug!(error = ?e, "frame read failure");
-            let response =
-                VerdictResponse::with_reason(Verdict::ParseError, format!("frame read: {e}"));
-            let _ = stream.write_all(&response.encode());
-            let _ = stream.flush();
-            return HandleOutcome::Responded(Verdict::ParseError);
-        }
-    };
+    //    The whole read is bounded by an ABSOLUTE deadline — the
+    //    slow-loris defence: the socket's per-read timeout resets on
+    //    every delivered byte, so a trickling client would otherwise
+    //    hold this handler slot indefinitely.
+    let read_deadline = Instant::now() + config.connection_timeout;
+    let (signer_hint, payload) =
+        match read_request_with_deadline(stream, config.max_frame_size, read_deadline) {
+            Ok(p) => p,
+            Err(FrameError::EofBeforeHeader) => {
+                // Clean close before a frame arrived.  No response
+                // owed; just bail.
+                tracing::debug!("client closed before sending frame");
+                return HandleOutcome::ClientClosedBeforeRequest;
+            }
+            Err(e) => {
+                // Any other frame error → respond `ParseError` if we
+                // can.  Failure to write the response is logged at
+                // debug; the connection will close anyway.
+                tracing::debug!(error = ?e, "frame read failure");
+                let response =
+                    VerdictResponse::with_reason(Verdict::ParseError, format!("frame read: {e}"));
+                let _ = stream.write_all(&response.encode());
+                let _ = stream.flush();
+                return HandleOutcome::Responded(Verdict::ParseError);
+            }
+        };
 
     // 2. Try to submit through the scheduler-agnostic queue handle.
     //    The (connection id, signer hint) pair is the two-tier DRR
@@ -416,7 +435,11 @@ enum PendingResponse {
 ///     sender, the writer drains the already-queued responses in order,
 ///     then both exit.  A well-behaved pipelining client half-closes its
 ///     write side after its last frame, so the reader sees an immediate
-///     EOF rather than waiting out the read timeout.
+///     EOF rather than waiting out the read timeout.  A slow-TRICKLE
+///     client (whose every read makes progress, so the socket timeout
+///     never fires) is instead cut off by the per-request end-to-end
+///     deadline (`FrameError::DeadlineExceeded`) — a protocol error
+///     answered with one final `ParseError` below, not a clean close.
 ///   * A fatal framing error writes one final `ParseError` (in order) and
 ///     ends the connection — the byte stream cannot be resynchronised.
 ///   * `stop` (graceful server shutdown) and a writer-side I/O error (the
@@ -461,7 +484,17 @@ where
         if stop.load(Ordering::Relaxed) || dead.load(Ordering::Relaxed) {
             break;
         }
-        match reader.read_next(&mut read_half, config.max_frame_size) {
+        // A FRESH end-to-end deadline per request: the connection may
+        // live indefinitely across many pipelined frames, but each
+        // individual frame's read is wall-clock-bounded (the
+        // slow-loris defence — a trickling client resets the socket's
+        // per-read timeout forever, this deadline it cannot reset).
+        // An idle client still ends via the socket timeout below
+        // (`WouldBlock`/`TimedOut` → graceful close): the deadline
+        // only fires when reads keep making progress too slowly, which
+        // is a protocol error (`ParseError`), not a clean close.
+        let read_deadline = Instant::now() + config.connection_timeout;
+        match reader.read_next_with_deadline(&mut read_half, config.max_frame_size, read_deadline) {
             Ok((signer_hint, payload)) => {
                 let pending = match handle.submit(conn_id, signer_hint, payload) {
                     SubmitOutcome::Enqueued(rx) => PendingResponse::Enqueued(rx),
