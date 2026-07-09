@@ -182,6 +182,12 @@ contract DeploySepolia is Script {
         // count/quorum 256 -> 0, which would revert QuorumThresholdOutOfRange
         // and brick the deploy, or 260 -> a weaker-than-intended 4-of-N quorum).
         require(adjSet.length >= 1 && adjSet.length <= 255, "adjudicator count must be 1..255");
+        // Reject duplicates: the dispute verifiers collapse duplicate
+        // adjudicators into distinct membership entries, so a duplicate (a
+        // simple typo in the list) would drop the effective committee size
+        // below `adjQuorum` and make disputes unfinalizable in a value-bearing
+        // deployment.  Check BEFORE defaulting/validating the quorum.
+        _requireDistinct(adjSet, "adjudicator");
         require(adjQuorum >= 1 && adjQuorum <= adjSet.length, "adjudicator quorum out of range");
         // `adjQuorum <= adjSet.length <= 255` is enforced above, so the uint8
         // narrowing cannot truncate.
@@ -225,6 +231,10 @@ contract DeploySepolia is Script {
             uint256 sigCount = vm.envOr("KNOMOSIS_AMM_MULTISIG_COUNT", uint256(5));
             sigSet = _deriveSet(sigBase, sigCount);
         }
+        // Reject duplicate signers here for a clear, early error (the multisig
+        // constructor also enforces distinctness, but this names the offending
+        // set at config time rather than reverting deep in the deploy).
+        _requireDistinct(sigSet, "AMM multisig signer");
         cfg.ammMultisigThreshold = vm.envOr("KNOMOSIS_AMM_MULTISIG_THRESHOLD", uint256(3));
         cfg.ammMultisigSigners = sigSet;
 
@@ -267,6 +277,21 @@ contract DeploySepolia is Script {
             // of the loop index can never truncate a meaningful value.
             // forge-lint: disable-next-line(unsafe-typecast)
             set[i] = address(uint160(base) + uint160(i));
+        }
+    }
+
+    /// @notice Revert if `set` contains a duplicate address.  A value-bearing
+    ///         committee / signer set with a duplicate would have a smaller
+    ///         *effective* (distinct) size than `set.length` once the
+    ///         downstream contracts de-duplicate it, silently invalidating a
+    ///         quorum / threshold keyed to the raw length.  O(n^2), fine for a
+    ///         small set (<= 255).  `_deriveSet` output is distinct by
+    ///         construction; this guards the operator-supplied explicit lists.
+    function _requireDistinct(address[] memory set, string memory label) internal pure {
+        for (uint256 i = 0; i < set.length; ++i) {
+            for (uint256 j = i + 1; j < set.length; ++j) {
+                require(set[i] != set[j], string.concat("duplicate ", label, " address"));
+            }
         }
     }
 
