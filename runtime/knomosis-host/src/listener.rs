@@ -865,6 +865,26 @@ pub mod tls {
                 return;
             }
         };
+        // KNOWN RESIDUAL (slow-loris, TLS sub-case).  The per-request
+        // end-to-end deadline `handle_connection` applies bounds the
+        // decoded-FRAME reads (it is checked before each
+        // `tls_stream.read`).  It does NOT bound rustls's internal I/O:
+        // `StreamOwned::read` drives the TLS handshake + record
+        // decryption within a single `read` call, doing multiple raw
+        // socket reads — each only bounded by the socket read timeout set
+        // above, which a trickling peer resets on every byte.  So a
+        // slow-HANDSHAKE TLS peer can still hold this handler up to
+        // ~`connection_timeout` per inner socket read, longer than the
+        // TCP/Unix paths (where the deadline sits directly over the
+        // socket).  Fully closing it needs a deadline-aware wrapper
+        // interposed UNDER rustls — `StreamOwned::new(connection,
+        // DeadlineStream::new(stream, deadline))` — so every handshake
+        // socket read observes the absolute deadline.  Deferred, low
+        // severity: the host TLS listener is one-shot AND, in the shipped
+        // topology, bound to loopback behind the gateway (which terminates
+        // public TLS); the gateway's `http::conn` layer has the analogous
+        // pattern, so the complete fix spans both.  Tracked in
+        // `docs/testnet_readiness.md` §3.6.
         let mut tls_stream = StreamOwned::new(connection, stream);
         let outcome = handle_connection(&mut tls_stream, &handle, &config, conn_id);
         tracing::info!(outcome = outcome.name(), "request handled");
