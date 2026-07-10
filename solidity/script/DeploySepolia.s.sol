@@ -172,6 +172,13 @@ contract DeploySepolia is Script {
         // no known private keys) for in-memory dry-runs / tests ONLY; it must
         // never be used for a deployment that adjudicates real disputes.
         address[] memory adjSet = vm.envOr("KNOMOSIS_ADJUDICATORS", ",", new address[](0));
+        // Whether the operator EXPLICITLY supplied the plural committee list.  The
+        // `KNOMOSIS_ADJUDICATOR`/`_COUNT` fallback below derives sequential
+        // `base+i` addresses with NO known private keys (test / dry-run only, even
+        // for a non-placeholder base), so a real broadcast must require the
+        // explicit list — enforced by the ScriptBroadcast gate at the end of this
+        // function.
+        bool adjExplicit = adjSet.length > 0;
         if (adjSet.length == 0) {
             address adjBase = vm.envOr("KNOMOSIS_ADJUDICATOR", PLACEHOLDER_ADJUDICATOR);
             uint256 adjCount = vm.envOr("KNOMOSIS_ADJUDICATOR_COUNT", uint256(3));
@@ -227,6 +234,10 @@ contract DeploySepolia is Script {
         // non-zero, not-bridge/self, and threshold >= MIN_DISABLE_THRESHOLD.)
         address[] memory sigSet =
             vm.envOr("KNOMOSIS_AMM_MULTISIG_SIGNERS", ",", new address[](0));
+        // As with the adjudicators, the `KNOMOSIS_AMM_MULTISIG_SIGNER`/`_COUNT`
+        // fallback derives keyless `base+i` placeholders, so a real broadcast must
+        // require the explicit plural list (ScriptBroadcast gate below).
+        bool sigExplicit = sigSet.length > 0;
         if (sigSet.length == 0) {
             address sigBase = vm.envOr("KNOMOSIS_AMM_MULTISIG_SIGNER", PLACEHOLDER_MULTISIG_SIGNER);
             uint256 sigCount = vm.envOr("KNOMOSIS_AMM_MULTISIG_COUNT", uint256(5));
@@ -318,13 +329,17 @@ contract DeploySepolia is Script {
                 cfg.treasury != PLACEHOLDER_TREASURY,
                 "KNOMOSIS_TREASURY is the placeholder (unset) on a real broadcast"
             );
-            // The adjudicator set falls back to a `PLACEHOLDER_ADJUDICATOR`-based
-            // sequential derivation whose first entry is the sentinel itself.
+            // The adjudicator committee must be the operator's EXPLICIT list, not
+            // the `base+i` derivation — which is keyless test-only even for a
+            // non-placeholder base, so a derived committee makes disputes
+            // permanently unfinalizable (the verifier's quorum expects signatures
+            // from addresses with no known keys).
             require(
-                cfg.adjudicators[0] != PLACEHOLDER_ADJUDICATOR,
-                "KNOMOSIS_ADJUDICATORS is the placeholder committee (unset) on a real broadcast"
+                adjExplicit,
+                "KNOMOSIS_ADJUDICATORS (explicit committee list) is required on a real broadcast: the base+i derivation is keyless test-only"
             );
             if (cfg.boldToken != address(0)) {
+                // Reject the unset placeholder sentinels...
                 require(
                     cfg.boldCircuitBreaker != PLACEHOLDER_BOLD_BREAKER,
                     "KNOMOSIS_BOLD_CIRCUIT_BREAKER is the placeholder (unset) on a real BOLD broadcast"
@@ -333,13 +348,32 @@ contract DeploySepolia is Script {
                     cfg.boldAdmin != PLACEHOLDER_BOLD_ADMIN,
                     "KNOMOSIS_BOLD_ADMIN is the placeholder (unset) on a real BOLD broadcast"
                 );
+                // ...and mirror the KnomosisBridge constructor's BOLD-role checks
+                // (`ZeroBoldCircuitBreaker` / `ZeroBoldAdmin` / roles-must-be-
+                // distinct) so an operator typo fails HERE, before the registry is
+                // deployed, rather than reverting mid-broadcast.
+                require(
+                    cfg.boldCircuitBreaker != address(0),
+                    "KNOMOSIS_BOLD_CIRCUIT_BREAKER is the zero address on a real BOLD broadcast"
+                );
+                require(
+                    cfg.boldAdmin != address(0),
+                    "KNOMOSIS_BOLD_ADMIN is the zero address on a real BOLD broadcast"
+                );
+                require(
+                    cfg.boldCircuitBreaker != cfg.boldAdmin,
+                    "KNOMOSIS_BOLD_CIRCUIT_BREAKER and KNOMOSIS_BOLD_ADMIN must be distinct on a real BOLD broadcast"
+                );
             }
-            // functionalAmm (mirrors `_deployAll`): the multisig is deployed
-            // only when a BOLD leg + a non-zero seed ratio are both present.
+            // functionalAmm (mirrors `_deployAll`): the multisig is deployed only
+            // when a BOLD leg + a non-zero seed ratio are both present.  Its
+            // signer set must likewise be the EXPLICIT list, else the AMM kill
+            // switch is controlled by keyless `base+i` derivations and can never
+            // be fired after a value-bearing deploy.
             if (cfg.boldToken != address(0) && cfg.ammSeedRatioBps > 0) {
                 require(
-                    cfg.ammMultisigSigners[0] != PLACEHOLDER_MULTISIG_SIGNER,
-                    "KNOMOSIS_AMM_MULTISIG_SIGNERS is the placeholder kill-switch set (unset) on a real broadcast"
+                    sigExplicit,
+                    "KNOMOSIS_AMM_MULTISIG_SIGNERS (explicit signer set) is required on a real broadcast: the base+i derivation is keyless test-only"
                 );
             }
 
