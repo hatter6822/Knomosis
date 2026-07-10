@@ -773,11 +773,11 @@ fn encode_cell_proof_array(proofs: &[CellProof]) -> Vec<u8> {
 /// The tuple contains a dynamic field (`bytes cellValue`), so
 /// the encoding uses the head/tail discipline:
 /// * Head (5 words = 160 bytes):
-///     word 0: cellKind          (uint8 left-padded)
-///     word 1: keyA              (uint256)
-///     word 2: keyB              (uint256)
-///     word 3: cellValue offset  (160 bytes, relative to tuple start)
-///     word 4: witnessCommit     (bytes32)
+///   word 0: cellKind          (uint8 left-padded)
+///   word 1: keyA              (uint256)
+///   word 2: keyB              (uint256)
+///   word 3: cellValue offset  (160 bytes, relative to tuple start)
+///   word 4: witnessCommit     (bytes32)
 /// * Tail: cellValue dynamic-bytes encoding.
 fn encode_cell_proof_tuple(p: &CellProof) -> Vec<u8> {
     const HEAD_WORDS: usize = 5;

@@ -181,21 +181,80 @@ const LINGER_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
 /// not pin the worker thread.
 const LINGER_DRAIN_MAX_BYTES: usize = 4 * 1024 * 1024;
 
-/// A `Read + Write` wrapper that fails **reads** once a per-request wallclock
-/// deadline passes — the slow-loris bound the per-read socket timeout alone
-/// cannot provide.  Because every buffer refill (every socket read) goes
-/// through here, a drip-feed that evades the per-read timeout is still bounded
-/// to the deadline.  **Writes pass through unbounded** — an SSE write is
-/// bounded by the socket's *write* timeout instead, and the read deadline must
-/// never abort a long-lived stream's writes.
+/// A `Read + Write` wrapper that bounds **reads** by a per-request wallclock
+/// deadline — the slow-loris bound the per-read socket timeout alone cannot
+/// provide (a drip just under each per-read timeout keeps every read
+/// "productive" while the cumulative time is unbounded).  Two mechanisms,
+/// both applied before every underlying read:
+///
+///   1. **Hard deadline.** Once the deadline passes, `read` fails `TimedOut`
+///      — so a drip-feed is bounded to the deadline no matter how the bytes
+///      arrive.
+///   2. **Shrinking per-read cap.** The underlying socket's read timeout is
+///      capped to the *remaining* budget (via [`BoundNextRead`], never
+///      widened past the caller's per-read backstop), so the LAST blocking
+///      read cannot overshoot — the total is `<= deadline`, not `deadline +
+///      one per-read timeout`.
+///
+/// **This wrapper must sit UNDER `rustls` on the TLS path** (see
+/// [`crate::http::tls`]).  A single `StreamOwned::read` drives the TLS
+/// handshake + record decryption via *many* raw socket reads; a deadline
+/// checked only *around* `StreamOwned::read` (this wrapper OVER rustls) never
+/// fires mid-handshake, so a peer trickling handshake / record bytes could
+/// hold the handler indefinitely.  Placed under rustls, every raw socket read
+/// during the handshake and record I/O passes through here and is bounded.
+/// On the plaintext path it sits directly on the `TcpStream`.
+///
+/// **Writes pass through unbounded** — an SSE write is bounded by the
+/// socket's *write* timeout instead, the read deadline must never abort a
+/// long-lived stream's writes, and (under rustls) a stalled handshake *write*
+/// is bounded by the socket write timeout, not this read deadline.
 pub(crate) struct DeadlineStream<S> {
     inner: S,
     deadline: Instant,
 }
 
+/// A transport whose next blocking read can be time-capped — lets
+/// [`DeadlineStream`] shrink the underlying socket's read timeout toward the
+/// absolute deadline, so the cumulative read time is bounded by the deadline
+/// even under a byte-at-a-time drip (each read blocks at most the remaining
+/// budget, not a fresh full per-read timeout).
+pub(crate) trait BoundNextRead {
+    /// Cap the next blocking read to at most `budget`.  An implementation may
+    /// additionally clamp to its own per-read backstop; it must never *widen*
+    /// the timeout past that backstop, and must never set it to zero (which
+    /// the OS reads as "block forever").
+    fn bound_next_read(&self, budget: Duration);
+}
+
+impl BoundNextRead for TcpStream {
+    fn bound_next_read(&self, budget: Duration) {
+        // Clamp to the per-read backstop (never widen it) and to a >= 1ms
+        // floor: `Duration::ZERO` means "block forever" to the OS — the
+        // opposite of intent — and `set_read_timeout` rejects a zero value.
+        let capped = budget.min(CONNECTION_TIMEOUT).max(Duration::from_millis(1));
+        let _ = self.set_read_timeout(Some(capped));
+    }
+}
+
+// The in-memory test transport (`&[u8]`) never blocks, so a cap is a no-op.
+impl BoundNextRead for &[u8] {
+    fn bound_next_read(&self, _budget: Duration) {}
+}
+
+/// Reset the per-request read deadline of the (possibly `rustls`-nested)
+/// [`DeadlineStream`] a connection reads through, so the keep-alive loop can
+/// grant each request a fresh budget without knowing whether the deadline
+/// stream sits directly on the socket (plaintext) or under a `StreamOwned`
+/// (TLS).  The TLS `StreamOwned` impl lives in [`crate::http::tls`].
+pub(crate) trait ResetReadDeadline {
+    /// Set the absolute instant after which reads fail `TimedOut`.
+    fn reset_read_deadline(&mut self, deadline: Instant);
+}
+
 impl<S> DeadlineStream<S> {
     /// Wrap `inner`; the deadline starts expired and is reset per request by
-    /// [`run_connection`].
+    /// [`run_connection`] via [`ResetReadDeadline`].
     pub(crate) fn new(inner: S) -> Self {
         Self {
             inner,
@@ -204,15 +263,26 @@ impl<S> DeadlineStream<S> {
     }
 }
 
-impl<S: Read> Read for DeadlineStream<S> {
+impl<S> ResetReadDeadline for DeadlineStream<S> {
+    fn reset_read_deadline(&mut self, deadline: Instant) {
+        self.deadline = deadline;
+    }
+}
+
+impl<S: Read + BoundNextRead> Read for DeadlineStream<S> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if Instant::now() >= self.deadline {
-            return Err(std::io::Error::new(
+        // Remaining budget; `None` (deadline in the past) or zero ⇒ expired.
+        match self.deadline.checked_duration_since(Instant::now()) {
+            Some(remaining) if !remaining.is_zero() => {
+                // Cap this read so it cannot overshoot the deadline.
+                self.inner.bound_next_read(remaining);
+                self.inner.read(buf)
+            }
+            _ => Err(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 "request read deadline exceeded",
-            ));
+            )),
         }
-        self.inner.read(buf)
     }
 }
 
@@ -271,8 +341,8 @@ fn lingering_drain(socket: Option<&TcpStream>) {
 /// errors, is evicted, or `shutdown` is set.  Each request resets the
 /// [`DeadlineStream`]'s read deadline, so the cumulative read time per request
 /// is bounded (slow-loris).
-pub(crate) fn run_connection<S: Read + Write>(
-    reader: &mut BufReader<DeadlineStream<S>>,
+pub(crate) fn run_connection<T: Read + Write + ResetReadDeadline>(
+    reader: &mut BufReader<T>,
     socket: Option<&TcpStream>,
     state: &AppState,
     shutdown: &AtomicBool,
@@ -284,7 +354,12 @@ pub(crate) fn run_connection<S: Read + Write>(
         let request_id = next_request_id();
         let start = Instant::now();
         // Reset the overall per-request read deadline (slow-loris bound).
-        reader.get_mut().deadline = Instant::now() + REQUEST_READ_DEADLINE;
+        // `reset_read_deadline` reaches the deadline stream whether it sits
+        // directly on the socket (plaintext) or under the `rustls`
+        // `StreamOwned` (TLS), so the handshake + record I/O is bounded too.
+        reader
+            .get_mut()
+            .reset_read_deadline(Instant::now() + REQUEST_READ_DEADLINE);
         let head = match read_head(reader, state.config.max_frame_size) {
             Ok(head) => head,
             // A clean EOF (idle keep-alive closed) or a socket error / timeout
@@ -354,8 +429,8 @@ enum ConnControl {
 /// request that carried a body, that body is left unread — so the connection
 /// **cannot** be kept alive (the unread bytes would desync the next keep-alive
 /// request); the response is sent with `Connection: close`.
-fn serve_parsed<S: Read + Write>(
-    reader: &mut BufReader<DeadlineStream<S>>,
+fn serve_parsed<T: Read + Write>(
+    reader: &mut BufReader<T>,
     socket: Option<&TcpStream>,
     state: &AppState,
     head: &RequestHead,
@@ -1125,8 +1200,8 @@ fn reject_slug(status: u16) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        read_body, read_head, reason_phrase, reject_slug, write_response, ConnControl,
-        DeadlineStream, RequestError, Version,
+        read_body, read_head, reason_phrase, reject_slug, write_response, BoundNextRead,
+        ConnControl, DeadlineStream, RequestError, Version,
     };
     use crate::http::RouteOutcome;
     use std::io::{BufReader, Read};
@@ -1295,7 +1370,7 @@ mod tests {
         // Reads succeed before the deadline, fail (TimedOut) after — the
         // mechanism that bounds the cumulative request-read time.
         let mut s = DeadlineStream::new(&b"hello"[..]);
-        s.deadline = Instant::now() + Duration::from_secs(60);
+        s.deadline = Instant::now() + Duration::from_mins(1);
         let mut buf = [0u8; 5];
         assert_eq!(s.read(&mut buf).unwrap(), 5);
         // Now expire it: the next read errors regardless of available bytes.
@@ -1306,6 +1381,67 @@ mod tests {
         assert_eq!(
             s.read(&mut buf).unwrap_err().kind(),
             std::io::ErrorKind::TimedOut
+        );
+    }
+
+    #[test]
+    fn deadline_stream_caps_each_read_to_the_remaining_budget() {
+        // The under-rustls tightening: before every underlying read the
+        // deadline stream caps the transport's next blocking read to the
+        // REMAINING budget (never a fresh full per-read timeout), so the TLS
+        // handshake / record I/O — many raw socket reads inside one
+        // `StreamOwned::read` — cannot overshoot the deadline under a drip.
+        use std::cell::RefCell;
+
+        // Records every cap; yields one byte per read (never blocks).
+        struct Recorder {
+            budgets: RefCell<Vec<Duration>>,
+        }
+        impl Read for Recorder {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                buf[0] = b'x';
+                Ok(1)
+            }
+        }
+        impl BoundNextRead for Recorder {
+            fn bound_next_read(&self, budget: Duration) {
+                self.budgets.borrow_mut().push(budget);
+            }
+        }
+
+        let mut s = DeadlineStream::new(Recorder {
+            budgets: RefCell::new(Vec::new()),
+        });
+        s.deadline = Instant::now() + Duration::from_secs(30);
+        let mut buf = [0u8; 1];
+        for _ in 0..4 {
+            assert_eq!(s.read(&mut buf).unwrap(), 1);
+        }
+        {
+            let budgets = s.inner.budgets.borrow();
+            assert_eq!(budgets.len(), 4, "one cap per read");
+            // Every cap is a real, positive slice of the 30s budget, and the
+            // sequence never grows (time only moves forward between reads).
+            assert!(budgets
+                .iter()
+                .all(|b| *b > Duration::ZERO && *b <= Duration::from_secs(30)));
+            for w in budgets.windows(2) {
+                assert!(w[1] <= w[0], "the remaining budget must not grow");
+            }
+        }
+        // Past the deadline: fail fast — no read attempted, no cap applied.
+        s.deadline = Instant::now()
+            .checked_sub(Duration::from_secs(1))
+            .expect("a deadline one second in the past");
+        let caps_before = s.inner.budgets.borrow().len();
+        assert_eq!(
+            s.read(&mut buf).unwrap_err().kind(),
+            std::io::ErrorKind::TimedOut
+        );
+        assert_eq!(
+            s.inner.budgets.borrow().len(),
+            caps_before,
+            "no cap is attempted once the deadline has passed"
         );
     }
 

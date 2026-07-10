@@ -115,14 +115,13 @@ LAKE_BUILD_TARGETS=(
   lex_lint lex_codegen lex_diff lex_format
 )
 
-# Build every target above with explicit `-j` parallelism.  The job
-# count defaults to the core count (nproc on Linux, sysctl on macOS),
-# falling back to 4 if neither is available.
+# Build every target above.  The pinned toolchain's Lake (5.0.0 /
+# Lean 4.29.1) has no `-j` / `--jobs` flag — it parallelises across
+# the machine's logical cores automatically — so no job count is (or
+# can be) passed.
 run_full_lake_build() {
-  local jobs
-  jobs="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-  log_elapsed "running full lake build (-j ${jobs}, ${#LAKE_BUILD_TARGETS[@]} targets)"
-  (cd "${ROOT_DIR}" && lake build -j "${jobs}" "${LAKE_BUILD_TARGETS[@]}")
+  log_elapsed "running full lake build (${#LAKE_BUILD_TARGETS[@]} targets)"
+  (cd "${ROOT_DIR}" && lake build "${LAKE_BUILD_TARGETS[@]}")
 }
 
 ELAN_HOME_DEFAULT="${HOME}/.elan"
@@ -166,15 +165,15 @@ LEAN_TOOLCHAIN_SHA256_ZIP_ARM="171cd3426c3f43ca49b5affad15633e4d9f1e983df536a208
 
 # Foundry (forge / cast / anvil / chisel) toolchain.  Workstream E (the
 # Solidity mirror of the kernel) needs `forge` to build / test the
-# contracts under `solidity/`.  Pinned to v1.7.0; bumping requires
+# contracts under `solidity/`.  Pinned to v1.7.1; bumping requires
 # recomputing the SHAs in the same commit.  Regenerate via:
 #   for arch in amd64 arm64; do
-#     curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_${arch}.tar.gz" \
+#     curl -fsSL "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_${arch}.tar.gz" \
 #       | sha256sum
 #   done
-FOUNDRY_VERSION="v1.7.0"
-FOUNDRY_SHA256_X86="88501301c43e2cb3231009e68bd76af17cc0f7e9981f9d37ceabc6b857febb2f"
-FOUNDRY_SHA256_ARM="4be51b29d81f46f5f8913caf9b458db4b6f04f51565fbd59a0d11f69a4be2f77"
+FOUNDRY_VERSION="v1.7.1"
+FOUNDRY_SHA256_X86="cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b"
+FOUNDRY_SHA256_ARM="c8fe8fa09ae3aba2c81b510c6f9da3a9d468029b9580e690b245b3f0aea687ae"
 
 # solc 0.8.20 static binary (linux x86_64 only — the upstream v0.8.20
 # release does not ship an ARM static binary; ARM users must build
@@ -232,6 +231,19 @@ _path_writable_or_creatable() {
     d="$(dirname "${d}")"
   done
   [ -w "${d}" ]
+}
+
+# Match a `--version` line for an EXACT version token, not an arbitrary
+# substring.  The pinned version must be delimited by a non-version character
+# (or a string edge) on BOTH sides, so a future "1.7.10" / "0.8.200" release is
+# NOT accepted as the pinned "1.7.1" / "0.8.20".  Dots in the pin are escaped so
+# they match literally (not as the regex "any char").  Handles both observed
+# forge formats ("1.7.1-stable" and "...-v1.7.1") and the solc format.  Reads
+# the version output on stdin; returns grep's exit status.
+_version_token_match() {
+  local ver_re
+  ver_re="$(printf '%s' "$1" | sed 's/[.]/\\./g')"
+  grep -Eq "(^|[^0-9.])${ver_re}([^0-9]|\$)"
 }
 
 # -------- Persist toolchain PATH (the anti-drift core) --------
@@ -350,7 +362,7 @@ do_solidity_install() {
 
   # ---- Foundry fast-path check ----
   if [ -x "${foundry_install_dir}/forge" ] && \
-     "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION}"; then
+     "${foundry_install_dir}/forge" --version 2>/dev/null | _version_token_match "${FOUNDRY_VERSION#v}"; then
     log_elapsed "Foundry ${FOUNDRY_VERSION} is already installed (fast-path)"
   else
     log_elapsed "installing Foundry ${FOUNDRY_VERSION}"
@@ -440,13 +452,17 @@ do_solidity_install() {
   fi
 
   # ---- Verify the freshly-installed toolchain runs + is the pin ----
-  # `forge --version` for v1.7.0 prints "... -v1.7.0", so grep the pin string.
-  if ! "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION}"; then
+  # `forge --version` embeds the release tag but the exact format varies by
+  # build (e.g. "...-v1.7.1" vs "1.7.1-stable"), so match the v-stripped version
+  # as a bounded TOKEN (`_version_token_match`) rather than a bare substring —
+  # otherwise a future "1.7.10" would satisfy the "1.7.1" pin.  The solc check
+  # below uses the same helper for the same reason ("0.8.20" vs "0.8.200").
+  if ! "${foundry_install_dir}/forge" --version 2>/dev/null | _version_token_match "${FOUNDRY_VERSION#v}"; then
     echo "error: forge at ${foundry_install_dir} is not the pinned ${FOUNDRY_VERSION} (or fails to run)" >&2
     return 1
   fi
   if [ -x "${solc_install_path}" ] \
-     && ! "${solc_install_path}" --version 2>/dev/null | grep -q "${SOLC_VERSION#v}"; then
+     && ! "${solc_install_path}" --version 2>/dev/null | _version_token_match "${SOLC_VERSION#v}"; then
     echo "error: solc at ${solc_install_path} is not ${SOLC_VERSION} (or fails to run)" >&2
     return 1
   fi

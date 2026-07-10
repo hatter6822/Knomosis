@@ -24,7 +24,7 @@
 #[must_use]
 pub fn decode(input: &str) -> Option<Vec<u8>> {
     let bytes = input.as_bytes();
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return None;
     }
     if bytes.is_empty() {

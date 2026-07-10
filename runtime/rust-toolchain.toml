@@ -12,13 +12,15 @@
 # starts inside the workspace tree (including from sub-directories of
 # `runtime/`).
 #
-# Channel choice.  `1.83` is the stable LTS as of the plan's authoring
-# (per `docs/planning/rust_host_runtime_plan.md` §4 RH-H step 2).
-# Bumping the channel is a workspace-level PR per the plan §7 risk
-# register — we don't let any single sub-stream silently drift the
-# toolchain.  `Cargo.toml`'s `[workspace.package].rust-version = "1.83"`
-# documents the same constraint at the package level, so cargo refuses
-# to build under any older toolchain even when this file is missing.
+# Channel choice.  `1.97` is the current stable (2026-07); it succeeds the
+# original `1.83` pin (per `docs/planning/rust_host_runtime_plan.md` §4 RH-H
+# step 2).  Bumping the channel is a workspace-level PR per the plan §7 risk
+# register — we don't let any single sub-stream silently drift the toolchain —
+# so this bump was verified across the full `cargo build` / `cargo test` /
+# `cargo clippy -D warnings` / `cargo fmt --check` gate before landing.
+# `Cargo.toml`'s `[workspace.package].rust-version = "1.97"` documents the same
+# constraint at the package level, so cargo refuses to build under any older
+# toolchain even when this file is missing.
 #
 # Components.  `clippy` and `rustfmt` are pulled in eagerly so the
 # four CI gates (`cargo build`, `cargo test`, `cargo clippy`,
@@ -26,6 +28,6 @@
 # add` step.
 
 [toolchain]
-channel = "1.83"
+channel = "1.97"
 components = ["clippy", "rustfmt"]
 profile = "minimal"

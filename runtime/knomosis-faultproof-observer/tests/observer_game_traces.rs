@@ -228,9 +228,11 @@ impl FixtureClaim {
 }
 
 fn bytes32_to_hex(b: &[u8; 32]) -> String {
+    use std::fmt::Write as _;
     let mut s = String::with_capacity(64);
     for byte in b {
-        s.push_str(&format!("{byte:02x}"));
+        // Writes to a `String` are infallible, so the result is discarded.
+        let _ = write!(s, "{byte:02x}");
     }
     s
 }
@@ -340,12 +342,17 @@ fn locate_fixture() -> Option<PathBuf> {
 /// every-step-byte-equals test.
 fn load_corpus() -> Option<Fixture> {
     let path = locate_fixture()?;
-    let bytes = std::fs::read(&path)
-        .unwrap_or_else(|e| panic!("corpus file exists at {path:?} but cannot be read: {e}"));
+    let bytes = std::fs::read(&path).unwrap_or_else(|e| {
+        panic!(
+            "corpus file exists at {} but cannot be read: {e}",
+            path.display()
+        )
+    });
     let fixture: Fixture = serde_json::from_slice(&bytes).unwrap_or_else(|e| {
         panic!(
-            "corpus file at {path:?} is malformed JSON or schema-drifted: {e}.  \
-             Rebuild via `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test`."
+            "corpus file at {} is malformed JSON or schema-drifted: {e}.  \
+             Rebuild via `KNOMOSIS_FIXTURES_OVERWRITE=1 lake test`.",
+            path.display()
         )
     });
     Some(fixture)

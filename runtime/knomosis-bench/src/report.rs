@@ -381,14 +381,18 @@ impl BenchmarkReport {
     /// Used by the CLI binary's stdout output.
     #[must_use]
     pub fn to_human_summary(&self) -> String {
+        use std::fmt::Write as _;
         let mut out = String::new();
-        out.push_str(&format!(
-            "{} v{} (proto v{})\n",
+        // Writes to a `String` are infallible, so the `write!` results are discarded.
+        let _ = writeln!(
+            out,
+            "{} v{} (proto v{})",
             self.identifier, self.harness_version, self.protocol_version
-        ));
-        out.push_str(&format!("  Transport       : {}\n", self.transport.name()));
-        out.push_str(&format!(
-            "  Wire mode       : {}{}\n",
+        );
+        let _ = writeln!(out, "  Transport       : {}", self.transport.name());
+        let _ = writeln!(
+            out,
+            "  Wire mode       : {}{}",
             if self.emit_hints {
                 "v2-hinted (--emit-hints)"
             } else {
@@ -399,56 +403,67 @@ impl BenchmarkReport {
             } else {
                 " + one-shot"
             }
-        ));
-        out.push_str(&format!("  Workers         : {}\n", self.worker_count));
-        out.push_str(&format!(
-            "  Actors          : {}\n",
+        );
+        let _ = writeln!(out, "  Workers         : {}", self.worker_count);
+        let _ = writeln!(
+            out,
+            "  Actors          : {}",
             self.fixture_config.actor_count
-        ));
-        out.push_str(&format!(
-            "  Transfers       : {}\n",
+        );
+        let _ = writeln!(
+            out,
+            "  Transfers       : {}",
             self.fixture_config.transfer_count
-        ));
-        out.push_str(&format!("  Warmup requests : {}\n", self.warmup_requests));
-        out.push_str(&format!("  Measured reqs   : {}\n", self.measured_requests));
-        out.push_str(&format!(
-            "  Elapsed         : {:.3} s\n",
+        );
+        let _ = writeln!(out, "  Warmup requests : {}", self.warmup_requests);
+        let _ = writeln!(out, "  Measured reqs   : {}", self.measured_requests);
+        let _ = writeln!(
+            out,
+            "  Elapsed         : {:.3} s",
             self.elapsed_ns as f64 / 1e9
-        ));
-        out.push_str(&format!(
-            "  Throughput      : {:.1} ops/sec\n",
+        );
+        let _ = writeln!(
+            out,
+            "  Throughput      : {:.1} ops/sec",
             self.throughput_ops_per_sec
-        ));
+        );
         out.push_str("  Latency:\n");
-        out.push_str(&format!(
-            "    min  : {:>9.3} µs\n",
+        let _ = writeln!(
+            out,
+            "    min  : {:>9.3} µs",
             self.latency.min_ns as f64 / 1_000.0
-        ));
-        out.push_str(&format!(
-            "    p50  : {:>9.3} µs\n",
+        );
+        let _ = writeln!(
+            out,
+            "    p50  : {:>9.3} µs",
             self.latency.p50_ns as f64 / 1_000.0
-        ));
-        out.push_str(&format!(
-            "    p90  : {:>9.3} µs\n",
+        );
+        let _ = writeln!(
+            out,
+            "    p90  : {:>9.3} µs",
             self.latency.p90_ns as f64 / 1_000.0
-        ));
-        out.push_str(&format!(
-            "    p99  : {:>9.3} µs\n",
+        );
+        let _ = writeln!(
+            out,
+            "    p99  : {:>9.3} µs",
             self.latency.p99_ns as f64 / 1_000.0
-        ));
-        out.push_str(&format!(
-            "    p999 : {:>9.3} µs\n",
+        );
+        let _ = writeln!(
+            out,
+            "    p999 : {:>9.3} µs",
             self.latency.p999_ns as f64 / 1_000.0
-        ));
-        out.push_str(&format!(
-            "    max  : {:>9.3} µs\n",
+        );
+        let _ = writeln!(
+            out,
+            "    max  : {:>9.3} µs",
             self.latency.max_ns as f64 / 1_000.0
-        ));
-        out.push_str(&format!(
-            "    mean : {:>9.3} µs (± {:.3} µs stddev)\n",
+        );
+        let _ = writeln!(
+            out,
+            "    mean : {:>9.3} µs (± {:.3} µs stddev)",
             self.latency.mean_ns / 1_000.0,
             self.latency.stddev_ns / 1_000.0
-        ));
+        );
         out
     }
 }

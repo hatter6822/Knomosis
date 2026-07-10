@@ -125,12 +125,18 @@ fn main() -> ExitCode {
     let fixture = FixtureFile::from_records(FixtureKind::Ecdsa, records);
     if let Some(parent) = output_path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("failed to create output directory {parent:?}: {e}");
+            eprintln!(
+                "failed to create output directory {}: {e}",
+                parent.display()
+            );
             return ExitCode::from(1);
         }
     }
     if let Err(e) = fixture.write_to(&output_path) {
-        eprintln!("failed to write fixture file {output_path:?}: {e}");
+        eprintln!(
+            "failed to write fixture file {}: {e}",
+            output_path.display()
+        );
         return ExitCode::from(1);
     }
     println!(

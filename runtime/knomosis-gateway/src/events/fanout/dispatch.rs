@@ -210,7 +210,7 @@ mod tests {
     fn brisk(max_lag: usize) -> StreamConfig {
         StreamConfig {
             max_client_lag: max_lag,
-            heartbeat: Duration::from_secs(3600),
+            heartbeat: Duration::from_hours(1),
             poll: Duration::from_millis(5),
         }
     }
@@ -441,7 +441,7 @@ mod tests {
                     &[],
                     &StreamConfig {
                         max_client_lag: max_lag,
-                        heartbeat: Duration::from_secs(3600),
+                        heartbeat: Duration::from_hours(1),
                         poll: Duration::from_millis(5),
                     },
                     &sd,

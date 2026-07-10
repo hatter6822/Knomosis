@@ -84,6 +84,16 @@ members = [
     "knomosis-gateway",
     "knomosis-gateway-bench",
 ]
+# The `fuzz/` cargo-fuzz crate is a SEPARATE workspace (it carries its
+# own `[workspace]` table) and is excluded here so the stable-toolchain
+# gates never try to build it: its `libfuzzer-sys` targets require a
+# nightly toolchain + the LLVM sanitizer runtime and are driven ONLY by
+# `cargo +nightly fuzz` (the dedicated `ci-fuzz.yml` lane).  Keeping it
+# out of `--workspace` is what lets `cargo build/test/clippy --workspace`
+# stay green on pinned stable 1.83.
+exclude = [
+    "fuzz",
+]
 
 # Shared package metadata.  Per-crate manifests use
 # `package.<field>.workspace = true` to inherit.  Centralising the
@@ -96,13 +106,13 @@ members = [
 # version here propagates to every member crate via
 # `version.workspace = true`.
 [workspace.package]
-version = "0.10.1"
+version = "0.10.2"
 edition = "2021"
 # `rust-version` documents the workspace's minimum-supported-Rust-
 # version (MSRV).  `rust-toolchain.toml` pins the build channel; this
 # field gates `cargo` itself before any compilation begins.  Bumping
 # the MSRV is a workspace-level PR, not a per-crate one.
-rust-version = "1.83"
+rust-version = "1.97"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/hatter6822/Knomosis"
 publish = false
@@ -185,13 +195,13 @@ tempfile = "~3.14"
 #     enabled so operators can opt into TLS 1.2 for interop with
 #     older clients; default minimum is still 1.3 per the plan
 #     §RH-C.3 recommendation.
-#   * `rustls-pemfile` — PEM-encoded certificate / key parser.
-#     Tiny dependency (parser only, no crypto); decouples the
-#     PEM-loading codepath from the rustls major version.
 #   * `rustls-pki-types` — shared certificate / private-key type
-#     vocabulary between rustls and rustls-pemfile.
+#     vocabulary for rustls, INCLUDING the PEM parsing surface (the
+#     `pem::PemObject` trait, >= 1.9) the cert / key / CRL loaders
+#     use.  The formerly-separate `rustls-pemfile` wrapper
+#     (unmaintained, RUSTSEC-2025-0134) was dropped in favour of
+#     this crate's own parser — the same code, one fewer dependency.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-pemfile = { version = "2", default-features = false, features = ["std"] }
 rustls-pki-types = { version = "1.10", default-features = false, features = ["std"] }
 
 # RH-E (storage abstraction + indexer) dependencies.  Pinned to minor

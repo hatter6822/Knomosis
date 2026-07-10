@@ -394,7 +394,12 @@ canonical state commit), which is what lets it file challenges
 automatically; without the pair it falls back to the in-memory oracle.
 `--play-as` defaults to `challenger`, and supplying `--chain-id`
 enables the production JSON-RPC submitter (otherwise the observer runs
-read-only, logging moves without submitting).  Run
+read-only, logging moves without submitting).  `--chain-id`
+additionally **requires** the truth-oracle pair — a broadcast-capable
+observer with no truth oracle would defer every bisection move
+(`TruthOracleMissed`) while appearing armed, silently voiding the
+watchtower-liveness assumption, so that combination is rejected
+fail-closed at startup.  Run
 `knomosis-faultproof-observer --help` for the full flag list.
 
 The observer logs detected divergences and (when configured with

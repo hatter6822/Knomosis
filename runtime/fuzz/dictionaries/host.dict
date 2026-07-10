@@ -1,0 +1,9 @@
+# libFuzzer dictionary for host_read_request.
+# The 4-byte Rung-1 (v2) preamble a client sends to opt into per-frame
+# signer hints; without this token the coverage engine almost never
+# reproduces the magic, so the whole v2 hinted read path stays dark.
+knh2_preamble="KNH2"
+# A minimal 1-byte v1 frame: 4-byte big-endian length prefix (0x00000001)
+# + one payload byte — the smallest well-formed frame, so the happy
+# body-read path is seeded too.
+v1_min_frame="\x00\x00\x00\x01\x00"

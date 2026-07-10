@@ -26,6 +26,17 @@ the go/no-go gate in `docs/testnet_readiness.md`, and the gateway API in
 `docs/api/gateway.openapi.yaml`.  `docs/DEVELOPMENT.md` §11 is the short
 overview that points here.
 
+> **Launch kit (the fast path).**  For a value-bearing BOLD+AMM launch the
+> only manual inputs are: fund the deployer EOA, fill
+> `solidity/deploy.sepolia.env.example` with your custodied addresses /
+> signer, and provide `SEPOLIA_RPC_URL` + `ETHERSCAN_API_KEY`.  Then
+> `./scripts/deploy_sepolia_launch.sh` runs the whole flow (F-1/F-2 gate →
+> dry-run → confirm → broadcast + verify → manifest → optional L2 stack).
+> The execution-ordered checklist — including the post-deploy verification,
+> monitoring/alerting, key-custody/rotation, and watchtower ops — is
+> `docs/launch_execution_checklist.md`.  The sections below remain the
+> reference detail the kit automates.
+
 ---
 
 ## 0. Topology — what talks to what
@@ -143,9 +154,23 @@ export KNOMOSIS_DEPLOYER_ACCOUNT=my-sepolia-deployer  # forge keystore (recommen
 export KNOMOSIS_ATTESTOR=0x...        # bridge off-chain signer EOA
 export KNOMOSIS_SEQUENCER=0x...       # the L2 sequencer EOA
 export KNOMOSIS_TREASURY=0x...        # fault-proof 5% skim recipient
-export KNOMOSIS_ADJUDICATOR=0x...     # base of the adjudicator set (3-of-3 default)
+export KNOMOSIS_ADJUDICATORS=0x...,0x...,0x...  # explicit, DISTINCT, custodied set
+                                      # (quorum defaults to the set size). The
+                                      # KNOMOSIS_ADJUDICATOR base+_COUNT derivation
+                                      # is placeholder-only (no known keys) — dry-run
+                                      # / test use ONLY, never value-bearing.
 make deploy-sepolia                   # broadcasts + verifies on Etherscan
 ```
+
+> **Foundry version.** Use a **stable** `foundry` release for the broadcast.
+> Some dev builds (the `1.6.0-v1.7.0` build this repo previously pinned; now
+> bumped to v1.7.1, unverified on this path in the sandbox)
+> regress on decoding `KnomosisDisputeVerifier`'s `constructor(tuple)` when
+> assembling the `--broadcast` (`type check failed for "offset (usize)"`,
+> **before any tx is sent**); the deploy logic itself is proven (the dry-run +
+> the F.3 acceptance suite pass). Preflight with `make deploy-local` against a
+> local `anvil`; if it reproduces, `foundryup` to a stable release. See
+> `DEVELOPMENT.md` §10.5.
 
 ### 4.3 BOLD + AMM on Sepolia (optional)
 

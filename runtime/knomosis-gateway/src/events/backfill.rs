@@ -302,7 +302,7 @@ impl<'a> PageBuilder<'a> {
             render_event(payload, seq, index).map_err(|e: DecodeError| BackfillError::Render {
                 detail: e.to_string(),
             })?;
-        if self.types.is_empty() || self.types.iter().any(|t| *t == rendered.event_type) {
+        if self.types.is_empty() || self.types.contains(&rendered.event_type) {
             self.group.push(rendered);
         }
         self.group_seq = Some(seq);

@@ -36,6 +36,12 @@ snapshots/
 deployments/*.json
 !deployments/.gitkeep
 
+# Filled-in deploy env files (RPC keys / a raw signer key / actor addresses).
+# The committed fill-in TEMPLATE is `deploy.sepolia.env.example`; the filled
+# copy (`deploy.sepolia.env`, `deploy.mainnet.env`, …) holds secrets and must
+# never be committed.  The `.example` suffix keeps the template tracked.
+deploy.*.env
+
 # Editor / OS noise
 .vscode/
 .idea/

@@ -104,7 +104,18 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       emits `deployments/sepolia.json` against a real Sepolia RPC.  This is the
       recommended path: unlike the F.3 `TestnetAcceptance` `Deployer` bundler it
       needs **no** `--disable-code-size-limit` (every production contract is
-      under EIP-170).  See `docs/sepolia_deployment_runbook.md`.
+      under EIP-170).  See `docs/sepolia_deployment_runbook.md`.  The one-command
+      wrapper `scripts/deploy_sepolia_launch.sh` chains the F-1/F-2 gate → forked
+      dry-run → confirm → broadcast+verify → manifest; `docs/launch_execution_checklist.md`
+      is the execution checklist.  **Toolchain caveat (deploy-tooling, not the
+      deploy logic):** use a **stable** `foundry` release — some dev builds (the
+      `1.6.0-v1.7.0` build this repo previously pinned; now v1.7.1, unverified on
+      this path in the sandbox) regress on assembling the
+      `--broadcast` for `KnomosisDisputeVerifier`'s `constructor(tuple)`
+      (`type check failed for "offset (usize)"`, *before any tx is sent*); the
+      deploy logic is proven (dry-run + F.3 acceptance pass), so preflight the
+      operator's foundry with `make deploy-local` against `anvil` (see
+      `DEVELOPMENT.md` §10.5).
 - [ ] `make testnet-acceptance` (the F.3 acceptance-assertion script) passes
       against the deployed contracts (needs `--disable-code-size-limit` for the
       CREATE3 bundler harness — see the `Deployer` note above).
@@ -135,12 +146,43 @@ and the SVC step-VM + SC SMT cross-stack corpora.
       `docs/audits/20-…`); findings remediated.  An **internal** deep
       review (`docs/audits/21-…`) is done: it found + fixed 5 real
       contract defects (1 Critical, 1 High, 3 Medium/Low).
-- [~] Adversarial fuzzing of the untrusted-input boundaries (security
-      review §4.3).  **Partial:** never-panics property fuzz now covers
-      the l1-ingest ABI decoder, the host frame reader, and the indexer
-      decoder + two-pass dispatch (all-tag + overflow amounts); the SMT
-      verifier has adversarial size-discipline tests.  **Remaining:** a
-      coverage-target sweep + cargo-fuzz on the network boundaries.
+- [x] **Slow-loris hardening of the TLS handshake path.**  A
+      deadline-aware wrapper (`DeadlineStream`) is interposed **under**
+      rustls on **both** TLS terminators — `knomosis-host` (`listener.rs`
+      `mod tls`) and the gateway (`http::conn` + `http::tls`) — so the
+      per-request read deadline bounds the TLS handshake + record I/O (the
+      many raw socket reads a single `StreamOwned::read` performs), not
+      merely the decoded frames.  It shrinks the socket read timeout to the
+      *remaining* budget before every raw read, so a peer trickling
+      handshake / record bytes is bounded by `connection_timeout` (host) /
+      `REQUEST_READ_DEADLINE` (gateway) instead of held past it; on the
+      gateway the keep-alive loop resets that (now rustls-nested) deadline
+      per request via `ResetReadDeadline`.  Writes pass through, bounded by
+      the socket write timeout, so a long-lived SSE stream is unaffected.
+      Covered by unit tests (the deadline check + the shrinking per-read
+      cap, host and gateway) on top of the gateway's end-to-end rustls
+      handshake / keep-alive / mTLS / SSE suite.
+- [x] Adversarial fuzzing of the untrusted-input boundaries (security
+      review §4.3).  **Two layers, both CI-wired:**
+      (1) *stable proptest* (`ci-rust.yml`) — never-panics property fuzz
+      over the l1-ingest ABI decoder (both the arbitrary-log path AND a
+      targeted arm that seeds every real event-signature `topic0` so the
+      deeper per-event ABI decode — fixed-word reads, dynamic-`bytes`
+      length prefixes, indexed-topic arity — is driven with truncated /
+      over-long / wrong-arity payloads, i.e. the deposit paths that
+      credit L2 balances), the host frame reader (the v1 body path AND
+      the full Rung-1 negotiated + hinted `read_request` state machine
+      `handle_connection` actually calls), and the indexer decoder +
+      two-pass dispatch (all-tag + overflow amounts); the SMT verifier
+      has adversarial size-discipline tests.
+      (2) *coverage-guided libFuzzer* — the `knomosis-fuzz` crate
+      (`runtime/fuzz/`) drives `cargo-fuzz` at the host frame reader, the
+      l1-ingest ABI decoder, and the indexer decoder, on the dedicated
+      nightly `ci-fuzz.yml` lane (`fuzz-build` API-drift guard on every
+      PR + a bounded per-target `fuzz-smoke`, longer on a weekly
+      schedule; crash/OOM/hang reproducers uploaded as artifacts).  The
+      libFuzzer crate is a separate workspace, `exclude`d from the pinned
+      stable `1.97` workspace so `cargo …--workspace` stays green.
 - [x] v2 receipt-verified reimbursement (GP.8.5) — the gate is shipped
       (`LegalKernel.Bridge.ReceiptVerifiedClaim` + the Rust mirror);
       *enable* it before the pool holds material value (economic

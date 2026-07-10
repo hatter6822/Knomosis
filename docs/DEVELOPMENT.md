@@ -73,8 +73,8 @@ topic:
 |-----------|-------|
 | Project version | `v0.8.4` (Lean + Rust in lockstep; `kernelVersion` in `LegalKernel.lean`) |
 | Lean toolchain | `leanprover/lean4:v4.29.1` (pinned in [`../lean-toolchain`](../lean-toolchain)) |
-| Rust toolchain | stable **1.83** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.83`) |
-| Solidity toolchain | Foundry **v1.7.0** + solc **0.8.20** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
+| Rust toolchain | stable **1.97** (pinned in `runtime/rust-toolchain.toml`; MSRV `1.97`) |
+| Solidity toolchain | Foundry **v1.7.1** + solc **0.8.20** (`evm_version = shanghai`, `via_ir`, `optimizer_runs = 200`) |
 | Vendored Solidity deps | OpenZeppelin **v5.0.2**, forge-std **v1.9.4** |
 | Kernel TCB | `LegalKernel/Kernel.lean`, `LegalKernel/RBMapLemmas.lean` (Lean core + Std core only) |
 | Kernel axioms | exactly `propext`, `Classical.choice`, `Quot.sound` — **no custom axioms** |
@@ -152,7 +152,7 @@ toolchain are macOS-native (see
 - For the optional Solidity stack: nothing extra — `setup.sh` installs Foundry
   and solc for you.
 - For the Rust stack: `rustup` (the base container image ships it; otherwise
-  install from <https://rustup.rs>). The pinned 1.83 channel is auto-resolved
+  install from <https://rustup.rs>). The pinned 1.97 channel is auto-resolved
   from `runtime/rust-toolchain.toml`.
 
 **Disk / network.** A full three-stack setup downloads the Lean toolchain
@@ -212,7 +212,7 @@ trust story:
    baked into the script.
 4. Installs `elan` (also SHA-256-pinned to a specific commit, never `master`) so
    you can switch toolchains later.
-5. Installs the Solidity toolchain: Foundry v1.7.0 + solc 0.8.20 (each
+5. Installs the Solidity toolchain: Foundry v1.7.1 + solc 0.8.20 (each
    checksum-pinned) and vendors OpenZeppelin + forge-std via
    `solidity/scripts/vendor-deps.sh`.  These install to `/usr/local`
    (matching the README + CI) when it is writable, and otherwise fall back to
@@ -248,7 +248,7 @@ commands are documented inline in the script next to each constant).
 | `-h` / `--help` | Print usage. |
 
 > The Rust toolchain is **not** installed by `setup.sh` — `cargo` resolves the
-> pinned 1.83 channel automatically from `runtime/rust-toolchain.toml` on first
+> pinned 1.97 channel automatically from `runtime/rust-toolchain.toml` on first
 > use. The web SessionStart hook additionally runs `cargo fetch --locked` to
 > warm the registry cache (see §5.7).
 
@@ -449,7 +449,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings   # every lint is
 
 Workspace conventions:
 
-- **Pinned channel:** stable 1.83 in `runtime/rust-toolchain.toml`; MSRV `1.83`
+- **Pinned channel:** stable 1.97 in `runtime/rust-toolchain.toml`; MSRV `1.97`
   in `runtime/Cargo.toml` `[workspace.package]`. Bumping the channel is a
   workspace-level PR — sub-streams cannot silently drift it.
 - **`--locked`** everywhere: builds use exactly the committed `Cargo.lock`
@@ -621,9 +621,25 @@ address(0)`, `deploymentId` self-consistency), source-verifies on Etherscan
 (`--verify`), and emits a machine-readable manifest at
 `solidity/deployments/<network>.json`.
 
+**Launch kit (the fast path).** For a value-bearing BOLD+AMM launch the only
+manual inputs are: fund the deployer EOA, fill
+`solidity/deploy.sepolia.env.example` with your custodied addresses / signer,
+and provide `SEPOLIA_RPC_URL` + `ETHERSCAN_API_KEY`. Then one command runs the
+whole flow (F-1/F-2 gate → forked dry-run → confirm → broadcast + verify →
+manifest → optional L2 stack):
+
+```bash
+cp solidity/deploy.sepolia.env.example solidity/deploy.sepolia.env   # then fill SET-THIS…
+./scripts/deploy_sepolia_launch.sh solidity/deploy.sepolia.env
+```
+
+The execution-ordered checklist — pre-flight, post-deploy verification,
+monitoring/alerting, key-custody/rotation, and watchtower ops — is
+`docs/launch_execution_checklist.md`. The underlying make targets:
+
 ```bash
 cd solidity
-make deploy-sepolia-dryrun     # in-memory simulation; writes the manifest
+make deploy-sepolia-dryrun     # bare in-memory sim (ETH-only; writes the manifest)
 # real broadcast (needs SEPOLIA_RPC_URL, a signer [KNOMOSIS_DEPLOYER_ACCOUNT keystore
 # or PRIVATE_KEY], ETHERSCAN_API_KEY + actors):
 make deploy-sepolia
@@ -636,7 +652,26 @@ deploy pipeline first, and size the immutable economics with
 `scripts/economic_simulation.py` (see `docs/deployment_parameters.md`). BOLD is
 **chain-conditional**: mainnet requires the canonical `BOLD_TOKEN_ADDRESS` pin;
 Sepolia accepts an operator-supplied `symbol()=="BOLD"` token
-(`KNOMOSIS_BOLD_TOKEN`); unset ⇒ ETH-only.
+(`KNOMOSIS_BOLD_TOKEN`); unset ⇒ ETH-only. Because a value-bearing BOLD deploy
+references a real on-chain token (the bridge constructor cross-checks its
+`code`/`symbol()`), the wrapper's dry-run forks Sepolia (`forge script
+--fork-url $SEPOLIA_RPC_URL`) rather than using the bare in-memory
+`make deploy-sepolia-dryrun`, which has no BOLD token deployed.
+
+> **Foundry version — `--broadcast` constructor-arg decoding.** Use a **stable
+> `foundry` release** for the real broadcast. Some foundry **dev builds** (e.g.
+> the `1.6.0-v1.7.0` build this repo previously pinned — now bumped to v1.7.1,
+> whose behaviour on this exact path is not re-verified in the sandbox) carry a
+> regression that, under `via_ir`, mis-locates the init-code/args boundary when
+> assembling the broadcast for a `constructor(tuple)` carrying a non-empty
+> dynamic array *plus* immutables (here `KnomosisDisputeVerifier`) — it aborts
+> `type check failed for "offset (usize)"` **before sending any transaction**.
+> The deploy *logic* is unaffected (the in-memory dry-run and the F.3
+> `TestnetAcceptance` suite pass), and a stable foundry decodes the args
+> correctly. **Preflight your toolchain** with `make deploy-local` against a
+> local `anvil` (a full `--broadcast` of the suite) before the real Sepolia
+> run; if it reproduces the `offset (usize)` abort, upgrade foundry
+> (`foundryup`) to a stable release.
 
 ### 10.6 L2 stack + Licio gateway bring-up
 
@@ -1042,7 +1077,7 @@ follow the standard tracker workflow.
 | codemap gate fails | Run `python3 scripts/regenerate_codemaps.py` and commit the result. |
 | `forge build` can't find the pinned solc | `foundry.toml` pins `/usr/local/bin/solc`. Re-run `./scripts/setup.sh` — it installs solc (under `~/.local/bin/solc` on a non-root host) and sets `FOUNDRY_SOLC` to it — then `source ~/.bashrc`. |
 | `anvil` fails: `version 'GLIBC_2.35' not found` | The host glibc is < 2.35 (e.g. RHEL 9 / glibc 2.34); modern Foundry's `anvil` needs ≥ 2.35. `forge` / `cast` / `solc` still work — use `make deploy-sepolia-dryrun` / `forge script` (in-memory) instead of `make devnet` / `deploy-local`, or run anvil on a glibc ≥ 2.35 host / container. |
-| `cargo` builds a different toolchain | Run from inside `runtime/` so `rust-toolchain.toml` (1.83) applies; use `--locked`. |
+| `cargo` builds a different toolchain | Run from inside `runtime/` so `rust-toolchain.toml` (1.97) applies; use `--locked`. |
 | `hash-check` / `verify-check` exit 1 | **Expected** on the default build — they fail closed on the fallback primitives. They flip to 0 only with the production adaptors linked (§10.2/§10.3). |
 | Cross-stack keccak assertions are "skipped" | Expected under the FNV fallback; run `./scripts/verify_keccak_crossstack.sh` to execute them against real keccak. |
 

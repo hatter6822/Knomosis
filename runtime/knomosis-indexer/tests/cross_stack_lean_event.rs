@@ -98,7 +98,8 @@ fn load_fixture() -> Option<Fixture> {
         eprintln!("[SKIP] event_subscribe_cbe.json not found; run `lake test`.");
         return None;
     };
-    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("cannot read {path:?}: {e}"));
+    let bytes =
+        std::fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     Some(serde_json::from_slice(&bytes).unwrap_or_else(|e| panic!("malformed fixture: {e}")))
 }
 

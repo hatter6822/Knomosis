@@ -465,7 +465,7 @@ make snapshot-gas-selftest  # behavioural self-tests for the gate + generator
   ratchet the baseline (and table) keeps the documented numbers
   honest.
 
-Baselines are stable only for the pinned toolchain (Foundry v1.7.0,
+Baselines are stable only for the pinned toolchain (Foundry v1.7.1,
 solc 0.8.20, the committed `foundry.toml`) — regenerate with exactly
 that toolchain.
 

@@ -76,7 +76,7 @@ the Lean side and skip on the fallback).
 
 ```bash
 # Install Foundry (one-time):
-curl -sSfL https://github.com/foundry-rs/foundry/releases/download/v1.7.0/foundry_v1.7.0_linux_amd64.tar.gz \
+curl -sSfL https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_amd64.tar.gz \
   -o /tmp/foundry.tar.gz
 tar xzf /tmp/foundry.tar.gz -C /usr/local/foundry/bin
 export PATH="/usr/local/foundry/bin:$PATH"

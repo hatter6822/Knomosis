@@ -17,21 +17,21 @@
 //!   3. For each block number in `(last_confirmed,
 //!      confirmed_head]`:
 //!      a. Fetch the block header and feed it to the re-org
-//!         window.  Halts with `WatcherError::Reorg` if the
-//!         re-org exceeds the window.
+//!      window.  Halts with `WatcherError::Reorg` if the
+//!      re-org exceeds the window.
 //!      b. Fetch the logs from `bridge_contract` and
-//!         `identity_registry_contract` in that block, BY HASH
-//!         (defends against re-orgs racing the header→logs
-//!         fetch sequence).
+//!      `identity_registry_contract` in that block, BY HASH
+//!      (defends against re-orgs racing the header→logs
+//!      fetch sequence).
 //!      c. Decode each log via `events::decode_event`.  Skip
-//!         non-Knomosis logs.
+//!      non-Knomosis logs.
 //!      d. For each `IngestedEvent`, dedup via the forwarded
-//!         set.  If new, *peek* the translation via
-//!         `translation::preview_ingest` (does NOT mutate the
-//!         book), sign via the keystore, submit via the
-//!         submitter.  ON SUCCESS, persist one atomic
-//!         `Submitted` JSONL record and apply the in-memory
-//!         mutations (book + nonce + forwarded set).
+//!      set.  If new, *peek* the translation via
+//!      `translation::preview_ingest` (does NOT mutate the
+//!      book), sign via the keystore, submit via the
+//!      submitter.  ON SUCCESS, persist one atomic
+//!      `Submitted` JSONL record and apply the in-memory
+//!      mutations (book + nonce + forwarded set).
 //!      e. Append a `Confirmed` record to the state store.
 //!   4. Optionally sleep `poll_interval` before the next iteration.
 //!
@@ -362,10 +362,7 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
                 info!("watcher received stop signal; exiting");
                 break;
             }
-            if self
-                .last_confirmed_block
-                .map_or(false, |b| b >= until_block)
-            {
+            if self.last_confirmed_block.is_some_and(|b| b >= until_block) {
                 info!(
                     last_confirmed = self.last_confirmed_block,
                     until_block = until_block,
@@ -493,14 +490,14 @@ impl<S: L1Source, B: Submitter> WatcherLoop<S, B> {
     ///   4. Sign and submit.
     ///   5. On submit success:
     ///      a. Persist the ATOMIC `Submitted` JSONL record
-    ///         carrying the new nonce + optional address
-    ///         assignment + dedup key in a single line write.
+    ///      carrying the new nonce + optional address
+    ///      assignment + dedup key in a single line write.
     ///      b. Commit the in-memory address-book mutation (if
-    ///         the translation produced one).  Overflow here is
-    ///         operator-actionable.
+    ///      the translation produced one).  Overflow here is
+    ///      operator-actionable.
     ///      c. Bump the in-memory `next_nonce`.
     ///      d. Insert the dedup key into the in-memory
-    ///         `forwarded` set.
+    ///      `forwarded` set.
     ///
     /// Step 5a's atomic single-line write is the load-bearing
     /// integrity boundary.  A crash between 5a and 5d leaves

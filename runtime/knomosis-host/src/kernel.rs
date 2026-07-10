@@ -508,15 +508,14 @@ pub mod mock {
             }
         }
 
-        fn identifier(&self) -> &str {
+        fn identifier(&self) -> &'static str {
             "knomosis-host-mock/v1"
         }
 
         fn ok_admission_stage(&self) -> AdmissionStage {
             self.inner
                 .lock()
-                .map(|i| i.ok_stage)
-                .unwrap_or(AdmissionStage::Finalized)
+                .map_or(AdmissionStage::Finalized, |i| i.ok_stage)
         }
     }
 
@@ -795,7 +794,7 @@ pub mod command {
     /// Default per-request subprocess timeout.  Per-request
     /// spawning is heavy (each call re-loads the log), so the
     /// timeout is generous; production tuning may bump it.
-    pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+    pub const DEFAULT_TIMEOUT: Duration = Duration::from_mins(1);
 
     /// Polling interval for `try_wait` in the timeout loop.
     /// Trade-off: smaller = more responsive timeout but more CPU
@@ -1142,7 +1141,7 @@ pub mod command {
                 Err(e) => {
                     return KernelResponse::with_reason(
                         Verdict::NotAdmissible,
-                        format!("create temp file in {:?}: {e}", self.work_dir),
+                        format!("create temp file in {}: {e}", self.work_dir.display()),
                     );
                 }
             };
@@ -1174,7 +1173,7 @@ pub mod command {
                     let _ = std::fs::remove_file(&temp_path);
                     return KernelResponse::with_reason(
                         Verdict::NotAdmissible,
-                        format!("write temp file {temp_path:?}: {e}"),
+                        format!("write temp file {}: {e}", temp_path.display()),
                     );
                 }
                 // Use `sync_data` rather than `flush`: `std::fs::File`'s
@@ -1194,7 +1193,7 @@ pub mod command {
                     let _ = std::fs::remove_file(&temp_path);
                     return KernelResponse::with_reason(
                         Verdict::NotAdmissible,
-                        format!("sync temp file {temp_path:?}: {e}"),
+                        format!("sync temp file {}: {e}", temp_path.display()),
                     );
                 }
                 // Drop closes the file handle.
@@ -1342,7 +1341,7 @@ pub mod command {
             response
         }
 
-        fn identifier(&self) -> &str {
+        fn identifier(&self) -> &'static str {
             "knomosis-host-command/v1"
         }
     }
@@ -2090,7 +2089,7 @@ mod tests {
             fn submit(&self, _: &[u8]) -> KernelResponse {
                 KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
             }
-            fn identifier(&self) -> &str {
+            fn identifier(&self) -> &'static str {
                 "stub"
             }
         }
@@ -2108,7 +2107,7 @@ mod tests {
             fn submit(&self, _: &[u8]) -> KernelResponse {
                 KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
             }
-            fn identifier(&self) -> &str {
+            fn identifier(&self) -> &'static str {
                 "stub"
             }
         }
@@ -2125,7 +2124,7 @@ mod tests {
             fn submit(&self, _: &[u8]) -> KernelResponse {
                 KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
             }
-            fn identifier(&self) -> &str {
+            fn identifier(&self) -> &'static str {
                 "stub"
             }
         }
@@ -2146,7 +2145,7 @@ mod tests {
             fn submit(&self, _: &[u8]) -> KernelResponse {
                 KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
             }
-            fn identifier(&self) -> &str {
+            fn identifier(&self) -> &'static str {
                 "stub"
             }
         }
@@ -2169,7 +2168,7 @@ mod tests {
             fn submit(&self, _: &[u8]) -> KernelResponse {
                 KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
             }
-            fn identifier(&self) -> &str {
+            fn identifier(&self) -> &'static str {
                 "stub"
             }
             fn ok_admission_stage(&self) -> AdmissionStage {
@@ -2314,7 +2313,7 @@ mod tests {
                 );
                 KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
             }
-            fn identifier(&self) -> &str {
+            fn identifier(&self) -> &'static str {
                 "staging/v1"
             }
             fn ok_admission_stage(&self) -> AdmissionStage {
@@ -2456,7 +2455,7 @@ mod tests {
                 );
                 KernelResponse::from_verdict(crate::verdict::Verdict::Ok)
             }
-            fn identifier(&self) -> &str {
+            fn identifier(&self) -> &'static str {
                 "racy-stage/v1"
             }
             fn ok_admission_stage(&self) -> AdmissionStage {

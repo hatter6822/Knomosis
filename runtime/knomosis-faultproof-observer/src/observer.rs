@@ -20,12 +20,12 @@
 //!   2. For each event:
 //!      a. Apply the event to the in-memory game-state map.
 //!      b. If the event introduces a new game where we should
-//!         play (the challenger or sequencer side per
-//!         [`ObserverConfig::play_as`]), compute the honest move
-//!         via [`crate::strategy::compute_next_move`].
+//!      play (the challenger or sequencer side per
+//!      [`ObserverConfig::play_as`]), compute the honest move
+//!      via [`crate::strategy::compute_next_move`].
 //!      c. If a move is required AND we haven't already
-//!         submitted for this pivot, encode the calldata and
-//!         submit via the configured [`crate::submitter::Submitter`].
+//!      submitted for this pivot, encode the calldata and
+//!      submit via the configured [`crate::submitter::Submitter`].
 //!   3. Commit the batch atomically: every updated game record
 //!      plus every new response record plus the new watcher cursor
 //!      via [`crate::persistence::Persistence::commit_batch`].
@@ -1446,18 +1446,15 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
     /// Returns `Some(bytes)` on success, `None` if any step failed
     /// (logged inside).
     fn build_terminate_calldata(&self, rec: &GameRecord, mv: HonestMove) -> Option<Vec<u8>> {
-        let bundle_oracle = match &self.terminate_bundle_oracle {
-            None => {
-                warn!(
-                    game_id = %rec.game_id,
-                    pivot_idx = ?pivot_for_move(&rec.state, mv),
-                    "TerminateOnSingleStep deferred: no TerminateBundleOracle \
-                     attached (call Observer::with_terminate_bundle_oracle \
-                     to enable terminate-move construction)",
-                );
-                return None;
-            }
-            Some(o) => o,
+        let Some(bundle_oracle) = &self.terminate_bundle_oracle else {
+            warn!(
+                game_id = %rec.game_id,
+                pivot_idx = ?pivot_for_move(&rec.state, mv),
+                "TerminateOnSingleStep deferred: no TerminateBundleOracle \
+                 attached (call Observer::with_terminate_bundle_oracle \
+                 to enable terminate-move construction)",
+            );
+            return None;
         };
         // Fetch the bundle at the disputed action-entry index.
         // For a single-step range `[low, high] = [n, n+1]`, the
@@ -1575,7 +1572,7 @@ fn interruptible_sleep(duration: Duration, stop: &AtomicBool) {
         if stop.load(Ordering::Acquire) {
             return;
         }
-        let chunk = tick.min(duration - elapsed);
+        let chunk = tick.min(duration.checked_sub(elapsed).unwrap());
         sleep(chunk);
         elapsed += chunk;
     }
@@ -2426,7 +2423,7 @@ mod tests {
         let (mut obs, _dir) = fresh_observer();
         // Set the poll interval to 60s so we can verify the
         // stop check is honoured in the chunked sleep path.
-        obs.config.poll_interval = Duration::from_secs(60);
+        obs.config.poll_interval = Duration::from_mins(1);
         let stop = obs.stop_signal();
         let handle = std::thread::spawn(move || {
             obs.run().unwrap();

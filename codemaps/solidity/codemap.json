@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "735951343904d58b2d81b0e7ba3ccb2e6d2089bf0f0bb97ca85441401d7de338"
+    "source_digest": "eee8410920ba6d1e25c8efecb07ad3a90344aebef8e3a950ef12c5bbcf82ffd3"
   },
   "summary": {
     "module_count": 87,
-    "declaration_count": 1921
+    "declaration_count": 1926
   },
   "modules": [
     {
@@ -71,18 +71,18 @@
     {
       "module": "DeploySepolia.s",
       "path": "solidity/script/DeploySepolia.s.sol",
-      "declaration_count": 10,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "contract",
           "name": "DeploySepolia",
-          "line": 69,
+          "line": 70,
           "called": []
         },
         {
           "kind": "struct",
           "name": "DeployConfig",
-          "line": 87,
+          "line": 88,
           "called": [
             "attestor",
             "disputeWindowBlocks",
@@ -93,7 +93,7 @@
         {
           "kind": "struct",
           "name": "Deployed",
-          "line": 131,
+          "line": 132,
           "called": [
             "bridge",
             "deploymentId",
@@ -104,7 +104,7 @@
         {
           "kind": "function",
           "name": "run",
-          "line": 146,
+          "line": 147,
           "called": [
             "_deployAll",
             "_readConfig"
@@ -113,29 +113,50 @@
         {
           "kind": "function",
           "name": "_readConfig",
-          "line": 158,
+          "line": 159,
           "called": [
             "DeployConfig",
             "_deriveSet",
-            "_networkName"
+            "_networkName",
+            "_requireDistinctNonZero",
+            "_requireEnvFits",
+            "_requireManifestUnderDeployments"
           ]
         },
         {
           "kind": "function",
+          "name": "_requireManifestUnderDeployments",
+          "line": 523,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_requireEnvFits",
+          "line": 551,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "_deriveSet",
-          "line": 234,
+          "line": 566,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_requireDistinctNonZero",
+          "line": 589,
           "called": []
         },
         {
           "kind": "function",
           "name": "_networkName",
-          "line": 244,
+          "line": 598,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deployAll",
-          "line": 259,
+          "line": 613,
           "called": [
             "DeployConfig",
             "Deployed",
@@ -164,7 +185,7 @@
         {
           "kind": "function",
           "name": "_logSummary",
-          "line": 437,
+          "line": 791,
           "called": [
             "Deployed"
           ]
@@ -172,7 +193,7 @@
         {
           "kind": "function",
           "name": "_writeManifest",
-          "line": 455,
+          "line": 809,
           "called": [
             "DeployConfig",
             "Deployed"
@@ -13386,7 +13407,7 @@
     {
       "module": "KnomosisFaultProofGame.t",
       "path": "solidity/test/KnomosisFaultProofGame.t.sol",
-      "declaration_count": 46,
+      "declaration_count": 48,
       "declarations": [
         {
           "kind": "contract",
@@ -13646,20 +13667,38 @@
         },
         {
           "kind": "function",
+          "name": "test_multi_round_bisection_then_terminate_sequencer_wins",
+          "line": 517,
+          "called": [
+            "_encodeCbeNat",
+            "_makeCellProof",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_rechallenge_succeeds_after_settled_game_with_reassigned_high",
+          "line": 609,
+          "called": [
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_claimTimeout_after_window_settles_against_sequencer",
-          "line": 507,
+          "line": 657,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_distributes_bonds_95_5_split",
-          "line": 521,
+          "line": 671,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_settlement_not_bricked_by_reverting_treasury",
-          "line": 562,
+          "line": 712,
           "called": [
             "KnomosisFaultProofGame",
             "RevertingReceiver"
@@ -13668,31 +13707,31 @@
         {
           "kind": "function",
           "name": "test_withdraw_nothing_credited_reverts",
-          "line": 595,
+          "line": 745,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_slashSequencerBond_on_challenger_wins",
-          "line": 601,
+          "line": 751,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins",
-          "line": 620,
+          "line": 770,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_rejects_already_settled_game",
-          "line": 634,
+          "line": 784,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_sequencer_first_round",
-          "line": 649,
+          "line": 799,
           "called": [
             "sequencer"
           ]
@@ -13700,13 +13739,13 @@
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_wrong_caller",
-          "line": 659,
+          "line": 809,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_after_deadline",
-          "line": 669,
+          "line": 819,
           "called": [
             "sequencer"
           ]
@@ -13714,7 +13753,7 @@
         {
           "kind": "function",
           "name": "test_respondToMidpoint_rejects_without_pending",
-          "line": 679,
+          "line": 829,
           "called": []
         }
       ]

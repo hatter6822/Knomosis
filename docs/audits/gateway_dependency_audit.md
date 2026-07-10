@@ -27,8 +27,7 @@ and a thread-per-connection model) over `rustls 0.23`.  Its only new
 
 | Crate | Kind | Role | Justification |
 |-------|------|------|---------------|
-| `rustls` | normal | Native in-process HTTPS / mTLS (G4.2, `src/http/tls.rs`) **and** the gateway's whole HTTP stack (after the `tiny_http` retirement). | The **workspace-pinned `rustls 0.23`** (TLS 1.3, the `ring` backend) — the SAME audited stack `knomosis-host` already uses.  Adds **no new crate** to the graph (rustls 0.23 + its transitive deps were already present via `knomosis-host`).  PEM cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders. |
-| `rustls-pemfile` | normal | PEM certificate-revocation-list parsing for the `--mtls-crl` gate (`rustls_pemfile::crls`). | The same workspace-pinned PEM loader `knomosis-host` already uses for certs/keys; shares rustls 0.23's `pki_types` vocabulary.  Adds **no new crate** to the graph (already present via `knomosis-host`). |
+| `rustls` | normal | Native in-process HTTPS / mTLS (G4.2, `src/http/tls.rs`) **and** the gateway's whole HTTP stack (after the `tiny_http` retirement). | The **workspace-pinned `rustls 0.23`** (TLS 1.3, the `ring` backend) — the SAME audited stack `knomosis-host` already uses.  Adds **no new crate** to the graph (rustls 0.23 + its transitive deps were already present via `knomosis-host`).  PEM cert/key/CA loading reuses `knomosis_host::tls`'s vetted loaders, and the `--mtls-crl` CRL parsing goes through rustls's re-exported `pki_types::pem::PemObject` — the maintained parser that replaced the retired `rustls-pemfile` (RUSTSEC-2025-0134). |
 | `tracing-subscriber` (feature `json`) | normal | The gateway installs its own structured-log subscriber (`src/logging.rs`, `--log-format json\|text`); cli-common is text-only and the gateway is the first WU needing JSON. | The same workspace-pinned crate the sibling crates use, with the additive `json` feature.  That feature pulls two new transitive crates — `tracing-serde` and `valuable`, both MIT (on the allow-list, §below). |
 | `subtle` | normal | Constant-time bearer-token comparison (G1.4 auth gate). | The same audited, `no_std`, constant-time crate the secp256k1 verifier already uses workspace-wide; eliminates an early-return timing oracle on the secret token. |
 | `signal-hook` | normal | SIGTERM/SIGINT graceful-shutdown trigger (G4.4). | A safe `sigaction` wrapper — the crate's `unsafe = forbid` rules out a hand-rolled handler.  `default-features = false` pulls only the atomic-flag registration (`flag::register`), not the channel/iterator helpers. |
@@ -59,7 +58,7 @@ GPL-3.0-or-later }`:
 | `MIT` | MIT | `rusqlite`, `generic-array`, `tracing-serde`, `valuable` (the latter two new via `tracing-subscriber`'s `json` feature), … |
 | `(MIT OR Apache-2.0) AND Unicode-3.0` | MIT **+ Unicode-3.0** | `unicode-ident` |
 | `Apache-2.0 AND ISC` | Apache-2.0 **+ ISC** | `ring` |
-| `Apache-2.0 OR ISC OR MIT` | MIT | `rustls`, `rustls-pemfile` |
+| `Apache-2.0 OR ISC OR MIT` | MIT | `rustls`, `rustls-pki-types` |
 | `ISC` | ISC | `rustls-webpki`, `untrusted` |
 | `BSD-3-Clause` | **BSD-3-Clause** | `subtle` |
 | `BSD-2-Clause OR Apache-2.0 OR MIT` | MIT | `zerocopy` |
@@ -80,18 +79,13 @@ third-party copyleft dependency** in the tree.
     hard failure; a yanked version fails.  The advisory-database match is
     performed by `cargo deny` (pinned `^0.19` so its `cvss` crate can parse the
     CVSS-4.0 advisories now present upstream) in CI against the live RUSTSEC DB
-    (it cannot be evaluated offline).  **One advisory is ignored**, with
-    justification in `deny.toml`:
-      * `RUSTSEC-2025-0134` — `rustls-pemfile` unmaintained (archived Aug 2025).
-        *Not a vulnerability*: it is a thin wrapper around the **same** PEM
-        parsing code now exported by the maintained `rustls-pki-types` (>= 1.9;
-        the workspace pins 1.10) via its `PemObject` trait, so there is no
-        security/correctness exposure.  It enters the tree through
-        `knomosis-host`'s cert/key loaders and the gateway's `--mtls-crl` parser
-        (`rustls_pemfile::crls`).  **Tracked follow-up:** migrate both loaders to
-        `rustls_pki_types::pem::PemObject` to drop the dependency entirely (a
-        cross-crate change touching `knomosis-host`, out of the gateway
-        workstream's scope).
+    (it cannot be evaluated offline).  **No advisory is ignored.**  (The
+    formerly-ignored `RUSTSEC-2025-0134` — `rustls-pemfile` unmaintained,
+    archived Aug 2025 — was retired by completing the tracked follow-up:
+    the `knomosis-host` cert/key loaders and the gateway's `--mtls-crl` CRL
+    parser now use the maintained `rustls_pki_types::pem::PemObject` API
+    (the same PEM parsing code `rustls-pemfile` 2.x wrapped), and the
+    `rustls-pemfile` crate left the dependency tree entirely.)
   * **Bans**: a wildcard (`*`) version requirement is denied (every
     dependency carries a concrete constraint); duplicate versions are
     *warned*, not failed (benign, but surfaced for tracking).

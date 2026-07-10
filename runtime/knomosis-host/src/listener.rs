@@ -27,7 +27,10 @@
 //! **One-shot (default).**  HTTP-style — simpler, and matches the plan's
 //! §RH-C.3 "HTTP-style one-shot is also acceptable, simpler":
 //!
-//!   1. Read one wire frame via [`crate::frame::read_request`].
+//!   1. Read one wire frame via
+//!      [`crate::frame::read_request_with_deadline`] (the whole read
+//!      bounded by `connection_timeout` end-to-end — the slow-loris
+//!      defence).
 //!   2. Try to submit to the queue ([`crate::queue::QueueHandle`]).
 //!   3. If the queue is full: respond `Busy` immediately, close.
 //!   4. Otherwise: block on the reply channel (capacity 1).
@@ -54,23 +57,124 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::frame::{read_request, ConnReader, FrameError};
+use crate::frame::{read_request_with_deadline, ConnReader, FrameError};
 use crate::kernel::KernelResponse;
 use crate::queue::{ConnId, QueueHandle, SubmitOutcome};
 use crate::verdict::{Verdict, VerdictResponse};
 
-/// Default read / write timeout per connection.  10 seconds is
-/// generous — a slow client sending one byte every 9.9 seconds
-/// stays under the timeout, but a malicious "slow-loris" client
-/// is bounded.
+/// Default read / write timeout per connection — applied BOTH as the
+/// socket's per-read/write timeout AND as the end-to-end per-request
+/// frame-read deadline (see [`crate::frame::read_request_with_deadline`]).
+///
+/// The two limits compose: the socket timeout bounds each individual
+/// read (an idle client is cut off within one window), while the
+/// deadline bounds the request as a whole (a "slow-loris" client that
+/// trickles one byte per window — resetting the socket timer forever —
+/// is still cut off once the deadline passes).  10 seconds is generous
+/// for a ≤ 1 MiB frame on any realistic link; operators with larger
+/// frames or slower links tune `--connection-timeout`.
 pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Hard ceiling on `--connection-timeout`.  The per-request read deadline is
+/// `Instant::now() + connection_timeout` (here and in the TLS `DeadlineStream`);
+/// an unbounded operator value could overflow that `Instant` and **panic** the
+/// handler thread on the first connection.  A full day is already pathological
+/// for a single request, so cap far below any overflow.
+pub const MAX_CONNECTION_TIMEOUT: Duration = Duration::from_hours(24);
+
+/// Construct the absolute per-request read deadline `now + timeout` in a way
+/// that can **never** panic on `Instant` overflow, no matter how `timeout`
+/// reached us.
+///
+/// The CLI path caps `--connection-timeout` at [`MAX_CONNECTION_TIMEOUT`]
+/// (`crate::config::Config::validate`), but a library embedder that builds a
+/// [`HandlerConfig`] directly — e.g. through
+/// [`crate::config::ServerConfigBuilder::handler`] — bypasses that ceiling.
+/// A pathological `Duration` (up to `Duration::MAX`) would then overflow the
+/// bare `Instant::now() + timeout` and abort the handler thread on its first
+/// accepted connection.  Clamping the addend to `MAX_CONNECTION_TIMEOUT` — a
+/// value already far past any legitimate single-request budget — makes the
+/// deadline construction total: it saturates rather than panicking.  The
+/// residual `checked_add` guards the (platform-dependent) case where even
+/// `now + 24 h` is unrepresentable, degrading fail-closed to an immediate
+/// deadline instead of a panic.
+#[must_use]
+fn read_deadline_from(now: Instant, timeout: Duration) -> Instant {
+    let bounded = timeout.min(MAX_CONNECTION_TIMEOUT);
+    now.checked_add(bounded).unwrap_or(now)
+}
+
+#[cfg(test)]
+mod read_deadline_tests {
+    use super::{read_deadline_from, MAX_CONNECTION_TIMEOUT};
+    use std::time::{Duration, Instant};
+
+    /// A library embedder that builds a `HandlerConfig` directly (bypassing
+    /// the CLI ceiling) can supply a pathological `connection_timeout`.  The
+    /// bare `now + Duration::MAX` overflows `Instant` and panics the handler
+    /// thread; `read_deadline_from` must clamp to the ceiling and return a
+    /// finite future deadline instead.
+    #[test]
+    fn saturates_instead_of_panicking_on_extreme_timeout() {
+        let now = Instant::now();
+        let deadline = read_deadline_from(now, Duration::MAX);
+        assert!(deadline > now, "deadline must be in the future");
+        assert!(
+            deadline <= now + MAX_CONNECTION_TIMEOUT,
+            "clamped deadline must not exceed the ceiling"
+        );
+    }
+
+    /// A normal sub-ceiling timeout is preserved exactly (no clamping).
+    #[test]
+    fn preserves_normal_timeouts_below_the_ceiling() {
+        let now = Instant::now();
+        let d = Duration::from_secs(10);
+        assert_eq!(read_deadline_from(now, d), now + d);
+    }
+
+    /// Exactly the ceiling is preserved (boundary case: `min` keeps it).
+    #[test]
+    fn preserves_the_ceiling_exactly() {
+        let now = Instant::now();
+        assert_eq!(
+            read_deadline_from(now, MAX_CONNECTION_TIMEOUT),
+            now + MAX_CONNECTION_TIMEOUT
+        );
+    }
+
+    /// `bounded_connection_timeout` clamps the value used for `set_read_timeout`
+    /// too — not just the deadline math — so a directly-constructed
+    /// `HandlerConfig { connection_timeout: Duration::MAX, .. }` cannot leave a
+    /// socket read effectively unbounded (an idle peer blocking inside the first
+    /// `Read::read` past the intended ceiling).
+    #[test]
+    fn bounded_connection_timeout_clamps_socket_timeout() {
+        use super::HandlerConfig;
+        let cfg = HandlerConfig {
+            connection_timeout: Duration::MAX,
+            ..Default::default()
+        };
+        assert_eq!(cfg.bounded_connection_timeout(), MAX_CONNECTION_TIMEOUT);
+
+        let normal = HandlerConfig {
+            connection_timeout: Duration::from_secs(10),
+            ..Default::default()
+        };
+        assert_eq!(
+            normal.bounded_connection_timeout(),
+            Duration::from_secs(10),
+            "a sub-ceiling timeout is passed through unchanged"
+        );
+    }
+}
 
 /// Maximum time the connection handler will block waiting for the
 /// kernel's reply.  Bounded so a wedged kernel doesn't hold
 /// connection threads indefinitely.
-pub const DEFAULT_KERNEL_REPLY_TIMEOUT: Duration = Duration::from_secs(60);
+pub const DEFAULT_KERNEL_REPLY_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// Default cap on the number of simultaneously-active connection
 /// handler threads (across all listeners).  Defends against the
@@ -99,7 +203,9 @@ pub struct HandlerConfig {
     /// Maximum frame size accepted from the client.  Forwarded to
     /// [`crate::frame::read_frame`].
     pub max_frame_size: usize,
-    /// Read / write timeout for the underlying socket.
+    /// Read / write timeout for the underlying socket, ALSO used as
+    /// the end-to-end per-request frame-read deadline (the slow-loris
+    /// bound; see [`DEFAULT_CONNECTION_TIMEOUT`]).
     pub connection_timeout: Duration,
     /// Maximum time to wait for the kernel's reply before
     /// responding `NotAdmissible` with a "timeout" reason.
@@ -128,6 +234,27 @@ impl Default for HandlerConfig {
             max_concurrent_connections: DEFAULT_MAX_CONCURRENT_CONNECTIONS,
             persistent_connections: false,
         }
+    }
+}
+
+impl HandlerConfig {
+    /// The connection timeout clamped to [`MAX_CONNECTION_TIMEOUT`].
+    ///
+    /// Every socket-timeout (`set_read_timeout` / `set_write_timeout`) and
+    /// deadline computation MUST read the timeout through this accessor, never
+    /// the raw `connection_timeout` field.  The CLI path caps the field in
+    /// `Config::validate`, but a library embedder that builds a `HandlerConfig`
+    /// directly (e.g. `ServerConfigBuilder::handler(HandlerConfig {
+    /// connection_timeout: Duration::MAX, .. })`) bypasses that ceiling.  An
+    /// unclamped `Duration::MAX` would (a) overflow `Instant::now() + timeout`
+    /// and panic the deadline math, and (b) reach `set_read_timeout` as an
+    /// effectively-unbounded socket read — so an idle peer could block inside
+    /// the first `Read::read`, past which the pre-read deadline is never
+    /// rechecked, holding the handler slot indefinitely.  Clamping to a full
+    /// day — already pathological for one request — bounds both uses.
+    #[must_use]
+    pub fn bounded_connection_timeout(&self) -> Duration {
+        self.connection_timeout.min(MAX_CONNECTION_TIMEOUT)
     }
 }
 
@@ -275,11 +402,12 @@ impl HandleOutcome {
 /// *classification* hints only and never affect admissibility (`GP.8`
 /// §2.6 invariants 1 & 2).
 ///
-/// The Rung-1 negotiation ([`read_request`]) is performed on EVERY path
-/// (FIFO and DRR), because it is a wire-format concern, not a scheduler
-/// one: a v2 client's preamble + per-frame hint are stripped and the
-/// opaque payload submitted regardless of scheduler, so v2 clients
-/// interoperate with a FIFO host (gaining no fairness, but working).
+/// The Rung-1 negotiation ([`read_request_with_deadline`]) is performed
+/// on EVERY path (FIFO and DRR), because it is a wire-format concern,
+/// not a scheduler one: a v2 client's preamble + per-frame hint are
+/// stripped and the opaque payload submitted regardless of scheduler,
+/// so v2 clients interoperate with a FIFO host (gaining no fairness,
+/// but working).
 pub fn handle_connection<S: Read + Write>(
     stream: &mut S,
     handle: &QueueHandle,
@@ -290,26 +418,32 @@ pub fn handle_connection<S: Read + Write>(
     //    and its advisory signer hint.  A legacy connection yields
     //    `LEGACY_SIGNER_HINT`; its payload bytes are byte-identical to a
     //    plain v1 `read_frame`, so the FIFO path is unchanged for it.
-    let (signer_hint, payload) = match read_request(stream, config.max_frame_size) {
-        Ok(p) => p,
-        Err(FrameError::EofBeforeHeader) => {
-            // Clean close before a frame arrived.  No response
-            // owed; just bail.
-            tracing::debug!("client closed before sending frame");
-            return HandleOutcome::ClientClosedBeforeRequest;
-        }
-        Err(e) => {
-            // Any other frame error → respond `ParseError` if we
-            // can.  Failure to write the response is logged at
-            // debug; the connection will close anyway.
-            tracing::debug!(error = ?e, "frame read failure");
-            let response =
-                VerdictResponse::with_reason(Verdict::ParseError, format!("frame read: {e}"));
-            let _ = stream.write_all(&response.encode());
-            let _ = stream.flush();
-            return HandleOutcome::Responded(Verdict::ParseError);
-        }
-    };
+    //    The whole read is bounded by an ABSOLUTE deadline — the
+    //    slow-loris defence: the socket's per-read timeout resets on
+    //    every delivered byte, so a trickling client would otherwise
+    //    hold this handler slot indefinitely.
+    let read_deadline = read_deadline_from(Instant::now(), config.bounded_connection_timeout());
+    let (signer_hint, payload) =
+        match read_request_with_deadline(stream, config.max_frame_size, read_deadline) {
+            Ok(p) => p,
+            Err(FrameError::EofBeforeHeader) => {
+                // Clean close before a frame arrived.  No response
+                // owed; just bail.
+                tracing::debug!("client closed before sending frame");
+                return HandleOutcome::ClientClosedBeforeRequest;
+            }
+            Err(e) => {
+                // Any other frame error → respond `ParseError` if we
+                // can.  Failure to write the response is logged at
+                // debug; the connection will close anyway.
+                tracing::debug!(error = ?e, "frame read failure");
+                let response =
+                    VerdictResponse::with_reason(Verdict::ParseError, format!("frame read: {e}"));
+                let _ = stream.write_all(&response.encode());
+                let _ = stream.flush();
+                return HandleOutcome::Responded(Verdict::ParseError);
+            }
+        };
 
     // 2. Try to submit through the scheduler-agnostic queue handle.
     //    The (connection id, signer hint) pair is the two-tier DRR
@@ -416,7 +550,11 @@ enum PendingResponse {
 ///     sender, the writer drains the already-queued responses in order,
 ///     then both exit.  A well-behaved pipelining client half-closes its
 ///     write side after its last frame, so the reader sees an immediate
-///     EOF rather than waiting out the read timeout.
+///     EOF rather than waiting out the read timeout.  A slow-TRICKLE
+///     client (whose every read makes progress, so the socket timeout
+///     never fires) is instead cut off by the per-request end-to-end
+///     deadline (`FrameError::DeadlineExceeded`) — a protocol error
+///     answered with one final `ParseError` below, not a clean close.
 ///   * A fatal framing error writes one final `ParseError` (in order) and
 ///     ends the connection — the byte stream cannot be resynchronised.
 ///   * `stop` (graceful server shutdown) and a writer-side I/O error (the
@@ -461,7 +599,17 @@ where
         if stop.load(Ordering::Relaxed) || dead.load(Ordering::Relaxed) {
             break;
         }
-        match reader.read_next(&mut read_half, config.max_frame_size) {
+        // A FRESH end-to-end deadline per request: the connection may
+        // live indefinitely across many pipelined frames, but each
+        // individual frame's read is wall-clock-bounded (the
+        // slow-loris defence — a trickling client resets the socket's
+        // per-read timeout forever, this deadline it cannot reset).
+        // An idle client still ends via the socket timeout below
+        // (`WouldBlock`/`TimedOut` → graceful close): the deadline
+        // only fires when reads keep making progress too slowly, which
+        // is a protocol error (`ParseError`), not a clean close.
+        let read_deadline = read_deadline_from(Instant::now(), config.bounded_connection_timeout());
+        match reader.read_next_with_deadline(&mut read_half, config.max_frame_size, read_deadline) {
             Ok((signer_hint, payload)) => {
                 let pending = match handle.submit(conn_id, signer_hint, payload) {
                     SubmitOutcome::Enqueued(rx) => PendingResponse::Enqueued(rx),
@@ -634,7 +782,8 @@ pub mod tcp {
                                     "max_concurrent_connections reached; responding Busy"
                                 );
                                 let mut stream = stream;
-                                let _ = stream.set_write_timeout(Some(config.connection_timeout));
+                                let _ = stream
+                                    .set_write_timeout(Some(config.bounded_connection_timeout()));
                                 let bytes = VerdictResponse::from_verdict(Verdict::Busy).encode();
                                 let _ = stream.write_all(&bytes);
                                 let _ = stream.flush();
@@ -672,8 +821,8 @@ pub mod tcp {
         // _slot is held for the lifetime of this function; the
         // RAII Drop releases the connection-counter slot when
         // the handler exits, regardless of panic / early return.
-        let _ = stream.set_read_timeout(Some(config.connection_timeout));
-        let _ = stream.set_write_timeout(Some(config.connection_timeout));
+        let _ = stream.set_read_timeout(Some(config.bounded_connection_timeout()));
+        let _ = stream.set_write_timeout(Some(config.bounded_connection_timeout()));
         let span = tracing::info_span!("conn", proto = "tcp", peer = %peer, conn = conn_id);
         let _enter = span.enter();
         let outcome = if config.persistent_connections {
@@ -684,7 +833,7 @@ pub mod tcp {
             // back to the one-shot path (correct, just not pipelined).
             match stream.try_clone() {
                 Ok(write_half) => {
-                    let _ = write_half.set_write_timeout(Some(config.connection_timeout));
+                    let _ = write_half.set_write_timeout(Some(config.bounded_connection_timeout()));
                     super::run_persistent(stream, write_half, &handle, &config, conn_id, &stop)
                 }
                 Err(e) => {
@@ -702,13 +851,16 @@ pub mod tcp {
 /// TLS-on-TCP listener.  Layered on top of [`tcp::TcpListener`]
 /// with `rustls` termination.
 pub mod tls {
+    use std::io::{Read, Write};
     use std::net::{TcpListener as StdTcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
+    use std::time::{Duration, Instant};
 
     use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
+    use super::read_deadline_from;
     use crate::queue::{ConnId, QueueHandle};
 
     use super::{backoff_on_accept_error, handle_connection, ConnectionSlot, HandlerConfig};
@@ -805,6 +957,72 @@ pub mod tls {
         }
     }
 
+    /// A `Read + Write` adapter that bounds every underlying socket **read**
+    /// by an absolute deadline, interposed UNDER `rustls` (it wraps the raw
+    /// `TcpStream`, not the `StreamOwned`) so the TLS handshake + record I/O —
+    /// the many raw socket reads a single `StreamOwned::read` performs — is
+    /// bounded.  Before each read the socket read timeout is shrunk to the
+    /// remaining budget, so the cumulative handshake + read time cannot exceed
+    /// the deadline (not `deadline + one socket timeout`).
+    ///
+    /// This closes the slow-loris TLS sub-case the frame-read deadline
+    /// [`handle_connection`] applies OVER `rustls` cannot catch: that deadline
+    /// is only checked *between* `StreamOwned::read` calls, so a peer trickling
+    /// handshake / record bytes inside one `read` evades it.  Writes pass
+    /// through, bounded by the socket write timeout the caller sets (a stalled
+    /// handshake write is a far weaker lever than a stalled read, and this
+    /// one-shot path writes only a tiny verdict response).
+    struct DeadlineStream {
+        inner: TcpStream,
+        deadline: Instant,
+        per_read_cap: Duration,
+    }
+
+    impl DeadlineStream {
+        /// Wrap `inner` with an absolute `deadline`; each read is additionally
+        /// capped to `per_read_cap` (the per-read backstop, never widened).
+        fn new(inner: TcpStream, deadline: Instant, per_read_cap: Duration) -> Self {
+            Self {
+                inner,
+                deadline,
+                per_read_cap,
+            }
+        }
+    }
+
+    impl Read for DeadlineStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            // Remaining budget; `None` (deadline in the past) or zero ⇒ expired.
+            match self.deadline.checked_duration_since(Instant::now()) {
+                Some(remaining) if !remaining.is_zero() => {
+                    // Cap this read to the remaining budget so it cannot
+                    // overshoot the deadline; clamp to the per-read backstop
+                    // (never widen it) and a >= 1ms floor (`Duration::ZERO`
+                    // reads as "block forever" to the OS, and `set_read_timeout`
+                    // rejects a zero value).
+                    let cap = remaining
+                        .min(self.per_read_cap)
+                        .max(Duration::from_millis(1));
+                    let _ = self.inner.set_read_timeout(Some(cap));
+                    self.inner.read(buf)
+                }
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "TLS connection read deadline exceeded",
+                )),
+            }
+        }
+    }
+
+    impl Write for DeadlineStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.inner.write(buf)
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
     fn handle_tls_connection(
         stream: TcpStream,
         peer: std::net::SocketAddr,
@@ -815,8 +1033,8 @@ pub mod tls {
         conn_id: ConnId,
     ) {
         // _slot RAII releases the connection-counter slot.
-        let _ = stream.set_read_timeout(Some(config.connection_timeout));
-        let _ = stream.set_write_timeout(Some(config.connection_timeout));
+        let _ = stream.set_read_timeout(Some(config.bounded_connection_timeout()));
+        let _ = stream.set_write_timeout(Some(config.bounded_connection_timeout()));
         // Required to switch the socket back to blocking mode for
         // the synchronous `rustls::StreamOwned` adapter.
         let _ = stream.set_nonblocking(false);
@@ -832,9 +1050,78 @@ pub mod tls {
                 return;
             }
         };
-        let mut tls_stream = StreamOwned::new(connection, stream);
+        // Interpose the absolute deadline UNDER rustls (wrapping the raw
+        // socket) so the TLS handshake + record I/O is bounded, not merely the
+        // decoded frames `handle_connection` bounds OVER rustls.  Without this
+        // a peer trickling handshake / record bytes could hold the handler far
+        // past `connection_timeout`: `StreamOwned::read` drives many raw socket
+        // reads within one call, each only bounded by the (per-byte-resettable)
+        // socket read timeout, and the frame-read deadline is checked only
+        // *between* `StreamOwned::read` calls, so it never fires mid-handshake.
+        // `DeadlineStream` shrinks the socket read timeout to the remaining
+        // budget on every raw read, so the whole connection is bounded by
+        // `connection_timeout`.
+        let deadline = read_deadline_from(Instant::now(), config.bounded_connection_timeout());
+        let bounded = DeadlineStream::new(stream, deadline, config.bounded_connection_timeout());
+        let mut tls_stream = StreamOwned::new(connection, bounded);
         let outcome = handle_connection(&mut tls_stream, &handle, &config, conn_id);
         tracing::info!(outcome = outcome.name(), "request handled");
+    }
+
+    #[cfg(test)]
+    mod deadline_tests {
+        use super::DeadlineStream;
+        use std::io::Read;
+        use std::net::{TcpListener, TcpStream};
+        use std::time::{Duration, Instant};
+
+        /// A connected server-side `TcpStream`; the returned client end is kept
+        /// alive by the caller (dropping it would close the connection and let
+        /// `read` return `Ok(0)` instead of blocking).
+        fn idle_server_stream() -> (TcpStream, TcpStream) {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+            let addr = listener.local_addr().expect("local_addr");
+            let client = TcpStream::connect(addr).expect("connect loopback");
+            let (server, _) = listener.accept().expect("accept");
+            server.set_nonblocking(false).expect("blocking mode");
+            (server, client)
+        }
+
+        #[test]
+        fn read_past_the_deadline_is_timed_out_without_blocking() {
+            let (server, _client) = idle_server_stream();
+            let past = Instant::now()
+                .checked_sub(Duration::from_secs(1))
+                .expect("one second ago");
+            let mut s = DeadlineStream::new(server, past, Duration::from_secs(10));
+            let started = Instant::now();
+            let err = s
+                .read(&mut [0u8; 8])
+                .expect_err("a past deadline must fail");
+            assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+            // Fail-fast: no socket read is attempted once the deadline passed.
+            assert!(started.elapsed() < Duration::from_millis(500));
+        }
+
+        #[test]
+        fn an_idle_socket_read_is_bounded_by_the_deadline() {
+            // The tightening: a peer that connects then trickles nothing (the
+            // slow-loris limit case) is cut off at the deadline, NOT held for
+            // the full per-read backstop — the socket read timeout is shrunk to
+            // the remaining budget before the read.
+            let (server, _client) = idle_server_stream();
+            let deadline = Instant::now() + Duration::from_millis(200);
+            // Per-read backstop deliberately far LONGER than the deadline, so
+            // only the deadline-derived cap can bound the read.
+            let mut s = DeadlineStream::new(server, deadline, Duration::from_secs(30));
+            let started = Instant::now();
+            let result = s.read(&mut [0u8; 8]);
+            assert!(result.is_err(), "an idle read must not succeed");
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "the read must be bounded by the 200ms deadline, not the 30s backstop"
+            );
+        }
     }
 }
 
@@ -939,7 +1226,7 @@ pub mod unix {
                     if !meta.file_type().is_socket() {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::AlreadyExists,
-                            format!("path {path:?} exists and is not a Unix socket"),
+                            format!("path {} exists and is not a Unix socket", path.display()),
                         ));
                     }
                     std::fs::remove_file(&path)?;
@@ -1004,7 +1291,8 @@ pub mod unix {
                                     "Unix: max_concurrent_connections reached; responding Busy"
                                 );
                                 let mut stream = stream;
-                                let _ = stream.set_write_timeout(Some(config.connection_timeout));
+                                let _ = stream
+                                    .set_write_timeout(Some(config.bounded_connection_timeout()));
                                 let bytes = VerdictResponse::from_verdict(Verdict::Busy).encode();
                                 let _ = stream.write_all(&bytes);
                                 let _ = stream.flush();
@@ -1047,15 +1335,15 @@ pub mod unix {
         stop: Arc<AtomicBool>,
     ) {
         // _slot RAII releases the connection-counter slot.
-        let _ = stream.set_read_timeout(Some(config.connection_timeout));
-        let _ = stream.set_write_timeout(Some(config.connection_timeout));
+        let _ = stream.set_read_timeout(Some(config.bounded_connection_timeout()));
+        let _ = stream.set_write_timeout(Some(config.bounded_connection_timeout()));
         let span = tracing::info_span!("conn", proto = "unix", conn = conn_id);
         let _enter = span.enter();
         let outcome = if config.persistent_connections {
             // Persistent + pipelined (see the TCP handler / `run_persistent`).
             match stream.try_clone() {
                 Ok(write_half) => {
-                    let _ = write_half.set_write_timeout(Some(config.connection_timeout));
+                    let _ = write_half.set_write_timeout(Some(config.bounded_connection_timeout()));
                     super::run_persistent(stream, write_half, &handle, &config, conn_id, &stop)
                 }
                 Err(e) => {

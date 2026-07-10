@@ -6,8 +6,14 @@
 
 # Cargo dependency supply-chain audit (Workstream GW §G4.5).
 #
-# Runs `cargo deny check` over the `runtime/` Cargo workspace against the
-# policy in `runtime/deny.toml`:
+# Runs `cargo deny check` over BOTH cargo workspaces under `runtime/`:
+#
+#   * the `runtime/` runtime workspace  -> policy `runtime/deny.toml`;
+#   * the `runtime/fuzz/` cargo-fuzz    -> policy `runtime/fuzz/deny.toml`
+#     workspace (a SEPARATE, excluded    (parent policy + `NCSA` for the
+#     workspace; nightly libFuzzer)      LLVM libFuzzer libfuzzer-sys links).
+#
+# Each policy enforces:
 #
 #   * advisories — every RUSTSEC advisory (incl. yanked) is a hard failure;
 #   * licenses   — a verified allow-list (see
@@ -15,9 +21,9 @@
 #   * bans       — wildcard version requirements denied;
 #   * sources    — only the canonical crates.io registry permitted.
 #
-# Scoped to dependency-graph changes (any member `Cargo.toml`, the
-# workspace `Cargo.lock`, the policy file, or this workflow) so it does not
-# add CI time to source-only PRs.
+# Scoped to dependency-graph changes (any member `Cargo.toml`, either
+# workspace `Cargo.lock`, either policy file, or this workflow) so it does
+# not add CI time to source-only PRs.
 #
 # Third-party-action pinning (per CLAUDE.md / Genesis Plan §13.6): the two
 # actions are pinned to the SAME commit SHAs already vetted in
@@ -35,6 +41,8 @@ on:
       - 'runtime/Cargo.toml'
       - 'runtime/Cargo.lock'
       - 'runtime/deny.toml'
+      - 'runtime/fuzz/Cargo.lock'
+      - 'runtime/fuzz/deny.toml'
       - '.github/workflows/ci-cargo-deny.yml'
   pull_request:
     branches:
@@ -44,6 +52,8 @@ on:
       - 'runtime/Cargo.toml'
       - 'runtime/Cargo.lock'
       - 'runtime/deny.toml'
+      - 'runtime/fuzz/Cargo.lock'
+      - 'runtime/fuzz/deny.toml'
       - '.github/workflows/ci-cargo-deny.yml'
 
 concurrency:
@@ -90,13 +100,35 @@ jobs:
       - name: Install cargo-deny
         # Built with a recent `stable` (NOT the project's pinned 1.83, which
         # cargo-deny 0.19's MSRV exceeds) — cargo-deny is a standalone tool, so
-        # its build toolchain is independent of the workspace's.  Pinned to
-        # `^0.19`: 0.16.x can no longer load the RustSec advisory DB (its bundled
-        # `cvss` cannot parse the CVSS-4.0 advisories now present upstream); 0.19
-        # parses them.  `--locked` for a reproducible tool build.
+        # its build toolchain is independent of the workspace's.  Pinned to the
+        # EXACT `=0.20.2` (the latest 0.20.x) for a reproducible tool build — a
+        # bare `^0.20` would silently adopt a future 0.20.x with different lint
+        # behaviour or a different transitive build graph on a clean CI run,
+        # matching the exact-pin discipline the fuzz lane uses for cargo-fuzz.
+        # (0.16.x can no longer load the RustSec advisory DB — its bundled `cvss`
+        # cannot parse the CVSS-4.0 advisories now upstream; 0.19+ parses them.)
+        # Bump this version intentionally.  `--locked` pins the tool's own deps.
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
-          cargo +stable install cargo-deny --locked --version "^0.19"
+          cargo +stable install cargo-deny --locked --version "=0.20.2"
 
-      - name: cargo deny check
+      - name: cargo deny check (runtime workspace)
         run: cargo deny --manifest-path Cargo.toml check
+
+      - name: cargo deny check (fuzz workspace)
+        # The `runtime/fuzz/` cargo-fuzz workspace is excluded from the parent
+        # workspace, so it is NOT covered by the check above — audit it against
+        # its own scoped policy (`runtime/fuzz/deny.toml`: the parent allow-list
+        # plus `NCSA` for the LLVM libFuzzer runtime `libfuzzer-sys` bundles).
+        # `check --config fuzz/deny.toml` (the path is relative to the `runtime`
+        # working-directory) selects the fuzz policy, never the parent's.
+        env:
+          # cargo-deny shells out to `cargo metadata`; the fuzz tree pulls
+          # edition2024 crates the workspace's pinned 1.83 cargo cannot parse,
+          # so force the freshly-installed `stable` (>= 1.85) for the metadata
+          # resolution.  (The runtime check above stays on the native 1.83 —
+          # that workspace has no edition2024 deps.)
+          RUSTUP_TOOLCHAIN: stable
+        # cargo-deny 0.20 moved `--config` (and `--manifest-path`) to TOP-LEVEL
+        # flags before the `check` subcommand (0.19 took `--config` after it).
+        run: cargo deny --manifest-path fuzz/Cargo.toml --config fuzz/deny.toml check

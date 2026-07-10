@@ -26,7 +26,7 @@ use std::thread::{self, JoinHandle};
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
 use crate::config::{Config, TlsConfig};
-use crate::http::conn::{self, DeadlineStream};
+use crate::http::conn::{self, BoundNextRead, DeadlineStream, ResetReadDeadline};
 use crate::state::AppState;
 
 /// The **hot-swappable** server config.  The accept loop clones the current
@@ -216,15 +216,19 @@ fn build_server_config(tls: &TlsConfig) -> Result<Arc<ServerConfig>, TlsSetupErr
 }
 
 /// Load the PEM-encoded certificate-revocation lists from `path` (one or more
-/// `X509 CRL` blocks) into the rustls vocabulary.
+/// `X509 CRL` blocks) into the rustls vocabulary.  Parsed via the maintained
+/// `rustls-pki-types` `PemObject` API (the `rustls-pemfile` replacement,
+/// RUSTSEC-2025-0134): `pem_reader_iter` yields every `X509 CRL` section in
+/// file order, skipping PEM sections of other kinds — the same section
+/// discipline the retired `rustls_pemfile::crls` had.
 fn load_crls(
     path: &std::path::Path,
 ) -> Result<Vec<rustls::pki_types::CertificateRevocationListDer<'static>>, TlsSetupError> {
+    use rustls::pki_types::pem::PemObject;
     let file = std::fs::File::open(path)
         .map_err(|e| TlsSetupError::Crl(format!("opening {}: {e}", path.display())))?;
-    let mut reader = std::io::BufReader::new(file);
     let mut crls = Vec::new();
-    for crl in rustls_pemfile::crls(&mut reader) {
+    for crl in rustls::pki_types::CertificateRevocationListDer::pem_reader_iter(file) {
         crls.push(crl.map_err(|e| TlsSetupError::Crl(format!("parsing {}: {e}", path.display())))?);
     }
     if crls.is_empty() {
@@ -312,8 +316,25 @@ fn handle_connection(
             return;
         }
     };
-    let mut reader = BufReader::new(DeadlineStream::new(StreamOwned::new(connection, stream)));
+    // The `DeadlineStream` sits UNDER `rustls` (wrapping the raw `TcpStream`,
+    // not the `StreamOwned`), so the per-request read deadline bounds the TLS
+    // handshake + record I/O — the many raw socket reads a single
+    // `StreamOwned::read` performs — and not merely the decoded-frame reads.
+    // The keep-alive loop resets that nested deadline each request via the
+    // `ResetReadDeadline for StreamOwned<..>` impl below.
+    let mut reader = BufReader::new(StreamOwned::new(connection, DeadlineStream::new(stream)));
     conn::run_connection(&mut reader, control.as_ref(), state, shutdown);
+}
+
+/// Reach the `rustls`-nested [`DeadlineStream`] so the keep-alive loop can
+/// reset its per-request read deadline.  `StreamOwned::sock` is the transport
+/// under rustls — here the [`DeadlineStream`] wrapping the raw `TcpStream`.
+impl<S: std::io::Read + std::io::Write + BoundNextRead> ResetReadDeadline
+    for StreamOwned<ServerConnection, DeadlineStream<S>>
+{
+    fn reset_read_deadline(&mut self, deadline: std::time::Instant) {
+        self.sock.reset_read_deadline(deadline);
+    }
 }
 
 /// End-to-end TLS handshake tests: a real `rustls 0.23` client drives the real

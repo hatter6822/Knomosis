@@ -1,0 +1,14 @@
+# cargo-fuzz build output + the auto-grown corpus / crash artifacts.
+# The dictionaries that ARE committed live under `dictionaries/`
+# (tracked); everything below is scratch.
+#
+# NOTE: `Cargo.lock` is NOT ignored — it is committed.  This crate is a
+# SEPARATE workspace (excluded from `runtime`), so without a tracked
+# lockfile the `ci-fuzz.yml` runners would resolve `libfuzzer-sys` /
+# `arbitrary` / the transitive deps afresh on every clean checkout, and
+# an unrelated upstream release could break or change the fuzz gate —
+# defeating the harness's pinning intent.  A committed lockfile pins them.
+target/
+corpus/
+artifacts/
+coverage/

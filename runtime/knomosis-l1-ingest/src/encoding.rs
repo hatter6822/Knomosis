@@ -207,7 +207,7 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
             out.extend_from_slice(&encode_u64(*receiver));
             out.extend_from_slice(&encode_amount(*amount)?);
         }
-        Action::Mint { r, to, amount } => {
+        Action::Mint { r, to, amount } | Action::Reward { r, to, amount } => {
             out.extend_from_slice(&encode_u64(*r));
             out.extend_from_slice(&encode_u64(*to));
             out.extend_from_slice(&encode_amount(*amount)?);
@@ -227,11 +227,6 @@ pub fn encode_action(action: &Action) -> Result<Vec<u8>, EncodeError> {
         Action::ReplaceKey { actor, new_key } => {
             out.extend_from_slice(&encode_u64(*actor));
             out.extend_from_slice(&encode_byte_string(new_key.as_bytes())?);
-        }
-        Action::Reward { r, to, amount } => {
-            out.extend_from_slice(&encode_u64(*r));
-            out.extend_from_slice(&encode_u64(*to));
-            out.extend_from_slice(&encode_amount(*amount)?);
         }
         Action::DistributeOthers {
             r,

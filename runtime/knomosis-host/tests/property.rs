@@ -10,7 +10,9 @@
 //! Uses `proptest` to fuzz the wire-frame parser, verdict
 //! encoding, and queue invariants over randomly-generated inputs.
 
-use knomosis_host::frame::{encode_frame, read_frame, FrameError, DEFAULT_MAX_FRAME_SIZE};
+use knomosis_host::frame::{
+    encode_frame, read_frame, read_request, FrameError, DEFAULT_MAX_FRAME_SIZE, KNH2_PREAMBLE,
+};
 use knomosis_host::queue::{drain_one, BoundedQueue, DrainOutcome, SubmitOutcome};
 use knomosis_host::verdict::{Verdict, VerdictResponse};
 use proptest::prelude::*;
@@ -35,6 +37,38 @@ proptest! {
         let mut cursor = Cursor::new(bytes);
         // Result is irrelevant; we're testing absence of panic.
         let _ = read_frame(&mut cursor, DEFAULT_MAX_FRAME_SIZE);
+    }
+
+    /// `read_request` — the FULL negotiated request reader (the Rung-1
+    /// magic peek + the v1 / v2-hinted branch) — never panics on
+    /// arbitrary input.  `read_frame` above only fuzzes the v1 body
+    /// path; this covers the negotiation state machine and the
+    /// 8-byte-signer-hint + length-header reads a v2 client drives,
+    /// which is the actual entry point `handle_connection` calls on
+    /// every accepted socket (the untrusted network boundary).
+    #[test]
+    fn read_request_never_panics_on_arbitrary_input(
+        bytes in proptest::collection::vec(any::<u8>(), 0..=8192),
+    ) {
+        let mut cursor = Cursor::new(bytes);
+        let _ = read_request(&mut cursor, DEFAULT_MAX_FRAME_SIZE);
+    }
+
+    /// `read_request` never panics when the input is prefixed with the
+    /// EXACT Rung-1 `KNH2` preamble, so negotiation classifies the
+    /// connection as v2 (hinted) and the adversarial tail is consumed
+    /// by the hinted-frame path (`[8-byte signer hint][4-byte
+    /// length][payload]`).  A raw fuzz almost never reproduces the
+    /// 4-byte magic, so without this the whole v2 read path is
+    /// unexercised by fuzzing.
+    #[test]
+    fn read_request_hinted_path_never_panics(
+        tail in proptest::collection::vec(any::<u8>(), 0..=4096),
+    ) {
+        let mut bytes = KNH2_PREAMBLE.to_vec();
+        bytes.extend(tail);
+        let mut cursor = Cursor::new(bytes);
+        let _ = read_request(&mut cursor, DEFAULT_MAX_FRAME_SIZE);
     }
 
     /// Truncating any single byte after a valid frame's encoding
@@ -183,6 +217,6 @@ proptest! {
         let bytes = response.encode();
         let declared = u32::from_be_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]) as usize;
         prop_assert_eq!(declared, bytes.len() - 5);
-        prop_assert_eq!(declared, reason.as_bytes().len());
+        prop_assert_eq!(declared, reason.len());
     }
 }

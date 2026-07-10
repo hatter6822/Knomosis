@@ -107,6 +107,13 @@ pub struct CliConfig {
     /// locally; does NOT broadcast to L1).  Audit-pass-4-round-3
     /// fix: previously the mock was always used regardless of
     /// operator intent, making the `JsonRpcSubmitter` dead code.
+    ///
+    /// `Some(_)` REQUIRES the truth oracle
+    /// (`knomosis_binary` + `knomosis_log_path`) — enforced fail-closed
+    /// by [`CliConfig::validate`]: a broadcast-capable observer
+    /// without a truth oracle would defer every honest move
+    /// (`TruthOracleMissed`) while appearing armed, silently voiding
+    /// the IC-3 watchtower-liveness assumption.
     pub chain_id: Option<u64>,
     /// Optional path to the `knomosis` binary.  When `Some(p)` AND
     /// `knomosis_log_path` is also `Some(_)`, the observer wires up
@@ -378,6 +385,26 @@ impl CliConfig {
                 ));
             }
         }
+        // Fail closed on a broadcast-capable observer with no truth
+        // oracle.  `--chain-id` arms the PRODUCTION `JsonRpcSubmitter`
+        // (the observer signs + broadcasts real L1 transactions), but
+        // without `--knomosis-binary` + `--knomosis-log` the strategy
+        // falls back to the empty `MemoryTruthOracle` and DEFERS every
+        // honest move (`TruthOracleMissed`) — an observer that LOOKS
+        // armed while unable to defend a single root.  That silently
+        // voids the IC-3 watchtower-liveness assumption, so the
+        // combination is rejected up-front as an operator
+        // misconfiguration.  Passive (read-only) event-watching stays
+        // available by omitting --chain-id.
+        if self.chain_id.is_some() && self.knomosis_binary.is_none() {
+            return Err(CliError::InvalidConfiguration(
+                "--chain-id (production submitter) requires --knomosis-binary and \
+                 --knomosis-log (the truth oracle): a broadcast-capable observer \
+                 without a truth oracle would defer every bisection move and defend \
+                 nothing; omit --chain-id for passive event-watching"
+                    .into(),
+            ));
+        }
         Ok(())
     }
 }
@@ -488,6 +515,10 @@ OPTIONS:
                                 production JSON-RPC submitter (signs +
                                 broadcasts L1 transactions; verifies the
                                 chain_id against the live RPC at startup).
+                                REQUIRES --knomosis-binary + --knomosis-log
+                                (fail-closed: a broadcast-capable observer
+                                without a truth oracle would defer every
+                                bisection move and defend nothing).
                                 When omitted, uses the in-memory mock
                                 submitter (records moves locally; does
                                 NOT broadcast to L1).
@@ -708,6 +739,71 @@ mod tests {
         assert!(matches!(err, CliError::InvalidConfiguration(_)));
     }
 
+    /// `--chain-id` (production submitter) WITHOUT the truth oracle is
+    /// rejected fail-closed: a broadcast-capable observer that can
+    /// only defer moves would silently void the IC-3 watchtower
+    /// assumption.
+    #[test]
+    fn chain_id_without_truth_oracle_rejected() {
+        let err = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--chain-id",
+            "11155111",
+        ]))
+        .unwrap_err();
+        assert!(
+            matches!(err, CliError::InvalidConfiguration(ref m) if m.contains("--knomosis-binary")),
+            "expected the fail-closed truth-oracle guard, got {err:?}"
+        );
+    }
+
+    /// `--chain-id` WITH the truth oracle pair is the fully-armed
+    /// production shape and parses fine.
+    #[test]
+    fn chain_id_with_truth_oracle_accepted() {
+        let cfg = CliConfig::parse_args(args(&[
+            "--l1-rpc",
+            "http://localhost:8545",
+            "--game-contract",
+            "0x0102030405060708091011121314151617181920",
+            "--state-root-contract",
+            "0xa102030405060708091011121314151617181920",
+            "--storage",
+            "/tmp/test.db",
+            "--keystore",
+            "/tmp/key",
+            "--deployment-id",
+            &format!("0x{}", "ab".repeat(32)),
+            "--chain-id",
+            "11155111",
+            "--knomosis-binary",
+            "/usr/local/bin/knomosis",
+            "--knomosis-log",
+            "/var/lib/knomosis/knomosis.log",
+        ]))
+        .unwrap();
+        assert_eq!(cfg.chain_id, Some(11_155_111));
+        assert_eq!(
+            cfg.knomosis_binary,
+            Some(PathBuf::from("/usr/local/bin/knomosis"))
+        );
+        assert_eq!(
+            cfg.knomosis_log_path,
+            Some(PathBuf::from("/var/lib/knomosis/knomosis.log"))
+        );
+    }
+
     /// Custom options override defaults.
     #[test]
     fn custom_options_override_defaults() {
@@ -777,6 +873,10 @@ mod tests {
     /// omitted).
     #[test]
     fn chain_id_parses_decimal_value() {
+        // The truth-oracle pair is supplied because --chain-id
+        // fail-closed-requires it (see
+        // `chain_id_without_truth_oracle_rejected`); this test's
+        // subject is the decimal parse of the chain-id value itself.
         let cfg = CliConfig::parse_args(args(&[
             "--l1-rpc",
             "http://localhost:8545",
@@ -792,6 +892,10 @@ mod tests {
             &format!("0x{}", "ab".repeat(32)),
             "--chain-id",
             "1",
+            "--knomosis-binary",
+            "/usr/local/bin/knomosis",
+            "--knomosis-log",
+            "/var/lib/knomosis/knomosis.log",
         ]))
         .unwrap();
         assert_eq!(cfg.chain_id, Some(1));

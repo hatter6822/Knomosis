@@ -105,8 +105,8 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
     // Open the persistence layer.
     let persistence = Persistence::open(&cfg.storage_path).map_err(|e| {
         ObserverError::Storage(knomosis_storage::storage::StorageError::Other(format!(
-            "opening persistence at {:?}: {e}",
-            cfg.storage_path
+            "opening persistence at {}: {e}",
+            cfg.storage_path.display()
         )))
     })?;
 
@@ -141,7 +141,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
     // replay defence is enforced uniformly.  When the flags are
     // omitted, the observer falls back to the empty
     // `MemoryTruthOracle` (cannot play moves; passive event-
-    // watcher only).
+    // watcher only) — a combination `CliConfig::validate` permits
+    // ONLY without `--chain-id`: the production-submitter branch
+    // below can therefore rely on the oracle being armed (a
+    // broadcast-capable observer that could only defer moves is
+    // rejected fail-closed at CLI parse time).
     //
     // Audit-pass-4-round-6 fix: previously the `MemoryTruthOracle`
     // was hardcoded regardless of operator intent, making the
@@ -171,7 +175,10 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             // JsonRpcSubmitter, cross-check chain_id with the
             // live RPC, then run.
             let signing_key = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
-                ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
+                ObserverError::Crypto(format!(
+                    "loading keystore at {}: {e}",
+                    cfg.keystore_path.display()
+                ))
             })?;
             let submitter_cfg =
                 JsonRpcSubmitterConfig::new(chain_id, cfg.game_contract.0, &signing_key)
@@ -220,7 +227,10 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
             // end of scope) so the private bytes don't sit in
             // memory for the whole observer.run() duration.
             let _ = BridgeActorKey::from_file(&cfg.keystore_path).map_err(|e| {
-                ObserverError::Crypto(format!("loading keystore at {:?}: {e}", cfg.keystore_path))
+                ObserverError::Crypto(format!(
+                    "loading keystore at {}: {e}",
+                    cfg.keystore_path.display()
+                ))
             })?;
             info!(
                 "running with MockSubmitter (no --chain-id supplied; moves \
@@ -256,7 +266,11 @@ fn run(cfg: &CliConfig) -> Result<(), ObserverError> {
 /// Otherwise returns an empty [`MemoryTruthOracle`] — the
 /// observer detects this via [`HonestMoveError::TruthOracleMissed`]
 /// at move time and logs a "deferring move" warning; no incorrect
-/// moves are submitted.  This is the dev / read-only mode.
+/// moves are submitted.  This is the dev / read-only mode, and it is
+/// only reachable WITHOUT `--chain-id`: `CliConfig::validate` rejects
+/// a production (broadcasting) observer with no truth oracle
+/// fail-closed, so the mock-submitter path is the only consumer of
+/// the empty-oracle fallback.
 fn build_truth_oracle(cfg: &CliConfig) -> Box<dyn TruthOracle> {
     if let (Some(knomosis), Some(log_path)) = (&cfg.knomosis_binary, &cfg.knomosis_log_path) {
         // Format the deployment-id as 64-char lowercase hex via

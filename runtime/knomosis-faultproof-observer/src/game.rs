@@ -130,7 +130,7 @@ impl DisputedRange {
         let high = u128::from(self.high.idx);
         // Floor-divide.  Cast back to u64; safe because
         // (low + high) / 2 <= max(low, high) <= u64::MAX.
-        let mid = (low + high) / 2;
+        let mid = u128::midpoint(low, high);
         // Defensive: clamp to u64 range.  Mathematically
         // unnecessary but guards against a future change to the
         // bound.

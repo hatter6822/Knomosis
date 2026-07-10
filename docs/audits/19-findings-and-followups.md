@@ -669,18 +669,30 @@ minor findings, the recommended follow-up backlog is:
 8. ~~**[M-10] `MockCrypto` import-check audit tool.**~~
    **Closed** by AR.9 — `mock_import_audit` now ships as a CI
    gate (`lake exe mock_import_audit`).
-9. **[i-9] `proportionalDilute` guard comment** at the
-   load-bearing snapshot-read line. — Open (minor, optional;
-   non-TCB ergonomic guard, not a soundness item).
+9. ~~**[i-9] `proportionalDilute` guard comment** at the
+   load-bearing snapshot-read line.~~
+   **Closed** — the `INVARIANT (AR.15 / i-9)` guard comment ships
+   on the production foldl's snapshot read
+   (`Laws/ProportionalDilute.lean`), and the law's Lex
+   re-expression carries a matching guard (in the section docstring
+   immediately above the `lexlaw` block, so it cannot leak into the
+   codegen sidecar) — so neither copy of the load-bearing `kv.2`
+   read can be refactored to a live-state read without tripping over
+   the warning.
 
-**Remaining open follow-up.**
+**Remaining open follow-up** *(historical snapshot — since
+closed; see the reconciliation note above)*.
 
-  * **[m-16] Chain-level bridge accounting (§7.6.4 / §7.6.5).**
-    Promote the runtime / cross-stack-checked bridge supply
+  * ~~**[m-16] Chain-level bridge accounting (§7.6.4 / §7.6.5).**~~
+    **Closed by Workstream CA** (`Bridge/Reachable.lean` +
+    `Bridge/ChainAccounting.lean`; headline
+    `bridge_chain_accounting_equation`).  The original snapshot:
+    promote the runtime / cross-stack-checked bridge supply
     identities to inductive `BridgeReachable` theorems.  Triaged
     "Defer" in AR §15C.2; tracked by the CA workstream
-    (`docs/planning/chain_level_accounting_plan.md`).  This is the
-    last open finding from the comprehensive audit.
+    (`docs/planning/chain_level_accounting_plan.md`).  It was the
+    last open finding from the comprehensive audit — with it
+    closed, **no audit finding from this report remains open**.
 
 The auditor's recommendation is that none of these
 findings are urgent for a research-stage codebase, but

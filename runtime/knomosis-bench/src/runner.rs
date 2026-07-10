@@ -1168,7 +1168,7 @@ mod tests {
     /// declared-length.
     #[test]
     fn read_exact_with_eof_truncated_reason() {
-        let data = [b'h', b'i']; // 2 bytes when 5 expected
+        let data = *b"hi"; // 2 bytes when 5 expected
         let mut reader = Cursor::new(data);
         let mut buf = [0u8; 5];
         let err = read_exact_with_eof(&mut reader, &mut buf, ReadKind::Reason { declared: 5 })

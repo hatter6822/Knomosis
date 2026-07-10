@@ -148,11 +148,24 @@ cd solidity && make deploy-local              # full BOLD+AMM suite vs live anvi
 python3 scripts/economic_simulation.py
 
 # Workstream RH (Rust host runtime) — see runtime/README.md.
-# Toolchain pin: runtime/rust-toolchain.toml (stable 1.83).
+# Toolchain pin: runtime/rust-toolchain.toml (stable 1.97).
 cd runtime && cargo build --workspace --all-targets
 cd runtime && cargo test --workspace
 cd runtime && cargo clippy --workspace --all-targets -- -D warnings
 cd runtime && cargo fmt --all -- --check
+
+# Coverage-guided fuzzing of the untrusted-input boundaries — the
+# knomosis-fuzz crate (runtime/fuzz/; see runtime/fuzz/README.md).  A
+# SEPARATE workspace (excluded from the stable `runtime` workspace);
+# libFuzzer needs nightly + the LLVM sanitizer runtime, so it rides the
+# dedicated ci-fuzz.yml lane, NOT the --workspace gates above.  Its
+# stable-toolchain counterpart is the never-panics proptest fuzz in the
+# host / l1-ingest / indexer `tests/property.rs` (which DO ride --workspace).
+rustup toolchain install nightly --component rust-src   # one-time
+cargo install cargo-fuzz --locked                       # one-time (pin 0.13.2)
+cd runtime && cargo +nightly fuzz list                  # host / l1-ingest / indexer decoders
+cd runtime && cargo +nightly fuzz build                 # compile all targets (API-drift guard)
+cd runtime && cargo +nightly fuzz run l1_ingest_decode_event -- -max_total_time=60
 
 # Workstream GW (gateway) — synchronous HTTP/JSON + SSE service
 # (runtime/knomosis-gateway/; contract docs/api/gateway.openapi.yaml).
@@ -266,7 +279,7 @@ knomosis/
 │                                 (see solidity/README.md)
 ├── runtime/                   -- Workstream RH: Rust host runtime
 │   ├── Cargo.toml             --   workspace manifest
-│   ├── rust-toolchain.toml    --   pinned Rust channel (stable 1.83)
+│   ├── rust-toolchain.toml    --   pinned Rust channel (stable 1.97)
 │   ├── knomosis-hash-fallback.c  --   AR.10 default fallback (lake-built)
 │   ├── knomosis-cli-common/      --   shared CLI / logging helpers
 │   ├── knomosis-cross-stack/     --   dev-dep fixture loader
@@ -281,6 +294,8 @@ knomosis/
 │   ├── knomosis-bench/           --   transfer-throughput benchmark
 │   ├── knomosis-gateway/         --   Workstream GW: HTTP/JSON + SSE service
 │   ├── knomosis-gateway-bench/   --   GW read-path throughput/latency bench (G4.6)
+│   ├── fuzz/                     --   cargo-fuzz harness (SEPARATE workspace,
+│   │                                 excluded; nightly libFuzzer, ci-fuzz.yml)
 │   └── tests/cross-stack/     --   shared fixture corpus (.cxsf files)
 ├── scripts/
 │   ├── setup.sh               -- SHA-256-verified toolchain installer
@@ -292,6 +307,7 @@ knomosis/
 ├── .github/workflows/
 │   ├── ci.yml                 -- Lean build + test + audits
 │   ├── ci-rust.yml            -- Rust workspace gates (runtime/**)
+│   ├── ci-fuzz.yml            -- nightly libFuzzer gate (runtime/fuzz/**)
 │   ├── ci-solidity.yml        -- Solidity cap gate + forge gates (solidity/**)
 │   ├── ci-keccak-crossstack.yml -- Lean<->EVM keccak256 byte-equivalence
 │   ├── ci-verify-secp256k1.yml -- F-2 secp256k1-verifier production-link proof
@@ -745,7 +761,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.10.0`) — the single
+the `lakefile.lean` `version` field (currently `0.10.2`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -984,7 +1000,7 @@ Plan: `docs/planning/rust_host_runtime_plan.md`
 | RH-G | `knomosis-faultproof-observer` | Complete | Game state machine; honest strategy; L1 watcher; EIP-1559 submitter; persistence; chaos suite; 50-trace cross-stack corpus |
 
 Workspace conventions: `unsafe_code = "forbid"` default;
-`clippy::pedantic`; no `tokio`; stable 1.83.
+`clippy::pedantic`; no `tokio`; stable 1.97.
 
 ### Unified gas pool / budgets / AMM (Workstream GP)
 

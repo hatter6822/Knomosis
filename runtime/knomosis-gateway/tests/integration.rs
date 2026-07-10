@@ -21,6 +21,7 @@
 //! backpressure); and the `Idempotency-Key` replay cache (a duplicate key
 //! returns the cached response with no second host round-trip).
 
+use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -215,10 +216,10 @@ fn http_get(addr: SocketAddr, path: &str, token: Option<&str>, inm: Option<&str>
         .ok();
     let mut req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n");
     if let Some(t) = token {
-        req.push_str(&format!("Authorization: Bearer {t}\r\n"));
+        let _ = write!(req, "Authorization: Bearer {t}\r\n");
     }
     if let Some(m) = inm {
-        req.push_str(&format!("If-None-Match: {m}\r\n"));
+        let _ = write!(req, "If-None-Match: {m}\r\n");
     }
     req.push_str("\r\n");
     stream.write_all(req.as_bytes()).expect("write request");
@@ -268,10 +269,10 @@ fn http_post_full(
         body.len()
     );
     if let Some(t) = token {
-        head.push_str(&format!("Authorization: Bearer {t}\r\n"));
+        let _ = write!(head, "Authorization: Bearer {t}\r\n");
     }
     if let Some(k) = idem {
-        head.push_str(&format!("Idempotency-Key: {k}\r\n"));
+        let _ = write!(head, "Idempotency-Key: {k}\r\n");
     }
     head.push_str("\r\n");
     let mut bytes = head.into_bytes();

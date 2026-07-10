@@ -503,6 +503,156 @@ contract KnomosisFaultProofGameTest is Test {
             "challenger win must slash the sequencer bond");
     }
 
+    /// @notice Closes the audit-21 §4 extended-coverage follow-up (a): a
+    ///         MULTI-ROUND bisection that narrows a 4-step range to a
+    ///         single step through two full midpoint/response rounds and
+    ///         then terminates on the real step VM.  The honest sequencer
+    ///         defends a genuine 4-entry trace (each commit is the real
+    ///         `executeStep` of its predecessor); the challenger disagrees
+    ///         at every midpoint, so `g.high` is reassigned twice before
+    ///         the terminal step — exercising the depth accounting, the
+    ///         turn alternation, the step-interval gate across rounds, and
+    ///         (with the 1.2 fix) the lock clearing under
+    ///         `disputedLogIndex` even though `high.idx` ends at a
+    ///         midpoint.
+    function test_multi_round_bisection_then_terminate_sequencer_wins() public {
+        // A REAL 4-entry trace from the anchored genesis (LOW_ROOT):
+        // each step transfers 5 of resource 1 from actor 10 to actor 20,
+        // with cell proofs witnessing that step's true pre-commit and the
+        // balances evolving 100/50 → 95/55 → 90/60 → 85/65.
+        uint8 kind = 0;    // ActionKind.Transfer
+        uint64 stepSigner = 10;
+        bytes memory actionFields =
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint64(5));
+
+        bytes32[5] memory commits;
+        commits[0] = LOW_ROOT;
+        uint256 balFrom = 100;
+        uint256 balTo = 50;
+        KnomosisStepVM.CellProof[] memory stepProofs =
+            new KnomosisStepVM.CellProof[](2);
+        for (uint256 i = 0; i < 4; i++) {
+            stepProofs[0] =
+                _makeCellProof(0, 1, 10, _encodeCbeNat(balFrom), commits[i]);
+            stepProofs[1] =
+                _makeCellProof(0, 1, 20, _encodeCbeNat(balTo), commits[i]);
+            commits[i + 1] = stepVM.executeStep(
+                commits[i], kind, actionFields, stepSigner, stepProofs);
+            balFrom -= 5;
+            balTo += 5;
+        }
+
+        // The sequencer honestly published commits[4] at log index 4.
+        mockStateRootSubmission.seedRoot(
+            4, sequencer, commits[4], STATE_ROOT_BOND);
+
+        // Challenger opens a 4-step dispute with a WRONG claim.
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            4, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        // Round 1: midpoint of [0, 4] is 2.  The sequencer submits the
+        // honest commits[2]; the challenger DISAGREES, so the range
+        // narrows to [0, (2, commits[2])] — `high` is now a midpoint.
+        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.prank(sequencer);
+        game.submitMidpoint(gameId, commits[2]);
+        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.prank(challenger);
+        game.respondToMidpoint(gameId, false);
+
+        // Round 2: midpoint of [0, 2] is 1.  Same pattern — the range
+        // narrows to the single step [0, (1, commits[1])].
+        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.prank(sequencer);
+        game.submitMidpoint(gameId, commits[1]);
+        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.prank(challenger);
+        game.respondToMidpoint(gameId, false);
+
+        // Two full rounds happened: depth == 2 and it is the sequencer's
+        // turn on the single-step range.
+        (, , , , , , uint64 depth, , , , , , , ,) = game.games(gameId);
+        assertEq(depth, 2, "two bisection rounds must be recorded");
+
+        // Terminal step: executeStep(commits[0]) == commits[1] == high
+        // ⇒ the responding sequencer wins.
+        stepProofs[0] = _makeCellProof(0, 1, 10, _encodeCbeNat(100), LOW_ROOT);
+        stepProofs[1] = _makeCellProof(0, 1, 20, _encodeCbeNat(50), LOW_ROOT);
+        vm.prank(sequencer);
+        game.terminateOnSingleStep(
+            gameId, kind, actionFields, stepSigner, stepProofs);
+
+        (, , , , , , , , , , ,
+         KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
+        assertEq(uint8(status),
+            uint8(KnomosisFaultProofGame.GameStatus.SequencerWon),
+            "honest sequencer must win the multi-round game");
+        // The 1.2 fix across a disagree-reassigned high: the lock clears
+        // under the DISPUTED index (4), not the final high.idx (1).
+        assertEq(game.activeGameForLogIndex(4), 0,
+            "lock must clear under disputedLogIndex after multi-round play");
+        assertTrue(mockStateRootSubmission.clearDisputedCalled(),
+            "sequencer win must clear the disputed root");
+        // The sequencer claims the winner's share (pull-payment).
+        assertGt(game.pendingWithdrawals(sequencer), 0,
+            "winner credited after the multi-round settlement");
+    }
+
+    /// @notice Closes the audit-21 §4 extended-coverage follow-up (b): a
+    ///         RE-CHALLENGE of the same disputed log index succeeds after
+    ///         a prior game settles — exercising the 1.2 lock-key fix
+    ///         across a `disagree`-reassigned `high`.  Before the fix,
+    ///         `_settle` cleared `activeGameForLogIndex[g.high.idx]`
+    ///         (a midpoint after any disagree), leaving the disputed
+    ///         index pinned to the finished game forever, so this second
+    ///         `initiateChallenge` reverted `GameAlreadyExists`.
+    function test_rechallenge_succeeds_after_settled_game_with_reassigned_high()
+        public
+    {
+        // Open a wide dispute at the pre-seeded index 64 (range [0, 64]).
+        vm.prank(challenger);
+        uint256 firstGameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            64, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        // One full round with a DISAGREE: high is reassigned to the
+        // midpoint (32) — the exact shape under which the pre-fix clear
+        // keyed on `g.high.idx` zeroed the wrong slot.  The midpoint
+        // claim (0xAD) is arbitrary: this game settles by timeout, not
+        // by terminal step, so its truth is irrelevant.
+        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.prank(sequencer);
+        game.submitMidpoint(firstGameId, bytes32(uint256(0xAD)));
+        vm.roll(block.number + MIN_STEP_INTERVAL + 1);
+        vm.prank(challenger);
+        game.respondToMidpoint(firstGameId, false);
+
+        // Settle by timeout (the sequencer's turn after the response;
+        // it stalls past the deadline and loses).
+        vm.roll(block.number + BISECTION_TIMEOUT + 1);
+        vm.prank(challenger);
+        game.claimTimeout(firstGameId);
+        (, , , , , , , , , , ,
+         KnomosisFaultProofGame.GameStatus status, , ,) =
+            game.games(firstGameId);
+        assertEq(uint8(status),
+            uint8(KnomosisFaultProofGame.GameStatus.TimedOutSequencer),
+            "first game must settle by sequencer timeout");
+
+        // THE 1.2 REGRESSION ASSERTION: the disputed index is unlocked
+        // (cleared under `disputedLogIndex`, not the reassigned
+        // `high.idx`), so a fresh challenge on the SAME root opens fine.
+        assertEq(game.activeGameForLogIndex(64), 0,
+            "settled game must release the disputed-index lock");
+        vm.prank(challenger);
+        uint256 secondGameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            64, bytes32(uint256(0xC2)), LOW_ROOT, 0);
+        assertEq(secondGameId, firstGameId + 1,
+            "re-challenge must open a NEW game");
+        assertEq(game.activeGameForLogIndex(64), secondGameId,
+            "the new game must own the disputed-index lock");
+    }
+
     /* -------- claimTimeout -------- */
 
     function test_claimTimeout_after_window_settles_against_sequencer() public {

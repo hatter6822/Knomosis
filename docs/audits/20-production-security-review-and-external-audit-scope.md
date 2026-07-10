@@ -197,14 +197,30 @@ contracts (§4.1) and the deployment-discipline items above.
       (companion: P2 test-expansion increment).
 - [x] **Fuzz the untrusted-input boundaries** (§4.3) — the host frame
       parser (`read_frame_never_panics_on_arbitrary_input` + truncation /
-      oversize properties, `knomosis-host/tests/property.rs`), the L1-log
-      ABI decoder (`decode_event`, `knomosis-l1-ingest/tests/property.rs`),
-      and the indexer state reconstruction
-      (`indexer_apply_arbitrary_events_never_panics`,
+      oversize properties, PLUS `read_request_never_panics_on_arbitrary_input`
+      and `read_request_hinted_path_never_panics` which fuzz the full
+      Rung-1 negotiated + hinted request reader `handle_connection`
+      actually calls — not just the v1 body path,
+      `knomosis-host/tests/property.rs`), the L1-log ABI decoder
+      (`decode_event_never_panics_on_arbitrary_input` PLUS
+      `decode_event_with_valid_topic0_never_panics_on_adversarial_payload`,
+      which seeds every real event-signature `topic0` so the deeper
+      per-event ABI decode is driven with boundary / wrong-arity payloads
+      — the deposit paths that credit L2 balances,
+      `knomosis-l1-ingest/tests/property.rs`), and the indexer state
+      reconstruction (`indexer_apply_arbitrary_events_never_panics`,
       `restart_preserves_state`,
       `indexer_apply_adversarial_amounts_never_panics`,
       `knomosis-indexer/tests/property.rs`) are all proptest-fuzzed for
-      never-panics; the observer has a chaos suite (RH-G).
+      never-panics; the observer has a chaos suite (RH-G).  A
+      coverage-guided **libFuzzer lane** now complements the proptests:
+      the `knomosis-fuzz` crate (`runtime/fuzz/`) drives `cargo-fuzz` at
+      the host frame reader, the l1-ingest ABI decoder, and the indexer
+      decoder — a separate nightly workspace (`exclude`d from the pinned
+      stable `1.83` runtime workspace) driven by the dedicated
+      `ci-fuzz.yml` lane (`fuzz-build` API-drift guard on every PR + a
+      bounded per-target `fuzz-smoke`, longer on a weekly schedule,
+      uploading any crash/OOM/hang reproducer).
 - [x] **Economic-incentive analysis** (§4.5) — shipped:
       `docs/economic_incentive_analysis.md` (+ the
       `scripts/economic_simulation.py` IC-1..IC-6 harness).

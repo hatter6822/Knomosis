@@ -267,7 +267,7 @@ proptest! {
             // Apply to indexer first.  If it accepts, mirror the
             // change in the reference; if it rejects, leave the
             // reference alone (mirroring the indexer's reject).
-            if indexer.apply_batch(seq, &[event.clone()]).is_ok() {
+            if indexer.apply_batch(seq, std::slice::from_ref(event)).is_ok() {
                 let _ = apply_to_reference(&mut reference, event);
             }
         }
@@ -291,7 +291,7 @@ proptest! {
         let mut last_cursor = 0u64;
         for (i, event) in events.iter().enumerate() {
             let seq = (i + 1) as u64;
-            match indexer.apply_batch(seq, &[event.clone()]) {
+            match indexer.apply_batch(seq, std::slice::from_ref(event)) {
                 Ok(()) => {
                     prop_assert!(indexer.cursor() >= last_cursor);
                     last_cursor = indexer.cursor();
@@ -318,7 +318,7 @@ proptest! {
             let mut indexer = Indexer::open(&storage).unwrap();
             for (i, event) in events.iter().enumerate() {
                 let seq = (i + 1) as u64;
-                if indexer.apply_batch(seq, &[event.clone()]).is_ok() {
+                if indexer.apply_batch(seq, std::slice::from_ref(event)).is_ok() {
                     applied = seq;
                 }
                 last_seq = seq;
@@ -382,7 +382,7 @@ proptest! {
         for (i, event) in events.iter().enumerate() {
             let seq = (i + 1) as u64;
             // Load-bearing assertion: no panic on ANY tag / value.
-            let _ = indexer.apply_batch(seq, &[event.clone()]);
+            let _ = indexer.apply_batch(seq, std::slice::from_ref(event));
             // The cursor must never regress, whatever the verdict.
             prop_assert!(indexer.cursor() >= last_cursor);
             last_cursor = indexer.cursor();
@@ -404,7 +404,7 @@ proptest! {
         for (i, event) in events.iter().enumerate() {
             let seq = (i + 1) as u64;
             // No panic on overflow-adjacent amounts.
-            let _ = indexer.apply_batch(seq, &[event.clone()]);
+            let _ = indexer.apply_batch(seq, std::slice::from_ref(event));
         }
         // The balance view must remain queryable (no corruption) for
         // every actor/resource the stream could have touched.
