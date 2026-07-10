@@ -233,6 +233,19 @@ _path_writable_or_creatable() {
   [ -w "${d}" ]
 }
 
+# Match a `--version` line for an EXACT version token, not an arbitrary
+# substring.  The pinned version must be delimited by a non-version character
+# (or a string edge) on BOTH sides, so a future "1.7.10" / "0.8.200" release is
+# NOT accepted as the pinned "1.7.1" / "0.8.20".  Dots in the pin are escaped so
+# they match literally (not as the regex "any char").  Handles both observed
+# forge formats ("1.7.1-stable" and "...-v1.7.1") and the solc format.  Reads
+# the version output on stdin; returns grep's exit status.
+_version_token_match() {
+  local ver_re
+  ver_re="$(printf '%s' "$1" | sed 's/[.]/\\./g')"
+  grep -Eq "(^|[^0-9.])${ver_re}([^0-9]|\$)"
+}
+
 # -------- Persist toolchain PATH (the anti-drift core) --------
 #
 # The toolchains are installed above, but on a LOCAL checkout nothing puts
@@ -349,7 +362,7 @@ do_solidity_install() {
 
   # ---- Foundry fast-path check ----
   if [ -x "${foundry_install_dir}/forge" ] && \
-     "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION#v}"; then
+     "${foundry_install_dir}/forge" --version 2>/dev/null | _version_token_match "${FOUNDRY_VERSION#v}"; then
     log_elapsed "Foundry ${FOUNDRY_VERSION} is already installed (fast-path)"
   else
     log_elapsed "installing Foundry ${FOUNDRY_VERSION}"
@@ -440,14 +453,16 @@ do_solidity_install() {
 
   # ---- Verify the freshly-installed toolchain runs + is the pin ----
   # `forge --version` embeds the release tag but the exact format varies by
-  # build (e.g. "...-v1.7.1" vs "1.7.1-stable"), so grep the v-stripped version
-  # — a substring of every format — consistent with the solc check below.
-  if ! "${foundry_install_dir}/forge" --version 2>/dev/null | grep -q "${FOUNDRY_VERSION#v}"; then
+  # build (e.g. "...-v1.7.1" vs "1.7.1-stable"), so match the v-stripped version
+  # as a bounded TOKEN (`_version_token_match`) rather than a bare substring —
+  # otherwise a future "1.7.10" would satisfy the "1.7.1" pin.  The solc check
+  # below uses the same helper for the same reason ("0.8.20" vs "0.8.200").
+  if ! "${foundry_install_dir}/forge" --version 2>/dev/null | _version_token_match "${FOUNDRY_VERSION#v}"; then
     echo "error: forge at ${foundry_install_dir} is not the pinned ${FOUNDRY_VERSION} (or fails to run)" >&2
     return 1
   fi
   if [ -x "${solc_install_path}" ] \
-     && ! "${solc_install_path}" --version 2>/dev/null | grep -q "${SOLC_VERSION#v}"; then
+     && ! "${solc_install_path}" --version 2>/dev/null | _version_token_match "${SOLC_VERSION#v}"; then
     echo "error: solc at ${solc_install_path} is not ${SOLC_VERSION} (or fails to run)" >&2
     return 1
   fi

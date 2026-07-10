@@ -329,6 +329,24 @@ contract DeploySepolia is Script {
                 cfg.treasury != PLACEHOLDER_TREASURY,
                 "KNOMOSIS_TREASURY is the placeholder (unset) on a real broadcast"
             );
+            // A zero core actor slips past the sentinels above (they are all
+            // non-zero), yet reverts a constructor mid-broadcast — attestor via
+            // KnomosisBridge `NotAttestor`, sequencer via KnomosisSequencerStake
+            // `ZeroAddress`, treasury via KnomosisFaultProofGame `ZeroAddress` —
+            // after earlier contracts are already live.  Reject them here so the
+            // typo costs zero gas.
+            require(
+                cfg.attestor != address(0),
+                "KNOMOSIS_ATTESTOR is the zero address on a real broadcast"
+            );
+            require(
+                cfg.sequencer != address(0),
+                "KNOMOSIS_SEQUENCER is the zero address on a real broadcast"
+            );
+            require(
+                cfg.treasury != address(0),
+                "KNOMOSIS_TREASURY is the zero address on a real broadcast"
+            );
             // The adjudicator committee must be the operator's EXPLICIT list, not
             // the `base+i` derivation — which is keyless test-only even for a
             // non-placeholder base, so a derived committee makes disputes
@@ -363,6 +381,15 @@ contract DeploySepolia is Script {
                 require(
                     cfg.boldCircuitBreaker != cfg.boldAdmin,
                     "KNOMOSIS_BOLD_CIRCUIT_BREAKER and KNOMOSIS_BOLD_ADMIN must be distinct on a real BOLD broadcast"
+                );
+                // Mirror the bridge's `BoldTvlCapExceedsGlobal`: the per-BOLD
+                // sub-cap must not exceed the global TVL ceiling.  Both are
+                // uint256 (no width narrowing), so compare the cfg values
+                // directly.  `boldTvlCap` defaults to `tvlCap` when unset, so an
+                // omitted knob passes (equal).
+                require(
+                    cfg.boldTvlCap <= cfg.tvlCap,
+                    "KNOMOSIS_BOLD_TVL_CAP exceeds KNOMOSIS_TVL_CAP (bridge BoldTvlCapExceedsGlobal) on a real BOLD broadcast"
                 );
             }
             // functionalAmm (mirrors `_deployAll`): the multisig is deployed only
@@ -399,6 +426,120 @@ contract DeploySepolia is Script {
             _requireEnvFits("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL", type(uint64).max);
             _requireEnvFits("KNOMOSIS_STATE_ROOT_BOND", type(uint128).max);
             _requireEnvFits("KNOMOSIS_MIN_CHALLENGE_BOND", type(uint128).max);
+
+            // (3) Env values that FIT their field width but violate a downstream
+            //     constructor bound.  Each reverts a specific constructor
+            //     mid-broadcast — after earlier contracts are already live —
+            //     leaving an orphaned partial deployment.  Mirror the bounds here
+            //     so a value-bearing typo fails with zero gas.  The width checks
+            //     above ran first, so every `cfg.*` below equals its true env
+            //     value (nothing wrapped).  The `5000` / `8000` / `10000`
+            //     literals mirror KnomosisBridge.MAX_FEE_BPS_CAP /
+            //     MAX_AMM_SEED_RATIO_BPS and KnomosisSequencerStake's 10_000
+            //     slash ceiling — a contract `public constant` is not reachable
+            //     as `Contract.CONST` from a script, so the values are inlined
+            //     with this cross-reference.
+            //   Bridge economic bounds:
+            require(
+                cfg.minFeeBps <= cfg.maxFeeBps,
+                "KNOMOSIS_MIN_FEE_BPS exceeds KNOMOSIS_MAX_FEE_BPS (bridge MinFeeBpsExceedsMax) on a real broadcast"
+            );
+            require(
+                cfg.maxFeeBps <= 5000,
+                "KNOMOSIS_MAX_FEE_BPS exceeds MAX_FEE_BPS_CAP=5000 (bridge MaxFeeBpsExceedsCap) on a real broadcast"
+            );
+            require(
+                cfg.ammSeedRatioBps <= 8000,
+                "KNOMOSIS_AMM_SEED_RATIO_BPS exceeds MAX_AMM_SEED_RATIO_BPS=8000 (bridge AmmSeedRatioExceedsMax) on a real broadcast"
+            );
+            require(
+                cfg.weiPerBudgetUnitEth > 0,
+                "KNOMOSIS_WEI_PER_BUDGET_UNIT_ETH is zero (bridge WeiPerBudgetUnitTooSmall) on a real broadcast"
+            );
+            //   Bridge window topology (dispute window must dominate; neither the
+            //   dispute window nor the attestation-staleness window may be zero):
+            require(
+                cfg.disputeWindowBlocks >= cfg.maxRedemptionWindowBlocks,
+                "KNOMOSIS_DISPUTE_WINDOW < KNOMOSIS_MAX_REDEMPTION (bridge InvariantViolation_DisputeWindowVsRedemption) on a real broadcast"
+            );
+            require(
+                cfg.disputeWindowBlocks > 0,
+                "KNOMOSIS_DISPUTE_WINDOW is zero (bridge ZeroDisputeWindow) on a real broadcast"
+            );
+            require(
+                cfg.maxAttestationStaleBlocks > 0,
+                "KNOMOSIS_ATTEST_STALE is zero (bridge ZeroMaxAttestationStaleBlocks) on a real broadcast"
+            );
+            //   Sequencer-stake bound:
+            require(
+                cfg.slashRatioBps <= 10_000,
+                "KNOMOSIS_SLASH_BPS exceeds 10000 (stake SlashRatioOutOfRange) on a real broadcast"
+            );
+            //   State-root-submission bounds:
+            require(
+                cfg.stateRootBond > 0,
+                "KNOMOSIS_STATE_ROOT_BOND is zero (state-root InvalidBond) on a real broadcast"
+            );
+            require(
+                cfg.srDisputeWindow > 0,
+                "KNOMOSIS_STATE_ROOT_DISPUTE_WINDOW is zero (state-root WindowTooShort) on a real broadcast"
+            );
+            require(
+                cfg.srDisputeWindow >= cfg.withdrawalFinalisationWindow,
+                "KNOMOSIS_STATE_ROOT_DISPUTE_WINDOW < KNOMOSIS_WITHDRAWAL_WINDOW_BLOCKS (state-root WindowTooShort) on a real broadcast"
+            );
+            require(
+                cfg.minSubmissionInterval > 0,
+                "KNOMOSIS_MIN_SUBMISSION_INTERVAL is zero (state-root SubmissionTooFrequent) on a real broadcast"
+            );
+            require(
+                cfg.maxOutstandingRoots > 0,
+                "KNOMOSIS_MAX_OUTSTANDING_ROOTS is zero (state-root TooManyOutstandingRoots) on a real broadcast"
+            );
+            //   BOLD-leg budget-unit floor (only consulted when BOLD is enabled):
+            if (cfg.boldToken != address(0)) {
+                require(
+                    cfg.weiPerBudgetUnitBold > 0,
+                    "KNOMOSIS_WEI_PER_BUDGET_UNIT_BOLD is zero (bridge WeiPerBudgetUnitTooSmall) on a real BOLD broadcast"
+                );
+            }
+
+            // (4) The manifest output path must live under `deployments/`, the
+            //     only directory `foundry.toml` `fs_permissions` grants
+            //     `vm.writeJson` write access to.  An absolute or escaping path
+            //     would broadcast the whole deploy and THEN fail at
+            //     `_writeManifest` (after `vm.stopBroadcast()`), leaving live
+            //     contracts with no manifest.  Reject it before any broadcast.
+            _requireManifestUnderDeployments(cfg.outPath);
+        }
+    }
+
+    /// @notice Revert unless `outPath` is a relative path under the
+    ///         `deployments/` directory that `foundry.toml` `fs_permissions`
+    ///         grants `vm.writeJson` write access to.  Rejects an absolute path
+    ///         (leading `/`), a path not prefixed with `deployments/`, and any
+    ///         `..` path-escape.  Guards the direct `make deploy-sepolia` path so
+    ///         a mis-set `KNOMOSIS_MANIFEST_OUT` fails BEFORE broadcasting rather
+    ///         than after `vm.stopBroadcast()` when the manifest write reverts.
+    function _requireManifestUnderDeployments(string memory outPath) internal pure {
+        bytes memory p = bytes(outPath);
+        bytes memory prefix = bytes("deployments/");
+        require(
+            p.length > prefix.length,
+            "KNOMOSIS_MANIFEST_OUT must be a relative path under deployments/ (foundry.toml fs_permissions)"
+        );
+        for (uint256 i = 0; i < prefix.length; ++i) {
+            require(
+                p[i] == prefix[i],
+                "KNOMOSIS_MANIFEST_OUT must be under deployments/ (foundry.toml fs_permissions restricts vm.writeJson)"
+            );
+        }
+        // Reject any "../" path-escape out of the permitted directory.
+        for (uint256 i = 0; i + 1 < p.length; ++i) {
+            require(
+                !(p[i] == 0x2e && p[i + 1] == 0x2e),
+                "KNOMOSIS_MANIFEST_OUT must not contain '..' (path escape out of deployments/)"
+            );
         }
     }
 

@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1d21265b60600dea33b3c2d60e9565e057ee934deedcc42c2cd707f307ecadf0"
+    "source_digest": "eee8410920ba6d1e25c8efecb07ad3a90344aebef8e3a950ef12c5bbcf82ffd3"
   },
   "summary": {
     "module_count": 87,
-    "declaration_count": 1925
+    "declaration_count": 1926
   },
   "modules": [
     {
@@ -71,7 +71,7 @@
     {
       "module": "DeploySepolia.s",
       "path": "solidity/script/DeploySepolia.s.sol",
-      "declaration_count": 12,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "contract",
@@ -119,37 +119,44 @@
             "_deriveSet",
             "_networkName",
             "_requireDistinctNonZero",
-            "_requireEnvFits"
+            "_requireEnvFits",
+            "_requireManifestUnderDeployments"
           ]
         },
         {
           "kind": "function",
+          "name": "_requireManifestUnderDeployments",
+          "line": 523,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "_requireEnvFits",
-          "line": 410,
+          "line": 551,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deriveSet",
-          "line": 425,
+          "line": 566,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireDistinctNonZero",
-          "line": 448,
+          "line": 589,
           "called": []
         },
         {
           "kind": "function",
           "name": "_networkName",
-          "line": 457,
+          "line": 598,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deployAll",
-          "line": 472,
+          "line": 613,
           "called": [
             "DeployConfig",
             "Deployed",
@@ -178,7 +185,7 @@
         {
           "kind": "function",
           "name": "_logSummary",
-          "line": 650,
+          "line": 791,
           "called": [
             "Deployed"
           ]
@@ -186,7 +193,7 @@
         {
           "kind": "function",
           "name": "_writeManifest",
-          "line": 668,
+          "line": 809,
           "called": [
             "DeployConfig",
             "Deployed"

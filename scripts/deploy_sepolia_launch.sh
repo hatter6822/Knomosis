@@ -180,6 +180,28 @@ case "${KNOMOSIS_BOLD_TOKEN}" in
   ETH-only deploy path." ;;
 esac
 
+# The addresses manifest is written by DeploySepolia's `vm.writeJson`, which
+# `solidity/foundry.toml` `fs_permissions` restricts to the `./deployments`
+# directory.  An absolute KNOMOSIS_MANIFEST_OUT (e.g. /tmp/sepolia.json) — or a
+# relative one that escapes via `..` — would let the broadcast deploy every
+# contract and THEN revert at manifest-write, leaving live contracts with no
+# manifest and this wrapper dying before stack bring-up.  Require a relative path
+# under `deployments/` with no `..`, mirroring DeploySepolia's pre-broadcast gate,
+# so a mis-set path fails HERE before any test-ETH is spent.
+if [ -n "${KNOMOSIS_MANIFEST_OUT:-}" ]; then
+  case "${KNOMOSIS_MANIFEST_OUT}" in
+    deployments/*..* | *../*)
+      die "KNOMOSIS_MANIFEST_OUT ('${KNOMOSIS_MANIFEST_OUT}') must not contain '..'
+  (path escape).  vm.writeJson can only write under solidity/deployments/." ;;
+    deployments/*) : ;;  # ok: relative, under the permitted directory
+    *)
+      die "KNOMOSIS_MANIFEST_OUT ('${KNOMOSIS_MANIFEST_OUT}') must be a RELATIVE path
+  under deployments/ (e.g. deployments/sepolia.json).  Foundry's fs_permissions
+  grants vm.writeJson write access only to solidity/deployments/, so an absolute
+  or out-of-tree path would broadcast the deploy and then fail at manifest-write." ;;
+  esac
+fi
+
 log "env validated — value-bearing BOLD+AMM deploy"
 log "  deployer:   ${KNOMOSIS_DEPLOYER_ACCOUNT:-<raw PRIVATE_KEY>}"
 log "  bold token: ${KNOMOSIS_BOLD_TOKEN}"
@@ -280,15 +302,12 @@ log "broadcasting to Sepolia + verifying sources on Etherscan…"
 ( cd "${ROOT}/solidity" && make deploy-sepolia ) \
   || die "deploy FAILED during broadcast/verify — inspect the forge output above."
 
-# Resolve the manifest path the way forge does: DeploySepolia writes an ABSOLUTE
-# KNOMOSIS_MANIFEST_OUT as-is, and a relative one under the solidity project root.
-# Prepending ${ROOT}/solidity/ unconditionally would mis-report an absolute path
-# and point --with-l2-stack at a file that was never written.
+# Resolve the manifest path forge wrote.  The env guard above (and DeploySepolia's
+# pre-broadcast gate) constrain KNOMOSIS_MANIFEST_OUT to a relative path under
+# solidity/deployments/ — the only directory vm.writeJson may write to — so the
+# written file is always under the solidity project root.
 _manifest_out="${KNOMOSIS_MANIFEST_OUT:-deployments/sepolia.json}"
-case "${_manifest_out}" in
-  /*) MANIFEST="${_manifest_out}" ;;
-  *)  MANIFEST="${ROOT}/solidity/${_manifest_out}" ;;
-esac
+MANIFEST="${ROOT}/solidity/${_manifest_out}"
 log "deploy COMPLETE."
 if [ -f "${MANIFEST}" ]; then
   log "addresses manifest: ${MANIFEST}"

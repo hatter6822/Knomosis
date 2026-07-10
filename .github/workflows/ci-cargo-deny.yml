@@ -100,14 +100,17 @@ jobs:
       - name: Install cargo-deny
         # Built with a recent `stable` (NOT the project's pinned 1.83, which
         # cargo-deny 0.19's MSRV exceeds) — cargo-deny is a standalone tool, so
-        # its build toolchain is independent of the workspace's.  Pinned to
-        # `^0.20` (the latest stable line): 0.16.x can no longer load the RustSec
-        # advisory DB (its bundled `cvss` cannot parse the CVSS-4.0 advisories now
-        # present upstream); 0.19+ parses them.  `--locked` for a reproducible
-        # tool build.
+        # its build toolchain is independent of the workspace's.  Pinned to the
+        # EXACT `=0.20.2` (the latest 0.20.x) for a reproducible tool build — a
+        # bare `^0.20` would silently adopt a future 0.20.x with different lint
+        # behaviour or a different transitive build graph on a clean CI run,
+        # matching the exact-pin discipline the fuzz lane uses for cargo-fuzz.
+        # (0.16.x can no longer load the RustSec advisory DB — its bundled `cvss`
+        # cannot parse the CVSS-4.0 advisories now upstream; 0.19+ parses them.)
+        # Bump this version intentionally.  `--locked` pins the tool's own deps.
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
-          cargo +stable install cargo-deny --locked --version "^0.20"
+          cargo +stable install cargo-deny --locked --version "=0.20.2"
 
       - name: cargo deny check (runtime workspace)
         run: cargo deny --manifest-path Cargo.toml check
