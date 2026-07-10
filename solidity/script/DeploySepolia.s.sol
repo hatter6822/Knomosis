@@ -5,6 +5,7 @@
 pragma solidity 0.8.20;
 
 import {Script} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {console2 as console} from "forge-std/console2.sol";
 
 import {KnomosisIdentityRegistry} from "src/contracts/KnomosisIdentityRegistry.sol";
@@ -288,6 +289,95 @@ contract DeploySepolia is Script {
         cfg.network = _networkName(block.chainid);
         cfg.outPath = vm.envOr(
             "KNOMOSIS_MANIFEST_OUT", string.concat("deployments/", cfg.network, ".json")
+        );
+
+        // ------------------------------------------------------------------
+        // Real-broadcast safety gate.  On a live `forge script --broadcast`
+        // ONLY — `vm.isContext` keeps this inert during `forge test` and
+        // non-broadcast dry-runs, which legitimately run on the in-memory
+        // placeholder defaults — every production actor and every env integer
+        // must be EXPLICITLY and validly supplied.  This guards the documented
+        // direct `make deploy-sepolia` path, which bypasses the launch wrapper's
+        // env validation.  It runs here in `_readConfig`, BEFORE any
+        // `vm.startBroadcast()`, so a bad config reverts with ZERO gas instead
+        // of half-deploying real contracts that are then permanently unusable
+        // (placeholder actors have no controlled keys; a silently-narrowed knob
+        // deploys the wrong value).
+        if (vm.isContext(VmSafe.ForgeContext.ScriptBroadcast)) {
+            // (1) Production actors / committees must not be the in-memory
+            //     placeholder sentinels (an omitted env var).
+            require(
+                cfg.attestor != PLACEHOLDER_ATTESTOR,
+                "KNOMOSIS_ATTESTOR is the placeholder (unset) on a real broadcast"
+            );
+            require(
+                cfg.sequencer != PLACEHOLDER_SEQUENCER,
+                "KNOMOSIS_SEQUENCER is the placeholder (unset) on a real broadcast"
+            );
+            require(
+                cfg.treasury != PLACEHOLDER_TREASURY,
+                "KNOMOSIS_TREASURY is the placeholder (unset) on a real broadcast"
+            );
+            // The adjudicator set falls back to a `PLACEHOLDER_ADJUDICATOR`-based
+            // sequential derivation whose first entry is the sentinel itself.
+            require(
+                cfg.adjudicators[0] != PLACEHOLDER_ADJUDICATOR,
+                "KNOMOSIS_ADJUDICATORS is the placeholder committee (unset) on a real broadcast"
+            );
+            if (cfg.boldToken != address(0)) {
+                require(
+                    cfg.boldCircuitBreaker != PLACEHOLDER_BOLD_BREAKER,
+                    "KNOMOSIS_BOLD_CIRCUIT_BREAKER is the placeholder (unset) on a real BOLD broadcast"
+                );
+                require(
+                    cfg.boldAdmin != PLACEHOLDER_BOLD_ADMIN,
+                    "KNOMOSIS_BOLD_ADMIN is the placeholder (unset) on a real BOLD broadcast"
+                );
+            }
+            // functionalAmm (mirrors `_deployAll`): the multisig is deployed
+            // only when a BOLD leg + a non-zero seed ratio are both present.
+            if (cfg.boldToken != address(0) && cfg.ammSeedRatioBps > 0) {
+                require(
+                    cfg.ammMultisigSigners[0] != PLACEHOLDER_MULTISIG_SIGNER,
+                    "KNOMOSIS_AMM_MULTISIG_SIGNERS is the placeholder kill-switch set (unset) on a real broadcast"
+                );
+            }
+
+            // (2) Env integers must fit their on-chain field width.  An oversized
+            //     decimal silently narrows on the `uintN(...)` cast (e.g. a value
+            //     of 2^64 + 500 becomes `uint16(500)`) and would otherwise deploy
+            //     the wrong value with no error.  Reading the raw `uint256`
+            //     (default 0, which always fits) makes an unset knob a no-op.
+            _requireEnvFits("KNOMOSIS_AMM_SEED_RATIO_BPS", type(uint16).max);
+            _requireEnvFits("KNOMOSIS_MIN_FEE_BPS", type(uint16).max);
+            _requireEnvFits("KNOMOSIS_MAX_FEE_BPS", type(uint16).max);
+            _requireEnvFits("KNOMOSIS_DISPUTE_WINDOW", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_MAX_REDEMPTION", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_ATTEST_STALE", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_COOLDOWN", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_WEI_PER_BUDGET_UNIT_ETH", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_WEI_PER_BUDGET_UNIT_BOLD", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_STATE_ROOT_DISPUTE_WINDOW", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_MIN_SUBMISSION_INTERVAL", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_MAX_OUTSTANDING_ROOTS", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_WITHDRAWAL_WINDOW_BLOCKS", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_BISECTION_TIMEOUT_BLOCKS", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL", type(uint64).max);
+            _requireEnvFits("KNOMOSIS_STATE_ROOT_BOND", type(uint128).max);
+            _requireEnvFits("KNOMOSIS_MIN_CHALLENGE_BOND", type(uint128).max);
+        }
+    }
+
+    /// @notice On a real broadcast, revert if the decimal env value at `key`
+    ///         exceeds `max` — i.e. it would silently narrow when cast to its
+    ///         on-chain field width (`uint16` / `uint64` / `uint128`).  Reads the
+    ///         raw `uint256` with a `0` default (which always fits), so an unset
+    ///         knob is a no-op while a set-but-oversized one fails fast, before
+    ///         any broadcast.
+    function _requireEnvFits(string memory key, uint256 max) internal view {
+        require(
+            vm.envOr(key, uint256(0)) <= max,
+            string.concat(key, " exceeds its on-chain field width (would silently narrow)")
         );
     }
 

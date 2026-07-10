@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "24b5c5beef22583d041382f0b2dfb9643de994f224e0ccff0048097beea91755"
+    "source_digest": "700b1945d1c0f2e2942d21f4294c072f6a3cc658d3add8663b8c79dbc75ee7be"
   },
   "summary": {
     "module_count": 87,
-    "declaration_count": 1924
+    "declaration_count": 1925
   },
   "modules": [
     {
@@ -71,18 +71,18 @@
     {
       "module": "DeploySepolia.s",
       "path": "solidity/script/DeploySepolia.s.sol",
-      "declaration_count": 11,
+      "declaration_count": 12,
       "declarations": [
         {
           "kind": "contract",
           "name": "DeploySepolia",
-          "line": 69,
+          "line": 70,
           "called": []
         },
         {
           "kind": "struct",
           "name": "DeployConfig",
-          "line": 87,
+          "line": 88,
           "called": [
             "attestor",
             "disputeWindowBlocks",
@@ -93,7 +93,7 @@
         {
           "kind": "struct",
           "name": "Deployed",
-          "line": 131,
+          "line": 132,
           "called": [
             "bridge",
             "deploymentId",
@@ -104,7 +104,7 @@
         {
           "kind": "function",
           "name": "run",
-          "line": 146,
+          "line": 147,
           "called": [
             "_deployAll",
             "_readConfig"
@@ -113,36 +113,43 @@
         {
           "kind": "function",
           "name": "_readConfig",
-          "line": 158,
+          "line": 159,
           "called": [
             "DeployConfig",
             "_deriveSet",
             "_networkName",
-            "_requireDistinctNonZero"
+            "_requireDistinctNonZero",
+            "_requireEnvFits"
           ]
         },
         {
           "kind": "function",
+          "name": "_requireEnvFits",
+          "line": 376,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "_deriveSet",
-          "line": 301,
+          "line": 391,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireDistinctNonZero",
-          "line": 324,
+          "line": 414,
           "called": []
         },
         {
           "kind": "function",
           "name": "_networkName",
-          "line": 333,
+          "line": 423,
           "called": []
         },
         {
           "kind": "function",
           "name": "_deployAll",
-          "line": 348,
+          "line": 438,
           "called": [
             "DeployConfig",
             "Deployed",
@@ -171,7 +178,7 @@
         {
           "kind": "function",
           "name": "_logSummary",
-          "line": 526,
+          "line": 616,
           "called": [
             "Deployed"
           ]
@@ -179,7 +186,7 @@
         {
           "kind": "function",
           "name": "_writeManifest",
-          "line": 544,
+          "line": 634,
           "called": [
             "DeployConfig",
             "Deployed"
