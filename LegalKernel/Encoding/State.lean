@@ -541,51 +541,41 @@ def decodeMap {K V : Type} [Encodable K] [Encodable V]
 
 A balance map's VALUES are amounts and so ride the 17-byte
 `cbeTagAmount` head, while its KEYS are `ActorId`s and stay on the
-8-byte uint head.  `encodeSortedPairs` / `decodeMap` are homogeneous in
-the value codec (both sides go through `Encodable`), so the amount
-case gets its own pair of combinators rather than a widened `Encodable
-Nat` — widening that instance would drag every identifier, nonce, tag
-and length prefix to 17 bytes for no benefit. -/
+8-byte uint head.  `encodeSortedPairs` / `decodeMap` select the value
+codec by `Encodable` resolution, and `Amount` reduces to `Nat`, which
+`instEncodableNat` already owns for identifiers, nonces, tags and
+length prefixes — widening *that* instance would drag all of them to 17
+bytes for no benefit.
 
-/-- Encode a sorted `(key, amount)` pair list: `cbeTagMap` head, then
-    each key on the 8-byte uint head and each value on the 17-byte
-    amount head.  Mirrors `encodeSortedPairs` exactly but for the value
-    encoder. -/
-def encodeSortedAmountPairs (pairs : List (Nat × Nat)) : Stream :=
-  cborHeadEncode cbeTagMap pairs.length ++
-    pairs.foldr (fun p acc =>
-      Encodable.encode p.1 ++ encodeAmount p.2 ++ acc) []
+The value slot therefore travels wrapped in `Encoding.AmountValue`
+(`Encoding/Encodable.lean`), the one-field carrier whose `Encodable`
+instance routes to `encodeAmount` / `decodeAmount`.  Wrapping rather
+than duplicating is what keeps the EI.1.e machinery applicable
+verbatim: `encodeSortedPairs_injective_bounded` and
+`encodeSortedPairs_self_delim_split` are polymorphic in the value
+carrier, so amount-valued maps consume them unchanged. -/
 
-/-- Decode `n` `(key, amount)` pairs.  The amount-valued counterpart of
-    `decodeNPairs`. -/
-def decodeNAmountPairs :
-    Nat → Stream → Except DecodeError (List (Nat × Nat) × Stream)
-  | 0,     s => .ok ([], s)
-  | k + 1, s =>
-    match Encodable.decode (T := Nat) s with
-    | .ok (key, rest) =>
-      match decodeAmount rest with
-      | .ok (val, rest') =>
-        match decodeNAmountPairs k rest' with
-        | .ok (tl, rest'') => .ok ((key, val) :: tl, rest'')
-        | .error e         => .error e
-      | .error e => .error e
-    | .error e => .error e
+/-- Project a `(ActorId, Amount)` pair into the `(Nat, AmountValue)`
+    carrier the CBE map combinators encode: the key drops to `Nat` (the
+    8-byte uint head) and the value rises into `AmountValue` (the
+    17-byte amount head).
 
-/-- Decode an amount-valued CBE map, enforcing the same
-    strictly-ascending-key canonicality rule as `decodeMap`. -/
-def decodeAmountMap (s : Stream) :
-    Except DecodeError (List (Nat × Nat) × Stream) :=
-  match cborHeadDecode s cbeTagMap with
-  | .ok (count, rest) =>
-    match decodeNAmountPairs count rest with
-    | .ok (pairs, rest') =>
-      if keysStrictlyAscending compare pairs then
-        .ok (pairs, rest')
-      else
-        .error (.nonCanonical "map keys must be strictly ascending")
-    | .error e => .error e
-  | .error e => .error e
+    Named rather than inlined so the injectivity proofs can state the
+    `proj`-injectivity obligation of `List.map_inj_right` against a
+    single stable term. -/
+def balanceMapPair (p : ActorId × Amount) : Nat × AmountValue :=
+  (p.1.toNat, ⟨p.2⟩)
+
+/-- `balanceMapPair` is injective: the key projection `UInt64.toNat` is
+    injective and `AmountValue.mk` is a single-field constructor. -/
+theorem balanceMapPair_injective :
+    ∀ x y : ActorId × Amount, balanceMapPair x = balanceMapPair y → x = y := by
+  intro ⟨a₁, v₁⟩ ⟨a₂, v₂⟩ h
+  unfold balanceMapPair at h
+  simp only [Prod.mk.injEq, AmountValue.mk.injEq] at h
+  obtain ⟨hk, hv⟩ := h
+  have : a₁ = a₂ := UInt64.toNat_inj.mp hk
+  subst this; subst hv; rfl
 
 /-! ## State encoding
 
@@ -605,9 +595,11 @@ know where each inner map's encoding ends and the next outer pair
 begins. -/
 
 /-- Encode a `BalanceMap` (the inner per-resource `TreeMap ActorId
-    Amount`).  Produces a sorted-pair-list CBE map. -/
+    Amount`).  Produces a sorted-pair-list CBE map: each key on the
+    8-byte uint head, each balance on the 17-byte amount head (via the
+    `AmountValue` carrier `balanceMapPair` projects into). -/
 def BalanceMap.encode (bm : BalanceMap) : Stream :=
-  encodeSortedPairs (bm.toList.map (fun (a, v) => (a.toNat, v)))
+  encodeSortedPairs (bm.toList.map balanceMapPair)
 
 /-- Convenience helper: pack the inner-map bytes as a `ByteArray` so
     the outer encoder uses the `Encodable ByteArray` instance (CBE
@@ -641,12 +633,14 @@ def State.encode (s : State) : Stream :=
     check on the keys), rebuild via `TreeMap.ofList`.
 
     Each key is a CBE-decoded `Nat`; by the codec invariant it lies
-    in `[0, 2^64)` and converts to `UInt64` exactly via `toUInt64`. -/
+    in `[0, 2^64)` and converts to `UInt64` exactly via `toUInt64`.
+    Each value is read through `AmountValue`, i.e. off the 17-byte
+    amount head — the symmetric inverse of `balanceMapPair`. -/
 def BalanceMap.decode (s : Stream) : Except DecodeError (BalanceMap × Stream) :=
-  match decodeMap (K := Nat) (V := Nat) s with
+  match decodeMap (K := Nat) (V := AmountValue) s with
   | .ok (pairs, rest) =>
     let pairs' : List (ActorId × Amount) :=
-      pairs.map (fun (k, v) => (k.toUInt64, v))
+      pairs.map (fun (k, v) => (k.toUInt64, v.val))
     .ok (TreeMap.ofList pairs' compare, rest)
   | .error e => .error e
 

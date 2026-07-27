@@ -275,6 +275,80 @@ theorem encodeAmount_ne_encodeNat (n₁ n₂ : Nat) :
     encodeAmount n₁ ≠ Encodable.encode (T := Nat) n₂ :=
   cborAmountHeadEncode_ne_cborHeadEncode n₁ n₂
 
+/-! ### `AmountValue`: the amount codec as an `Encodable` carrier
+
+`encodeAmount` / `decodeAmount` are explicit functions, which is all a
+*positional* field site needs — the encoder writes the field, the
+decoder reads it, and neither goes through typeclass resolution.  The
+generic container combinators (`encodeSortedPairs`, `decodeNPairs`,
+`decodeMap` in `Encoding/State.lean`) do not have that luxury: they
+select their element codec by `Encodable` instance, so a map whose
+*value* slot is an amount cannot reach the wide head while `Amount`
+reduces to `Nat` and `instEncodableNat` owns that type.
+
+`AmountValue` is the one-field carrier that closes the gap.  Wrapping
+the value slot in it makes the container pick `instEncodableAmountValue`
+by resolution, so `encodeSortedPairs_injective_bounded` and
+`encodeSortedPairs_self_delim_split` apply to amount-valued maps
+verbatim — no amount-specific duplicates of the pair machinery.
+
+Unlike `BoundedNat` the wrapper carries no proof field: balances are
+`Nat` and arrive from the kernel without a bound in hand, so the range
+obligation stays where the rest of the codec keeps it — a per-element
+hypothesis on the injectivity theorems (`< 2^128` here rather than the
+`< 2^64` the narrow head demanded). -/
+
+/-- A value-carrying `Amount` in a slot whose codec is chosen by
+    typeclass resolution.  Selects the 17-byte amount head where the
+    bare `Nat` would select the 9-byte identifier head. -/
+structure AmountValue where
+  /-- The underlying amount. -/
+  val : Nat
+  deriving Repr, DecidableEq
+
+instance instEncodableAmountValue : Encodable AmountValue where
+  encode a := encodeAmount a.val
+  decode s :=
+    match decodeAmount s with
+    | .ok (n, rest) => .ok (⟨n⟩, rest)
+    | .error e => .error e
+
+/-- `AmountValue.mk` is injective — the structure has a single field.
+    Feeds the `proj`-injectivity obligation of `List.map_inj_right`
+    wherever a pair list is projected into the wrapper. -/
+theorem AmountValue.mk_injective {n₁ n₂ : Nat}
+    (h : AmountValue.mk n₁ = AmountValue.mk n₂) : n₁ = n₂ :=
+  congrArg AmountValue.val h
+
+/-- Bounded `AmountValue` round-trip (with suffix).  The bound is the
+    amount head's `< 2^128`, so it is not reachable by a wei-denominated
+    balance (the entire ETH supply is about `2^87` wei). -/
+theorem amountValue_roundtrip (a : AmountValue) (rest : Stream)
+    (h : a.val < 256 ^ 16) :
+    Encodable.decode (T := AmountValue) (Encodable.encode a ++ rest) = .ok (a, rest) := by
+  show (match decodeAmount (encodeAmount a.val ++ rest) with
+    | .ok (n, rest) => Except.ok ((⟨n⟩ : AmountValue), rest)
+    | .error e => Except.error e) = .ok (a, rest)
+  rw [amount_roundtrip a.val rest h]
+
+/-- Bounded `AmountValue` round-trip (empty suffix). -/
+theorem amountValue_roundtrip_empty (a : AmountValue) (h : a.val < 256 ^ 16) :
+    Encodable.decode (T := AmountValue) (Encodable.encode a) = .ok (a, []) := by
+  have := amountValue_roundtrip a [] h
+  simpa using this
+
+/-- Bounded `AmountValue` injectivity: in-range wrapped amounts with
+    equal encodings are equal. -/
+theorem amountValue_encode_injective (a₁ a₂ : AmountValue)
+    (h₁ : a₁.val < 256 ^ 16) (h₂ : a₂.val < 256 ^ 16)
+    (h : Encodable.encode (T := AmountValue) a₁ = Encodable.encode a₂) : a₁ = a₂ := by
+  have r₁ := amountValue_roundtrip_empty a₁ h₁
+  have r₂ := amountValue_roundtrip_empty a₂ h₂
+  rw [h] at r₁
+  have heq : (Except.ok (a₁, ([] : Stream)) : Except DecodeError (AmountValue × Stream))
+           = Except.ok (a₂, []) := r₁.symm.trans r₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
+
 /-! ### `BoundedNat`: a `Nat` with a static `< 2^64` bound
 
 Used by callers that need *unconditional* round-trip / injectivity

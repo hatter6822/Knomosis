@@ -681,8 +681,8 @@ def test_balanceMap_encode_injective_api : TestCase := {
   body := do
     let _proof : ∀ (bm₁ bm₂ : BalanceMap),
         bm₁.toList.length < 256 ^ 8 → bm₂.toList.length < 256 ^ 8 →
-        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 8) →
-        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 8) →
+        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 16) →
+        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 16) →
         BalanceMap.encode bm₁ = BalanceMap.encode bm₂ →
         bm₁.Equiv bm₂ :=
       BalanceMap.encode_injective
@@ -753,8 +753,8 @@ def test_balanceMap_encode_injective_to_equiv_api : TestCase := {
   body := do
     let _proof : ∀ (bm₁ bm₂ : BalanceMap),
         bm₁.toList.length < 256 ^ 8 → bm₂.toList.length < 256 ^ 8 →
-        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 8) →
-        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 8) →
+        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 16) →
+        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 16) →
         BalanceMap.encode bm₁ = BalanceMap.encode bm₂ →
         bm₁.Equiv bm₂ :=
       BalanceMap.encode_injective_to_equiv
@@ -769,8 +769,8 @@ def test_balanceMap_encodeAsBytes_injective_api : TestCase := {
   body := do
     let _proof : ∀ (bm₁ bm₂ : BalanceMap),
         bm₁.toList.length < 256 ^ 8 → bm₂.toList.length < 256 ^ 8 →
-        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 8) →
-        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 8) →
+        (∀ p ∈ bm₁.toList, p.2 < 256 ^ 16) →
+        (∀ p ∈ bm₂.toList, p.2 < 256 ^ 16) →
         BalanceMap.encodeAsBytes bm₁ = BalanceMap.encodeAsBytes bm₂ →
         bm₁.Equiv bm₂ :=
       BalanceMap.encodeAsBytes_injective
@@ -818,8 +818,8 @@ def test_state_encode_injective_api : TestCase := {
         s₂.balances.toList.length < 256 ^ 8 →
         (∀ p ∈ s₁.balances.toList, p.2.toList.length < 256 ^ 8) →
         (∀ p ∈ s₂.balances.toList, p.2.toList.length < 256 ^ 8) →
-        (∀ p ∈ s₁.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 8) →
-        (∀ p ∈ s₂.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 8) →
+        (∀ p ∈ s₁.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 16) →
+        (∀ p ∈ s₂.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 16) →
         (∀ p ∈ s₁.balances.toList, (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ s₂.balances.toList, (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8) →
         State.encode s₁ = State.encode s₂ →

@@ -23,8 +23,8 @@ This file ships:
   * **EI.2.a** `BalanceMap.encode_injective` — inner-map injectivity
     (equal bytes ⇒ extensional `TreeMap.Equiv` on the inner map).
     Specialises `encodeSortedPairs_injective_bounded` to `(Nat,
-    Amount)` and lifts the projected-key equality through
-    `UInt64.toNat_inj`.
+    AmountValue)` — the balance slot rides the 17-byte amount head —
+    and lifts the projected-key equality through `UInt64.toNat_inj`.
 
   * **EI.2.b** `BalanceMap.encode_injective_to_equiv` — explicit
     `Equiv`-shaped alias.  EI.2.a already concludes `Equiv` directly,
@@ -48,12 +48,18 @@ This file ships:
     `BalanceMap`s, which is strictly stronger than what byte-
     equality of the canonical encoding implies).
 
-All theorems are **conditional** on canonical-encoding bounds
-(`< 2^64`) on list lengths and `Nat`-valued payload sizes — the
-underlying `nat_encode_injective` / `byteArray_encode_injective`
-primitives are themselves conditional, because the CBE head's
-8-byte LE length field forces a `< 2^64` discipline.  Deployments
-enforce these bounds at the runtime boundary (§8.5).
+All theorems are **conditional** on canonical-encoding bounds, and
+the bound differs by slot.  List lengths, identifiers and payload
+sizes carry `< 2^64` — the CBE head's 8-byte LE length field forces
+that discipline, and `nat_encode_injective` /
+`byteArray_encode_injective` are conditional for the same reason.
+*Balances* carry `< 2^128`, because they ride the wider amount head
+(`amountValue_encode_injective`).  The distinction is not cosmetic:
+at `< 2^64` the balance hypothesis was reachable on ordinary states
+— a wei-denominated balance crosses `2^64` at ~18.45 ETH and
+balances accumulate — so it could not be discharged in practice, and
+`State.encode` was non-injective exactly there.  Deployments enforce
+these bounds at the runtime boundary (§8.5).
 
 **Visibility decision (OQ-EI-2 option (a)).**  `BalanceMap.encodeAsBytes`
 was promoted from `private` to non-private in the same PR so the
@@ -80,7 +86,8 @@ open LegalKernel.Authority
 
 The inner-map injectivity theorem.  Specialises
 `encodeSortedPairs_injective_bounded` (`Encoding/State.lean`) to
-the `(Nat, Amount)` pair-list shape of the inner balance map, then
+the `(Nat, AmountValue)` pair-list shape of the inner balance map
+(the shape `balanceMapPair` projects into), then
 lifts the projected-key equality (`a.toNat = b.toNat`) back to
 `a = b` via `UInt64.toNat_inj` and `List.map_inj_right`.
 
@@ -93,26 +100,6 @@ both (by `balanceMap_encode_deterministic_of_equiv`).  Injectivity
 in the other direction recovers exactly the same `Equiv`-shaped
 notion. -/
 
-/-- Internal helper: `(a.toNat, v) = (b.toNat, w)` implies `(a, v) =
-    (b, w)`.  The `Nat`-projection on the key is injective by
-    `UInt64.toNat_inj`; the value position is structurally equal.
-
-    Used as the `proj`-injectivity hypothesis fed to
-    `List.map_inj_right` in `BalanceMap.encode_injective`. -/
-private theorem balanceMap_pair_proj_injective :
-    ∀ x y : ActorId × Amount,
-      ((fun (p : ActorId × Amount) => (p.1.toNat, p.2)) x =
-       (fun (p : ActorId × Amount) => (p.1.toNat, p.2)) y) →
-      x = y := by
-  intro ⟨a₁, v₁⟩ ⟨a₂, v₂⟩ h
-  -- Beta-reduce the lambda applications via `simp` so that
-  -- `congrArg` can unify the projected positions.  After `simp`,
-  -- `h : a₁.toNat = a₂.toNat ∧ v₁ = v₂`.
-  simp only [Prod.mk.injEq] at h
-  obtain ⟨hk, hv⟩ := h
-  have : a₁ = a₂ := UInt64.toNat_inj.mp hk
-  subst this; subst hv; rfl
-
 /-- EI.2.a — `BalanceMap.encode_injective`.  Equal canonical encodings
     of two `BalanceMap`s imply extensional equality of the maps.
 
@@ -124,9 +111,14 @@ private theorem balanceMap_pair_proj_injective :
         and would let an attacker collide two distinct maps.
         Deployment-level constraint (§8.8.6).
       * `h_amt₁ / h_amt₂` — per-amount canonical-encoding bounds.
-        `Amount := Nat` with the same 8-byte LE discipline;
-        amounts ≥ `2^64` collide on the encoder.  Phase-5 runtime
-        gate (§8.5).
+        Balances ride the 17-byte amount head, so the bound is
+        `2^128`, not the `2^64` the identifier head imposes.  That
+        difference is the whole point of the wide head: a
+        wei-denominated balance crosses `2^64` at ~18.45 ETH and
+        balances accumulate, so the narrow bound was reachable on
+        ordinary states and this hypothesis was not discharge-able in
+        practice.  At `2^128` it is — the entire ETH supply is about
+        `2^87` wei.
 
     The actor-key side has no hypothesis: every `a : ActorId =
     UInt64` automatically satisfies `a.toNat < 2^64`.
@@ -140,22 +132,19 @@ theorem BalanceMap.encode_injective
     (bm₁ bm₂ : BalanceMap)
     (h_len₁ : bm₁.toList.length < 256 ^ 8)
     (h_len₂ : bm₂.toList.length < 256 ^ 8)
-    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 8)
-    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 8)
+    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 16)
+    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 16)
     (h : BalanceMap.encode bm₁ = BalanceMap.encode bm₂) :
     bm₁.Equiv bm₂ := by
   -- Step A: unfold the encoder to expose the pair-list shape.
+  -- `h : encodeSortedPairs (bm₁.toList.map balanceMapPair) =
+  --      encodeSortedPairs (bm₂.toList.map balanceMapPair)`.
   unfold BalanceMap.encode at h
-  -- `h : encodeSortedPairs (bm₁.toList.map proj) =
-  --      encodeSortedPairs (bm₂.toList.map proj)`
-  -- where `proj := fun p : ActorId × Amount => (p.1.toNat, p.2)`.
-  -- (Lean elaborates `fun (a, v) => (a.toNat, v)` as this anonymous
-  --  projection-pattern, definitionally equal to our explicit `proj`.)
-  -- Step B: apply `encodeSortedPairs_injective_bounded` at `(Nat, Amount)`.
-  -- Length-after-map equals original length.
-  have h_plen₁ : (bm₁.toList.map (fun (a, v) => (a.toNat, v))).length < 256 ^ 8 := by
+  -- Step B: apply `encodeSortedPairs_injective_bounded` at
+  -- `(Nat, AmountValue)`.  Length-after-map equals original length.
+  have h_plen₁ : (bm₁.toList.map balanceMapPair).length < 256 ^ 8 := by
     rw [List.length_map]; exact h_len₁
-  have h_plen₂ : (bm₂.toList.map (fun (a, v) => (a.toNat, v))).length < 256 ^ 8 := by
+  have h_plen₂ : (bm₂.toList.map balanceMapPair).length < 256 ^ 8 := by
     rw [List.length_map]; exact h_len₂
   -- Conversion lemma so we can lift `UInt64.toNat_lt` (which gives
   -- `< 2^64`) to the canonical `< 256^8` form expected by the
@@ -165,67 +154,64 @@ theorem BalanceMap.encode_injective
   -- Each `p` in the projected list comes from some `q ∈ bm.toList`
   -- with `p.1 = q.1.toNat`; `q.1 : ActorId = UInt64` so
   -- `q.1.toNat < 2^64` automatically.
-  have hK₁ : ∀ p ∈ bm₁.toList.map (fun (a, v) => (a.toNat, v)),
+  have hK₁ : ∀ p ∈ bm₁.toList.map balanceMapPair,
               ∀ (rest : Stream),
                 Encodable.decode (T := Nat) (Encodable.encode p.1 ++ rest) =
                   .ok (p.1, rest) := by
     intro p hp_mem rest
     obtain ⟨q, _, hq_eq⟩ := List.mem_map.mp hp_mem
     have hp_bound : p.1 < 256 ^ 8 := by
-      -- `(fun (a, v) => (a.toNat, v)) q = p` ⇒ `p.1 = q.1.toNat`.
-      have : p.1 = q.1.toNat := by rw [← hq_eq]
+      -- `balanceMapPair q = p` ⇒ `p.1 = q.1.toNat`.
+      have : p.1 = q.1.toNat := by rw [← hq_eq]; rfl
       rw [this, h_uint64_pow]; exact UInt64.toNat_lt q.1
     exact nat_roundtrip p.1 rest hp_bound
-  have hK₂ : ∀ p ∈ bm₂.toList.map (fun (a, v) => (a.toNat, v)),
+  have hK₂ : ∀ p ∈ bm₂.toList.map balanceMapPair,
               ∀ (rest : Stream),
                 Encodable.decode (T := Nat) (Encodable.encode p.1 ++ rest) =
                   .ok (p.1, rest) := by
     intro p hp_mem rest
     obtain ⟨q, _, hq_eq⟩ := List.mem_map.mp hp_mem
     have hp_bound : p.1 < 256 ^ 8 := by
-      have : p.1 = q.1.toNat := by rw [← hq_eq]
+      have : p.1 = q.1.toNat := by rw [← hq_eq]; rfl
       rw [this, h_uint64_pow]; exact UInt64.toNat_lt q.1
     exact nat_roundtrip p.1 rest hp_bound
-  -- Per-pair round-trip hypotheses for the value carrier (`Amount`
-  -- = `Nat`).  Each `p` in the projected list satisfies `p.2 = q.2`
-  -- for some `q ∈ bm.toList`; the amount bound `h_amt` supplies the
-  -- `< 2^64` requirement.
-  have hV₁ : ∀ p ∈ bm₁.toList.map (fun (a, v) => (a.toNat, v)),
+  -- Per-pair round-trip hypotheses for the value carrier
+  -- (`AmountValue`).  Each `p` in the projected list satisfies
+  -- `p.2.val = q.2` for some `q ∈ bm.toList`; the amount bound
+  -- `h_amt` supplies the `< 2^128` requirement.
+  have hV₁ : ∀ p ∈ bm₁.toList.map balanceMapPair,
               ∀ (rest : Stream),
-                Encodable.decode (T := Amount) (Encodable.encode p.2 ++ rest) =
+                Encodable.decode (T := AmountValue) (Encodable.encode p.2 ++ rest) =
                   .ok (p.2, rest) := by
     intro p hp_mem rest
     obtain ⟨q, hq_mem, hq_eq⟩ := List.mem_map.mp hp_mem
-    have hp_bound : p.2 < 256 ^ 8 := by
-      have : p.2 = q.2 := by rw [← hq_eq]
+    have hp_bound : p.2.val < 256 ^ 16 := by
+      have : p.2 = ⟨q.2⟩ := by rw [← hq_eq]; rfl
       rw [this]; exact h_amt₁ q hq_mem
-    exact nat_roundtrip p.2 rest hp_bound
-  have hV₂ : ∀ p ∈ bm₂.toList.map (fun (a, v) => (a.toNat, v)),
+    exact amountValue_roundtrip p.2 rest hp_bound
+  have hV₂ : ∀ p ∈ bm₂.toList.map balanceMapPair,
               ∀ (rest : Stream),
-                Encodable.decode (T := Amount) (Encodable.encode p.2 ++ rest) =
+                Encodable.decode (T := AmountValue) (Encodable.encode p.2 ++ rest) =
                   .ok (p.2, rest) := by
     intro p hp_mem rest
     obtain ⟨q, hq_mem, hq_eq⟩ := List.mem_map.mp hp_mem
-    have hp_bound : p.2 < 256 ^ 8 := by
-      have : p.2 = q.2 := by rw [← hq_eq]
+    have hp_bound : p.2.val < 256 ^ 16 := by
+      have : p.2 = ⟨q.2⟩ := by rw [← hq_eq]; rfl
       rw [this]; exact h_amt₂ q hq_mem
-    exact nat_roundtrip p.2 rest hp_bound
+    exact amountValue_roundtrip p.2 rest hp_bound
   -- Invoke `encodeSortedPairs_injective_bounded` to get pair-list equality.
-  have h_pairs : bm₁.toList.map (fun (a, v) => (a.toNat, v))
-                 = bm₂.toList.map (fun (a, v) => (a.toNat, v)) :=
+  have h_pairs : bm₁.toList.map balanceMapPair
+                 = bm₂.toList.map balanceMapPair :=
     encodeSortedPairs_injective_bounded
-      (bm₁.toList.map (fun (a, v) => (a.toNat, v)))
-      (bm₂.toList.map (fun (a, v) => (a.toNat, v)))
+      (bm₁.toList.map balanceMapPair)
+      (bm₂.toList.map balanceMapPair)
       h_plen₁ h_plen₂ hK₁ hV₁ hK₂ hV₂ h
-  -- Step C: lift pair-list equality through `proj` to `bm.toList` equality.
-  -- `proj := fun (a, v) => (a.toNat, v)` is injective via
-  -- `balanceMap_pair_proj_injective` (which uses `UInt64.toNat_inj`).
-  have h_toList : bm₁.toList = bm₂.toList := by
-    have h_pairs' :
-        bm₁.toList.map (fun p : ActorId × Amount => (p.1.toNat, p.2))
-        = bm₂.toList.map (fun p : ActorId × Amount => (p.1.toNat, p.2)) :=
-      h_pairs
-    exact (List.map_inj_right balanceMap_pair_proj_injective).mp h_pairs'
+  -- Step C: lift pair-list equality through the projection to
+  -- `bm.toList` equality.  `balanceMapPair` is injective via
+  -- `balanceMapPair_injective` (`UInt64.toNat_inj` on the key,
+  -- single-field constructor injectivity on the value).
+  have h_toList : bm₁.toList = bm₂.toList :=
+    (List.map_inj_right balanceMapPair_injective).mp h_pairs
   -- Step D: lift `toList` equality to `Equiv` via Std.
   exact Std.TreeMap.equiv_iff_toList_eq.mpr h_toList
 
@@ -245,8 +231,8 @@ theorem BalanceMap.encode_injective_to_equiv
     (bm₁ bm₂ : BalanceMap)
     (h_len₁ : bm₁.toList.length < 256 ^ 8)
     (h_len₂ : bm₂.toList.length < 256 ^ 8)
-    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 8)
-    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 8)
+    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 16)
+    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 16)
     (h : BalanceMap.encode bm₁ = BalanceMap.encode bm₂) :
     bm₁.Equiv bm₂ :=
   BalanceMap.encode_injective bm₁ bm₂ h_len₁ h_len₂ h_amt₁ h_amt₂ h
@@ -281,8 +267,8 @@ theorem BalanceMap.encodeAsBytes_injective
     (bm₁ bm₂ : BalanceMap)
     (h_len₁ : bm₁.toList.length < 256 ^ 8)
     (h_len₂ : bm₂.toList.length < 256 ^ 8)
-    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 8)
-    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 8)
+    (h_amt₁ : ∀ p ∈ bm₁.toList, p.2 < 256 ^ 16)
+    (h_amt₂ : ∀ p ∈ bm₂.toList, p.2 < 256 ^ 16)
     (h : BalanceMap.encodeAsBytes bm₁ = BalanceMap.encodeAsBytes bm₂) :
     bm₁.Equiv bm₂ := by
   -- Strip the framing wrapper.
@@ -469,9 +455,9 @@ theorem State.encode_injective
     (h_inner_len₁ : ∀ p ∈ s₁.balances.toList, p.2.toList.length < 256 ^ 8)
     (h_inner_len₂ : ∀ p ∈ s₂.balances.toList, p.2.toList.length < 256 ^ 8)
     (h_amt₁ : ∀ p ∈ s₁.balances.toList,
-              ∀ q ∈ p.2.toList, q.2 < 256 ^ 8)
+              ∀ q ∈ p.2.toList, q.2 < 256 ^ 16)
     (h_amt₂ : ∀ p ∈ s₂.balances.toList,
-              ∀ q ∈ p.2.toList, q.2 < 256 ^ 8)
+              ∀ q ∈ p.2.toList, q.2 < 256 ^ 16)
     (h_size₁ : ∀ p ∈ s₁.balances.toList,
                 (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8)
     (h_size₂ : ∀ p ∈ s₂.balances.toList,

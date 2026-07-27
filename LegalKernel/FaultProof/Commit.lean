@@ -622,8 +622,10 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   base_outer_len : es.base.balances.toList.length < 256 ^ 8
   /-- Each inner `BalanceMap` pair-list length fits. -/
   base_inner_len : ∀ p ∈ es.base.balances.toList, p.2.toList.length < 256 ^ 8
-  /-- Each inner amount value fits. -/
-  base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 8
+  /-- Each inner balance fits the 17-byte amount head's `2^128`
+      range (not the `2^64` an identifier field would impose — a
+      wei-denominated balance crosses `2^64` at ~18.45 ETH). -/
+  base_amt : ∀ p ∈ es.base.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 16
   /-- Each inner-map framed-bytes size fits. -/
   base_inner_size : ∀ p ∈ es.base.balances.toList,
                     (BalanceMap.encodeAsBytes p.2).size < 256 ^ 8
