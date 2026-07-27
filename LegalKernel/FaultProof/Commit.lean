@@ -651,8 +651,8 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
                  (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8
   /-- Each deposit record's fields fit. -/
   bs_cons_rec : ∀ p ∈ es.bridge.consumed.toList,
-                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-                p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8
+                p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
+                p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8
   /-- The bridge pending-map pair-list length fits. -/
   bs_pend_len : es.bridge.pending.toList.length < 256 ^ 8
   /-- Each per-withdrawal-id fits. -/
@@ -663,18 +663,18 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   /-- Each pending withdrawal's fields fit. -/
   bs_pend_wd : ∀ p ∈ es.bridge.pending.toList,
                p.2.resource.toNat < 256 ^ 8 ∧
-               p.2.amount < 256 ^ 8 ∧
+               p.2.amount < 256 ^ 16 ∧
                p.2.l2LogIndex < 256 ^ 8
   /-- The bridge nextWdId fits. -/
   bs_nxt : es.bridge.nextWdId < 256 ^ 8
   /-- GP.11.8: AMM ETH reserve fits. -/
-  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 8
+  bs_ammEth : es.bridge.ammReserveEth < 256 ^ 16
   /-- GP.11.8: AMM BOLD reserve fits. -/
-  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 8
+  bs_ammBold : es.bridge.ammReserveBold < 256 ^ 16
   /-- GP.11.8: BOLD TVL cap fits. -/
-  bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 8
+  bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 16
   /-- GP.11.8: BOLD total locked value fits. -/
-  bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 8
+  bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 16
 
 /-- EI.8.b — Composition theorem.  Under
     `CollisionFree hashBytes` plus the canonical-bounds invariants
@@ -833,11 +833,11 @@ theorem bridgeState_commit_includes_ammState (bs : Bridge.BridgeState) :
       Bridge.BridgeState.encodeConsumed bs ++
       Bridge.BridgeState.encodePending bs ++
       Encodable.encode (T := Nat) bs.nextWdId ++
-      Encodable.encode (T := Nat) bs.ammReserveEth ++
-      Encodable.encode (T := Nat) bs.ammReserveBold ++
+      encodeAmount bs.ammReserveEth ++
+      encodeAmount bs.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-      Encodable.encode (T := Nat) bs.boldTvlCap ++
-      Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+      encodeAmount bs.boldTvlCap ++
+      encodeAmount bs.boldTotalLockedValue ++
       Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0) := by
   rfl
 
@@ -854,11 +854,11 @@ def bridgeStateEncodeBase (bs : Bridge.BridgeState) : Encoding.Stream :=
     which is the structural reason the v1.2→v1.4 migration is
     deterministic (see `bridgeState_amm_genesis_suffix_const`). -/
 def bridgeStateEncodeAmmSuffix (bs : Bridge.BridgeState) : Encoding.Stream :=
-  Encodable.encode (T := Nat) bs.ammReserveEth ++
-  Encodable.encode (T := Nat) bs.ammReserveBold ++
+  encodeAmount bs.ammReserveEth ++
+  encodeAmount bs.ammReserveBold ++
   Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-  Encodable.encode (T := Nat) bs.boldTvlCap ++
-  Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+  encodeAmount bs.boldTvlCap ++
+  encodeAmount bs.boldTotalLockedValue ++
   Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0)
 
 /-- GP.11.8: the v1.4 encoding factorizes as a v1.2 base prefix
@@ -1005,19 +1005,19 @@ theorem commitBridgeState_reflects_ammDisabled
       Bridge.BridgeState.encodeConsumed bs₁ ++
       Bridge.BridgeState.encodePending bs₁ ++
       Encodable.encode (T := Nat) bs₁.nextWdId ++
-      Encodable.encode (T := Nat) bs₁.ammReserveEth ++
-      Encodable.encode (T := Nat) bs₁.ammReserveBold ++
+      encodeAmount bs₁.ammReserveEth ++
+      encodeAmount bs₁.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs₁.boldCircuitClosed then 1 else 0) ++
-      Encodable.encode (T := Nat) bs₁.boldTvlCap ++
-      Encodable.encode (T := Nat) bs₁.boldTotalLockedValue =
+      encodeAmount bs₁.boldTvlCap ++
+      encodeAmount bs₁.boldTotalLockedValue =
       Bridge.BridgeState.encodeConsumed bs₂ ++
       Bridge.BridgeState.encodePending bs₂ ++
       Encodable.encode (T := Nat) bs₂.nextWdId ++
-      Encodable.encode (T := Nat) bs₂.ammReserveEth ++
-      Encodable.encode (T := Nat) bs₂.ammReserveBold ++
+      encodeAmount bs₂.ammReserveEth ++
+      encodeAmount bs₂.ammReserveBold ++
       Encodable.encode (T := Nat) (if bs₂.boldCircuitClosed then 1 else 0) ++
-      Encodable.encode (T := Nat) bs₂.boldTvlCap ++
-      Encodable.encode (T := Nat) bs₂.boldTotalLockedValue := by
+      encodeAmount bs₂.boldTvlCap ++
+      encodeAmount bs₂.boldTotalLockedValue := by
     simp only [Bridge.BridgeState.encodeConsumed, Bridge.BridgeState.encodePending,
                h_consumed, h_pending, h_nextWdId, h_ammEth, h_ammBold,
                h_circuit, h_tvlCap, h_totalLocked]

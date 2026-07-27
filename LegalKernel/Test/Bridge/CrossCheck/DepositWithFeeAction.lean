@@ -264,8 +264,9 @@ def tests : List TestCase :=
     , body := do
         -- Anchor the Lean encoder to ground truth so the cross-stack
         -- equivalence is not circular: `.depositWithFee 0 1 2 1000
-        -- 500 10 42` must encode to the 72-byte sequence below (8 ×
-        -- 9-byte CBE uint heads, tag 19 first), identical to the
+        -- 500 10 42` must encode to the 88-byte sequence below (six
+        -- 9-byte CBE uint heads plus two 17-byte amount heads, tag 19
+        -- first), identical to the
         -- Rust `encode_deposit_with_fee_known_vector` test.
         let a : Action := .depositWithFee 0 1 2 1000 500 10 42
         let hex := encodeActionHex a
@@ -274,8 +275,10 @@ def tests : List TestCase :=
           "0x" ++
           "001300000000000000" ++ "000000000000000000" ++
           "000100000000000000" ++ "000200000000000000" ++
-          -- userAmount 1000 (0x03e8 LE) | poolAmount 500 (0x01f4 LE)
-          "00e803000000000000" ++ "00f401000000000000" ++
+          -- userAmount 1000 | poolAmount 500 — 17-byte amount heads
+          -- (tag 0x01 + 16 LE body bytes)
+          "01e8030000000000000000000000000000" ++
+          "01f4010000000000000000000000000000" ++
           -- budgetGrant 10 | depositId 42
           "000a00000000000000" ++ "002a00000000000000"
         if hex ≠ expected then

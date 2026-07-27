@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6d2566ab9018f889ffbc1c4de38a148b48e2fe15f9f8634cecacd6c332e10f70"
+    "source_digest": "77ce9ca29b4964146748f37ec963209e3ad1bdc7069938bdb5546a25409a9dd6"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5217
+    "declaration_count": 5220
   },
   "modules": [
     {
@@ -15676,7 +15676,7 @@
     {
       "module": "LegalKernel.Encoding.Action",
       "path": "LegalKernel/Encoding/Action.lean",
-      "declaration_count": 15,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "namespace",
@@ -15747,6 +15747,7 @@
             "deposit",
             "depositWithFee",
             "distributeOthers",
+            "encodeAmount",
             "freezeResource",
             "gasResource",
             "mint",
@@ -15781,10 +15782,21 @@
         },
         {
           "kind": "def",
+          "name": "Action.readAmountField",
+          "line": 336,
+          "called": [
+            "DecodeError",
+            "Stream",
+            "decodeAmount"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "Action.decode",
-          "line": 330,
+          "line": 342,
           "called": [
             "Action",
+            "Action.readAmountField",
             "Action.readNatField",
             "Action.readUInt64Field",
             "DecodeError",
@@ -15818,7 +15830,7 @@
         {
           "kind": "instance",
           "name": "instEncodableAction",
-          "line": 632,
+          "line": 644,
           "called": [
             "Action",
             "Action.decode",
@@ -15831,7 +15843,7 @@
         {
           "kind": "theorem",
           "name": "readUInt64Field_roundtrip",
-          "line": 644,
+          "line": 656,
           "called": [
             "Action.readUInt64Field",
             "Stream",
@@ -15841,7 +15853,7 @@
         {
           "kind": "theorem",
           "name": "readNatField_roundtrip",
-          "line": 668,
+          "line": 680,
           "called": [
             "Action.readNatField",
             "Stream",
@@ -15850,8 +15862,19 @@
         },
         {
           "kind": "theorem",
+          "name": "readAmountField_roundtrip",
+          "line": 688,
+          "called": [
+            "Action.readAmountField",
+            "Stream",
+            "amount_roundtrip",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "action_roundtrip",
-          "line": 678,
+          "line": 698,
           "called": [
             "Action",
             "Action.decode",
@@ -15870,6 +15893,7 @@
             "depositWithFee",
             "dispute_roundtrip",
             "distributeOthers",
+            "encodeAmount",
             "freezeResource",
             "gasResource",
             "localPolicy_roundtrip",
@@ -15877,6 +15901,7 @@
             "nat_roundtrip",
             "poolActor",
             "proportionalDilute",
+            "readAmountField_roundtrip",
             "readNatField_roundtrip",
             "readUInt64Field_roundtrip",
             "reclaimAmmReserves",
@@ -15892,7 +15917,7 @@
         {
           "kind": "theorem",
           "name": "action_roundtrip_empty",
-          "line": 1164,
+          "line": 1184,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -15902,7 +15927,7 @@
         {
           "kind": "theorem",
           "name": "action_encode_injective",
-          "line": 1171,
+          "line": 1191,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -15914,7 +15939,7 @@
         {
           "kind": "theorem",
           "name": "Action.tag_matches_encode_tag",
-          "line": 1202,
+          "line": 1222,
           "called": [
             "Action",
             "Action.encode",
@@ -15946,7 +15971,7 @@
     {
       "module": "LegalKernel.Encoding.BridgeInjective",
       "path": "LegalKernel/Encoding/BridgeInjective.lean",
-      "declaration_count": 16,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "namespace",
@@ -16088,14 +16113,25 @@
         },
         {
           "kind": "theorem",
+          "name": "amount_encode_suffix_split",
+          "line": 567,
+          "called": [
+            "DecodeError",
+            "Stream",
+            "amount_roundtrip",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "bool_as_nat_injective",
-          "line": 570,
+          "line": 586,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "Bridge.BridgeState.encode_injective",
-          "line": 610,
+          "line": 626,
           "called": [
             "Bridge.BridgeState.consumedProj",
             "Bridge.BridgeState.encode",
@@ -16109,6 +16145,7 @@
             "Encoding",
             "LegalKernel",
             "Stream",
+            "amount_encode_suffix_split",
             "bool_as_nat_injective",
             "bridgeState_encodeConsumed_eq_via_consumedProj",
             "bridgeState_encodePending_eq_via_pendingProj",
@@ -17557,6 +17594,7 @@
             "Stream",
             "ammReserveActor",
             "challenger",
+            "encodeAmount",
             "gasResource",
             "policy",
             "poolActor",
@@ -17568,6 +17606,7 @@
           "name": "Event.decode",
           "line": 226,
           "called": [
+            "Action.readAmountField",
             "Action.readNatField",
             "Action.readUInt64Field",
             "DecodeError",
@@ -18781,7 +18820,8 @@
           "name": "Bridge.DepositRecord.encode",
           "line": 729,
           "called": [
-            "Stream"
+            "Stream",
+            "encodeAmount"
           ]
         },
         {
@@ -18790,7 +18830,8 @@
           "line": 737,
           "called": [
             "DecodeError",
-            "Stream"
+            "Stream",
+            "decodeAmount"
           ]
         },
         {
@@ -18816,7 +18857,8 @@
           "name": "Bridge.PendingWithdrawal.encode",
           "line": 785,
           "called": [
-            "Stream"
+            "Stream",
+            "encodeAmount"
           ]
         },
         {
@@ -18833,7 +18875,8 @@
           "line": 804,
           "called": [
             "DecodeError",
-            "Stream"
+            "Stream",
+            "decodeAmount"
           ]
         },
         {
@@ -18853,7 +18896,8 @@
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending",
-            "Stream"
+            "Stream",
+            "encodeAmount"
           ]
         },
         {
@@ -18888,7 +18932,8 @@
             "Bridge.BridgeState.decodeConsumed",
             "Bridge.BridgeState.decodePending",
             "DecodeError",
-            "Stream"
+            "Stream",
+            "decodeAmount"
           ]
         },
         {
@@ -19185,6 +19230,8 @@
             "Bridge.DepositRecord.decode",
             "Bridge.DepositRecord.encode",
             "Stream",
+            "amount_roundtrip",
+            "encodeAmount",
             "nat_roundtrip"
           ]
         },
@@ -19196,7 +19243,9 @@
             "Bridge.PendingWithdrawal.decode",
             "Bridge.PendingWithdrawal.encode",
             "Stream",
+            "amount_roundtrip",
             "byteArray_roundtrip",
+            "encodeAmount",
             "nat_roundtrip"
           ]
         },
@@ -20804,7 +20853,8 @@
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
-            "Bridge.BridgeState.encodePending"
+            "Bridge.BridgeState.encodePending",
+            "encodeAmount"
           ]
         },
         {
@@ -20820,7 +20870,9 @@
           "kind": "def",
           "name": "bridgeStateEncodeAmmSuffix",
           "line": 855,
-          "called": []
+          "called": [
+            "encodeAmount"
+          ]
         },
         {
           "kind": "theorem",
@@ -20880,6 +20932,7 @@
             "bridgeState_commit_includes_ammState",
             "commitBridgeState",
             "commitBridgeState_bytes_injective_under_collision_free",
+            "encodeAmount",
             "hashBytes",
             "nat_encode_injective"
           ]
@@ -35929,13 +35982,13 @@
         {
           "kind": "def",
           "name": "cxsfKindTag",
-          "line": 329,
+          "line": 330,
           "called": []
         },
         {
           "kind": "def",
           "name": "entryCxsf",
-          "line": 332,
+          "line": 333,
           "called": [
             "Action",
             "Entry",
@@ -35947,7 +36000,7 @@
         {
           "kind": "def",
           "name": "buildCxsfBlob",
-          "line": 346,
+          "line": 347,
           "called": [
             "buildCxsf",
             "cxsfKindTag",
@@ -35957,13 +36010,13 @@
         {
           "kind": "def",
           "name": "cxsfName",
-          "line": 350,
+          "line": 351,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 357,
+          "line": 358,
           "called": [
             "Action",
             "AmmSwapCrossCheck",
@@ -36132,7 +36185,7 @@
         {
           "kind": "def",
           "name": "actionBytes",
-          "line": 139,
+          "line": 140,
           "called": [
             "Action"
           ]
@@ -36140,7 +36193,7 @@
         {
           "kind": "def",
           "name": "budgetBytes",
-          "line": 144,
+          "line": 145,
           "called": [
             "ActorBudget"
           ]
@@ -36148,7 +36201,7 @@
         {
           "kind": "def",
           "name": "actionFor",
-          "line": 150,
+          "line": 151,
           "called": [
             "Action",
             "depositWithFee",
@@ -36159,7 +36212,7 @@
         {
           "kind": "def",
           "name": "recipientBudgetCell",
-          "line": 169,
+          "line": 170,
           "called": [
             "ActorBudget",
             "EpochBudgetState",
@@ -36169,7 +36222,7 @@
         {
           "kind": "def",
           "name": "recipientBudgetLedger",
-          "line": 178,
+          "line": 179,
           "called": [
             "EpochBudgetState",
             "fixedRecipient"
@@ -36178,7 +36231,7 @@
         {
           "kind": "theorem",
           "name": "recipientBudgetCell_currentBudget",
-          "line": 187,
+          "line": 188,
           "called": [
             "fixedRecipient",
             "recipientBudgetLedger"
@@ -36187,7 +36240,7 @@
         {
           "kind": "theorem",
           "name": "recipientBudgetCell_matches_gate",
-          "line": 206,
+          "line": 207,
           "called": [
             "ActorId",
             "AdmissibleWith",
@@ -36212,13 +36265,13 @@
         {
           "kind": "structure",
           "name": "Entry",
-          "line": 247,
+          "line": 248,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkEntry",
-          "line": 277,
+          "line": 278,
           "called": [
             "Entry",
             "actionBytes",
@@ -36230,31 +36283,31 @@
         {
           "kind": "def",
           "name": "maxU64",
-          "line": 303,
+          "line": 304,
           "called": []
         },
         {
           "kind": "def",
           "name": "amountGrid",
-          "line": 307,
+          "line": 308,
           "called": []
         },
         {
           "kind": "def",
           "name": "feeBpsGrid",
-          "line": 310,
+          "line": 311,
           "called": []
         },
         {
           "kind": "def",
           "name": "weiPerBudgetUnitGrid",
-          "line": 321,
+          "line": 322,
           "called": []
         },
         {
           "kind": "def",
           "name": "gridEntries",
-          "line": 328,
+          "line": 329,
           "called": [
             "Entry",
             "fixedDepositId",
@@ -36266,7 +36319,7 @@
         {
           "kind": "def",
           "name": "boundaryEntries",
-          "line": 345,
+          "line": 346,
           "called": [
             "Entry",
             "maxU64",
@@ -36278,37 +36331,37 @@
         {
           "kind": "def",
           "name": "calibRateEth",
-          "line": 387,
+          "line": 388,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibRateBold",
-          "line": 391,
+          "line": 392,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibRatio",
-          "line": 394,
+          "line": 395,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibAmountEths",
-          "line": 398,
+          "line": 399,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibFeeBps",
-          "line": 402,
+          "line": 403,
           "called": []
         },
         {
           "kind": "def",
           "name": "calibrationEntries",
-          "line": 412,
+          "line": 413,
           "called": [
             "Entry",
             "calibAmountEths",
@@ -36324,7 +36377,7 @@
         {
           "kind": "def",
           "name": "allEntries",
-          "line": 431,
+          "line": 432,
           "called": [
             "Entry",
             "boundaryEntries",
@@ -36335,7 +36388,7 @@
         {
           "kind": "def",
           "name": "toJsonEntry",
-          "line": 438,
+          "line": 439,
           "called": [
             "Entry",
             "Json",
@@ -36346,7 +36399,7 @@
         {
           "kind": "def",
           "name": "buildFixtureJson",
-          "line": 455,
+          "line": 456,
           "called": [
             "Json",
             "boldTokenAddr20",
@@ -36359,25 +36412,25 @@
         {
           "kind": "def",
           "name": "fixtureJsonName",
-          "line": 478,
+          "line": 479,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfKindTag",
-          "line": 484,
+          "line": 485,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfName",
-          "line": 487,
+          "line": 488,
           "called": []
         },
         {
           "kind": "def",
           "name": "encodeFeeSplitInput",
-          "line": 493,
+          "line": 494,
           "called": [
             "Entry",
             "beBytes",
@@ -36388,7 +36441,7 @@
         {
           "kind": "def",
           "name": "cxsfRecords",
-          "line": 505,
+          "line": 506,
           "called": [
             "encodeFeeSplitInput"
           ]
@@ -36396,13 +36449,13 @@
         {
           "kind": "def",
           "name": "clampActiveCount",
-          "line": 511,
+          "line": 512,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 515,
+          "line": 516,
           "called": [
             "Action",
             "BoldDeposit",
@@ -37742,7 +37795,7 @@
         {
           "kind": "def",
           "name": "writeFixtureFile",
-          "line": 231,
+          "line": 232,
           "called": [
             "TestCase",
             "fixtureName",
@@ -37752,7 +37805,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 238,
+          "line": 239,
           "called": [
             "EventCbe",
             "LegalKernel.Test.Bridge.CrossCheck",
@@ -45538,7 +45591,7 @@
         {
           "kind": "def",
           "name": "transferByteLength",
-          "line": 165,
+          "line": 168,
           "called": [
             "Action",
             "TestCase",
@@ -45549,7 +45602,7 @@
         {
           "kind": "def",
           "name": "actionRoundtripAPI",
-          "line": 174,
+          "line": 180,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -45561,7 +45614,7 @@
         {
           "kind": "def",
           "name": "actionInjectiveAPI",
-          "line": 184,
+          "line": 190,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -45572,7 +45625,7 @@
         {
           "kind": "def",
           "name": "depositRT",
-          "line": 197,
+          "line": 203,
           "called": [
             "Action",
             "TestCase",
@@ -45583,7 +45636,7 @@
         {
           "kind": "def",
           "name": "withdrawRT",
-          "line": 214,
+          "line": 220,
           "called": [
             "Action",
             "TestCase",
@@ -45595,7 +45648,7 @@
         {
           "kind": "def",
           "name": "depositVsMintBytes",
-          "line": 233,
+          "line": 239,
           "called": [
             "Action",
             "TestCase",
@@ -45606,7 +45659,7 @@
         {
           "kind": "def",
           "name": "withdrawVsBurnBytes",
-          "line": 244,
+          "line": 250,
           "called": [
             "Action",
             "TestCase",
@@ -45617,7 +45670,7 @@
         {
           "kind": "def",
           "name": "withdrawHighBitDistinguishability",
-          "line": 264,
+          "line": 270,
           "called": [
             "Action",
             "TestCase",
@@ -45628,7 +45681,7 @@
         {
           "kind": "def",
           "name": "withdrawHighBitRoundtrip",
-          "line": 292,
+          "line": 298,
           "called": [
             "Action",
             "TestCase",
@@ -45639,7 +45692,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyEmptyRT",
-          "line": 315,
+          "line": 321,
           "called": [
             "Action",
             "TestCase"
@@ -45648,7 +45701,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyMultiRT",
-          "line": 329,
+          "line": 335,
           "called": [
             "Action",
             "TestCase"
@@ -45657,7 +45710,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyRT",
-          "line": 345,
+          "line": 351,
           "called": [
             "Action",
             "TestCase"
@@ -45666,7 +45719,7 @@
         {
           "kind": "def",
           "name": "lpCtorDistinguishability",
-          "line": 359,
+          "line": 365,
           "called": [
             "Action",
             "TestCase"
@@ -45675,7 +45728,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyDistinguishesPolicy",
-          "line": 372,
+          "line": 378,
           "called": [
             "Action",
             "TestCase"
@@ -45684,7 +45737,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyTagAgreement",
-          "line": 387,
+          "line": 393,
           "called": [
             "Action",
             "TestCase"
@@ -45693,7 +45746,7 @@
         {
           "kind": "def",
           "name": "tagMatchesEncodeTagAPI",
-          "line": 403,
+          "line": 409,
           "called": [
             "Action",
             "Action.tag",
@@ -45705,7 +45758,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeRT",
-          "line": 417,
+          "line": 423,
           "called": [
             "Action",
             "TestCase",
@@ -45716,7 +45769,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetRT",
-          "line": 429,
+          "line": 435,
           "called": [
             "Action",
             "TestCase",
@@ -45727,7 +45780,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeVsDepositBytes",
-          "line": 442,
+          "line": 448,
           "called": [
             "Action",
             "TestCase",
@@ -45738,7 +45791,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetVsTransferBytes",
-          "line": 454,
+          "line": 460,
           "called": [
             "Action",
             "TestCase",
@@ -45749,7 +45802,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeTagPin",
-          "line": 465,
+          "line": 471,
           "called": [
             "Action.tag",
             "TestCase",
@@ -45760,7 +45813,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetTagPin",
-          "line": 473,
+          "line": 479,
           "called": [
             "Action.tag",
             "TestCase",
@@ -45771,7 +45824,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeFieldInjective",
-          "line": 482,
+          "line": 488,
           "called": [
             "Action",
             "TestCase",
@@ -45781,7 +45834,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetFieldInjective",
-          "line": 493,
+          "line": 499,
           "called": [
             "Action",
             "TestCase",
@@ -45791,7 +45844,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForRT",
-          "line": 506,
+          "line": 512,
           "called": [
             "Action",
             "TestCase",
@@ -45802,7 +45855,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForVsTopUpActionBudgetBytes",
-          "line": 521,
+          "line": 527,
           "called": [
             "Action",
             "TestCase",
@@ -45813,7 +45866,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForTagPin",
-          "line": 532,
+          "line": 538,
           "called": [
             "Action.tag",
             "TestCase",
@@ -45824,7 +45877,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForFieldInjective",
-          "line": 543,
+          "line": 549,
           "called": [
             "Action",
             "TestCase",
@@ -45834,7 +45887,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundRT",
-          "line": 557,
+          "line": 563,
           "called": [
             "Action",
             "TestCase",
@@ -45845,7 +45898,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundTagPin",
-          "line": 569,
+          "line": 575,
           "called": [
             "Action.tag",
             "TestCase",
@@ -45856,7 +45909,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundVsTopUpBytes",
-          "line": 578,
+          "line": 584,
           "called": [
             "Action",
             "TestCase",
@@ -45867,7 +45920,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundFieldInjective",
-          "line": 591,
+          "line": 597,
           "called": [
             "Action",
             "TestCase",
@@ -45877,13 +45930,13 @@
         {
           "kind": "def",
           "name": "sampleAddr",
-          "line": 605,
+          "line": 611,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleDispute",
-          "line": 626,
+          "line": 632,
           "called": [
             "challenger"
           ]
@@ -45891,13 +45944,13 @@
         {
           "kind": "def",
           "name": "sampleVerdict",
-          "line": 634,
+          "line": 640,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleActions",
-          "line": 641,
+          "line": 647,
           "called": [
             "Action",
             "ammSwap",
@@ -45923,7 +45976,7 @@
         {
           "kind": "def",
           "name": "requiredActionTag",
-          "line": 670,
+          "line": 676,
           "called": [
             "Action",
             "ammSwap",
@@ -45946,7 +45999,7 @@
         {
           "kind": "def",
           "name": "actionSweepCoversAllTags",
-          "line": 699,
+          "line": 705,
           "called": [
             "Action.tag",
             "TestCase",
@@ -45958,7 +46011,7 @@
         {
           "kind": "def",
           "name": "actionSweepRoundtrips",
-          "line": 711,
+          "line": 717,
           "called": [
             "Action",
             "Action.decode",
@@ -45971,7 +46024,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 726,
+          "line": 732,
           "called": [
             "ActionTests",
             "LegalKernel.Test.Encoding",
@@ -46579,7 +46632,7 @@
         {
           "kind": "def",
           "name": "gasPoolClaimByteLayout",
-          "line": 156,
+          "line": 157,
           "called": [
             "Event",
             "TestCase",
@@ -46589,7 +46642,7 @@
         {
           "kind": "def",
           "name": "leadingTagHeadMatchesTag",
-          "line": 174,
+          "line": 177,
           "called": [
             "Event",
             "Event.tag",
@@ -46601,7 +46654,7 @@
         {
           "kind": "def",
           "name": "gasPoolFamilyDistinct",
-          "line": 188,
+          "line": 191,
           "called": [
             "Event",
             "TestCase",
@@ -46611,7 +46664,7 @@
         {
           "kind": "def",
           "name": "encodeDeterministic",
-          "line": 209,
+          "line": 212,
           "called": [
             "Event",
             "TestCase",
@@ -46622,7 +46675,7 @@
         {
           "kind": "def",
           "name": "decodeRejectsUnknownTag",
-          "line": 220,
+          "line": 223,
           "called": [
             "Event.decode",
             "TestCase",
@@ -46633,7 +46686,7 @@
         {
           "kind": "def",
           "name": "decodeNeverPanics",
-          "line": 232,
+          "line": 235,
           "called": [
             "Event.decode",
             "Stream",
@@ -46643,7 +46696,7 @@
         {
           "kind": "def",
           "name": "tagMatchesEncodeTagAPI",
-          "line": 246,
+          "line": 249,
           "called": [
             "Event",
             "Event.tag",
@@ -46655,7 +46708,7 @@
         {
           "kind": "def",
           "name": "localPolicyDeclaredPolicyIsByteString",
-          "line": 263,
+          "line": 266,
           "called": [
             "Event",
             "TestCase",
@@ -46665,7 +46718,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 273,
+          "line": 276,
           "called": [
             "EventTests",
             "LegalKernel.Test.Encoding",
@@ -49562,6 +49615,7 @@
             "commitLocalPolicies",
             "commitNonceState",
             "commitState",
+            "encodeAmount",
             "es",
             "es0",
             "genesisState"

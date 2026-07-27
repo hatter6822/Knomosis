@@ -90,19 +90,19 @@ adaptor gates on this before serialising. -/
     delegated to the inner type's `fieldsBounded`. -/
 def Action.fieldsBounded : Action → Prop
   | .transfer r s r' a            =>
-      r.toNat < 256 ^ 8 ∧ s.toNat < 256 ^ 8 ∧ r'.toNat < 256 ^ 8 ∧ a < 256 ^ 8
+      r.toNat < 256 ^ 8 ∧ s.toNat < 256 ^ 8 ∧ r'.toNat < 256 ^ 8 ∧ a < 256 ^ 16
   | .mint r to a                  =>
-      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 8
+      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 16
   | .burn r fr a                  =>
-      r.toNat < 256 ^ 8 ∧ fr.toNat < 256 ^ 8 ∧ a < 256 ^ 8
+      r.toNat < 256 ^ 8 ∧ fr.toNat < 256 ^ 8 ∧ a < 256 ^ 16
   | .freezeResource r             => r.toNat < 256 ^ 8
   | .replaceKey actor newKey      => actor.toNat < 256 ^ 8 ∧ newKey.size < 256 ^ 8
   | .reward r to a                =>
-      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 8
+      r.toNat < 256 ^ 8 ∧ to.toNat < 256 ^ 8 ∧ a < 256 ^ 16
   | .distributeOthers r e a       =>
-      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ a < 256 ^ 8
+      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ a < 256 ^ 16
   | .proportionalDilute r e tr    =>
-      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ tr < 256 ^ 8
+      r.toNat < 256 ^ 8 ∧ e.toNat < 256 ^ 8 ∧ tr < 256 ^ 16
   | .dispute d                    => Dispute.fieldsBounded d
   | .disputeWithdraw idx          => idx < 256 ^ 8
   | .verdict v                    => Verdict.fieldsBounded v ∧ Verdict.canonical v
@@ -110,7 +110,7 @@ def Action.fieldsBounded : Action → Prop
   | .registerIdentity actor pk    => actor.toNat < 256 ^ 8 ∧ pk.size < 256 ^ 8
   | .deposit r recipient amount d =>
       r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧
-      amount < 256 ^ 8 ∧ d < 256 ^ 8
+      amount < 256 ^ 16 ∧ d < 256 ^ 8
   | .withdraw r sender amount _rcp =>
       -- Audit-2: `recipientL1` is encoded as a 20-byte ByteArray
       -- (lossless via `EthAddress.toBytes`); no per-field bound
@@ -118,7 +118,7 @@ def Action.fieldsBounded : Action → Prop
       -- the type level via `Fin (2^160)`, and the 20-byte encoded
       -- form is `< 2^64` unconditionally).
       r.toNat < 256 ^ 8 ∧ sender.toNat < 256 ^ 8 ∧
-      amount < 256 ^ 8
+      amount < 256 ^ 16
   | .declareLocalPolicy p           => LocalPolicy.fieldsBounded p
   | .revokeLocalPolicy              => True
   | .faultProofChallenge bh s e cc  =>
@@ -128,24 +128,24 @@ def Action.fieldsBounded : Action → Prop
   -- Workstream GP (v1.0): depositWithFee + topUpActionBudget.
   | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
       r.toNat < 256 ^ 8 ∧ recipient.toNat < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8 ∧
-      userAmount < 256 ^ 8 ∧ poolAmount < 256 ^ 8 ∧
+      userAmount < 256 ^ 16 ∧ poolAmount < 256 ^ 16 ∧
       budgetGrant < 256 ^ 8 ∧ depositId < 256 ^ 8
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
-      gasResource.toNat < 256 ^ 8 ∧ gasAmount < 256 ^ 8 ∧
+      gasResource.toNat < 256 ^ 8 ∧ gasAmount < 256 ^ 16 ∧
       budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       recipient.toNat < 256 ^ 8 ∧ gasResource.toNat < 256 ^ 8 ∧
-      gasAmount < 256 ^ 8 ∧ budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
+      gasAmount < 256 ^ 16 ∧ budgetIncrement < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       gasResource.toNat < 256 ^ 8 ∧ budgetUnits < 256 ^ 8 ∧
-      weiPerBudgetUnit < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
+      weiPerBudgetUnit < 256 ^ 16 ∧ poolActor.toNat < 256 ^ 8
   -- Workstream GP (GP.11.4): ammSwap.
   | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
       fromResource.toNat < 256 ^ 8 ∧ toResource.toNat < 256 ^ 8 ∧
-      amountIn < 256 ^ 8 ∧ amountOut < 256 ^ 8 ∧ ammReserveActor.toNat < 256 ^ 8
+      amountIn < 256 ^ 16 ∧ amountOut < 256 ^ 16 ∧ ammReserveActor.toNat < 256 ^ 8
   -- Workstream GP (GP.11.10): reclaimAmmReserves.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
-      r.toNat < 256 ^ 8 ∧ amount < 256 ^ 8 ∧
+      r.toNat < 256 ^ 8 ∧ amount < 256 ^ 16 ∧
       reserveActor.toNat < 256 ^ 8 ∧ poolActor.toNat < 256 ^ 8
   -- Workstream-LX (LX.18): codegen-managed Lex `fieldsBounded`
   -- arms land between the fence markers below.  Empty in M1
@@ -171,17 +171,17 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) s.toNat ++
       Encodable.encode (T := Nat) r'.toNat ++
-      Encodable.encode (T := Nat) a
+      encodeAmount a
   | .mint r to a                  =>
       Encodable.encode (T := Nat) 1 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) to.toNat ++
-      Encodable.encode (T := Nat) a
+      encodeAmount a
   | .burn r fr a                  =>
       Encodable.encode (T := Nat) 2 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) fr.toNat ++
-      Encodable.encode (T := Nat) a
+      encodeAmount a
   | .freezeResource r             =>
       Encodable.encode (T := Nat) 3 ++
       Encodable.encode (T := Nat) r.toNat
@@ -193,17 +193,17 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) 5 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) to.toNat ++
-      Encodable.encode (T := Nat) a
+      encodeAmount a
   | .distributeOthers r e a       =>
       Encodable.encode (T := Nat) 6 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) e.toNat ++
-      Encodable.encode (T := Nat) a
+      encodeAmount a
   | .proportionalDilute r e tr    =>
       Encodable.encode (T := Nat) 7 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) e.toNat ++
-      Encodable.encode (T := Nat) tr
+      encodeAmount tr
   | .dispute d                    =>
       Encodable.encode (T := Nat) 8 ++
       Encodable.encode (T := Dispute) d
@@ -224,7 +224,7 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) 13 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) recipient.toNat ++
-      Encodable.encode (T := Nat) amount ++
+      encodeAmount amount ++
       Encodable.encode (T := Nat) d
   | .withdraw r sender amount rcp =>
       -- Audit-2: encode `recipientL1` as a 20-byte BE ByteArray
@@ -236,7 +236,7 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) 14 ++
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) sender.toNat ++
-      Encodable.encode (T := Nat) amount ++
+      encodeAmount amount ++
       Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes rcp)
   | .declareLocalPolicy p           =>
       Encodable.encode (T := Nat) 15 ++
@@ -261,21 +261,21 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) r.toNat ++
       Encodable.encode (T := Nat) recipient.toNat ++
       Encodable.encode (T := Nat) poolActor.toNat ++
-      Encodable.encode (T := Nat) userAmount ++
-      Encodable.encode (T := Nat) poolAmount ++
+      encodeAmount userAmount ++
+      encodeAmount poolAmount ++
       Encodable.encode (T := Nat) budgetGrant ++
       Encodable.encode (T := Nat) depositId
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
       Encodable.encode (T := Nat) 20 ++
       Encodable.encode (T := Nat) gasResource.toNat ++
-      Encodable.encode (T := Nat) gasAmount ++
+      encodeAmount gasAmount ++
       Encodable.encode (T := Nat) budgetIncrement ++
       Encodable.encode (T := Nat) poolActor.toNat
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       Encodable.encode (T := Nat) 21 ++
       Encodable.encode (T := Nat) recipient.toNat ++
       Encodable.encode (T := Nat) gasResource.toNat ++
-      Encodable.encode (T := Nat) gasAmount ++
+      encodeAmount gasAmount ++
       Encodable.encode (T := Nat) budgetIncrement ++
       Encodable.encode (T := Nat) poolActor.toNat
   -- Workstream GP (GP.9.1): claimBudgetRefund.
@@ -283,21 +283,21 @@ def Action.encode : Action → Stream
       Encodable.encode (T := Nat) 22 ++
       Encodable.encode (T := Nat) gasResource.toNat ++
       Encodable.encode (T := Nat) budgetUnits ++
-      Encodable.encode (T := Nat) weiPerBudgetUnit ++
+      encodeAmount weiPerBudgetUnit ++
       Encodable.encode (T := Nat) poolActor.toNat
   -- Workstream GP (GP.11.4): ammSwap.
   | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
       Encodable.encode (T := Nat) 23 ++
       Encodable.encode (T := Nat) fromResource.toNat ++
       Encodable.encode (T := Nat) toResource.toNat ++
-      Encodable.encode (T := Nat) amountIn ++
-      Encodable.encode (T := Nat) amountOut ++
+      encodeAmount amountIn ++
+      encodeAmount amountOut ++
       Encodable.encode (T := Nat) ammReserveActor.toNat
   -- Workstream GP (GP.11.10): reclaimAmmReserves.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
       Encodable.encode (T := Nat) 24 ++
       Encodable.encode (T := Nat) r.toNat ++
-      Encodable.encode (T := Nat) amount ++
+      encodeAmount amount ++
       Encodable.encode (T := Nat) reserveActor.toNat ++
       Encodable.encode (T := Nat) poolActor.toNat
   -- Workstream-LX (LX.18): codegen-managed Lex `encode` arms land
@@ -326,6 +326,18 @@ def Action.readNatField (s : Stream) :
     Except DecodeError (Nat × Stream) :=
   Encodable.decode (T := Nat) s
 
+/-- Read an `Amount` field from the stream: the 17-byte
+    `cbeTagAmount` head (`decodeAmount`), not the 8-byte uint head.
+
+    Amounts are the one `Action` field that legitimately exceeds
+    `2^64` — a wei-denominated balance passes that at ~18.45 ETH —
+    so they carry their own tag and a 16-byte body.  Identifiers,
+    nonces, log indices and budget UNIT counts stay on
+    `readNatField`. -/
+def Action.readAmountField (s : Stream) :
+    Except DecodeError (Nat × Stream) :=
+  decodeAmount s
+
 /-- Decode an `Action` from the front of `s`.  Returns the recovered
     `Action` and the residual stream. -/
 def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
@@ -338,7 +350,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
       | .ok (sender, s₃) =>
         match Action.readUInt64Field s₃ with
         | .ok (receiver, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (amount, s₅) => .ok (.transfer r sender receiver amount, s₅)
           | .error e => .error e
         | .error e => .error e
@@ -350,7 +362,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (to, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) => .ok (.mint r to amount, s₄)
         | .error e => .error e
       | .error e => .error e
@@ -361,7 +373,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (fr, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) => .ok (.burn r fr amount, s₄)
         | .error e => .error e
       | .error e => .error e
@@ -385,7 +397,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (to, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) => .ok (.reward r to amount, s₄)
         | .error e => .error e
       | .error e => .error e
@@ -396,7 +408,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (e, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) => .ok (.distributeOthers r e amount, s₄)
         | .error e' => .error e'
       | .error e' => .error e'
@@ -407,7 +419,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (e, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (tr, s₄) => .ok (.proportionalDilute r e tr, s₄)
         | .error e' => .error e'
       | .error e' => .error e'
@@ -446,7 +458,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (recipient, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) =>
           match Action.readNatField s₄ with
           | .ok (d, s₅) => .ok (.deposit r recipient amount d, s₅)
@@ -464,7 +476,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (r, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (sender, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amount, s₄) =>
           match Encodable.decode (T := ByteArray) s₄ with
           | .ok (rcpBytes, s₅) =>
@@ -522,9 +534,9 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
       | .ok (recipient, s₃) =>
         match Action.readUInt64Field s₃ with
         | .ok (poolActor, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (userAmount, s₅) =>
-            match Action.readNatField s₅ with
+            match Action.readAmountField s₅ with
             | .ok (poolAmount, s₆) =>
               match Action.readNatField s₆ with
               | .ok (budgetGrant, s₇) =>
@@ -543,7 +555,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     -- topUpActionBudget (gasResource, gasAmount, budgetIncrement, poolActor)
     match Action.readUInt64Field s₁ with
     | .ok (gasResource, s₂) =>
-      match Action.readNatField s₂ with
+      match Action.readAmountField s₂ with
       | .ok (gasAmount, s₃) =>
         match Action.readNatField s₃ with
         | .ok (budgetIncrement, s₄) =>
@@ -560,7 +572,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (recipient, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (gasResource, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (gasAmount, s₄) =>
           match Action.readNatField s₄ with
           | .ok (budgetIncrement, s₅) =>
@@ -579,7 +591,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (gasResource, s₂) =>
       match Action.readNatField s₂ with
       | .ok (budgetUnits, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (weiPerBudgetUnit, s₄) =>
           match Action.readUInt64Field s₄ with
           | .ok (poolActor, s₅) =>
@@ -594,9 +606,9 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     | .ok (fromResource, s₂) =>
       match Action.readUInt64Field s₂ with
       | .ok (toResource, s₃) =>
-        match Action.readNatField s₃ with
+        match Action.readAmountField s₃ with
         | .ok (amountIn, s₄) =>
-          match Action.readNatField s₄ with
+          match Action.readAmountField s₄ with
           | .ok (amountOut, s₅) =>
             match Action.readUInt64Field s₅ with
             | .ok (ammReserveActor, s₆) =>
@@ -611,7 +623,7 @@ def Action.decode (s : Stream) : Except DecodeError (Action × Stream) :=
     -- reclaimAmmReserves (r, amount, reserveActor, poolActor)
     match Action.readUInt64Field s₁ with
     | .ok (r, s₂) =>
-      match Action.readNatField s₂ with
+      match Action.readAmountField s₂ with
       | .ok (amount, s₃) =>
         match Action.readUInt64Field s₃ with
         | .ok (reserveActor, s₄) =>
@@ -671,6 +683,14 @@ theorem readNatField_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 8) :
   unfold Action.readNatField
   exact nat_roundtrip n rest h
 
+/-- Reading an `Amount` field that was encoded via `encodeAmount n`
+    recovers `n`, given the 128-bit canonical-encoding bound.  The
+    amount counterpart of `readNatField_roundtrip`. -/
+theorem readAmountField_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 16) :
+    Action.readAmountField (encodeAmount n ++ rest) = .ok (n, rest) := by
+  unfold Action.readAmountField
+  exact amount_roundtrip n rest h
+
 /-! ## Action round-trip headline theorem -/
 
 /-- Round-trip with suffix: encoding `a` and appending `rest`, then
@@ -688,10 +708,10 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [show
       Encodable.encode (T := Nat) 0 ++ Encodable.encode (T := Nat) r.toNat ++
         Encodable.encode (T := Nat) s.toNat ++ Encodable.encode (T := Nat) r'.toNat ++
-        Encodable.encode (T := Nat) am ++ rest =
+        encodeAmount am ++ rest =
       Encodable.encode (T := Nat) 0 ++ (Encodable.encode (T := Nat) r.toNat ++
         (Encodable.encode (T := Nat) s.toNat ++ (Encodable.encode (T := Nat) r'.toNat ++
-        (Encodable.encode (T := Nat) am ++ rest))))
+        (encodeAmount am ++ rest))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 0 _ (by decide)]
     dsimp only
@@ -701,16 +721,16 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip r' _]
     dsimp only
-    rw [readNatField_roundtrip am rest h4]
+    rw [readAmountField_roundtrip am rest h4]
   | mint r to am =>
     obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.mint r to am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 1 ++ Encodable.encode (T := Nat) r.toNat ++
-        Encodable.encode (T := Nat) to.toNat ++ Encodable.encode (T := Nat) am ++ rest =
+        Encodable.encode (T := Nat) to.toNat ++ encodeAmount am ++ rest =
       Encodable.encode (T := Nat) 1 ++ (Encodable.encode (T := Nat) r.toNat ++
-        (Encodable.encode (T := Nat) to.toNat ++ (Encodable.encode (T := Nat) am ++ rest)))
+        (Encodable.encode (T := Nat) to.toNat ++ (encodeAmount am ++ rest)))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 1 _ (by decide)]
     dsimp only
@@ -718,16 +738,16 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip to _]
     dsimp only
-    rw [readNatField_roundtrip am rest h3]
+    rw [readAmountField_roundtrip am rest h3]
   | burn r fr am =>
     obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.burn r fr am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 2 ++ Encodable.encode (T := Nat) r.toNat ++
-        Encodable.encode (T := Nat) fr.toNat ++ Encodable.encode (T := Nat) am ++ rest =
+        Encodable.encode (T := Nat) fr.toNat ++ encodeAmount am ++ rest =
       Encodable.encode (T := Nat) 2 ++ (Encodable.encode (T := Nat) r.toNat ++
-        (Encodable.encode (T := Nat) fr.toNat ++ (Encodable.encode (T := Nat) am ++ rest)))
+        (Encodable.encode (T := Nat) fr.toNat ++ (encodeAmount am ++ rest)))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 2 _ (by decide)]
     dsimp only
@@ -735,7 +755,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip fr _]
     dsimp only
-    rw [readNatField_roundtrip am rest h3]
+    rw [readAmountField_roundtrip am rest h3]
   | freezeResource r =>
     show Action.decode (Action.encode (.freezeResource r) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
@@ -767,9 +787,9 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 5 ++ Encodable.encode (T := Nat) r.toNat ++
-        Encodable.encode (T := Nat) to.toNat ++ Encodable.encode (T := Nat) am ++ rest =
+        Encodable.encode (T := Nat) to.toNat ++ encodeAmount am ++ rest =
       Encodable.encode (T := Nat) 5 ++ (Encodable.encode (T := Nat) r.toNat ++
-        (Encodable.encode (T := Nat) to.toNat ++ (Encodable.encode (T := Nat) am ++ rest)))
+        (Encodable.encode (T := Nat) to.toNat ++ (encodeAmount am ++ rest)))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 5 _ (by decide)]
     dsimp only
@@ -777,16 +797,16 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip to _]
     dsimp only
-    rw [readNatField_roundtrip am rest h3]
+    rw [readAmountField_roundtrip am rest h3]
   | distributeOthers r e am =>
     obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.distributeOthers r e am) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 6 ++ Encodable.encode (T := Nat) r.toNat ++
-        Encodable.encode (T := Nat) e.toNat ++ Encodable.encode (T := Nat) am ++ rest =
+        Encodable.encode (T := Nat) e.toNat ++ encodeAmount am ++ rest =
       Encodable.encode (T := Nat) 6 ++ (Encodable.encode (T := Nat) r.toNat ++
-        (Encodable.encode (T := Nat) e.toNat ++ (Encodable.encode (T := Nat) am ++ rest)))
+        (Encodable.encode (T := Nat) e.toNat ++ (encodeAmount am ++ rest)))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 6 _ (by decide)]
     dsimp only
@@ -794,16 +814,16 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip e _]
     dsimp only
-    rw [readNatField_roundtrip am rest h3]
+    rw [readAmountField_roundtrip am rest h3]
   | proportionalDilute r e tr =>
     obtain ⟨_, _, h3⟩ := h
     show Action.decode (Action.encode (.proportionalDilute r e tr) ++ rest) = .ok (_, rest)
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 7 ++ Encodable.encode (T := Nat) r.toNat ++
-        Encodable.encode (T := Nat) e.toNat ++ Encodable.encode (T := Nat) tr ++ rest =
+        Encodable.encode (T := Nat) e.toNat ++ encodeAmount tr ++ rest =
       Encodable.encode (T := Nat) 7 ++ (Encodable.encode (T := Nat) r.toNat ++
-        (Encodable.encode (T := Nat) e.toNat ++ (Encodable.encode (T := Nat) tr ++ rest)))
+        (Encodable.encode (T := Nat) e.toNat ++ (encodeAmount tr ++ rest)))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 7 _ (by decide)]
     dsimp only
@@ -811,7 +831,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip e _]
     dsimp only
-    rw [readNatField_roundtrip tr rest h3]
+    rw [readAmountField_roundtrip tr rest h3]
   | dispute d =>
     -- h : Action.fieldsBounded (.dispute d) = Dispute.fieldsBounded d
     show Action.decode (Action.encode (.dispute d) ++ rest) = .ok (_, rest)
@@ -879,11 +899,11 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [show
       Encodable.encode (T := Nat) 13 ++ Encodable.encode (T := Nat) r.toNat ++
         Encodable.encode (T := Nat) recipient.toNat ++
-        Encodable.encode (T := Nat) amount ++
+        encodeAmount amount ++
         Encodable.encode (T := Nat) d ++ rest =
       Encodable.encode (T := Nat) 13 ++ (Encodable.encode (T := Nat) r.toNat ++
         (Encodable.encode (T := Nat) recipient.toNat ++
-        (Encodable.encode (T := Nat) amount ++
+        (encodeAmount amount ++
         (Encodable.encode (T := Nat) d ++ rest))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 13 _ (by decide)]
@@ -892,7 +912,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip recipient _]
     dsimp only
-    rw [readNatField_roundtrip amount _ h3]
+    rw [readAmountField_roundtrip amount _ h3]
     dsimp only
     rw [readNatField_roundtrip d rest h4]
   | withdraw r sender amount rcp =>
@@ -902,11 +922,11 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [show
       Encodable.encode (T := Nat) 14 ++ Encodable.encode (T := Nat) r.toNat ++
         Encodable.encode (T := Nat) sender.toNat ++
-        Encodable.encode (T := Nat) amount ++
+        encodeAmount amount ++
         Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes rcp) ++ rest =
       Encodable.encode (T := Nat) 14 ++ (Encodable.encode (T := Nat) r.toNat ++
         (Encodable.encode (T := Nat) sender.toNat ++
-        (Encodable.encode (T := Nat) amount ++
+        (encodeAmount amount ++
         (Encodable.encode (T := ByteArray) (Bridge.EthAddress.toBytes rcp) ++ rest))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 14 _ (by decide)]
@@ -915,7 +935,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip sender _]
     dsimp only
-    rw [readNatField_roundtrip amount _ h3]
+    rw [readAmountField_roundtrip amount _ h3]
     dsimp only
     -- 20-byte ByteArray round-trip: size = 20 < 2^64.
     have hsize : (Bridge.EthAddress.toBytes rcp).size < 256 ^ 8 := by
@@ -1000,15 +1020,15 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
       Encodable.encode (T := Nat) 19 ++ Encodable.encode (T := Nat) r.toNat ++
         Encodable.encode (T := Nat) recipient.toNat ++
         Encodable.encode (T := Nat) poolActor.toNat ++
-        Encodable.encode (T := Nat) userAmount ++
-        Encodable.encode (T := Nat) poolAmount ++
+        encodeAmount userAmount ++
+        encodeAmount poolAmount ++
         Encodable.encode (T := Nat) budgetGrant ++
         Encodable.encode (T := Nat) depositId ++ rest =
       Encodable.encode (T := Nat) 19 ++ (Encodable.encode (T := Nat) r.toNat ++
         (Encodable.encode (T := Nat) recipient.toNat ++
         (Encodable.encode (T := Nat) poolActor.toNat ++
-        (Encodable.encode (T := Nat) userAmount ++
-        (Encodable.encode (T := Nat) poolAmount ++
+        (encodeAmount userAmount ++
+        (encodeAmount poolAmount ++
         (Encodable.encode (T := Nat) budgetGrant ++
         (Encodable.encode (T := Nat) depositId ++ rest)))))))
         from by simp [List.append_assoc]]
@@ -1020,9 +1040,9 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip poolActor _]
     dsimp only
-    rw [readNatField_roundtrip userAmount _ h4]
+    rw [readAmountField_roundtrip userAmount _ h4]
     dsimp only
-    rw [readNatField_roundtrip poolAmount _ h5]
+    rw [readAmountField_roundtrip poolAmount _ h5]
     dsimp only
     rw [readNatField_roundtrip budgetGrant _ h6]
     dsimp only
@@ -1035,11 +1055,11 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 20 ++ Encodable.encode (T := Nat) gasResource.toNat ++
-        Encodable.encode (T := Nat) gasAmount ++
+        encodeAmount gasAmount ++
         Encodable.encode (T := Nat) budgetIncrement ++
         Encodable.encode (T := Nat) poolActor.toNat ++ rest =
       Encodable.encode (T := Nat) 20 ++ (Encodable.encode (T := Nat) gasResource.toNat ++
-        (Encodable.encode (T := Nat) gasAmount ++
+        (encodeAmount gasAmount ++
         (Encodable.encode (T := Nat) budgetIncrement ++
         (Encodable.encode (T := Nat) poolActor.toNat ++ rest))))
         from by simp [List.append_assoc]]
@@ -1047,7 +1067,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip gasResource _]
     dsimp only
-    rw [readNatField_roundtrip gasAmount _ h2]
+    rw [readAmountField_roundtrip gasAmount _ h2]
     dsimp only
     rw [readNatField_roundtrip budgetIncrement _ h3]
     dsimp only
@@ -1061,12 +1081,12 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [show
       Encodable.encode (T := Nat) 21 ++ Encodable.encode (T := Nat) recipient.toNat ++
         Encodable.encode (T := Nat) gasResource.toNat ++
-        Encodable.encode (T := Nat) gasAmount ++
+        encodeAmount gasAmount ++
         Encodable.encode (T := Nat) budgetIncrement ++
         Encodable.encode (T := Nat) poolActor.toNat ++ rest =
       Encodable.encode (T := Nat) 21 ++ (Encodable.encode (T := Nat) recipient.toNat ++
         (Encodable.encode (T := Nat) gasResource.toNat ++
-        (Encodable.encode (T := Nat) gasAmount ++
+        (encodeAmount gasAmount ++
         (Encodable.encode (T := Nat) budgetIncrement ++
         (Encodable.encode (T := Nat) poolActor.toNat ++ rest)))))
         from by simp [List.append_assoc]]
@@ -1076,7 +1096,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip gasResource _]
     dsimp only
-    rw [readNatField_roundtrip gasAmount _ h3]
+    rw [readAmountField_roundtrip gasAmount _ h3]
     dsimp only
     rw [readNatField_roundtrip budgetIncrement _ h4]
     dsimp only
@@ -1090,11 +1110,11 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [show
       Encodable.encode (T := Nat) 22 ++ Encodable.encode (T := Nat) gasResource.toNat ++
         Encodable.encode (T := Nat) budgetUnits ++
-        Encodable.encode (T := Nat) weiPerBudgetUnit ++
+        encodeAmount weiPerBudgetUnit ++
         Encodable.encode (T := Nat) poolActor.toNat ++ rest =
       Encodable.encode (T := Nat) 22 ++ (Encodable.encode (T := Nat) gasResource.toNat ++
         (Encodable.encode (T := Nat) budgetUnits ++
-        (Encodable.encode (T := Nat) weiPerBudgetUnit ++
+        (encodeAmount weiPerBudgetUnit ++
         (Encodable.encode (T := Nat) poolActor.toNat ++ rest))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 22 _ (by decide)]
@@ -1103,7 +1123,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readNatField_roundtrip budgetUnits _ h2]
     dsimp only
-    rw [readNatField_roundtrip weiPerBudgetUnit _ h3]
+    rw [readAmountField_roundtrip weiPerBudgetUnit _ h3]
     dsimp only
     rw [readUInt64Field_roundtrip poolActor rest]
   | ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
@@ -1115,13 +1135,13 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     rw [show
       Encodable.encode (T := Nat) 23 ++ Encodable.encode (T := Nat) fromResource.toNat ++
         Encodable.encode (T := Nat) toResource.toNat ++
-        Encodable.encode (T := Nat) amountIn ++
-        Encodable.encode (T := Nat) amountOut ++
+        encodeAmount amountIn ++
+        encodeAmount amountOut ++
         Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest =
       Encodable.encode (T := Nat) 23 ++ (Encodable.encode (T := Nat) fromResource.toNat ++
         (Encodable.encode (T := Nat) toResource.toNat ++
-        (Encodable.encode (T := Nat) amountIn ++
-        (Encodable.encode (T := Nat) amountOut ++
+        (encodeAmount amountIn ++
+        (encodeAmount amountOut ++
         (Encodable.encode (T := Nat) ammReserveActor.toNat ++ rest)))))
         from by simp [List.append_assoc]]
     rw [nat_roundtrip 23 _ (by decide)]
@@ -1130,9 +1150,9 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip toResource _]
     dsimp only
-    rw [readNatField_roundtrip amountIn _ h3]
+    rw [readAmountField_roundtrip amountIn _ h3]
     dsimp only
-    rw [readNatField_roundtrip amountOut _ h4]
+    rw [readAmountField_roundtrip amountOut _ h4]
     dsimp only
     rw [readUInt64Field_roundtrip ammReserveActor rest]
   | reclaimAmmReserves r amount reserveActor poolActor =>
@@ -1143,11 +1163,11 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     unfold Action.encode Action.decode
     rw [show
       Encodable.encode (T := Nat) 24 ++ Encodable.encode (T := Nat) r.toNat ++
-        Encodable.encode (T := Nat) amount ++
+        encodeAmount amount ++
         Encodable.encode (T := Nat) reserveActor.toNat ++
         Encodable.encode (T := Nat) poolActor.toNat ++ rest =
       Encodable.encode (T := Nat) 24 ++ (Encodable.encode (T := Nat) r.toNat ++
-        (Encodable.encode (T := Nat) amount ++
+        (encodeAmount amount ++
         (Encodable.encode (T := Nat) reserveActor.toNat ++
         (Encodable.encode (T := Nat) poolActor.toNat ++ rest))))
         from by simp [List.append_assoc]]
@@ -1155,7 +1175,7 @@ theorem action_roundtrip (a : Action) (rest : Stream) (h : Action.fieldsBounded 
     dsimp only
     rw [readUInt64Field_roundtrip r _]
     dsimp only
-    rw [readNatField_roundtrip amount _ h2]
+    rw [readAmountField_roundtrip amount _ h2]
     dsimp only
     rw [readUInt64Field_roundtrip reserveActor _]
     dsimp only

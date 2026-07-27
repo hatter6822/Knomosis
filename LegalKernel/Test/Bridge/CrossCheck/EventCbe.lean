@@ -216,14 +216,15 @@ def gasPoolClaimGroundTruth : TestCase := {
   name := "GP.6.3: gasPoolClaim canonical hex pinned to ground truth"
   body := do
     let hex := encodeEventHex (Event.gasPoolClaim 0 2 250)
-    -- Spell the 36-byte stream explicitly: tag 18, r 0, sequencer 2,
-    -- amount 250.  Each head = 0x00 ‖ 8-byte LE value.
+    -- Spell the 44-byte stream explicitly: tag 18, r 0, sequencer 2 as
+    -- 9-byte uint heads (0x00 ‖ 8-byte LE), then amount 250 as a
+    -- 17-byte amount head (0x01 ‖ 16-byte LE).
     let want :=
       "0x" ++
       "001200000000000000" ++   -- tag = 18 (0x12)
       "000000000000000000" ++   -- r = 0
       "000200000000000000" ++   -- sequencer = 2
-      "00fa00000000000000"      -- amount = 250 (0xfa)
+      "01fa000000000000000000000000000000"  -- amount = 250 (0xfa)
     assertEq want hex "gasPoolClaim ground-truth hex"
 }
 

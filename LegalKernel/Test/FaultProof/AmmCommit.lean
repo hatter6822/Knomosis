@@ -154,11 +154,11 @@ def tests : List TestCase :=
               Bridge.BridgeState.encodeConsumed bs ++
               Bridge.BridgeState.encodePending bs ++
               Encodable.encode (T := Nat) bs.nextWdId ++
-              Encodable.encode (T := Nat) bs.ammReserveEth ++
-              Encodable.encode (T := Nat) bs.ammReserveBold ++
+              encodeAmount bs.ammReserveEth ++
+              encodeAmount bs.ammReserveBold ++
               Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-              Encodable.encode (T := Nat) bs.boldTvlCap ++
-              Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+              encodeAmount bs.boldTvlCap ++
+              encodeAmount bs.boldTotalLockedValue ++
               Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0) :=
           bridgeState_commit_includes_ammState
         pure ()
@@ -230,11 +230,11 @@ def tests : List TestCase :=
           Bridge.BridgeState.encodeConsumed bs ++
           Bridge.BridgeState.encodePending bs ++
           Encodable.encode (T := Nat) bs.nextWdId ++
-          Encodable.encode (T := Nat) bs.ammReserveEth ++
-          Encodable.encode (T := Nat) bs.ammReserveBold ++
+          encodeAmount bs.ammReserveEth ++
+          encodeAmount bs.ammReserveBold ++
           Encodable.encode (T := Nat) 2 ++
-          Encodable.encode (T := Nat) bs.boldTvlCap ++
-          Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+          encodeAmount bs.boldTvlCap ++
+          encodeAmount bs.boldTotalLockedValue ++
           Encodable.encode (T := Nat) (if bs.ammDisabled then 1 else 0)
         match Bridge.BridgeState.decode tampered with
         | .error _ => pure ()
@@ -313,11 +313,11 @@ def tests : List TestCase :=
           Bridge.BridgeState.encodeConsumed bs ++
           Bridge.BridgeState.encodePending bs ++
           Encodable.encode (T := Nat) bs.nextWdId ++
-          Encodable.encode (T := Nat) bs.ammReserveEth ++
-          Encodable.encode (T := Nat) bs.ammReserveBold ++
+          encodeAmount bs.ammReserveEth ++
+          encodeAmount bs.ammReserveBold ++
           Encodable.encode (T := Nat) (if bs.boldCircuitClosed then 1 else 0) ++
-          Encodable.encode (T := Nat) bs.boldTvlCap ++
-          Encodable.encode (T := Nat) bs.boldTotalLockedValue ++
+          encodeAmount bs.boldTvlCap ++
+          encodeAmount bs.boldTotalLockedValue ++
           Encodable.encode (T := Nat) 2
         match Bridge.BridgeState.decode tampered with
         | .error _ => pure ()

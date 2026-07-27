@@ -1219,10 +1219,10 @@ def test_depositRecord_encode_injective_api : TestCase := {
   name := "Bridge.DepositRecord.encode_injective API stability"
   body := do
     let _proof : ∀ (rec₁ rec₂ : LegalKernel.Bridge.DepositRecord),
-        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
-          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8 →
-        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
-          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8 →
+        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 16 ∧
+          rec₁.poolAmount < 256 ^ 16 ∧ rec₁.budgetGrant < 256 ^ 8 →
+        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 16 ∧
+          rec₂.poolAmount < 256 ^ 16 ∧ rec₂.budgetGrant < 256 ^ 8 →
         Bridge.DepositRecord.encode rec₁ = Bridge.DepositRecord.encode rec₂ →
         rec₁ = rec₂ :=
       Bridge.DepositRecord.encode_injective
@@ -1352,10 +1352,10 @@ def test_depositRecord_encodeAsBytes_injective_api : TestCase := {
   name := "Bridge.DepositRecord.encodeAsBytes_injective API stability"
   body := do
     let _proof : ∀ (rec₁ rec₂ : LegalKernel.Bridge.DepositRecord),
-        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 8 ∧
-          rec₁.poolAmount < 256 ^ 8 ∧ rec₁.budgetGrant < 256 ^ 8 →
-        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 8 ∧
-          rec₂.poolAmount < 256 ^ 8 ∧ rec₂.budgetGrant < 256 ^ 8 →
+        rec₁.resource.toNat < 256 ^ 8 ∧ rec₁.userAmount < 256 ^ 16 ∧
+          rec₁.poolAmount < 256 ^ 16 ∧ rec₁.budgetGrant < 256 ^ 8 →
+        rec₂.resource.toNat < 256 ^ 8 ∧ rec₂.userAmount < 256 ^ 16 ∧
+          rec₂.poolAmount < 256 ^ 16 ∧ rec₂.budgetGrant < 256 ^ 8 →
         Bridge.DepositRecord.encodeAsBytes rec₁ = Bridge.DepositRecord.encodeAsBytes rec₂ →
         rec₁ = rec₂ :=
       Bridge.DepositRecord.encodeAsBytes_injective
@@ -1386,10 +1386,10 @@ def test_bridgeState_encodeConsumed_injective_api : TestCase := {
         (∀ p ∈ bs₂.consumed.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
-        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
-        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
+          p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
+          p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8) →
         Bridge.BridgeState.encodeConsumed bs₁ = Bridge.BridgeState.encodeConsumed bs₂ →
         bs₁.consumed.Equiv bs₂.consumed :=
       Bridge.BridgeState.encodeConsumed_injective
@@ -1454,10 +1454,10 @@ def test_pendingWithdrawal_encode_injective_api : TestCase := {
   body := do
     let _proof : ∀ (wd₁ wd₂ : LegalKernel.Bridge.PendingWithdrawal),
         wd₁.resource.toNat < 256 ^ 8 →
-        wd₁.amount < 256 ^ 8 →
+        wd₁.amount < 256 ^ 16 →
         wd₁.l2LogIndex < 256 ^ 8 →
         wd₂.resource.toNat < 256 ^ 8 →
-        wd₂.amount < 256 ^ 8 →
+        wd₂.amount < 256 ^ 16 →
         wd₂.l2LogIndex < 256 ^ 8 →
         Bridge.PendingWithdrawal.encode wd₁ = Bridge.PendingWithdrawal.encode wd₂ →
         wd₁ = wd₂ :=
@@ -1486,10 +1486,10 @@ def test_pendingWithdrawal_encodeAsBytes_injective_api : TestCase := {
   body := do
     let _proof : ∀ (wd₁ wd₂ : LegalKernel.Bridge.PendingWithdrawal),
         wd₁.resource.toNat < 256 ^ 8 →
-        wd₁.amount < 256 ^ 8 →
+        wd₁.amount < 256 ^ 16 →
         wd₁.l2LogIndex < 256 ^ 8 →
         wd₂.resource.toNat < 256 ^ 8 →
-        wd₂.amount < 256 ^ 8 →
+        wd₂.amount < 256 ^ 16 →
         wd₂.l2LogIndex < 256 ^ 8 →
         Bridge.PendingWithdrawal.encodeAsBytes wd₁ = Bridge.PendingWithdrawal.encodeAsBytes wd₂ →
         wd₁ = wd₂ :=
@@ -1510,9 +1510,9 @@ def test_bridgeState_encodePending_injective_api : TestCase := {
         (∀ p ∈ bs₁.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 16 ∧ p.2.l2LogIndex < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 16 ∧ p.2.l2LogIndex < 256 ^ 8) →
         Bridge.BridgeState.encodePending bs₁ = Bridge.BridgeState.encodePending bs₂ →
         bs₁.pending.Equiv bs₂.pending :=
       Bridge.BridgeState.encodePending_injective
@@ -1531,24 +1531,24 @@ def test_bridgeState_encode_injective_api : TestCase := {
         (∀ p ∈ bs₂.consumed.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.consumed.toList, (Bridge.DepositRecord.encodeAsBytes p.2).size < 256 ^ 8) →
-        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
-        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 8 ∧
-          p.2.poolAmount < 256 ^ 8 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₁.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
+          p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8) →
+        (∀ p ∈ bs₂.consumed.toList, p.2.resource.toNat < 256 ^ 8 ∧ p.2.userAmount < 256 ^ 16 ∧
+          p.2.poolAmount < 256 ^ 16 ∧ p.2.budgetGrant < 256 ^ 8) →
         bs₁.pending.toList.length < 256 ^ 8 → bs₂.pending.toList.length < 256 ^ 8 →
         (∀ p ∈ bs₁.pending.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, p.1 < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList, (Bridge.PendingWithdrawal.encodeAsBytes p.2).size < 256 ^ 8) →
         (∀ p ∈ bs₁.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 16 ∧ p.2.l2LogIndex < 256 ^ 8) →
         (∀ p ∈ bs₂.pending.toList,
-          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 8 ∧ p.2.l2LogIndex < 256 ^ 8) →
+          p.2.resource.toNat < 256 ^ 8 ∧ p.2.amount < 256 ^ 16 ∧ p.2.l2LogIndex < 256 ^ 8) →
         bs₁.nextWdId < 256 ^ 8 → bs₂.nextWdId < 256 ^ 8 →
-        bs₁.ammReserveEth < 256 ^ 8 → bs₂.ammReserveEth < 256 ^ 8 →
-        bs₁.ammReserveBold < 256 ^ 8 → bs₂.ammReserveBold < 256 ^ 8 →
-        bs₁.boldTvlCap < 256 ^ 8 → bs₂.boldTvlCap < 256 ^ 8 →
-        bs₁.boldTotalLockedValue < 256 ^ 8 → bs₂.boldTotalLockedValue < 256 ^ 8 →
+        bs₁.ammReserveEth < 256 ^ 16 → bs₂.ammReserveEth < 256 ^ 16 →
+        bs₁.ammReserveBold < 256 ^ 16 → bs₂.ammReserveBold < 256 ^ 16 →
+        bs₁.boldTvlCap < 256 ^ 16 → bs₂.boldTvlCap < 256 ^ 16 →
+        bs₁.boldTotalLockedValue < 256 ^ 16 → bs₂.boldTotalLockedValue < 256 ^ 16 →
         Bridge.BridgeState.encode bs₁ = Bridge.BridgeState.encode bs₂ →
         bs₁.consumed.Equiv bs₂.consumed ∧ bs₁.pending.Equiv bs₂.pending ∧
         bs₁.nextWdId = bs₂.nextWdId ∧

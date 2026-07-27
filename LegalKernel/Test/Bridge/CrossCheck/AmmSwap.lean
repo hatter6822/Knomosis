@@ -324,7 +324,8 @@ def fixtureName : String := "amm_swap.json"
 
 Each record: input = the five `Action.ammSwap` fields as 5 × 8-byte
 BE u64 words (40 bytes); expected = the Lean `Action.encode` CBE
-bytes (54 bytes: tag + 5 × 9-byte heads). -/
+bytes (70 bytes: four 9-byte uint heads — tag, fromResource,
+toResource, ammReserveActor — plus two 17-byte amount heads). -/
 
 /-- CXSF kind tag for the AMM-swap corpus (on-disk tag 8). -/
 def cxsfKindTag : UInt32 := 8
@@ -411,22 +412,22 @@ def tests : List TestCase :=
           "001700000000000000" ++
           "000000000000000000" ++
           "000100000000000000" ++
-          "00e803000000000000" ++
-          "00f401000000000000" ++
+          "01e8030000000000000000000000000000" ++
+          "01f4010000000000000000000000000000" ++
           "000300000000000000"
         if hex ≠ expected then
           throw <| IO.userError
             s!"ammSwap canonical bytes mismatch:\n  got      {hex}\n  expected {expected}"
     }
-  , { name := "GP.11.7: every entry's expectedCbe is 54 bytes (110 hex chars with 0x prefix)"
+  , { name := "GP.11.7: every entry's expectedCbe is 70 bytes (142 hex chars with 0x prefix)"
     , body := do
         for e in entries do
           let a : Action :=
             .ammSwap (UInt64.ofNat e.fromResource) (UInt64.ofNat e.toResource)
               e.amountIn e.expectedOut (UInt64.ofNat ammReserveActorId)
           let hex := encodeActionHex a
-          if hex.length ≠ 110 then
-            throw <| IO.userError s!"CBE length mismatch for {e.category}: {hex.length} ≠ 110"
+          if hex.length ≠ 142 then
+            throw <| IO.userError s!"CBE length mismatch for {e.category}: {hex.length} ≠ 142"
     }
   , { name := "GP.11.7: every entry's leading tag byte is 0x17 (= 23)"
     , body := do
