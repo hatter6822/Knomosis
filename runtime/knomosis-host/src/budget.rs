@@ -93,6 +93,22 @@ use std::collections::BTreeMap;
 /// (per OQ-GP-6).
 pub const BRIDGE_ACTOR: u64 = 0;
 
+/// The reserved gas-pool-actor id.  Mirrors Lean's
+/// `LegalKernel.Bridge.gasPoolActor` (`Bridge/BridgeActor.lean`),
+/// which fixes `ActorId 1` as the canonical gas pool.
+pub const GAS_POOL_ACTOR: u64 = 1;
+
+/// The per-action ceiling on how much action budget one
+/// `topUpActionBudget` / `topUpActionBudgetFor` may mint.  Mirrors
+/// Lean's `Authority.MAX_TOPUP_BUDGET_PER_ACTION`.
+///
+/// This bound is rate- and balance-INDEPENDENT, so unlike the GP.9.1
+/// round-trip seal it belongs in this pre-filter rather than being
+/// deferred to `CommandKernel`.  Without it, one unit of gas bought an
+/// unbounded budget on any deployment with refunds disabled — which is
+/// every deployment by default.
+pub const MAX_TOPUP_BUDGET_PER_ACTION: u64 = 1_000_000;
+
 /// CBE type tag for unsigned integers.  Mirrors Lean's
 /// `Encoding.CBOR.cbeTagUint`.
 const CBE_TAG_UINT: u8 = 0x00;
@@ -1041,6 +1057,20 @@ pub enum GateRejection {
     /// would no-op while the grant still ran).
     #[error("BudgetGateSelfRecipientDelegatedTopUp")]
     SelfRecipientDelegatedTopUp,
+    /// A top-up routed its gas payment somewhere other than the
+    /// canonical `GAS_POOL_ACTOR`.  Without this pin two colluding
+    /// actors ping-pong the same gas and mint budget on every hop,
+    /// their combined gas conserved while their combined budget grows.
+    #[error("BudgetGateTopUpNonCanonicalPool")]
+    TopUpNonCanonicalPool,
+    /// A top-up paid with a resource that is neither ETH (0) nor
+    /// BOLD (1), so a freely-mintable token could buy budget.
+    #[error("BudgetGateTopUpNonCanonicalResource")]
+    TopUpNonCanonicalResource,
+    /// A top-up asked to mint more than
+    /// [`MAX_TOPUP_BUDGET_PER_ACTION`] units in one action.
+    #[error("BudgetGateTopUpBudgetCeilingExceeded")]
+    TopUpBudgetCeilingExceeded,
     /// A `depositWithFee` was signed by a non-bridge actor (would
     /// inject free balance + free budget; only the bridge actor may
     /// sign deposit-class actions).
@@ -1106,6 +1136,9 @@ impl GateRejection {
             Self::SelfPoolTopUp => "BudgetGateSelfPoolTopUp",
             Self::ZeroGasTopUp => "BudgetGateZeroGasTopUp",
             Self::SelfRecipientDelegatedTopUp => "BudgetGateSelfRecipientDelegatedTopUp",
+            Self::TopUpNonCanonicalPool => "BudgetGateTopUpNonCanonicalPool",
+            Self::TopUpNonCanonicalResource => "BudgetGateTopUpNonCanonicalResource",
+            Self::TopUpBudgetCeilingExceeded => "BudgetGateTopUpBudgetCeilingExceeded",
             Self::NonBridgeDepositWithFee => "BudgetGateNonBridgeDepositWithFee",
             Self::InsufficientGas => "BudgetGateInsufficientGas",
             Self::DelegationNotAuthorized => "BudgetGateDelegationNotAuthorized",
@@ -1308,13 +1341,25 @@ impl BudgetGate {
                 gas_resource,
                 pool_actor,
                 gas_amount,
-                ..
+                budget_increment,
             } => {
                 if signer == BRIDGE_ACTOR {
                     return Err(GateRejection::BridgeActorTopUp);
                 }
                 if signer == pool_actor {
                     return Err(GateRejection::SelfPoolTopUp);
+                }
+                // Pool / resource / ceiling pins.  All three are policy-
+                // and balance-INDEPENDENT, so they belong here beside the
+                // signer checks rather than deferred to `CommandKernel`.
+                if pool_actor != GAS_POOL_ACTOR {
+                    return Err(GateRejection::TopUpNonCanonicalPool);
+                }
+                if gas_resource != 0 && gas_resource != 1 {
+                    return Err(GateRejection::TopUpNonCanonicalResource);
+                }
+                if budget_increment > MAX_TOPUP_BUDGET_PER_ACTION {
+                    return Err(GateRejection::TopUpBudgetCeilingExceeded);
                 }
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
@@ -1337,7 +1382,7 @@ impl BudgetGate {
                 gas_resource,
                 pool_actor,
                 gas_amount,
-                ..
+                budget_increment,
             } => {
                 if signer == BRIDGE_ACTOR {
                     return Err(GateRejection::BridgeActorTopUp);
@@ -1347,6 +1392,18 @@ impl BudgetGate {
                 }
                 if recipient == signer {
                     return Err(GateRejection::SelfRecipientDelegatedTopUp);
+                }
+                // Same three policy-independent pins as the self-funded
+                // arm: the delegated variant mints budget the same way, so
+                // it carries the same bound.
+                if pool_actor != GAS_POOL_ACTOR {
+                    return Err(GateRejection::TopUpNonCanonicalPool);
+                }
+                if gas_resource != 0 && gas_resource != 1 {
+                    return Err(GateRejection::TopUpNonCanonicalResource);
+                }
+                if budget_increment > MAX_TOPUP_BUDGET_PER_ACTION {
+                    return Err(GateRejection::TopUpBudgetCeilingExceeded);
                 }
                 if gas_amount == 0 {
                     return Err(GateRejection::ZeroGasTopUp);
@@ -1483,7 +1540,7 @@ mod tests {
     use super::{
         decode_budget_view, ActionBudgetKind, ActorBudget, BudgetDecodeError, BudgetGate,
         BudgetPolicy, EpochBudgetState, GateRejection, SignedActionBudgetView, BRIDGE_ACTOR,
-        CBE_TAG_AMOUNT, CBE_TAG_MAP, CBE_TAG_UINT,
+        CBE_TAG_AMOUNT, CBE_TAG_MAP, CBE_TAG_UINT, GAS_POOL_ACTOR, MAX_TOPUP_BUDGET_PER_ACTION,
     };
 
     // ---- CBE test helpers (independent re-derivation of the wire
@@ -2095,7 +2152,7 @@ mod tests {
             10,
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
-                pool_actor: 2,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 5,
                 budget_increment: 100,
             },
@@ -2103,6 +2160,110 @@ mod tests {
         assert!(gate.admit(&v).is_ok());
         // 1 (free tier) - 1 (consume) + 100 (grant) = 100.
         assert_eq!(gate.current_budget(10), 100);
+    }
+
+    /// The critical regression: one unit of gas cannot buy an unbounded
+    /// action budget.  (`budget_increment` is a UNIT count, so `u64` is
+    /// its full range — `u64::MAX` is as unbounded as the field gets.)
+    ///
+    /// The only bound before this was the GP.9.1 round-trip seal
+    /// `budget_increment * refundRate(gas_resource) <= gas_amount`, and
+    /// `refundRate` defaults to zero on every production path — so the
+    /// seal read `0 <= 1` and held for any increment.  The ceiling is
+    /// rate-independent, so it holds whatever a deployment configures,
+    /// which is why it belongs in this pre-filter rather than being
+    /// deferred to `CommandKernel` alongside the rate-dependent
+    /// conjuncts.
+    #[test]
+    fn gate_rejects_unbounded_budget_mint() {
+        let gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1));
+        let v = view(
+            10,
+            ActionBudgetKind::TopUpActionBudget {
+                gas_resource: 0,
+                pool_actor: GAS_POOL_ACTOR,
+                gas_amount: 1,
+                budget_increment: u64::MAX,
+            },
+        );
+        assert_eq!(
+            gate.evaluate(&v),
+            Err(GateRejection::TopUpBudgetCeilingExceeded)
+        );
+    }
+
+    /// The ceiling is exact: at the constant is admitted, one past it is
+    /// not.  Pins the constant as the real cut-off.
+    #[test]
+    fn gate_budget_ceiling_is_exact() {
+        let mk = |inc: u64| {
+            view(
+                10,
+                ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 0,
+                    pool_actor: GAS_POOL_ACTOR,
+                    gas_amount: 5,
+                    budget_increment: inc,
+                },
+            )
+        };
+        let gate = BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1));
+        assert!(gate.evaluate(&mk(MAX_TOPUP_BUDGET_PER_ACTION)).is_ok());
+        assert_eq!(
+            gate.evaluate(&mk(MAX_TOPUP_BUDGET_PER_ACTION + 1)),
+            Err(GateRejection::TopUpBudgetCeilingExceeded)
+        );
+    }
+
+    /// Gas must be paid to the canonical pool, and with a canonical
+    /// resource.
+    ///
+    /// Without the pool pin two colluding actors ping-pong the same gas
+    /// and mint budget on every hop — their combined gas conserved while
+    /// their combined budget grows.  Without the resource pin, a token
+    /// the signer mints freely buys budget, since the balance conjunct
+    /// is satisfiable at any resource.  Both pins apply to the delegated
+    /// variant too, which mints budget the same way.
+    #[test]
+    fn gate_pins_topup_pool_and_resource() {
+        let gate = BudgetGate::new(BudgetPolicy::mk_bounded(10, 1, 1));
+        assert_eq!(
+            gate.evaluate(&view(
+                10,
+                ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 0,
+                    pool_actor: 99, // a colluding peer, not the pool
+                    gas_amount: 5,
+                    budget_increment: 100,
+                }
+            )),
+            Err(GateRejection::TopUpNonCanonicalPool)
+        );
+        assert_eq!(
+            gate.evaluate(&view(
+                10,
+                ActionBudgetKind::TopUpActionBudget {
+                    gas_resource: 7, // neither ETH (0) nor BOLD (1)
+                    pool_actor: GAS_POOL_ACTOR,
+                    gas_amount: 5,
+                    budget_increment: 100,
+                }
+            )),
+            Err(GateRejection::TopUpNonCanonicalResource)
+        );
+        assert_eq!(
+            gate.evaluate(&view(
+                10,
+                ActionBudgetKind::TopUpActionBudgetFor {
+                    recipient: 20,
+                    gas_resource: 0,
+                    pool_actor: 99,
+                    gas_amount: 5,
+                    budget_increment: 100,
+                }
+            )),
+            Err(GateRejection::TopUpNonCanonicalPool)
+        );
     }
 
     /// GP.9.1: a `claimBudgetRefund` consumes `action_cost +
@@ -2224,7 +2385,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient: 7,
                 gas_resource: 0,
-                pool_actor: 2,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 5,
                 budget_increment: 100,
             },
@@ -2247,7 +2408,7 @@ mod tests {
                 BRIDGE_ACTOR,
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
-                    pool_actor: 2,
+                    pool_actor: GAS_POOL_ACTOR,
                     gas_amount: 5,
                     budget_increment: 1
                 }
@@ -2277,7 +2438,7 @@ mod tests {
                 10,
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
-                    pool_actor: 2,
+                    pool_actor: GAS_POOL_ACTOR,
                     gas_amount: 0,
                     budget_increment: 1
                 }
@@ -2293,7 +2454,7 @@ mod tests {
                 ActionBudgetKind::TopUpActionBudgetFor {
                     recipient: 10,
                     gas_resource: 0,
-                    pool_actor: 2,
+                    pool_actor: GAS_POOL_ACTOR,
                     gas_amount: 5,
                     budget_increment: 1
                 }
@@ -2391,7 +2552,7 @@ mod tests {
             10,
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
-                pool_actor: 2,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 5,
                 budget_increment: 100,
             },
@@ -2408,7 +2569,7 @@ mod tests {
             10,
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
-                pool_actor: 2,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 5,
                 budget_increment: 100,
             },
@@ -2434,7 +2595,7 @@ mod tests {
             10,
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 1, // BOLD
-                pool_actor: 2,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 5,
                 budget_increment: 100,
             },
@@ -2456,7 +2617,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient: 7,
                 gas_resource: 0,
-                pool_actor: 2,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 5,
                 budget_increment: 100,
             },
@@ -2489,7 +2650,7 @@ mod tests {
             10,
             ActionBudgetKind::TopUpActionBudget {
                 gas_resource: 0,
-                pool_actor: 2,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 0, // zero gas
                 budget_increment: 100,
             },
@@ -2663,7 +2824,7 @@ mod tests {
                 20,
                 ActionBudgetKind::TopUpActionBudget {
                     gas_resource: 0,
-                    pool_actor: 9,
+                    pool_actor: GAS_POOL_ACTOR,
                     gas_amount: 5,
                     budget_increment: 50,
                 },
@@ -2946,7 +3107,7 @@ mod tests {
             ActionBudgetKind::TopUpActionBudgetFor {
                 recipient: 8,
                 gas_resource: 4,
-                pool_actor: 9,
+                pool_actor: GAS_POOL_ACTOR,
                 gas_amount: 10,
                 budget_increment: 11,
             },

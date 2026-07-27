@@ -480,6 +480,28 @@ contract KnomosisStepVM {
         return result;
     }
 
+    /// @notice Decode a big-endian uint128 from a calldata slice of 16
+    ///         bytes.  The `abi.encodePacked` form for `uint128`.
+    ///
+    ///         The width for value-carrying fields.  Identifiers, log
+    ///         indices, deposit ids and budget-UNIT counts stay on
+    ///         `_decodeUint64BE`; a wei-denominated amount crosses
+    ///         `2^64` at ~18.45 ETH, and `actionFields` is a separate
+    ///         encoding from the CBE codec with its own truncation
+    ///         boundary, so both had to widen or the fault proof could
+    ///         not adjudicate a large-amount action.
+    function _decodeUint128BE(bytes calldata data, uint256 offset)
+        internal pure returns (uint128)
+    {
+        uint128 result = 0;
+        for (uint256 i = 0; i < 16; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            result = uint128(uint256(result) << 8) |
+                     uint128(uint8(data[offset + i]));
+        }
+        return result;
+    }
+
     /// @notice Decode a big-endian uint256 from a 32-byte calldata slice.
     function _decodeUint256BE(bytes calldata data, uint256 offset)
         internal pure returns (uint256)
@@ -508,11 +530,11 @@ contract KnomosisStepVM {
     ) internal pure returns (bytes32) {
         // Decode action fields: (resourceId, sender, receiver, amount).
         // Layout: 8+8+8+8 = 32 bytes (all big-endian uint64s).
-        require(actionFields.length >= 32, "TransferFieldsTooShort");
+        require(actionFields.length >= 40, "TransferFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 sender = _decodeUint64BE(actionFields, 8);
         uint64 receiver = _decodeUint64BE(actionFields, 16);
-        uint256 amount = uint256(_decodeUint64BE(actionFields, 24));
+        uint256 amount = uint256(_decodeUint128BE(actionFields, 24));
 
         // Pre-condition: amount > 0 + sender has balance ≥ amount.
         if (amount == 0) revert AmountMustBePositive();
@@ -566,10 +588,10 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 24, "MintFieldsTooShort");
+        require(actionFields.length >= 32, "MintFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 to = _decodeUint64BE(actionFields, 8);
-        uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
+        uint256 amount = uint256(_decodeUint128BE(actionFields, 16));
 
         if (amount == 0) revert AmountMustBePositive();
         uint256 toProofIdx = _findBalanceCellProof(cellProofs, r, to);
@@ -589,10 +611,10 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 24, "BurnFieldsTooShort");
+        require(actionFields.length >= 32, "BurnFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 fromActor = _decodeUint64BE(actionFields, 8);
-        uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
+        uint256 amount = uint256(_decodeUint128BE(actionFields, 16));
 
         // Lean's `Laws.burn` precondition: `amount > 0`.  Without
         // this check, a zero-amount burn passes Solidity but is
@@ -658,10 +680,10 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 24, "RewardFieldsTooShort");
+        require(actionFields.length >= 32, "RewardFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 to = _decodeUint64BE(actionFields, 8);
-        uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
+        uint256 amount = uint256(_decodeUint128BE(actionFields, 16));
 
         // Lean's `Laws.reward` precondition: `amount > 0`.  Without
         // this check, a zero-amount reward passes Solidity but is
@@ -685,10 +707,10 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 24, "DistributeOthersFieldsTooShort");
+        require(actionFields.length >= 32, "DistributeOthersFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 excluded = _decodeUint64BE(actionFields, 8);
-        uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
+        uint256 amount = uint256(_decodeUint128BE(actionFields, 16));
 
         // Lean's `Laws.distributeOthers` precondition: `amount > 0`.
         // Without this check, a zero-amount bulk distribution passes
@@ -723,10 +745,10 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 24, "ProportionalDiluteFieldsTooShort");
+        require(actionFields.length >= 32, "ProportionalDiluteFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 excluded = _decodeUint64BE(actionFields, 8);
-        uint256 totalReward = uint256(_decodeUint64BE(actionFields, 16));
+        uint256 totalReward = uint256(_decodeUint128BE(actionFields, 16));
 
         // Lean's `Laws.proportionalDilute` precondition:
         // `totalReward > 0 ∧ sumOthers > 0`.  Without these checks,
@@ -857,11 +879,11 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 32, "DepositFieldsTooShort");
+        require(actionFields.length >= 40, "DepositFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 recipient = _decodeUint64BE(actionFields, 8);
-        uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
-        uint256 depositId = uint256(_decodeUint64BE(actionFields, 24));
+        uint256 amount = uint256(_decodeUint128BE(actionFields, 16));
+        uint256 depositId = uint256(_decodeUint64BE(actionFields, 32));
 
         uint256 recipientProofIdx = _findBalanceCellProof(cellProofs, r, recipient);
         uint256 newRecipientBalance =
@@ -882,11 +904,11 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 24, "WithdrawFieldsTooShort");
+        require(actionFields.length >= 32, "WithdrawFieldsTooShort");
         uint64 r = _decodeUint64BE(actionFields, 0);
         uint64 sender = _decodeUint64BE(actionFields, 8);
-        uint256 amount = uint256(_decodeUint64BE(actionFields, 16));
-        bytes calldata recipientL1 = actionFields[24:];
+        uint256 amount = uint256(_decodeUint128BE(actionFields, 16));
+        bytes calldata recipientL1 = actionFields[32:];
 
         uint256 senderProofIdx = _findBalanceCellProof(cellProofs, r, sender);
         uint256 senderBalance = _decodeNat(cellProofs[senderProofIdx].cellValue);
@@ -983,14 +1005,14 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 56, "DepositWithFeeFieldsTooShort");
+        require(actionFields.length >= 72, "DepositWithFeeFieldsTooShort");
         uint64 r          = _decodeUint64BE(actionFields, 0);
         uint64 recipient  = _decodeUint64BE(actionFields, 8);
         uint64 poolActor  = _decodeUint64BE(actionFields, 16);
-        uint256 userAmount = uint256(_decodeUint64BE(actionFields, 24));
-        uint256 poolAmount = uint256(_decodeUint64BE(actionFields, 32));
+        uint256 userAmount = uint256(_decodeUint128BE(actionFields, 24));
+        uint256 poolAmount = uint256(_decodeUint128BE(actionFields, 40));
         // actionFields[40..48] = budgetGrant (admission-layer; not hashed)
-        uint256 depositId  = uint256(_decodeUint64BE(actionFields, 48));
+        uint256 depositId  = uint256(_decodeUint64BE(actionFields, 64));
 
         uint256 recipientProofIdx = _findBalanceCellProof(cellProofs, r, recipient);
         uint256 recipientBalance =
@@ -1050,11 +1072,11 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 32, "TopUpActionBudgetFieldsTooShort");
+        require(actionFields.length >= 40, "TopUpActionBudgetFieldsTooShort");
         uint64 gasResource = _decodeUint64BE(actionFields, 0);
-        uint256 gasAmount  = uint256(_decodeUint64BE(actionFields, 8));
-        // actionFields[16..24] = budgetIncrement (admission-layer; not hashed)
-        uint64 poolActor   = _decodeUint64BE(actionFields, 24);
+        uint256 gasAmount  = uint256(_decodeUint128BE(actionFields, 8));
+        // actionFields[24..32] = budgetIncrement (admission-layer; not hashed)
+        uint64 poolActor   = _decodeUint64BE(actionFields, 32);
 
         uint256 signerProofIdx = _findBalanceCellProof(cellProofs, gasResource, signer);
         uint256 signerBalance =
@@ -1122,12 +1144,12 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 40, "TopUpActionBudgetForFieldsTooShort");
+        require(actionFields.length >= 48, "TopUpActionBudgetForFieldsTooShort");
         // actionFields[0..8] = recipient (admission-layer; not hashed)
         uint64 gasResource = _decodeUint64BE(actionFields, 8);
-        uint256 gasAmount  = uint256(_decodeUint64BE(actionFields, 16));
-        // actionFields[24..32] = budgetIncrement (admission-layer; not hashed)
-        uint64 poolActor   = _decodeUint64BE(actionFields, 32);
+        uint256 gasAmount  = uint256(_decodeUint128BE(actionFields, 16));
+        // actionFields[32..40] = budgetIncrement (admission-layer; not hashed)
+        uint64 poolActor   = _decodeUint64BE(actionFields, 40);
 
         uint256 signerProofIdx = _findBalanceCellProof(cellProofs, gasResource, signer);
         uint256 signerBalance =
@@ -1185,11 +1207,11 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 32, "ClaimBudgetRefundFieldsTooShort");
+        require(actionFields.length >= 40, "ClaimBudgetRefundFieldsTooShort");
         uint64 gasResource       = _decodeUint64BE(actionFields, 0);
         uint256 budgetUnits      = uint256(_decodeUint64BE(actionFields, 8));
-        uint256 weiPerBudgetUnit = uint256(_decodeUint64BE(actionFields, 16));
-        uint64 poolActor         = _decodeUint64BE(actionFields, 24);
+        uint256 weiPerBudgetUnit = uint256(_decodeUint128BE(actionFields, 16));
+        uint64 poolActor         = _decodeUint64BE(actionFields, 32);
         // uint256 product: ~2^128 max, never uint64.
         uint256 refundAmount = budgetUnits * weiPerBudgetUnit;
 
@@ -1244,12 +1266,12 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 40, "AmmSwapFieldsTooShort");
+        require(actionFields.length >= 56, "AmmSwapFieldsTooShort");
         uint64 fromResource    = _decodeUint64BE(actionFields, 0);
         uint64 toResource      = _decodeUint64BE(actionFields, 8);
-        uint256 amountIn       = uint256(_decodeUint64BE(actionFields, 16));
-        uint256 amountOut      = uint256(_decodeUint64BE(actionFields, 24));
-        uint64 ammReserveActor = _decodeUint64BE(actionFields, 32);
+        uint256 amountIn       = uint256(_decodeUint128BE(actionFields, 16));
+        uint256 amountOut      = uint256(_decodeUint128BE(actionFields, 32));
+        uint64 ammReserveActor = _decodeUint64BE(actionFields, 48);
 
         // Lean `Laws.ammSwap` preconditions (see NatSpec above).
         if (amountIn == 0) revert AmountMustBePositive();
@@ -1298,11 +1320,11 @@ contract KnomosisStepVM {
         uint64 signer,
         CellProof[] calldata cellProofs
     ) internal pure returns (bytes32) {
-        require(actionFields.length >= 32, "ReclaimAmmReservesFieldsTooShort");
+        require(actionFields.length >= 40, "ReclaimAmmReservesFieldsTooShort");
         uint64 r            = _decodeUint64BE(actionFields, 0);
-        uint256 amount      = uint256(_decodeUint64BE(actionFields, 8));
-        uint64 reserveActor = _decodeUint64BE(actionFields, 16);
-        uint64 poolActor    = _decodeUint64BE(actionFields, 24);
+        uint256 amount      = uint256(_decodeUint128BE(actionFields, 8));
+        uint64 reserveActor = _decodeUint64BE(actionFields, 24);
+        uint64 poolActor    = _decodeUint64BE(actionFields, 32);
 
         // Lean `Laws.reclaimAmmReserves` preconditions (see NatSpec).
         if (amount == 0) revert AmountMustBePositive();

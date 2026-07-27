@@ -30,6 +30,41 @@ the cited Lean / Solidity / Rust code; this document tracks it.
 > bootstrap fresh"; for research-stage software this is acceptable
 > and was the explicit choice in the audit-3 plan.
 
+> **128-bit amount ABI break.**  Value-carrying fields — balances,
+> transfer / mint / burn / reward amounts, deposit and withdrawal
+> amounts, fee splits, gas amounts and the budget→gas rate — moved
+> from the 9-byte CBE uint head (`0x00` + 8 LE) to a 17-byte CBE
+> **amount** head (`0x01` + 16 LE).  The `actionFieldsForL1` layout
+> the L1 step VM reads made the same move, `uint64BE → uint128BE`,
+> and so did the fault-proof balance *cell values*.
+>
+> **Why.**  The 8-byte head truncates modulo `2^64`, which a
+> wei-denominated balance crosses at ~18.45 ETH — and balances
+> accumulate, so bounding individual action amounts could not keep a
+> stored balance in range.  `State.encode` was therefore
+> non-injective on ordinary reachable states: two states whose
+> balances differed by exactly `2^64` produced byte-identical
+> encodings, and `commitState` hashes exactly those bytes, so they
+> shared one L1 state root.  The commitment stopped binding the
+> balance ledger — the assumption the bisection game rests on.
+>
+> **What did NOT move.**  Identifiers (`ActorId`, `ResourceId`,
+> `DepositId`, `WithdrawalId`), log indices, epoch numbers, nonces,
+> constructor tags, length prefixes, and budget **unit counts**
+> (`budgetGrant`, `budgetIncrement`, `budgetUnits`,
+> `ActorBudget.budgetBalance`, `BudgetPolicy.{freeTier,actionCost}`).
+> These are counters or `UInt64`-typed at the source and cannot
+> exceed the narrow range.
+>
+> Every decoder is exact-width and tag-dispatched: a value on the
+> narrow head, or an amount head of the wrong length, is REJECTED
+> rather than truncated.  Accepting either width would give one
+> logical value two byte forms and reintroduce the collision.
+>
+> The migration path is the same as Audit-3.1's — throw away the old
+> log file and bootstrap fresh.  Every cross-stack fixture corpus was
+> regenerated.
+
 ## 1. Scope
 
 The Phase-5 ABI covers three boundaries:
@@ -209,11 +244,12 @@ example:
 ```
 Action.transfer r sender receiver amount  →
   CBE-uint(0) ++ CBE-uint(r) ++ CBE-uint(sender) ++
-  CBE-uint(receiver) ++ CBE-uint(amount)
+  CBE-uint(receiver) ++ CBE-amount(amount)
 ```
 
-(All five fields are 9-byte CBE uints; total transfer encoding is
-`9 * 5 = 45` bytes.)
+(The tag and the three identifier fields are 9-byte CBE uints; the
+value-carrying `amount` is a 17-byte CBE amount, so the total
+transfer encoding is `9 * 4 + 17 = 53` bytes.)
 
 The full per-constructor table is in
 `LegalKernel/Encoding/Action.lean`.
@@ -282,7 +318,7 @@ Action.ammSwap fromResource toResource amountIn amountOut ammReserveActor  →
   CBE-uint(amountIn) ++ CBE-uint(amountOut) ++ CBE-uint(ammReserveActor)
 
 Action.reclaimAmmReserves r amount reserveActor poolActor  →
-  CBE-uint(24) ++ CBE-uint(r) ++ CBE-uint(amount) ++
+  CBE-uint(24) ++ CBE-uint(r) ++ CBE-amount(amount) ++
   CBE-uint(reserveActor) ++ CBE-uint(poolActor)
 ```
 
@@ -2479,24 +2515,25 @@ The `KnomosisBridge.withdrawWithProof(uint64 atLogIndexHigh,
 bytes proofBlob, bytes leafBlob)` function expects:
 
   * `leafBlob` — CBE-encoded `PendingWithdrawal`:
-      uint  resourceId    (CBE: 9 bytes)
-      bytes recipientL1   (CBE: 1 tag + 8 length + 20 payload = 29 bytes)
-      uint  amount        (9 bytes)
-      uint  l2LogIndex    (9 bytes)
-      → total: 56 bytes (audit-2 lossless 20-byte address encoding).
+      uint   resourceId   (CBE: 9 bytes)
+      bytes  recipientL1  (CBE: 1 tag + 8 length + 20 payload = 29 bytes)
+      amount amount       (CBE: 1 tag + 16 LE = 17 bytes)
+      uint   l2LogIndex   (9 bytes)
+      → total: 64 bytes (the audit-2 lossless 20-byte address
+        encoding, plus the amount on the 17-byte head).
   * `proofBlob` — CBE encoding of the `WithdrawalProof`
     (post-audit-2; mirrors Lean's `WithdrawalProof` shape
     with variable-size leaf and siblings):
       bytes leaf          (CBE bytes; mirrors Lean's
                             `WithdrawalProof.leaf : ByteArray` —
-                            ≈ 56 bytes for populated, 32 for
+                            ≈ 64 bytes for populated, 32 for
                             sentinel; equals leafBlob byte-for-byte
                             for canonical proofs)
       uint  index         (9 bytes)
       array siblings[64]  (CBE array head + 64 × CBE bytes; each
                             sibling is variable-size — typically
                             32 bytes for the 32-byte default-hash
-                            values, but can be ~56 bytes for the
+                            values, but can be ~64 bytes for the
                             leaf-adjacent sibling in the
                             dense-pair case).
       → typical sparse total: ≈ 2700 bytes; dense-pair total:

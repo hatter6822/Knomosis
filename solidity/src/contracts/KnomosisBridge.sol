@@ -1942,12 +1942,15 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
 
     /// @notice Decoded leaf shape — must mirror Lean's
     ///         `Bridge.PendingWithdrawal.encode`.  Layout:
-    ///           CBE uint   resourceId   (9 bytes)
-    ///           CBE bytes  recipientL1  (29 bytes; 1 tag + 8 length + 20 payload)
-    ///           CBE uint   amount       (9 bytes)
-    ///           CBE uint   l2LogIndex   (9 bytes)
-    ///         Total: 56 bytes per the audit-2 lossless 20-byte
-    ///         address encoding.
+    ///           CBE uint    resourceId   (9 bytes)
+    ///           CBE bytes   recipientL1  (29 bytes; 1 tag + 8 length + 20 payload)
+    ///           CBE amount  amount       (17 bytes; 1 tag + 16 LE)
+    ///           CBE uint    l2LogIndex   (9 bytes)
+    ///         Total: 64 bytes — the audit-2 lossless 20-byte address
+    ///         encoding, plus the amount on the wide head.  `amount` is
+    ///         wei-denominated and this is the EXIT path, so a narrow
+    ///         head would have capped what a withdrawal could redeem
+    ///         (and silently truncated anything above it).
     struct PendingWithdrawal {
         uint64 resourceId;
         address recipientL1;
@@ -2063,9 +2066,9 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
         uint256 off = 0;
         (wd.resourceId, off) = CBEDecode.readUint(leafBlob, off);
         (wd.recipientL1, off) = CBEDecode.readAddressExact(leafBlob, off);
-        uint64 amount64;
-        (amount64, off) = CBEDecode.readUint(leafBlob, off);
-        wd.amount = uint256(amount64);
+        uint128 amount128;
+        (amount128, off) = CBEDecode.readAmount(leafBlob, off);
+        wd.amount = uint256(amount128);
         (wd.l2LogIndex, off) = CBEDecode.readUint(leafBlob, off);
         CBEDecode.assertFullyConsumed(leafBlob, off);
     }

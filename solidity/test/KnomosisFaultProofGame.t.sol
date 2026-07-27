@@ -372,10 +372,22 @@ contract KnomosisFaultProofGameTest is Test {
 
     /// CBE Nat encoder (mirror of the StepVM test helper): 0x1B tag +
     /// 8 little-endian value bytes.  Used to build balance cell values.
-    function _encodeCbeNat(uint256 v) internal pure returns (bytes memory) {
-        bytes memory result = new bytes(9);
-        result[0] = 0x1B;
-        for (uint256 i = 0; i < 8; i++) {
+    /// @notice The canonical CBE bytes of a BALANCE cell value: the
+    ///         17-byte amount head (tag 0x01 + 16 LE bytes).
+    ///
+    /// @dev    Two things were wrong with the previous form and both
+    ///         mattered.  It emitted tag `0x1B`, which no encoder on
+    ///         any stack produces — the tests passed only because
+    ///         `_decodeNat` used to IGNORE the tag byte and read a
+    ///         fixed 8 bytes.  And it was 8 bytes wide, so it could not
+    ///         express a balance at or above `2^64` (~18.45 ETH in
+    ///         wei).  `_decodeNat` is now exact-width and
+    ///         tag-dispatched, so a wrong tag or width reverts instead
+    ///         of decoding to a wrong number.
+    function _encodeCbeAmount(uint128 v) internal pure returns (bytes memory) {
+        bytes memory result = new bytes(17);
+        result[0] = 0x01;
+        for (uint256 i = 0; i < 16; i++) {
             // forge-lint: disable-next-line(unsafe-typecast)
             result[1 + i] = bytes1(uint8(v >> (8 * i)));
         }
@@ -415,10 +427,10 @@ contract KnomosisFaultProofGameTest is Test {
         // commit (LOW_ROOT): move 5 of resource 1 from actor 10 (bal
         // 100) to actor 20 (bal 50).
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeNat(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeNat(50), LOW_ROOT);
+        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
+        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
         bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint64(5));
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
         uint8 kind = 0;            // ActionKind.Transfer
         uint64 stepSigner = 10;
 
@@ -472,10 +484,10 @@ contract KnomosisFaultProofGameTest is Test {
     ///         turn, so a mismatch settles `ChallengerWon`.
     function test_terminate_single_step_invalid_root_challenger_wins() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeNat(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeNat(50), LOW_ROOT);
+        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
+        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
         bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint64(5));
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
 
         // Seed the disputed root with a FABRICATED high (!= the honest
         // step output) — i.e. the sequencer published an invalid root.
@@ -523,19 +535,19 @@ contract KnomosisFaultProofGameTest is Test {
         uint8 kind = 0;    // ActionKind.Transfer
         uint64 stepSigner = 10;
         bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint64(5));
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
 
         bytes32[5] memory commits;
         commits[0] = LOW_ROOT;
-        uint256 balFrom = 100;
-        uint256 balTo = 50;
+        uint128 balFrom = 100;
+        uint128 balTo = 50;
         KnomosisStepVM.CellProof[] memory stepProofs =
             new KnomosisStepVM.CellProof[](2);
         for (uint256 i = 0; i < 4; i++) {
             stepProofs[0] =
-                _makeCellProof(0, 1, 10, _encodeCbeNat(balFrom), commits[i]);
+                _makeCellProof(0, 1, 10, _encodeCbeAmount(balFrom), commits[i]);
             stepProofs[1] =
-                _makeCellProof(0, 1, 20, _encodeCbeNat(balTo), commits[i]);
+                _makeCellProof(0, 1, 20, _encodeCbeAmount(balTo), commits[i]);
             commits[i + 1] = stepVM.executeStep(
                 commits[i], kind, actionFields, stepSigner, stepProofs);
             balFrom -= 5;
@@ -577,8 +589,8 @@ contract KnomosisFaultProofGameTest is Test {
 
         // Terminal step: executeStep(commits[0]) == commits[1] == high
         // ⇒ the responding sequencer wins.
-        stepProofs[0] = _makeCellProof(0, 1, 10, _encodeCbeNat(100), LOW_ROOT);
-        stepProofs[1] = _makeCellProof(0, 1, 20, _encodeCbeNat(50), LOW_ROOT);
+        stepProofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
+        stepProofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
         vm.prank(sequencer);
         game.terminateOnSingleStep(
             gameId, kind, actionFields, stepSigner, stepProofs);

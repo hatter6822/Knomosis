@@ -37,10 +37,12 @@ Design (mirrors `BudgetSidecar`):
     rate MUST decode-equal it, else a precise error names the expected
     flags.  Absent sidecar ⇒ no constraint.
   * **Write** (`writeSidecarIfAbsent`): the writer (`process`) records
-    the rate after a successful bootstrap, but ONLY for a non-default
-    (refunds-enabled) rate — a refunds-disabled (`0 0`) deployment
-    creates no sidecar, preserving the pre-GP.9.1 on-disk footprint
-    byte-for-byte.
+    the rate after a successful bootstrap, for EVERY rate including the
+    refunds-disabled `0 0` default.  Recording the default is what makes
+    the check meaningful: an absent sidecar is "no constraint", so a log
+    written with refunds off would otherwise accept a refunds-on binary
+    later — an escalation, since budget minted at rate `0` was never
+    priced against a refund.
 
 The pure `encode` / `decode` round-trip + `isDefault` predicate are
 unit-tested; the IO orchestration is exercised by the
@@ -201,17 +203,27 @@ def load (logPath : System.FilePath) :
   else
     pure (.ok none)
 
-/-- IO: write the sidecar iff it does NOT already exist AND the rate is
-    non-default (refunds enabled).  Called by the writer (`process`)
-    after a successful bootstrap, so a refunds-disabled deployment never
-    creates a sidecar (preserving the pre-GP.9.1 on-disk footprint). -/
+/-- IO: write the sidecar iff it does NOT already exist.  Called by the
+    writer (`process`) after a successful bootstrap.
+
+    **Recorded unconditionally, including the refunds-disabled default.**
+    The earlier form skipped the write when `current.isDefault`, to keep
+    a refunds-disabled deployment's on-disk footprint byte-identical to
+    pre-GP.9.1.  That footprint is not worth what it cost: `checkConsistent`
+    treats an ABSENT sidecar as "no constraint", so a log produced with
+    refunds off carried no record of that fact, and an operator could
+    later point a refunds-ENABLED binary at the same log.
+
+    That transition is an escalation, not a configuration change.  Budget
+    acquired while the rate was `0` was priced by the round-trip seal at
+    `budgetIncrement × 0 ≤ gasAmount` — i.e. not priced at all — and
+    enabling a rate afterwards makes every unit of it redeemable from the
+    gas pool at the new rate.  Persisting the `0 0` config turns that into
+    a loud `checkConsistent` failure at startup. -/
 def writeSidecarIfAbsent (logPath : System.FilePath) (current : RefundRateConfig) :
     IO Unit := do
-  if current.isDefault then
-    pure ()
-  else
-    let path := sidecarPath logPath
-    unless ← path.pathExists do
-      IO.FS.writeFile path (encode current)
+  let path := sidecarPath logPath
+  unless ← path.pathExists do
+    IO.FS.writeFile path (encode current)
 
 end LegalKernel.Runtime.RefundRateSidecar

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
+import {CbeTestEncoder} from "./utils/CbeTestEncoder.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
@@ -35,7 +36,7 @@ import {
 ///         deployed (the constructor's `symbol()` cross-check reads it).
 ///         `vm.etch` copies runtime code and resets storage, hence the
 ///         `pure` `symbol()` in `MockBold` and the post-etch `mint`.
-contract BridgeFeeSplitBoldTest is Test {
+contract BridgeFeeSplitBoldTest is Test, CbeTestEncoder {
     address private alice = address(0xA1);
     address private bob = address(0xB0B);
 
@@ -1180,66 +1181,6 @@ contract BridgeFeeSplitBoldTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    /// @notice 8 little-endian bytes of a uint64 (the CBE head value form).
-    function _leBytes8(uint64 v) internal pure returns (bytes memory out) {
-        out = new bytes(8);
-        for (uint256 i = 0; i < 8; i++) {
-            // Extract byte i (LE) by truncating the shifted value.
-            // forge-lint: disable-next-line(unsafe-typecast)
-            out[i] = bytes1(uint8(v >> (8 * i)));
-        }
-    }
-
-    /// @notice CBE uint: tag 0x00 + 8 LE value bytes.
-    function _cbeUint(uint64 v) internal pure returns (bytes memory) {
-        return bytes.concat(hex"00", _leBytes8(v));
-    }
-
-    /// @notice CBE byte string: tag 0x02 + 8 LE length + payload.
-    function _cbeBytes(bytes memory payload) internal pure returns (bytes memory) {
-        // payload.length is tiny here (<= 56); the uint64 cast cannot lose.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return bytes.concat(hex"02", _leBytes8(uint64(payload.length)), payload);
-    }
-
-    /// @notice CBE array head: tag 0x04 + 8 LE count.
-    function _cbeArrayHead(uint64 count) internal pure returns (bytes memory) {
-        return bytes.concat(hex"04", _leBytes8(count));
-    }
-
-    /// @notice CBE-encode a `PendingWithdrawal` leaf, matching
-    ///         `KnomosisBridge._decodePendingWithdrawal`: CBE uint
-    ///         resourceId, CBE bytes recipient (20-byte address), CBE uint
-    ///         amount, CBE uint l2LogIndex.
-    function _encodeWithdrawalLeaf(uint64 resourceId, address recipient, uint64 amount, uint64 l2LogIndex)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return bytes.concat(
-            _cbeUint(resourceId),
-            _cbeBytes(abi.encodePacked(recipient)),
-            _cbeUint(amount),
-            _cbeUint(l2LogIndex)
-        );
-    }
-
-    /// @notice CBE-encode a `WithdrawalProof`, matching
-    ///         `KnomosisBridge._decodeWithdrawalProof`: CBE bytes leaf, CBE
-    ///         uint index, CBE array of `SMT_HEIGHT` CBE-bytes siblings.
-    function _encodeWithdrawalProof(bytes memory leaf, uint64 idx, bytes[] memory siblings)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        // siblings.length is SMT_HEIGHT (64); the uint64 cast cannot lose.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        bytes memory out = bytes.concat(_cbeBytes(leaf), _cbeUint(idx), _cbeArrayHead(uint64(siblings.length)));
-        for (uint256 i = 0; i < siblings.length; i++) {
-            out = bytes.concat(out, _cbeBytes(siblings[i]));
-        }
-        return out;
-    }
 
     // ------------------------------------------------------------------
     // GP.5.4 — fuzz: conservation + differential against reference

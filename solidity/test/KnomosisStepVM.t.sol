@@ -60,7 +60,7 @@ contract KnomosisStepVMTest is Test {
             bytes32(uint256(0xBADC0DE))  // wrong witnessCommit
         );
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(20), uint64(5));
+            uint64(1), uint64(10), uint64(20), uint128(5));
         vm.expectRevert(KnomosisStepVM.BadCellProof.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT,
@@ -90,7 +90,7 @@ contract KnomosisStepVMTest is Test {
         // to actor 20 of resource 1.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         // Sender's balance: encode 100 as CBE Nat.
-        bytes memory senderBalanceBytes = _encodeCbeNat(100);
+        bytes memory senderBalanceBytes = _encodeCbeAmount(100);
         proofs[0] = _makeCellProof(
             0,                // Balance
             1, 10,            // (resource=1, actor=10)
@@ -99,11 +99,11 @@ contract KnomosisStepVMTest is Test {
         // Receiver's balance: 50.
         proofs[1] = _makeCellProof(
             0, 1, 20,
-            _encodeCbeNat(50),
+            _encodeCbeAmount(50),
             FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(20), uint64(5));
+            uint64(1), uint64(10), uint64(20), uint128(5));
         bytes32 result1 = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
         bytes32 result2 = stepVM.executeStep(
@@ -132,10 +132,10 @@ contract KnomosisStepVMTest is Test {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         // Self-transfer: sender == receiver.
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(10), uint64(5));
+            uint64(1), uint64(10), uint64(10), uint128(5));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
 
@@ -160,7 +160,7 @@ contract KnomosisStepVMTest is Test {
             new KnomosisStepVM.CellProof[](cap + 1);
         for (uint256 i = 0; i < cap + 1; i++) {
             proofs[i] = _makeCellProof(
-                0, 1, i + 100, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+                0, 1, i + 100, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
         }
         bytes memory actionFields = abi.encodePacked(uint64(1));
         vm.expectRevert(KnomosisStepVM.TooManyCellProofs.selector);
@@ -174,9 +174,9 @@ contract KnomosisStepVMTest is Test {
     function test_burn_rejects_zero_amount() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(0));
+            uint64(1), uint64(10), uint128(0));
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(2), actionFields, uint64(10), proofs);
@@ -185,12 +185,12 @@ contract KnomosisStepVMTest is Test {
     function test_transfer_rejects_zero_amount() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(20), uint64(0));
+            uint64(1), uint64(10), uint64(20), uint128(0));
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
@@ -208,10 +208,10 @@ contract KnomosisStepVMTest is Test {
         proofs[0] = _makeCellProof(
             0, 1, 10, hex"01020304ff", FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(20), uint64(10));
+            uint64(1), uint64(10), uint64(20), uint128(10));
         vm.expectRevert(KnomosisStepVM.MalformedCellValue.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
@@ -221,12 +221,12 @@ contract KnomosisStepVMTest is Test {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         // Sender has 5 but tries to send 100.
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(5), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(5), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(20), uint64(100));
+            uint64(1), uint64(10), uint64(20), uint128(100));
         vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
@@ -237,10 +237,10 @@ contract KnomosisStepVMTest is Test {
     function test_mint_increases_balance() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(20), uint64(10));
+            uint64(1), uint64(20), uint128(10));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(1), actionFields, uint64(0), proofs);
 
@@ -255,10 +255,10 @@ contract KnomosisStepVMTest is Test {
     function test_mint_rejects_zero_amount() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(20), uint64(0));
+            uint64(1), uint64(20), uint128(0));
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(1), actionFields, uint64(0), proofs);
@@ -269,10 +269,10 @@ contract KnomosisStepVMTest is Test {
     function test_burn_decreases_balance() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(50));
+            uint64(1), uint64(10), uint128(50));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(2), actionFields, uint64(10), proofs);
 
@@ -287,10 +287,10 @@ contract KnomosisStepVMTest is Test {
     function test_burn_rejects_insufficient_balance() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(5), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(5), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(100));
+            uint64(1), uint64(10), uint128(100));
         vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(2), actionFields, uint64(10), proofs);
@@ -312,10 +312,10 @@ contract KnomosisStepVMTest is Test {
     function test_reward_credits_recipient() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(20), uint64(10));
+            uint64(1), uint64(20), uint128(10));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(5), actionFields, uint64(0), proofs);
 
@@ -333,14 +333,14 @@ contract KnomosisStepVMTest is Test {
         // 3 balance proofs; one excluded (actor 5).
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](3);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 5, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // excluded
+            0, 1, 5, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // excluded
         proofs[2] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(75), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(75), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(10));  // excluded = 5, amount = 10
+            uint64(1), uint64(5), uint128(10));  // excluded = 5, amount = 10
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(6), actionFields, uint64(0), proofs);
         assertTrue(result != bytes32(0), "distributeOthers produces commit");
@@ -357,10 +357,10 @@ contract KnomosisStepVMTest is Test {
         // No non-excluded recipients ⇒ sumOthers = 0.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 5, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // excluded
+            0, 1, 5, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // excluded
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(50));
+            uint64(1), uint64(5), uint128(50));
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(7), actionFields, uint64(0), proofs);
@@ -372,12 +372,12 @@ contract KnomosisStepVMTest is Test {
     function test_proportionalDilute_rejects_zero_totalReward() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(0));  // totalReward = 0
+            uint64(1), uint64(5), uint128(0));  // totalReward = 0
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(7), actionFields, uint64(0), proofs);
@@ -388,10 +388,10 @@ contract KnomosisStepVMTest is Test {
     function test_reward_rejects_zero_amount() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(20), uint64(0));
+            uint64(1), uint64(20), uint128(0));
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(5), actionFields, uint64(0), proofs);
@@ -403,10 +403,10 @@ contract KnomosisStepVMTest is Test {
     function test_distributeOthers_rejects_zero_amount() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(0));  // amount = 0
+            uint64(1), uint64(5), uint128(0));  // amount = 0
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(6), actionFields, uint64(0), proofs);
@@ -459,10 +459,10 @@ contract KnomosisStepVMTest is Test {
     function test_deposit_action_executes() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(20), uint64(10), uint64(42));
+            uint64(1), uint64(20), uint128(10), uint64(42));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(13), actionFields, uint64(0), proofs);
         assertTrue(result != bytes32(0), "deposit produces commit");
@@ -471,10 +471,10 @@ contract KnomosisStepVMTest is Test {
     function test_withdraw_action_executes() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(10), uint64(50));
+            uint64(1), uint64(10), uint128(50));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(14), actionFields, uint64(10), proofs);
         assertTrue(result != bytes32(0), "withdraw produces commit");
@@ -526,15 +526,15 @@ contract KnomosisStepVMTest is Test {
         // balance cells.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // recipient
+            0, 1, 20, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);  // recipient
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // poolActor
+            0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);  // poolActor
 
         // Field layout: r || recipient || poolActor || userAmount
         //               || poolAmount || budgetGrant || depositId
         bytes memory actionFields = abi.encodePacked(
             uint64(1), uint64(20), uint64(99),
-            uint64(30), uint64(20), uint64(500), uint64(77));
+            uint128(30), uint128(20), uint64(500), uint64(77));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(19), actionFields, uint64(0), proofs);
         assertTrue(result != bytes32(0), "depositWithFee produces commit");
@@ -548,11 +548,11 @@ contract KnomosisStepVMTest is Test {
         // userAmount + poolAmount into a single new balance.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 20, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+            0, 1, 20, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
             uint64(1), uint64(20), uint64(20),    // recipient == poolActor
-            uint64(30), uint64(20), uint64(500), uint64(78));
+            uint128(30), uint128(20), uint64(500), uint64(78));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(19), actionFields, uint64(0), proofs);
         assertTrue(result != bytes32(0), "self-credit depositWithFee commits");
@@ -573,14 +573,14 @@ contract KnomosisStepVMTest is Test {
         // poolActor's gas-balance cell.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer's gas
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // signer's gas
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // pool's gas
+            0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);  // pool's gas
 
         // Field layout: gasResource || gasAmount || budgetIncrement
         //               || poolActor
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(50), uint64(1000), uint64(99));
+            uint64(1), uint128(50), uint64(1000), uint64(99));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(20), actionFields, uint64(10), proofs);
         assertTrue(result != bytes32(0), "topUpActionBudget produces commit");
@@ -599,12 +599,12 @@ contract KnomosisStepVMTest is Test {
         // Signer has 100 gas; tries to transfer 200.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+            0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(200), uint64(1000), uint64(99));
+            uint64(1), uint128(200), uint64(1000), uint64(99));
         vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(20), actionFields, uint64(10), proofs);
@@ -620,14 +620,14 @@ contract KnomosisStepVMTest is Test {
         // needs the signer's + poolActor's gas-balance cells.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer's gas
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // signer's gas
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // pool's gas
+            0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);  // pool's gas
 
         // Field layout: recipient || gasResource || gasAmount
         //               || budgetIncrement || poolActor
         bytes memory actionFields = abi.encodePacked(
-            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+            uint64(50), uint64(1), uint128(50), uint64(1000), uint64(99));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
         assertTrue(result != bytes32(0), "topUpActionBudgetFor produces commit");
@@ -646,14 +646,14 @@ contract KnomosisStepVMTest is Test {
     function test_topUpActionBudgetFor_matches_canonical_recipe() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer gas = 100
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // signer gas = 100
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);  // pool gas = 0
+            0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);  // pool gas = 0
 
         // recipient=50 (admission-only), gasResource=1, gasAmount=50,
         // budgetIncrement=1000 (admission-only), poolActor=99.
         bytes memory actionFields = abi.encodePacked(
-            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+            uint64(50), uint64(1), uint128(50), uint64(1000), uint64(99));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
 
@@ -681,9 +681,9 @@ contract KnomosisStepVMTest is Test {
     function test_topUpActionBudgetFor_distinct_from_topUpActionBudget() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+            0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
 
         // kind 20: gasResource=1, gasAmount=50, budgetIncrement=1000,
         //          poolActor=99.
@@ -712,12 +712,12 @@ contract KnomosisStepVMTest is Test {
     function test_topUpActionBudgetFor_self_pool_net_zero() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // signer == pool gas = 100
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // signer == pool gas = 100
 
         // recipient=50, gasResource=1, gasAmount=50, budgetIncrement=1000,
         // poolActor=10 (== signer).
         bytes memory actionFields = abi.encodePacked(
-            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(10));
+            uint64(50), uint64(1), uint128(50), uint64(1000), uint64(10));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
 
@@ -742,14 +742,14 @@ contract KnomosisStepVMTest is Test {
     function test_topUpActionBudgetFor_exact_balance_zeroes_signer() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);  // signer gas = 50
+            0, 1, 10, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);  // signer gas = 50
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(10), FIXTURE_PRE_COMMIT);  // pool gas = 10
+            0, 1, 99, _encodeCbeAmount(10), FIXTURE_PRE_COMMIT);  // pool gas = 10
 
         // recipient=50, gasResource=1, gasAmount=50 (== balance),
         // budgetIncrement=1000, poolActor=99.
         bytes memory actionFields = abi.encodePacked(
-            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+            uint64(50), uint64(1), uint128(50), uint64(1000), uint64(99));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
 
@@ -778,14 +778,14 @@ contract KnomosisStepVMTest is Test {
         // Signer has 100 gas; tries to transfer 200.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+            0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
 
         // recipient=50, gasResource=1, gasAmount=200, budgetIncrement=1000,
         // poolActor=99.
         bytes memory actionFields = abi.encodePacked(
-            uint64(50), uint64(1), uint64(200), uint64(1000), uint64(99));
+            uint64(50), uint64(1), uint128(200), uint64(1000), uint64(99));
         vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(21), actionFields, uint64(10), proofs);
@@ -801,14 +801,14 @@ contract KnomosisStepVMTest is Test {
     function test_claimBudgetRefund_matches_canonical_recipe() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // claimant gas = 100
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // claimant gas = 100
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(60), FIXTURE_PRE_COMMIT);   // pool gas = 60
+            0, 1, 99, _encodeCbeAmount(60), FIXTURE_PRE_COMMIT);   // pool gas = 60
 
         // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10 => refundAmount=50,
         // poolActor=99.
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(10), uint64(99));
+            uint64(1), uint64(5), uint128(10), uint64(99));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
 
@@ -838,9 +838,9 @@ contract KnomosisStepVMTest is Test {
     function test_claimBudgetRefund_uint256_product_no_overflow() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);      // claimant gas = 0
+            0, 1, 10, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);      // claimant gas = 0
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(1000), FIXTURE_PRE_COMMIT);   // pool gas = 1000
+            0, 1, 99, _encodeCbeAmount(1000), FIXTURE_PRE_COMMIT);   // pool gas = 1000
 
         // budgetUnits = 2^33, weiPerBudgetUnit = 2^33 (each < 2^64, fit
         // uint64); true product = 2^66 >> pool 1000 => revert.
@@ -881,11 +881,11 @@ contract KnomosisStepVMTest is Test {
     function test_claimBudgetRefund_self_pool_net_zero() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // claimant == pool gas = 100
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // claimant == pool gas = 100
 
         // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10, poolActor=10 (== signer).
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(10), uint64(10));
+            uint64(1), uint64(5), uint128(10), uint64(10));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
 
@@ -905,14 +905,14 @@ contract KnomosisStepVMTest is Test {
     function test_claimBudgetRefund_exact_pool_drain() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(20), FIXTURE_PRE_COMMIT);  // claimant gas = 20
+            0, 1, 10, _encodeCbeAmount(20), FIXTURE_PRE_COMMIT);  // claimant gas = 20
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(50), FIXTURE_PRE_COMMIT);  // pool gas = 50 (== refund)
+            0, 1, 99, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT);  // pool gas = 50 (== refund)
 
         // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10 => refundAmount=50
         // (== pool balance), poolActor=99.
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(10), uint64(99));
+            uint64(1), uint64(5), uint128(10), uint64(99));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
 
@@ -937,14 +937,14 @@ contract KnomosisStepVMTest is Test {
         // Pool has 30 gas; refund of 50 must revert (pool solvency).
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 10, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 99, _encodeCbeNat(30), FIXTURE_PRE_COMMIT);  // pool gas = 30 < 50
+            0, 1, 99, _encodeCbeAmount(30), FIXTURE_PRE_COMMIT);  // pool gas = 30 < 50
 
         // gasResource=1, budgetUnits=5, weiPerBudgetUnit=10 => refundAmount=50,
         // poolActor=99.
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(5), uint64(10), uint64(99));
+            uint64(1), uint64(5), uint128(10), uint64(99));
         vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);
@@ -960,12 +960,12 @@ contract KnomosisStepVMTest is Test {
         // toBalance=800, amountOut=200 => newToBalance=600.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);  // from: res=0, actor=3
+            0, 0, 3, _encodeCbeAmount(500), FIXTURE_PRE_COMMIT);  // from: res=0, actor=3
         proofs[1] = _makeCellProof(
-            0, 1, 3, _encodeCbeNat(800), FIXTURE_PRE_COMMIT);  // to: res=1, actor=3
+            0, 1, 3, _encodeCbeAmount(800), FIXTURE_PRE_COMMIT);  // to: res=1, actor=3
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(1), uint64(100), uint64(200), uint64(3));
+            uint64(0), uint64(1), uint128(100), uint128(200), uint64(3));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
 
@@ -982,12 +982,12 @@ contract KnomosisStepVMTest is Test {
     function test_ammSwap_exact_drain() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 3, _encodeCbeNat(300), FIXTURE_PRE_COMMIT);
+            0, 1, 3, _encodeCbeAmount(300), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(1), uint64(50), uint64(300), uint64(3));
+            uint64(0), uint64(1), uint128(50), uint128(300), uint64(3));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(7), proofs);
 
@@ -1015,13 +1015,13 @@ contract KnomosisStepVMTest is Test {
     function test_ammSwap_rejects_zero_amountIn() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(500), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 3, _encodeCbeNat(800), FIXTURE_PRE_COMMIT);
+            0, 1, 3, _encodeCbeAmount(800), FIXTURE_PRE_COMMIT);
 
         // amountIn = 0, fromResource=0 != toResource=1.
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(1), uint64(0), uint64(200), uint64(3));
+            uint64(0), uint64(1), uint128(0), uint128(200), uint64(3));
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
@@ -1035,11 +1035,11 @@ contract KnomosisStepVMTest is Test {
     function test_ammSwap_rejects_same_resource() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(500), FIXTURE_PRE_COMMIT);
 
         // fromResource == toResource == 0, amountIn=100 > 0.
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(0), uint64(100), uint64(50), uint64(3));
+            uint64(0), uint64(0), uint128(100), uint128(50), uint64(3));
         vm.expectRevert(KnomosisStepVM.SameResourceSwap.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
@@ -1050,12 +1050,12 @@ contract KnomosisStepVMTest is Test {
     function test_ammSwap_rejects_insufficient_balance() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(500), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(500), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 1, 3, _encodeCbeNat(100), FIXTURE_PRE_COMMIT);  // to=100 < amountOut=200
+            0, 1, 3, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT);  // to=100 < amountOut=200
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(1), uint64(50), uint64(200), uint64(3));
+            uint64(0), uint64(1), uint128(50), uint128(200), uint64(3));
         vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(23), actionFields, uint64(10), proofs);
@@ -1072,12 +1072,12 @@ contract KnomosisStepVMTest is Test {
         // poolBalance=700 => newPoolBalance=5700.
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT); // reserve: res=0, actor=3
+            0, 0, 3, _encodeCbeAmount(5000), FIXTURE_PRE_COMMIT); // reserve: res=0, actor=3
         proofs[1] = _makeCellProof(
-            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);  // pool: res=0, actor=1
+            0, 0, 1, _encodeCbeAmount(700), FIXTURE_PRE_COMMIT);  // pool: res=0, actor=1
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(5000), uint64(3), uint64(1));
+            uint64(0), uint128(5000), uint64(3), uint64(1));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
 
@@ -1094,12 +1094,12 @@ contract KnomosisStepVMTest is Test {
     function test_reclaimAmmReserves_fresh_pool() public view {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 1, 3, _encodeCbeNat(4500), FIXTURE_PRE_COMMIT); // reserve: res=1 (BOLD leg)
+            0, 1, 3, _encodeCbeAmount(4500), FIXTURE_PRE_COMMIT); // reserve: res=1 (BOLD leg)
         proofs[1] = _makeCellProof(
-            0, 1, 1, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);    // pool: zero balance
+            0, 1, 1, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);    // pool: zero balance
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), uint64(4500), uint64(3), uint64(1));
+            uint64(1), uint128(4500), uint64(3), uint64(1));
         bytes32 result = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
 
@@ -1126,12 +1126,12 @@ contract KnomosisStepVMTest is Test {
     function test_reclaimAmmReserves_rejects_zero_amount() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(0), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);
+            0, 0, 1, _encodeCbeAmount(700), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(0), uint64(3), uint64(1));
+            uint64(0), uint128(0), uint64(3), uint64(1));
         vm.expectRevert(KnomosisStepVM.AmountMustBePositive.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
@@ -1143,10 +1143,10 @@ contract KnomosisStepVMTest is Test {
     function test_reclaimAmmReserves_rejects_same_actor() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(5000), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(5000), uint64(3), uint64(3));
+            uint64(0), uint128(5000), uint64(3), uint64(3));
         vm.expectRevert(KnomosisStepVM.SameActorSweep.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(24), actionFields, uint64(0), proofs);
@@ -1159,12 +1159,12 @@ contract KnomosisStepVMTest is Test {
     function test_reclaimAmmReserves_rejects_partial_sweep() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(5000), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);
+            0, 0, 1, _encodeCbeAmount(700), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(4999), uint64(3), uint64(1));
+            uint64(0), uint128(4999), uint64(3), uint64(1));
         vm.expectRevert(abi.encodeWithSelector(
             KnomosisStepVM.SweepAmountMismatch.selector, uint256(5000), uint256(4999)));
         stepVM.executeStep(
@@ -1177,12 +1177,12 @@ contract KnomosisStepVMTest is Test {
     function test_reclaimAmmReserves_rejects_over_sweep() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
-            0, 0, 3, _encodeCbeNat(5000), FIXTURE_PRE_COMMIT);
+            0, 0, 3, _encodeCbeAmount(5000), FIXTURE_PRE_COMMIT);
         proofs[1] = _makeCellProof(
-            0, 0, 1, _encodeCbeNat(700), FIXTURE_PRE_COMMIT);
+            0, 0, 1, _encodeCbeAmount(700), FIXTURE_PRE_COMMIT);
 
         bytes memory actionFields = abi.encodePacked(
-            uint64(0), uint64(5001), uint64(3), uint64(1));
+            uint64(0), uint128(5001), uint64(3), uint64(1));
         vm.expectRevert(abi.encodeWithSelector(
             KnomosisStepVM.SweepAmountMismatch.selector, uint256(5000), uint256(5001)));
         stepVM.executeStep(
@@ -1215,10 +1215,22 @@ contract KnomosisStepVMTest is Test {
     /* -------- Helpers -------- */
 
     /// @dev Encode a uint256 as a CBE Nat (1-byte tag + 8 bytes LE).
-    function _encodeCbeNat(uint256 v) internal pure returns (bytes memory) {
-        bytes memory result = new bytes(9);
-        result[0] = 0x1B;
-        for (uint256 i = 0; i < 8; i++) {
+    /// @notice The canonical CBE bytes of a BALANCE cell value: the
+    ///         17-byte amount head (tag 0x01 + 16 LE bytes).
+    ///
+    /// @dev    Two things were wrong with the previous form and both
+    ///         mattered.  It emitted tag `0x1B`, which no encoder on
+    ///         any stack produces — the tests passed only because
+    ///         `_decodeNat` used to IGNORE the tag byte and read a
+    ///         fixed 8 bytes.  And it was 8 bytes wide, so it could not
+    ///         express a balance at or above `2^64` (~18.45 ETH in
+    ///         wei).  `_decodeNat` is now exact-width and
+    ///         tag-dispatched, so a wrong tag or width reverts instead
+    ///         of decoding to a wrong number.
+    function _encodeCbeAmount(uint128 v) internal pure returns (bytes memory) {
+        bytes memory result = new bytes(17);
+        result[0] = 0x01;
+        for (uint256 i = 0; i < 16; i++) {
             // forge-lint: disable-next-line(unsafe-typecast)
             result[1 + i] = bytes1(uint8(v >> (8 * i)));
         }

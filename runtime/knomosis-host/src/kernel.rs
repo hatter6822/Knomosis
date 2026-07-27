@@ -733,7 +733,8 @@ pub mod mock {
         fn budget_gate_strict_mode_via_set_budget_gate() {
             use crate::budget::BudgetGate;
             // tag 20 topUpActionBudget: gasResource 0, gasAmount 5,
-            // budgetIncrement 100, poolActor 2 ; signer 10 (no balance).
+            // budgetIncrement 100, poolActor 1 (the canonical gas pool —
+            // the gate pins it) ; signer 10 (no balance).
             fn u(n: u64) -> Vec<u8> {
                 let mut v = vec![0x00u8];
                 v.extend_from_slice(&n.to_le_bytes());
@@ -751,7 +752,7 @@ pub mod mock {
             let mut sa = Vec::new();
             // topUpActionBudget: tag, gasResource, gasAmount (wide),
             // budgetIncrement, poolActor, then signer + nonce.
-            for chunk in [u(20), u(0), amt(5), u(100), u(2), u(10), u(0)] {
+            for chunk in [u(20), u(0), amt(5), u(100), u(1), u(10), u(0)] {
                 sa.extend_from_slice(&chunk);
             }
             let mut sig = vec![0x02u8];
