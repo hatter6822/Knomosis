@@ -702,6 +702,88 @@ snapshot-bootstrap guarantees.
 
 ---
 
+## C-1 (CRITICAL) — `State.encode` is non-injective on reachable
+states: balances ≥ 2^64 collide, so two distinct states share one
+L1 state root
+
+**Status:** OPEN.  Found by a later audit pass; not covered by the
+original review, whose closing note ("No critical findings") is
+superseded by this entry.
+
+**Where.**  `LegalKernel/Encoding/Encodable.lean` (`instEncodableNat`
+→ `cborHeadEncode`, a fixed 8-byte little-endian body) and
+`LegalKernel/Encoding/State.lean` (`State.encode` →
+`BalanceMap.encodeAsBytes`, which encodes each balance with that
+`Nat` instance).
+
+**The defect.**  `Amount` is `Nat` (unbounded, `Kernel.lean`), but the
+CBE `Nat` encoder is total and lossy above `2^64` — it truncates
+modulo `2^64` rather than failing.  `State.encode_injective`
+(`Encoding/StateInjective.lean`) is therefore correctly conditioned on
+`h_amt : ∀ p ∈ s.balances.toList, ∀ q ∈ p.2.toList, q.2 < 256 ^ 8`,
+and its docstring states that "the runtime adaptor (Phase 5) gates
+inputs at the boundary".
+
+That gate does not discharge the hypothesis, for two independent
+reasons:
+
+1. **Nothing in production Lean bounds a balance.**  Every `< 256 ^ 8`
+   occurrence outside a proof is in `Encoding/Action.lean`'s
+   well-formedness predicate, which constrains *action input fields*.
+   There is no invariant, precondition, or smart constructor bounding
+   a stored balance.
+2. **Bounding inputs cannot bound balances anyway.**  Balances
+   accumulate: repeated in-range deposits sum past `2^64`.  The
+   hypothesis is on the *stored balance*, not the input amount, so an
+   input gate is the wrong quantity even if it existed.
+
+`State.encode_injective` has no production caller — it is referenced
+only from its own module and the test suite — so `h_amt` is never
+discharged anywhere.
+
+**Executable demonstration** (run against this tree):
+
+```lean
+import LegalKernel
+open LegalKernel LegalKernel.Encoding
+def sA : State := setBalance { balances := ∅ } 0 1 100
+def sB : State := setBalance { balances := ∅ } 0 1 (100 + 2^64)
+#eval (getBalance sA 0 1 == getBalance sB 0 1)          -- false
+#eval (State.encode sA == State.encode sB)              -- TRUE
+```
+
+Observed: balances `100` and `18446744073709551716` differ, yet both
+states encode to the same 54 bytes.
+
+**Impact.**  `commitState` / `commitExtendedState` hash exactly these
+bytes, so two distinct states produce the same L1 state root.  The
+state commitment is not binding on the balance ledger, which is the
+assumption the fault-proof chain rests on: a committed root no longer
+identifies a unique balance assignment, so a bisection game can settle
+on a state root that does not correspond to the state actually
+reached.  Reaching the threshold requires a single actor's balance to
+touch `2^64` wei ≈ **18.45 ETH** — routine for a bridge escrow or the
+gas-pool actor, not an exotic edge case.
+
+**Why a fix is not attempted in this pass.**  Every available remedy
+is Genesis-Plan scale and needs the §13.6 two-reviewer gate:
+
+* widening the `Nat` body to a variable-length encoding breaks the
+  frozen byte contract that the Rust indexer and the Solidity step VM
+  are pinned to (the cross-stack corpora would all have to be
+  regenerated);
+* making the encoder fail-closed changes `encode`'s signature from
+  total `Stream` to a fallible one, touching every encoder in the
+  ladder; and
+* enforcing `balance < 2^64` as a kernel-level invariant adds a
+  precondition to every balance-mutating law and changes what
+  `Reachable` admits.
+
+The right owner is a scoped workstream that picks one of these
+deliberately.  Recording it here rather than half-fixing it.
+
+---
+
 ## Closing notes
 
 The audit reviewed ~73,000 lines of Lean across 241 files.
@@ -722,7 +804,12 @@ than CODEOWNERS.  Combined with the mechanical gates, this
 gives the project the right posture for its claimed phase
 (research-stage with production-aspiration).
 
-No critical findings.  Ten major findings, mostly
+**Superseded:** this note originally read "No critical findings".
+Finding **C-1** above (`State.encode` non-injective on balances
+≥ 2^64) is critical and was missed by this review.  The remainder of
+the note stands as written.
+
+Ten major findings, mostly
 documentation-vs-enforcement drift or
 non-TCB-but-could-be-tighter; each has a recommended fix
 that does not require a TCB amendment.  ~30 minor and
