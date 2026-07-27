@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "baa2c1859fbafd4e656be13c266d16a867c24ef36be84362b0b01770729d4a34"
+    "source_digest": "6d2566ab9018f889ffbc1c4de38a148b48e2fe15f9f8634cecacd6c332e10f70"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5210
+    "declaration_count": 5217
   },
   "modules": [
     {
@@ -45401,7 +45401,7 @@
     {
       "module": "LegalKernel.Test.Encoding.Action",
       "path": "LegalKernel/Test/Encoding/Action.lean",
-      "declaration_count": 46,
+      "declaration_count": 53,
       "declarations": [
         {
           "kind": "namespace",
@@ -45876,14 +45876,110 @@
         },
         {
           "kind": "def",
-          "name": "tests",
+          "name": "sampleAddr",
           "line": 605,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleDispute",
+          "line": 626,
+          "called": [
+            "challenger"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "sampleVerdict",
+          "line": 634,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sampleActions",
+          "line": 641,
+          "called": [
+            "Action",
+            "ammSwap",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "distributeOthers",
+            "freezeResource",
+            "mint",
+            "proportionalDilute",
+            "reclaimAmmReserves",
+            "reward",
+            "sampleAddr",
+            "sampleDispute",
+            "sampleVerdict",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "requiredActionTag",
+          "line": 670,
+          "called": [
+            "Action",
+            "ammSwap",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "distributeOthers",
+            "freezeResource",
+            "mint",
+            "proportionalDilute",
+            "reclaimAmmReserves",
+            "reward",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "actionSweepCoversAllTags",
+          "line": 699,
+          "called": [
+            "Action.tag",
+            "TestCase",
+            "assertEq",
+            "requiredActionTag",
+            "sampleActions"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "actionSweepRoundtrips",
+          "line": 711,
+          "called": [
+            "Action",
+            "Action.decode",
+            "Stream",
+            "TestCase",
+            "assertEq",
+            "sampleActions"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 726,
           "called": [
             "ActionTests",
             "LegalKernel.Test.Encoding",
             "TestCase",
             "actionInjectiveAPI",
             "actionRoundtripAPI",
+            "actionSweepCoversAllTags",
+            "actionSweepRoundtrips",
             "burnRT",
             "claimBudgetRefundFieldInjective",
             "claimBudgetRefundRT",

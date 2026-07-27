@@ -222,6 +222,18 @@ impl<'a> Cursor<'a> {
         Ok(BudgetUnits::from(self.read_uint()?))
     }
 
+    /// Read a CBE uint as a `Nonce` (= `u128`).  A nonce is a
+    /// per-actor COUNTER, not a value, so it stays on the 8-byte
+    /// `CBE_TAG_UINT` head even as amounts widen to the 16-byte
+    /// `CBE_TAG_AMOUNT` head.  Previously these fields went through
+    /// `read_amount`, which would have silently widened them along
+    /// with real amounts and desynchronised this decoder from Lean's
+    /// `Encoding/Event.lean` (which encodes `oldN`/`newN` as plain
+    /// `Nat`).
+    fn read_nonce(&mut self) -> Result<Nonce, DecodeError> {
+        Ok(Nonce::from(self.read_uint()?))
+    }
+
     /// Read a CBE byte string (tag 0x02 + 8-byte LE length +
     /// payload).
     fn read_byte_string(&mut self) -> Result<Vec<u8>, DecodeError> {
@@ -301,8 +313,8 @@ pub fn decode_event(payload: &[u8]) -> Result<Event, DecodeError> {
         },
         1 => Event::NonceAdvanced {
             actor: cursor.read_uint()?,
-            old_nonce: cursor.read_amount()?,
-            new_nonce: cursor.read_amount()?,
+            old_nonce: cursor.read_nonce()?,
+            new_nonce: cursor.read_nonce()?,
         },
         2 => Event::IdentityRegistered {
             actor: cursor.read_uint()?,
@@ -497,8 +509,29 @@ fn write_budget_units(out: &mut Vec<u8>, units: BudgetUnits) {
     write_uint(out, n);
 }
 
+/// Encode a `Nonce` into `out` on the 8-byte uint head.  Counterpart
+/// of [`Cursor::read_nonce`]: a nonce is a counter, not a value, and
+/// must not follow amounts onto the wider amount head.
+fn write_nonce(out: &mut Vec<u8>, nonce: Nonce) {
+    let n = (nonce & u128::from(u64::MAX)) as u64;
+    write_uint(out, n);
+}
+
 /// Encode a `BudgetUnits` into `out`, rejecting values `>= 2^64`.
 /// Sibling of [`write_amount_checked`] for the budget-unit fields.
+/// Encode a `Nonce` into `out`, rejecting values `>= 2^64`.  Sibling
+/// of [`write_amount_checked`] for the counter fields, which stay on
+/// the 8-byte uint head.
+fn write_nonce_checked(out: &mut Vec<u8>, nonce: Nonce) -> Result<(), EncodeError> {
+    if nonce >= 1u128 << 64 {
+        return Err(EncodeError::AmountExceedsBound { value: nonce });
+    }
+    #[allow(clippy::cast_possible_truncation)] // bound-checked above
+    let n = nonce as u64;
+    write_uint(out, n);
+    Ok(())
+}
+
 fn write_budget_units_checked(out: &mut Vec<u8>, units: BudgetUnits) -> Result<(), EncodeError> {
     if units >= 1u128 << 64 {
         return Err(EncodeError::AmountExceedsBound { value: units });
@@ -548,8 +581,8 @@ pub fn encode_event(event: &Event) -> Vec<u8> {
             new_nonce,
         } => {
             write_uint(&mut out, *actor);
-            write_amount(&mut out, *old_nonce);
-            write_amount(&mut out, *new_nonce);
+            write_nonce(&mut out, *old_nonce);
+            write_nonce(&mut out, *new_nonce);
         }
         Event::IdentityRegistered { actor, key } => {
             write_uint(&mut out, *actor);
@@ -775,8 +808,8 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             new_nonce,
         } => {
             write_uint(&mut out, *actor);
-            write_amount_checked(&mut out, *old_nonce)?;
-            write_amount_checked(&mut out, *new_nonce)?;
+            write_nonce_checked(&mut out, *old_nonce)?;
+            write_nonce_checked(&mut out, *new_nonce)?;
         }
         Event::IdentityRegistered { actor, key } => {
             write_uint(&mut out, *actor);

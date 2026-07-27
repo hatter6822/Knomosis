@@ -15,11 +15,11 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f5ce27585d4230dd0a701bfb6000efbdf18f9c0a1c1228c20429e09a239bc018"
+    "source_digest": "93168fae32d6f4c3a7cae4fcb7b38005cb9594584849d0b4d0774e1fe9809fc3"
   },
   "summary": {
     "module_count": 192,
-    "declaration_count": 5962
+    "declaration_count": 5966
   },
   "modules": [
     {
@@ -47125,7 +47125,7 @@
     {
       "module": "runtime::knomosis-indexer::src::decoder",
       "path": "runtime/knomosis-indexer/src/decoder.rs",
-      "declaration_count": 77,
+      "declaration_count": 80,
       "declarations": [
         {
           "kind": "const",
@@ -47262,8 +47262,18 @@
         },
         {
           "kind": "fn",
+          "name": "read_nonce",
+          "line": 232,
+          "called": [
+            "DecodeError",
+            "Nonce",
+            "read_uint"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "read_byte_string",
-          "line": 226,
+          "line": 238,
           "called": [
             "CBE_TAG_BYTES",
             "DecodeError",
@@ -47281,7 +47291,7 @@
         {
           "kind": "fn",
           "name": "read_byte_string_exact",
-          "line": 255,
+          "line": 267,
           "called": [
             "CBE_TAG_BYTES",
             "DecodeError",
@@ -47297,7 +47307,7 @@
         {
           "kind": "fn",
           "name": "read_eth_address",
-          "line": 277,
+          "line": 289,
           "called": [
             "DecodeError",
             "ETH_ADDRESS_BYTES",
@@ -47308,7 +47318,7 @@
         {
           "kind": "fn",
           "name": "decode_event",
-          "line": 291,
+          "line": 303,
           "called": [
             "DecodeError",
             "Err",
@@ -47325,6 +47335,7 @@
             "read_budget_units",
             "read_byte_string",
             "read_eth_address",
+            "read_nonce",
             "read_uint",
             "remaining",
             "resource",
@@ -47335,7 +47346,7 @@
         {
           "kind": "fn",
           "name": "write_uint",
-          "line": 432,
+          "line": 444,
           "called": [
             "CBE_TAG_UINT",
             "push"
@@ -47344,7 +47355,7 @@
         {
           "kind": "fn",
           "name": "write_byte_string",
-          "line": 438,
+          "line": 450,
           "called": [
             "CBE_TAG_BYTES",
             "len",
@@ -47354,7 +47365,7 @@
         {
           "kind": "enum",
           "name": "EncodeError",
-          "line": 447,
+          "line": 459,
           "called": [
             "error"
           ]
@@ -47362,7 +47373,7 @@
         {
           "kind": "fn",
           "name": "write_amount_checked",
-          "line": 463,
+          "line": 475,
           "called": [
             "Amount",
             "EncodeError",
@@ -47374,7 +47385,7 @@
         {
           "kind": "fn",
           "name": "write_amount",
-          "line": 486,
+          "line": 498,
           "called": [
             "Amount",
             "amount",
@@ -47384,7 +47395,7 @@
         {
           "kind": "fn",
           "name": "write_budget_units",
-          "line": 494,
+          "line": 506,
           "called": [
             "BudgetUnits",
             "write_uint"
@@ -47392,8 +47403,30 @@
         },
         {
           "kind": "fn",
+          "name": "write_nonce",
+          "line": 514,
+          "called": [
+            "Nonce",
+            "nonce",
+            "write_uint"
+          ]
+        },
+        {
+          "kind": "fn",
+          "name": "write_nonce_checked",
+          "line": 524,
+          "called": [
+            "EncodeError",
+            "Err",
+            "Nonce",
+            "nonce",
+            "write_uint"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "write_budget_units_checked",
-          "line": 501,
+          "line": 534,
           "called": [
             "BudgetUnits",
             "EncodeError",
@@ -47404,7 +47437,7 @@
         {
           "kind": "fn",
           "name": "write_eth_address",
-          "line": 512,
+          "line": 545,
           "called": [
             "EthAddress",
             "addr",
@@ -47414,7 +47447,7 @@
         {
           "kind": "fn",
           "name": "encode_event",
-          "line": 529,
+          "line": 562,
           "called": [
             "Event",
             "actor",
@@ -47431,13 +47464,14 @@
             "write_budget_units",
             "write_byte_string",
             "write_eth_address",
+            "write_nonce",
             "write_uint"
           ]
         },
         {
           "kind": "fn",
           "name": "encode_event_checked",
-          "line": 756,
+          "line": 789,
           "called": [
             "EncodeError",
             "Event",
@@ -47455,13 +47489,14 @@
             "write_budget_units_checked",
             "write_byte_string",
             "write_eth_address",
+            "write_nonce_checked",
             "write_uint"
           ]
         },
         {
           "kind": "fn",
           "name": "amount_to_be_bytes",
-          "line": 973,
+          "line": 1006,
           "called": [
             "Amount",
             "amount"
@@ -47470,7 +47505,7 @@
         {
           "kind": "fn",
           "name": "amount_from_be_bytes",
-          "line": 981,
+          "line": 1014,
           "called": [
             "ActorId",
             "Amount",
@@ -47481,7 +47516,7 @@
         {
           "kind": "type",
           "name": "_Aliases",
-          "line": 991,
+          "line": 1024,
           "called": [
             "DepositId",
             "Nonce",
@@ -47491,7 +47526,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 1001,
+          "line": 1034,
           "called": [
             "DecodeError",
             "ETH_ADDRESS_BYTES",
@@ -47505,7 +47540,7 @@
         {
           "kind": "fn",
           "name": "constants",
-          "line": 1010,
+          "line": 1043,
           "called": [
             "ETH_ADDRESS_BYTES",
             "HARD_MAX_BYTE_STRING_LEN",
@@ -47515,7 +47550,7 @@
         {
           "kind": "fn",
           "name": "round_trip_balance_changed",
-          "line": 1018,
+          "line": 1051,
           "called": [
             "actor",
             "bytes",
@@ -47527,7 +47562,7 @@
         {
           "kind": "fn",
           "name": "round_trip_nonce_advanced",
-          "line": 1031,
+          "line": 1064,
           "called": [
             "actor",
             "bytes",
@@ -47538,7 +47573,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_registered",
-          "line": 1042,
+          "line": 1075,
           "called": [
             "actor",
             "bytes",
@@ -47550,7 +47585,7 @@
         {
           "kind": "fn",
           "name": "round_trip_identity_revoked",
-          "line": 1052,
+          "line": 1085,
           "called": [
             "actor",
             "bytes",
@@ -47561,7 +47596,7 @@
         {
           "kind": "fn",
           "name": "round_trip_time_recorded",
-          "line": 1059,
+          "line": 1092,
           "called": [
             "bytes",
             "decode_event",
@@ -47571,7 +47606,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_filed",
-          "line": 1068,
+          "line": 1101,
           "called": [
             "bytes",
             "decode_event",
@@ -47581,7 +47616,7 @@
         {
           "kind": "fn",
           "name": "round_trip_dispute_withdrawn",
-          "line": 1078,
+          "line": 1111,
           "called": [
             "bytes",
             "decode_event",
@@ -47591,7 +47626,7 @@
         {
           "kind": "fn",
           "name": "round_trip_verdict_applied",
-          "line": 1085,
+          "line": 1118,
           "called": [
             "bytes",
             "decode_event",
@@ -47601,7 +47636,7 @@
         {
           "kind": "fn",
           "name": "round_trip_reward_issued",
-          "line": 1095,
+          "line": 1128,
           "called": [
             "amount",
             "bytes",
@@ -47613,7 +47648,7 @@
         {
           "kind": "fn",
           "name": "round_trip_withdrawal_requested",
-          "line": 1106,
+          "line": 1139,
           "called": [
             "amount",
             "bytes",
@@ -47625,7 +47660,7 @@
         {
           "kind": "fn",
           "name": "round_trip_deposit_credited",
-          "line": 1119,
+          "line": 1152,
           "called": [
             "amount",
             "bytes",
@@ -47637,7 +47672,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_declared",
-          "line": 1131,
+          "line": 1164,
           "called": [
             "actor",
             "bytes",
@@ -47649,7 +47684,7 @@
         {
           "kind": "fn",
           "name": "round_trip_local_policy_revoked",
-          "line": 1141,
+          "line": 1174,
           "called": [
             "actor",
             "bytes",
@@ -47660,7 +47695,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_opened",
-          "line": 1148,
+          "line": 1181,
           "called": [
             "bytes",
             "decode_event",
@@ -47671,7 +47706,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_bisection_step",
-          "line": 1161,
+          "line": 1194,
           "called": [
             "bytes",
             "commit",
@@ -47683,7 +47718,7 @@
         {
           "kind": "fn",
           "name": "round_trip_fault_proof_game_settled",
-          "line": 1174,
+          "line": 1207,
           "called": [
             "bytes",
             "decode_event",
@@ -47694,7 +47729,7 @@
         {
           "kind": "fn",
           "name": "round_trip_deposit_with_fee_credited",
-          "line": 1187,
+          "line": 1220,
           "called": [
             "bytes",
             "decode_event",
@@ -47705,7 +47740,7 @@
         {
           "kind": "fn",
           "name": "round_trip_action_budget_top_up",
-          "line": 1203,
+          "line": 1236,
           "called": [
             "bytes",
             "decode_event",
@@ -47716,7 +47751,7 @@
         {
           "kind": "fn",
           "name": "round_trip_gas_pool_claim",
-          "line": 1217,
+          "line": 1250,
           "called": [
             "amount",
             "bytes",
@@ -47728,7 +47763,7 @@
         {
           "kind": "fn",
           "name": "round_trip_delegated_action_budget_top_up",
-          "line": 1229,
+          "line": 1262,
           "called": [
             "bytes",
             "decode_event",
@@ -47739,7 +47774,7 @@
         {
           "kind": "fn",
           "name": "round_trip_budget_consumed",
-          "line": 1244,
+          "line": 1277,
           "called": [
             "actor",
             "amount",
@@ -47751,7 +47786,7 @@
         {
           "kind": "fn",
           "name": "budget_consumed_byte_layout",
-          "line": 1257,
+          "line": 1290,
           "called": [
             "actor",
             "amount",
@@ -47763,7 +47798,7 @@
         {
           "kind": "fn",
           "name": "deposit_with_fee_credited_byte_layout",
-          "line": 1279,
+          "line": 1312,
           "called": [
             "bytes",
             "encode_event",
@@ -47774,7 +47809,7 @@
         {
           "kind": "fn",
           "name": "delegated_action_budget_top_up_byte_layout",
-          "line": 1308,
+          "line": 1341,
           "called": [
             "bytes",
             "encode_event",
@@ -47785,7 +47820,7 @@
         {
           "kind": "fn",
           "name": "tag_17_and_19_byte_distinct",
-          "line": 1337,
+          "line": 1370,
           "called": [
             "encode_event",
             "len",
@@ -47795,7 +47830,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_gp_family",
-          "line": 1368,
+          "line": 1401,
           "called": [
             "amount",
             "decode_event",
@@ -47809,7 +47844,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_oversize_budget_grant",
-          "line": 1411,
+          "line": 1444,
           "called": [
             "Err",
             "encode_event_checked",
@@ -47819,7 +47854,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_oversize_budget_increment_tag17",
-          "line": 1432,
+          "line": 1465,
           "called": [
             "Err",
             "encode_event_checked",
@@ -47829,7 +47864,7 @@
         {
           "kind": "fn",
           "name": "empty_payload_truncated",
-          "line": 1448,
+          "line": 1481,
           "called": [
             "Err",
             "decode_event",
@@ -47839,7 +47874,7 @@
         {
           "kind": "fn",
           "name": "trailing_bytes_rejected",
-          "line": 1457,
+          "line": 1490,
           "called": [
             "Err",
             "actor",
@@ -47852,7 +47887,7 @@
         {
           "kind": "fn",
           "name": "unknown_tag_rejected",
-          "line": 1470,
+          "line": 1503,
           "called": [
             "Err",
             "bytes",
@@ -47864,7 +47899,7 @@
         {
           "kind": "fn",
           "name": "bad_head_tag_rejected",
-          "line": 1484,
+          "line": 1517,
           "called": [
             "Err",
             "bytes",
@@ -47876,7 +47911,7 @@
         {
           "kind": "fn",
           "name": "truncated_mid_payload",
-          "line": 1504,
+          "line": 1537,
           "called": [
             "Err",
             "actor",
@@ -47890,7 +47925,7 @@
         {
           "kind": "fn",
           "name": "byte_string_too_long_rejected",
-          "line": 1522,
+          "line": 1555,
           "called": [
             "Err",
             "HARD_MAX_BYTE_STRING_LEN",
@@ -47902,7 +47937,7 @@
         {
           "kind": "fn",
           "name": "eth_address_wrong_length_rejected",
-          "line": 1545,
+          "line": 1578,
           "called": [
             "Err",
             "bytes",
@@ -47913,7 +47948,7 @@
         {
           "kind": "fn",
           "name": "encode_event_deterministic",
-          "line": 1576,
+          "line": 1609,
           "called": [
             "amount",
             "b",
@@ -47924,7 +47959,7 @@
         {
           "kind": "fn",
           "name": "balance_changed_byte_layout",
-          "line": 1591,
+          "line": 1624,
           "called": [
             "actor",
             "bytes",
@@ -47936,7 +47971,7 @@
         {
           "kind": "fn",
           "name": "decoder_does_not_panic_on_random_input",
-          "line": 1621,
+          "line": 1654,
           "called": [
             "_",
             "decode_event"
@@ -47945,7 +47980,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_bounded",
-          "line": 1637,
+          "line": 1670,
           "called": [
             "actor",
             "bytes",
@@ -47957,7 +47992,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_overflow",
-          "line": 1652,
+          "line": 1685,
           "called": [
             "Err",
             "actor",
@@ -47968,7 +48003,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_rejects_exact_boundary",
-          "line": 1671,
+          "line": 1704,
           "called": [
             "Err",
             "amount",
@@ -47979,7 +48014,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_accepts_max_u64",
-          "line": 1688,
+          "line": 1721,
           "called": [
             "amount",
             "bytes",
@@ -47991,7 +48026,7 @@
         {
           "kind": "fn",
           "name": "encode_event_checked_matches_unchecked_in_range",
-          "line": 1702,
+          "line": 1735,
           "called": [
             "actor",
             "amount",
@@ -51597,7 +51632,7 @@
     {
       "module": "runtime::knomosis-l1-ingest::src::encoding",
       "path": "runtime/knomosis-l1-ingest/src/encoding.rs",
-      "declaration_count": 61,
+      "declaration_count": 62,
       "declarations": [
         {
           "kind": "const",
@@ -51711,8 +51746,18 @@
         },
         {
           "kind": "fn",
+          "name": "encode_nonce",
+          "line": 440,
+          "called": [
+            "EncodeError",
+            "encode_u128_checked",
+            "nonce"
+          ]
+        },
+        {
+          "kind": "fn",
           "name": "encode_byte_string",
-          "line": 433,
+          "line": 447,
           "called": [
             "EncodeError",
             "bytes",
@@ -51723,7 +51768,7 @@
         {
           "kind": "fn",
           "name": "signing_input",
-          "line": 460,
+          "line": 474,
           "called": [
             "Action",
             "EncodeError",
@@ -51731,8 +51776,8 @@
             "action",
             "as_bytes",
             "encode_action",
-            "encode_amount",
             "encode_byte_string",
+            "encode_nonce",
             "encode_u64",
             "nonce",
             "signer"
@@ -51741,14 +51786,14 @@
         {
           "kind": "fn",
           "name": "encode_signed_action",
-          "line": 494,
+          "line": 508,
           "called": [
             "Action",
             "EncodeError",
             "action",
             "encode_action",
-            "encode_amount",
             "encode_byte_string",
+            "encode_nonce",
             "encode_u64",
             "nonce",
             "signer"
@@ -51757,7 +51802,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address",
-          "line": 511,
+          "line": 525,
           "called": [
             "EthAddress",
             "addr",
@@ -51768,7 +51813,7 @@
         {
           "kind": "mod",
           "name": "tests",
-          "line": 517,
+          "line": 531,
           "called": [
             "Action",
             "CBE_TAG_BYTES",
@@ -51790,7 +51835,7 @@
         {
           "kind": "fn",
           "name": "u64_le_zero",
-          "line": 527,
+          "line": 541,
           "called": [
             "write_u64_le"
           ]
@@ -51798,7 +51843,7 @@
         {
           "kind": "fn",
           "name": "u64_le_one",
-          "line": 535,
+          "line": 549,
           "called": [
             "write_u64_le"
           ]
@@ -51806,7 +51851,7 @@
         {
           "kind": "fn",
           "name": "u64_le_max",
-          "line": 543,
+          "line": 557,
           "called": [
             "write_u64_le"
           ]
@@ -51814,7 +51859,7 @@
         {
           "kind": "fn",
           "name": "u64_le_pattern",
-          "line": 551,
+          "line": 565,
           "called": [
             "write_u64_le"
           ]
@@ -51822,7 +51867,7 @@
         {
           "kind": "fn",
           "name": "encode_u64_layout",
-          "line": 560,
+          "line": 574,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51833,7 +51878,7 @@
         {
           "kind": "fn",
           "name": "encode_u128_rejects_overflow",
-          "line": 569,
+          "line": 583,
           "called": [
             "encode_u128_checked"
           ]
@@ -51841,7 +51886,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_empty",
-          "line": 577,
+          "line": 591,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -51852,7 +51897,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_short",
-          "line": 586,
+          "line": 600,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -51863,7 +51908,7 @@
         {
           "kind": "fn",
           "name": "encode_transfer_layout",
-          "line": 596,
+          "line": 610,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51877,7 +51922,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_layout",
-          "line": 627,
+          "line": 641,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -51891,7 +51936,7 @@
         {
           "kind": "fn",
           "name": "encode_replace_key_layout",
-          "line": 648,
+          "line": 662,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -51905,7 +51950,7 @@
         {
           "kind": "fn",
           "name": "encode_withdraw_layout",
-          "line": 669,
+          "line": 683,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51919,7 +51964,7 @@
         {
           "kind": "fn",
           "name": "encode_revoke_local_policy",
-          "line": 686,
+          "line": 700,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -51931,7 +51976,7 @@
         {
           "kind": "fn",
           "name": "encode_signed_action_layout",
-          "line": 696,
+          "line": 710,
           "called": [
             "action",
             "encode_signed_action",
@@ -51942,7 +51987,7 @@
         {
           "kind": "fn",
           "name": "signing_input_starts_with_domain_prefix",
-          "line": 710,
+          "line": 724,
           "called": [
             "CBE_TAG_BYTES",
             "SIGNED_ACTION_DOMAIN",
@@ -51957,7 +52002,7 @@
         {
           "kind": "fn",
           "name": "signing_input_min_size",
-          "line": 726,
+          "line": 740,
           "called": [
             "action",
             "bytes",
@@ -51969,7 +52014,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_deployments",
-          "line": 739,
+          "line": 753,
           "called": [
             "action",
             "r",
@@ -51979,7 +52024,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_nonces",
-          "line": 748,
+          "line": 762,
           "called": [
             "action",
             "r",
@@ -51989,7 +52034,7 @@
         {
           "kind": "fn",
           "name": "signing_input_distinguishes_actions",
-          "line": 757,
+          "line": 771,
           "called": [
             "r",
             "signing_input"
@@ -51998,7 +52043,7 @@
         {
           "kind": "fn",
           "name": "encode_eth_address_layout",
-          "line": 767,
+          "line": 781,
           "called": [
             "CBE_TAG_BYTES",
             "HEAD_LEN",
@@ -52010,7 +52055,7 @@
         {
           "kind": "fn",
           "name": "signed_action_domain_matches_lean",
-          "line": 779,
+          "line": 793,
           "called": [
             "SIGNED_ACTION_DOMAIN",
             "len"
@@ -52019,7 +52064,7 @@
         {
           "kind": "fn",
           "name": "encode_action_deterministic",
-          "line": 787,
+          "line": 801,
           "called": [
             "actor",
             "encode_action"
@@ -52028,7 +52073,7 @@
         {
           "kind": "fn",
           "name": "encode_register_identity_known_vector",
-          "line": 810,
+          "line": 824,
           "called": [
             "actor",
             "encode_action"
@@ -52037,7 +52082,7 @@
         {
           "kind": "fn",
           "name": "signing_input_domain_prefix_known_vector",
-          "line": 839,
+          "line": 853,
           "called": [
             "b",
             "bytes",
@@ -52049,7 +52094,7 @@
         {
           "kind": "fn",
           "name": "encode_bytes_checked_empty_known_vector",
-          "line": 857,
+          "line": 871,
           "called": [
             "encode_bytes_checked"
           ]
@@ -52057,7 +52102,7 @@
         {
           "kind": "fn",
           "name": "encode_u64_zero_known_vector",
-          "line": 865,
+          "line": 879,
           "called": [
             "encode_u64"
           ]
@@ -52065,7 +52110,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_layout",
-          "line": 874,
+          "line": 888,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -52078,7 +52123,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_layout",
-          "line": 916,
+          "line": 930,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -52090,7 +52135,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_layout",
-          "line": 946,
+          "line": 960,
           "called": [
             "CBE_TAG_UINT",
             "HEAD_LEN",
@@ -52102,7 +52147,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_known_vector",
-          "line": 995,
+          "line": 1009,
           "called": [
             "action",
             "encode_action",
@@ -52112,7 +52157,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_bold_known_vector",
-          "line": 1028,
+          "line": 1042,
           "called": [
             "encode_action",
             "len",
@@ -52122,7 +52167,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_known_vector",
-          "line": 1070,
+          "line": 1084,
           "called": [
             "action",
             "encode_action"
@@ -52131,7 +52176,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_known_vector",
-          "line": 1094,
+          "line": 1108,
           "called": [
             "action",
             "encode_action"
@@ -52140,7 +52185,7 @@
         {
           "kind": "fn",
           "name": "encode_claim_budget_refund_known_vector",
-          "line": 1120,
+          "line": 1134,
           "called": [
             "action",
             "encode_action"
@@ -52149,7 +52194,7 @@
         {
           "kind": "fn",
           "name": "encode_amm_swap_known_vector",
-          "line": 1145,
+          "line": 1159,
           "called": [
             "action",
             "encode_action"
@@ -52158,7 +52203,7 @@
         {
           "kind": "fn",
           "name": "encode_reclaim_amm_reserves_known_vector",
-          "line": 1175,
+          "line": 1189,
           "called": [
             "action",
             "amount",
@@ -52169,7 +52214,7 @@
         {
           "kind": "fn",
           "name": "encode_reclaim_amm_reserves_rejects_oversized_amount",
-          "line": 1198,
+          "line": 1212,
           "called": [
             "Err",
             "action",
@@ -52181,7 +52226,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_rejects_oversized_user_amount",
-          "line": 1216,
+          "line": 1230,
           "called": [
             "Err",
             "action",
@@ -52192,7 +52237,7 @@
         {
           "kind": "fn",
           "name": "encode_deposit_with_fee_rejects_oversized_pool_amount",
-          "line": 1236,
+          "line": 1250,
           "called": [
             "Err",
             "action",
@@ -52203,7 +52248,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_rejects_oversized_gas_amount",
-          "line": 1256,
+          "line": 1270,
           "called": [
             "Err",
             "action",
@@ -52213,7 +52258,7 @@
         {
           "kind": "fn",
           "name": "encode_top_up_action_budget_for_rejects_oversized_gas_amount",
-          "line": 1273,
+          "line": 1287,
           "called": [
             "Err",
             "action",
@@ -52223,7 +52268,7 @@
         {
           "kind": "fn",
           "name": "top_up_action_budget_variants_distinct_bytes",
-          "line": 1294,
+          "line": 1308,
           "called": [
             "HEAD_LEN",
             "encode_action",
@@ -52233,7 +52278,7 @@
         {
           "kind": "fn",
           "name": "signing_input_deposit_with_fee",
-          "line": 1323,
+          "line": 1337,
           "called": [
             "CBE_TAG_BYTES",
             "CBE_TAG_UINT",
@@ -52249,7 +52294,7 @@
         {
           "kind": "fn",
           "name": "encode_gp_actions_deterministic",
-          "line": 1355,
+          "line": 1369,
           "called": [
             "b",
             "encode_action",

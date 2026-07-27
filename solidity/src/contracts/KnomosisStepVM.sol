@@ -82,6 +82,22 @@ contract KnomosisStepVM {
     }
 
     /* ---------------------------------------------------------- */
+    /* CBE type bytes (mirror LegalKernel/Encoding/CBOR.lean)     */
+    /* ---------------------------------------------------------- */
+
+    /// @notice CBE type byte for an 8-byte-body unsigned integer
+    ///         (identifiers, nonces, constructor tags, length prefixes).
+    ///         Mirrors `cbeTagUint` in `LegalKernel/Encoding/CBOR.lean`.
+    uint8 internal constant CBE_TAG_UINT = 0x00;
+
+    /// @notice CBE type byte for a 16-byte-body AMOUNT.  Amounts are the
+    ///         one CBE field that legitimately exceeds 2^64 — a balance
+    ///         denominated in wei passes that at ~18.45 ETH, and balances
+    ///         accumulate — so they carry a distinct tag and a wider body.
+    ///         Mirrors `cbeTagAmount` in `LegalKernel/Encoding/CBOR.lean`.
+    uint8 internal constant CBE_TAG_AMOUNT = 0x01;
+
+    /* ---------------------------------------------------------- */
     /* Per-variant action discriminator (mirrors Action.tag)      */
     /* ---------------------------------------------------------- */
 
@@ -419,12 +435,30 @@ contract KnomosisStepVM {
     ///         cross-stack soundness gap (cellValue not bound to
     ///         witnessState at the Solidity layer) would be even
     ///         wider.
+    ///         **Exact-width, tag-dispatched.**  The width is derived from
+    ///         the leading CBE type byte and the whole slice must match it
+    ///         exactly.  An earlier form guarded `data.length < 9` rather
+    ///         than an exact width, which meant a 17-byte
+    ///         `CBE_TAG_AMOUNT` head PASSED the check and was silently
+    ///         truncated to its low 8 bytes — a wrong value rather than a
+    ///         revert, on the cell values a bisection game settles against.
+    ///         Any unrecognised tag, or a payload whose length does not
+    ///         match its tag, reverts.
     function _decodeNat(bytes memory data) internal pure returns (uint256) {
         if (data.length == 0) return 0;
-        if (data.length < 9) revert MalformedCellValue();
-        // Read 8 bytes LE starting at offset 1.
+        if (data.length < 1) revert MalformedCellValue();
+        uint8 tag = uint8(data[0]);
+        uint256 width;
+        if (tag == CBE_TAG_UINT) {
+            width = 8;
+        } else if (tag == CBE_TAG_AMOUNT) {
+            width = 16;
+        } else {
+            revert MalformedCellValue();
+        }
+        if (data.length != 1 + width) revert MalformedCellValue();
         uint256 result = 0;
-        for (uint256 i = 0; i < 8; i++) {
+        for (uint256 i = 0; i < width; i++) {
             result |= uint256(uint8(data[1 + i])) << (8 * i);
         }
         return result;
@@ -457,19 +491,6 @@ contract KnomosisStepVM {
         return result;
     }
 
-    /// @notice Encode a uint256 as a CBE Nat (1-byte tag + 8 bytes LE).
-    function _encodeNat(uint256 v) internal pure returns (bytes memory) {
-        bytes memory result = new bytes(9);
-        result[0] = 0x1B;  // CBE Nat tag (8-byte width)
-        for (uint256 i = 0; i < 8; i++) {
-            // The cast to uint8 truncates to the low byte, which is exactly
-            // the per-byte LE encoding semantic.  Each iteration extracts a
-            // distinct byte position via the shift.
-            // forge-lint: disable-next-line(unsafe-typecast)
-            result[1 + i] = bytes1(uint8(v >> (8 * i)));
-        }
-        return result;
-    }
 
     /* ---------------------------------------------------------- */
     /* H.5.2.1: _stepTransfer                                     */

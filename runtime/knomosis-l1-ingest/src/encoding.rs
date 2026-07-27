@@ -428,6 +428,20 @@ fn encode_amount(amount: u128) -> Result<Vec<u8>, EncodeError> {
     encode_u128_checked(amount).ok_or(EncodeError::FieldExceedsBound { value: amount })
 }
 
+/// Encode a `Nonce` as a CBE uint on the 8-byte head.
+///
+/// A nonce is a per-actor COUNTER, not a value: it must stay on the
+/// 8-byte `CBE_TAG_UINT` head even as amounts move to the 16-byte
+/// `CBE_TAG_AMOUNT` head.  Previously the nonce went through
+/// [`encode_amount`], which would have widened it in lockstep with
+/// real amounts and desynchronised the SIGNING INPUT from Lean's
+/// `Encoding/SignInput.lean` (which encodes the nonce as a plain
+/// `Nat`) — a consensus break, since every signature is taken over
+/// exactly these bytes.
+fn encode_nonce(nonce: u128) -> Result<Vec<u8>, EncodeError> {
+    encode_u128_checked(nonce).ok_or(EncodeError::FieldExceedsBound { value: nonce })
+}
+
 /// Encode a byte slice as a CBE byte string, reporting
 /// `EncodeError::LengthExceedsBound` if the length exceeds
 /// `2^64`.
@@ -476,7 +490,7 @@ pub fn signing_input(
     out.extend_from_slice(&encode_byte_string(deployment_id)?);
     out.extend_from_slice(&encode_action(action)?);
     out.extend_from_slice(&encode_u64(signer));
-    out.extend_from_slice(&encode_amount(nonce)?);
+    out.extend_from_slice(&encode_nonce(nonce)?);
     Ok(out)
 }
 
@@ -501,7 +515,7 @@ pub fn encode_signed_action(
     let mut out = Vec::new();
     out.extend_from_slice(&encode_action(action)?);
     out.extend_from_slice(&encode_u64(signer));
-    out.extend_from_slice(&encode_amount(nonce)?);
+    out.extend_from_slice(&encode_nonce(nonce)?);
     out.extend_from_slice(&encode_byte_string(sig)?);
     Ok(out)
 }
