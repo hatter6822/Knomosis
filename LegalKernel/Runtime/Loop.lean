@@ -329,7 +329,8 @@ inductive BootstrapError where
     `truncated` as a *non-fatal* diagnostic when a partial tail
     was discarded — the caller may want to log this for ops
     visibility, but bootstrap itself succeeds. -/
-def bootstrap
+def bootstrapWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
     (policy : AuthorityPolicy) (genesis : ExtendedState)
     (logPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
@@ -344,7 +345,14 @@ def bootstrap
   -- GP.9.1: thread `refundRate` so a log that already contains admitted
   -- `claimBudgetRefund` actions reconstructs under the producing rate
   -- (a divergent rate would reject those entries during reconstruction).
-  match replay policy genesis entries epochLength refundRate with
+  -- AR.2.4: route through `replayWith` so the caller's `deploymentId`
+  -- reaches the signature domain separator.  The back-compat `replay`
+  -- alias hard-codes `ByteArray.empty`, so bootstrapping a log whose
+  -- entries were SIGNED under a non-empty deployment id would have
+  -- verified them against the wrong domain — the flag was accepted,
+  -- stored in the returned `RuntimeState`, and then ignored for the
+  -- one operation that consumes it.
+  match replayWith verify deploymentId policy genesis entries epochLength refundRate with
   | .ok finalState =>
     let prevHash :=
       match entries.reverse with
@@ -362,6 +370,18 @@ def bootstrap
     pure (.ok (rs, frameErr))
   | .error e =>
     pure (.error (.replay e))
+
+/-- Bootstrap under the production `Verify`.  The back-compat alias of
+    [`bootstrapWith`], mirroring the `replay` / `replayWith` and
+    `processSignedAction` / `processSignedActionWith` pairs. -/
+def bootstrap
+    (policy : AuthorityPolicy) (genesis : ExtendedState)
+    (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty)
+    (epochLength : Nat := 0)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
+    IO (Except BootstrapError (RuntimeState × Option FrameError)) :=
+  bootstrapWith Verify policy genesis logPath deploymentId epochLength refundRate
 
 /-- Bootstrap a replica from a snapshot plus the runtime's full log
     file at `logPath`.  Like `bootstrap`, but starts from the
@@ -388,11 +408,13 @@ def bootstrap
         available log file.
       * `.replay e` — replay of the post-snapshot tail failed
         (chain broken, action inadmissible, etc.). -/
-def bootstrapFromSnapshot
+def bootstrapFromSnapshotWith
+    (verify : PublicKey → ByteArray → Signature → Bool)
     (policy : AuthorityPolicy) (snap : Snapshot)
     (logPath : System.FilePath)
     (deploymentId : ByteArray := ByteArray.empty)
-    (epochLength : Nat := 0) :
+    (epochLength : Nat := 0)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
     IO (Except BootstrapError (RuntimeState × Option FrameError)) := do
   match restoreSnapshot snap with
   | .ok (state, seedHash, baseIdx) =>
@@ -422,7 +444,13 @@ def bootstrapFromSnapshot
         -- GP.6.2: resume epoch advancement at the ABSOLUTE `baseIdx`
         -- so a snapshot-restored replica's epochs match a
         -- from-genesis replay byte-for-byte.
-        match replayFromSeed policy seedHash state tail baseIdx epochLength with
+        -- Same two defects as `bootstrap` above, plus one more: the
+        -- back-compat `replayFromSeed` alias drops BOTH the deployment
+        -- id AND `refundRate`, so a post-snapshot tail containing
+        -- admitted `claimBudgetRefund` actions would be re-verified at
+        -- rate 0 and rejected.  `replayFromSeedWith` takes both.
+        match replayFromSeedWith verify deploymentId policy seedHash state tail
+                baseIdx epochLength refundRate with
         | .ok finalState =>
           let prevHash :=
             match tail.reverse with
@@ -435,7 +463,11 @@ def bootstrapFromSnapshot
             , logIndex     := baseIdx + tail.length
             , logPath      := logPath
             , deploymentId := deploymentId
-            , epochLength  := epochLength }
+            , epochLength  := epochLength
+              -- Set explicitly rather than defaulted: the returned
+              -- state must carry the rate the tail was replayed under,
+              -- or the next `step` would admit at a different one.
+            , refundRate   := refundRate }
           pure (.ok (rs, frameErr))
         | .error e =>
           pure (.error (.replay e))
@@ -444,6 +476,18 @@ def bootstrapFromSnapshot
     -- surface the precise diagnostic rather than collapsing into
     -- a generic replay error.
     pure (.error (.snapshot e))
+
+/-- Bootstrap from a snapshot under the production `Verify`.  The
+    back-compat alias of [`bootstrapFromSnapshotWith`]. -/
+def bootstrapFromSnapshot
+    (policy : AuthorityPolicy) (snap : Snapshot)
+    (logPath : System.FilePath)
+    (deploymentId : ByteArray := ByteArray.empty)
+    (epochLength : Nat := 0)
+    (refundRate : ResourceId → Nat := fun _ => 0) :
+    IO (Except BootstrapError (RuntimeState × Option FrameError)) :=
+  bootstrapFromSnapshotWith Verify policy snap logPath deploymentId
+    epochLength refundRate
 
 /-! ## Convenience: process a list of signed actions in sequence
 

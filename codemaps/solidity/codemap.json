@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6972f1074ff430edda9be36ff9804a465a4cb542796bc1fa3677d8aac91a24f4"
+    "source_digest": "59a456813cc91436e2e7f51cc76216b2484df0e6f77778a21490dff7e4f514f1"
   },
   "summary": {
-    "module_count": 87,
-    "declaration_count": 1916
+    "module_count": 88,
+    "declaration_count": 1925
   },
   "modules": [
     {
@@ -5382,6 +5382,8 @@
           "line": 340,
           "called": [
             "KnomosisBridge",
+            "_encodeWithdrawalLeaf",
+            "_encodeWithdrawalProof",
             "_signStateRootAs",
             "bridge"
           ]
@@ -7063,6 +7065,8 @@
           "called": [
             "MockBoldOz",
             "_deployBridge",
+            "_encodeWithdrawalLeaf",
+            "_encodeWithdrawalProof",
             "_etchMocks",
             "_mintApprove",
             "_signStateRoot",
@@ -8170,6 +8174,8 @@
           "line": 1237,
           "called": [
             "KnomosisBridge",
+            "_encodeWithdrawalLeaf",
+            "_encodeWithdrawalProof",
             "_signStateRoot",
             "bridge"
           ]
@@ -8866,7 +8872,9 @@
           "kind": "contract",
           "name": "BridgeFeeSplitBoldTest",
           "line": 38,
-          "called": []
+          "called": [
+            "CbeTestEncoder"
+          ]
         },
         {
           "kind": "event",
@@ -9596,6 +9604,8 @@
             "KnomosisBridge",
             "MockBold",
             "_deployKeyedAttestorBold",
+            "_encodeWithdrawalLeaf",
+            "_encodeWithdrawalProof",
             "_mintApprove",
             "_signStateRoot",
             "balanceOf",
@@ -9622,6 +9632,8 @@
           "called": [
             "KnomosisBridge",
             "_deployKeyedAttestorBold",
+            "_encodeWithdrawalLeaf",
+            "_encodeWithdrawalProof",
             "_mintApprove",
             "_signStateRoot",
             "bridge"
@@ -16240,6 +16252,83 @@
       ]
     },
     {
+      "module": "CbeTestEncoder",
+      "path": "solidity/test/utils/CbeTestEncoder.sol",
+      "declaration_count": 9,
+      "declarations": [
+        {
+          "kind": "abstract_contract",
+          "name": "CbeTestEncoder",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_leBytes8",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_leBytes16",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_cbeUint",
+          "line": 50,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cbeAmount",
+          "line": 57,
+          "called": [
+            "_leBytes16"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cbeBytes",
+          "line": 62,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_cbeArrayHead",
+          "line": 69,
+          "called": [
+            "_leBytes8"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_encodeWithdrawalLeaf",
+          "line": 81,
+          "called": [
+            "_cbeAmount",
+            "_cbeBytes",
+            "_cbeUint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_encodeWithdrawalProof",
+          "line": 99,
+          "called": [
+            "_cbeArrayHead",
+            "_cbeBytes",
+            "_cbeUint"
+          ]
+        }
+      ]
+    },
+    {
       "module": "Deployer",
       "path": "solidity/test/utils/Deployer.sol",
       "declaration_count": 5,
@@ -16827,7 +16916,9 @@
           "kind": "abstract_contract",
           "name": "WithdrawalFlowHarness",
           "line": 25,
-          "called": []
+          "called": [
+            "CbeTestEncoder"
+          ]
         },
         {
           "kind": "function",

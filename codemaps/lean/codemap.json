@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b70e1d89dd55d47f9bb9a74dd920613d975671c07ac29dec1cc9e0bdb2b94afb"
+    "source_digest": "854a9578dedd8809d0ba8a970033df08213eb216ea2808c4271f08c21cfbd575"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5235
+    "declaration_count": 5238
   },
   "modules": [
     {
@@ -30953,7 +30953,7 @@
     {
       "module": "LegalKernel.Runtime.Loop",
       "path": "LegalKernel/Runtime/Loop.lean",
-      "declaration_count": 13,
+      "declaration_count": 15,
       "declarations": [
         {
           "kind": "namespace",
@@ -31048,7 +31048,7 @@
         },
         {
           "kind": "def",
-          "name": "bootstrap",
+          "name": "bootstrapWith",
           "line": 331,
           "called": [
             "AuthorityPolicy",
@@ -31056,8 +31056,10 @@
             "ExtendedState",
             "FrameError",
             "LogEntry.hash",
+            "PublicKey",
             "ResourceId",
             "RuntimeState",
+            "Signature",
             "deploymentId",
             "entries",
             "genesis",
@@ -31065,33 +31067,75 @@
             "policy",
             "refundRate",
             "replay",
+            "replayWith",
             "zeroHash"
           ]
         },
         {
           "kind": "def",
-          "name": "bootstrapFromSnapshot",
-          "line": 390,
+          "name": "bootstrap",
+          "line": 376,
+          "called": [
+            "AuthorityPolicy",
+            "BootstrapError",
+            "ExtendedState",
+            "FrameError",
+            "ResourceId",
+            "RuntimeState",
+            "Verify",
+            "bootstrapWith",
+            "deploymentId",
+            "genesis",
+            "policy",
+            "refundRate"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "bootstrapFromSnapshotWith",
+          "line": 410,
           "called": [
             "AuthorityPolicy",
             "BootstrapError",
             "FrameError",
             "LogEntry.hash",
+            "PublicKey",
+            "ResourceId",
             "RuntimeState",
+            "Signature",
             "Snapshot",
             "deploymentId",
             "entries",
             "loadAndTruncate",
             "policy",
+            "refundRate",
             "replay",
-            "replayFromSeed",
+            "replayFromSeedWith",
             "restoreSnapshot"
           ]
         },
         {
           "kind": "def",
+          "name": "bootstrapFromSnapshot",
+          "line": 481,
+          "called": [
+            "AuthorityPolicy",
+            "BootstrapError",
+            "FrameError",
+            "ResourceId",
+            "RuntimeState",
+            "Snapshot",
+            "Verify",
+            "bootstrapFromSnapshotWith",
+            "deploymentId",
+            "policy",
+            "refundRate"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "processBatch",
-          "line": 460,
+          "line": 504,
           "called": [
             "ProcessError",
             "ProcessResult",
@@ -31103,7 +31147,7 @@
         {
           "kind": "def",
           "name": "processPure",
-          "line": 507,
+          "line": 551,
           "called": [
             "BridgeAdmissibleWith",
             "Event",
@@ -31124,7 +31168,7 @@
         {
           "kind": "theorem",
           "name": "processPure_deterministic",
-          "line": 540,
+          "line": 584,
           "called": [
             "LegalKernel",
             "Runtime",
@@ -51295,7 +51339,7 @@
     {
       "module": "LegalKernel.Test.Integration.CrossDeployment",
       "path": "LegalKernel/Test/Integration/CrossDeployment.lean",
-      "declaration_count": 8,
+      "declaration_count": 9,
       "declarations": [
         {
           "kind": "namespace",
@@ -51353,8 +51397,38 @@
         },
         {
           "kind": "def",
+          "name": "bootstrapVerifiesNonEmptyLogUnderItsDeploymentId",
+          "line": 142,
+          "called": [
+            "Action",
+            "AuthorityPolicy.unrestricted",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "PublicKey",
+            "RuntimeState",
+            "Signature",
+            "SignedAction",
+            "TestCase",
+            "assertEq",
+            "bootstrapWith",
+            "deploymentId",
+            "deploymentId1",
+            "deploymentId2",
+            "genesis",
+            "mockPubKey",
+            "mockSign",
+            "mockVerify",
+            "policy",
+            "processSignedActionWith",
+            "setBalance",
+            "transfer",
+            "zeroHash"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "replayWithAPI",
-          "line": 130,
+          "line": 210,
           "called": [
             "AuthorityPolicy",
             "ExtendedState",
@@ -51369,11 +51443,12 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 141,
+          "line": 221,
           "called": [
             "LegalKernel.Test.Integration.CrossDeployment",
             "TestCase",
             "bootstrapPreservesDeploymentId",
+            "bootstrapVerifiesNonEmptyLogUnderItsDeploymentId",
             "deploymentIdsDistinct",
             "emptyLogReplayAcceptsUnderAnyDeployment",
             "replayWithAPI"
