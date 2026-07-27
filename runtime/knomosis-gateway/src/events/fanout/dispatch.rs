@@ -75,29 +75,51 @@ pub enum StreamEnd {
     ShuttingDown,
 }
 
+/// Where a per-client stream begins.
+///
+/// Distinguishes "after this specific cursor" from "wherever the live tail is
+/// when reading starts".  The two are NOT the same when the ring is empty:
+/// there is no newest cursor to name, and any concrete stand-in (notably
+/// [`Cursor::ORIGIN`]) misrepresents a caught-up client as one sitting at the
+/// beginning of history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamStart {
+    /// Stream records strictly after this cursor.
+    After(Cursor),
+    /// Stream from the ring's newest record at the moment reading starts.
+    LiveTail,
+}
+
 /// Drive one SSE client: replay the ring after `start`, then live-tail,
 /// writing §6.1 records (filtered to `types`, empty = all) + heartbeats to
 /// `sink`, until the client disconnects, is evicted, a decode fault occurs,
 /// or `shutdown` is set.
 ///
-/// `sink`'s write deadline is the **caller's** responsibility, and the two
-/// transports differ (OQ-GW-15): the **native-TLS** path
-/// ([`crate::http::tls`]) owns its `TcpStream` and sets a per-connection write
-/// timeout, so a stalled-reader write surfaces as an error →
-/// [`StreamEnd::Disconnected`] and the slot is released; the **plaintext**
-/// `tiny_http` path **cannot** set one (`Request::into_writer` yields a
-/// type-erased `Box<dyn Write>` with no socket handle), so there a wedged
-/// reader blocks this stream's write until it disconnects — prefer the
-/// native-TLS path for untrusted SSE clients.
+/// `sink`'s write deadline is the **caller's** responsibility.  Both
+/// transports now provide one and they do so identically (OQ-GW-15): the
+/// plaintext and native-TLS listeners share the `http::conn` handler, which
+/// owns the `TcpStream` and applies `--sse-write-timeout-ms` before handing
+/// the writer to this function.  A stalled reader therefore surfaces as a
+/// write error → [`StreamEnd::Disconnected`], and the stream slot is released
+/// on either transport.
 pub fn run_stream<W: Write>(
     sink: &mut W,
     state: &FanoutState,
-    start: Cursor,
+    start: StreamStart,
     types: &[String],
     config: &StreamConfig,
     shutdown: &AtomicBool,
 ) -> StreamEnd {
-    let mut cursor = start;
+    // `None` means live-tail not yet resolved: the ring was empty when the
+    // client connected, so there is no cursor to start after.  Resolving it to
+    // `Cursor::ORIGIN` instead would place the client at the beginning of
+    // history and get it evicted `lag_exceeded` the moment the ring filled —
+    // despite it having asked for live-tail and missed nothing.  We hold the
+    // intent until the ring has a newest record to name.
+    let mut cursor: Option<Cursor> = match start {
+        StreamStart::After(c) => Some(c),
+        StreamStart::LiveTail => None,
+    };
     let mut last_write = Instant::now();
     loop {
         // Graceful shutdown (§G4.4): emit a clean `server_shutdown` close so
@@ -112,11 +134,29 @@ pub fn run_stream<W: Write>(
             let _ = write_stream_error(sink, "decode_error", None);
             return StreamEnd::Fault;
         }
+        let Some(active) = cursor else {
+            // Live-tail on a still-empty ring.  Take the newest record as the
+            // start point as soon as one exists; until then, heartbeat.
+            {
+                let ring = state.ring();
+                cursor = ring.newest();
+            }
+            if cursor.is_none() {
+                if last_write.elapsed() >= config.heartbeat {
+                    if write_heartbeat(sink).is_err() {
+                        return StreamEnd::Disconnected;
+                    }
+                    last_write = Instant::now();
+                }
+                std::thread::sleep(config.poll);
+            }
+            continue;
+        };
         let (records, behind) = {
             let ring = state.ring();
             (
-                ring.records_after(cursor),
-                matches!(ring.position(cursor), CursorPosition::Behind { .. }),
+                ring.records_after(active),
+                matches!(ring.position(active), CursorPosition::Behind { .. }),
             )
         };
         // Evict a client whose unseen records were evicted, or whose backlog
@@ -145,7 +185,7 @@ pub fn run_stream<W: Write>(
                 }
                 last_write = Instant::now();
             }
-            cursor = record.cursor();
+            cursor = Some(record.cursor());
         }
     }
 }
@@ -187,7 +227,7 @@ pub(crate) fn write_stream_error<W: Write>(
 
 #[cfg(test)]
 mod tests {
-    use super::{run_stream, write_stream_error, StreamConfig, StreamEnd};
+    use super::{run_stream, write_stream_error, StreamConfig, StreamEnd, StreamStart};
     use crate::events::fanout::ring::{Cursor, EventRecord};
     use crate::events::fanout::FanoutState;
     use std::io::{Read, Write};
@@ -236,7 +276,7 @@ mod tests {
     /// then stop the stream and return the captured output.
     fn capture(
         state: &Arc<FanoutState>,
-        from: Cursor,
+        from: StreamStart,
         types: &[String],
         config: StreamConfig,
         done: impl Fn(&str) -> bool,
@@ -282,9 +322,13 @@ mod tests {
             ring.push(rec(5, 1, "nonceAdvanced"));
             ring.push(rec(6, 0, "balanceChanged"));
         }
-        let out = capture(&state, Cursor::new(4, 0), &[], brisk(64), |t| {
-            t.contains("id: 6.0")
-        });
+        let out = capture(
+            &state,
+            StreamStart::After(Cursor::new(4, 0)),
+            &[],
+            brisk(64),
+            |t| t.contains("id: 6.0"),
+        );
         assert!(out.contains("id: 5.0\nevent: balanceChanged\ndata: {"));
         assert!(out.contains("id: 5.1\nevent: nonceAdvanced\ndata: {"));
         assert!(out.contains("id: 6.0\nevent: balanceChanged\ndata: {"));
@@ -311,7 +355,7 @@ mod tests {
         // filter dropped the balanceChanged records rather than lagging.
         let out = capture(
             &state,
-            Cursor::new(4, 0),
+            StreamStart::After(Cursor::new(4, 0)),
             &["nonceAdvanced".to_string()],
             brisk(64),
             |t| t.contains("id: 5.1"),
@@ -321,6 +365,55 @@ mod tests {
         // Exactly one record (the filtered nonceAdvanced); the trailing
         // `server_shutdown` close carries no `id:`.
         assert_eq!(out.matches("id: ").count(), 1);
+    }
+
+    /// A live-tail client that connects to an EMPTY ring is not evicted when
+    /// the ring subsequently fills past the lag bound.
+    ///
+    /// It asked for the live tail and has missed nothing; the records that
+    /// arrive after it connects are exactly the ones it should receive.  Before
+    /// the fix its start point collapsed to `Cursor::ORIGIN`, so
+    /// `records_after` returned the whole ring and the backlog check evicted it
+    /// with `lag_exceeded` on its first poll.
+    ///
+    /// The stream is driven through `capture`, so it performs REAL polls — a
+    /// version that sets the shutdown flag up front returns before the lag
+    /// check runs and would pass against the pre-fix code.
+    #[test]
+    fn live_tail_on_an_empty_ring_is_not_evicted_when_the_ring_fills() {
+        let state = FanoutState::new(64);
+        assert!(
+            state.ring().newest().is_none(),
+            "precondition: the ring is empty when the client connects"
+        );
+        // Fill well past the lag bound of 3 while the stream is running: the
+        // client should see these as live records, not as a backlog it is
+        // already behind on.
+        let filler = {
+            let st = Arc::clone(&state);
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(20));
+                let mut ring = st.ring();
+                for seq in 1..=10u64 {
+                    ring.push(rec(seq, 0, "balanceChanged"));
+                }
+            })
+        };
+        // Run for a fixed window (no record is expected: live-tail skips
+        // whatever the ring holds when the stream first reads it, and here that
+        // is the whole burst).  What must NOT happen is an eviction.
+        let out = capture(&state, StreamStart::LiveTail, &[], brisk(3), |_| false);
+        let _ = filler.join();
+        assert!(
+            !out.contains("lag_exceeded"),
+            "a live-tail client that missed nothing must not be evicted: {out}"
+        );
+        // Reaching the clean shutdown close proves the stream stayed alive
+        // through the burst rather than terminating early.
+        assert!(
+            out.contains("\"error\":\"server_shutdown\""),
+            "the stream should still be running when shutdown arrives: {out}"
+        );
     }
 
     #[test]
@@ -336,7 +429,14 @@ mod tests {
         // behind → evicted before any record is written.
         let mut sink: Vec<u8> = Vec::new();
         let shutdown = Arc::new(AtomicBool::new(false));
-        let end = run_stream(&mut sink, &state, Cursor::ORIGIN, &[], &brisk(3), &shutdown);
+        let end = run_stream(
+            &mut sink,
+            &state,
+            StreamStart::After(Cursor::ORIGIN),
+            &[],
+            &brisk(3),
+            &shutdown,
+        );
         assert_eq!(end, StreamEnd::Evicted);
         let out = String::from_utf8(sink).unwrap();
         assert!(out.contains("event: error\ndata: {\"error\":\"lag_exceeded\"}"));
@@ -360,7 +460,7 @@ mod tests {
         let end = run_stream(
             &mut sink,
             &state,
-            Cursor::ORIGIN,
+            StreamStart::After(Cursor::ORIGIN),
             &[],
             &brisk(1000), // not a count-lag eviction; this is the Behind path
             &shutdown,
@@ -381,7 +481,7 @@ mod tests {
         let end = run_stream(
             &mut sink,
             &state,
-            Cursor::ORIGIN,
+            StreamStart::After(Cursor::ORIGIN),
             &[],
             &brisk(64),
             &shutdown,
@@ -404,7 +504,7 @@ mod tests {
         let end = run_stream(
             &mut sink,
             &state,
-            Cursor::ORIGIN,
+            StreamStart::After(Cursor::ORIGIN),
             &[],
             &brisk(64),
             &shutdown,
@@ -455,7 +555,7 @@ mod tests {
                 run_stream(
                     &mut sock,
                     &st,
-                    Cursor::ORIGIN,
+                    StreamStart::After(Cursor::ORIGIN),
                     &[],
                     &StreamConfig {
                         max_client_lag: max_lag,

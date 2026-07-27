@@ -28,7 +28,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::events::fanout::dispatch::{run_stream, write_stream_error, StreamConfig, StreamEnd};
+use crate::events::fanout::dispatch::{
+    run_stream, write_stream_error, StreamConfig, StreamEnd, StreamStart,
+};
 use crate::events::fanout::resume::{classify_resume, parse_resume, ResumeAction};
 use crate::events::fanout::FanoutState;
 
@@ -112,7 +114,14 @@ pub(crate) fn run_one_stream<W: Write>(writer: &mut W, request: &StreamRequest) 
         classify_resume(&ring, point, None)
     };
     match action {
-        ResumeAction::Stream(cursor) => {
+        ResumeAction::Stream(_) | ResumeAction::LiveTail => {
+            let start = match action {
+                ResumeAction::Stream(cursor) => StreamStart::After(cursor),
+                // Left unresolved on purpose: `run_stream` re-reads the ring
+                // under its own lock and picks up the newest record once one
+                // exists.  See `ResumeAction::LiveTail`.
+                _ => StreamStart::LiveTail,
+            };
             let config = StreamConfig {
                 max_client_lag: request.sse.max_client_lag,
                 heartbeat: Duration::from_secs(request.sse.heartbeat_secs),
@@ -121,7 +130,7 @@ pub(crate) fn run_one_stream<W: Write>(writer: &mut W, request: &StreamRequest) 
             run_stream(
                 writer,
                 request.fanout,
-                cursor,
+                start,
                 request.types,
                 &config,
                 request.shutdown,

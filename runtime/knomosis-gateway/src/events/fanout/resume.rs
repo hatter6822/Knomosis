@@ -47,9 +47,21 @@ pub enum ResumePoint {
 /// What to do with a resume point against the current ring.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResumeAction {
-    /// Stream records strictly after this cursor (in-window / caught-up /
-    /// live-tail).  Hand this to the G3.4c `run_stream`.
+    /// Stream records strictly after this cursor (in-window / caught-up).
+    /// Hand this to the G3.4c `run_stream`.
     Stream(Cursor),
+    /// Stream from wherever the ring's newest record is **at the moment the
+    /// stream starts reading** — deliberately unresolved here.
+    ///
+    /// Resolving live-tail at classification time is wrong when the ring is
+    /// empty: there is no newest cursor to name, and collapsing to
+    /// [`Cursor::ORIGIN`] tells the dispatch the client sits at the very
+    /// beginning of history.  A client that asked for live-tail and has missed
+    /// nothing is then evicted with `lag_exceeded` as soon as the ring fills
+    /// past the lag bound, or reported `Behind` once the ring wraps past seq 0.
+    /// Carrying the intent through to the dispatch, which re-reads the ring
+    /// under its own lock, removes the empty-ring special case entirely.
+    LiveTail,
     /// The resume point predates the ring; emit `event: error{behind}` and
     /// steer the client to the `GET /events` backfill (§3.5 / finding #7).
     Behind {
@@ -104,9 +116,7 @@ pub fn classify_resume(
 ) -> ResumeAction {
     let cursor = match point {
         // Live-tail: stream only future records (from the current newest).
-        ResumePoint::LiveTail => {
-            return ResumeAction::Stream(ring.newest().unwrap_or(Cursor::ORIGIN));
-        }
+        ResumePoint::LiveTail => return ResumeAction::LiveTail,
         ResumePoint::After(cursor) => cursor,
     };
     match ring.position(cursor) {
@@ -230,16 +240,38 @@ mod tests {
     }
 
     #[test]
-    fn live_tail_streams_only_future_records() {
+    fn live_tail_classifies_unresolved_on_a_populated_ring() {
         let ring = ring_with(&[(5, 0), (6, 0)], 64);
-        let action = classify_resume(&ring, ResumePoint::LiveTail, None);
-        let cursor = match action {
-            ResumeAction::Stream(c) => c,
-            other => panic!("expected Stream, got {other:?}"),
-        };
-        // The cursor is the current newest, so the backlog is excluded.
-        assert_eq!(cursor, Cursor::new(6, 0));
-        assert!(ring.records_after(cursor).is_empty());
+        assert_eq!(
+            classify_resume(&ring, ResumePoint::LiveTail, None),
+            ResumeAction::LiveTail
+        );
+        // The dispatch resolves it against the ring it reads under its own
+        // lock; here that is the newest record, so the backlog is excluded.
+        let newest = ring.newest().expect("populated ring has a newest");
+        assert_eq!(newest, Cursor::new(6, 0));
+        assert!(ring.records_after(newest).is_empty());
+    }
+
+    /// Live-tail on an EMPTY ring must stay unresolved rather than collapse to
+    /// a concrete cursor.
+    ///
+    /// Resolving it to `Cursor::ORIGIN` — the only concrete stand-in available
+    /// when there is no newest record — tells the dispatch the client sits at
+    /// the beginning of history.  A client that asked for live-tail and has
+    /// missed nothing is then evicted `lag_exceeded` as soon as the ring fills
+    /// past the lag bound, and reported `Behind` once the ring wraps past seq
+    /// 0.  This fails against the pre-fix classifier, which returned
+    /// `Stream(Cursor::ORIGIN)` here.
+    #[test]
+    fn live_tail_on_an_empty_ring_stays_unresolved() {
+        let ring = EventRing::new(64);
+        assert!(ring.newest().is_none(), "precondition: the ring is empty");
+        assert_eq!(
+            classify_resume(&ring, ResumePoint::LiveTail, None),
+            ResumeAction::LiveTail,
+            "live-tail on an empty ring must not name a cursor"
+        );
     }
 
     #[test]
