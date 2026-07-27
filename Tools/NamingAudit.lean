@@ -197,16 +197,59 @@ def auditFilename (path : String) : Option Violation :=
 
     Handles: `def NAME`, `theorem NAME`, `structure NAME`,
     `class NAME`, `instance NAME`, `abbrev NAME`, `lemma NAME`,
-    `noncomputable def NAME`, `private def NAME`, etc. -/
+    `inductive NAME`, `opaque NAME`, `axiom NAME`, each optionally
+    behind any number of `@[...]` attribute groups and any ordering of
+    the `noncomputable` / `private` / `protected` / `partial` /
+    `unsafe` / `scoped` / `local` modifiers. -/
 def parseDeclName (line : String) : Option String := Id.run do
   let trimmed := line.trimAscii.toString
-  -- Strip optional modifiers.
+  -- Strip leading `@[...]` attribute groups.  The payload can itself
+  -- contain brackets (`@[simp, inline]`, `@[extern "knomosis_..."]`),
+  -- so scan for the matching close rather than the first `]`.
+  --
+  -- Without this every attributed declaration was invisible to the
+  -- audit — `@[extern] def ...`, `@[simp] theorem ...` — as were the
+  -- `partial` / `unsafe` / `opaque` forms below.  A forbidden token in
+  -- any of them passed the gate silently.
+  let stripAttributes (s : String) : String := Id.run do
+    let mut cur := s
+    let mut guard := 0
+    while cur.startsWith "@[" && guard < 16 do
+      guard := guard + 1
+      let mut depth := 0
+      let mut idx := 0
+      let mut closed := false
+      for c in cur.toList do
+        idx := idx + 1
+        if c == '[' then depth := depth + 1
+        else if c == ']' then
+          depth := depth - 1
+          if depth == 0 then
+            closed := true
+            break
+      if closed then
+        cur := (cur.drop idx).trimAscii.toString
+      else
+        -- Unbalanced: leave the line alone rather than mangling it.
+        break
+    return cur
+  -- Strip optional modifiers, repeatedly: `private noncomputable def`
+  -- and `protected partial def` are both legal orderings, so a fixed
+  -- three-step chain missed them.
   let stripIfPrefix (s : String) (p : String) : String :=
-    if s.startsWith p then (s.drop p.length).toString else s
-  let trimmed₁ :=
-    stripIfPrefix (stripIfPrefix (stripIfPrefix trimmed "noncomputable ")
-                                 "private ")
-                  "protected "
+    if s.startsWith p then (s.drop p.length).trimAscii.toString else s
+  let modifiers : List String :=
+    [ "noncomputable ", "private ", "protected ", "partial ", "unsafe "
+    , "scoped ", "local " ]
+  let mut trimmed₁ := stripAttributes trimmed
+  let mut changed := true
+  let mut rounds := 0
+  while changed && rounds < 8 do
+    rounds := rounds + 1
+    let before := trimmed₁
+    for m in modifiers do
+      trimmed₁ := stripIfPrefix trimmed₁ m
+    changed := before != trimmed₁
   -- Match declaration keyword.
   let keywords : List String :=
     [ "def "
@@ -217,6 +260,8 @@ def parseDeclName (line : String) : Option String := Id.run do
     , "abbrev "
     , "lemma "
     , "inductive "
+    , "opaque "
+    , "axiom "
     ]
   for kw in keywords do
     if trimmed₁.startsWith kw then

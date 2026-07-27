@@ -94,6 +94,7 @@ import Lex.Test.Tools.Diff
 import Lex.Test.Tools.Format
 import Lex.Test.Tools.DiagnosticCoverage
 import Lex.Test.DSL.Deployment
+import LegalKernel.Test.Tools.AuditBinaries
 import LegalKernel.Test.Deployments.UsdClearing
 import LegalKernel.Test.Deployments.GasPoolExample
 import Lex.Test.ExampleLex
@@ -273,6 +274,8 @@ def main : IO UInt32 := do
                                     Lex.Test.Tools.FormatTests.tests)
   failed := failed + (← runAll "tools-lex-diagnostic-coverage"
                                     Lex.Test.Tools.DiagnosticCoverage.tests)
+  failed := failed + (← runAll "tools-audit-binaries"
+                                    LegalKernel.Test.Tools.AuditBinaries.tests)
   failed := failed + (← runAll "dsl-lex-deployment"
                                     Lex.Test.DSL.DeploymentTests.tests)
   failed := failed + (← runAll "deployments-usd-clearing"

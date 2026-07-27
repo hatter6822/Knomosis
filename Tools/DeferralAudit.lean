@@ -91,10 +91,13 @@ def forbiddenPhrases : List String :=
   , "| deferred  |"
   , "status: deferred"
   , "marked deferred"
-  -- TODO/FIXME/XXX in docstrings or comments.
-  , "TODO:"
-  , "FIXME:"
-  , "XXX:"
+  -- TODO/FIXME/XXX in docstrings or comments.  Lowercase like every
+  -- other entry: `containsLower` folds the needle, so the case here is
+  -- cosmetic — but a uniformly-lowercase list keeps
+  -- `Violation.matchedPhrase` (documented as lowercase) honest.
+  , "todo:"
+  , "fixme:"
+  , "xxx:"
   ]
 
 /-- A violation produced when a forbidden phrase is found. -/
@@ -118,10 +121,17 @@ def Violation.format (v : Violation) : String :=
     else v.lineContent
   s!"  {v.path}:{v.lineNumber}: forbidden phrase `{v.matchedPhrase}` in:\n    {truncated}"
 
-/-- Check whether `haystack` contains `needle` as a substring
-    (both lowercased). -/
+/-- Check whether `haystack` contains `needle` as a substring, folding
+    case on BOTH sides.
+
+    The needle used to be compared verbatim against a lowercased
+    haystack, which made the match case-SENSITIVE in the needle — so
+    the three uppercase entries below (`TODO:`, `FIXME:`, `XXX:`) could
+    never fire, and the gate silently passed every file containing
+    them.  Folding both sides is what makes the docstring's
+    "matched as case-insensitive substrings" true. -/
 private def containsLower (haystack needle : String) : Bool :=
-  decide (((toLower haystack).splitOn needle).length > 1)
+  decide (((toLower haystack).splitOn (toLower needle)).length > 1)
 
 /-- Audit all lines in a file for forbidden phrases. -/
 def auditFile (path : String) (content : String) : List Violation :=
@@ -155,12 +165,14 @@ partial def listLeanFiles (root : String) : IO (List String) := do
 
 /-- Paths to exclude from the scan.  These files mention the
     forbidden phrases as DATA (the forbidden-token list, the
-    documentation of what's banned) rather than as live
-    deferrals; scanning them would be a self-reference. -/
+    documentation of what's banned, the gate's own test corpus)
+    rather than as live deferrals; scanning them would be a
+    self-reference. -/
 def excludedPaths : List String :=
   [ "Tools/DeferralAudit.lean"
   , "DeferralAudit.lean"
   , "Tools/NamingAudit.lean"
+  , "LegalKernel/Test/Tools/AuditBinaries.lean"
   ]
 
 /-- Check whether a path should be excluded from the scan. -/

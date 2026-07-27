@@ -215,6 +215,18 @@ lean_lib NamingAuditLib where
 lean_lib DeferralAuditLib where
   roots := #[`Tools.DeferralAudit]
 
+/-- Zero-sorry audit library.  Exposes `Tools.CountSorries` for the
+    `count_sorries` executable AND for the test driver's self-tests —
+    without a `lean_lib` the module has no installed `.olean`, so the
+    gate's own matcher could not be tested. -/
+lean_lib CountSorriesLib where
+  roots := #[`Tools.CountSorries]
+
+/-- Stub-detection audit library.  Exposes `Tools.StubAudit` for the
+    `stub_audit` executable and the test driver's self-tests. -/
+lean_lib StubAuditLib where
+  roots := #[`Tools.StubAudit]
+
 /-- WU 1.11 (Phase 1) TCB-audit executable.  Enumerates the *direct
     imports* of the trusted-core source files (`Kernel.lean`,
     `RBMapLemmas.lean`) and compares each to the allowlist at
@@ -233,7 +245,7 @@ lean_exe tcb_audit where
     `Kernel.lean` or `RBMapLemmas.lean` blocks the build. -/
 @[default_target]
 lean_exe count_sorries where
-  root := `Tools.CountSorries
+  root := `CountSorries
   supportInterpreter := true
 
 /-- Audit-3.8 stub-detection executable.  Walks every `.lean` file
@@ -246,7 +258,7 @@ lean_exe count_sorries where
     `signingInput := ByteArray.empty`) blocks merge automatically. -/
 @[default_target]
 lean_exe stub_audit where
-  root := `Tools.StubAudit
+  root := `StubAudit
   supportInterpreter := true
 
 /-- Content-name discipline enforcer.  Scans every `.lean` file

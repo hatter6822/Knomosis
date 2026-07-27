@@ -50,6 +50,14 @@ is fast enough to run on every CI build.
 
 import Tools.Common
 
+namespace LegalKernel.Tools.CountSorries
+
+-- Namespaced like the sibling `NamingAudit` / `DeferralAudit`
+-- audit libraries.  Without it this module's helpers sat in the
+-- root namespace, so `searchRoots` here and in the other
+-- root-namespace tool collided and no single module could import
+-- both — which is why neither had a test suite.
+
 open LegalKernel.Tools (kernelTcbFiles readFileSafe)
 
 /-- Files-and-directories search root.  Covers the kernel
@@ -117,9 +125,45 @@ def maskStep : LexState → Char → Char → Char × LexState
   | .inBlockComment d, '\n', _ => ('\n', .inBlockComment d)
   | .inBlockComment d, _, _   => (' ', .inBlockComment d)
 
+/-- Blank the interior of every closed Lean CHARACTER literal, as a
+    pre-pass before the comment / string lexer runs.
+
+    `maskStep` sees only one character of lookahead, so it cannot tell
+    the `"` in the character literal `'"'` (three characters) or `'\"'`
+    (four) from a string opener.  It therefore treated such a file as
+    entering a string literal and blanked the entire remainder of the
+    text — every `sorry` after the first one became invisible to the
+    zero-sorry gate.  Recognising the literals up front removes the
+    ambiguity without giving the lexer more lookahead.
+
+    Only the fully closed shapes are matched.  A bare `'` is
+    deliberately NOT an opener: `'` is a legal identifier character in
+    Lean and occurs as a prime in hundreds of kernel declarations, so
+    an opener rule would blank real code.  A prime that happens to sit
+    two characters from another prime therefore matches spuriously —
+    harmlessly, because the replacement is whitespace and a
+    single-character literal can never spell `sorry`.  Newlines are
+    preserved in every position so line numbering survives. -/
+def maskCharLiterals (cs : List Char) : List Char :=
+  -- Accumulator-passing so the walk stays tail-recursive: this runs
+  -- over a whole source file's character list, and a non-tail form
+  -- overflows the stack on the larger kernel modules.
+  let rec go (acc : List Char) : List Char → List Char
+    -- `'\e'` — escaped character literal.
+    | '\'' :: '\\' :: esc :: '\'' :: rest =>
+        go (' ' :: (if esc = '\n' then '\n' else ' ') :: ' ' :: ' ' :: acc) rest
+    -- `'c'` — plain character literal.
+    | '\'' :: c :: '\'' :: rest =>
+        go (' ' :: (if c = '\n' then '\n' else ' ') :: ' ' :: acc) rest
+    | c :: rest => go (c :: acc) rest
+    | []        => acc.reverse
+  go [] cs
+
 /-- Walk a list of characters, blanking out comments and string
     literals.  After this pass, the only `sorry` substrings remaining
-    are those in code position. -/
+    are those in code position.  Character literals are blanked by the
+    `maskCharLiterals` pre-pass first, so the lexer never mistakes the
+    quote inside one for a string opener. -/
 def maskNonCode (cs : List Char) : List Char :=
   let rec go (st : LexState) (acc : List Char) : List Char → List Char
     | []           => acc.reverse
@@ -137,7 +181,7 @@ def maskNonCode (cs : List Char) : List Char :=
         | .inBlockComment _, .inBlockComment _, '/', '-' =>
             go st' (' ' :: ' ' :: acc) rest
         | _, _, _, _                            => go st' (c' :: acc) (c₂ :: rest)
-  go .code [] cs
+  go .code [] (maskCharLiterals cs)
 
 /-- Test whether `needle` appears as a contiguous substring of `haystack`.
     Naive `O(n·m)` scan, sufficient for the short patterns the audit uses. -/
@@ -307,36 +351,4 @@ def selfCheckPatternDetector : List String :=
     if actual == expected then none
     else some s!"  fail: input={repr input} expected={expected} actual={actual}"
 
-/-- Entry point.  Reports per-file sorry counts; fails (exit 1) if
-    any kernel-TCB file has a non-zero count, in which case the
-    matching lines are echoed to stderr for the failing reviewer.
-
-    AR.14: runs the pattern-detector self-check before the file
-    scan so a regression in `isSorryProofPosition` fails fast
-    rather than scanning the codebase under a broken detector. -/
-def main : IO UInt32 := do
-  -- AR.14 self-check.
-  let failures := selfCheckPatternDetector
-  if !failures.isEmpty then
-    IO.eprintln "count_sorries: FAIL — pattern-detector self-check regressed:"
-    for f in failures do
-      IO.eprintln f
-    return 1
-  let counts ← aggregate
-  let total := counts.foldl (fun acc p => acc + p.snd) 0
-  IO.println s!"count_sorries: {total} sorry/sorries across {counts.length} file(s)."
-  for (path, n) in counts do
-    IO.println s!"  {path}: {n}"
-  let mut tcbFail := false
-  for tcbPath in kernelTcbFiles do
-    let ms ← fileMatches tcbPath
-    if ms.length > 0 then
-      IO.eprintln s!"count_sorries: FAIL — kernel-TCB file '{tcbPath}' has {ms.length} sorry/sorries:"
-      for (n, line) in ms do
-        IO.eprintln s!"{tcbPath}:{n}: {line}"
-      tcbFail := true
-  if tcbFail then
-    pure 1
-  else
-    IO.println "count_sorries: PASS — every kernel-TCB module has zero sorries."
-    pure 0
+end LegalKernel.Tools.CountSorries

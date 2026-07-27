@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "854a9578dedd8809d0ba8a970033df08213eb216ea2808c4271f08c21cfbd575"
+    "source_digest": "2c6eeed80076ea58920a061cf9a616636f08dee192015831fd2612b27d4935e7"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5238
+    "declaration_count": 5239
   },
   "modules": [
     {
@@ -62908,7 +62908,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 213,
+          "line": 214,
           "called": [
             "runAll"
           ]
@@ -62963,18 +62963,28 @@
     {
       "module": "Tools.CountSorries",
       "path": "Tools/CountSorries.lean",
-      "declaration_count": 16,
+      "declaration_count": 17,
       "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Tools.CountSorries",
+          "line": 52,
+          "called": [
+            "LegalKernel.Tools",
+            "kernelTcbFiles",
+            "readFileSafe"
+          ]
+        },
         {
           "kind": "def",
           "name": "searchRoots",
-          "line": 59,
+          "line": 67,
           "called": []
         },
         {
           "kind": "def",
           "name": "listLeanFiles",
-          "line": 65,
+          "line": 73,
           "called": [
             "entries"
           ]
@@ -62982,48 +62992,55 @@
         {
           "kind": "inductive",
           "name": "LexState",
-          "line": 84,
+          "line": 92,
           "called": []
         },
         {
           "kind": "def",
           "name": "maskStep",
-          "line": 101,
+          "line": 109,
           "called": [
             "LexState"
           ]
         },
         {
           "kind": "def",
+          "name": "maskCharLiterals",
+          "line": 146,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "maskNonCode",
-          "line": 122,
+          "line": 166,
           "called": [
             "LexState",
+            "maskCharLiterals",
             "maskStep"
           ]
         },
         {
           "kind": "def",
           "name": "listContains",
-          "line": 143,
+          "line": 187,
           "called": []
         },
         {
           "kind": "def",
           "name": "dropLeadingWs",
-          "line": 156,
+          "line": 200,
           "called": []
         },
         {
           "kind": "def",
           "name": "dropTrailingWs",
-          "line": 161,
+          "line": 205,
           "called": []
         },
         {
           "kind": "def",
           "name": "isSorryProofPosition",
-          "line": 174,
+          "line": 218,
           "called": [
             "dropLeadingWs",
             "dropTrailingWs",
@@ -63033,13 +63050,13 @@
         {
           "kind": "def",
           "name": "splitOnNewline",
-          "line": 199,
+          "line": 243,
           "called": []
         },
         {
           "kind": "def",
           "name": "matchesInContent",
-          "line": 212,
+          "line": 256,
           "called": [
             "isSorryProofPosition",
             "maskNonCode",
@@ -63049,7 +63066,7 @@
         {
           "kind": "def",
           "name": "fileMatches",
-          "line": 228,
+          "line": 272,
           "called": [
             "matchesInContent",
             "readFileSafe"
@@ -63058,7 +63075,7 @@
         {
           "kind": "def",
           "name": "aggregate",
-          "line": 236,
+          "line": 280,
           "called": [
             "fileMatches",
             "listLeanFiles",
@@ -63068,27 +63085,17 @@
         {
           "kind": "def",
           "name": "patternSelfTests",
-          "line": 282,
+          "line": 326,
           "called": []
         },
         {
           "kind": "def",
           "name": "selfCheckPatternDetector",
-          "line": 303,
+          "line": 347,
           "called": [
+            "LegalKernel.Tools.CountSorries",
             "isSorryProofPosition",
             "maskNonCode"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "main",
-          "line": 316,
-          "called": [
-            "aggregate",
-            "fileMatches",
-            "kernelTcbFiles",
-            "selfCheckPatternDetector"
           ]
         }
       ]
@@ -63133,13 +63140,13 @@
         {
           "kind": "structure",
           "name": "Violation",
-          "line": 100,
+          "line": 103,
           "called": []
         },
         {
           "kind": "def",
           "name": "Violation.format",
-          "line": 113,
+          "line": 116,
           "called": [
             "Violation"
           ]
@@ -63147,7 +63154,7 @@
         {
           "kind": "def",
           "name": "containsLower",
-          "line": 122,
+          "line": 132,
           "called": [
             "toLower"
           ]
@@ -63155,7 +63162,7 @@
         {
           "kind": "def",
           "name": "auditFile",
-          "line": 126,
+          "line": 136,
           "called": [
             "Violation",
             "containsLower",
@@ -63165,7 +63172,7 @@
         {
           "kind": "def",
           "name": "listLeanFiles",
-          "line": 143,
+          "line": 153,
           "called": [
             "entries"
           ]
@@ -63173,19 +63180,19 @@
         {
           "kind": "def",
           "name": "excludedPaths",
-          "line": 159,
+          "line": 170,
           "called": []
         },
         {
           "kind": "def",
           "name": "isExcluded",
-          "line": 166,
+          "line": 178,
           "called": []
         },
         {
           "kind": "def",
           "name": "runAudit",
-          "line": 171,
+          "line": 183,
           "called": [
             "LegalKernel.Tools.DeferralAudit",
             "Violation",
@@ -63401,13 +63408,13 @@
         {
           "kind": "def",
           "name": "parseDeclName",
-          "line": 200,
+          "line": 203,
           "called": []
         },
         {
           "kind": "def",
           "name": "auditDeclarations",
-          "line": 237,
+          "line": 282,
           "called": [
             "Violation",
             "findForbiddenToken",
@@ -63417,7 +63424,7 @@
         {
           "kind": "def",
           "name": "listLeanFiles",
-          "line": 257,
+          "line": 302,
           "called": [
             "entries"
           ]
@@ -63425,7 +63432,7 @@
         {
           "kind": "def",
           "name": "readAllowlist",
-          "line": 272,
+          "line": 317,
           "called": [
             "namingAllowlistPath",
             "readFileSafe"
@@ -63434,7 +63441,7 @@
         {
           "kind": "def",
           "name": "isAllowlisted",
-          "line": 286,
+          "line": 331,
           "called": [
             "Violation"
           ]
@@ -63442,7 +63449,7 @@
         {
           "kind": "def",
           "name": "runAudit",
-          "line": 293,
+          "line": 338,
           "called": [
             "LegalKernel.Tools.NamingAudit",
             "Violation",
@@ -63463,33 +63470,42 @@
       "declaration_count": 19,
       "declarations": [
         {
+          "kind": "namespace",
+          "name": "LegalKernel.Tools.StubAudit",
+          "line": 49,
+          "called": [
+            "LegalKernel.Tools",
+            "readFileSafe"
+          ]
+        },
+        {
           "kind": "def",
           "name": "searchRoots",
-          "line": 54,
+          "line": 62,
           "called": []
         },
         {
           "kind": "def",
           "name": "stubAllowlistPath",
-          "line": 57,
+          "line": 65,
           "called": []
         },
         {
           "kind": "def",
           "name": "stubPatterns",
-          "line": 61,
+          "line": 69,
           "called": []
         },
         {
           "kind": "def",
           "name": "redFlagTokens",
-          "line": 71,
+          "line": 79,
           "called": []
         },
         {
           "kind": "def",
           "name": "listLeanFiles",
-          "line": 78,
+          "line": 86,
           "called": [
             "entries"
           ]
@@ -63497,37 +63513,37 @@
         {
           "kind": "def",
           "name": "stripWhitespace",
-          "line": 100,
+          "line": 108,
           "called": []
         },
         {
           "kind": "def",
           "name": "isStringEmpty",
-          "line": 107,
+          "line": 115,
           "called": []
         },
         {
           "kind": "def",
           "name": "asciiLower",
-          "line": 112,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "containsSubstr",
           "line": 120,
           "called": []
         },
         {
           "kind": "def",
+          "name": "containsSubstr",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "def",
           "name": "stripLineComment",
-          "line": 138,
+          "line": 146,
           "called": []
         },
         {
           "kind": "def",
           "name": "lineHasStubPattern",
-          "line": 145,
+          "line": 153,
           "called": [
             "containsSubstr",
             "stripLineComment"
@@ -63536,7 +63552,7 @@
         {
           "kind": "def",
           "name": "blockHasRedFlag",
-          "line": 150,
+          "line": 158,
           "called": [
             "asciiLower",
             "containsSubstr"
@@ -63545,21 +63561,22 @@
         {
           "kind": "def",
           "name": "docstringAbove",
-          "line": 164,
+          "line": 179,
           "called": [
-            "containsSubstr"
+            "containsSubstr",
+            "stripWhitespace"
           ]
         },
         {
           "kind": "structure",
           "name": "Violation",
-          "line": 186,
+          "line": 208,
           "called": []
         },
         {
           "kind": "def",
           "name": "Violation.canonicalKey",
-          "line": 198,
+          "line": 220,
           "called": [
             "Violation"
           ]
@@ -63567,7 +63584,7 @@
         {
           "kind": "def",
           "name": "readAllowlist",
-          "line": 204,
+          "line": 226,
           "called": [
             "isStringEmpty",
             "readFileSafe",
@@ -63577,7 +63594,7 @@
         {
           "kind": "def",
           "name": "scanFile",
-          "line": 215,
+          "line": 237,
           "called": [
             "Violation",
             "blockHasRedFlag",
@@ -63589,22 +63606,15 @@
         {
           "kind": "def",
           "name": "aggregate",
-          "line": 232,
+          "line": 254,
           "called": [
+            "LegalKernel.Tools.StubAudit",
             "Violation",
             "listLeanFiles",
             "readAllowlist",
             "scanFile",
             "searchRoots",
             "stubAllowlistPath"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "main",
-          "line": 251,
-          "called": [
-            "aggregate"
           ]
         }
       ]
