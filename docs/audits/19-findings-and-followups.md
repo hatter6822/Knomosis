@@ -784,6 +784,68 @@ deliberately.  Recording it here rather than half-fixing it.
 
 ---
 
+## H-1 (HIGH) — `commitExtendedState` binds 5 of `ExtendedState`'s 7
+fields: `epochBudgets` and `budgetPolicy` are absent from the L1
+state root
+
+**Status:** OPEN.
+
+**Where.**  `LegalKernel/FaultProof/Commit.lean` (`commitExtendedState`)
+against `LegalKernel/Authority/Nonce.lean` (`structure ExtendedState`).
+
+**The defect.**  `ExtendedState` carries seven fields — `base`,
+`nonces`, `registry`, `bridge`, `localPolicies`, `epochBudgets`,
+`budgetPolicy`.  `commitExtendedState` hashes five of them:
+
+```lean
+hashBytes
+  (commitState        es.base ++
+   commitNonceState   es.nonces ++
+   commitKeyRegistry  es.registry ++
+   commitLocalPolicies es.localPolicies ++
+   commitBridgeState  es.bridge)
+```
+
+Its docstring states the opposite: "a single 32-byte hash binding
+**every sub-state** in canonical order.  This is the value the
+sequencer publishes to L1 as the state root."  Per CLAUDE.md's
+implement-the-improvement rule the docstring is the better artefact
+here and the code is what must change — the docstring must NOT be
+weakened to match.
+
+**Why it matters.**  `epochBudgets` is live, mutable, security-relevant
+state, not a derived cache: `Bridge/Admissible.lean` rewrites it on
+admitted actions (`epochBudgets := applyGrant …`, lines 521 / 530), and
+it is what the GP.3.2 admission gate meters spending against.  Because
+the published root does not bind it, two executions that agree on every
+committed sub-state but disagree on per-actor budget grants or
+consumption produce the *same* state root — so a fault proof has
+nothing to disagree about and cannot challenge a forged budget ledger.
+The same holds for `budgetPolicy`, which sets the metering parameters
+themselves.
+
+Note this is distinct from the documented step-VM boundary in
+`FaultProof/StepVMCoherence.lean` (a terminate step binds balance
+writes but not nonce/budget effects).  That is a statement about
+per-step cell proofs; H-1 is about the top-level state root, which the
+docstring claims is total over sub-states.
+
+**Feasibility.**  Half the fix already exists: `instEncodableBudgetPolicy`
+is defined (`Encoding/State.lean:944`), so `budgetPolicy` can be folded
+in immediately.  `EpochBudgetState` has no `Encodable` instance yet and
+needs one (plus the matching injectivity lemma, to keep the EI ladder
+whole).
+
+**Why a fix is not attempted in this pass.**  Extending the preimage
+changes the published state-root bytes, which is the frozen cross-stack
+contract: the Solidity mirror, the committed cross-stack corpora, and
+the `bridgeState_commit_extends_v1_*` backward-compatibility theorems
+all key off it.  That is a §13.6 two-reviewer, versioned-format change
+and wants its own scoped workstream, exactly as GP.11.8 was for the AMM
+fields.
+
+---
+
 ## Closing notes
 
 The audit reviewed ~73,000 lines of Lean across 241 files.
@@ -805,8 +867,9 @@ gives the project the right posture for its claimed phase
 (research-stage with production-aspiration).
 
 **Superseded:** this note originally read "No critical findings".
-Finding **C-1** above (`State.encode` non-injective on balances
-≥ 2^64) is critical and was missed by this review.  The remainder of
+Findings **C-1** (`State.encode` non-injective on balances ≥ 2^64,
+critical) and **H-1** (`commitExtendedState` binds 5 of 7 sub-states,
+high) above were both missed by this review.  The remainder of
 the note stands as written.
 
 Ten major findings, mostly
