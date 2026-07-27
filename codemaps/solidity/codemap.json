@@ -15,7 +15,7 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "06c07cba85cd4e2df71b5fdade75f6083e2b8e748a3380e56a028e11fe90f074"
+    "source_digest": "88bceeef8189086dfffb6b4a45f1757044fecd387a16cb1722ace13825caf69e"
   },
   "summary": {
     "module_count": 88,
@@ -10426,7 +10426,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_cbeByteLength",
-          "line": 228,
+          "line": 232,
           "called": [
             "_count",
             "_skipWithReason",
@@ -10437,7 +10437,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_postSwapReserves",
-          "line": 249,
+          "line": 257,
           "called": [
             "Entry",
             "_count",
@@ -10450,7 +10450,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_l2BalanceDeltas",
-          "line": 269,
+          "line": 277,
           "called": [
             "Entry",
             "_count",
@@ -10463,7 +10463,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_cbeTagByte",
-          "line": 291,
+          "line": 299,
           "called": [
             "_count",
             "_skipWithReason",
@@ -10474,7 +10474,7 @@
         {
           "kind": "function",
           "name": "test_liveContract_ammSwapMatchesFormula",
-          "line": 316,
+          "line": 324,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -10683,7 +10683,7 @@
         {
           "kind": "function",
           "name": "test_actionCbe_wellformed",
-          "line": 376,
+          "line": 382,
           "called": [
             "_count",
             "fixtureExists",
@@ -10693,7 +10693,7 @@
         {
           "kind": "function",
           "name": "test_recipientBudgetCbe_decodes_to_budgetGrant",
-          "line": 416,
+          "line": 422,
           "called": [
             "Entry",
             "_count",
@@ -10706,7 +10706,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 464,
+          "line": 470,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -10719,7 +10719,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 501,
+          "line": 507,
           "called": [
             "KnomosisBridge",
             "_deployBridge"
@@ -10728,7 +10728,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 507,
+          "line": 513,
           "called": []
         }
       ]

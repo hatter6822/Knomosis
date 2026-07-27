@@ -38,7 +38,7 @@ use serde::Deserialize;
 /// Pinned generator identifier.  A Lean-side version bump forces an
 /// explicit update here, so the differential can never silently
 /// consume a fixture from a different schema version.
-const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-event-subscribe/event-cbe/v1";
+const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-event-subscribe/event-cbe/v2";
 
 /// Fixture header — mirrors the Lean generator's `header` object.
 /// `deny_unknown_fields` rejects an unannounced Lean-side key.

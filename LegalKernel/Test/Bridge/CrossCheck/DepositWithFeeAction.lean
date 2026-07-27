@@ -213,7 +213,7 @@ def entries : List Json :=
 /-- The fixture's JSON value: a header + the entries array. -/
 def buildFixture : Json :=
   let header : Json := .obj
-    [ ("identifier",          .str "knomosis-l1-ingest/deposit-with-fee-action/v1")
+    [ ("identifier",          .str "knomosis-l1-ingest/deposit-with-fee-action/v2")
     , ("count",               .num entries.length)
     , ("countDepositWithFee", .num 8)
     , ("countTopUpBudget",    .num 5)

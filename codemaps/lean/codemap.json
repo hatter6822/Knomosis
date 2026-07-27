@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6ad7ed37f43beaaa61aadd5906ebbd295625fa29f51b2b820a655f484dd0a0e1"
+    "source_digest": "f059a4fcb731047b566d29d52ee8718e0f31cb9d7b7444fe945e9bf417529713"
   },
   "summary": {
     "module_count": 311,
@@ -15805,19 +15805,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 74,
+          "line": 77,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Encoding",
-          "line": 75,
+          "line": 78,
           "called": []
         },
         {
           "kind": "def",
           "name": "Action.fieldsBounded",
-          "line": 90,
+          "line": 97,
           "called": [
             "Action",
             "Dispute.fieldsBounded",
@@ -15848,7 +15848,7 @@
         {
           "kind": "instance",
           "name": "Action.decFieldsBounded",
-          "line": 159,
+          "line": 166,
           "called": [
             "Action",
             "Action.fieldsBounded"
@@ -15857,7 +15857,7 @@
         {
           "kind": "def",
           "name": "Action.encode",
-          "line": 167,
+          "line": 174,
           "called": [
             "Action",
             "Dispute",
@@ -15889,7 +15889,7 @@
         {
           "kind": "def",
           "name": "Action.readUInt64Field",
-          "line": 310,
+          "line": 317,
           "called": [
             "DecodeError",
             "Stream"
@@ -15898,7 +15898,7 @@
         {
           "kind": "def",
           "name": "Action.readNatField",
-          "line": 324,
+          "line": 331,
           "called": [
             "DecodeError",
             "Stream"
@@ -15907,7 +15907,7 @@
         {
           "kind": "def",
           "name": "Action.readAmountField",
-          "line": 336,
+          "line": 343,
           "called": [
             "DecodeError",
             "Stream",
@@ -15917,7 +15917,7 @@
         {
           "kind": "def",
           "name": "Action.decode",
-          "line": 342,
+          "line": 349,
           "called": [
             "Action",
             "Action.readAmountField",
@@ -15954,7 +15954,7 @@
         {
           "kind": "instance",
           "name": "instEncodableAction",
-          "line": 644,
+          "line": 651,
           "called": [
             "Action",
             "Action.decode",
@@ -15967,7 +15967,7 @@
         {
           "kind": "theorem",
           "name": "readUInt64Field_roundtrip",
-          "line": 656,
+          "line": 663,
           "called": [
             "Action.readUInt64Field",
             "Stream",
@@ -15977,7 +15977,7 @@
         {
           "kind": "theorem",
           "name": "readNatField_roundtrip",
-          "line": 680,
+          "line": 687,
           "called": [
             "Action.readNatField",
             "Stream",
@@ -15987,7 +15987,7 @@
         {
           "kind": "theorem",
           "name": "readAmountField_roundtrip",
-          "line": 688,
+          "line": 695,
           "called": [
             "Action.readAmountField",
             "Stream",
@@ -15998,7 +15998,7 @@
         {
           "kind": "theorem",
           "name": "action_roundtrip",
-          "line": 698,
+          "line": 705,
           "called": [
             "Action",
             "Action.decode",
@@ -16041,7 +16041,7 @@
         {
           "kind": "theorem",
           "name": "action_roundtrip_empty",
-          "line": 1184,
+          "line": 1191,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -16051,7 +16051,7 @@
         {
           "kind": "theorem",
           "name": "action_encode_injective",
-          "line": 1191,
+          "line": 1198,
           "called": [
             "Action",
             "Action.fieldsBounded",
@@ -16063,7 +16063,7 @@
         {
           "kind": "theorem",
           "name": "Action.tag_matches_encode_tag",
-          "line": 1222,
+          "line": 1229,
           "called": [
             "Action",
             "Action.encode",

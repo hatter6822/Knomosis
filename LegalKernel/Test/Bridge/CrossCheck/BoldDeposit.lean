@@ -456,7 +456,7 @@ def toJsonEntry (e : Entry) : Json :=
 /-- The fixture's JSON value: a header + the entries array. -/
 def buildFixtureJson : Json :=
   let header : Json := .obj
-    [ ("identifier",          .str "knomosis/bold-deposit-crossstack/v1")
+    [ ("identifier",          .str "knomosis/bold-deposit-crossstack/v2")
     , ("count",               .num allEntries.length)
     , ("isKeccak256Linked",   .bool LegalKernel.Bridge.isKeccak256Linked)
     , ("hashIdentifier",      .str (LegalKernel.Runtime.hashImplementationIdentifier ()))

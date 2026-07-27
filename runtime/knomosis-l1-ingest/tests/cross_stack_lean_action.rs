@@ -55,7 +55,7 @@ use serde::Deserialize;
 /// updating this value is a deliberate schema-version change; the
 /// `lean_action_corpus_identifier_matches` test fails fast so the
 /// drift is impossible to miss.
-const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-l1-ingest/deposit-with-fee-action/v1";
+const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-l1-ingest/deposit-with-fee-action/v2";
 
 /// Fixture header — mirrors the Lean generator's `header` object.
 ///

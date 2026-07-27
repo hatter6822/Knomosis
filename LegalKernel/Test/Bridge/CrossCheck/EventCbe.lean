@@ -164,7 +164,7 @@ def entries : List Json :=
 /-- The fixture's JSON value: a header + the entries array. -/
 def buildFixture : Json :=
   let header : Json := .obj
-    [ ("identifier",     .str "knomosis-event-subscribe/event-cbe/v1")
+    [ ("identifier",     .str "knomosis-event-subscribe/event-cbe/v2")
     , ("count",          .num entries.length)
     , ("knownTagCount",  .num knownTagCount)
     , ("note",

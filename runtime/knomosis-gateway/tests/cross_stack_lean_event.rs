@@ -45,7 +45,7 @@ const MAX_KNOWN_TAG: u64 = 22;
 
 /// Pinned generator identifier (a Lean-side version bump forces an explicit
 /// update here, so the fixture can never silently change shape).
-const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-event-subscribe/event-cbe/v1";
+const EXPECTED_FIXTURE_IDENTIFIER: &str = "knomosis-event-subscribe/event-cbe/v2";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

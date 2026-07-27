@@ -56,7 +56,10 @@ The constructor-tag map (frozen):
   | 24  | `reclaimAmmReserves` | `r`, `amount`, `reserveActor`, `poolActor`              |
 
 The `Action.fieldsBounded` predicate captures the canonical-encoding
-bound (`< 2^64`) on every numeric field.  Round-trip and injectivity
+bound on every numeric field: `< 2^128` for the wei-denominated amount
+fields, which ride the 17-byte CBE amount head, and `< 2^64` for
+identifiers, unit counts, nonces, epochs and deposit ids, which ride
+the 9-byte uint head.  Round-trip and injectivity
 hold for `Action`s that satisfy `fieldsBounded`; outside that range
 the encoder is total but lossy.  Phase 5's runtime adaptor must gate
 on `fieldsBounded` before applying `encode`.
@@ -81,13 +84,17 @@ open LegalKernel.Disputes
 /-! ## Numerical bound predicate
 
 `Action.fieldsBounded a` holds when every numeric field of `a` fits
-in canonical CBE's 8-byte uint form (`< 2^64`).  Phase 5's runtime
-adaptor gates on this before serialising. -/
+its canonical CBE head: the 16-byte amount payload (`< 2^128`) for
+the wei-denominated amount fields, the 8-byte uint payload (`< 2^64`)
+for everything else.  Phase 5's runtime adaptor gates on this before
+serialising. -/
 
-/-- The canonical-encoding bound (`< 2^64`) on every numeric field
-    of `a`.  For `replaceKey`, the public key's byte length is the
-    relevant bound.  For dispute / verdict actions, the bound is
-    delegated to the inner type's `fieldsBounded`. -/
+/-- The canonical-encoding bound on every numeric field of `a`:
+    `< 2^128` for a wei-denominated amount, `< 2^64` for an
+    identifier, unit count, nonce, epoch, index or deposit id.  For
+    `replaceKey`, the public key's byte length is the relevant bound.
+    For dispute / verdict actions, the bound is delegated to the inner
+    type's `fieldsBounded`. -/
 def Action.fieldsBounded : Action → Prop
   | .transfer r s r' a            =>
       r.toNat < 256 ^ 8 ∧ s.toNat < 256 ^ 8 ∧ r'.toNat < 256 ^ 8 ∧ a < 256 ^ 16

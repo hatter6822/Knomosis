@@ -225,7 +225,11 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
     // CBE byte-length pin
     // ------------------------------------------------------------------
 
-    /// @notice Every entry's `expectedCbe` is exactly 54 bytes (110 hex chars + 0x prefix).
+    /// @notice Every entry's `expectedCbe` is exactly 70 bytes (140 hex
+    ///         chars + 0x prefix): the array tag plus five field heads —
+    ///         three 9-byte uint heads (`fromResource`, `toResource`,
+    ///         `ammReserveActor`) and two 17-byte amount heads
+    ///         (`amountIn`, `amountOut`, widened by C-1).
     function test_perEntry_cbeByteLength() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("amm_swap.json not generated (run `lake test`)");
@@ -238,7 +242,11 @@ contract AmmSwapFixturesCrossCheck is CrossCheckFramework {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
             string memory cbeHex = vm.parseJsonString(raw, string.concat(base, ".expectedCbe"));
             bytes memory cbeBytes = vm.parseBytes(cbeHex);
-            assertEq(cbeBytes.length, 54, "CBE must be 54 bytes (tag + 5 x 9-byte heads)");
+            assertEq(
+                cbeBytes.length,
+                70,
+                "CBE must be 70 bytes (tag + 3 x 9-byte uint heads + 2 x 17-byte amount heads)"
+            );
         }
     }
 

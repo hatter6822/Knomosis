@@ -368,12 +368,18 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     }
 
     /// @notice Well-formedness of the CBE side-channels: `actionCbe` is a
-    ///         0x-prefixed 72-byte hex string and `recipientBudgetCbe` an
+    ///         0x-prefixed 88-byte hex string and `recipientBudgetCbe` an
     ///         18-byte hex string for every entry.  (Length is checked on
     ///         the hex string directly, no decode needed.  The Lean
     ///         `hexFromBytes` emits `"0x"` + two hex chars per byte with no
-    ///         length prefix, so 72 bytes => 146 chars, 18 bytes => 38
+    ///         length prefix, so 88 bytes => 178 chars, 18 bytes => 38
     ///         chars.)
+    ///
+    ///         `depositWithFee` carries seven fields; C-1 widened the two
+    ///         wei-denominated ones (`userAmount`, `poolAmount`) from the
+    ///         9-byte CBE uint head to the 17-byte amount head, taking the
+    ///         action from 72 to 88 bytes.  `budgetGrant` is a UNIT count
+    ///         and stays narrow, so `recipientBudgetCbe` is unchanged.
     function test_actionCbe_wellformed() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
@@ -397,8 +403,8 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
             assertEq(
                 string(abi.encodePacked(budget[0], budget[1])), "0x", "recipientBudgetCbe 0x prefix"
             );
-            // 72 bytes => "0x" + 144 hex chars
-            assertEq(action.length, 2 + 144, "actionCbe decodes to 72 bytes");
+            // 88 bytes => "0x" + 176 hex chars
+            assertEq(action.length, 2 + 176, "actionCbe decodes to 88 bytes");
             // 18 bytes => "0x" + 36 hex chars
             assertEq(budget.length, 2 + 36, "recipientBudgetCbe decodes to 18 bytes");
         }
