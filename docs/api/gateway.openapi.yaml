@@ -523,7 +523,13 @@ components:
       name: Idempotency-Key
       in: header
       required: false
-      description: Client-chosen key (e.g. the action nonce) to dedup in-flight retries.
+      description: >-
+        Client-chosen key (e.g. the action nonce) to dedup in-flight retries.
+
+        Scoped to the presenting credential: the cached response is only ever
+        replayed to the same bearer token that produced it, so two clients
+        independently choosing the same value (nonce `1`, say) do not collide
+        and neither observes the other's verdict.
       schema: { type: string, maxLength: 255 }
     LastEventId:
       name: Last-Event-ID

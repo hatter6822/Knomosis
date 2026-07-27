@@ -234,6 +234,7 @@ mod tests {
             content_type: Some("application/json"),
             body: body.as_bytes(),
             idempotency_key: None,
+            credential: None,
         };
         handle(state, &payload)
     }

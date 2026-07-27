@@ -29,6 +29,17 @@
 //! The key is **opaque** and client-supplied; the client is responsible
 //! for using a distinct key per distinct action (the cache does not
 //! fingerprint the body).
+//!
+//! **Scoping.**  Cache entries are namespaced by the *credential* that
+//! wrote them ([`crate::auth::credential_key`], the same identity the
+//! per-credential rate limiter buckets on).  The `Idempotency-Key` header
+//! is client-chosen and the gateway accepts a whole token *file*, so two
+//! clients independently picking `1` — or any shared value — must not
+//! collide: an unscoped cache would hand the second client the first
+//! client's verdict and silently never submit its action.  Keys are built
+//! by [`scoped_key`], whose fixed-width credential prefix makes the
+//! namespace boundary unambiguous no matter what the client-supplied
+//! suffix contains.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -74,6 +85,25 @@ pub fn is_cacheable(outcome: &RouteOutcome) -> bool {
     (200..500).contains(&outcome.status)
 }
 
+/// Namespace a client-supplied `Idempotency-Key` by the credential that
+/// presented it, so one client's cached verdict can never be replayed to
+/// another.
+///
+/// The credential is rendered as exactly 16 hex digits followed by `:`.
+/// Because that prefix is fixed-width, no client-supplied suffix — even
+/// one containing `:` or a 16-hex-looking run — can shift the boundary and
+/// land in another credential's namespace.  `None` (no bearer credential;
+/// unreachable on the authenticated submit path, but reachable from
+/// `RequestPayload::EMPTY` and the unit tests) gets its own `anon:`
+/// namespace rather than sharing one with a real credential.
+#[must_use]
+fn scoped_key(credential: Option<u64>, key: &str) -> String {
+    match credential {
+        Some(c) => format!("{c:016x}:{key}"),
+        None => format!("anon.............:{key}"),
+    }
+}
+
 impl IdempotencyCache {
     /// A cache with the given TTL (seconds; `0` disables it) and entry
     /// cap.
@@ -101,13 +131,16 @@ impl IdempotencyCache {
         !self.ttl.is_zero()
     }
 
-    /// The cached response for `key`, if present and unexpired (refreshing
-    /// its LRU recency).  An expired entry is dropped and returns `None`.
+    /// The cached response `credential` previously stored under `key`, if
+    /// present and unexpired (refreshing its LRU recency).  An expired
+    /// entry is dropped and returns `None`.  Entries written by a
+    /// *different* credential are invisible here — see [`scoped_key`].
     #[must_use]
-    pub fn get(&self, key: &str) -> Option<RouteOutcome> {
+    pub fn get(&self, credential: Option<u64>, key: &str) -> Option<RouteOutcome> {
         if !self.is_enabled() {
             return None;
         }
+        let key = &scoped_key(credential, key);
         let now = Instant::now();
         let access = self.tick.fetch_add(1, Ordering::Relaxed);
         let mut entries = self.lock();
@@ -124,13 +157,16 @@ impl IdempotencyCache {
         }
     }
 
-    /// Cache `outcome` under `key` (no-op when disabled or `outcome` is
-    /// not cacheable).  Evicts expired entries and, at capacity, the
-    /// least-recently-used entry.
-    pub fn put(&self, key: &str, outcome: &RouteOutcome) {
+    /// Cache `outcome` under `key`, in `credential`'s namespace (no-op
+    /// when disabled or `outcome` is not cacheable).  Evicts expired
+    /// entries and, at capacity, the least-recently-used entry.
+    pub fn put(&self, credential: Option<u64>, key: &str, outcome: &RouteOutcome) {
         if !self.is_enabled() || !is_cacheable(outcome) {
             return;
         }
+        // Owned: it is moved into the map below, so building it once here
+        // avoids re-allocating for the insert.
+        let key = scoped_key(credential, key);
         let now = Instant::now();
         let access = self.tick.fetch_add(1, Ordering::Relaxed);
         let mut entries = self.lock();
@@ -138,7 +174,7 @@ impl IdempotencyCache {
         // memory under churn).
         entries.retain(|_, e| e.expires_at > now);
         // Evict the LRU entry if inserting a NEW key would exceed the cap.
-        if entries.len() >= self.max_entries && !entries.contains_key(key) {
+        if entries.len() >= self.max_entries && !entries.contains_key(&key) {
             if let Some(lru) = entries
                 .iter()
                 .min_by_key(|(_, e)| e.last_access)
@@ -148,7 +184,7 @@ impl IdempotencyCache {
             }
         }
         entries.insert(
-            key.to_string(),
+            key,
             Entry {
                 outcome: outcome.clone(),
                 expires_at: now + self.ttl,
@@ -180,19 +216,71 @@ impl IdempotencyCache {
 
 #[cfg(test)]
 mod tests {
-    use super::IdempotencyCache;
+    use super::{scoped_key, IdempotencyCache};
     use crate::http::RouteOutcome;
+
+    /// Two distinct credentials, as `credential_key` would produce them.
+    const CRED_A: Option<u64> = Some(0xAAAA_AAAA_AAAA_AAAA);
+    const CRED_B: Option<u64> = Some(0xBBBB_BBBB_BBBB_BBBB);
 
     fn ok(body: &str) -> RouteOutcome {
         RouteOutcome::json(200, body.to_string())
     }
 
+    /// The security property: an `Idempotency-Key` is scoped to the
+    /// credential that presented it.  Without this, client B reusing a key
+    /// client A had already used would receive A's verdict — and B's own
+    /// action would silently never be submitted to the host.
+    #[test]
+    fn key_is_scoped_per_credential() {
+        let cache = IdempotencyCache::new(60, 16);
+        cache.put(CRED_A, "shared-key", &ok("A-verdict"));
+
+        // B chose the same key: it must MISS, not see A's response.
+        assert!(
+            cache.get(CRED_B, "shared-key").is_none(),
+            "credential B must not observe credential A's cached verdict"
+        );
+        // An unauthenticated caller likewise gets its own namespace.
+        assert!(cache.get(None, "shared-key").is_none());
+
+        // B's own entry is independent and does not disturb A's.
+        cache.put(CRED_B, "shared-key", &ok("B-verdict"));
+        assert_eq!(
+            cache.get(CRED_A, "shared-key").expect("A hit").body,
+            "A-verdict"
+        );
+        assert_eq!(
+            cache.get(CRED_B, "shared-key").expect("B hit").body,
+            "B-verdict"
+        );
+    }
+
+    /// The credential prefix is fixed-width, so no client-supplied suffix
+    /// can shift the namespace boundary and collide with another
+    /// credential's entries.
+    #[test]
+    fn scoped_key_namespaces_cannot_be_forged_by_the_suffix() {
+        // A key that itself looks like a credential prefix must not land in
+        // that credential's namespace.
+        assert_ne!(
+            scoped_key(CRED_A, "bbbbbbbbbbbbbbbb:k"),
+            scoped_key(CRED_B, "k")
+        );
+        // Distinct credentials never share a namespace for the same key.
+        assert_ne!(scoped_key(CRED_A, "k"), scoped_key(CRED_B, "k"));
+        // The anonymous namespace is distinct from every credentialed one.
+        assert_ne!(scoped_key(None, "k"), scoped_key(CRED_A, "k"));
+        // Same credential + same key is stable (the cache must still hit).
+        assert_eq!(scoped_key(CRED_A, "k"), scoped_key(CRED_A, "k"));
+    }
+
     #[test]
     fn hit_returns_cached_response() {
         let cache = IdempotencyCache::new(60, 16);
-        assert!(cache.get("k").is_none()); // miss
-        cache.put("k", &ok("first"));
-        let hit = cache.get("k").expect("hit");
+        assert!(cache.get(CRED_A, "k").is_none()); // miss
+        cache.put(CRED_A, "k", &ok("first"));
+        let hit = cache.get(CRED_A, "k").expect("hit");
         assert_eq!(hit.body, "first");
         assert_eq!(cache.len(), 1);
     }
@@ -201,29 +289,29 @@ mod tests {
     fn disabled_cache_never_stores() {
         let cache = IdempotencyCache::new(0, 16);
         assert!(!cache.is_enabled());
-        cache.put("k", &ok("x"));
-        assert!(cache.get("k").is_none());
+        cache.put(CRED_A, "k", &ok("x"));
+        assert!(cache.get(CRED_A, "k").is_none());
         assert!(cache.is_empty());
     }
 
     #[test]
     fn transient_5xx_is_not_cached() {
         let cache = IdempotencyCache::new(60, 16);
-        cache.put("k", &RouteOutcome::problem(503, "{}".to_string()));
-        assert!(cache.get("k").is_none(), "5xx must not be cached");
+        cache.put(CRED_A, "k", &RouteOutcome::problem(503, "{}".to_string()));
+        assert!(cache.get(CRED_A, "k").is_none(), "5xx must not be cached");
         // A 4xx client error IS cacheable (deterministic).
-        cache.put("k4", &RouteOutcome::problem(400, "{}".to_string()));
-        assert!(cache.get("k4").is_some());
+        cache.put(CRED_A, "k4", &RouteOutcome::problem(400, "{}".to_string()));
+        assert!(cache.get(CRED_A, "k4").is_some());
     }
 
     #[test]
     fn entries_expire_after_ttl() {
         use std::time::Duration;
         let cache = IdempotencyCache::from_ttl(Duration::from_millis(40), 16);
-        cache.put("k", &ok("v"));
-        assert!(cache.get("k").is_some(), "live before the TTL");
+        cache.put(CRED_A, "k", &ok("v"));
+        assert!(cache.get(CRED_A, "k").is_some(), "live before the TTL");
         std::thread::sleep(Duration::from_millis(60));
-        assert!(cache.get("k").is_none(), "expired after the TTL");
+        assert!(cache.get(CRED_A, "k").is_none(), "expired after the TTL");
         // The expired entry was swept on the miss.
         assert!(cache.is_empty());
     }
@@ -231,23 +319,23 @@ mod tests {
     #[test]
     fn bounded_with_lru_eviction() {
         let cache = IdempotencyCache::new(60, 2);
-        cache.put("a", &ok("a"));
-        cache.put("b", &ok("b"));
+        cache.put(CRED_A, "a", &ok("a"));
+        cache.put(CRED_A, "b", &ok("b"));
         // Touch "a" so "b" becomes the least-recently-used.
-        assert!(cache.get("a").is_some());
+        assert!(cache.get(CRED_A, "a").is_some());
         // Inserting "c" at capacity evicts the LRU ("b").
-        cache.put("c", &ok("c"));
+        cache.put(CRED_A, "c", &ok("c"));
         assert_eq!(cache.len(), 2);
-        assert!(cache.get("a").is_some(), "recently-used kept");
-        assert!(cache.get("c").is_some(), "newest kept");
-        assert!(cache.get("b").is_none(), "LRU evicted");
+        assert!(cache.get(CRED_A, "a").is_some(), "recently-used kept");
+        assert!(cache.get(CRED_A, "c").is_some(), "newest kept");
+        assert!(cache.get(CRED_A, "b").is_none(), "LRU evicted");
     }
 
     #[test]
     fn unique_keys_do_not_grow_past_cap() {
         let cache = IdempotencyCache::new(60, 8);
         for i in 0..1000 {
-            cache.put(&format!("key-{i}"), &ok("v"));
+            cache.put(CRED_A, &format!("key-{i}"), &ok("v"));
         }
         assert!(cache.len() <= 8, "cache stayed bounded: {}", cache.len());
     }

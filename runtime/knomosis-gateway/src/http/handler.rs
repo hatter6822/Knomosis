@@ -146,6 +146,10 @@ pub fn handle(
             content_type: parts.content_type,
             body: &body,
             idempotency_key: parts.idempotency_key,
+            // `gate` has already accepted this credential; carry its
+            // stable key so the idempotency cache is namespaced per
+            // credential rather than globally.
+            credential: crate::auth::bearer_credential_key(parts.auth_header),
         };
         let outcome = apply_conditional(dispatch(routed, state, &payload), parts.if_none_match);
         return respond(outcome);
