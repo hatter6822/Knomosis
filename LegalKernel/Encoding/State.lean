@@ -995,6 +995,41 @@ instance instEncodableBudgetPolicy : Encodable BudgetPolicy where
   encode := BudgetPolicy.encode
   decode := BudgetPolicy.decode
 
+/-! ## `EpochBudgetState` encoding (H-1)
+
+`EpochBudgetState` is `TreeMap ActorId ActorBudget`, the per-actor
+gas-budget ledger the GP.3.2 admission gate meters spending against.
+It is live, mutable state — `Bridge/Admissible.lean` rewrites it on
+admitted actions — but it was absent from `commitExtendedState`, so the
+state root the sequencer publishes did not bind it.  Two executions
+agreeing on every committed sub-state while disagreeing on budget
+grants or consumption produced the same root, leaving a fault proof
+nothing to challenge.
+
+Encoded exactly like `NonceState`: a sorted-pair CBE map keyed by the
+actor id, with `ActorBudget`'s existing fixed-width instance as the
+value codec. -/
+
+/-- Encode an `EpochBudgetState` as a sorted-pair CBE map
+    (`ActorId → ActorBudget`). -/
+def EpochBudgetState.encode (ebs : EpochBudgetState) : Stream :=
+  encodeSortedPairs (ebs.toList.map (fun (a, b) => (a.toNat, b)))
+
+/-- Decode an `EpochBudgetState`: read the CBE map (with the
+    strictly-ascending-key canonicality check), then rebuild the
+    `TreeMap`.  Each key is a CBE `Nat` in `[0, 2^64)` by the codec
+    invariant and converts to `UInt64` exactly. -/
+def EpochBudgetState.decode (s : Stream) :
+    Except DecodeError (EpochBudgetState × Stream) :=
+  match decodeMap (K := Nat) (V := ActorBudget) s with
+  | .ok (pairs, rest) =>
+    .ok (TreeMap.ofList (pairs.map (fun (k, v) => (k.toUInt64, v))) compare, rest)
+  | .error e => .error e
+
+instance instEncodableEpochBudgetState : Encodable EpochBudgetState where
+  encode := EpochBudgetState.encode
+  decode := EpochBudgetState.decode
+
 /-! ## GP.3.1.d — `ActorBudget` and `BudgetPolicy` encoder injectivity
 
 The injectivity theorems for the new GP-introduced sub-state encodings,

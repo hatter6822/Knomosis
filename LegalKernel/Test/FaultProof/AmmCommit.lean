@@ -356,6 +356,55 @@ def tests : List TestCase :=
           bridgeState_commit_extends_v1_3
         pure ()
     }
+  -- H-1. The published state root binds ALL SEVEN `ExtendedState`
+  --     sub-states.  Before H-1 it bound five: `epochBudgets` and
+  --     `budgetPolicy` were omitted, so two executions agreeing on
+  --     every committed sub-state but disagreeing on budget grants or
+  --     consumption produced the SAME root and a fault proof had
+  --     nothing to challenge.  These are value-level pins: mutate one
+  --     of the two formerly-unbound fields and the root must move.
+  , { name := "H-1: state root reflects epochBudgets"
+    , body := do
+        let base : Authority.ExtendedState := { base := genesisState
+                                              , nonces := Authority.NonceState.empty
+                                              , registry := Authority.KeyRegistry.empty }
+        -- Same state, except one actor holds a budget cell.
+        let withBudget : Authority.ExtendedState :=
+          { base with
+            epochBudgets := Authority.EpochBudgetState.empty.topUp 7 0 0 500 }
+        Test.assert
+          (commitExtendedState base != commitExtendedState withBudget)
+          "a differing epochBudgets ledger must change the state root"
+    }
+  , { name := "H-1: state root reflects budgetPolicy"
+    , body := do
+        let base : Authority.ExtendedState := { base := genesisState
+                                              , nonces := Authority.NonceState.empty
+                                              , registry := Authority.KeyRegistry.empty }
+        let otherPolicy : Authority.ExtendedState :=
+          { base with budgetPolicy := .bounded 10 1 100 }
+        Test.assert
+          (commitExtendedState base != commitExtendedState otherPolicy)
+          "a differing budgetPolicy must change the state root"
+    }
+  , { name := "H-1: commitExtendedState binds seven sub-states"
+    , body := do
+        -- The decomposition theorem now yields SEVEN sub-commit
+        -- equalities; this pins its arity so a future field added to
+        -- `ExtendedState` without extending the commitment is caught.
+        let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
+            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            commitExtendedState es₁ = commitExtendedState es₂ →
+            commitState es₁.base = commitState es₂.base ∧
+            commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
+            commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
+            commitLocalPolicies es₁.localPolicies = commitLocalPolicies es₂.localPolicies ∧
+            commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
+            commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
+            commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy :=
+          commitExtendedState_subcommits_eq_under_collision_free
+        pure ()
+    }
   -- 26. Term-level API: commitBridgeState_reflects_ammDisabled
   --     (toList hypotheses, same rationale as test 25).
   , { name := "GP.11.10: commitBridgeState_reflects_ammDisabled API stable"

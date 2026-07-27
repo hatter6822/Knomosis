@@ -92,18 +92,45 @@ def commitBridgeState (bs : BridgeState) : ByteArray :=
   hashBytes
     (ByteArray.mk (Encodable.encode (T := BridgeState) bs).toArray)
 
+/-- Commit the per-actor epoch-budget ledger (H-1).
+
+    `epochBudgets` is live, mutable state — `Bridge/Admissible.lean`
+    rewrites it on admitted actions and the GP.3.2 admission gate
+    meters spending against it — so leaving it outside the published
+    root meant two executions could disagree on budget grants or
+    consumption and still produce the same state root. -/
+def commitEpochBudgets (ebs : EpochBudgetState) : ByteArray :=
+  hashBytes
+    (ByteArray.mk (Encodable.encode (T := EpochBudgetState) ebs).toArray)
+
+/-- Commit the budget policy (H-1): the metering parameters
+    (`freeTier`, `actionCost`, `epochLength`) the admission gate reads.
+    Bound for the same reason as `epochBudgets` — a root that does not
+    fix the policy does not fix what "within budget" means. -/
+def commitBudgetPolicy (bp : BudgetPolicy) : ByteArray :=
+  hashBytes
+    (ByteArray.mk (Encodable.encode (T := BudgetPolicy) bp).toArray)
+
 /-! ## Top-level state commitment -/
 
-/-- The top-level state commitment: a single 32-byte hash
-    binding every sub-state in canonical order.  This is the
-    value the sequencer publishes to L1 as the state root. -/
+/-- The top-level state commitment: a single 32-byte hash binding
+    every sub-state in canonical order.  This is the value the
+    sequencer publishes to L1 as the state root.
+
+    "Every sub-state" is all SEVEN `ExtendedState` fields.  Before H-1
+    this bound only five: `epochBudgets` and `budgetPolicy` were
+    omitted, so the published root did not fix the per-actor budget
+    ledger or the metering parameters, and a fault proof had nothing to
+    challenge when they were forged. -/
 def commitExtendedState (es : ExtendedState) : StateCommit :=
   hashBytes
     (commitState        es.base ++
      commitNonceState   es.nonces ++
      commitKeyRegistry  es.registry ++
      commitLocalPolicies es.localPolicies ++
-     commitBridgeState  es.bridge)
+     commitBridgeState  es.bridge ++
+     commitEpochBudgets es.epochBudgets ++
+     commitBudgetPolicy es.budgetPolicy)
 
 /-! ## Determinism theorems -/
 
@@ -155,6 +182,18 @@ theorem commitLocalPolicies_size (lp : LocalPolicies) :
 theorem commitBridgeState_size (bs : BridgeState) :
     (commitBridgeState bs).size = 32 := by
   unfold commitBridgeState
+  exact hashAdaptor_thirty_two_byte_output _
+
+/-- The epoch-budget sub-commit is 32 bytes (H-1). -/
+theorem commitEpochBudgets_size (ebs : EpochBudgetState) :
+    (commitEpochBudgets ebs).size = 32 := by
+  unfold commitEpochBudgets
+  exact hashAdaptor_thirty_two_byte_output _
+
+/-- The budget-policy sub-commit is 32 bytes (H-1). -/
+theorem commitBudgetPolicy_size (bp : BudgetPolicy) :
+    (commitBudgetPolicy bp).size = 32 := by
+  unfold commitBudgetPolicy
   exact hashAdaptor_thirty_two_byte_output _
 
 /-! ## Extensional equality on `ExtendedState`
@@ -245,6 +284,26 @@ theorem commitBridgeState_bytes_injective_under_collision_free
     ByteArray.mk (Encodable.encode (T := BridgeState) bs₁).toArray =
     ByteArray.mk (Encodable.encode (T := BridgeState) bs₂).toArray := by
   unfold commitBridgeState at h
+  exact h_cf _ _ h
+
+/-- Bytes-injectivity for `commitEpochBudgets` (H-1). -/
+theorem commitEpochBudgets_bytes_injective_under_collision_free
+    (e₁ e₂ : EpochBudgetState)
+    (h_cf : Bridge.CollisionFree hashBytes)
+    (h : commitEpochBudgets e₁ = commitEpochBudgets e₂) :
+    ByteArray.mk (Encodable.encode (T := EpochBudgetState) e₁).toArray =
+    ByteArray.mk (Encodable.encode (T := EpochBudgetState) e₂).toArray := by
+  unfold commitEpochBudgets at h
+  exact h_cf _ _ h
+
+/-- Bytes-injectivity for `commitBudgetPolicy` (H-1). -/
+theorem commitBudgetPolicy_bytes_injective_under_collision_free
+    (p₁ p₂ : BudgetPolicy)
+    (h_cf : Bridge.CollisionFree hashBytes)
+    (h : commitBudgetPolicy p₁ = commitBudgetPolicy p₂) :
+    ByteArray.mk (Encodable.encode (T := BudgetPolicy) p₁).toArray =
+    ByteArray.mk (Encodable.encode (T := BudgetPolicy) p₂).toArray := by
+  unfold commitBudgetPolicy at h
   exact h_cf _ _ h
 
 /-! ## Top-level injectivity (#220)
@@ -347,7 +406,43 @@ private theorem byteArray_concat_five_split
   have ⟨e_1, e_2⟩ := byteArrayAppendInj e_l3 h₁
   exact ⟨e_1, e_2, e_3, e_4, e_5⟩
 
-/-- The five-component decomposition of `commitExtendedState`'s
+
+/-- Helper: split a 224-byte (7 × 32) ByteArray-backed concatenation
+    into its seven 32-byte components.  Composed from
+    `byteArray_concat_five_split` by peeling the two trailing segments
+    with `byteArrayAppendInj` — `++` is left-associated, so the
+    seven-fold concatenation is `(five-fold ++ a₆) ++ a₇`. -/
+private theorem byteArray_concat_seven_split
+    (a₁ a₂ a₃ a₄ a₅ a₆ a₇ b₁ b₂ b₃ b₄ b₅ b₆ b₇ : ByteArray)
+    (s₁ : a₁.size = 32) (s₂ : a₂.size = 32) (s₃ : a₃.size = 32)
+    (s₄ : a₄.size = 32) (s₅ : a₅.size = 32) (s₆ : a₆.size = 32)
+    (_s₇ : a₇.size = 32)
+    (t₁ : b₁.size = 32) (t₂ : b₂.size = 32) (t₃ : b₃.size = 32)
+    (t₄ : b₄.size = 32) (t₅ : b₅.size = 32) (t₆ : b₆.size = 32)
+    (_t₇ : b₇.size = 32)
+    (h : a₁ ++ a₂ ++ a₃ ++ a₄ ++ a₅ ++ a₆ ++ a₇ =
+         b₁ ++ b₂ ++ b₃ ++ b₄ ++ b₅ ++ b₆ ++ b₇) :
+    a₁ = b₁ ∧ a₂ = b₂ ∧ a₃ = b₃ ∧ a₄ = b₄ ∧ a₅ = b₅ ∧
+      a₆ = b₆ ∧ a₇ = b₇ := by
+  -- Peel `a₇` / `b₇`: the six-fold prefixes are both 192 bytes.
+  have size6 :
+      (a₁ ++ a₂ ++ a₃ ++ a₄ ++ a₅ ++ a₆).size =
+      (b₁ ++ b₂ ++ b₃ ++ b₄ ++ b₅ ++ b₆).size := by
+    simp [ByteArray.size_append, s₁, s₂, s₃, s₄, s₅, s₆, t₁, t₂, t₃, t₄, t₅, t₆]
+  obtain ⟨h6, h_a₇⟩ := byteArrayAppendInj h size6
+  -- Peel `a₆` / `b₆`: the five-fold prefixes are both 160 bytes.
+  have size5 :
+      (a₁ ++ a₂ ++ a₃ ++ a₄ ++ a₅).size =
+      (b₁ ++ b₂ ++ b₃ ++ b₄ ++ b₅).size := by
+    simp [ByteArray.size_append, s₁, s₂, s₃, s₄, s₅, t₁, t₂, t₃, t₄, t₅]
+  obtain ⟨h5, h_a₆⟩ := byteArrayAppendInj h6 size5
+  -- The remaining five-fold split is the existing lemma.
+  obtain ⟨e₁, e₂, e₃, e₄, e₅⟩ :=
+    byteArray_concat_five_split _ _ _ _ _ _ _ _ _ _
+      s₁ s₂ s₃ s₄ s₅ t₁ t₂ t₃ t₄ t₅ h5
+  exact ⟨e₁, e₂, e₃, e₄, e₅, h_a₆, h_a₇⟩
+
+/-- The seven-component decomposition of `commitExtendedState`'s
     pre-image hash.  Under `CollisionFree hashBytes` plus the
     32-byte size invariants, equal top-level commits imply
     sub-state-commit-wise equality. -/
@@ -358,23 +453,29 @@ theorem commitExtendedState_subcommits_eq_under_collision_free
     commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
     commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
     commitLocalPolicies es₁.localPolicies = commitLocalPolicies es₂.localPolicies ∧
-    commitBridgeState es₁.bridge = commitBridgeState es₂.bridge := by
-  -- commitExtendedState es = hashBytes (5 sub-commits concatenated).
+    commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
+    commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
+    commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy := by
+  -- commitExtendedState es = hashBytes (7 sub-commits concatenated).
   -- Under collision-freedom, equal hashes ⇒ equal pre-images.
   have h_concat :
       commitState es₁.base ++ commitNonceState es₁.nonces ++
         commitKeyRegistry es₁.registry ++ commitLocalPolicies es₁.localPolicies ++
-        commitBridgeState es₁.bridge =
+        commitBridgeState es₁.bridge ++ commitEpochBudgets es₁.epochBudgets ++
+        commitBudgetPolicy es₁.budgetPolicy =
       commitState es₂.base ++ commitNonceState es₂.nonces ++
         commitKeyRegistry es₂.registry ++ commitLocalPolicies es₂.localPolicies ++
-        commitBridgeState es₂.bridge :=
+        commitBridgeState es₂.bridge ++ commitEpochBudgets es₂.epochBudgets ++
+        commitBudgetPolicy es₂.budgetPolicy :=
     h_cf _ _ h
-  -- Apply the five-fold split with each segment's 32-byte size.
-  exact byteArray_concat_five_split _ _ _ _ _ _ _ _ _ _
+  -- Apply the seven-fold split with each segment's 32-byte size.
+  exact byteArray_concat_seven_split _ _ _ _ _ _ _ _ _ _ _ _ _ _
     (commitState_size _) (commitNonceState_size _) (commitKeyRegistry_size _)
     (commitLocalPolicies_size _) (commitBridgeState_size _)
+    (commitEpochBudgets_size _) (commitBudgetPolicy_size _)
     (commitState_size _) (commitNonceState_size _) (commitKeyRegistry_size _)
-    (commitLocalPolicies_size _) (commitBridgeState_size _) h_concat
+    (commitLocalPolicies_size _) (commitBridgeState_size _)
+    (commitEpochBudgets_size _) (commitBudgetPolicy_size _) h_concat
 
 /-- #220: Top-level commitment injectivity under
     `CollisionFree hashBytes`.  Equal top-level commits imply
@@ -413,14 +514,20 @@ theorem commitExtendedState_subcommits_bytes_eq_under_collision_free
     ByteArray.mk (Encodable.encode (T := LocalPolicies) es₁.localPolicies).toArray =
       ByteArray.mk (Encodable.encode (T := LocalPolicies) es₂.localPolicies).toArray ∧
     ByteArray.mk (Encodable.encode (T := BridgeState) es₁.bridge).toArray =
-      ByteArray.mk (Encodable.encode (T := BridgeState) es₂.bridge).toArray := by
-  obtain ⟨h_s, h_n, h_kr, h_lp, h_bs⟩ :=
+      ByteArray.mk (Encodable.encode (T := BridgeState) es₂.bridge).toArray ∧
+    ByteArray.mk (Encodable.encode (T := EpochBudgetState) es₁.epochBudgets).toArray =
+      ByteArray.mk (Encodable.encode (T := EpochBudgetState) es₂.epochBudgets).toArray ∧
+    ByteArray.mk (Encodable.encode (T := BudgetPolicy) es₁.budgetPolicy).toArray =
+      ByteArray.mk (Encodable.encode (T := BudgetPolicy) es₂.budgetPolicy).toArray := by
+  obtain ⟨h_s, h_n, h_kr, h_lp, h_bs, h_eb, h_bp⟩ :=
     commitExtendedState_subcommits_eq_under_collision_free es₁ es₂ h_cf h
   exact ⟨commitState_bytes_injective_under_collision_free _ _ h_cf h_s,
          commitNonceState_bytes_injective_under_collision_free _ _ h_cf h_n,
          commitKeyRegistry_bytes_injective_under_collision_free _ _ h_cf h_kr,
          commitLocalPolicies_bytes_injective_under_collision_free _ _ h_cf h_lp,
-         commitBridgeState_bytes_injective_under_collision_free _ _ h_cf h_bs⟩
+         commitBridgeState_bytes_injective_under_collision_free _ _ h_cf h_bs,
+         commitEpochBudgets_bytes_injective_under_collision_free _ _ h_cf h_eb,
+         commitBudgetPolicy_bytes_injective_under_collision_free _ _ h_cf h_bp⟩
 
 /-! ## EI.8 — Extensional-equality lift of the subcommits theorem
 
@@ -601,7 +708,7 @@ theorem commitExtendedState_subcommits_extensional_eq_under_collision_free
     ExtendedState.extEq es₁ es₂ := by
   -- Step 1: Apply the existing bytes-equality theorem to extract the
   -- five sub-state byte-array equalities.
-  obtain ⟨h_b, h_n, h_kr, h_lp, h_bs⟩ :=
+  obtain ⟨h_b, h_n, h_kr, h_lp, h_bs, _h_eb, h_bp⟩ :=
     commitExtendedState_subcommits_bytes_eq_under_collision_free es₁ es₂ h_cf h
   -- Step 2: Strip the `ByteArray.mk ∘ .toArray` framing on each
   -- sub-state byte-equality to recover the underlying `Stream` (List
@@ -963,7 +1070,7 @@ theorem commitExtendedState_reflects_ammDisabled
     (h_ne : es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled) :
     commitExtendedState es₁ ≠ commitExtendedState es₂ := by
   intro h_eq
-  obtain ⟨_, _, _, _, h_bs⟩ :=
+  obtain ⟨_, _, _, _, h_bs, _, _⟩ :=
     commitExtendedState_subcommits_eq_under_collision_free es₁ es₂ h_cf h_eq
   exact commitBridgeState_reflects_ammDisabled es₁.bridge es₂.bridge h_cf
     h_consumed h_pending h_nextWdId h_ammEth h_ammBold h_circuit

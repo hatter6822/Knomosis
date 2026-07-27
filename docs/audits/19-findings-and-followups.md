@@ -828,7 +828,7 @@ lands in one piece.
 fields: `epochBudgets` and `budgetPolicy` are absent from the L1
 state root
 
-**Status:** OPEN.
+**Status:** FIXED.
 
 **Where.**  `LegalKernel/FaultProof/Commit.lean` (`commitExtendedState`)
 against `LegalKernel/Authority/Nonce.lean` (`structure ExtendedState`).
@@ -876,13 +876,49 @@ in immediately.  `EpochBudgetState` has no `Encodable` instance yet and
 needs one (plus the matching injectivity lemma, to keep the EI ladder
 whole).
 
-**Why a fix is not attempted in this pass.**  Extending the preimage
-changes the published state-root bytes, which is the frozen cross-stack
-contract: the Solidity mirror, the committed cross-stack corpora, and
-the `bridgeState_commit_extends_v1_*` backward-compatibility theorems
-all key off it.  That is a §13.6 two-reviewer, versioned-format change
-and wants its own scoped workstream, exactly as GP.11.8 was for the AMM
-fields.
+**The fix.**  `commitExtendedState` now hashes all seven sub-commits.
+
+* `Encoding/State.lean` — `EpochBudgetState.encode` / `.decode` and
+  `instEncodableEpochBudgetState`, a sorted-pair CBE map keyed by actor
+  id over `ActorBudget`'s existing fixed-width instance (the same shape
+  `NonceState` uses).  `BudgetPolicy` already had `instEncodableBudgetPolicy`.
+* `FaultProof/Commit.lean` — `commitEpochBudgets` / `commitBudgetPolicy`
+  with their 32-byte size lemmas and bytes-injectivity lemmas;
+  `byteArray_concat_seven_split` (composed from the existing five-split
+  by peeling the two trailing 32-byte segments with `byteArrayAppendInj`);
+  and `commitExtendedState_subcommits_eq_under_collision_free` /
+  `…_bytes_eq_…` extended from five to seven components.
+
+**Cross-stack scope: none.**  Checked rather than assumed — the
+Solidity step VM explicitly does NOT recompute `commitExtendedState`
+(`KnomosisStepVM.sol` documents that it uses a step-VM-specific commit
+recipe and that the cross-check per-entry byte comparison is skipped
+for exactly that reason), and the Rust observer DELEGATES truth
+computation to its `TruthOracle` trait rather than re-implementing
+`commitExtendedState ∘ kernelOnlyReplay` (`strategy.rs`).  So the
+change is Lean-only; the single affected artefact is
+`solidity/test/CrossCheck/fixtures/step_vm.json`, regenerated via
+`KNOMOSIS_FIXTURES_OVERWRITE=1 lake test` (one line).
+
+**Regression protection.**  Three tests in
+`Test/FaultProof/AmmCommit.lean`: two value-level pins (mutating
+`epochBudgets`, and mutating `budgetPolicy`, each must move the root)
+and an arity pin on the decomposition theorem.  Reverting
+`commitExtendedState` to its five-field form does not merely fail those
+tests — it fails to BUILD (3 errors), because the arity pin and the
+decomposition theorem both require seven components.  A future field
+added to `ExtendedState` without extending the commitment is therefore
+a compile error, not a silent omission.
+
+**Not covered.**  The EI.8 extensional lift
+(`commitExtendedState_subcommits_extensional_eq_under_collision_free`)
+still concludes `ExtendedState.extEq`, which enumerates the original
+fields; it remains true and is now fed by the seven-component
+decomposition, but lifting the two new sub-states from bytes-equality
+to `TreeMap.Equiv` needs an `EpochBudgetState.encode_injective`
+mirroring `NonceState.encode_injective`.  That is a strengthening of
+the injectivity ladder, not a gap in the binding property this finding
+was about.
 
 ---
 
@@ -908,8 +944,9 @@ gives the project the right posture for its claimed phase
 
 **Superseded:** this note originally read "No critical findings".
 Findings **C-1** (`State.encode` non-injective on balances ≥ 2^64,
-critical) and **H-1** (`commitExtendedState` binds 5 of 7 sub-states,
-high) above were both missed by this review.  The remainder of
+critical — OPEN) and **H-1** (`commitExtendedState` bound 5 of 7
+sub-states, high — since FIXED) above were both missed by this
+review.  The remainder of
 the note stands as written.
 
 Ten major findings, mostly

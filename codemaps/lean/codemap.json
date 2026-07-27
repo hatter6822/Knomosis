@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "bb3aaad1114e62e3fadd2280d66ef404142209a09f0424efe03b5eb22dee59af"
+    "source_digest": "baa2c1859fbafd4e656be13c266d16a867c24ef36be84362b0b01770729d4a34"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5200
+    "declaration_count": 5210
   },
   "modules": [
     {
@@ -18523,7 +18523,7 @@
     {
       "module": "LegalKernel.Encoding.State",
       "path": "LegalKernel/Encoding/State.lean",
-      "declaration_count": 66,
+      "declaration_count": 69,
       "declarations": [
         {
           "kind": "namespace",
@@ -18972,9 +18972,44 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "EpochBudgetState.encode",
+          "line": 1014,
+          "called": [
+            "EpochBudgetState",
+            "Stream",
+            "encodeSortedPairs"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "EpochBudgetState.decode",
+          "line": 1021,
+          "called": [
+            "ActorBudget",
+            "DecodeError",
+            "EpochBudgetState",
+            "Stream",
+            "decodeMap"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "instEncodableEpochBudgetState",
+          "line": 1028,
+          "called": [
+            "Encodable",
+            "EpochBudgetState",
+            "EpochBudgetState.decode",
+            "EpochBudgetState.encode",
+            "decode",
+            "encode"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "actorBudget_roundtrip",
-          "line": 1022,
+          "line": 1057,
           "called": [
             "ActorBudget",
             "ActorBudget.decode",
@@ -18986,7 +19021,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_encode_injective",
-          "line": 1041,
+          "line": 1076,
           "called": [
             "ActorBudget",
             "ActorBudget.encode",
@@ -18998,7 +19033,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_bounded_roundtrip",
-          "line": 1064,
+          "line": 1099,
           "called": [
             "BudgetPolicy.decode",
             "BudgetPolicy.encode",
@@ -19011,7 +19046,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_encode_injective",
-          "line": 1099,
+          "line": 1134,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.encode",
@@ -19023,7 +19058,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.encode",
-          "line": 1129,
+          "line": 1164,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.encode",
@@ -19041,7 +19076,7 @@
         {
           "kind": "def",
           "name": "NonceState.decode",
-          "line": 1141,
+          "line": 1176,
           "called": [
             "ActorId",
             "DecodeError",
@@ -19054,7 +19089,7 @@
         {
           "kind": "def",
           "name": "KeyRegistry.decodeMap",
-          "line": 1151,
+          "line": 1186,
           "called": [
             "ActorId",
             "DecodeError",
@@ -19066,7 +19101,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.decode",
-          "line": 1162,
+          "line": 1197,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.decode",
@@ -19084,7 +19119,7 @@
         {
           "kind": "instance",
           "name": "instEncodableExtendedState",
-          "line": 1188,
+          "line": 1223,
           "called": [
             "Encodable",
             "ExtendedState",
@@ -19097,7 +19132,7 @@
         {
           "kind": "theorem",
           "name": "state_encode_deterministic",
-          "line": 1214,
+          "line": 1249,
           "called": [
             "State"
           ]
@@ -19105,7 +19140,7 @@
         {
           "kind": "theorem",
           "name": "balanceMap_encode_deterministic_of_equiv",
-          "line": 1221,
+          "line": 1256,
           "called": [
             "BalanceMap",
             "BalanceMap.encode"
@@ -19114,7 +19149,7 @@
         {
           "kind": "theorem",
           "name": "extendedState_encode_deterministic",
-          "line": 1231,
+          "line": 1266,
           "called": [
             "ExtendedState",
             "es"
@@ -19123,13 +19158,13 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_deterministic",
-          "line": 1242,
+          "line": 1277,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "depositRecord_encode_deterministic",
-          "line": 1250,
+          "line": 1285,
           "called": [
             "Bridge.DepositRecord.encode"
           ]
@@ -19137,7 +19172,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_encode_deterministic",
-          "line": 1256,
+          "line": 1291,
           "called": [
             "Bridge.PendingWithdrawal.encode"
           ]
@@ -19145,7 +19180,7 @@
         {
           "kind": "theorem",
           "name": "depositRecord_roundtrip",
-          "line": 1266,
+          "line": 1301,
           "called": [
             "Bridge.DepositRecord.decode",
             "Bridge.DepositRecord.encode",
@@ -19156,7 +19191,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_roundtrip",
-          "line": 1323,
+          "line": 1358,
           "called": [
             "Bridge.PendingWithdrawal.decode",
             "Bridge.PendingWithdrawal.encode",
@@ -19168,7 +19203,7 @@
         {
           "kind": "theorem",
           "name": "actorId_encode_injective",
-          "line": 1403,
+          "line": 1438,
           "called": [
             "ActorId",
             "Stream",
@@ -19178,7 +19213,7 @@
         {
           "kind": "theorem",
           "name": "resourceId_encode_injective",
-          "line": 1409,
+          "line": 1444,
           "called": [
             "ResourceId",
             "Stream",
@@ -19188,7 +19223,7 @@
         {
           "kind": "theorem",
           "name": "amount_encode_injective",
-          "line": 1415,
+          "line": 1450,
           "called": [
             "Amount",
             "nat_encode_injective"
@@ -19197,7 +19232,7 @@
         {
           "kind": "theorem",
           "name": "nonce_encode_injective",
-          "line": 1424,
+          "line": 1459,
           "called": [
             "Nonce",
             "nat_encode_injective"
@@ -19206,7 +19241,7 @@
         {
           "kind": "theorem",
           "name": "depositId_encode_injective",
-          "line": 1433,
+          "line": 1468,
           "called": [
             "nat_encode_injective"
           ]
@@ -19214,7 +19249,7 @@
         {
           "kind": "theorem",
           "name": "withdrawalId_encode_injective",
-          "line": 1443,
+          "line": 1478,
           "called": [
             "nat_encode_injective"
           ]
@@ -19222,7 +19257,7 @@
         {
           "kind": "theorem",
           "name": "publicKey_encode_injective",
-          "line": 1456,
+          "line": 1491,
           "called": [
             "Encoding",
             "LegalKernel",
@@ -20304,7 +20339,7 @@
     {
       "module": "LegalKernel.FaultProof.Commit",
       "path": "LegalKernel/FaultProof/Commit.lean",
-      "declaration_count": 44,
+      "declaration_count": 51,
       "declarations": [
         {
           "kind": "namespace",
@@ -20376,12 +20411,32 @@
         },
         {
           "kind": "def",
+          "name": "commitEpochBudgets",
+          "line": 101,
+          "called": [
+            "EpochBudgetState",
+            "hashBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "commitBudgetPolicy",
+          "line": 109,
+          "called": [
+            "BudgetPolicy",
+            "hashBytes"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "commitExtendedState",
-          "line": 99,
+          "line": 124,
           "called": [
             "ExtendedState",
             "StateCommit",
             "commitBridgeState",
+            "commitBudgetPolicy",
+            "commitEpochBudgets",
             "commitKeyRegistry",
             "commitLocalPolicies",
             "commitNonceState",
@@ -20393,7 +20448,7 @@
         {
           "kind": "theorem",
           "name": "commitState_deterministic",
-          "line": 109,
+          "line": 136,
           "called": [
             "commitState"
           ]
@@ -20401,7 +20456,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_deterministic",
-          "line": 112,
+          "line": 139,
           "called": [
             "NonceState",
             "commitNonceState"
@@ -20410,7 +20465,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_deterministic",
-          "line": 115,
+          "line": 142,
           "called": [
             "KeyRegistry",
             "commitKeyRegistry"
@@ -20419,7 +20474,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_deterministic",
-          "line": 118,
+          "line": 145,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies"
@@ -20428,7 +20483,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_deterministic",
-          "line": 121,
+          "line": 148,
           "called": [
             "BridgeState",
             "commitBridgeState"
@@ -20437,7 +20492,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_deterministic",
-          "line": 124,
+          "line": 151,
           "called": [
             "ExtendedState",
             "commitExtendedState",
@@ -20447,7 +20502,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_size",
-          "line": 129,
+          "line": 156,
           "called": [
             "ExtendedState",
             "commitExtendedState",
@@ -20458,7 +20513,7 @@
         {
           "kind": "theorem",
           "name": "commitState_size",
-          "line": 134,
+          "line": 161,
           "called": [
             "commitState",
             "hashAdaptor_thirty_two_byte_output"
@@ -20467,7 +20522,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_size",
-          "line": 139,
+          "line": 166,
           "called": [
             "NonceState",
             "commitNonceState",
@@ -20477,7 +20532,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_size",
-          "line": 144,
+          "line": 171,
           "called": [
             "KeyRegistry",
             "commitKeyRegistry",
@@ -20487,7 +20542,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_size",
-          "line": 149,
+          "line": 176,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies",
@@ -20497,7 +20552,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_size",
-          "line": 154,
+          "line": 181,
           "called": [
             "BridgeState",
             "commitBridgeState",
@@ -20505,9 +20560,29 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "commitEpochBudgets_size",
+          "line": 187,
+          "called": [
+            "EpochBudgetState",
+            "commitEpochBudgets",
+            "hashAdaptor_thirty_two_byte_output"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "commitBudgetPolicy_size",
+          "line": 193,
+          "called": [
+            "BudgetPolicy",
+            "commitBudgetPolicy",
+            "hashAdaptor_thirty_two_byte_output"
+          ]
+        },
+        {
           "kind": "def",
           "name": "extendedStateExtensionallyEqual",
-          "line": 176,
+          "line": 215,
           "called": [
             "ExtendedState",
             "es"
@@ -20516,7 +20591,7 @@
         {
           "kind": "theorem",
           "name": "commitState_bytes_injective_under_collision_free",
-          "line": 200,
+          "line": 239,
           "called": [
             "State.encode",
             "commitState",
@@ -20526,7 +20601,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_bytes_injective_under_collision_free",
-          "line": 210,
+          "line": 249,
           "called": [
             "NonceState",
             "NonceState.encode",
@@ -20537,7 +20612,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_bytes_injective_under_collision_free",
-          "line": 220,
+          "line": 259,
           "called": [
             "KeyRegistry",
             "KeyRegistry.encodeMap",
@@ -20548,7 +20623,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_bytes_injective_under_collision_free",
-          "line": 230,
+          "line": 269,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies",
@@ -20558,7 +20633,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_bytes_injective_under_collision_free",
-          "line": 240,
+          "line": 279,
           "called": [
             "BridgeState",
             "commitBridgeState",
@@ -20567,27 +20642,60 @@
         },
         {
           "kind": "theorem",
+          "name": "commitEpochBudgets_bytes_injective_under_collision_free",
+          "line": 289,
+          "called": [
+            "EpochBudgetState",
+            "commitEpochBudgets",
+            "hashBytes"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "commitBudgetPolicy_bytes_injective_under_collision_free",
+          "line": 299,
+          "called": [
+            "BudgetPolicy",
+            "commitBudgetPolicy",
+            "hashBytes"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "byteArrayAppendInj",
-          "line": 277,
+          "line": 336,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_concat_five_split",
-          "line": 303,
+          "line": 362,
           "called": [
             "byteArrayAppendInj"
           ]
         },
         {
           "kind": "theorem",
+          "name": "byteArray_concat_seven_split",
+          "line": 414,
+          "called": [
+            "byteArrayAppendInj",
+            "byteArray_concat_five_split"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "commitExtendedState_subcommits_eq_under_collision_free",
-          "line": 353,
+          "line": 448,
           "called": [
             "ExtendedState",
-            "byteArray_concat_five_split",
+            "byteArray_concat_seven_split",
             "commitBridgeState",
             "commitBridgeState_size",
+            "commitBudgetPolicy",
+            "commitBudgetPolicy_size",
+            "commitEpochBudgets",
+            "commitEpochBudgets_size",
             "commitExtendedState",
             "commitKeyRegistry",
             "commitKeyRegistry_size",
@@ -20604,15 +20712,19 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_bytes_eq_under_collision_free",
-          "line": 403,
+          "line": 504,
           "called": [
             "BridgeState",
+            "BudgetPolicy",
+            "EpochBudgetState",
             "ExtendedState",
             "KeyRegistry.encodeMap",
             "LocalPolicies",
             "NonceState.encode",
             "State.encode",
             "commitBridgeState_bytes_injective_under_collision_free",
+            "commitBudgetPolicy_bytes_injective_under_collision_free",
+            "commitEpochBudgets_bytes_injective_under_collision_free",
             "commitExtendedState",
             "commitExtendedState_subcommits_eq_under_collision_free",
             "commitKeyRegistry_bytes_injective_under_collision_free",
@@ -20626,7 +20738,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.extEq",
-          "line": 472,
+          "line": 579,
           "called": [
             "ExtendedState",
             "State.Equiv",
@@ -20636,7 +20748,7 @@
         {
           "kind": "theorem",
           "name": "ExtendedState.extEq.refl",
-          "line": 489,
+          "line": 596,
           "called": [
             "ExtendedState",
             "ExtendedState.extEq",
@@ -20647,7 +20759,7 @@
         {
           "kind": "structure",
           "name": "ExtendedState.CanonicalBounds",
-          "line": 512,
+          "line": 619,
           "called": [
             "BalanceMap.encodeAsBytes",
             "Bridge.DepositRecord.encodeAsBytes",
@@ -20661,7 +20773,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_extensional_eq_under_collision_free",
-          "line": 594,
+          "line": 701,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encode_injective",
@@ -20688,7 +20800,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_includes_ammState",
-          "line": 723,
+          "line": 830,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20698,7 +20810,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeBase",
-          "line": 738,
+          "line": 845,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending"
@@ -20707,13 +20819,13 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeAmmSuffix",
-          "line": 748,
+          "line": 855,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "bridgeState_encode_factored",
-          "line": 758,
+          "line": 865,
           "called": [
             "Bridge.BridgeState.encode",
             "bridgeStateEncodeAmmSuffix",
@@ -20723,7 +20835,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_amm_genesis_suffix_const",
-          "line": 767,
+          "line": 874,
           "called": [
             "bridgeStateEncodeAmmSuffix"
           ]
@@ -20731,7 +20843,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_2",
-          "line": 790,
+          "line": 897,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20747,7 +20859,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_3",
-          "line": 825,
+          "line": 932,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20759,7 +20871,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_reflects_ammDisabled",
-          "line": 864,
+          "line": 971,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20775,7 +20887,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_reflects_ammDisabled",
-          "line": 951,
+          "line": 1058,
           "called": [
             "ExtendedState",
             "ExtendedState.empty",
@@ -49345,10 +49457,18 @@
             "bs1",
             "commitBridgeState",
             "commitBridgeState_reflects_ammDisabled",
+            "commitBudgetPolicy",
+            "commitEpochBudgets",
             "commitExtendedState",
             "commitExtendedState_reflects_ammDisabled",
+            "commitExtendedState_subcommits_eq_under_collision_free",
+            "commitKeyRegistry",
+            "commitLocalPolicies",
+            "commitNonceState",
+            "commitState",
             "es",
-            "es0"
+            "es0",
+            "genesisState"
           ]
         }
       ]
