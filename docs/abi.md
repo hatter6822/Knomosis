@@ -2803,7 +2803,13 @@ All contracts immutable per Workstream-E §20 discipline.
   * `initiateChallenge(...) payable returns (uint256 gameId)`
   * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
   * `respondToMidpoint(uint256 gameId, bool agree)`
-  * `terminateOnSingleStep(uint256 gameId, bytes signedActionBytes, CellProof[] cellProofs, bytes32 claimedPostCommit)`
+  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs)`
+    — no `claimedPostCommit` argument: the contract computes the
+    post-commit from the step and compares it against the on-chain
+    `g.high.commit`, so the claim is not the caller's to make.  (An
+    earlier draft of this line documented a third, non-existent form;
+    the Rust observer had been built against it and its calldata could
+    not be dispatched.)
   * `claimTimeout(uint256 gameId)`
 
 `KnomosisStepVM`:

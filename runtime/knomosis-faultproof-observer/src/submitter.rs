@@ -72,11 +72,16 @@ pub enum MethodSelector {
     /// for production calldata.  Kept for integration smoke tests
     /// that exercise the minimum encoding path.
     TerminateOnSingleStep,
-    /// **FULL-FORM** `terminateOnSingleStep(uint256, uint8, bytes, uint64, (uint8,uint256,uint256,bytes,bytes32)[], bytes32)`.
+    /// **FULL-FORM** `terminateOnSingleStep(uint256, uint8, bytes, uint64, (uint8,uint256,uint256,bytes,bytes32)[])`.
     /// This is the production contract's actual signature — the
     /// fields are `(gameId, actionKind, actionFields, signer,
-    /// cellProofs, claimedPostCommit)`.  Use this selector for
-    /// any calldata the observer broadcasts to L1.
+    /// cellProofs)`.  Use this selector for any calldata the observer
+    /// broadcasts to L1.
+    ///
+    /// There is no `claimedPostCommit` argument: the contract computes
+    /// the post-commit from the step and compares it against the
+    /// on-chain `g.high.commit`, so the claim is not the caller's to
+    /// make.
     TerminateOnSingleStepFull,
     /// `claimTimeout(uint256 gameId)`.
     ClaimTimeout,
@@ -98,16 +103,25 @@ impl MethodSelector {
             Self::RespondToMidpoint => "respondToMidpoint(uint256,bool)",
             Self::TerminateOnSingleStep => "terminateOnSingleStep(uint256,bytes32)",
             // Full-form Solidity signature (per
-            // `solidity/src/contracts/KnomosisFaultProofGame.sol:383`):
+            // `solidity/src/contracts/KnomosisFaultProofGame.sol:452`):
             // `terminateOnSingleStep(uint256 gameId, uint8 actionKind,
             //                        bytes actionFields, uint64 signer,
-            //                        CellProof[] cellProofs,
-            //                        bytes32 claimedPostCommit)`
+            //                        CellProof[] cellProofs)`
             // The `CellProof` struct's canonical ABI tuple is
             // `(uint8, uint256, uint256, bytes, bytes32)` — see
             // `KnomosisStepVM::CellProof`.
+            //
+            // There is NO trailing `bytes32 claimedPostCommit`.  An
+            // earlier form spelled one, which changed the 4-byte
+            // selector — so every honest terminate reverted with an
+            // unknown-selector fallback and the observer could not win
+            // a game it had correctly bisected.  The contract's 5-arg
+            // shape is also the better design: it adjudicates against
+            // the on-chain `g.high.commit` rather than against a claim
+            // the caller supplies, so the Rust side moves, not the
+            // contract.
             Self::TerminateOnSingleStepFull => {
-                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32)[],bytes32)"
+                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32)[])"
             }
             Self::ClaimTimeout => "claimTimeout(uint256)",
         }
@@ -268,7 +282,6 @@ pub fn encode_calldata_with_bundle(
                 &b.action_fields,
                 b.signer,
                 &b.cell_proofs,
-                claimed_post_commit,
             ))
         }
         (mv, _) => encode_calldata(game_id, mv),
@@ -664,16 +677,19 @@ pub fn encode_terminate_full_calldata(
     action_fields: &[u8],
     signer: u64,
     cell_proofs: &[CellProof],
-    claimed_post_commit: StateCommit,
 ) -> Vec<u8> {
-    // Header layout (6 head words, 32 bytes each = 192 bytes):
+    // Header layout (5 head words, 32 bytes each = 160 bytes):
     //   word 0: gameId            (uint256)
     //   word 1: actionKind        (uint8 in uint256 slot)
     //   word 2: actionFields offset (relative to start of args)
     //   word 3: signer            (uint64 in uint256 slot)
     //   word 4: cellProofs offset (relative to start of args)
-    //   word 5: claimedPostCommit (bytes32)
-    const HEAD_WORDS: usize = 6;
+    //
+    // `claimed_post_commit` is NOT a calldata word — the contract
+    // recomputes the post-commit and compares it against the on-chain
+    // `g.high.commit`.  The parameter is retained here only to feed
+    // the caller's `BundleCommitMismatch` cross-oracle check.
+    const HEAD_WORDS: usize = 5;
     const WORD: usize = 32;
     let head_bytes: usize = HEAD_WORDS * WORD;
 
@@ -703,8 +719,6 @@ pub fn encode_terminate_full_calldata(
     out.extend_from_slice(&u256_be(u128::from(signer)));
     // word 4: cellProofs offset
     out.extend_from_slice(&u256_be(cell_proofs_offset));
-    // word 5: claimedPostCommit
-    out.extend_from_slice(&claimed_post_commit);
     // Tails.
     out.extend_from_slice(&action_fields_tail);
     out.extend_from_slice(&cell_proofs_tail);
@@ -1116,33 +1130,73 @@ mod tests {
     /// Solidity-side rename / signature change would silently
     /// produce wrong calldata on-chain; this test breaks the
     /// build instead.
+    /// Every production `MethodSelector` matches the COMPILED contract.
+    ///
+    /// The pin is loaded from `method_selectors.json`, which
+    /// `solidity/scripts/export_method_selectors.py` emits from
+    /// `solidity/out/**`.  That indirection is the whole point: an
+    /// earlier pin re-derived its expectation from the same signature
+    /// string the code under test returns, so a wrong signature changed
+    /// both sides together and the test could not fail.  It did not:
+    /// `terminateOnSingleStep` was spelled with a trailing
+    /// `bytes32 claimedPostCommit` the contract does not take, the
+    /// selector was `2f32c798` instead of `0a5836ef`, and every honest
+    /// terminate hit the fallback and reverted.
+    ///
+    /// Loading the compiled artifact means a signature change on the
+    /// Solidity side breaks this build.
     #[test]
     fn method_selectors_pinned_against_solidity_abi() {
-        // Verified via `forge inspect KnomosisFaultProofGame methods`
-        // (run in `solidity/`).  Per the audit pass: the
-        // `terminateOnSingleStep` MINIMUM-form is observer-
-        // internal-only (selector `e0e5c8ba`); production
-        // calldata uses the FULL-form selector below.
-        assert_eq!(
-            MethodSelector::SubmitMidpoint.selector(),
-            [0x11, 0xd9, 0x25, 0xb3],
-            "SubmitMidpoint selector drift",
-        );
-        assert_eq!(
-            MethodSelector::RespondToMidpoint.selector(),
-            [0x7e, 0x4d, 0x30, 0xfc],
-            "RespondToMidpoint selector drift",
-        );
-        assert_eq!(
-            MethodSelector::ClaimTimeout.selector(),
-            [0x86, 0xe7, 0x73, 0xf1],
-            "ClaimTimeout selector drift",
-        );
-        assert_eq!(
-            MethodSelector::TerminateOnSingleStepFull.selector(),
-            [0x2f, 0x32, 0xc7, 0x98],
-            "TerminateOnSingleStepFull selector drift; \
-             check Solidity signature in KnomosisFaultProofGame.sol line 383",
+        /// Find `"<signature>": "<selector>"` in the fixture and return
+        /// the selector bytes.  A missing signature means the contract
+        /// does not expose it — which is the drift this test exists to
+        /// catch, so it fails rather than skipping.
+        fn selector_of(section: &str, signature: &str) -> [u8; 4] {
+            let key = format!("\"{signature}\": \"");
+            let start = section
+                .find(&key)
+                .unwrap_or_else(|| panic!("contract does not expose `{signature}`"))
+                + key.len();
+            let hex = &section[start..start + 8];
+            let mut out = [0u8; 4];
+            for (i, byte) in out.iter_mut().enumerate() {
+                *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).expect("hex selector");
+            }
+            out
+        }
+
+        let raw = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../tests/cross-stack/method_selectors.json"),
+        )
+        .expect("method_selectors.json missing; run solidity/scripts/export_method_selectors.py");
+        let game = raw
+            .split("\"KnomosisFaultProofGame\": {")
+            .nth(1)
+            .expect("fixture has no KnomosisFaultProofGame section");
+
+        for variant in [
+            MethodSelector::SubmitMidpoint,
+            MethodSelector::RespondToMidpoint,
+            MethodSelector::ClaimTimeout,
+            MethodSelector::TerminateOnSingleStepFull,
+        ] {
+            assert_eq!(
+                variant.selector(),
+                selector_of(game, variant.signature()),
+                "selector drift for `{}`; the Rust table and the compiled \
+                 contract disagree",
+                variant.signature(),
+            );
+        }
+
+        // The MINIMUM form is observer-internal (no such contract
+        // entry point), so it must NOT appear in the compiled ABI.
+        // If it ever does, the two forms have collided.
+        assert!(
+            !game.contains(MethodSelector::TerminateOnSingleStep.signature()),
+            "the minimum-form terminate signature is now a real contract \
+             entry point; the observer's internal/production split is stale",
         );
     }
 
@@ -1267,16 +1321,15 @@ mod tests {
             &[1, 2, 3, 4],
             999_u64,
             std::slice::from_ref(&cell),
-            commit(0xAB),
         );
 
-        // Length sanity: 4-byte selector + 6×32-byte head + tails.
+        // Length sanity: 4-byte selector + 5×32-byte head + tails.
         // actionFields tail: 32 (length) + 32 (4 bytes padded) = 64.
         // cellProofs tail: 32 (length) + 32 (1 pointer) + per-cell tuple.
         //   per-cell: 5×32 head + 32 (cellValue length) + 32 (padded 3 bytes) = 224.
         // Total tail: 64 + 32 + 32 + 224 = 352.
-        // Total: 4 + 192 + 352 = 548.
-        assert_eq!(bytes.len(), 4 + 192 + 64 + 32 + 32 + 224);
+        // Total: 4 + 160 + 352 = 516.
+        assert_eq!(bytes.len(), 4 + 160 + 64 + 32 + 32 + 224);
 
         // Selector matches the full-form signature's hash.
         assert_eq!(
@@ -1289,8 +1342,13 @@ mod tests {
         expected_gid[31] = 123;
         assert_eq!(&bytes[4..36], &expected_gid);
 
-        // Word 5 (offset 4+5*32 = 164..196): claimedPostCommit.
-        assert_eq!(&bytes[164..196], &commit(0xAB));
+        // Word 2 (offset 4+2*32 = 68..100): the actionFields offset,
+        // which is the head size — 160, not 192.  This is the word the
+        // extra `claimedPostCommit` shifted, so it is the one that
+        // pins the head width.
+        let mut expected_off = [0u8; 32];
+        expected_off[31] = 160;
+        assert_eq!(&bytes[68..100], &expected_off);
     }
 
     /// `MethodSelector::TerminateOnSingleStepFull` produces a
@@ -1754,28 +1812,5 @@ mod tests {
             Some(&bundle),
         );
         assert!(matches!(result, Err(SubmitError::BundleCommitMismatch)));
-    }
-
-    /// Cross-stack regression: the full-form `terminateOnSingleStep`
-    /// selector matches the keccak256 of the canonical Solidity
-    /// signature.  Load-bearing pin against signature drift on
-    /// either side; if a renamed parameter changes the canonical
-    /// signature string, the selector changes and this test fails.
-    #[test]
-    fn full_form_terminate_selector_pinned() {
-        use sha3::{Digest as _, Keccak256};
-        let actual = MethodSelector::TerminateOnSingleStepFull.selector();
-        let mut h = Keccak256::new();
-        h.update(
-            b"terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32)[],bytes32)",
-        );
-        let digest = h.finalize();
-        let mut expected = [0u8; 4];
-        expected.copy_from_slice(&digest[0..4]);
-        assert_eq!(
-            actual, expected,
-            "terminateOnSingleStep full-form selector drift; \
-             actual={actual:02x?}, expected={expected:02x?}",
-        );
     }
 }

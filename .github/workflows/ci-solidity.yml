@@ -185,6 +185,23 @@ jobs:
       - name: forge test
         run: forge test
 
+      - name: Method-selector cross-stack pin
+        # The Rust fault-proof observer builds calldata by hand and
+        # carries its own signature -> 4-byte-selector table.  That
+        # table used to be pinned only by a test that re-derived the
+        # expected selector from the same signature string the code
+        # under test returns — so it could not fail, and it did not:
+        # `terminateOnSingleStep` was spelled with a trailing
+        # `bytes32 claimedPostCommit` the contract does not take, and
+        # every honest terminate reverted through the fallback.
+        #
+        # `method_selectors.json` is emitted from the COMPILED
+        # artifacts and asserted by the Rust test, so a signature
+        # change here breaks the Rust build.  This step fails if the
+        # committed fixture has gone stale relative to `out/`.
+        working-directory: ${{ github.workspace }}
+        run: python3 solidity/scripts/export_method_selectors.py --check
+
       - name: Gas-benchmark regression gate (GP.11.9)
         # Re-runs the deterministic BenchmarkGasV1_3 suite (per-call gas
         # + exact calldata cost via the snapshotGas cheatcodes) and
