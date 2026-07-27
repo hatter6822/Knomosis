@@ -49,12 +49,21 @@ use crate::event::{Amount, BudgetUnits, DepositId, EthAddress, Event, Nonce, Wit
 /// `Encoding.CBOR.cbeTagUint`.
 pub const CBE_TAG_UINT: u8 = 0x00;
 
+/// CBE tag byte for a value-carrying amount.  Matches Lean's
+/// `Encoding.CBOR.cbeTagAmount`.  Distinct from [`CBE_TAG_UINT`] so a
+/// widened amount field can never alias an adjacent identifier field
+/// in a concatenated layout.
+pub const CBE_TAG_AMOUNT: u8 = 0x01;
+
 /// CBE tag byte for a byte string.  Matches Lean's
 /// `Encoding.CBOR.cbeTagBytes`.
 pub const CBE_TAG_BYTES: u8 = 0x02;
 
-/// Length of a CBE head (1-byte tag + 8-byte LE u64).
+/// Length of a CBE uint head (1-byte tag + 8-byte LE u64).
 pub const HEAD_LEN: usize = 9;
+
+/// Length of a CBE amount head (1-byte tag + 16-byte LE u128).
+pub const AMOUNT_HEAD_LEN: usize = 17;
 
 /// 20-byte byte string is the standard EthAddress encoding (head
 /// + 20 payload bytes = 29 bytes total).
@@ -204,12 +213,28 @@ impl<'a> Cursor<'a> {
         Ok(n)
     }
 
-    /// Read a CBE uint and re-cast to `u128` (per the trait
-    /// `Amount` / `Nonce` typing).  Mirrors Lean's `Encodable Nat`
-    /// roundtrip: the value is encoded as a u64 and decoded back
-    /// to the wider Rust type for arithmetic.
+    /// Read a CBE amount head (tag 0x01 + 16-byte LE u128).
+    ///
+    /// `Amount` is `u128` on this side and `Nat` on Lean's, so the
+    /// 16-byte head makes the round-trip lossless where the 8-byte
+    /// head truncated: a wei-denominated balance crosses `2^64` at
+    /// ~18.45 ETH.  Rejects the uint tag rather than accepting either
+    /// width — one logical value must have exactly one byte form, or
+    /// the state root it feeds stops binding.
     fn read_amount(&mut self) -> Result<u128, DecodeError> {
-        Ok(u128::from(self.read_uint()?))
+        let head_offset = self.offset;
+        let buf = self.read_bytes(AMOUNT_HEAD_LEN)?;
+        let tag = buf[0];
+        if tag != CBE_TAG_AMOUNT {
+            return Err(DecodeError::BadHeadTag {
+                offset: head_offset,
+                expected: CBE_TAG_AMOUNT,
+                actual: tag,
+            });
+        }
+        let mut n_buf = [0u8; 16];
+        n_buf.copy_from_slice(&buf[1..AMOUNT_HEAD_LEN]);
+        Ok(u128::from_le_bytes(n_buf))
     }
 
     /// Read a CBE uint and re-cast to `BudgetUnits` (= `u128`).
@@ -447,6 +472,12 @@ fn write_uint(out: &mut Vec<u8>, n: u64) {
     out.extend_from_slice(&n.to_le_bytes());
 }
 
+/// Encode a CBE amount head (tag 0x01 + 16-byte LE u128) into `out`.
+fn write_amount_head(out: &mut Vec<u8>, n: u128) {
+    out.push(CBE_TAG_AMOUNT);
+    out.extend_from_slice(&n.to_le_bytes());
+}
+
 /// Encode a CBE byte string into `out`.
 fn write_byte_string(out: &mut Vec<u8>, payload: &[u8]) {
     out.push(CBE_TAG_BYTES);
@@ -458,11 +489,14 @@ fn write_byte_string(out: &mut Vec<u8>, payload: &[u8]) {
 /// shape of `knomosis-l1-ingest/src/encoding.rs::EncodeError`.
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
 pub enum EncodeError {
-    /// An `Amount` (or `Nonce`) field exceeded the CBE
-    /// canonical-encoding bound (`< 2^64`).  The Lean encoder
-    /// silently truncates such values; the Rust checked path
-    /// rejects them so callers can surface the error to the
-    /// operator.
+    /// A `BudgetUnits` field exceeded the CBE canonical-encoding
+    /// bound (`< 2^64`) for the 8-byte uint head.  The Lean encoder
+    /// silently truncates such values; the Rust checked path rejects
+    /// them so callers can surface the error to the operator.
+    ///
+    /// Amounts no longer reach this error: they ride the 16-byte
+    /// amount head, whose range is the full `u128` the Rust type
+    /// already carries, so the checked encoder cannot reject one.
     #[error("amount field {value} exceeds 2^64 CBE encoding bound")]
     AmountExceedsBound {
         /// The offending field's value.
@@ -470,35 +504,13 @@ pub enum EncodeError {
     },
 }
 
-/// Encode an Amount (u128 that fits in u64) into `out` — fallible.
-/// Returns `EncodeError::AmountExceedsBound` if the value is
-/// `>= 2^64`.  Mirrors `knomosis-l1-ingest::encoding::encode_u128_checked`.
-fn write_amount_checked(out: &mut Vec<u8>, amount: Amount) -> Result<(), EncodeError> {
-    if amount >= 1u128 << 64 {
-        return Err(EncodeError::AmountExceedsBound { value: amount });
-    }
-    #[allow(clippy::cast_possible_truncation)] // bound-checked above
-    let n = amount as u64;
-    write_uint(out, n);
-    Ok(())
-}
-
-/// Encode an Amount (u128 fitting in u64) into `out`.
+/// Encode an `Amount` into `out` on the 16-byte amount head.
 ///
-/// **Silent truncation.**  The CBE convention restricts amounts
-/// to `< 2^64`; this function silently truncates the high 64
-/// bits of larger values, matching the Lean encoder's
-/// documented behaviour for out-of-bounds `Nat`s.
-///
-/// Callers that want explicit rejection on overflow use
-/// [`encode_event_checked`] (which calls [`write_amount_checked`]
-/// instead).  This unchecked variant is reserved for the test
-/// path where synthetic events are bounded by construction;
-/// production code that handles arbitrary Amount values should
-/// route through the checked variant.
+/// Lossless for every `u128`.  The earlier form narrowed to `u64`
+/// and silently dropped the high 64 bits, which is what made two
+/// states differing by `2^64` encode identically.
 fn write_amount(out: &mut Vec<u8>, amount: Amount) {
-    let n = (amount & u128::from(u64::MAX)) as u64;
-    write_uint(out, n);
+    write_amount_head(out, amount);
 }
 
 /// Encode a `BudgetUnits` (u128 fitting in u64) into `out`.
@@ -518,9 +530,9 @@ fn write_nonce(out: &mut Vec<u8>, nonce: Nonce) {
 }
 
 /// Encode a `BudgetUnits` into `out`, rejecting values `>= 2^64`.
-/// Sibling of [`write_amount_checked`] for the budget-unit fields.
+/// Sibling of [`write_amount`] for the budget-unit fields.
 /// Encode a `Nonce` into `out`, rejecting values `>= 2^64`.  Sibling
-/// of [`write_amount_checked`] for the counter fields, which stay on
+/// of [`write_amount`] for the counter fields, which stay on
 /// the 8-byte uint head.
 fn write_nonce_checked(out: &mut Vec<u8>, nonce: Nonce) -> Result<(), EncodeError> {
     if nonce >= 1u128 << 64 {
@@ -799,8 +811,8 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         } => {
             write_uint(&mut out, *resource);
             write_uint(&mut out, *actor);
-            write_amount_checked(&mut out, *old_value)?;
-            write_amount_checked(&mut out, *new_value)?;
+            write_amount(&mut out, *old_value);
+            write_amount(&mut out, *new_value);
         }
         Event::NonceAdvanced {
             actor,
@@ -845,7 +857,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         } => {
             write_uint(&mut out, *resource);
             write_uint(&mut out, *recipient);
-            write_amount_checked(&mut out, *amount)?;
+            write_amount(&mut out, *amount);
         }
         Event::WithdrawalRequested {
             resource,
@@ -856,7 +868,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         } => {
             write_uint(&mut out, *resource);
             write_uint(&mut out, *sender);
-            write_amount_checked(&mut out, *amount)?;
+            write_amount(&mut out, *amount);
             write_eth_address(&mut out, recipient_l1);
             write_uint(&mut out, *withdrawal_id);
         }
@@ -868,7 +880,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         } => {
             write_uint(&mut out, *resource);
             write_uint(&mut out, *recipient);
-            write_amount_checked(&mut out, *amount)?;
+            write_amount(&mut out, *amount);
             write_uint(&mut out, *deposit_id);
         }
         Event::LocalPolicyDeclared { actor, policy } => {
@@ -910,7 +922,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_uint(&mut out, *game_id);
             write_uint(&mut out, *winner);
             write_uint(&mut out, *loser);
-            write_amount_checked(&mut out, *payout)?;
+            write_amount(&mut out, *payout);
         }
         Event::DepositWithFeeCredited {
             resource,
@@ -924,8 +936,8 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_uint(&mut out, *resource);
             write_uint(&mut out, *recipient);
             write_uint(&mut out, *pool_actor);
-            write_amount_checked(&mut out, *user_amount)?;
-            write_amount_checked(&mut out, *pool_amount)?;
+            write_amount(&mut out, *user_amount);
+            write_amount(&mut out, *pool_amount);
             write_budget_units_checked(&mut out, *budget_grant)?;
             write_uint(&mut out, *deposit_id);
         }
@@ -938,7 +950,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         } => {
             write_uint(&mut out, *signer);
             write_uint(&mut out, *gas_resource);
-            write_amount_checked(&mut out, *gas_amount)?;
+            write_amount(&mut out, *gas_amount);
             write_budget_units_checked(&mut out, *budget_increment)?;
             write_uint(&mut out, *pool_actor);
         }
@@ -949,7 +961,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         } => {
             write_uint(&mut out, *resource);
             write_uint(&mut out, *sequencer);
-            write_amount_checked(&mut out, *amount)?;
+            write_amount(&mut out, *amount);
         }
         Event::DelegatedActionBudgetTopUp {
             recipient,
@@ -962,7 +974,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             write_uint(&mut out, *recipient);
             write_uint(&mut out, *signer);
             write_uint(&mut out, *gas_resource);
-            write_amount_checked(&mut out, *gas_amount)?;
+            write_amount(&mut out, *gas_amount);
             write_budget_units_checked(&mut out, *budget_increment)?;
             write_uint(&mut out, *pool_actor);
         }
@@ -979,8 +991,8 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
         } => {
             write_uint(&mut out, *from_resource);
             write_uint(&mut out, *to_resource);
-            write_amount_checked(&mut out, *amount_in)?;
-            write_amount_checked(&mut out, *amount_out)?;
+            write_amount(&mut out, *amount_in);
+            write_amount(&mut out, *amount_out);
             write_uint(&mut out, *amm_reserve_actor);
         }
         Event::AmmReservesReclaimed {
@@ -990,7 +1002,7 @@ pub fn encode_event_checked(event: &Event) -> Result<Vec<u8>, EncodeError> {
             pool_actor,
         } => {
             write_uint(&mut out, *resource);
-            write_amount_checked(&mut out, *amount)?;
+            write_amount(&mut out, *amount);
             write_uint(&mut out, *reserve_actor);
             write_uint(&mut out, *pool_actor);
         }
@@ -1034,8 +1046,8 @@ type _Aliases = (
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_event, encode_event, encode_event_checked, DecodeError, ETH_ADDRESS_BYTES,
-        HARD_MAX_BYTE_STRING_LEN, HEAD_LEN,
+        decode_event, encode_event, encode_event_checked, DecodeError, CBE_TAG_AMOUNT,
+        CBE_TAG_UINT, ETH_ADDRESS_BYTES, HARD_MAX_BYTE_STRING_LEN, HEAD_LEN,
     };
     use crate::event::Event;
 
@@ -1322,22 +1334,35 @@ mod tests {
         };
         let bytes = encode_event(&e);
         // tag(9) + resource(9) + recipient(9) + pool_actor(9)
-        // + user_amount(9) + pool_amount(9) + budget_grant(9)
-        // + deposit_id(9) = 72 bytes.
-        assert_eq!(bytes.len(), 72);
+        // + user_amount(17) + pool_amount(17) + budget_grant(9)
+        // + deposit_id(9) = 88 bytes.  The two wei-denominated
+        // amounts are 17 bytes; `budget_grant` is a UNIT count and
+        // stays 9.
+        assert_eq!(bytes.len(), 88);
         // Tag head: 0x00 + 8-byte LE 16.
-        assert_eq!(bytes[0], 0x00);
+        assert_eq!(bytes[0], CBE_TAG_UINT);
         assert_eq!(&bytes[1..9], &16u64.to_le_bytes());
         // Resource head.
-        assert_eq!(bytes[9], 0x00);
+        assert_eq!(bytes[9], CBE_TAG_UINT);
         assert_eq!(&bytes[10..18], &1u64.to_le_bytes());
-        // Spot-check field-7 (deposit_id) head.
-        assert_eq!(bytes[63], 0x00);
-        assert_eq!(&bytes[64..72], &7u64.to_le_bytes());
+        // user_amount at 36..53 on the amount head.
+        assert_eq!(bytes[36], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[37..53], &4u128.to_le_bytes());
+        // pool_amount at 53..70 on the amount head.
+        assert_eq!(bytes[53], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[54..70], &5u128.to_le_bytes());
+        // budget_grant at 70..79 — a UNIT count, so the narrow head.
+        assert_eq!(bytes[70], CBE_TAG_UINT);
+        assert_eq!(&bytes[71..79], &6u64.to_le_bytes());
+        // Spot-check field-7 (deposit_id) head at 79..88.
+        assert_eq!(bytes[79], CBE_TAG_UINT);
+        assert_eq!(&bytes[80..88], &7u64.to_le_bytes());
     }
 
-    /// GP tag-19 wire-layout: `DelegatedActionBudgetTopUp` has
-    /// 6 fields × 9 bytes = 54 bytes + 9 tag-head = 63 bytes.
+    /// GP tag-19 wire-layout: `DelegatedActionBudgetTopUp` is
+    /// 6 narrow fields (tag, recipient, signer, gas_resource,
+    /// budget_increment, pool_actor) × 9 = 54 bytes + the
+    /// wei-denominated `gas_amount` on the 17-byte amount head = 71.
     #[test]
     fn delegated_action_budget_top_up_byte_layout() {
         let e = Event::DelegatedActionBudgetTopUp {
@@ -1349,17 +1374,23 @@ mod tests {
             pool_actor: 1,
         };
         let bytes = encode_event(&e);
-        assert_eq!(bytes.len(), 63);
+        assert_eq!(bytes.len(), 71);
         // Tag head: 0x00 + 8-byte LE 19.
-        assert_eq!(bytes[0], 0x00);
+        assert_eq!(bytes[0], CBE_TAG_UINT);
         assert_eq!(&bytes[1..9], &19u64.to_le_bytes());
         // First field: recipient = 55 (NOT signer — the load-bearing
         // ordering distinguishes this variant from tag 17).
-        assert_eq!(bytes[9], 0x00);
+        assert_eq!(bytes[9], CBE_TAG_UINT);
         assert_eq!(&bytes[10..18], &55u64.to_le_bytes());
         // Second field: signer = 77.
-        assert_eq!(bytes[18], 0x00);
+        assert_eq!(bytes[18], CBE_TAG_UINT);
         assert_eq!(&bytes[19..27], &77u64.to_le_bytes());
+        // gas_amount at 36..53 on the amount head; budget_increment
+        // that follows is a UNIT count and stays narrow.
+        assert_eq!(bytes[36], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[37..53], &10u128.to_le_bytes());
+        assert_eq!(bytes[53], CBE_TAG_UINT);
+        assert_eq!(&bytes[54..62], &100u64.to_le_bytes());
     }
 
     /// Tag 17 (`ActionBudgetTopUp`) and tag 19
@@ -1582,10 +1613,14 @@ mod tests {
         let mut bytes = Vec::new();
         bytes.push(0x00); // tag-head start
         bytes.extend_from_slice(&9u64.to_le_bytes()); // tag=9
-        for n in [1u64, 2, 3] {
-            bytes.push(0x00);
+                                                      // resource + sender on the uint head.
+        for n in [1u64, 2] {
+            bytes.push(CBE_TAG_UINT);
             bytes.extend_from_slice(&n.to_le_bytes());
         }
+        // amount on the amount head.
+        bytes.push(CBE_TAG_AMOUNT);
+        bytes.extend_from_slice(&3u128.to_le_bytes());
         // recipient_l1: 21-byte byte string (one off).
         bytes.push(0x02);
         bytes.extend_from_slice(&21u64.to_le_bytes());
@@ -1630,23 +1665,66 @@ mod tests {
             new_value: 4,
         };
         let bytes = encode_event(&e);
-        // Tag head (5 fields × 9 bytes = 45 bytes total).
-        assert_eq!(bytes.len(), 45);
+        // 3 identifier fields on the 9-byte uint head (tag, resource,
+        // actor) + 2 value fields on the 17-byte amount head
+        // (old_value, new_value) = 27 + 34 = 61 bytes.
+        assert_eq!(bytes.len(), 61);
         // tag = 0 at bytes 0..9.
-        assert_eq!(bytes[0], 0x00);
+        assert_eq!(bytes[0], CBE_TAG_UINT);
         assert_eq!(&bytes[1..9], &0u64.to_le_bytes());
         // resource = 1 at bytes 9..18.
-        assert_eq!(bytes[9], 0x00);
+        assert_eq!(bytes[9], CBE_TAG_UINT);
         assert_eq!(&bytes[10..18], &1u64.to_le_bytes());
         // actor = 2 at bytes 18..27.
-        assert_eq!(bytes[18], 0x00);
+        assert_eq!(bytes[18], CBE_TAG_UINT);
         assert_eq!(&bytes[19..27], &2u64.to_le_bytes());
-        // old_value = 3 at bytes 27..36.
-        assert_eq!(bytes[27], 0x00);
-        assert_eq!(&bytes[28..36], &3u64.to_le_bytes());
-        // new_value = 4 at bytes 36..45.
-        assert_eq!(bytes[36], 0x00);
-        assert_eq!(&bytes[37..45], &4u64.to_le_bytes());
+        // old_value = 3 at bytes 27..44 — the amount tag, then 16 LE
+        // bytes.  The tag is what keeps a balance from being read at
+        // the identifier width (and vice versa).
+        assert_eq!(bytes[27], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[28..44], &3u128.to_le_bytes());
+        // new_value = 4 at bytes 44..61.
+        assert_eq!(bytes[44], CBE_TAG_AMOUNT);
+        assert_eq!(&bytes[45..61], &4u128.to_le_bytes());
+    }
+
+    /// A balance above `2^64` round-trips.  This is the value the
+    /// 8-byte head truncated, and the reason the amount head exists.
+    #[test]
+    fn balance_above_narrow_bound_round_trips() {
+        let e = Event::BalanceChanged {
+            resource: 1,
+            actor: 2,
+            old_value: 1u128 << 64,
+            new_value: (1u128 << 100) + 7,
+        };
+        let bytes = encode_event(&e);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    /// A value-carrying field written on the narrow uint head is
+    /// rejected rather than read as its low 64 bits.
+    #[test]
+    fn balance_on_narrow_head_is_rejected() {
+        let mut bytes = encode_event(&Event::BalanceChanged {
+            resource: 1,
+            actor: 2,
+            old_value: 3,
+            new_value: 4,
+        });
+        // Rewrite old_value as a 9-byte uint head, shortening the frame.
+        bytes.truncate(27);
+        bytes.push(CBE_TAG_UINT);
+        bytes.extend_from_slice(&3u64.to_le_bytes());
+        bytes.push(CBE_TAG_AMOUNT);
+        bytes.extend_from_slice(&4u128.to_le_bytes());
+        assert!(matches!(
+            decode_event(&bytes),
+            Err(DecodeError::BadHeadTag {
+                expected: CBE_TAG_AMOUNT,
+                ..
+            })
+        ));
     }
 
     /// Decoder rejects every invalid input without panicking.
@@ -1683,30 +1761,33 @@ mod tests {
 
     /// `encode_event_checked` rejects out-of-range amounts.
     #[test]
-    fn encode_event_checked_rejects_overflow() {
-        // u128::MAX exceeds 2^64.
+    fn encode_event_checked_accepts_full_width_amount() {
+        // `u128::MAX` used to exceed the encodable range and be
+        // rejected; on the amount head it is representable, so the
+        // checked encoder must accept it AND round-trip it.  A
+        // rejection here would mean the runtime cannot express a
+        // balance the kernel can hold.
         let e = Event::BalanceChanged {
             resource: 1,
             actor: 2,
             old_value: 0,
             new_value: u128::MAX,
         };
-        let result = encode_event_checked(&e);
-        match result {
-            Err(super::EncodeError::AmountExceedsBound { value }) => {
-                assert_eq!(value, u128::MAX);
-            }
-            other => panic!("expected AmountExceedsBound, got {other:?}"),
-        }
+        let bytes = encode_event_checked(&e).expect("full-width amount must encode");
+        assert_eq!(decode_event(&bytes).unwrap(), e);
     }
 
-    /// `encode_event_checked` rejects exactly 2^64 (boundary).
+    /// The `AmountExceedsBound` guard is still live — it now protects
+    /// the fields that genuinely stayed narrow.  A budget-UNIT count
+    /// at or above `2^64` is rejected rather than truncated.
     #[test]
-    fn encode_event_checked_rejects_exact_boundary() {
-        let e = Event::RewardIssued {
-            resource: 0,
-            recipient: 0,
-            amount: 1u128 << 64, // exactly 2^64 — out of range
+    fn encode_event_checked_rejects_out_of_range_budget_units() {
+        let e = Event::ActionBudgetTopUp {
+            signer: 1,
+            gas_resource: 0,
+            gas_amount: 10,
+            budget_increment: 1u128 << 64,
+            pool_actor: 2,
         };
         match encode_event_checked(&e) {
             Err(super::EncodeError::AmountExceedsBound { value }) => {
@@ -1714,6 +1795,21 @@ mod tests {
             }
             other => panic!("expected AmountExceedsBound, got {other:?}"),
         }
+    }
+
+    /// `encode_event_checked` rejects exactly 2^64 (boundary).
+    #[test]
+    fn encode_event_checked_accepts_the_old_boundary() {
+        // Exactly `2^64` — the value the 8-byte head truncated to 0,
+        // and the boundary a wei-denominated amount crosses at
+        // ~18.45 ETH.  It must now encode and round-trip exactly.
+        let e = Event::RewardIssued {
+            resource: 0,
+            recipient: 0,
+            amount: 1u128 << 64,
+        };
+        let bytes = encode_event_checked(&e).expect("2^64 must encode");
+        assert_eq!(decode_event(&bytes).unwrap(), e);
     }
 
     /// `encode_event_checked` accepts the largest in-range value

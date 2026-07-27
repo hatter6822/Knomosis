@@ -666,6 +666,13 @@ pub mod mock {
                 v.extend_from_slice(&n.to_le_bytes());
                 v
             }
+            /// A CBE amount head: `[0x01] ++ LE16(n)`.  Value-carrying
+            /// fields ride this; identifiers and nonces do not.
+            fn amt(n: u128) -> Vec<u8> {
+                let mut v = vec![0x01u8];
+                v.extend_from_slice(&n.to_le_bytes());
+                v
+            }
             fn b(payload: &[u8]) -> Vec<u8> {
                 let mut v = vec![0x02u8];
                 v.extend_from_slice(&(payload.len() as u64).to_le_bytes());
@@ -673,7 +680,8 @@ pub mod mock {
                 v
             }
             let mut out = Vec::new();
-            for chunk in [u(0), u(1), u(signer), u(99), u(10), u(signer), u(0)] {
+            // transfer: tag, r, sender, receiver, amount, then signer + nonce.
+            for chunk in [u(0), u(1), u(signer), u(99), amt(10), u(signer), u(0)] {
                 out.extend_from_slice(&chunk);
             }
             out.extend_from_slice(&b(&[0xAB; 4])); // sig
@@ -731,12 +739,19 @@ pub mod mock {
                 v.extend_from_slice(&n.to_le_bytes());
                 v
             }
+            fn amt(n: u128) -> Vec<u8> {
+                let mut v = vec![0x01u8];
+                v.extend_from_slice(&n.to_le_bytes());
+                v
+            }
             let k = MockKernel::new();
             k.set_budget_gate(
                 BudgetGate::new(BudgetPolicy::mk_bounded(1, 1, 1)).with_strict_checks(),
             );
             let mut sa = Vec::new();
-            for chunk in [u(20), u(0), u(5), u(100), u(2), u(10), u(0)] {
+            // topUpActionBudget: tag, gasResource, gasAmount (wide),
+            // budgetIncrement, poolActor, then signer + nonce.
+            for chunk in [u(20), u(0), amt(5), u(100), u(2), u(10), u(0)] {
                 sa.extend_from_slice(&chunk);
             }
             let mut sig = vec![0x02u8];

@@ -123,7 +123,7 @@ struct Entry {
     budget_increment: Option<u64>,
     // ── claimBudgetRefund fields (GP.9.1; None for the others) ──
     budget_units: Option<u64>,
-    wei_per_budget_unit: Option<u64>,
+    wei_per_budget_unit: Option<u128>,
     /// The Lean-computed expected CBE bytes, 0x-prefixed lowercase
     /// hex.  The headline cross-stack value the Rust encoder must
     /// reproduce.
@@ -224,6 +224,9 @@ fn decode_hex(s: &str) -> Vec<u8> {
 ///     this guard, the Lean generator could quietly accumulate
 ///     wrong-variant fields under each kind and go unnoticed.
 fn entry_to_action(e: &Entry) -> Action {
+    // Generic over the field's width: `weiPerBudgetUnit` is a
+    // wei-denominated rate carried as `u128`, while identifiers and
+    // unit counts stay `u64`.
     let req = |o: Option<u64>, name: &str| {
         o.unwrap_or_else(|| {
             panic!(
@@ -305,7 +308,12 @@ fn entry_to_action(e: &Entry) -> Action {
             Action::ClaimBudgetRefund {
                 gas_resource: req(e.gas_resource, "gasResource"),
                 budget_units: req(e.budget_units, "budgetUnits"),
-                wei_per_budget_unit: req(e.wei_per_budget_unit, "weiPerBudgetUnit"),
+                wei_per_budget_unit: e.wei_per_budget_unit.unwrap_or_else(|| {
+                    panic!(
+                        "entry {} (kind {}): missing required field weiPerBudgetUnit",
+                        e.category, e.kind
+                    )
+                }),
                 pool_actor: req(e.pool_actor, "poolActor"),
             }
         }

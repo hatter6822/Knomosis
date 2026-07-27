@@ -630,33 +630,33 @@ mod tests {
             // to extract the sender + nonce: this is brittle to
             // encoder changes, but the test enforces a contract
             // we want to know about if it drifts.  See encoding.rs
-            // for the structure.  Transfer = tag(9) + r(9) +
-            // sender(9) + receiver(9) + amount(9) + signer(9) +
-            // nonce(9) + sig_head(9) + sig(64).
-            assert!(payload.len() >= 9 * 7 + 9 + 64);
+            // for the structure.  `encode_signed_action` is:
+            //   action_bytes ‖ encode_u64(signer) ‖ encode_nonce(nonce)
+            //                ‖ encode_byte_string(sig)
+            // Transfer's action_bytes is tag(9) + r(9) + sender(9) +
+            // receiver(9) + amount(17) = 53 bytes: the four
+            // identifier-shaped fields on the 9-byte CBE uint head and
+            // the value-carrying `amount` on the 17-byte amount head.
+            // Then:
+            //   signer   at 53..62  (CBE uint, 9 bytes)
+            //   nonce    at 62..71  (CBE uint, 9 bytes — a counter, so
+            //                        it stays narrow alongside amount)
+            //   sig head at 71..80  (CBE bytes head, 9 bytes)
+            //   sig      at 80..144 (64 raw bytes)
+            // Total = 144 bytes.
+            assert!(payload.len() >= 9 * 7 + 17 + 64);
             // sender field offset = 9 (after tag) + 9 (r) = 18; then
             // we want bytes [19..27] for the LE u64 sender.
             let sender_le = &payload[19..27];
             let sender_u64 = u64::from_le_bytes(sender_le.try_into().unwrap());
-            // signer offset = 9 (tag) + 9 (r) + 9 (sender) + 9 (receiver)
-            //               + 9 (amount) + 1 (signer tag) = 46 ... wait
-            // Actually: encode_signed_action layout is:
-            //   action_bytes ‖ encode_u64(signer) ‖ encode_amount(nonce)
-            //                ‖ encode_byte_string(sig)
-            // Transfer's action_bytes is: tag + r + sender + receiver +
-            // amount = 5 × 9 = 45 bytes.  Then:
-            //   signer at offset 45..54 (CBE uint, 9 bytes)
-            //   nonce at offset 54..63 (CBE uint, 9 bytes)
-            //   sig head at offset 63..72 (CBE bytes head, 9 bytes)
-            //   sig at offset 72..136 (64 raw bytes)
-            // Total = 136 bytes.
-            assert_eq!(payload.len(), 136);
-            // signer u64 (bytes 46..54, little-endian)
-            let signer_le = &payload[46..54];
+            assert_eq!(payload.len(), 144);
+            // signer u64 (bytes 54..62, little-endian — past the
+            // 9-byte head's tag at 53)
+            let signer_le = &payload[54..62];
             let signer_u64 = u64::from_le_bytes(signer_le.try_into().unwrap());
             assert_eq!(sender_u64, signer_u64);
-            // nonce u64 (bytes 55..63)
-            let nonce_le = &payload[55..63];
+            // nonce u64 (bytes 63..71)
+            let nonce_le = &payload[63..71];
             let nonce_u64 = u64::from_le_bytes(nonce_le.try_into().unwrap());
             seen_per_actor[sender_u64 as usize].push(u128::from(nonce_u64));
         }
@@ -675,10 +675,10 @@ mod tests {
         let fixture = generate(&cfg).unwrap();
         assert!(!fixture.is_empty());
         assert_eq!(fixture.len(), 4);
-        // Every Transfer payload is 136 bytes (proved in
+        // Every Transfer payload is 144 bytes (proved in
         // `per_actor_nonces_strictly_increase`).
-        assert!((fixture.average_payload_bytes() - 136.0).abs() < 0.001);
-        assert_eq!(fixture.max_payload_bytes(), 136);
+        assert!((fixture.average_payload_bytes() - 144.0).abs() < 0.001);
+        assert_eq!(fixture.max_payload_bytes(), 144);
     }
 
     /// `MAX_SCALAR_ATTEMPT_INDEX` and `MAX_SCALAR_ATTEMPTS` are

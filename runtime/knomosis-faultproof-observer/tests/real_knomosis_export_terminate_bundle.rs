@@ -156,12 +156,13 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
 
     // Per `actionKindByte`, Transfer dispatches to 0.
     assert_eq!(bundle.action_kind, 0, "Transfer's action_kind is 0");
-    // Per `actionFieldsForL1`, Transfer fields are 4 × 8 = 32
-    // bytes BE: r=1, sender=1, receiver=2, amount=100.
+    // Per `actionFieldsForL1`, Transfer fields are 3 × uint64BE
+    // (r=1, sender=1, receiver=2) + 1 × uint128BE (amount=100) = 40
+    // bytes BE.  The amount is value-carrying and so 16 bytes wide.
     assert_eq!(
         bundle.action_fields.len(),
-        32,
-        "Transfer fields = 4 × uint64BE = 32 bytes"
+        40,
+        "Transfer fields = 3 × uint64BE + 1 × uint128BE = 40 bytes"
     );
     // r at bytes [0..8]: BE-encoded 1 → bytes[7] = 1.
     assert_eq!(bundle.action_fields[7], 1, "r=1 in BE last byte");
@@ -170,7 +171,8 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
     // receiver at bytes [16..24]: BE-encoded 2 → bytes[23] = 2.
     assert_eq!(bundle.action_fields[23], 2, "receiver=2 in BE last byte");
     // amount at bytes [24..32]: BE-encoded 100 → bytes[31] = 100.
-    assert_eq!(bundle.action_fields[31], 100, "amount=100 in BE last byte");
+    // amount occupies [24..40] (uint128BE), so its LSB is byte 39.
+    assert_eq!(bundle.action_fields[39], 100, "amount=100 in BE last byte");
     assert_eq!(bundle.signer, 1, "Transfer signer is 1");
     assert_eq!(
         bundle.claimed_post_commit.len(),
@@ -214,7 +216,8 @@ fn real_knomosis_export_terminate_bundle_deterministic() {
     );
 }
 
-/// Mint variant: `action_kind` = 1, fields are 3 × `uint64BE`.
+/// Mint variant: `action_kind` = 1, fields are 2 × `uint64BE`
+/// (r, to) + 1 × `uint128BE` (amount).
 #[test]
 fn real_knomosis_export_terminate_bundle_mint_variant() {
     let Some(knomosis_path) = locate_knomosis_binary() else {
@@ -244,12 +247,13 @@ fn real_knomosis_export_terminate_bundle_mint_variant() {
     assert_eq!(bundle.action_kind, 1, "Mint's action_kind is 1");
     assert_eq!(
         bundle.action_fields.len(),
-        24,
-        "Mint fields = 3 × uint64BE = 24 bytes"
+        32,
+        "Mint fields = 2 × uint64BE + 1 × uint128BE = 32 bytes"
     );
     assert_eq!(bundle.action_fields[7], 3, "r=3 in BE last byte");
     assert_eq!(bundle.action_fields[15], 11, "to=11 in BE last byte");
-    assert_eq!(bundle.action_fields[23], 42, "amount=42 in BE last byte");
+    // amount occupies [16..32] (uint128BE), so its LSB is byte 31.
+    assert_eq!(bundle.action_fields[31], 42, "amount=42 in BE last byte");
     assert_eq!(bundle.signer, 11, "Mint signer is 11");
     // Mint bundle: 3 cells (registry, balance, nonce).
     assert_eq!(bundle.cell_proofs.len(), 3, "Mint bundle has 3 cell proofs");
@@ -287,17 +291,19 @@ fn real_knomosis_export_terminate_bundle_withdraw_variant() {
     let bundle = parse_terminate_bundle_json(0, json_line).unwrap();
 
     assert_eq!(bundle.action_kind, 14, "Withdraw's action_kind is 14");
-    // Withdraw fields = 3 × uint64BE (24 bytes) + 20-byte EthAddress = 44 bytes.
+    // Withdraw fields = 2 × uint64BE (r, sender) + 1 × uint128BE
+    // (amount) + 20-byte EthAddress = 16 + 16 + 20 = 52 bytes.
     assert_eq!(
         bundle.action_fields.len(),
-        44,
-        "Withdraw fields = 24 + 20 = 44 bytes"
+        52,
+        "Withdraw fields = 16 + 16 + 20 = 52 bytes"
     );
     assert_eq!(bundle.action_fields[7], 2, "r=2 in BE last byte");
     assert_eq!(bundle.action_fields[15], 3, "sender=3 in BE last byte");
-    assert_eq!(bundle.action_fields[23], 50, "amount=50 in BE last byte");
+    // amount occupies [16..32] (uint128BE), so its LSB is byte 31.
+    assert_eq!(bundle.action_fields[31], 50, "amount=50 in BE last byte");
     // Trailing 20 bytes are the recipient_l1.  All bytes 0xAB.
-    for i in 24..44 {
+    for i in 32..52 {
         assert_eq!(
             bundle.action_fields[i], 0xAB,
             "recipient_l1 byte {i} should be 0xAB"

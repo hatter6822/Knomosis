@@ -660,6 +660,14 @@ fn cbe_uint(n: u64) -> Vec<u8> {
     v
 }
 
+/// A CBE amount head: `[0x01] ++ LE16(n)`.  Value-carrying
+/// fields ride this head; identifiers and nonces do not.
+fn cbe_amount(n: u128) -> Vec<u8> {
+    let mut v = vec![0x01u8];
+    v.extend_from_slice(&n.to_le_bytes());
+    v
+}
+
 /// Build a CBE byte-string field: `[0x02] ++ LE(len) ++ payload`.
 fn cbe_bytes(payload: &[u8]) -> Vec<u8> {
     let mut v = vec![0x02u8];
@@ -678,7 +686,7 @@ fn transfer_signed_action(signer: u64) -> Vec<u8> {
     v.extend_from_slice(&cbe_uint(1)); // r
     v.extend_from_slice(&cbe_uint(signer)); // sender
     v.extend_from_slice(&cbe_uint(99)); // receiver
-    v.extend_from_slice(&cbe_uint(10)); // amount
+    v.extend_from_slice(&cbe_amount(10)); // amount
     v.extend_from_slice(&cbe_uint(signer)); // SignedAction.signer
     v.extend_from_slice(&cbe_uint(0)); // nonce
     v.extend_from_slice(&cbe_bytes(&[0xAB; 4])); // sig

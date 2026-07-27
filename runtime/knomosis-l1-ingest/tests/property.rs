@@ -228,8 +228,10 @@ proptest! {
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
-        // Layout invariant: 8 × 9-byte CBE uint heads.
-        prop_assert_eq!(e1.len(), 72);
+        // Layout invariant: 6 × 9-byte CBE uint heads (tag, r,
+        // recipient, poolActor, budgetGrant, depositId) + 2 × 17-byte
+        // amount heads (userAmount, poolAmount).
+        prop_assert_eq!(e1.len(), 88);
     }
 }
 
@@ -290,7 +292,8 @@ proptest! {
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
-        prop_assert_eq!(e1.len(), 45);
+        // 4 × 9-byte uint heads + 1 × 17-byte amount head (gasAmount).
+        prop_assert_eq!(e1.len(), 53);
     }
 }
 
@@ -315,7 +318,8 @@ proptest! {
         let e1 = encode_action(&action).unwrap();
         let e2 = encode_action(&action).unwrap();
         prop_assert_eq!(&e1, &e2);
-        prop_assert_eq!(e1.len(), 54);
+        // 5 × 9-byte uint heads + 1 × 17-byte amount head (gasAmount).
+        prop_assert_eq!(e1.len(), 62);
     }
 }
 

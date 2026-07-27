@@ -97,6 +97,10 @@ pub const BRIDGE_ACTOR: u64 = 0;
 /// `Encoding.CBOR.cbeTagUint`.
 const CBE_TAG_UINT: u8 = 0x00;
 
+/// CBE type tag for value-carrying amounts.  Mirrors Lean's
+/// `Encoding.CBOR.cbeTagAmount`.
+const CBE_TAG_AMOUNT: u8 = 0x01;
+
 /// CBE type tag for byte strings.  Mirrors Lean's
 /// `Encoding.CBOR.cbeTagBytes`.
 const CBE_TAG_BYTES: u8 = 0x02;
@@ -108,6 +112,11 @@ const CBE_TAG_MAP: u8 = 0x05;
 /// value/length.  Mirrors Lean's `Encoding.CBOR.cborHeadEncode`
 /// output width.
 const HEAD_LEN: usize = 9;
+
+/// Length of a CBE amount head: 1 type-tag byte + 16-byte
+/// little-endian value.  Mirrors Lean's
+/// `Encoding.CBOR.cborAmountHeadEncode` output width.
+const AMOUNT_HEAD_LEN: usize = 17;
 
 /// Append a CBE uint head (`CBE_TAG_UINT` + 8-byte LE value) to
 /// `out`.  Mirrors `Encodable.encode (T := Nat)`.
@@ -526,9 +535,11 @@ pub enum ActionBudgetKind {
         gas_resource: u64,
         /// The gas-pool actor credited the gas payment.
         pool_actor: u64,
-        /// The gas amount transferred (must be `> 0`).
-        gas_amount: u64,
-        /// The budget units credited to the signer.
+        /// The gas amount transferred (must be `> 0`).  Wei-denominated,
+        /// so it is `u128` and rides the CBE amount head.
+        gas_amount: u128,
+        /// The budget units credited to the signer.  A UNIT count, not
+        /// wei, so it stays `u64` on the uint head.
         budget_increment: u64,
     },
     /// `Action.topUpActionBudgetFor` (tag 21).  Credits `recipient`'s
@@ -542,9 +553,11 @@ pub enum ActionBudgetKind {
         gas_resource: u64,
         /// The gas-pool actor credited the gas payment.
         pool_actor: u64,
-        /// The gas amount transferred (must be `> 0`).
-        gas_amount: u64,
-        /// The budget units credited to `recipient`.
+        /// The gas amount transferred (must be `> 0`).  Wei-denominated,
+        /// so it is `u128` and rides the CBE amount head.
+        gas_amount: u128,
+        /// The budget units credited to `recipient`.  A UNIT count, not
+        /// wei, so it stays `u64` on the uint head.
         budget_increment: u64,
     },
     /// `Action.claimBudgetRefund` (tag 22, GP.9.1).  CONSUMES
@@ -569,7 +582,9 @@ pub enum ActionBudgetKind {
         budget_units: u64,
         /// The trusted budget→gas exchange rate (`≥ 1` enables the
         /// refund; `0` is the disabled default the gate rejects).
-        wei_per_budget_unit: u64,
+        /// Wei-denominated, so it is `u128` and rides the CBE amount
+        /// head; `budget_units` above is a UNIT count and does not.
+        wei_per_budget_unit: u128,
     },
 }
 
@@ -592,6 +607,17 @@ pub enum BudgetDecodeError {
     /// A CBE uint head carried the wrong type tag.
     #[error("expected CBE uint tag 0x00 at offset {offset}, found 0x{found:02x}")]
     ExpectedUint {
+        /// Byte offset of the bad head.
+        offset: usize,
+        /// The tag byte actually found.
+        found: u8,
+    },
+    /// A CBE amount head carried the wrong type tag.  In particular
+    /// this fires when a value-carrying field arrives on the narrower
+    /// uint head, which must be rejected rather than accepted at
+    /// either width — one logical value, one byte form.
+    #[error("expected CBE amount tag 0x01 at offset {offset}, found 0x{found:02x}")]
+    ExpectedAmount {
         /// Byte offset of the bad head.
         offset: usize,
         /// The tag byte actually found.
@@ -719,6 +745,42 @@ impl<'a> CbeCursor<'a> {
         self.read_uint().map(|_| ())
     }
 
+    /// Read a CBE amount head (tag `0x01` + 16-byte LE value),
+    /// advancing the cursor by [`AMOUNT_HEAD_LEN`].
+    ///
+    /// Value-carrying fields ride this head; identifiers, nonces and
+    /// budget-UNIT counts stay on [`Self::read_uint`].  The widths
+    /// differ, so this decoder's *positional* discipline depends on
+    /// each field being read at the right width: skipping an amount as
+    /// a uint would leave the cursor 8 bytes short and every
+    /// subsequent field — including `signer`, which the budget gate
+    /// authorises against — would be read from the wrong offset.
+    fn read_amount(&mut self) -> Result<u128, BudgetDecodeError> {
+        let end = self
+            .pos
+            .checked_add(AMOUNT_HEAD_LEN)
+            .ok_or(BudgetDecodeError::UnexpectedEnd)?;
+        let head = self
+            .bytes
+            .get(self.pos..end)
+            .ok_or(BudgetDecodeError::UnexpectedEnd)?;
+        if head[0] != CBE_TAG_AMOUNT {
+            return Err(BudgetDecodeError::ExpectedAmount {
+                offset: self.pos,
+                found: head[0],
+            });
+        }
+        let mut le = [0u8; 16];
+        le.copy_from_slice(&head[1..AMOUNT_HEAD_LEN]);
+        self.pos = end;
+        Ok(u128::from_le_bytes(le))
+    }
+
+    /// Read a CBE amount head and discard its value.
+    fn skip_amount(&mut self) -> Result<(), BudgetDecodeError> {
+        self.read_amount().map(|_| ())
+    }
+
     /// Skip a CBE byte-string field (tag `0x02` + 8-byte LE length +
     /// `length` payload bytes), advancing past the whole field.
     fn skip_bytes(&mut self) -> Result<(), BudgetDecodeError> {
@@ -778,20 +840,29 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
     let tag = cur.read_uint()?;
     let kind = match tag {
         // transfer(0): r, sender, receiver, amount.
+        0 => {
+            cur.skip_uint()?; // r
+            cur.skip_uint()?; // sender
+            cur.skip_uint()?; // receiver
+            cur.skip_amount()?; // amount
+            ActionBudgetKind::Ordinary
+        }
         // deposit(13): r, recipient, amount, depositId.
-        0 | 13 => {
-            for _ in 0..4 {
-                cur.skip_uint()?;
-            }
+        13 => {
+            cur.skip_uint()?; // r
+            cur.skip_uint()?; // recipient
+            cur.skip_amount()?; // amount
+            cur.skip_uint()?; // depositId
             ActionBudgetKind::Ordinary
         }
         // mint(1) / burn(2): r, x, amount.
         // reward(5) / distributeOthers(6) / proportionalDilute(7):
-        // r, x, amount.
+        // r, x, amount (proportionalDilute's third field is
+        // `totalReward`, also value-carrying).
         1 | 2 | 5..=7 => {
-            for _ in 0..3 {
-                cur.skip_uint()?;
-            }
+            cur.skip_uint()?;
+            cur.skip_uint()?;
+            cur.skip_amount()?;
             ActionBudgetKind::Ordinary
         }
         // freezeResource(3): r.
@@ -809,10 +880,10 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
         }
         // withdraw(14): r, sender, amount, recipientL1(bytes).
         14 => {
-            for _ in 0..3 {
-                cur.skip_uint()?;
-            }
-            cur.skip_bytes()?;
+            cur.skip_uint()?; // r
+            cur.skip_uint()?; // sender
+            cur.skip_amount()?; // amount
+            cur.skip_bytes()?; // recipientL1
             ActionBudgetKind::Ordinary
         }
         // revokeLocalPolicy(16): no fields.
@@ -841,9 +912,9 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
             cur.skip_uint()?; // r
             let recipient = cur.read_uint()?;
             cur.skip_uint()?; // poolActor
-            cur.skip_uint()?; // userAmount
-            cur.skip_uint()?; // poolAmount
-            let budget_grant = cur.read_uint()?;
+            cur.skip_amount()?; // userAmount
+            cur.skip_amount()?; // poolAmount
+            let budget_grant = cur.read_uint()?; // budget UNIT count
             cur.skip_uint()?; // depositId
             ActionBudgetKind::DepositWithFee {
                 recipient,
@@ -854,7 +925,7 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
         // budgetIncrement, poolActor.
         20 => {
             let gas_resource = cur.read_uint()?;
-            let gas_amount = cur.read_uint()?;
+            let gas_amount = cur.read_amount()?;
             let budget_increment = cur.read_uint()?;
             let pool_actor = cur.read_uint()?;
             ActionBudgetKind::TopUpActionBudget {
@@ -869,7 +940,7 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
         21 => {
             let recipient = cur.read_uint()?;
             let gas_resource = cur.read_uint()?;
-            let gas_amount = cur.read_uint()?;
+            let gas_amount = cur.read_amount()?;
             let budget_increment = cur.read_uint()?;
             let pool_actor = cur.read_uint()?;
             ActionBudgetKind::TopUpActionBudgetFor {
@@ -884,8 +955,8 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
         // weiPerBudgetUnit, poolActor.  GP.9.1 refund-on-exit.
         22 => {
             let gas_resource = cur.read_uint()?;
-            let budget_units = cur.read_uint()?;
-            let wei_per_budget_unit = cur.read_uint()?;
+            let budget_units = cur.read_uint()?; // budget UNIT count
+            let wei_per_budget_unit = cur.read_amount()?; // wei rate
             let pool_actor = cur.read_uint()?;
             ActionBudgetKind::ClaimBudgetRefund {
                 gas_resource,
@@ -893,6 +964,28 @@ pub fn decode_budget_view(bytes: &[u8]) -> Result<SignedActionBudgetView, Budget
                 budget_units,
                 wei_per_budget_unit,
             }
+        }
+        // ammSwap(23): fromResource, toResource, amountIn, amountOut,
+        // ammReserveActor.  Carries no budget grant, so it is an
+        // ordinary budget-consuming action — but it MUST be decoded
+        // rather than rejected: the constructor is shipped and frozen,
+        // and an unknown tag surfaces to the client as
+        // `Verdict::ParseError`.
+        23 => {
+            cur.skip_uint()?; // fromResource
+            cur.skip_uint()?; // toResource
+            cur.skip_amount()?; // amountIn
+            cur.skip_amount()?; // amountOut
+            cur.skip_uint()?; // ammReserveActor
+            ActionBudgetKind::Ordinary
+        }
+        // reclaimAmmReserves(24): r, amount, reserveActor, poolActor.
+        24 => {
+            cur.skip_uint()?; // r
+            cur.skip_amount()?; // amount
+            cur.skip_uint()?; // reserveActor
+            cur.skip_uint()?; // poolActor
+            ActionBudgetKind::Ordinary
         }
         // dispute(8) / verdict(10) / declareLocalPolicy(15): nested
         // encodings not modelled here.
@@ -1046,7 +1139,7 @@ pub struct BudgetGate {
     /// Strict-mode gas-balance oracle: `(gasResource, actor) ->
     /// balance`.  A missing entry reads as `0`.  Only consulted in
     /// strict mode.
-    balances: BTreeMap<(u64, u64), u64>,
+    balances: BTreeMap<(u64, u64), u128>,
     /// Strict-mode delegated-top-up consent oracle: the set of
     /// `(recipient, signer)` pairs the recipient has authorised
     /// (mirrors `delegatedTopUpConsentBool`).  Only consulted in
@@ -1136,7 +1229,7 @@ impl BudgetGate {
     }
 
     /// Set the strict-mode balance for `(gas_resource, actor)`.
-    pub fn set_balance(&mut self, gas_resource: u64, actor: u64, balance: u64) {
+    pub fn set_balance(&mut self, gas_resource: u64, actor: u64, balance: u128) {
         self.balances.insert((gas_resource, actor), balance);
     }
 
@@ -1169,7 +1262,11 @@ impl BudgetGate {
 
     /// The strict-mode balance recorded for `(gas_resource, actor)`
     /// (0 if none).  Consulted only in strict mode.
-    fn balance_of(&self, gas_resource: u64, actor: u64) -> u64 {
+    ///
+    /// `u128` to match the wire type: a balance is wei-denominated and
+    /// crosses `2^64` at ~18.45 ETH, so a `u64` view would compare a
+    /// truncated balance against a full-width `gas_amount`.
+    fn balance_of(&self, gas_resource: u64, actor: u64) -> u128 {
         self.balances
             .get(&(gas_resource, actor))
             .copied()
@@ -1309,8 +1406,8 @@ impl BudgetGate {
                 }
                 if self.strict {
                     // Pool solvency (uint128: the payout can reach ~2^128).
-                    let refund_amount = u128::from(budget_units) * u128::from(wei_per_budget_unit);
-                    if u128::from(self.balance_of(gas_resource, pool_actor)) < refund_amount {
+                    let refund_amount = u128::from(budget_units) * wei_per_budget_unit;
+                    if self.balance_of(gas_resource, pool_actor) < refund_amount {
                         return Err(GateRejection::RefundInsufficientPool);
                     }
                 }
@@ -1386,7 +1483,7 @@ mod tests {
     use super::{
         decode_budget_view, ActionBudgetKind, ActorBudget, BudgetDecodeError, BudgetGate,
         BudgetPolicy, EpochBudgetState, GateRejection, SignedActionBudgetView, BRIDGE_ACTOR,
-        CBE_TAG_MAP, CBE_TAG_UINT,
+        CBE_TAG_AMOUNT, CBE_TAG_MAP, CBE_TAG_UINT,
     };
 
     // ---- CBE test helpers (independent re-derivation of the wire
@@ -1395,6 +1492,16 @@ mod tests {
     /// A CBE uint head: `[0x00] ++ LE(n)`.
     fn u(n: u64) -> Vec<u8> {
         let mut v = vec![CBE_TAG_UINT];
+        v.extend_from_slice(&n.to_le_bytes());
+        v
+    }
+
+    /// A CBE amount field: `[0x01] ++ LE16(n)`.  The value-carrying
+    /// counterpart of [`u`]; using the wrong one shifts every
+    /// subsequent field by 8 bytes, which is exactly the failure the
+    /// decoder's tag check now surfaces.
+    fn amt(n: u128) -> Vec<u8> {
+        let mut v = vec![CBE_TAG_AMOUNT];
         v.extend_from_slice(&n.to_le_bytes());
         v
     }
@@ -1716,7 +1823,7 @@ mod tests {
     /// Transfer decodes to `Ordinary` and recovers the signer.
     #[test]
     fn decode_transfer_ordinary() {
-        let action = cat(&[u(0), u(1), u(10), u(20), u(100)]); // tag, r, sender, receiver, amount
+        let action = cat(&[u(0), u(1), u(10), u(20), amt(100)]); // tag, r, sender, receiver, amount
         let sa = signed(&action, 42);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, 42);
@@ -1729,18 +1836,22 @@ mod tests {
     fn decode_simple_variants() {
         // (tag, action-bytes-after-tag)
         let cases: Vec<(u64, Vec<u8>)> = vec![
-            (1, cat(&[u(1), u(2), u(3)])),                      // mint
-            (2, cat(&[u(1), u(2), u(3)])),                      // burn
-            (3, cat(&[u(1)])),                                  // freezeResource
-            (4, cat(&[u(7), bytes(&[0x02; 33])])),              // replaceKey
-            (5, cat(&[u(1), u(2), u(3)])),                      // reward
-            (6, cat(&[u(1), u(2), u(3)])),                      // distributeOthers
-            (7, cat(&[u(1), u(2), u(3)])),                      // proportionalDilute
-            (9, cat(&[u(4)])),                                  // disputeWithdraw
-            (11, cat(&[u(8)])),                                 // rollback
-            (12, cat(&[u(7), bytes(&[0x02; 33])])),             // registerIdentity
-            (13, cat(&[u(1), u(2), u(3), u(4)])),               // deposit
-            (14, cat(&[u(1), u(2), u(3), bytes(&[0x11; 20])])), // withdraw
+            (1, cat(&[u(1), u(2), amt(3)])),                      // mint
+            (2, cat(&[u(1), u(2), amt(3)])),                      // burn
+            (3, cat(&[u(1)])),                                    // freezeResource
+            (4, cat(&[u(7), bytes(&[0x02; 33])])),                // replaceKey
+            (5, cat(&[u(1), u(2), amt(3)])),                      // reward
+            (6, cat(&[u(1), u(2), amt(3)])),                      // distributeOthers
+            (7, cat(&[u(1), u(2), amt(3)])),                      // proportionalDilute
+            (9, cat(&[u(4)])),                                    // disputeWithdraw
+            (11, cat(&[u(8)])),                                   // rollback
+            (12, cat(&[u(7), bytes(&[0x02; 33])])),               // registerIdentity
+            (13, cat(&[u(1), u(2), amt(3), u(4)])),               // deposit
+            (14, cat(&[u(1), u(2), amt(3), bytes(&[0x11; 20])])), // withdraw
+            // ammSwap(23) and reclaimAmmReserves(24) are shipped and
+            // frozen; an unknown tag surfaces as `Verdict::ParseError`.
+            (23, cat(&[u(0), u(1), amt(500), amt(480), u(3)])), // ammSwap
+            (24, cat(&[u(0), amt(123_456), u(3), u(1)])),       // reclaimAmmReserves
             (16, vec![]),                                       // revokeLocalPolicy
             (
                 17,
@@ -1762,7 +1873,7 @@ mod tests {
     #[test]
     fn decode_deposit_with_fee() {
         // tag 19: r, recipient, poolActor, userAmount, poolAmount, budgetGrant, depositId
-        let action = cat(&[u(19), u(0), u(10), u(1), u(1000), u(500), u(50), u(7)]);
+        let action = cat(&[u(19), u(0), u(10), u(1), amt(1000), amt(500), u(50), u(7)]);
         let sa = signed(&action, BRIDGE_ACTOR);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, BRIDGE_ACTOR);
@@ -1779,7 +1890,7 @@ mod tests {
     #[test]
     fn decode_top_up_action_budget() {
         // tag 20: gasResource, gasAmount, budgetIncrement, poolActor
-        let action = cat(&[u(20), u(0), u(100), u(25), u(1)]);
+        let action = cat(&[u(20), u(0), amt(100), u(25), u(1)]);
         let sa = signed(&action, 10);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, 10);
@@ -1798,7 +1909,7 @@ mod tests {
     #[test]
     fn decode_top_up_action_budget_for() {
         // tag 21: recipient, gasResource, gasAmount, budgetIncrement, poolActor
-        let action = cat(&[u(21), u(7), u(0), u(100), u(25), u(1)]);
+        let action = cat(&[u(21), u(7), u(0), amt(100), u(25), u(1)]);
         let sa = signed(&action, 10);
         let view = decode_budget_view(&sa).unwrap();
         assert_eq!(view.signer, 10);
@@ -1833,10 +1944,11 @@ mod tests {
     /// claimBudgetRefund; 23 is the reserved future GP.11 `ammSwap`).
     #[test]
     fn decode_unknown_tag() {
-        let action = cat(&[u(23)]);
+        // 25 is past the highest frozen constructor (24).
+        let action = cat(&[u(25)]);
         let sa = signed(&action, 5);
         match decode_budget_view(&sa) {
-            Err(BudgetDecodeError::UnknownActionTag { tag }) => assert_eq!(tag, 23),
+            Err(BudgetDecodeError::UnknownActionTag { tag }) => assert_eq!(tag, 25),
             other => panic!("expected UnknownActionTag, got {other:?}"),
         }
     }
@@ -1859,14 +1971,14 @@ mod tests {
     #[test]
     fn decode_rejects_missing_nonce_sig() {
         // transfer action + signer, but no nonce / sig.
-        let mut buf = cat(&[u(0), u(1), u(10), u(20), u(100)]);
+        let mut buf = cat(&[u(0), u(1), u(10), u(20), amt(100)]);
         buf.extend_from_slice(&u(42)); // signer only
         match decode_budget_view(&buf) {
             Err(BudgetDecodeError::UnexpectedEnd) => {}
             other => panic!("expected UnexpectedEnd, got {other:?}"),
         }
         // action + signer + nonce, but no sig, is also incomplete.
-        let mut buf2 = cat(&[u(0), u(1), u(10), u(20), u(100)]);
+        let mut buf2 = cat(&[u(0), u(1), u(10), u(20), amt(100)]);
         buf2.extend_from_slice(&u(42)); // signer
         buf2.extend_from_slice(&u(0)); // nonce; sig still missing
         match decode_budget_view(&buf2) {
@@ -1880,7 +1992,7 @@ mod tests {
     /// suffix a peer could use to smuggle data past the gate).
     #[test]
     fn decode_view_rejects_trailing_after_sig() {
-        let action = cat(&[u(0), u(1), u(10), u(20), u(100)]);
+        let action = cat(&[u(0), u(1), u(10), u(20), amt(100)]);
         let mut sa = signed(&action, 42);
         sa.extend_from_slice(&u(7)); // garbage past the signature
         match decode_budget_view(&sa) {
@@ -2389,7 +2501,7 @@ mod tests {
     #[test]
     fn gate_drives_decoded_view() {
         let mut gate = BudgetGate::new(BudgetPolicy::mk_bounded(2, 1, 1));
-        let action = cat(&[u(0), u(1), u(10), u(20), u(100)]); // transfer
+        let action = cat(&[u(0), u(1), u(10), u(20), amt(100)]); // transfer
         let sa = signed(&action, 10);
         let v = decode_budget_view(&sa).unwrap();
         assert!(gate.admit(&v).is_ok());
@@ -2757,7 +2869,9 @@ mod tests {
     /// values; only the budget-relevant fields are recovered.
     fn encode_view_bytes(signer: u64, kind: ActionBudgetKind) -> Vec<u8> {
         let action = match kind {
-            ActionBudgetKind::Ordinary => cat(&[u(0), u(1), u(2), u(3), u(4)]), // transfer
+            // transfer(0): r, sender, receiver, amount — the amount on
+            // the wide head.
+            ActionBudgetKind::Ordinary => cat(&[u(0), u(1), u(2), u(3), amt(4)]),
             ActionBudgetKind::DepositWithFee {
                 recipient,
                 budget_grant,
@@ -2766,8 +2880,8 @@ mod tests {
                 u(7),
                 u(recipient),
                 u(8),
-                u(9),
-                u(10),
+                amt(9),  // userAmount
+                amt(10), // poolAmount
                 u(budget_grant),
                 u(11),
             ]),
@@ -2779,7 +2893,7 @@ mod tests {
             } => cat(&[
                 u(20),
                 u(gas_resource),
-                u(gas_amount),
+                amt(gas_amount),
                 u(budget_increment),
                 u(pool_actor),
             ]),
@@ -2793,7 +2907,7 @@ mod tests {
                 u(21),
                 u(recipient),
                 u(gas_resource),
-                u(gas_amount),
+                amt(gas_amount),
                 u(budget_increment),
                 u(pool_actor),
             ]),
@@ -2806,7 +2920,7 @@ mod tests {
                 u(22),
                 u(gas_resource),
                 u(budget_units),
-                u(wei_per_budget_unit),
+                amt(wei_per_budget_unit),
                 u(pool_actor),
             ]),
         };
@@ -2911,7 +3025,7 @@ mod tests {
             #[test]
             fn decode_view_topupfor(
                 signer in any::<u64>(), r in any::<u64>(), gr in any::<u64>(),
-                p in any::<u64>(), g in any::<u64>(), i in any::<u64>()
+                p in any::<u64>(), g in any::<u128>(), i in any::<u64>()
             ) {
                 let kind = ActionBudgetKind::TopUpActionBudgetFor {
                     recipient: r, gas_resource: gr, pool_actor: p, gas_amount: g, budget_increment: i,

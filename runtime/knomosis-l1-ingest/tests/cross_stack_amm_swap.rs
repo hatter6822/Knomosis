@@ -508,8 +508,11 @@ fn amm_swap_cxsf_consumer() {
         );
         assert_eq!(
             rec.expected.len(),
-            54,
-            "record {i}: expected should be 54 bytes (Action.ammSwap CBE)"
+            70,
+            "record {i}: expected should be 70 bytes (Action.ammSwap CBE: \
+             four 9-byte uint heads — tag, fromResource, toResource, \
+             ammReserveActor — plus two 17-byte amount heads for \
+             amountIn / amountOut)"
         );
     }
 }
