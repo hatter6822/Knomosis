@@ -1410,12 +1410,20 @@ contract KnomosisBridge is IKnomosisBridge, ReentrancyGuard {
     ///         freePoolAmount` (the GP.11.2 internal-accounting split),
     ///         hence `userAmount + ammSeedAmount + freePoolAmount ==
     ///         deposit` — every wei is accounted for; nothing is minted.
-    ///         The `receiptHash` binds the FULL `poolAmount` (not the
-    ///         split), which together with the immutable `ammSeedRatioBps`
-    ///         fully determines `ammSeedAmount` — so the L2 reconstructs
-    ///         the split deterministically and a replay with a modified
-    ///         split is impossible (the bound `poolAmount` is the only
-    ///         free variable, and the split is a pure function of it).
+    ///         The `receiptHash` binds `poolAmount` and `ammSeedAmount`
+    ///         as INDEPENDENT fields, and that independence is
+    ///         load-bearing: `ammSeedAmount` is **not** a pure function
+    ///         of `poolAmount` and `ammSeedRatioBps`.  `_seedAmmReserves`
+    ///         also returns zero when `boldEnabled` is false (an
+    ///         ETH<->BOLD pair that can never swap must not accrue
+    ///         reserves) and when the mutable GP.11.3 `ammDisabled` kill
+    ///         switch has fired.  An L2 ingestor that recomputed the
+    ///         split from `(poolAmount, ammSeedRatioBps)` alone would
+    ///         therefore diverge from the chain on every deposit made
+    ///         after an emergency disable.  Read `ammSeedAmount` from
+    ///         the emitted event; the receipt hash is what makes that
+    ///         read trustworthy, and a replay with a modified split is
+    ///         impossible because every field is bound.
     function _registerDepositWithFee(
         uint64 resourceId,
         address token,

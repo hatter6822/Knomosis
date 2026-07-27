@@ -278,11 +278,99 @@ contract KnomosisStateRootSubmissionTest is Test {
         registry.slashSequencerBond(999, address(0xCAFE));
     }
 
+    /// With nothing submitted, reverting from index 5 has nothing above
+    /// it to sweep, so the range is the single index.
     function test_revertStateRootsFrom_updates_range() public {
         vm.prank(faultProofGame);
         registry.revertStateRootsFrom(5);
         assertEq(registry.lowestRevertedLogIndex(), 5);
         assertEq(registry.highestRevertedLogIndex(), 5);
+    }
+
+    /// Submit a contiguous chain 0..3, then submit them.
+    function _submitChain(uint64 upToIdx) internal returns (bytes32 nextHash) {
+        nextHash = bytes32(0);
+        for (uint64 i = 0; i <= upToIdx; i++) {
+            vm.roll(block.number + MIN_INTERVAL + 1);
+            vm.prank(sequencer);
+            registry.submitStateRoot{value: BOND}(
+                i, bytes32(uint256(0xAAA) + i), nextHash);
+            (, , , bytes32 expectedNext, , , , ) = registry.roots(i);
+            nextHash = expectedNext;
+        }
+    }
+
+    /// **Descendant roots must be reverted too.**
+    ///
+    /// Each root's `prevLogEntryHash` chains to its predecessor's
+    /// `expectedNextHash`, so a root proven invalid at `fromIdx`
+    /// invalidates every root that descends from it.  Raising the ceiling
+    /// only to `fromIdx` marked the single disputed index and left its
+    /// descendants finalisable — this fails against that behaviour.
+    function test_revertStateRootsFrom_sweeps_descendants() public {
+        _submitChain(3);
+        assertEq(registry.latestSubmittedLogIndex(), 3);
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(1);
+        assertEq(registry.lowestRevertedLogIndex(), 1);
+        assertEq(
+            registry.highestRevertedLogIndex(),
+            3,
+            "the ceiling must cover every descendant of the disputed root"
+        );
+        assertFalse(registry.isStateRootReverted(0), "the ancestor stands");
+        assertTrue(registry.isStateRootReverted(1));
+        assertTrue(registry.isStateRootReverted(2), "descendant 2 is reverted");
+        assertTrue(registry.isStateRootReverted(3), "descendant 3 is reverted");
+    }
+
+    /// **Reverting from index 0 is not a no-op.**
+    ///
+    /// The floor sentinel used to be `0`, which made "no floor set"
+    /// indistinguishable from "the floor is the genesis root", and
+    /// `isStateRootReverted` additionally required `floor > 0`.  Reverting
+    /// from 0 therefore marked nothing at all — the cheapest possible
+    /// bypass of the whole mechanism.
+    function test_revertStateRootsFrom_zero_reverts_the_genesis_root() public {
+        _submitChain(2);
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(0);
+        assertEq(registry.lowestRevertedLogIndex(), 0);
+        assertEq(registry.highestRevertedLogIndex(), 2);
+        assertTrue(
+            registry.isStateRootReverted(0),
+            "reverting from the genesis root must actually revert it"
+        );
+        assertTrue(registry.isStateRootReverted(1));
+        assertTrue(registry.isStateRootReverted(2));
+    }
+
+    /// The floor is monotonically lowered and the ceiling monotonically
+    /// raised across repeated calls.
+    function test_revertStateRootsFrom_range_is_monotone() public {
+        _submitChain(3);
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(2);
+        assertEq(registry.lowestRevertedLogIndex(), 2);
+        assertEq(registry.highestRevertedLogIndex(), 3);
+        // A lower floor widens the range downward.
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(1);
+        assertEq(registry.lowestRevertedLogIndex(), 1);
+        assertEq(registry.highestRevertedLogIndex(), 3);
+        // A higher floor does NOT narrow it.
+        vm.prank(faultProofGame);
+        registry.revertStateRootsFrom(3);
+        assertEq(registry.lowestRevertedLogIndex(), 1);
+        assertEq(registry.highestRevertedLogIndex(), 3);
+    }
+
+    /// `latestSubmittedLogIndex` is a running maximum: submission is not
+    /// monotone (the hash-chain check only requires the PREDECESSOR to
+    /// exist), so a later call at a lower index must not lower it.
+    function test_latestSubmittedLogIndex_is_a_running_maximum() public {
+        _submitChain(3);
+        assertEq(registry.latestSubmittedLogIndex(), 3);
     }
 
     function test_isStateRootReverted_in_range() public {
@@ -297,9 +385,13 @@ contract KnomosisStateRootSubmissionTest is Test {
         assertFalse(registry.isStateRootReverted(4));
     }
 
-    function test_isStateRootReverted_default_floor_zero() public view {
-        // No revert ever fired; floor = 0; isStateRootReverted(0) = false.
+    function test_isStateRootReverted_unset_floor_is_the_sentinel() public view {
+        // No revert ever fired: the floor is `NO_REVERTED_FLOOR`, which is
+        // above every reachable index, so nothing reads as reverted — and
+        // that is now distinguishable from "the floor is index 0".
+        assertEq(registry.lowestRevertedLogIndex(), registry.NO_REVERTED_FLOOR());
         assertFalse(registry.isStateRootReverted(0));
+        assertFalse(registry.isStateRootReverted(type(uint64).max));
     }
 
     /* -------- assertConsistent -------- */

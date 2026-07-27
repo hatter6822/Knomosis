@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "88bceeef8189086dfffb6b4a45f1757044fecd387a16cb1722ace13825caf69e"
+    "source_digest": "3428f9a1f14fccb8da3c4df268775f8e29c2ba2b38aa879a6cecd9db701a16d1"
   },
   "summary": {
     "module_count": 88,
-    "declaration_count": 1925
+    "declaration_count": 1930
   },
   "modules": [
     {
@@ -1023,7 +1023,7 @@
         {
           "kind": "function",
           "name": "_registerDepositWithFee",
-          "line": 1418,
+          "line": 1426,
           "called": [
             "BoldTvlCapReached",
             "DepositWithFeeInitiated",
@@ -1037,7 +1037,7 @@
         {
           "kind": "function",
           "name": "_seedAmmReserves",
-          "line": 1528,
+          "line": 1536,
           "called": [
             "ammDisabled"
           ]
@@ -1045,109 +1045,109 @@
         {
           "kind": "event",
           "name": "AmmSwapExecuted",
-          "line": 1581,
+          "line": 1589,
           "called": []
         },
         {
           "kind": "error",
           "name": "SwapDeadlineExpired",
-          "line": 1593,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ZeroSwapInput",
-          "line": 1595,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ZeroSwapOutput",
-          "line": 1599,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "EthAmountMismatch",
           "line": 1601,
           "called": []
         },
         {
           "kind": "error",
-          "name": "UnexpectedEth",
+          "name": "ZeroSwapInput",
           "line": 1603,
           "called": []
         },
         {
           "kind": "error",
+          "name": "ZeroSwapOutput",
+          "line": 1607,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthAmountMismatch",
+          "line": 1609,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnexpectedEth",
+          "line": 1611,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "UnsupportedSwapResource",
-          "line": 1606,
+          "line": 1614,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmEmpty",
-          "line": 1610,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "SlippageExceeded",
-          "line": 1613,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "ReserveExhausted",
           "line": 1618,
           "called": []
         },
         {
           "kind": "error",
-          "name": "EthTransferFailed",
+          "name": "SlippageExceeded",
           "line": 1621,
           "called": []
         },
         {
           "kind": "error",
+          "name": "ReserveExhausted",
+          "line": 1626,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "EthTransferFailed",
+          "line": 1629,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "AmmKInvariantViolated",
-          "line": 1628,
+          "line": 1636,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmIsDisabled",
-          "line": 1631,
+          "line": 1639,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmPausedByBoldCircuit",
-          "line": 1634,
+          "line": 1642,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotAmmDisasterRecovery",
-          "line": 1637,
+          "line": 1645,
           "called": []
         },
         {
           "kind": "error",
           "name": "AmmAlreadyDisabled",
-          "line": 1640,
+          "line": 1648,
           "called": []
         },
         {
           "kind": "event",
           "name": "AmmDisabled",
-          "line": 1645,
+          "line": 1653,
           "called": []
         },
         {
           "kind": "function",
           "name": "emergencyDisableAmm",
-          "line": 1660,
+          "line": 1668,
           "called": [
             "AmmAlreadyDisabled",
             "AmmDisabled",
@@ -1158,7 +1158,7 @@
         {
           "kind": "function",
           "name": "ammSwap",
-          "line": 1722,
+          "line": 1730,
           "called": [
             "AmmEmpty",
             "AmmKInvariantViolated",
@@ -1184,13 +1184,13 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 1864,
+          "line": 1872,
           "called": []
         },
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 1871,
+          "line": 1879,
           "called": [
             "InvalidSignatureLength",
             "NonMonotonic",
@@ -1207,13 +1207,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 1910,
+          "line": 1918,
           "called": []
         },
         {
           "kind": "function",
           "name": "stateRootAt",
-          "line": 1917,
+          "line": 1925,
           "called": [
             "StateRootRecord",
             "isStateRootReverted"
@@ -1222,7 +1222,7 @@
         {
           "kind": "function",
           "name": "isStateRootFinalised",
-          "line": 1923,
+          "line": 1931,
           "called": [
             "StateRootRecord",
             "disputeWindowBlocks",
@@ -1232,25 +1232,25 @@
         {
           "kind": "event",
           "name": "WithdrawalRedeemed",
-          "line": 1934,
+          "line": 1942,
           "called": []
         },
         {
           "kind": "struct",
           "name": "PendingWithdrawal",
-          "line": 1953,
+          "line": 1961,
           "called": []
         },
         {
           "kind": "struct",
           "name": "WithdrawalProof",
-          "line": 1966,
+          "line": 1974,
           "called": []
         },
         {
           "kind": "function",
           "name": "withdrawWithProof",
-          "line": 1972,
+          "line": 1980,
           "called": [
             "AlreadyRedeemed",
             "BridgeAccountingMismatch",
@@ -1274,7 +1274,7 @@
         {
           "kind": "function",
           "name": "_decodePendingWithdrawal",
-          "line": 2060,
+          "line": 2068,
           "called": [
             "PendingWithdrawal"
           ]
@@ -1282,7 +1282,7 @@
         {
           "kind": "function",
           "name": "_decodeWithdrawalProof",
-          "line": 2075,
+          "line": 2083,
           "called": [
             "InvalidProof"
           ]
@@ -1290,13 +1290,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 2113,
+          "line": 2121,
           "called": []
         },
         {
           "kind": "function",
           "name": "revertToPriorRoot",
-          "line": 2117,
+          "line": 2125,
           "called": [
             "NotDisputeVerifier",
             "StateRootRangeReverted",
@@ -1307,31 +1307,31 @@
         {
           "kind": "event",
           "name": "BoldCircuitClosed",
-          "line": 2160,
+          "line": 2168,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitOpened",
-          "line": 2163,
+          "line": 2171,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldCircuitClosedByAutoTrigger",
-          "line": 2169,
+          "line": 2177,
           "called": []
         },
         {
           "kind": "event",
           "name": "BoldTvlCapUpdated",
-          "line": 2174,
+          "line": 2182,
           "called": []
         },
         {
           "kind": "function",
           "name": "closeBoldCircuit",
-          "line": 2181,
+          "line": 2189,
           "called": [
             "BoldCircuitClosed",
             "onlyBoldCircuitBreaker"
@@ -1340,7 +1340,7 @@
         {
           "kind": "function",
           "name": "openBoldCircuit",
-          "line": 2190,
+          "line": 2198,
           "called": [
             "BoldCircuitOpened",
             "onlyBoldCircuitBreaker"
@@ -1349,7 +1349,7 @@
         {
           "kind": "function",
           "name": "closeBoldCircuitIfAnyLiquityBranchShutdown",
-          "line": 2219,
+          "line": 2227,
           "called": [
             "AutoCircuitTriggerDisabled",
             "BoldCircuitClosedByAutoTrigger",
@@ -1360,7 +1360,7 @@
         {
           "kind": "function",
           "name": "_readLiquityShutdownTime",
-          "line": 2269,
+          "line": 2277,
           "called": [
             "LiquityV2ReadFailed"
           ]
@@ -1368,7 +1368,7 @@
         {
           "kind": "function",
           "name": "setBoldTvlCap",
-          "line": 2292,
+          "line": 2300,
           "called": [
             "BoldTvlCapExceedsGlobal",
             "BoldTvlCapUpdated",
@@ -1378,7 +1378,7 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 2304,
+          "line": 2312,
           "called": []
         }
       ]
@@ -2968,7 +2968,7 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 94,
+          "line": 116,
           "called": [
             "sequencer"
           ]
@@ -2976,7 +2976,7 @@
         {
           "kind": "event",
           "name": "StateRootFinalised",
-          "line": 100,
+          "line": 122,
           "called": [
             "sequencer"
           ]
@@ -2984,13 +2984,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 105,
+          "line": 127,
           "called": []
         },
         {
           "kind": "event",
           "name": "StateRootDisputed",
-          "line": 113,
+          "line": 135,
           "called": [
             "sequencer"
           ]
@@ -2998,7 +2998,7 @@
         {
           "kind": "event",
           "name": "SequencerBondSlashed",
-          "line": 121,
+          "line": 143,
           "called": [
             "sequencer"
           ]
@@ -3006,121 +3006,121 @@
         {
           "kind": "error",
           "name": "NotSequencer",
-          "line": 132,
+          "line": 154,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotFaultProofGame",
-          "line": 133,
+          "line": 155,
           "called": []
         },
         {
           "kind": "error",
           "name": "SubmissionTooFrequent",
-          "line": 134,
+          "line": 156,
           "called": []
         },
         {
           "kind": "error",
           "name": "TooManyOutstandingRoots",
-          "line": 135,
+          "line": 157,
           "called": []
         },
         {
           "kind": "error",
           "name": "AlreadyClaimed",
-          "line": 136,
+          "line": 158,
           "called": []
         },
         {
           "kind": "error",
           "name": "InvalidBond",
-          "line": 137,
+          "line": 159,
           "called": []
         },
         {
           "kind": "error",
           "name": "HashChainBroken",
-          "line": 138,
+          "line": 160,
           "called": []
         },
         {
           "kind": "error",
           "name": "RootMissing",
-          "line": 139,
+          "line": 161,
           "called": []
         },
         {
           "kind": "error",
           "name": "AlreadyDisputed",
-          "line": 140,
+          "line": 162,
           "called": []
         },
         {
           "kind": "error",
           "name": "AlreadySlashed",
-          "line": 141,
+          "line": 163,
           "called": []
         },
         {
           "kind": "error",
           "name": "BondAlreadyZero",
-          "line": 142,
+          "line": 164,
           "called": []
         },
         {
           "kind": "error",
           "name": "SlashTransferFailed",
-          "line": 143,
+          "line": 165,
           "called": []
         },
         {
           "kind": "error",
           "name": "PreviousRootMissing",
-          "line": 144,
+          "line": 166,
           "called": []
         },
         {
           "kind": "error",
           "name": "NotYetFinalisable",
-          "line": 145,
+          "line": 167,
           "called": []
         },
         {
           "kind": "error",
           "name": "AlreadyFinalised",
-          "line": 146,
+          "line": 168,
           "called": []
         },
         {
           "kind": "error",
           "name": "DisputeInProgress",
-          "line": 147,
+          "line": 169,
           "called": []
         },
         {
           "kind": "error",
           "name": "ZeroAddress",
-          "line": 148,
+          "line": 170,
           "called": []
         },
         {
           "kind": "error",
           "name": "WindowTooShort",
-          "line": 149,
+          "line": 171,
           "called": []
         },
         {
           "kind": "error",
           "name": "SequencerIsFaultProofGame",
-          "line": 154,
+          "line": 176,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 160,
+          "line": 182,
           "called": [
             "InvalidBond",
             "SequencerIsFaultProofGame",
@@ -3135,7 +3135,7 @@
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 206,
+          "line": 228,
           "called": [
             "AlreadyClaimed",
             "HashChainBroken",
@@ -3153,7 +3153,7 @@
         {
           "kind": "function",
           "name": "finaliseStateRoot",
-          "line": 262,
+          "line": 287,
           "called": [
             "AlreadyFinalised",
             "DisputeInProgress",
@@ -3167,7 +3167,7 @@
         {
           "kind": "function",
           "name": "markDisputed",
-          "line": 306,
+          "line": 331,
           "called": [
             "AlreadyDisputed",
             "AlreadyFinalised",
@@ -3181,7 +3181,7 @@
         {
           "kind": "function",
           "name": "clearDisputed",
-          "line": 331,
+          "line": 356,
           "called": [
             "NotFaultProofGame",
             "RootMissing",
@@ -3192,7 +3192,7 @@
         {
           "kind": "function",
           "name": "slashSequencerBond",
-          "line": 357,
+          "line": 382,
           "called": [
             "AlreadyFinalised",
             "BondAlreadyZero",
@@ -3208,7 +3208,7 @@
         {
           "kind": "function",
           "name": "revertStateRootsFrom",
-          "line": 394,
+          "line": 432,
           "called": [
             "NotFaultProofGame",
             "StateRootRangeReverted"
@@ -3217,13 +3217,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 417,
+          "line": 463,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 434,
+          "line": 484,
           "called": [
             "sequencer"
           ]
@@ -14577,7 +14577,7 @@
     {
       "module": "KnomosisStateRootSubmission.t",
       "path": "solidity/test/KnomosisStateRootSubmission.t.sol",
-      "declaration_count": 34,
+      "declaration_count": 39,
       "declarations": [
         {
           "kind": "contract",
@@ -14802,31 +14802,71 @@
         {
           "kind": "function",
           "name": "test_revertStateRootsFrom_updates_range",
-          "line": 280,
+          "line": 282,
           "called": []
         },
         {
           "kind": "function",
+          "name": "_submitChain",
+          "line": 290,
+          "called": [
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revertStateRootsFrom_sweeps_descendants",
+          "line": 309,
+          "called": [
+            "_submitChain"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revertStateRootsFrom_zero_reverts_the_genesis_root",
+          "line": 333,
+          "called": [
+            "_submitChain"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_revertStateRootsFrom_range_is_monotone",
+          "line": 349,
+          "called": [
+            "_submitChain"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_latestSubmittedLogIndex_is_a_running_maximum",
+          "line": 370,
+          "called": [
+            "_submitChain"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_isStateRootReverted_in_range",
-          "line": 287,
+          "line": 375,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_isStateRootReverted_below_floor",
-          "line": 293,
+          "line": 381,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_isStateRootReverted_default_floor_zero",
-          "line": 299,
+          "name": "test_isStateRootReverted_unset_floor_is_the_sentinel",
+          "line": 387,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_assertConsistent_does_not_revert",
-          "line": 306,
+          "line": 398,
           "called": []
         }
       ]
