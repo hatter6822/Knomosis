@@ -66,7 +66,7 @@ solidity/
                                     MockBoldOz.sol, MockLiquityV2.sol
 ```
 
-Total: **~867 forge tests passing across 58 suites** (`forge test`;
+Total: **~894 forge tests passing across 59 suites** (`forge test`;
 fuzz and property tests additionally report per-test run counts). A
 subset is conditionally skipped when the production keccak256 binding
 is not linked (the cross-check suites probe `isKeccak256Linked` on

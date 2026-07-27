@@ -775,9 +775,20 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 050 | ~150 | `lake test` |
-| Rust | ~1 990 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~878 passed | 58 forge suites | `cd solidity && forge test` |
+| Lean | ~3 060 | ~150 | `lake test` |
+| Rust | ~2 350 | across 12 crates | `cargo test --workspace` |
+| Solidity | ~894 passed | 59 forge suites | `cd solidity && forge test` |
+
+A bare `forge test` additionally reports ~12 **skipped** cross-stack
+entries.  Those are the Lean<->EVM byte-equivalence checks under
+`solidity/test/CrossCheck/`, which gate themselves on the fixture
+header's `isKeccak256Linked` flag; the committed fixtures carry the
+FNV-1a-64 fallback, so they skip unless the fixtures are regenerated
+against a keccak-linked build.  `./scripts/verify_keccak_crossstack.sh`
+(the `ci-keccak-crossstack.yml` lane) does exactly that and runs them
+for real (906 passed / 0 skipped, verified in this configuration) — a
+bare `forge test` reporting 0 failures does NOT mean the
+byte-equivalence corpus ran.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
