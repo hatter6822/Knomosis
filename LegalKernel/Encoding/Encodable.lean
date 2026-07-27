@@ -222,6 +222,59 @@ theorem nat_encode_injective (n₁ n₂ : Nat) (h₁ : n₁ < 256 ^ 8) (h₂ : n
            = Except.ok (n₂, []) := r₁.symm.trans r₂
   exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
 
+/-! ### `Amount` (CBE 128-bit amount head; `< 2^128` round-trip)
+
+`Amount` is `Nat` (`Kernel.lean`), so it cannot carry its own
+`Encodable` instance without colliding with `instEncodableNat`.  The
+amount codec is therefore a pair of explicit functions, used at every
+*value-carrying* field site — balances, transfer/mint/burn amounts,
+fees, budget increments — while identifiers, nonces, constructor tags
+and length prefixes keep the 8-byte `Nat` head.
+
+The distinction is load-bearing rather than cosmetic.  The 8-byte head
+truncates modulo `2^64`, and a balance denominated in wei crosses that
+at ~18.45 ETH; balances also *accumulate*, so gating individual input
+amounts cannot keep a stored balance in range.  Encoding balances
+through the narrow head therefore made `State.encode` non-injective on
+ordinary reachable states, and with it the L1 state root: two states
+whose balances differ by exactly `2^64` committed to the same value. -/
+
+/-- Encode an `Amount` as a 17-byte CBE amount head (`cbeTagAmount` +
+    16 little-endian bytes). -/
+def encodeAmount (n : Nat) : Stream :=
+  cborAmountHeadEncode n
+
+/-- Decode an `Amount` from a 17-byte CBE amount head. -/
+def decodeAmount (s : Stream) : Except DecodeError (Nat × Stream) :=
+  cborAmountHeadDecode s
+
+/-- Amount round-trip (with suffix): for `n < 2^128`, decoding
+    `encodeAmount n ++ rest` returns `(n, rest)`. -/
+theorem amount_roundtrip (n : Nat) (rest : Stream) (h : n < 256 ^ 16) :
+    decodeAmount (encodeAmount n ++ rest) = .ok (n, rest) :=
+  cborAmountHeadRoundtrip_append n rest h
+
+/-- Amount round-trip (empty suffix). -/
+theorem amount_roundtrip_empty (n : Nat) (h : n < 256 ^ 16) :
+    decodeAmount (encodeAmount n) = .ok (n, []) :=
+  cborAmountHeadRoundtrip n h
+
+/-- Amount injectivity: in-range amounts with equal encodings are
+    equal.  The bound is `2^128` rather than the `2^64` the old `Nat`
+    path required, which is what moves it out of the reachable range —
+    the entire ETH supply is about `2^87` wei. -/
+theorem encodeAmount_injective (n₁ n₂ : Nat)
+    (h₁ : n₁ < 256 ^ 16) (h₂ : n₂ < 256 ^ 16)
+    (h : encodeAmount n₁ = encodeAmount n₂) : n₁ = n₂ :=
+  cborAmountHeadEncode_injective h₁ h₂ h
+
+/-- An encoded amount is never an encoded `Nat`: the leading type byte
+    differs.  Keeps a widened amount field from aliasing an adjacent
+    identifier field in a concatenated layout. -/
+theorem encodeAmount_ne_encodeNat (n₁ n₂ : Nat) :
+    encodeAmount n₁ ≠ Encodable.encode (T := Nat) n₂ :=
+  cborAmountHeadEncode_ne_cborHeadEncode n₁ n₂
+
 /-! ### `BoundedNat`: a `Nat` with a static `< 2^64` bound
 
 Used by callers that need *unconditional* round-trip / injectivity

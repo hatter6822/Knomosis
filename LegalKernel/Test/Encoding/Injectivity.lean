@@ -1662,8 +1662,73 @@ fixture-smoke checks from EI.0.c stay at the head as shared-machinery
 regressions; EI.1's per-lemma coverage follows.  EI.2 onwards will
 each append their per-sub-state tests when those PRs land. -/
 
+/-! ## 128-bit amount head (`cbeTagAmount`)
+
+The 8-byte `cbeTagUint` body truncates modulo `2^64`, which is inside
+the range ordinary wei balances reach (~18.45 ETH) and which balances
+additionally *accumulate* past.  These pin the widened amount head that
+closes that gap. -/
+
+/-- The exact collision C-1 documents: two values differing by exactly
+    `2^64` share an 8-byte-head encoding, but are distinguished by the
+    128-bit amount head. -/
+def test_amountHead_separates_the_2_64_collision : TestCase := {
+  name := "amount head separates values colliding mod 2^64"
+  body := do
+    let lo : Nat := 100
+    let hi : Nat := 100 + 2 ^ 64
+    -- The narrow uint head cannot tell them apart.
+    assertEq
+      (Encodable.encode (T := Nat) lo)
+      (Encodable.encode (T := Nat) hi)
+      "the 8-byte uint head collides on values differing by 2^64"
+    -- The 128-bit amount head does.
+    assert
+      (encodeAmount lo != encodeAmount hi)
+      "the 128-bit amount head must separate them"
+}
+
+/-- The amount head is 17 bytes (tag + 16 LE body) and round-trips
+    values far above `2^64`. -/
+def test_amountHead_roundtrips_above_2_64 : TestCase := {
+  name := "amount head round-trips values above 2^64"
+  body := do
+    for n in [0, 1, 2 ^ 64 - 1, 2 ^ 64, 2 ^ 64 + 100, 2 ^ 100] do
+      assertEq (17 : Nat) (encodeAmount n).length s!"amount head width for {n}"
+      match decodeAmount (encodeAmount n) with
+      | .ok (n', rest) =>
+        assertEq n n' s!"amount round-trip value for {n}"
+        assertEq ([] : Stream) rest s!"amount round-trip tail for {n}"
+      | .error e => throw <| IO.userError s!"amount decode failed for {n}: {repr e}"
+}
+
+/-- An amount head never aliases a uint head: the leading tag differs,
+    so a widened amount field cannot collide with an identifier field. -/
+def test_amountHead_never_aliases_uint_head : TestCase := {
+  name := "amount head is tag-disjoint from the uint head"
+  body := do
+    for n in [0, 1, 42, 2 ^ 63] do
+      assert
+        (encodeAmount n != Encodable.encode (T := Nat) n)
+        s!"amount head must not equal the uint head for {n}"
+    let _proof : ∀ a b : Nat, encodeAmount a ≠ Encodable.encode (T := Nat) b :=
+      encodeAmount_ne_encodeNat
+    pure ()
+}
+
+/-- Term-level API stability for `encodeAmount_injective`. -/
+def test_encodeAmount_injective_api : TestCase := {
+  name := "encodeAmount_injective API stability"
+  body := do
+    let _proof : ∀ (n₁ n₂ : Nat), n₁ < 256 ^ 16 → n₂ < 256 ^ 16 →
+        encodeAmount n₁ = encodeAmount n₂ → n₁ = n₂ :=
+      encodeAmount_injective
+    pure ()
+}
+
 /-- Workstream EI's test cases.  Includes the four EI.0.c fixture
-    smoke checks and the EI.1 per-lemma coverage. -/
+    smoke checks, the EI.1 per-lemma coverage, and the C-1
+    128-bit-amount-head pins. -/
 def tests : List TestCase :=
   [ -- EI.0.c — Shared-fixture smoke checks.
     fixtureEmptyShape
@@ -1776,6 +1841,11 @@ def tests : List TestCase :=
   , test_extendedState_extEq_refl_empty
   , test_extendedState_extEq_refl_nonEmpty
   , test_commitExtendedState_subcommits_extensional_eq_api
+    -- C-1 groundwork — the 128-bit `cbeTagAmount` head.
+  , test_amountHead_separates_the_2_64_collision
+  , test_amountHead_roundtrips_above_2_64
+  , test_amountHead_never_aliases_uint_head
+  , test_encodeAmount_injective_api
   ]
 
 end InjectivityTests

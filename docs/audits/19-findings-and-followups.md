@@ -765,22 +765,62 @@ reached.  Reaching the threshold requires a single actor's balance to
 touch `2^64` wei ≈ **18.45 ETH** — routine for a bridge escrow or the
 gas-pool actor, not an exotic edge case.
 
-**Why a fix is not attempted in this pass.**  Every available remedy
-is Genesis-Plan scale and needs the §13.6 two-reviewer gate:
+**Resolution chosen: widen amounts to 128 bits.**  The three stacks
+already disagree on amount width — Rust's balance cell is 16 bytes
+(`BALANCE_VALUE_LEN = 16`, `Amount = u128`, with *checked* arithmetic
+that errors on overflow), Solidity uses `uint256`, and only Lean's
+commitment path is 8 bytes and silently truncating.  Lean is the
+narrow one, so the fix is to widen it rather than to cap balances.
 
-* widening the `Nat` body to a variable-length encoding breaks the
-  frozen byte contract that the Rust indexer and the Solidity step VM
-  are pinned to (the cross-stack corpora would all have to be
-  regenerated);
-* making the encoder fail-closed changes `encode`'s signature from
-  total `Stream` to a fallible one, touching every encoder in the
-  ladder; and
-* enforcing `balance < 2^64` as a kernel-level invariant adds a
-  precondition to every balance-mutating law and changes what
-  `Reachable` admits.
+**Landed (this pass): the encoding foundation, fully proved.**
 
-The right owner is a scoped workstream that picks one of these
-deliberately.  Recording it here rather than half-fixing it.
+* `Encoding/CBOR.lean` — `cbeTagAmount = 0x01` (previously unused in
+  the tag space `{0x00 uint, 0x02 bytes, 0x03 text, 0x04 array,
+  0x05 map}`), plus `cborAmountHeadEncode` / `cborAmountHeadDecode`: a
+  17-byte head (tag + 16 LE body).  Theorems:
+  `cborAmountHeadEncode_length`, `cborAmountHeadRoundtrip{,_append}`,
+  `cborAmountHeadEncode_injective`, and
+  `cborAmountHeadEncode_ne_cborHeadEncode` (tag-disjointness, which is
+  what stops a widened amount field aliasing an identifier field).
+* `Encoding/Encodable.lean` — `encodeAmount` / `decodeAmount` with
+  `amount_roundtrip{,_empty}`, `encodeAmount_injective` (bound `2^128`),
+  and `encodeAmount_ne_encodeNat`.
+* `Encoding/State.lean` — `encodeSortedAmountPairs`,
+  `decodeNAmountPairs`, `decodeAmountMap`: the amount-valued map
+  combinators `BalanceMap` will use.
+* `Test/Encoding/Injectivity.lean` — four pins, including
+  `amount head separates values colliding mod 2^64`, which asserts
+  BOTH that the 8-byte head collides on `100` vs `100 + 2^64` and that
+  the 128-bit head separates them.
+
+Identifiers, nonces, constructor tags and length prefixes deliberately
+stay on the 8-byte head: they are `UInt64`-typed or structurally
+bounded, so widening them would cost wire size and add a canonicality
+obligation for nothing.
+
+**Remaining: the migration itself.**  Measured surface —
+
+* 407 `Encodable.encode (T := Amount|Nat)` call sites across
+  `Encoding/{Action,Event,State,Disputes}.lean`, each needing the
+  judgment "is this field an amount (→ `encodeAmount`) or an
+  identifier / nonce / tag / length (→ unchanged)";
+* 298 `256 ^ 8` bounds across ten `Encoding/*.lean` files, each
+  needing the same judgment to decide whether it becomes `256 ^ 16`;
+* the Rust decoders (`knomosis-indexer::decoder`,
+  `knomosis-event-subscribe`, `knomosis-l1-ingest`) which currently
+  assume `HEAD_LEN = 9` for every field;
+* the Solidity step-VM `_stepXX` field decoders;
+* every cross-stack fixture corpus, regenerated; and
+* `docs/abi.md` §4 / §5, which documents the 9-byte head per field.
+
+**This must land atomically.**  `Amount` is an `abbrev` for `Nat`, so
+any site left on `Encodable.encode (T := Amount)` silently keeps the
+narrow codec.  A migration that moves some amount fields and not
+others produces a *mixed-width* encoder — a new consensus split, and
+strictly worse than the current uniform bug.  That is why the
+foundation above is purely additive and no existing encoder was
+switched: the tree stays consistent and green until the migration
+lands in one piece.
 
 ---
 

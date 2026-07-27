@@ -537,6 +537,56 @@ def decodeMap {K V : Type} [Encodable K] [Encodable V]
     | .error e => .error e
   | .error e => .error e
 
+/-! ## Amount-valued maps (128-bit values)
+
+A balance map's VALUES are amounts and so ride the 17-byte
+`cbeTagAmount` head, while its KEYS are `ActorId`s and stay on the
+8-byte uint head.  `encodeSortedPairs` / `decodeMap` are homogeneous in
+the value codec (both sides go through `Encodable`), so the amount
+case gets its own pair of combinators rather than a widened `Encodable
+Nat` — widening that instance would drag every identifier, nonce, tag
+and length prefix to 17 bytes for no benefit. -/
+
+/-- Encode a sorted `(key, amount)` pair list: `cbeTagMap` head, then
+    each key on the 8-byte uint head and each value on the 17-byte
+    amount head.  Mirrors `encodeSortedPairs` exactly but for the value
+    encoder. -/
+def encodeSortedAmountPairs (pairs : List (Nat × Nat)) : Stream :=
+  cborHeadEncode cbeTagMap pairs.length ++
+    pairs.foldr (fun p acc =>
+      Encodable.encode p.1 ++ encodeAmount p.2 ++ acc) []
+
+/-- Decode `n` `(key, amount)` pairs.  The amount-valued counterpart of
+    `decodeNPairs`. -/
+def decodeNAmountPairs :
+    Nat → Stream → Except DecodeError (List (Nat × Nat) × Stream)
+  | 0,     s => .ok ([], s)
+  | k + 1, s =>
+    match Encodable.decode (T := Nat) s with
+    | .ok (key, rest) =>
+      match decodeAmount rest with
+      | .ok (val, rest') =>
+        match decodeNAmountPairs k rest' with
+        | .ok (tl, rest'') => .ok ((key, val) :: tl, rest'')
+        | .error e         => .error e
+      | .error e => .error e
+    | .error e => .error e
+
+/-- Decode an amount-valued CBE map, enforcing the same
+    strictly-ascending-key canonicality rule as `decodeMap`. -/
+def decodeAmountMap (s : Stream) :
+    Except DecodeError (List (Nat × Nat) × Stream) :=
+  match cborHeadDecode s cbeTagMap with
+  | .ok (count, rest) =>
+    match decodeNAmountPairs count rest with
+    | .ok (pairs, rest') =>
+      if keysStrictlyAscending compare pairs then
+        .ok (pairs, rest')
+      else
+        .error (.nonCanonical "map keys must be strictly ascending")
+    | .error e => .error e
+  | .error e => .error e
+
 /-! ## State encoding
 
 A `State` is encoded as a CBE map of `ResourceId → (CBE map of

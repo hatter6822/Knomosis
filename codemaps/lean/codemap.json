@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c65084eb4dbc26d53ca6b9fbbb5dd1282b0b8c252e3d44f85167a815e98078d1"
+    "source_digest": "bb3aaad1114e62e3fadd2280d66ef404142209a09f0424efe03b5eb22dee59af"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5179
+    "declaration_count": 5200
   },
   "modules": [
     {
@@ -16124,7 +16124,7 @@
     {
       "module": "LegalKernel.Encoding.CBOR",
       "path": "LegalKernel/Encoding/CBOR.lean",
-      "declaration_count": 20,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "namespace",
@@ -16152,38 +16152,44 @@
         },
         {
           "kind": "abbrev",
+          "name": "cbeTagAmount",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "abbrev",
           "name": "cbeTagBytes",
-          "line": 110,
+          "line": 131,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagText",
-          "line": 113,
+          "line": 134,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagArray",
-          "line": 116,
+          "line": 137,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagMap",
-          "line": 119,
+          "line": 140,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "Stream",
-          "line": 132,
+          "line": 153,
           "called": []
         },
         {
           "kind": "def",
           "name": "natToBytesLE",
-          "line": 143,
+          "line": 164,
           "called": [
             "Stream"
           ]
@@ -16191,7 +16197,7 @@
         {
           "kind": "theorem",
           "name": "natToBytesLE_length",
-          "line": 148,
+          "line": 169,
           "called": [
             "natToBytesLE"
           ]
@@ -16199,7 +16205,7 @@
         {
           "kind": "def",
           "name": "natFromBytesLE",
-          "line": 157,
+          "line": 178,
           "called": [
             "DecodeError",
             "Stream"
@@ -16208,13 +16214,13 @@
         {
           "kind": "theorem",
           "name": "nat_lt_256_toUInt8_toNat_eq",
-          "line": 184,
+          "line": 205,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "natFromBytesLE_natToBytesLE",
-          "line": 192,
+          "line": 213,
           "called": [
             "natFromBytesLE",
             "natToBytesLE",
@@ -16224,7 +16230,7 @@
         {
           "kind": "def",
           "name": "cborHeadEncode",
-          "line": 244,
+          "line": 265,
           "called": [
             "Stream",
             "natToBytesLE"
@@ -16233,7 +16239,7 @@
         {
           "kind": "def",
           "name": "cborHeadDecode",
-          "line": 257,
+          "line": 278,
           "called": [
             "DecodeError",
             "Stream",
@@ -16243,7 +16249,7 @@
         {
           "kind": "theorem",
           "name": "natFromBytesLE_append_natToBytesLE",
-          "line": 270,
+          "line": 291,
           "called": [
             "Stream",
             "natFromBytesLE",
@@ -16254,7 +16260,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadRoundtrip",
-          "line": 298,
+          "line": 319,
           "called": [
             "cborHeadDecode",
             "cborHeadEncode",
@@ -16264,7 +16270,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadRoundtrip_append",
-          "line": 309,
+          "line": 330,
           "called": [
             "Stream",
             "cborHeadDecode",
@@ -16273,9 +16279,82 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "cborAmountHeadEncode",
+          "line": 352,
+          "called": [
+            "Stream",
+            "cbeTagAmount",
+            "natToBytesLE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cborAmountHeadDecode",
+          "line": 362,
+          "called": [
+            "DecodeError",
+            "Stream",
+            "cbeTagAmount",
+            "natFromBytesLE"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cborAmountHeadEncode_length",
+          "line": 373,
+          "called": [
+            "cborAmountHeadEncode",
+            "natToBytesLE_length"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cborAmountHeadRoundtrip_append",
+          "line": 380,
+          "called": [
+            "Stream",
+            "cborAmountHeadDecode",
+            "cborAmountHeadEncode",
+            "natFromBytesLE_append_natToBytesLE"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cborAmountHeadRoundtrip",
+          "line": 388,
+          "called": [
+            "cborAmountHeadDecode",
+            "cborAmountHeadEncode",
+            "cborAmountHeadRoundtrip_append"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cborAmountHeadEncode_injective",
+          "line": 396,
+          "called": [
+            "DecodeError",
+            "Stream",
+            "cborAmountHeadEncode",
+            "cborAmountHeadRoundtrip"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cborAmountHeadEncode_ne_cborHeadEncode",
+          "line": 410,
+          "called": [
+            "cbeTagAmount",
+            "cbeTagUint",
+            "cborAmountHeadEncode",
+            "cborHeadEncode"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "cborHeadEncode_injective",
-          "line": 334,
+          "line": 433,
           "called": [
             "DecodeError",
             "Encoding",
@@ -16714,7 +16793,7 @@
     {
       "module": "LegalKernel.Encoding.Encodable",
       "path": "LegalKernel/Encoding/Encodable.lean",
-      "declaration_count": 68,
+      "declaration_count": 74,
       "declarations": [
         {
           "kind": "namespace",
@@ -16862,21 +16941,79 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "encodeAmount",
+          "line": 243,
+          "called": [
+            "Stream",
+            "cborAmountHeadEncode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeAmount",
+          "line": 247,
+          "called": [
+            "DecodeError",
+            "Stream",
+            "cborAmountHeadDecode"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "amount_roundtrip",
+          "line": 252,
+          "called": [
+            "Stream",
+            "cborAmountHeadRoundtrip_append",
+            "decodeAmount",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "amount_roundtrip_empty",
+          "line": 257,
+          "called": [
+            "cborAmountHeadRoundtrip",
+            "decodeAmount",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "encodeAmount_injective",
+          "line": 265,
+          "called": [
+            "cborAmountHeadEncode_injective",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "encodeAmount_ne_encodeNat",
+          "line": 273,
+          "called": [
+            "cborAmountHeadEncode_ne_cborHeadEncode",
+            "encodeAmount"
+          ]
+        },
+        {
           "kind": "structure",
           "name": "BoundedNat",
-          "line": 234,
+          "line": 287,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "BoundedNat",
-          "line": 241,
+          "line": 294,
           "called": []
         },
         {
           "kind": "instance",
           "name": "instEncodableBoundedNat",
-          "line": 253,
+          "line": 306,
           "called": [
             "BoundedNat",
             "Encodable",
@@ -16890,7 +17027,7 @@
         {
           "kind": "theorem",
           "name": "boundedNat_roundtrip",
-          "line": 265,
+          "line": 318,
           "called": [
             "BoundedNat",
             "Stream",
@@ -16903,7 +17040,7 @@
         {
           "kind": "theorem",
           "name": "boundedNat_encode_injective",
-          "line": 280,
+          "line": 333,
           "called": [
             "BoundedNat",
             "DecodeError",
@@ -16914,7 +17051,7 @@
         {
           "kind": "def",
           "name": "encodeBytesList",
-          "line": 295,
+          "line": 348,
           "called": [
             "Stream",
             "cbeTagBytes",
@@ -16924,7 +17061,7 @@
         {
           "kind": "def",
           "name": "decodeBytesList",
-          "line": 300,
+          "line": 353,
           "called": [
             "DecodeError",
             "Stream",
@@ -16935,7 +17072,7 @@
         {
           "kind": "instance",
           "name": "instEncodableByteArray",
-          "line": 310,
+          "line": 363,
           "called": [
             "Encodable",
             "decode",
@@ -16947,31 +17084,31 @@
         {
           "kind": "theorem",
           "name": "byteArray_mk_data_toList_toArray",
-          "line": 320,
+          "line": 373,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_data_toList_length",
-          "line": 328,
+          "line": 381,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "list_take_self_length",
-          "line": 336,
+          "line": 389,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "list_drop_self_length",
-          "line": 343,
+          "line": 396,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_roundtrip",
-          "line": 350,
+          "line": 403,
           "called": [
             "Stream",
             "byteArray_data_toList_length",
@@ -16988,7 +17125,7 @@
         {
           "kind": "theorem",
           "name": "byteArray_roundtrip_empty",
-          "line": 374,
+          "line": 427,
           "called": [
             "byteArray_roundtrip"
           ]
@@ -16996,7 +17133,7 @@
         {
           "kind": "theorem",
           "name": "byteArray_encode_injective",
-          "line": 380,
+          "line": 433,
           "called": [
             "DecodeError",
             "Stream",
@@ -17006,7 +17143,7 @@
         {
           "kind": "def",
           "name": "encodeList",
-          "line": 402,
+          "line": 455,
           "called": [
             "Encodable",
             "Stream",
@@ -17017,7 +17154,7 @@
         {
           "kind": "def",
           "name": "decodeListN",
-          "line": 408,
+          "line": 461,
           "called": [
             "DecodeError",
             "Encodable",
@@ -17027,7 +17164,7 @@
         {
           "kind": "instance",
           "name": "instEncodableList",
-          "line": 418,
+          "line": 471,
           "called": [
             "Encodable",
             "cbeTagArray",
@@ -17041,7 +17178,7 @@
         {
           "kind": "def",
           "name": "ElemRoundtrip",
-          "line": 428,
+          "line": 481,
           "called": [
             "Encodable",
             "Stream"
@@ -17050,7 +17187,7 @@
         {
           "kind": "theorem",
           "name": "decodeListN_encode_foldr",
-          "line": 435,
+          "line": 488,
           "called": [
             "ElemRoundtrip",
             "Encodable",
@@ -17061,7 +17198,7 @@
         {
           "kind": "theorem",
           "name": "list_roundtrip",
-          "line": 450,
+          "line": 503,
           "called": [
             "ElemRoundtrip",
             "Encodable",
@@ -17078,7 +17215,7 @@
         {
           "kind": "def",
           "name": "ElemRoundtripIn",
-          "line": 483,
+          "line": 536,
           "called": [
             "Encodable",
             "Stream"
@@ -17087,7 +17224,7 @@
         {
           "kind": "theorem",
           "name": "decodeListN_encode_foldr_bounded",
-          "line": 490,
+          "line": 543,
           "called": [
             "ElemRoundtripIn",
             "Encodable",
@@ -17098,7 +17235,7 @@
         {
           "kind": "theorem",
           "name": "list_roundtrip_bounded",
-          "line": 513,
+          "line": 566,
           "called": [
             "ElemRoundtripIn",
             "Encodable",
@@ -17115,7 +17252,7 @@
         {
           "kind": "instance",
           "name": "instEncodableOption",
-          "line": 533,
+          "line": 586,
           "called": [
             "Encodable",
             "cbeTagArray",
@@ -17129,7 +17266,7 @@
         {
           "kind": "theorem",
           "name": "option_roundtrip",
-          "line": 549,
+          "line": 602,
           "called": [
             "ElemRoundtrip",
             "Encodable",
@@ -17144,7 +17281,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt8",
-          "line": 585,
+          "line": 638,
           "called": [
             "Encodable",
             "decode",
@@ -17154,7 +17291,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt16",
-          "line": 597,
+          "line": 650,
           "called": [
             "Encodable",
             "decode",
@@ -17164,7 +17301,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt32",
-          "line": 609,
+          "line": 662,
           "called": [
             "Encodable",
             "decode",
@@ -17174,7 +17311,7 @@
         {
           "kind": "instance",
           "name": "instEncodableUInt64",
-          "line": 621,
+          "line": 674,
           "called": [
             "Encodable",
             "decode",
@@ -17184,7 +17321,7 @@
         {
           "kind": "theorem",
           "name": "uInt8_roundtrip",
-          "line": 634,
+          "line": 687,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17193,7 +17330,7 @@
         {
           "kind": "theorem",
           "name": "uInt16_roundtrip",
-          "line": 659,
+          "line": 712,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17202,7 +17339,7 @@
         {
           "kind": "theorem",
           "name": "uInt32_roundtrip",
-          "line": 684,
+          "line": 737,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17211,7 +17348,7 @@
         {
           "kind": "theorem",
           "name": "uInt64_roundtrip",
-          "line": 709,
+          "line": 762,
           "called": [
             "Stream",
             "nat_roundtrip"
@@ -17220,13 +17357,13 @@
         {
           "kind": "namespace",
           "name": "Encodable",
-          "line": 772,
+          "line": 825,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "Encodable_via_decode_inj",
-          "line": 783,
+          "line": 836,
           "called": [
             "DecodeError",
             "Encodable",
@@ -17236,7 +17373,7 @@
         {
           "kind": "theorem",
           "name": "Encodable_via_decode_inj_append",
-          "line": 801,
+          "line": 854,
           "called": [
             "Encodable",
             "Encodable_via_decode_inj",
@@ -17246,7 +17383,7 @@
         {
           "kind": "theorem",
           "name": "encodeAsBytes_eq_injective_of_encode_eq_injective",
-          "line": 841,
+          "line": 894,
           "called": [
             "Stream",
             "encode"
@@ -17255,7 +17392,7 @@
         {
           "kind": "theorem",
           "name": "uInt8_encode_injective",
-          "line": 867,
+          "line": 920,
           "called": [
             "Stream",
             "uInt8_roundtrip"
@@ -17264,7 +17401,7 @@
         {
           "kind": "theorem",
           "name": "uInt16_encode_injective",
-          "line": 873,
+          "line": 926,
           "called": [
             "Stream",
             "uInt16_roundtrip"
@@ -17273,7 +17410,7 @@
         {
           "kind": "theorem",
           "name": "uInt32_encode_injective",
-          "line": 879,
+          "line": 932,
           "called": [
             "Stream",
             "uInt32_roundtrip"
@@ -17282,7 +17419,7 @@
         {
           "kind": "theorem",
           "name": "uInt64_encode_injective",
-          "line": 885,
+          "line": 938,
           "called": [
             "Stream",
             "uInt64_roundtrip"
@@ -17291,7 +17428,7 @@
         {
           "kind": "theorem",
           "name": "list_encode_injective",
-          "line": 903,
+          "line": 956,
           "called": [
             "DecodeError",
             "ElemRoundtrip",
@@ -17303,7 +17440,7 @@
         {
           "kind": "theorem",
           "name": "option_encode_injective",
-          "line": 926,
+          "line": 979,
           "called": [
             "DecodeError",
             "ElemRoundtrip",
@@ -17315,13 +17452,13 @@
         {
           "kind": "namespace",
           "name": "Encodable",
-          "line": 962,
+          "line": 1015,
           "called": []
         },
         {
           "kind": "class",
           "name": "HasInjective",
-          "line": 968,
+          "line": 1021,
           "called": [
             "Encodable",
             "Stream"
@@ -17330,13 +17467,13 @@
         {
           "kind": "namespace",
           "name": "HasInjective",
-          "line": 973,
+          "line": 1026,
           "called": []
         },
         {
           "kind": "instance",
           "name": "instBool",
-          "line": 976,
+          "line": 1029,
           "called": [
             "HasInjective",
             "bool_encode_injective"
@@ -17345,7 +17482,7 @@
         {
           "kind": "instance",
           "name": "instBoundedNat",
-          "line": 981,
+          "line": 1034,
           "called": [
             "BoundedNat",
             "HasInjective",
@@ -17355,7 +17492,7 @@
         {
           "kind": "instance",
           "name": "instUInt8",
-          "line": 985,
+          "line": 1038,
           "called": [
             "HasInjective",
             "uInt8_encode_injective"
@@ -17364,7 +17501,7 @@
         {
           "kind": "instance",
           "name": "instUInt16",
-          "line": 989,
+          "line": 1042,
           "called": [
             "HasInjective",
             "uInt16_encode_injective"
@@ -17373,7 +17510,7 @@
         {
           "kind": "instance",
           "name": "instUInt32",
-          "line": 993,
+          "line": 1046,
           "called": [
             "HasInjective",
             "uInt32_encode_injective"
@@ -17382,7 +17519,7 @@
         {
           "kind": "instance",
           "name": "instUInt64",
-          "line": 999,
+          "line": 1052,
           "called": [
             "Encodable",
             "Encoding",
@@ -18386,7 +18523,7 @@
     {
       "module": "LegalKernel.Encoding.State",
       "path": "LegalKernel/Encoding/State.lean",
-      "declaration_count": 63,
+      "declaration_count": 66,
       "declarations": [
         {
           "kind": "namespace",
@@ -18516,8 +18653,42 @@
         },
         {
           "kind": "def",
+          "name": "encodeSortedAmountPairs",
+          "line": 553,
+          "called": [
+            "Stream",
+            "cbeTagMap",
+            "cborHeadEncode",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeNAmountPairs",
+          "line": 560,
+          "called": [
+            "DecodeError",
+            "Stream",
+            "decodeAmount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeAmountMap",
+          "line": 576,
+          "called": [
+            "DecodeError",
+            "Stream",
+            "cbeTagMap",
+            "cborHeadDecode",
+            "decodeNAmountPairs",
+            "keysStrictlyAscending"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "BalanceMap.encode",
-          "line": 558,
+          "line": 608,
           "called": [
             "BalanceMap",
             "Stream",
@@ -18527,7 +18698,7 @@
         {
           "kind": "def",
           "name": "BalanceMap.encodeAsBytes",
-          "line": 576,
+          "line": 626,
           "called": [
             "BalanceMap",
             "BalanceMap.encode"
@@ -18536,7 +18707,7 @@
         {
           "kind": "def",
           "name": "State.encode",
-          "line": 585,
+          "line": 635,
           "called": [
             "BalanceMap.encodeAsBytes",
             "State",
@@ -18547,7 +18718,7 @@
         {
           "kind": "def",
           "name": "BalanceMap.decode",
-          "line": 594,
+          "line": 644,
           "called": [
             "ActorId",
             "Amount",
@@ -18560,7 +18731,7 @@
         {
           "kind": "def",
           "name": "State.decode",
-          "line": 609,
+          "line": 659,
           "called": [
             "BalanceMap",
             "BalanceMap.decode",
@@ -18575,7 +18746,7 @@
         {
           "kind": "instance",
           "name": "instEncodableState",
-          "line": 627,
+          "line": 677,
           "called": [
             "Encodable",
             "State",
@@ -18588,7 +18759,7 @@
         {
           "kind": "def",
           "name": "NonceState.encode",
-          "line": 640,
+          "line": 690,
           "called": [
             "NonceState",
             "Stream",
@@ -18598,7 +18769,7 @@
         {
           "kind": "def",
           "name": "KeyRegistry.encodeMap",
-          "line": 644,
+          "line": 694,
           "called": [
             "KeyRegistry",
             "Stream",
@@ -18608,7 +18779,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.encode",
-          "line": 679,
+          "line": 729,
           "called": [
             "Stream"
           ]
@@ -18616,7 +18787,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.decode",
-          "line": 687,
+          "line": 737,
           "called": [
             "DecodeError",
             "Stream"
@@ -18625,7 +18796,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.encodeAsBytes",
-          "line": 718,
+          "line": 768,
           "called": [
             "Bridge.DepositRecord.encode"
           ]
@@ -18633,7 +18804,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encodeConsumed",
-          "line": 723,
+          "line": 773,
           "called": [
             "Bridge.DepositRecord.encodeAsBytes",
             "Stream",
@@ -18643,7 +18814,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.encode",
-          "line": 735,
+          "line": 785,
           "called": [
             "Stream"
           ]
@@ -18651,7 +18822,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.encodeAsBytes",
-          "line": 749,
+          "line": 799,
           "called": [
             "Bridge.PendingWithdrawal.encode"
           ]
@@ -18659,7 +18830,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.decode",
-          "line": 754,
+          "line": 804,
           "called": [
             "DecodeError",
             "Stream"
@@ -18668,7 +18839,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encodePending",
-          "line": 783,
+          "line": 833,
           "called": [
             "Bridge.PendingWithdrawal.encodeAsBytes",
             "Stream",
@@ -18678,7 +18849,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encode",
-          "line": 797,
+          "line": 847,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending",
@@ -18688,7 +18859,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decodeConsumed",
-          "line": 810,
+          "line": 860,
           "called": [
             "Bridge.DepositRecord.decode",
             "DecodeError",
@@ -18700,7 +18871,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decodePending",
-          "line": 829,
+          "line": 879,
           "called": [
             "Bridge.PendingWithdrawal.decode",
             "DecodeError",
@@ -18712,7 +18883,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decode",
-          "line": 850,
+          "line": 900,
           "called": [
             "Bridge.BridgeState.decodeConsumed",
             "Bridge.BridgeState.decodePending",
@@ -18723,7 +18894,7 @@
         {
           "kind": "instance",
           "name": "instEncodableBridgeState",
-          "line": 891,
+          "line": 941,
           "called": [
             "Bridge.BridgeState.decode",
             "Bridge.BridgeState.encode",
@@ -18735,7 +18906,7 @@
         {
           "kind": "def",
           "name": "ActorBudget.encode",
-          "line": 896,
+          "line": 946,
           "called": [
             "ActorBudget",
             "Stream"
@@ -18744,7 +18915,7 @@
         {
           "kind": "def",
           "name": "ActorBudget.decode",
-          "line": 901,
+          "line": 951,
           "called": [
             "ActorBudget",
             "DecodeError",
@@ -18754,7 +18925,7 @@
         {
           "kind": "instance",
           "name": "instEncodableActorBudget",
-          "line": 910,
+          "line": 960,
           "called": [
             "ActorBudget",
             "ActorBudget.decode",
@@ -18767,7 +18938,7 @@
         {
           "kind": "def",
           "name": "BudgetPolicy.encode",
-          "line": 916,
+          "line": 966,
           "called": [
             "BudgetPolicy",
             "Stream",
@@ -18778,7 +18949,7 @@
         {
           "kind": "def",
           "name": "BudgetPolicy.decode",
-          "line": 924,
+          "line": 974,
           "called": [
             "BudgetPolicy",
             "DecodeError",
@@ -18790,7 +18961,7 @@
         {
           "kind": "instance",
           "name": "instEncodableBudgetPolicy",
-          "line": 943,
+          "line": 993,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.decode",
@@ -18803,7 +18974,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_roundtrip",
-          "line": 972,
+          "line": 1022,
           "called": [
             "ActorBudget",
             "ActorBudget.decode",
@@ -18815,7 +18986,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_encode_injective",
-          "line": 991,
+          "line": 1041,
           "called": [
             "ActorBudget",
             "ActorBudget.encode",
@@ -18827,7 +18998,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_bounded_roundtrip",
-          "line": 1014,
+          "line": 1064,
           "called": [
             "BudgetPolicy.decode",
             "BudgetPolicy.encode",
@@ -18840,7 +19011,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_encode_injective",
-          "line": 1049,
+          "line": 1099,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.encode",
@@ -18852,7 +19023,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.encode",
-          "line": 1079,
+          "line": 1129,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.encode",
@@ -18870,7 +19041,7 @@
         {
           "kind": "def",
           "name": "NonceState.decode",
-          "line": 1091,
+          "line": 1141,
           "called": [
             "ActorId",
             "DecodeError",
@@ -18883,7 +19054,7 @@
         {
           "kind": "def",
           "name": "KeyRegistry.decodeMap",
-          "line": 1101,
+          "line": 1151,
           "called": [
             "ActorId",
             "DecodeError",
@@ -18895,7 +19066,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.decode",
-          "line": 1112,
+          "line": 1162,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.decode",
@@ -18913,7 +19084,7 @@
         {
           "kind": "instance",
           "name": "instEncodableExtendedState",
-          "line": 1138,
+          "line": 1188,
           "called": [
             "Encodable",
             "ExtendedState",
@@ -18926,7 +19097,7 @@
         {
           "kind": "theorem",
           "name": "state_encode_deterministic",
-          "line": 1164,
+          "line": 1214,
           "called": [
             "State"
           ]
@@ -18934,7 +19105,7 @@
         {
           "kind": "theorem",
           "name": "balanceMap_encode_deterministic_of_equiv",
-          "line": 1171,
+          "line": 1221,
           "called": [
             "BalanceMap",
             "BalanceMap.encode"
@@ -18943,7 +19114,7 @@
         {
           "kind": "theorem",
           "name": "extendedState_encode_deterministic",
-          "line": 1181,
+          "line": 1231,
           "called": [
             "ExtendedState",
             "es"
@@ -18952,13 +19123,13 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_deterministic",
-          "line": 1192,
+          "line": 1242,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "depositRecord_encode_deterministic",
-          "line": 1200,
+          "line": 1250,
           "called": [
             "Bridge.DepositRecord.encode"
           ]
@@ -18966,7 +19137,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_encode_deterministic",
-          "line": 1206,
+          "line": 1256,
           "called": [
             "Bridge.PendingWithdrawal.encode"
           ]
@@ -18974,7 +19145,7 @@
         {
           "kind": "theorem",
           "name": "depositRecord_roundtrip",
-          "line": 1216,
+          "line": 1266,
           "called": [
             "Bridge.DepositRecord.decode",
             "Bridge.DepositRecord.encode",
@@ -18985,7 +19156,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_roundtrip",
-          "line": 1273,
+          "line": 1323,
           "called": [
             "Bridge.PendingWithdrawal.decode",
             "Bridge.PendingWithdrawal.encode",
@@ -18997,7 +19168,7 @@
         {
           "kind": "theorem",
           "name": "actorId_encode_injective",
-          "line": 1353,
+          "line": 1403,
           "called": [
             "ActorId",
             "Stream",
@@ -19007,7 +19178,7 @@
         {
           "kind": "theorem",
           "name": "resourceId_encode_injective",
-          "line": 1359,
+          "line": 1409,
           "called": [
             "ResourceId",
             "Stream",
@@ -19017,7 +19188,7 @@
         {
           "kind": "theorem",
           "name": "amount_encode_injective",
-          "line": 1365,
+          "line": 1415,
           "called": [
             "Amount",
             "nat_encode_injective"
@@ -19026,7 +19197,7 @@
         {
           "kind": "theorem",
           "name": "nonce_encode_injective",
-          "line": 1374,
+          "line": 1424,
           "called": [
             "Nonce",
             "nat_encode_injective"
@@ -19035,7 +19206,7 @@
         {
           "kind": "theorem",
           "name": "depositId_encode_injective",
-          "line": 1383,
+          "line": 1433,
           "called": [
             "nat_encode_injective"
           ]
@@ -19043,7 +19214,7 @@
         {
           "kind": "theorem",
           "name": "withdrawalId_encode_injective",
-          "line": 1393,
+          "line": 1443,
           "called": [
             "nat_encode_injective"
           ]
@@ -19051,7 +19222,7 @@
         {
           "kind": "theorem",
           "name": "publicKey_encode_injective",
-          "line": 1406,
+          "line": 1456,
           "called": [
             "Encoding",
             "LegalKernel",
@@ -46308,7 +46479,7 @@
     {
       "module": "LegalKernel.Test.Encoding.Injectivity",
       "path": "LegalKernel/Test/Encoding/Injectivity.lean",
-      "declaration_count": 102,
+      "declaration_count": 106,
       "declarations": [
         {
           "kind": "namespace",
@@ -47411,8 +47582,52 @@
         },
         {
           "kind": "def",
+          "name": "test_amountHead_separates_the_2_64_collision",
+          "line": 1674,
+          "called": [
+            "TestCase",
+            "assert",
+            "assertEq",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "test_amountHead_roundtrips_above_2_64",
+          "line": 1692,
+          "called": [
+            "Stream",
+            "TestCase",
+            "assertEq",
+            "decodeAmount",
+            "encodeAmount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "test_amountHead_never_aliases_uint_head",
+          "line": 1706,
+          "called": [
+            "TestCase",
+            "assert",
+            "encodeAmount",
+            "encodeAmount_ne_encodeNat"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "test_encodeAmount_injective_api",
+          "line": 1719,
+          "called": [
+            "TestCase",
+            "encodeAmount",
+            "encodeAmount_injective"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 1666,
+          "line": 1731,
           "called": [
             "InjectivityTests",
             "LegalKernel.Test.Encoding",
@@ -47422,6 +47637,9 @@
             "fixtureSingletonShape",
             "fixtureThreeShape",
             "test_HasInjective_instances",
+            "test_amountHead_never_aliases_uint_head",
+            "test_amountHead_roundtrips_above_2_64",
+            "test_amountHead_separates_the_2_64_collision",
             "test_balanceMap_encodeAsBytes_distinguishes",
             "test_balanceMap_encodeAsBytes_injective_api",
             "test_balanceMap_encode_distinguishes_actor",
@@ -47450,6 +47668,7 @@
             "test_depositRecord_roundtrip_value",
             "test_encodable_via_decode_inj_api",
             "test_encodable_via_decode_inj_append_api",
+            "test_encodeAmount_injective_api",
             "test_encodeAsBytes_distinguishes",
             "test_encodeAsBytes_eq_injective_api",
             "test_encodeAsBytes_equiv_injective_api",

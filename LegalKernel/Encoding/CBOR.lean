@@ -107,6 +107,27 @@ encoders / decoders use them directly. -/
 /-- Type byte for a CBE unsigned integer (canonical CBOR major type 0). -/
 abbrev cbeTagUint  : UInt8 := 0x00
 
+/-- Type byte for a CBE **128-bit amount** — a value-carrying uint with a
+    16-byte little-endian body instead of the 8-byte body `cbeTagUint`
+    uses.
+
+    Amounts are the only CBE field that legitimately exceeds `2^64`: a
+    balance denominated in wei passes that bound at ~18.45 ETH, and
+    balances additionally *accumulate*, so no gate on individual input
+    amounts can keep a stored balance inside a 64-bit body.  Encoding an
+    out-of-range value through the 8-byte head silently truncated it
+    modulo `2^64`, which made `State.encode` — and therefore the L1 state
+    root — non-injective on ordinary reachable states (two balances
+    differing by exactly `2^64` committed to the same root).
+
+    Identifiers (`ActorId` / `ResourceId`), nonces, constructor tags and
+    every length prefix stay on the 8-byte `cbeTagUint` head: they are
+    `UInt64`-typed or structurally bounded, so widening them would cost
+    wire size and add a canonicality obligation for no benefit.  The
+    distinct tag keeps the two forms unambiguous for a decoder that knows
+    which shape a field should have. -/
+abbrev cbeTagAmount : UInt8 := 0x01
+
 /-- Type byte for a CBE byte string (canonical CBOR major type 2). -/
 abbrev cbeTagBytes : UInt8 := 0x02
 
@@ -313,6 +334,84 @@ theorem cborHeadRoundtrip_append (major : UInt8) (n : Nat) (rest : Stream)
   unfold cborHeadEncode cborHeadDecode
   simp
   exact natFromBytesLE_append_natToBytesLE n 8 rest h
+
+/-! ## The 128-bit amount head
+
+The `cbeTagAmount` counterpart of `cborHeadEncode` / `cborHeadDecode`:
+a 17-byte head (tag byte + 16 little-endian body bytes) carrying a
+value in `[0, 2^128)`.  Everything below mirrors the 8-byte head
+exactly — the underlying `natToBytesLE` / `natFromBytesLE` helpers are
+already width-parametric, so the width is the only difference. -/
+
+/-- Encode a 128-bit CBE amount head: the `cbeTagAmount` type byte
+    followed by 16 little-endian body bytes.
+
+    Total, and lossy only above `2^128` — a bound no balance
+    denominated in any real unit can approach (the entire ETH supply is
+    ~`1.2e26` wei, about `2^87`), unlike the `2^64` bound of the 8-byte
+    head which ordinary wei balances cross at ~18.45 ETH. -/
+def cborAmountHeadEncode (n : Nat) : Stream :=
+  cbeTagAmount :: natToBytesLE n 16
+
+/-- Decode a 128-bit CBE amount head.  Rejects a tag byte that is not
+    `cbeTagAmount` (`invalidMajorType`) and inputs shorter than 17 bytes
+    (`unexpectedEof`).
+
+    As with the 8-byte head, no non-canonicality check is needed: the
+    fixed-width body gives exactly one byte sequence per value in
+    `[0, 2^128)`. -/
+def cborAmountHeadDecode (s : Stream) :
+    Except DecodeError (Nat × Stream) :=
+  match s with
+  | []       => .error .unexpectedEof
+  | b :: rest =>
+    if b != cbeTagAmount then
+      .error (.invalidMajorType b cbeTagAmount)
+    else
+      natFromBytesLE rest 16
+
+/-- The amount head is 17 bytes wide. -/
+theorem cborAmountHeadEncode_length (n : Nat) :
+    (cborAmountHeadEncode n).length = 17 := by
+  unfold cborAmountHeadEncode
+  simp [natToBytesLE_length]
+
+/-- Amount-head round-trip with a suffix: for `n < 2^128`, decoding
+    `cborAmountHeadEncode n ++ rest` returns `(n, rest)`. -/
+theorem cborAmountHeadRoundtrip_append (n : Nat) (rest : Stream)
+    (h : n < 256 ^ 16) :
+    cborAmountHeadDecode (cborAmountHeadEncode n ++ rest) = .ok (n, rest) := by
+  unfold cborAmountHeadEncode cborAmountHeadDecode
+  simp
+  exact natFromBytesLE_append_natToBytesLE n 16 rest h
+
+/-- Amount-head round-trip with no suffix. -/
+theorem cborAmountHeadRoundtrip (n : Nat) (h : n < 256 ^ 16) :
+    cborAmountHeadDecode (cborAmountHeadEncode n) = .ok (n, []) := by
+  have := cborAmountHeadRoundtrip_append n [] h
+  simpa using this
+
+/-- Amount-head injectivity: two in-range values with equal encodings
+    are equal.  The `EI.1`-tier lemma the amount-carrying encoders build
+    on, exactly as `cborHeadEncode_injective` serves the 8-byte head. -/
+theorem cborAmountHeadEncode_injective
+    {n₁ n₂ : Nat} (h₁ : n₁ < 256 ^ 16) (h₂ : n₂ < 256 ^ 16)
+    (h : cborAmountHeadEncode n₁ = cborAmountHeadEncode n₂) : n₁ = n₂ := by
+  have d₁ := cborAmountHeadRoundtrip n₁ h₁
+  have d₂ := cborAmountHeadRoundtrip n₂ h₂
+  rw [h] at d₁
+  have heq : (Except.ok (n₁, ([] : Stream)) : Except DecodeError (Nat × Stream))
+           = Except.ok (n₂, []) := d₁.symm.trans d₂
+  exact (Prod.mk.injEq _ _ _ _).mp (Except.ok.inj heq) |>.1
+
+/-- A 128-bit amount head never collides with an 8-byte uint head: the
+    leading type byte differs (`cbeTagAmount` vs `cbeTagUint`).  This is
+    what lets a decoder keep the two forms apart, and what stops a
+    widened amount field from aliasing an identifier field. -/
+theorem cborAmountHeadEncode_ne_cborHeadEncode (n₁ n₂ : Nat) :
+    cborAmountHeadEncode n₁ ≠ cborHeadEncode cbeTagUint n₂ := by
+  unfold cborAmountHeadEncode cborHeadEncode
+  simp [cbeTagAmount, cbeTagUint]
 
 /-! ## CBE-head injectivity (EI.1.c)
 
