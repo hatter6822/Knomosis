@@ -581,7 +581,7 @@ better code is correct.
   | Lean kernel    | `lakefile.lean` `version` + `LegalKernel.lean` `kernelVersion` |
   | Rust workspace | `runtime/Cargo.toml` `[workspace.package] version` |
   | Solidity       | `solidity/foundry.toml` (if `version` present)   |
-  | README banner  | `README.md` top-of-file `**Version:** vX.Y.Z`    |
+  | README banner  | `README.md` version badge URL + the `| Version |` table row |
 
   Lean and Rust versions are bumped in lockstep to the same value in
   every PR.  Use semver: patch (default) for bug fixes / refactors /
@@ -761,7 +761,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.10.2`) — the single
+the `lakefile.lean` `version` field (currently `0.10.3`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the

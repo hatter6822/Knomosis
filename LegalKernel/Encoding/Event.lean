@@ -20,7 +20,7 @@ it; `knomosis-event-subscribe::event_type` peeks its leading tag)
 but had no Lean-side authority.  This module IS that authority.
 
 **Layout.**  Each `Event` is encoded as a constructor-tag uint
-(matching `Event.tag`, frozen indices 0..20) followed by the
+(matching `Event.tag`, frozen indices 0..22) followed by the
 constructor's fields in declaration order, mirroring
 `Encoding.Action.encode`:
 

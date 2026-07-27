@@ -931,6 +931,15 @@ fn insert_header(headers: &mut HeaderSet, name: &str, value: &str) -> Result<(),
         if value.contains(',') {
             return Err(reject(400, "Bad Request", "multiple Content-Length values"));
         }
+        // RFC 7230 §3.3.2: `Content-Length = 1*DIGIT`.  A sign is NOT a
+        // digit, but `str::parse::<u64>` accepts a leading `+` (so a bare
+        // `parse` would read `+5` as 5).  An edge proxy that rejects — or
+        // normalises — such a value while this reader silently accepts it
+        // is exactly the framing disagreement that enables request
+        // smuggling, so validate the digits explicitly before parsing.
+        if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(reject(400, "Bad Request", "malformed Content-Length"));
+        }
         let n = value
             .parse::<u64>()
             .map_err(|_| reject(400, "Bad Request", "malformed Content-Length"))?;
@@ -1315,6 +1324,38 @@ mod tests {
             parse(raw, 1024),
             Err(RequestError::Reject { status: 400, .. })
         ));
+    }
+
+    /// RFC 7230 §3.3.2 restricts `Content-Length` to `1*DIGIT`.  A signed
+    /// or otherwise non-digit value must be rejected rather than coerced:
+    /// `str::parse::<u64>` accepts a leading `+`, so a bare `parse` would
+    /// read `+5` as 5 and frame the body differently from an edge proxy
+    /// that rejects the same header — a request-smuggling desync.
+    /// Note: surrounding optional whitespace is NOT a violation — RFC 7230
+    /// §3.2.4 strips OWS from the field value, and `read_headers` trims
+    /// before this check, so `Content-Length:  5` is a valid 5.
+    #[test]
+    fn rejects_non_digit_content_length() {
+        for value in ["+5", "-5", "5.0", "0x5", "5e0", ""] {
+            let raw = format!("POST /v1/actions HTTP/1.1\r\nContent-Length: {value}\r\n\r\nhello");
+            assert!(
+                matches!(
+                    parse(raw.as_bytes(), 1024),
+                    Err(RequestError::Reject { status: 400, .. })
+                ),
+                "Content-Length: {value:?} must be rejected 400"
+            );
+        }
+    }
+
+    /// Leading zeros ARE legal `1*DIGIT` (RFC 7230 §3.3.2), so `007` must
+    /// still frame a 7-byte body rather than being rejected alongside the
+    /// signed forms above.
+    #[test]
+    fn accepts_zero_padded_content_length() {
+        let raw = b"POST /v1/actions HTTP/1.1\r\nContent-Length: 007\r\n\r\n1234567";
+        let parsed = parse(raw, 1024).expect("zero-padded Content-Length is valid");
+        assert_eq!(parsed.body, b"1234567");
     }
 
     #[test]

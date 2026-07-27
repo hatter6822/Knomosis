@@ -11,9 +11,10 @@
 LegalKernel.Test.Encoding.Event — tests for the §8.9.2 `Event` CBE
 codec (`LegalKernel/Encoding/Event.lean`).
 
-Covers: a per-constructor encode→decode round-trip sweep (all 21
-frozen constructors 0..20, including the GP.6.4 `budgetConsumed` at
-tag 20), non-circular byte-layout pins for the leading tag head +
+Covers: a per-constructor encode→decode round-trip sweep (all 23
+frozen constructors 0..22, including the GP.6.4 `budgetConsumed` at
+tag 20 and the GP.11.4 / GP.11.10 AMM pair at tags 21/22),
+non-circular byte-layout pins for the leading tag head +
 the Workstream-GP gas-pool family, value-level tag-agreement checks
 (complementing the `Event.tag_matches_encode_tag` theorem),
 constructor distinctness, and API-stability term checks.
@@ -38,9 +39,17 @@ def sampleAddr : Bridge.EthAddress :=
                       11, 12, 13, 14, 15, 16, 17, 18, 19, 20])).getD
     Bridge.EthAddress.zero
 
-/-- The 21 representative events, one per frozen constructor
-    (tags 0..20).  The tag-20 `budgetConsumed` entry was added
-    by GP.6.4. -/
+/-- The 23 representative events, one per frozen constructor
+    (tags 0..22).  The tag-20 `budgetConsumed` entry was added
+    by GP.6.4; the tag-21 `ammSwapExecuted` and tag-22
+    `ammReservesReclaimed` entries by GP.11.4 / GP.11.10.
+
+    Every sweep below iterates this list, so an entry missing here
+    silently removes a constructor from the round-trip, leading-head,
+    determinism, and distinctness suites at once.  `requiredTag`
+    guards against exactly that: it is total over `Event`, so a new
+    constructor fails to elaborate until it is handled there, and
+    `roundtripCoversAllTags` cross-checks this list against it. -/
 def sampleEvents : List Event :=
   [ .balanceChanged 7 42 100 250
   , .nonceAdvanced 9 0 1
@@ -62,7 +71,46 @@ def sampleEvents : List Event :=
   , .actionBudgetTopUp 7 0 500 10 1
   , .gasPoolClaim 0 2 250
   , .delegatedActionBudgetTopUp 9 7 0 500 10 1
-  , .budgetConsumed 42 1 ]
+  , .budgetConsumed 42 1
+  , .ammSwapExecuted 0 1 1000 995 77
+  , .ammReservesReclaimed 0 5000 77 88 ]
+
+/-- The frozen tag every `Event` constructor must carry, spelled out
+    by hand rather than read back from `Event.tag` — so this table is
+    a NON-CIRCULAR pin: a renumbering of `Event.tag` disagrees with it
+    and fails `roundtripCoversAllTags`.
+
+    The match is total over `Event`, which is the structural half of
+    the guard: adding a constructor to the inductive without adding an
+    arm here is an elaboration error in this file, and the resulting
+    build failure is what forces `sampleEvents` above to be extended
+    in the same change.  Before this table existed, `sampleEvents` was
+    pinned only by a hand-maintained `21` and silently omitted the two
+    AMM constructors (tags 21/22) that GP.11.4 / GP.11.10 added. -/
+def requiredTag : Event → Nat
+  | .balanceChanged             .. =>  0
+  | .nonceAdvanced              .. =>  1
+  | .identityRegistered         .. =>  2
+  | .identityRevoked            .. =>  3
+  | .timeRecorded               .. =>  4
+  | .disputeFiled               .. =>  5
+  | .disputeWithdrawn           .. =>  6
+  | .verdictApplied             .. =>  7
+  | .rewardIssued               .. =>  8
+  | .withdrawalRequested        .. =>  9
+  | .depositCredited            .. => 10
+  | .localPolicyDeclared        .. => 11
+  | .localPolicyRevoked         .. => 12
+  | .faultProofGameOpened       .. => 13
+  | .faultProofBisectionStep    .. => 14
+  | .faultProofGameSettled      .. => 15
+  | .depositWithFeeCredited     .. => 16
+  | .actionBudgetTopUp          .. => 17
+  | .gasPoolClaim               .. => 18
+  | .delegatedActionBudgetTopUp .. => 19
+  | .budgetConsumed             .. => 20
+  | .ammSwapExecuted            .. => 21
+  | .ammReservesReclaimed       .. => 22
 
 /-- Assert that `e` encodes and decodes back to itself, consuming
     the whole stream (no trailing bytes). -/
@@ -77,22 +125,30 @@ def assertRoundtrips (e : Event) : IO Unit := do
 
 /-- Every frozen constructor round-trips encode→decode. -/
 def roundtripAllConstructors : TestCase := {
-  name := "Event codec round-trips all 21 constructors"
+  name := "Event codec round-trips all 23 constructors"
   body := do
     for e in sampleEvents do
       assertRoundtrips e
 }
 
-/-- The round-trip sweep covers exactly the 21 frozen tags 0..20,
+/-- The round-trip sweep covers exactly the 23 frozen tags 0..22,
     one event per tag (catches an omitted / duplicated constructor
-    in `sampleEvents`). -/
+    in `sampleEvents`), and each sample's `Event.tag` agrees with the
+    hand-spelled `requiredTag` table (catches a renumbering). -/
 def roundtripCoversAllTags : TestCase := {
-  name := "Event round-trip sweep covers tags 0..20"
+  name := "Event round-trip sweep covers tags 0..22"
   body := do
     let tags := (sampleEvents.map Event.tag)
-    assertEq (21 : Nat) tags.length "sample count"
-    -- Tags are exactly 0..20 in order.
-    assertEq (List.range 21) tags "sample tags are 0..20 in order"
+    assertEq (23 : Nat) tags.length "sample count"
+    -- Tags are exactly 0..22 in order.
+    assertEq (List.range 23) tags "sample tags are 0..22 in order"
+    -- Non-circular cross-check against the total `requiredTag` match:
+    -- `Event.tag` must agree with the independently spelled table, so
+    -- a renumbering of either is caught here rather than silently
+    -- re-pinning both.
+    for e in sampleEvents do
+      assertEq (requiredTag e) (Event.tag e)
+        s!"Event.tag agrees with requiredTag for tag {requiredTag e}"
 }
 
 /-- Non-circular byte-layout pin: `gasPoolClaim 0 2 250` (tag 18)

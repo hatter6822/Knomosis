@@ -13,13 +13,14 @@ the L1 step-VM cross-stack coherence chain.
 
 This module ships three load-bearing pieces:
 
-  1. `actionKindByte : Action → UInt8` — the 0..21 dispatcher byte
+  1. `actionKindByte : Action → UInt8` — the 0..24 dispatcher byte
      that the Solidity `executeStep(actionKind, ...)` consumes.
      Mirrors the `Encoding.Action.encode`'s leading-tag table and
      the `KnomosisStepVM.sol::ActionKind` enum.  (Workstream GP widened
      the range from 0..18 to 0..20 with `depositWithFee` = 19 and
      `topUpActionBudget` = 20; GP.5.3 added `topUpActionBudgetFor` =
-     21.)
+     21; GP.9.1 `claimBudgetRefund` = 22; GP.11.4 `ammSwap` = 23; and
+     GP.11.10 `reclaimAmmReserves` = 24.)
 
   2. `actionFieldsForL1 : Action → ByteArray` — the canonical byte
      layout the Solidity `_stepXX` decoders expect.  For structured
@@ -29,7 +30,7 @@ This module ships three load-bearing pieces:
      simply hashes via `keccak256(actionFields)` without inspecting
      internal structure).
 
-  3. `stepVMHash` — the unified dispatcher over the 22 per-variant
+  3. `stepVMHash` — the unified dispatcher over the 25 per-variant
      `stepCommitXX` functions.  Given `(preCommit, kind, fields,
      signer, bundle)` it produces the same 32-byte output Solidity's
      `KnomosisStepVM.executeStep` would.  This is the load-bearing
@@ -109,7 +110,7 @@ per-variant choice).**  A bisection-game terminate step catches a
 sequencer who lies about a *balance* write, but NOT one who lies about
 a nonce advance or an epoch-budget credit, because the honest
 re-execution produces the same step-VM hash regardless of those
-effects.  This boundary is uniform across all 22 variants; kind 21's
+effects.  This boundary is uniform across all 25 variants; kind 21's
 exclusion of `recipient` / `budgetIncrement` is the same posture kinds
 19 / 20 take for their budget fields.  Binding `epochBudgets` would
 require (1) an `epochBudgets` `CellTag` + cell-proof construction and
@@ -155,10 +156,11 @@ open LegalKernel.Runtime
 
 Mirrors `Encoding.Action.encode`'s leading-tag table (which uses
 `Encodable.encode (T := Nat) <idx>`).  The Solidity-side
-`KnomosisStepVM.ActionKind` enum has the same indices.  Kinds `0..21`
+`KnomosisStepVM.ActionKind` enum has the same indices.  Kinds `0..24`
 have a real `stepVMHash` execution arm with a cross-stack Solidity
 counterpart (GP.5.3 closed the index-`21` `topUpActionBudgetFor` arm
-that GP.3.4 had staged). -/
+that GP.3.4 had staged; GP.9.1 / GP.11.4 / GP.11.10 added kinds 22 /
+23 / 24). -/
 
 /-- The constructor-index dispatcher byte for an `Action`.  Mirrors
     the Solidity `ActionKind` enum and `Encoding.Action.encode`'s
@@ -927,9 +929,10 @@ theorem actionFieldsForL1_deterministic
 
 /-! ## Per-variant dispatch coherence theorems
 
-For each of the 22 variants (0..18 from SVC.5.e plus Workstream-GP's
-`depositWithFee` = 19, `topUpActionBudget` = 20, and
-`topUpActionBudgetFor` = 21), the dispatcher's output equals the
+For each of the 25 variants (0..18 from SVC.5.e plus Workstream-GP's
+`depositWithFee` = 19, `topUpActionBudget` = 20,
+`topUpActionBudgetFor` = 21, `claimBudgetRefund` = 22, `ammSwap` = 23,
+and `reclaimAmmReserves` = 24), the dispatcher's output equals the
 canonical `stepCommitXX` invocation with the decoded fields.  Each
 proof is a structural reduction: `stepVMHash` unfolds to the
 appropriate `stepCommitXX` branch when `kind = <variant>`. -/

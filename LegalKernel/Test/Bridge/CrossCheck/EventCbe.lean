@@ -29,7 +29,7 @@ field of every entry is the hex of Lean's `Event.encode`, and the
 Rust consumer
 (`runtime/knomosis-event-subscribe/tests/cross_stack_lean_event.rs`)
 asserts `peek_event_tag` reads exactly `tag` and `classify` resolves
-to the named `EventType` for all 22 constructors.
+to the named `EventType` for all 23 constructors.
 
 **What it catches.**  A Lean encoder change (frozen-index bump,
 field-order edit) drifts the committed JSON — `lake test`'s
