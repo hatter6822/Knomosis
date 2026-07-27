@@ -136,9 +136,21 @@ def tests : List TestCase :=
         let _proof := @verifyCellProof_complete
         pure ()
     }
-  , { name := "Theorem #222 verifyCellProof_sound_under_collision_free API"
+  , { name := "Theorem #222 verifyCellProof_sound API"
     , body := do
-        let _proof := @verifyCellProof_sound_under_collision_free
+        let _proof : ∀ (commit : StateCommit) (proof : CellProof),
+            verifyCellProof commit proof = true →
+            ∃ es, commitExtendedState es = commit ∧
+                  getCellValue es proof.cellTag = proof.cellValue :=
+          verifyCellProof_sound
+        pure ()
+    }
+  , { name := "Theorem #222 verifyCellProof witness-uniqueness API"
+    , body := do
+        -- The uniqueness half is what a fault-proof consumer relies
+        -- on; pinning its signature keeps the collision-resistance
+        -- hypothesis attached to the statement that needs it.
+        let _proof := @verifyCellProof_witness_unique_under_collision_free
         pure ()
     }
   , { name := "Theorem #223 updateCommitment_agrees_with_setCell API"

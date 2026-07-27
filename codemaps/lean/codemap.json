@@ -15,13 +15,31 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2c6eeed80076ea58920a061cf9a616636f08dee192015831fd2612b27d4935e7"
+    "source_digest": "6ad7ed37f43beaaa61aadd5906ebbd295625fa29f51b2b820a655f484dd0a0e1"
   },
   "summary": {
-    "module_count": 308,
-    "declaration_count": 5239
+    "module_count": 311,
+    "declaration_count": 5267
   },
   "modules": [
+    {
+      "module": "CountSorries",
+      "path": "CountSorries.lean",
+      "declaration_count": 1,
+      "declarations": [
+        {
+          "kind": "def",
+          "name": "main",
+          "line": 38,
+          "called": [
+            "aggregate",
+            "fileMatches",
+            "kernelTcbFiles",
+            "selfCheckPatternDetector"
+          ]
+        }
+      ]
+    },
     {
       "module": "DeferralAudit",
       "path": "DeferralAudit.lean",
@@ -8491,7 +8509,7 @@
     {
       "module": "LegalKernel.Bridge.Eip712",
       "path": "LegalKernel/Bridge/Eip712.lean",
-      "declaration_count": 40,
+      "declaration_count": 48,
       "declarations": [
         {
           "kind": "namespace",
@@ -8503,20 +8521,69 @@
         },
         {
           "kind": "def",
-          "name": "CollisionFree",
-          "line": 133,
+          "name": "CollisionFreeOn",
+          "line": 152,
           "called": []
         },
         {
           "kind": "theorem",
+          "name": "CollisionFreeOn.apply",
+          "line": 156,
+          "called": [
+            "CollisionFreeOn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "CollisionFreeOn.mono",
+          "line": 164,
+          "called": [
+            "CollisionFreeOn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "CollisionFreeOn.append_left",
+          "line": 171,
+          "called": [
+            "CollisionFreeOn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "CollisionFreeOn.append_right",
+          "line": 177,
+          "called": [
+            "CollisionFreeOn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "collisionFreeOn_id",
+          "line": 186,
+          "called": [
+            "CollisionFreeOn"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "exists_uniformOutputSize_collisionFreeOn_of_ne",
+          "line": 197,
+          "called": [
+            "CollisionFreeOn",
+            "H"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "byteArray_eq_of_data_toList_eq",
-          "line": 143,
+          "line": 229,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_append_inj_of_size_left",
-          "line": 156,
+          "line": 242,
           "called": [
             "byteArray_eq_of_data_toList_eq"
           ]
@@ -8524,31 +8591,31 @@
         {
           "kind": "def",
           "name": "eip712Prefix",
-          "line": 174,
+          "line": 260,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "eip712Prefix_size",
-          "line": 178,
+          "line": 264,
           "called": []
         },
         {
           "kind": "def",
           "name": "eip712DomainTypeString",
-          "line": 190,
+          "line": 276,
           "called": []
         },
         {
           "kind": "def",
           "name": "knomosisActionTypeString",
-          "line": 203,
+          "line": 289,
           "called": []
         },
         {
           "kind": "def",
           "name": "eip712DomainTypeHash",
-          "line": 210,
+          "line": 296,
           "called": [
             "hashBytes"
           ]
@@ -8556,7 +8623,7 @@
         {
           "kind": "def",
           "name": "knomosisActionTypeHash",
-          "line": 215,
+          "line": 301,
           "called": [
             "hashBytes"
           ]
@@ -8564,7 +8631,7 @@
         {
           "kind": "theorem",
           "name": "eip712DomainTypeHash_size",
-          "line": 220,
+          "line": 306,
           "called": [
             "hashBytes_size"
           ]
@@ -8572,7 +8639,7 @@
         {
           "kind": "theorem",
           "name": "knomosisActionTypeHash_size",
-          "line": 224,
+          "line": 310,
           "called": [
             "hashBytes_size"
           ]
@@ -8580,7 +8647,7 @@
         {
           "kind": "def",
           "name": "encodeUint256BE",
-          "line": 236,
+          "line": 322,
           "called": [
             "natToBytesLE"
           ]
@@ -8588,7 +8655,7 @@
         {
           "kind": "theorem",
           "name": "encodeUint256BE_size",
-          "line": 240,
+          "line": 326,
           "called": [
             "encodeUint256BE",
             "natToBytesLE",
@@ -8598,7 +8665,7 @@
         {
           "kind": "theorem",
           "name": "encodeUint256BE_injective",
-          "line": 248,
+          "line": 334,
           "called": [
             "DecodeError",
             "Stream",
@@ -8610,13 +8677,13 @@
         {
           "kind": "theorem",
           "name": "pow_2_64_le_pow_256_32",
-          "line": 278,
+          "line": 364,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "encodeUint256BE_injective_uint64",
-          "line": 288,
+          "line": 374,
           "called": [
             "encodeUint256BE",
             "encodeUint256BE_injective",
@@ -8626,25 +8693,25 @@
         {
           "kind": "structure",
           "name": "DomainParams",
-          "line": 300,
+          "line": 386,
           "called": []
         },
         {
           "kind": "def",
           "name": "knomosisL2ChainIdMainnet",
-          "line": 348,
+          "line": 434,
           "called": []
         },
         {
           "kind": "def",
           "name": "knomosisL2ChainIdTestnet",
-          "line": 355,
+          "line": 441,
           "called": []
         },
         {
           "kind": "def",
           "name": "l2ChainIdForL1",
-          "line": 362,
+          "line": 448,
           "called": [
             "knomosisL2ChainIdMainnet",
             "knomosisL2ChainIdTestnet"
@@ -8653,7 +8720,7 @@
         {
           "kind": "theorem",
           "name": "l2ChainIdForL1_lt_two_pow_64",
-          "line": 372,
+          "line": 458,
           "called": [
             "knomosisL2ChainIdMainnet",
             "knomosisL2ChainIdTestnet",
@@ -8663,7 +8730,7 @@
         {
           "kind": "def",
           "name": "domainPreHash",
-          "line": 379,
+          "line": 465,
           "called": [
             "DomainParams",
             "eip712DomainTypeHash",
@@ -8674,7 +8741,7 @@
         {
           "kind": "def",
           "name": "eip712DomainSeparator",
-          "line": 389,
+          "line": 475,
           "called": [
             "DomainParams",
             "domainPreHash",
@@ -8684,7 +8751,7 @@
         {
           "kind": "theorem",
           "name": "eip712DomainSeparator_size",
-          "line": 393,
+          "line": 479,
           "called": [
             "DomainParams",
             "eip712DomainSeparator",
@@ -8694,7 +8761,7 @@
         {
           "kind": "structure",
           "name": "Eip712Message",
-          "line": 403,
+          "line": 489,
           "called": [
             "Action",
             "ActorId",
@@ -8705,7 +8772,7 @@
         {
           "kind": "def",
           "name": "Eip712Message.signInput",
-          "line": 415,
+          "line": 501,
           "called": [
             "Eip712Message"
           ]
@@ -8713,7 +8780,7 @@
         {
           "kind": "def",
           "name": "Eip712Message.actionHash",
-          "line": 422,
+          "line": 508,
           "called": [
             "Eip712Message",
             "hashBytes"
@@ -8722,7 +8789,7 @@
         {
           "kind": "theorem",
           "name": "Eip712Message.actionHash_size",
-          "line": 428,
+          "line": 514,
           "called": [
             "Eip712Message",
             "Eip712Message.actionHash",
@@ -8732,7 +8799,7 @@
         {
           "kind": "def",
           "name": "structPreHash",
-          "line": 436,
+          "line": 522,
           "called": [
             "Eip712Message",
             "encodeUint256BE",
@@ -8743,7 +8810,7 @@
         {
           "kind": "def",
           "name": "eip712StructHash",
-          "line": 464,
+          "line": 550,
           "called": [
             "Eip712Message",
             "hashBytes",
@@ -8753,7 +8820,7 @@
         {
           "kind": "theorem",
           "name": "eip712StructHash_size",
-          "line": 468,
+          "line": 554,
           "called": [
             "Eip712Message",
             "eip712StructHash",
@@ -8763,7 +8830,7 @@
         {
           "kind": "theorem",
           "name": "structPreHash_size",
-          "line": 473,
+          "line": 559,
           "called": [
             "Eip712Message",
             "Eip712Message.actionHash_size",
@@ -8779,7 +8846,7 @@
         {
           "kind": "def",
           "name": "eip712Wrap",
-          "line": 483,
+          "line": 569,
           "called": [
             "Eip712Message",
             "eip712Prefix",
@@ -8789,7 +8856,7 @@
         {
           "kind": "theorem",
           "name": "eip712Wrap_size",
-          "line": 494,
+          "line": 580,
           "called": [
             "Eip712Message",
             "eip712Prefix",
@@ -8802,18 +8869,28 @@
         {
           "kind": "theorem",
           "name": "eip712Wrap_deterministic",
-          "line": 501,
+          "line": 587,
           "called": [
             "Eip712Message",
             "eip712Wrap"
           ]
         },
         {
+          "kind": "def",
+          "name": "eip712WrapPreimages",
+          "line": 632,
+          "called": [
+            "Eip712Message",
+            "signInput",
+            "structPreHash"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "eip712Wrap_injective",
-          "line": 560,
+          "line": 653,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "Eip712Message",
             "Eip712Message.actionHash",
             "Eip712Message.actionHash_size",
@@ -8821,6 +8898,7 @@
             "eip712Prefix",
             "eip712StructHash",
             "eip712Wrap",
+            "eip712WrapPreimages",
             "encodeUint256BE",
             "encodeUint256BE_size",
             "hashBytes",
@@ -8831,14 +8909,23 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "domainPreHashPreimages",
+          "line": 754,
+          "called": [
+            "DomainParams"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "domainPreHash_injective",
-          "line": 664,
+          "line": 767,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "DomainParams",
             "byteArray_append_inj_of_size_left",
             "domainPreHash",
+            "domainPreHashPreimages",
             "eip712DomainTypeHash",
             "eip712DomainTypeHash_size",
             "encodeUint256BE",
@@ -8851,11 +8938,12 @@
         {
           "kind": "theorem",
           "name": "eip712DomainSeparator_distinguishes",
-          "line": 737,
+          "line": 846,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "DomainParams",
             "domainPreHash",
+            "domainPreHashPreimages",
             "domainPreHash_injective",
             "eip712DomainSeparator",
             "hashBytes"
@@ -8864,15 +8952,16 @@
         {
           "kind": "theorem",
           "name": "eip712Wrap_distinguishes",
-          "line": 771,
+          "line": 884,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "Eip712Message",
             "LegalKernel.Bridge",
             "byteArray_append_inj_of_size_left",
             "eip712Prefix",
             "eip712StructHash",
             "eip712Wrap",
+            "eip712WrapPreimages",
             "eip712Wrap_injective",
             "hashBytes",
             "signInput"
@@ -12142,7 +12231,7 @@
     {
       "module": "LegalKernel.Bridge.WithdrawalRoot",
       "path": "LegalKernel/Bridge/WithdrawalRoot.lean",
-      "declaration_count": 52,
+      "declaration_count": 54,
       "declarations": [
         {
           "kind": "namespace",
@@ -12235,8 +12324,24 @@
         },
         {
           "kind": "def",
+          "name": "hashUpPreimage",
+          "line": 172,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "hashUp_eq_hash_preimage",
+          "line": 177,
+          "called": [
+            "H",
+            "hashUp",
+            "hashUpPreimage"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "leafBytes",
-          "line": 173,
+          "line": 187,
           "called": [
             "Bridge.PendingWithdrawal.encode",
             "PendingWithdrawal"
@@ -12245,7 +12350,7 @@
         {
           "kind": "def",
           "name": "rangeRoot",
-          "line": 187,
+          "line": 201,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12259,7 +12364,7 @@
         {
           "kind": "def",
           "name": "withdrawalRoot",
-          "line": 203,
+          "line": 217,
           "called": [
             "BridgeState",
             "H",
@@ -12270,7 +12375,7 @@
         {
           "kind": "theorem",
           "name": "rangeRoot_nil_eq_defaultHash",
-          "line": 211,
+          "line": 225,
           "called": [
             "H",
             "defaultHash",
@@ -12280,7 +12385,7 @@
         {
           "kind": "theorem",
           "name": "rangeRoot_succ_cons",
-          "line": 217,
+          "line": 231,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12292,7 +12397,7 @@
         {
           "kind": "theorem",
           "name": "withdrawalRoot_empty_eq_defaultHash_top",
-          "line": 229,
+          "line": 243,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12307,7 +12412,7 @@
         {
           "kind": "theorem",
           "name": "withdrawalRoot_extensional",
-          "line": 247,
+          "line": 261,
           "called": [
             "BridgeState",
             "H",
@@ -12317,7 +12422,7 @@
         {
           "kind": "structure",
           "name": "WithdrawalProof",
-          "line": 258,
+          "line": 272,
           "called": [
             "WithdrawalId",
             "smtHeight"
@@ -12326,7 +12431,7 @@
         {
           "kind": "def",
           "name": "verifyProofRec",
-          "line": 271,
+          "line": 285,
           "called": [
             "H",
             "WithdrawalId",
@@ -12337,7 +12442,7 @@
         {
           "kind": "def",
           "name": "verifyProof",
-          "line": 287,
+          "line": 301,
           "called": [
             "H",
             "WithdrawalProof",
@@ -12348,7 +12453,7 @@
         {
           "kind": "def",
           "name": "emptyProofSiblings",
-          "line": 301,
+          "line": 315,
           "called": [
             "H",
             "defaultHash"
@@ -12357,7 +12462,7 @@
         {
           "kind": "theorem",
           "name": "emptyProofSiblings_length",
-          "line": 308,
+          "line": 322,
           "called": [
             "H",
             "defaultHash",
@@ -12367,7 +12472,7 @@
         {
           "kind": "def",
           "name": "constructProofAux",
-          "line": 329,
+          "line": 343,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12383,7 +12488,7 @@
         {
           "kind": "theorem",
           "name": "constructProofAux_succ_cons_true",
-          "line": 363,
+          "line": 377,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12396,7 +12501,7 @@
         {
           "kind": "theorem",
           "name": "constructProofAux_succ_cons_false",
-          "line": 391,
+          "line": 405,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12409,7 +12514,7 @@
         {
           "kind": "theorem",
           "name": "constructProofAux_nil",
-          "line": 419,
+          "line": 433,
           "called": [
             "H",
             "WithdrawalId",
@@ -12421,7 +12526,7 @@
         {
           "kind": "theorem",
           "name": "constructProofAux_siblings_length",
-          "line": 426,
+          "line": 440,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12440,7 +12545,7 @@
         {
           "kind": "def",
           "name": "constructProof",
-          "line": 454,
+          "line": 468,
           "called": [
             "BridgeState",
             "H",
@@ -12454,7 +12559,7 @@
         {
           "kind": "theorem",
           "name": "constructProof_deterministic",
-          "line": 467,
+          "line": 481,
           "called": [
             "BridgeState",
             "H",
@@ -12465,7 +12570,7 @@
         {
           "kind": "theorem",
           "name": "constructProof_siblings_length",
-          "line": 475,
+          "line": 489,
           "called": [
             "BridgeState",
             "H",
@@ -12477,7 +12582,7 @@
         {
           "kind": "theorem",
           "name": "verifyProof_total",
-          "line": 480,
+          "line": 494,
           "called": [
             "H",
             "WithdrawalProof",
@@ -12487,7 +12592,7 @@
         {
           "kind": "theorem",
           "name": "siblings_toList",
-          "line": 492,
+          "line": 506,
           "called": [
             "smtHeight"
           ]
@@ -12495,7 +12600,7 @@
         {
           "kind": "theorem",
           "name": "verifyProofRec_emptyProof_eq_defaultHash",
-          "line": 501,
+          "line": 515,
           "called": [
             "H",
             "WithdrawalId",
@@ -12510,7 +12615,7 @@
         {
           "kind": "theorem",
           "name": "verifyProofRec_eq_rangeRoot",
-          "line": 528,
+          "line": 542,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12534,7 +12639,7 @@
         {
           "kind": "theorem",
           "name": "constructProof_siblings_toList",
-          "line": 599,
+          "line": 613,
           "called": [
             "BridgeState",
             "H",
@@ -12548,7 +12653,7 @@
         {
           "kind": "theorem",
           "name": "constructProof_leaf",
-          "line": 607,
+          "line": 621,
           "called": [
             "BridgeState",
             "H",
@@ -12561,7 +12666,7 @@
         {
           "kind": "theorem",
           "name": "constructProof_index",
-          "line": 613,
+          "line": 627,
           "called": [
             "BridgeState",
             "H",
@@ -12572,7 +12677,7 @@
         {
           "kind": "theorem",
           "name": "verifyProof_complete_any_index",
-          "line": 627,
+          "line": 641,
           "called": [
             "BridgeState",
             "H",
@@ -12591,7 +12696,7 @@
         {
           "kind": "theorem",
           "name": "verifyProof_complete",
-          "line": 644,
+          "line": 658,
           "called": [
             "BridgeState",
             "H",
@@ -12604,18 +12709,9 @@
           ]
         },
         {
-          "kind": "theorem",
-          "name": "collisionFree_inj",
-          "line": 672,
-          "called": [
-            "CollisionFree",
-            "H"
-          ]
-        },
-        {
           "kind": "def",
           "name": "UniformOutputSize",
-          "line": 678,
+          "line": 684,
           "called": [
             "H"
           ]
@@ -12623,25 +12719,26 @@
         {
           "kind": "theorem",
           "name": "byteArray_append_inj",
-          "line": 688,
+          "line": 694,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "hashUp_inj_of_collisionFree",
-          "line": 712,
+          "line": 718,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "H",
             "byteArray_append_inj",
-            "collisionFree_inj",
-            "hashUp"
+            "hashUp",
+            "hashUpPreimage",
+            "hashUp_eq_hash_preimage"
           ]
         },
         {
           "kind": "theorem",
           "name": "verifyProofRec_size_succ",
-          "line": 732,
+          "line": 744,
           "called": [
             "H",
             "UniformOutputSize",
@@ -12654,30 +12751,44 @@
         {
           "kind": "def",
           "name": "siblingsHaveMatchingSizes",
-          "line": 753,
+          "line": 765,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "siblingsHaveMatchingSizes_of_all_32",
-          "line": 758,
+          "line": 770,
           "called": [
             "siblingsHaveMatchingSizes"
           ]
         },
         {
+          "kind": "def",
+          "name": "verifyProofPreimages",
+          "line": 784,
+          "called": [
+            "H",
+            "WithdrawalId",
+            "hashUpPreimage",
+            "pathBitAtLevel",
+            "verifyProofRec"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "verifyProofRec_inj",
-          "line": 776,
+          "line": 801,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "H",
             "UniformOutputSize",
             "WithdrawalId",
             "hashUp",
+            "hashUpPreimage",
             "hashUp_inj_of_collisionFree",
             "pathBitAtLevel",
             "siblingsHaveMatchingSizes",
+            "verifyProofPreimages",
             "verifyProofRec",
             "verifyProofRec_size_succ"
           ]
@@ -12685,7 +12796,7 @@
         {
           "kind": "theorem",
           "name": "mem_filter_pathBitAtLevel_self",
-          "line": 897,
+          "line": 960,
           "called": [
             "PendingWithdrawal",
             "WithdrawalId",
@@ -12696,7 +12807,7 @@
         {
           "kind": "theorem",
           "name": "constructProofAux_leaf_singleton",
-          "line": 916,
+          "line": 979,
           "called": [
             "H",
             "PendingWithdrawal",
@@ -12711,10 +12822,10 @@
         {
           "kind": "theorem",
           "name": "verifyProof_sound",
-          "line": 1017,
+          "line": 1080,
           "called": [
             "BridgeState",
-            "CollisionFree",
+            "CollisionFreeOn",
             "H",
             "UniformOutputSize",
             "WithdrawalProof",
@@ -12726,6 +12837,7 @@
             "siblingsHaveMatchingSizes",
             "smtHeight",
             "verifyProof",
+            "verifyProofPreimages",
             "verifyProofRec",
             "verifyProofRec_eq_rangeRoot",
             "verifyProofRec_inj",
@@ -12735,18 +12847,20 @@
         {
           "kind": "theorem",
           "name": "verifyProof_sound_all_32",
-          "line": 1083,
+          "line": 1153,
           "called": [
             "Bridge",
             "BridgeState",
-            "CollisionFree",
+            "CollisionFreeOn",
             "H",
             "LegalKernel",
             "UniformOutputSize",
             "WithdrawalProof",
             "constructProof",
             "siblingsHaveMatchingSizes_of_all_32",
+            "smtHeight",
             "verifyProof",
+            "verifyProofPreimages",
             "verifyProof_sound",
             "withdrawalRoot"
           ]
@@ -20172,13 +20286,14 @@
         {
           "kind": "theorem",
           "name": "smtSound",
-          "line": 218,
+          "line": 219,
           "called": [
             "BitsKey",
             "Cell",
             "FaultProof",
             "LegalKernel",
             "SmtCellProof",
+            "smtCellProofPreimages",
             "smtCellProof_sound_under_collision_free",
             "verifySmtCellProof"
           ]
@@ -20435,7 +20550,7 @@
     {
       "module": "LegalKernel.FaultProof.Commit",
       "path": "LegalKernel/FaultProof/Commit.lean",
-      "declaration_count": 51,
+      "declaration_count": 54,
       "declarations": [
         {
           "kind": "namespace",
@@ -20525,11 +20640,10 @@
         },
         {
           "kind": "def",
-          "name": "commitExtendedState",
-          "line": 124,
+          "name": "extendedStatePreimage",
+          "line": 118,
           "called": [
             "ExtendedState",
-            "StateCommit",
             "commitBridgeState",
             "commitBudgetPolicy",
             "commitEpochBudgets",
@@ -20537,14 +20651,52 @@
             "commitLocalPolicies",
             "commitNonceState",
             "commitState",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "commitExtendedState",
+          "line": 136,
+          "called": [
+            "ExtendedState",
+            "StateCommit",
             "es",
+            "extendedStatePreimage",
             "hashBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "subStatePreimages",
+          "line": 144,
+          "called": [
+            "BridgeState",
+            "BudgetPolicy",
+            "EpochBudgetState",
+            "ExtendedState",
+            "KeyRegistry.encodeMap",
+            "LocalPolicies",
+            "NonceState.encode",
+            "State.encode",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "extendedStateCommitPreimages",
+          "line": 157,
+          "called": [
+            "ExtendedState",
+            "es",
+            "extendedStatePreimage",
+            "subStatePreimages"
           ]
         },
         {
           "kind": "theorem",
           "name": "commitState_deterministic",
-          "line": 136,
+          "line": 163,
           "called": [
             "commitState"
           ]
@@ -20552,7 +20704,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_deterministic",
-          "line": 139,
+          "line": 166,
           "called": [
             "NonceState",
             "commitNonceState"
@@ -20561,7 +20713,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_deterministic",
-          "line": 142,
+          "line": 169,
           "called": [
             "KeyRegistry",
             "commitKeyRegistry"
@@ -20570,7 +20722,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_deterministic",
-          "line": 145,
+          "line": 172,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies"
@@ -20579,7 +20731,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_deterministic",
-          "line": 148,
+          "line": 175,
           "called": [
             "BridgeState",
             "commitBridgeState"
@@ -20588,7 +20740,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_deterministic",
-          "line": 151,
+          "line": 178,
           "called": [
             "ExtendedState",
             "commitExtendedState",
@@ -20598,7 +20750,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_size",
-          "line": 156,
+          "line": 183,
           "called": [
             "ExtendedState",
             "commitExtendedState",
@@ -20609,7 +20761,7 @@
         {
           "kind": "theorem",
           "name": "commitState_size",
-          "line": 161,
+          "line": 188,
           "called": [
             "commitState",
             "hashAdaptor_thirty_two_byte_output"
@@ -20618,7 +20770,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_size",
-          "line": 166,
+          "line": 193,
           "called": [
             "NonceState",
             "commitNonceState",
@@ -20628,7 +20780,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_size",
-          "line": 171,
+          "line": 198,
           "called": [
             "KeyRegistry",
             "commitKeyRegistry",
@@ -20638,7 +20790,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_size",
-          "line": 176,
+          "line": 203,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies",
@@ -20648,7 +20800,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_size",
-          "line": 181,
+          "line": 208,
           "called": [
             "BridgeState",
             "commitBridgeState",
@@ -20658,7 +20810,7 @@
         {
           "kind": "theorem",
           "name": "commitEpochBudgets_size",
-          "line": 187,
+          "line": 214,
           "called": [
             "EpochBudgetState",
             "commitEpochBudgets",
@@ -20668,7 +20820,7 @@
         {
           "kind": "theorem",
           "name": "commitBudgetPolicy_size",
-          "line": 193,
+          "line": 220,
           "called": [
             "BudgetPolicy",
             "commitBudgetPolicy",
@@ -20678,7 +20830,7 @@
         {
           "kind": "def",
           "name": "extendedStateExtensionallyEqual",
-          "line": 215,
+          "line": 242,
           "called": [
             "ExtendedState",
             "es"
@@ -20687,7 +20839,7 @@
         {
           "kind": "theorem",
           "name": "commitState_bytes_injective_under_collision_free",
-          "line": 239,
+          "line": 266,
           "called": [
             "State.encode",
             "commitState",
@@ -20697,7 +20849,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_bytes_injective_under_collision_free",
-          "line": 249,
+          "line": 277,
           "called": [
             "NonceState",
             "NonceState.encode",
@@ -20708,7 +20860,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_bytes_injective_under_collision_free",
-          "line": 259,
+          "line": 288,
           "called": [
             "KeyRegistry",
             "KeyRegistry.encodeMap",
@@ -20719,7 +20871,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_bytes_injective_under_collision_free",
-          "line": 269,
+          "line": 299,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies",
@@ -20729,7 +20881,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_bytes_injective_under_collision_free",
-          "line": 279,
+          "line": 310,
           "called": [
             "BridgeState",
             "commitBridgeState",
@@ -20739,7 +20891,7 @@
         {
           "kind": "theorem",
           "name": "commitEpochBudgets_bytes_injective_under_collision_free",
-          "line": 289,
+          "line": 321,
           "called": [
             "EpochBudgetState",
             "commitEpochBudgets",
@@ -20749,7 +20901,7 @@
         {
           "kind": "theorem",
           "name": "commitBudgetPolicy_bytes_injective_under_collision_free",
-          "line": 299,
+          "line": 332,
           "called": [
             "BudgetPolicy",
             "commitBudgetPolicy",
@@ -20759,13 +20911,13 @@
         {
           "kind": "theorem",
           "name": "byteArrayAppendInj",
-          "line": 336,
+          "line": 370,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_concat_five_split",
-          "line": 362,
+          "line": 396,
           "called": [
             "byteArrayAppendInj"
           ]
@@ -20773,7 +20925,7 @@
         {
           "kind": "theorem",
           "name": "byteArray_concat_seven_split",
-          "line": 414,
+          "line": 448,
           "called": [
             "byteArrayAppendInj",
             "byteArray_concat_five_split"
@@ -20782,7 +20934,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_eq_under_collision_free",
-          "line": 448,
+          "line": 482,
           "called": [
             "ExtendedState",
             "byteArray_concat_seven_split",
@@ -20802,13 +20954,14 @@
             "commitState",
             "commitState_size",
             "es",
+            "extendedStatePreimage",
             "hashBytes"
           ]
         },
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_bytes_eq_under_collision_free",
-          "line": 504,
+          "line": 541,
           "called": [
             "BridgeState",
             "BudgetPolicy",
@@ -20828,13 +20981,15 @@
             "commitNonceState_bytes_injective_under_collision_free",
             "commitState_bytes_injective_under_collision_free",
             "es",
-            "hashBytes"
+            "extendedStateCommitPreimages",
+            "hashBytes",
+            "subStatePreimages"
           ]
         },
         {
           "kind": "def",
           "name": "ExtendedState.extEq",
-          "line": 579,
+          "line": 662,
           "called": [
             "ExtendedState",
             "State.Equiv",
@@ -20844,7 +20999,7 @@
         {
           "kind": "theorem",
           "name": "ExtendedState.extEq.refl",
-          "line": 596,
+          "line": 679,
           "called": [
             "ExtendedState",
             "ExtendedState.extEq",
@@ -20855,7 +21010,7 @@
         {
           "kind": "structure",
           "name": "ExtendedState.CanonicalBounds",
-          "line": 619,
+          "line": 702,
           "called": [
             "BalanceMap.encodeAsBytes",
             "Bridge.DepositRecord.encodeAsBytes",
@@ -20869,7 +21024,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_subcommits_extensional_eq_under_collision_free",
-          "line": 703,
+          "line": 786,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encode_injective",
@@ -20890,13 +21045,14 @@
             "commitExtendedState",
             "commitExtendedState_subcommits_bytes_eq_under_collision_free",
             "es",
+            "extendedStateCommitPreimages",
             "hashBytes"
           ]
         },
         {
           "kind": "theorem",
           "name": "bridgeState_commit_includes_ammState",
-          "line": 832,
+          "line": 916,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20907,7 +21063,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeBase",
-          "line": 847,
+          "line": 931,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending"
@@ -20916,7 +21072,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeAmmSuffix",
-          "line": 857,
+          "line": 941,
           "called": [
             "encodeAmount"
           ]
@@ -20924,7 +21080,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_factored",
-          "line": 867,
+          "line": 951,
           "called": [
             "Bridge.BridgeState.encode",
             "bridgeStateEncodeAmmSuffix",
@@ -20934,7 +21090,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_amm_genesis_suffix_const",
-          "line": 876,
+          "line": 960,
           "called": [
             "bridgeStateEncodeAmmSuffix"
           ]
@@ -20942,7 +21098,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_2",
-          "line": 899,
+          "line": 983,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20958,7 +21114,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_3",
-          "line": 934,
+          "line": 1018,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20970,7 +21126,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_reflects_ammDisabled",
-          "line": 973,
+          "line": 1057,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -20987,7 +21143,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_reflects_ammDisabled",
-          "line": 1060,
+          "line": 1147,
           "called": [
             "ExtendedState",
             "ExtendedState.empty",
@@ -20998,7 +21154,9 @@
             "commitExtendedState_size",
             "commitExtendedState_subcommits_eq_under_collision_free",
             "es",
-            "hashBytes"
+            "extendedStateCommitPreimages",
+            "hashBytes",
+            "subStatePreimages"
           ]
         }
       ]
@@ -21193,7 +21351,7 @@
         {
           "kind": "theorem",
           "name": "commitState_setBalance_bytes_inj_under_collision_free",
-          "line": 63,
+          "line": 64,
           "called": [
             "ActorId",
             "Amount",
@@ -21206,13 +21364,13 @@
         {
           "kind": "theorem",
           "name": "kernelStep_encode_deterministic",
-          "line": 76,
+          "line": 80,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "kernelStep_encode_distinguishes_inputs",
-          "line": 86,
+          "line": 90,
           "called": [
             "kernelStep_encode_deterministic"
           ]
@@ -21220,13 +21378,13 @@
         {
           "kind": "theorem",
           "name": "gameState_encode_deterministic",
-          "line": 97,
+          "line": 101,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "gameState_encode_distinguishes_inputs",
-          "line": 104,
+          "line": 108,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -23140,18 +23298,18 @@
     {
       "module": "LegalKernel.FaultProof.Smt",
       "path": "LegalKernel/FaultProof/Smt.lean",
-      "declaration_count": 56,
+      "declaration_count": 60,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 70,
+          "line": 71,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 71,
+          "line": 72,
           "called": [
             "LegalKernel.Bridge",
             "LegalKernel.Runtime"
@@ -23160,19 +23318,19 @@
         {
           "kind": "def",
           "name": "smtDepth",
-          "line": 83,
+          "line": 84,
           "called": []
         },
         {
           "kind": "class",
           "name": "BitsKey",
-          "line": 96,
+          "line": 97,
           "called": []
         },
         {
           "kind": "instance",
           "name": "instBitsKeyByteArray",
-          "line": 106,
+          "line": 107,
           "called": [
             "BitsKey"
           ]
@@ -23180,7 +23338,7 @@
         {
           "kind": "instance",
           "name": "instBitsKeyUInt64",
-          "line": 117,
+          "line": 118,
           "called": [
             "BitsKey"
           ]
@@ -23188,13 +23346,13 @@
         {
           "kind": "def",
           "name": "emptyLeafSeedBytes",
-          "line": 130,
+          "line": 131,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildEmptyHashesAux",
-          "line": 136,
+          "line": 137,
           "called": [
             "hashBytes"
           ]
@@ -23202,7 +23360,7 @@
         {
           "kind": "def",
           "name": "emptySubtreeHashes",
-          "line": 152,
+          "line": 153,
           "called": [
             "buildEmptyHashesAux",
             "emptyLeafSeedBytes",
@@ -23212,7 +23370,7 @@
         {
           "kind": "theorem",
           "name": "buildEmptyHashesAux_size",
-          "line": 157,
+          "line": 158,
           "called": [
             "buildEmptyHashesAux"
           ]
@@ -23220,7 +23378,7 @@
         {
           "kind": "theorem",
           "name": "emptySubtreeHashes_size",
-          "line": 167,
+          "line": 168,
           "called": [
             "buildEmptyHashesAux_size",
             "emptySubtreeHashes"
@@ -23229,7 +23387,7 @@
         {
           "kind": "theorem",
           "name": "buildEmptyHashesAux_all_32",
-          "line": 175,
+          "line": 176,
           "called": [
             "buildEmptyHashesAux",
             "hashBytes",
@@ -23239,7 +23397,7 @@
         {
           "kind": "theorem",
           "name": "emptySubtreeHashes_get_size",
-          "line": 197,
+          "line": 198,
           "called": [
             "buildEmptyHashesAux_all_32",
             "emptyLeafSeedBytes",
@@ -23251,7 +23409,7 @@
         {
           "kind": "def",
           "name": "emptySubtreeHash",
-          "line": 214,
+          "line": 215,
           "called": [
             "emptySubtreeHashes"
           ]
@@ -23259,7 +23417,7 @@
         {
           "kind": "theorem",
           "name": "emptySubtreeHash_size",
-          "line": 219,
+          "line": 220,
           "called": [
             "emptySubtreeHash",
             "emptySubtreeHashes_get_size",
@@ -23269,19 +23427,19 @@
         {
           "kind": "structure",
           "name": "SmtCellProof",
-          "line": 241,
+          "line": 242,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "SmtCellProof",
-          "line": 252,
+          "line": 253,
           "called": []
         },
         {
           "kind": "def",
           "name": "empty",
-          "line": 257,
+          "line": 258,
           "called": [
             "SmtCellProof"
           ]
@@ -23289,7 +23447,7 @@
         {
           "kind": "def",
           "name": "bitmaskBit",
-          "line": 263,
+          "line": 264,
           "called": [
             "SmtCellProof"
           ]
@@ -23297,7 +23455,7 @@
         {
           "kind": "def",
           "name": "isWellFormed",
-          "line": 280,
+          "line": 281,
           "called": [
             "SmtCellProof"
           ]
@@ -23305,7 +23463,7 @@
         {
           "kind": "theorem",
           "name": "isWellFormed_implies_all_siblings_32",
-          "line": 285,
+          "line": 286,
           "called": [
             "SmtCellProof",
             "isWellFormed"
@@ -23314,13 +23472,13 @@
         {
           "kind": "def",
           "name": "paddingHash",
-          "line": 314,
+          "line": 315,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "paddingHash_size",
-          "line": 318,
+          "line": 319,
           "called": [
             "paddingHash"
           ]
@@ -23328,7 +23486,7 @@
         {
           "kind": "def",
           "name": "encodeAsBytes",
-          "line": 329,
+          "line": 330,
           "called": [
             "Encodable"
           ]
@@ -23336,7 +23494,7 @@
         {
           "kind": "def",
           "name": "leafHash",
-          "line": 335,
+          "line": 336,
           "called": [
             "Encodable",
             "encodeAsBytes",
@@ -23346,7 +23504,7 @@
         {
           "kind": "theorem",
           "name": "leafHash_size",
-          "line": 340,
+          "line": 341,
           "called": [
             "Encodable",
             "hashBytes_size",
@@ -23356,15 +23514,31 @@
         {
           "kind": "def",
           "name": "smtStep",
-          "line": 355,
+          "line": 356,
           "called": [
             "hashBytes"
           ]
         },
         {
+          "kind": "def",
+          "name": "smtStepPreimage",
+          "line": 365,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "smtStep_eq_hash_preimage",
+          "line": 369,
+          "called": [
+            "hashBytes",
+            "smtStep",
+            "smtStepPreimage"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "smtStep_size",
-          "line": 362,
+          "line": 375,
           "called": [
             "hashBytes_size",
             "smtStep"
@@ -23373,24 +23547,26 @@
         {
           "kind": "theorem",
           "name": "byteArray_append_inj_left",
-          "line": 372,
+          "line": 385,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "smtStep_inj_under_collision_free",
-          "line": 405,
+          "line": 418,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "byteArray_append_inj_left",
             "hashBytes",
-            "smtStep"
+            "smtStep",
+            "smtStepPreimage",
+            "smtStep_eq_hash_preimage"
           ]
         },
         {
           "kind": "def",
           "name": "stepPair",
-          "line": 429,
+          "line": 447,
           "called": [
             "smtStep"
           ]
@@ -23398,7 +23574,7 @@
         {
           "kind": "theorem",
           "name": "stepPair_size",
-          "line": 433,
+          "line": 451,
           "called": [
             "smtStep_size",
             "stepPair"
@@ -23407,7 +23583,7 @@
         {
           "kind": "def",
           "name": "keyBits",
-          "line": 438,
+          "line": 456,
           "called": [
             "BitsKey",
             "smtDepth"
@@ -23416,7 +23592,7 @@
         {
           "kind": "def",
           "name": "expandSiblingsAux",
-          "line": 451,
+          "line": 469,
           "called": [
             "SmtCellProof",
             "emptySubtreeHash",
@@ -23426,7 +23602,7 @@
         {
           "kind": "def",
           "name": "expandSiblings",
-          "line": 461,
+          "line": 479,
           "called": [
             "SmtCellProof",
             "expandSiblingsAux",
@@ -23436,7 +23612,7 @@
         {
           "kind": "def",
           "name": "smtWalk",
-          "line": 467,
+          "line": 485,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23450,7 +23626,7 @@
         {
           "kind": "def",
           "name": "smtRootListAux",
-          "line": 503,
+          "line": 521,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23463,7 +23639,7 @@
         {
           "kind": "def",
           "name": "smtRoot",
-          "line": 531,
+          "line": 549,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23474,7 +23650,7 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_size",
-          "line": 552,
+          "line": 570,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23488,7 +23664,7 @@
         {
           "kind": "theorem",
           "name": "smtRoot_size",
-          "line": 581,
+          "line": 599,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23500,13 +23676,13 @@
         {
           "kind": "def",
           "name": "setBitmaskBit",
-          "line": 612,
+          "line": 630,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildSmtCellProofAux",
-          "line": 643,
+          "line": 661,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23518,7 +23694,7 @@
         {
           "kind": "def",
           "name": "buildSmtCellProof",
-          "line": 682,
+          "line": 700,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23532,7 +23708,7 @@
         {
           "kind": "def",
           "name": "verifySmtCellProof",
-          "line": 698,
+          "line": 716,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23543,7 +23719,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_deterministic",
-          "line": 705,
+          "line": 723,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23554,7 +23730,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_walks_to_root",
-          "line": 724,
+          "line": 742,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23566,13 +23742,13 @@
         {
           "kind": "theorem",
           "name": "SmtCellProof.empty_isWellFormed",
-          "line": 737,
+          "line": 755,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_empty_self_verifies",
-          "line": 752,
+          "line": 770,
           "called": [
             "BitsKey",
             "Encodable",
@@ -23585,7 +23761,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_all_32",
-          "line": 779,
+          "line": 797,
           "called": [
             "SmtCellProof",
             "emptySubtreeHash_size",
@@ -23597,7 +23773,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_all_32",
-          "line": 820,
+          "line": 838,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -23608,7 +23784,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_length",
-          "line": 831,
+          "line": 849,
           "called": [
             "SmtCellProof",
             "expandSiblingsAux"
@@ -23617,7 +23793,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_length",
-          "line": 845,
+          "line": 863,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -23628,7 +23804,7 @@
         {
           "kind": "theorem",
           "name": "keyBits_length",
-          "line": 850,
+          "line": 868,
           "called": [
             "BitsKey",
             "keyBits",
@@ -23636,24 +23812,50 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "walkPreimages",
+          "line": 877,
+          "called": [
+            "smtStepPreimage",
+            "stepPair"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "walk_leaf_inj_under_collision_free",
-          "line": 867,
+          "line": 894,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "hashBytes",
+            "smtStepPreimage",
             "smtStep_inj_under_collision_free",
             "stepPair",
-            "stepPair_size"
+            "stepPair_size",
+            "walkPreimages"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "smtCellProofPreimages",
+          "line": 1006,
+          "called": [
+            "BitsKey",
+            "Encodable",
+            "SmtCellProof",
+            "encodeAsBytes",
+            "expandSiblings",
+            "keyBits",
+            "leafHash",
+            "walkPreimages"
           ]
         },
         {
           "kind": "theorem",
           "name": "smtCellProof_no_value_substitution",
-          "line": 949,
+          "line": 1025,
           "called": [
             "BitsKey",
-            "CollisionFree",
+            "CollisionFreeOn",
             "Encodable",
             "SmtCellProof",
             "Stream",
@@ -23667,6 +23869,7 @@
             "keyBits_length",
             "leafHash",
             "leafHash_size",
+            "smtCellProofPreimages",
             "smtWalk",
             "stepPair",
             "verifySmtCellProof",
@@ -23676,16 +23879,17 @@
         {
           "kind": "theorem",
           "name": "smtCellProof_sound_under_collision_free",
-          "line": 1013,
+          "line": 1094,
           "called": [
             "BitsKey",
-            "CollisionFree",
+            "CollisionFreeOn",
             "Encodable",
             "FaultProof",
             "LegalKernel",
             "SmtCellProof",
             "Stream",
             "hashBytes",
+            "smtCellProofPreimages",
             "smtCellProof_no_value_substitution",
             "verifySmtCellProof"
           ]
@@ -24268,7 +24472,7 @@
         {
           "kind": "theorem",
           "name": "hashString_inj_under_collision_free",
-          "line": 635,
+          "line": 636,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -26094,18 +26298,18 @@
     {
       "module": "LegalKernel.FaultProof.Verify",
       "path": "LegalKernel/FaultProof/Verify.lean",
-      "declaration_count": 26,
+      "declaration_count": 27,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 65,
+          "line": 69,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 66,
+          "line": 70,
           "called": [
             "LegalKernel.Bridge"
           ]
@@ -26113,7 +26317,7 @@
         {
           "kind": "def",
           "name": "canonicalAbsentValue",
-          "line": 86,
+          "line": 90,
           "called": [
             "CellTag"
           ]
@@ -26121,7 +26325,7 @@
         {
           "kind": "def",
           "name": "getCellValue",
-          "line": 105,
+          "line": 109,
           "called": [
             "Bridge.DepositRecord.encode",
             "Bridge.PendingWithdrawal.encode",
@@ -26133,7 +26337,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_deterministic",
-          "line": 145,
+          "line": 149,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26144,7 +26348,7 @@
         {
           "kind": "def",
           "name": "isCellAbsent",
-          "line": 154,
+          "line": 158,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26156,7 +26360,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsCellAbsent",
-          "line": 159,
+          "line": 163,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26167,7 +26371,7 @@
         {
           "kind": "def",
           "name": "setCell",
-          "line": 176,
+          "line": 180,
           "called": [
             "Bridge.DepositRecord.decode",
             "CellTag",
@@ -26178,7 +26382,7 @@
         {
           "kind": "theorem",
           "name": "setCell_deterministic",
-          "line": 223,
+          "line": 227,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26189,7 +26393,7 @@
         {
           "kind": "def",
           "name": "buildCellProof",
-          "line": 235,
+          "line": 239,
           "called": [
             "CellProof",
             "CellTag",
@@ -26201,7 +26405,7 @@
         {
           "kind": "def",
           "name": "verifyCellProof",
-          "line": 249,
+          "line": 253,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26212,7 +26416,7 @@
         {
           "kind": "def",
           "name": "verifyCellProofs",
-          "line": 255,
+          "line": 259,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -26222,7 +26426,7 @@
         {
           "kind": "instance",
           "name": "instDecidableVerifyCellProof",
-          "line": 260,
+          "line": 264,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26232,7 +26436,7 @@
         {
           "kind": "instance",
           "name": "instDecidableVerifyCellProofs",
-          "line": 266,
+          "line": 270,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -26242,7 +26446,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_deterministic",
-          "line": 273,
+          "line": 277,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26252,7 +26456,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_deterministic",
-          "line": 278,
+          "line": 282,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -26262,7 +26466,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete",
-          "line": 288,
+          "line": 292,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26275,7 +26479,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_empty",
-          "line": 295,
+          "line": 299,
           "called": [
             "CellProofBundle.empty",
             "StateCommit",
@@ -26285,7 +26489,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_singleton",
-          "line": 299,
+          "line": 303,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26296,7 +26500,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_complete_for_canonical_bundle",
-          "line": 308,
+          "line": 312,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26310,7 +26514,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_recommits",
-          "line": 322,
+          "line": 326,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26321,7 +26525,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_has_cell_value",
-          "line": 335,
+          "line": 339,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26331,8 +26535,8 @@
         },
         {
           "kind": "theorem",
-          "name": "verifyCellProof_sound_under_collision_free",
-          "line": 352,
+          "name": "verifyCellProof_sound",
+          "line": 358,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26345,9 +26549,27 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "verifyCellProof_witness_unique_under_collision_free",
+          "line": 377,
+          "called": [
+            "CellProof",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "ExtendedState.extEq",
+            "StateCommit",
+            "commitExtendedState",
+            "commitExtendedState_subcommits_extensional_eq_under_collision_free",
+            "es",
+            "extendedStateCommitPreimages",
+            "verifyCellProof",
+            "verifyCellProof_witness_recommits"
+          ]
+        },
+        {
           "kind": "def",
           "name": "updateCommitment",
-          "line": 372,
+          "line": 402,
           "called": [
             "CellProof",
             "StateCommit",
@@ -26358,7 +26580,7 @@
         {
           "kind": "theorem",
           "name": "updateCommitment_agrees_with_setCell",
-          "line": 378,
+          "line": 408,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26372,7 +26594,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete_for_absent_cell",
-          "line": 389,
+          "line": 419,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -41378,10 +41600,11 @@
           "name": "wrapInjectiveAPI",
           "line": 498,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "Eip712Message",
             "TestCase",
             "eip712Wrap",
+            "eip712WrapPreimages",
             "eip712Wrap_injective",
             "hashBytes",
             "signInput"
@@ -41390,11 +41613,13 @@
         {
           "kind": "def",
           "name": "dsDistinguishesAPI",
-          "line": 509,
+          "line": 510,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "DomainParams",
             "TestCase",
+            "domainPreHash",
+            "domainPreHashPreimages",
             "eip712DomainSeparator",
             "eip712DomainSeparator_distinguishes",
             "hashBytes"
@@ -41403,12 +41628,13 @@
         {
           "kind": "def",
           "name": "wrapDistinguishesAPI",
-          "line": 524,
+          "line": 527,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "Eip712Message",
             "TestCase",
             "eip712Wrap",
+            "eip712WrapPreimages",
             "eip712Wrap_distinguishes",
             "hashBytes",
             "signInput"
@@ -41417,12 +41643,13 @@
         {
           "kind": "def",
           "name": "domainPreHashInjectiveAPI",
-          "line": 537,
+          "line": 541,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "DomainParams",
             "TestCase",
             "domainPreHash",
+            "domainPreHashPreimages",
             "domainPreHash_injective",
             "hashBytes"
           ]
@@ -41430,7 +41657,7 @@
         {
           "kind": "def",
           "name": "encodeUintInjectiveAPI",
-          "line": 550,
+          "line": 555,
           "called": [
             "TestCase",
             "encodeUint256BE",
@@ -41440,7 +41667,7 @@
         {
           "kind": "def",
           "name": "encodeUintSizeAPI",
-          "line": 561,
+          "line": 566,
           "called": [
             "TestCase",
             "encodeUint256BE",
@@ -41450,7 +41677,7 @@
         {
           "kind": "def",
           "name": "wrapSizeAPI",
-          "line": 570,
+          "line": 575,
           "called": [
             "Eip712Message",
             "TestCase",
@@ -41461,7 +41688,7 @@
         {
           "kind": "def",
           "name": "prefixSizeAPI",
-          "line": 581,
+          "line": 586,
           "called": [
             "TestCase",
             "eip712Prefix_size"
@@ -41470,7 +41697,7 @@
         {
           "kind": "def",
           "name": "structHashSizeAPI",
-          "line": 589,
+          "line": 594,
           "called": [
             "Eip712Message",
             "TestCase",
@@ -41481,7 +41708,7 @@
         {
           "kind": "def",
           "name": "dsSizeAPI",
-          "line": 598,
+          "line": 603,
           "called": [
             "DomainParams",
             "TestCase",
@@ -41492,7 +41719,7 @@
         {
           "kind": "def",
           "name": "l2ChainIdMainnetValue",
-          "line": 614,
+          "line": 619,
           "called": [
             "TestCase",
             "assertEq",
@@ -41502,7 +41729,7 @@
         {
           "kind": "def",
           "name": "l2ChainIdTestnetValue",
-          "line": 620,
+          "line": 625,
           "called": [
             "TestCase",
             "assertEq",
@@ -41512,7 +41739,7 @@
         {
           "kind": "def",
           "name": "l2ChainIdSelectorValues",
-          "line": 627,
+          "line": 632,
           "called": [
             "TestCase",
             "assertEq",
@@ -41522,7 +41749,7 @@
         {
           "kind": "def",
           "name": "l2ChainIdBoundAPI",
-          "line": 638,
+          "line": 643,
           "called": [
             "TestCase",
             "l2ChainIdForL1",
@@ -41532,7 +41759,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 647,
+          "line": 652,
           "called": [
             "Eip712Tests",
             "LegalKernel.Test.Bridge",
@@ -43109,7 +43336,7 @@
           "name": "tests",
           "line": 70,
           "called": [
-            "CollisionFree",
+            "CollisionFreeOn",
             "H",
             "LegalKernel.Test.Bridge.WithdrawalRootTests",
             "TestCase",
@@ -43117,6 +43344,7 @@
             "WithdrawalProof",
             "assert",
             "assertEq",
+            "collisionFreeOn_id",
             "constructProof",
             "constructProof_siblings_length",
             "defaultHash",
@@ -43124,6 +43352,7 @@
             "defaultHash_well_defined",
             "defaultHash_zero",
             "emptyLeafHash",
+            "exists_uniformOutputSize_collisionFreeOn_of_ne",
             "fixtureEight",
             "fixtureOne",
             "fixtureTwo",
@@ -48048,13 +48277,14 @@
             "TestCase",
             "commitExtendedState",
             "commitExtendedState_subcommits_extensional_eq_under_collision_free",
-            "es"
+            "es",
+            "extendedStateCommitPreimages"
           ]
         },
         {
           "kind": "def",
           "name": "test_amountHead_separates_the_2_64_collision",
-          "line": 1674,
+          "line": 1675,
           "called": [
             "TestCase",
             "assert",
@@ -48065,7 +48295,7 @@
         {
           "kind": "def",
           "name": "test_amountHead_roundtrips_above_2_64",
-          "line": 1692,
+          "line": 1693,
           "called": [
             "Stream",
             "TestCase",
@@ -48077,7 +48307,7 @@
         {
           "kind": "def",
           "name": "test_amountHead_never_aliases_uint_head",
-          "line": 1706,
+          "line": 1707,
           "called": [
             "TestCase",
             "assert",
@@ -48088,7 +48318,7 @@
         {
           "kind": "def",
           "name": "test_encodeAmount_injective_api",
-          "line": 1719,
+          "line": 1720,
           "called": [
             "TestCase",
             "encodeAmount",
@@ -48098,7 +48328,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1731,
+          "line": 1732,
           "called": [
             "InjectivityTests",
             "LegalKernel.Test.Encoding",
@@ -49874,6 +50104,8 @@
             "encodeAmount",
             "es",
             "es0",
+            "extendedStateCommitPreimages",
+            "extendedStatePreimage",
             "genesisState"
           ]
         }
@@ -50510,7 +50742,7 @@
           "line": 36,
           "called": [
             "BitsKey",
-            "CollisionFree",
+            "CollisionFreeOn",
             "Encodable",
             "LegalKernel.Bridge",
             "LegalKernel.Runtime",
@@ -50518,22 +50750,25 @@
             "SmtCellProof",
             "Stream",
             "hashBytes",
+            "smtCellProofPreimages",
             "smtCellProof_no_value_substitution",
             "smtCellProof_sound_under_collision_free",
             "smtStep",
+            "smtStepPreimage",
             "smtStep_inj_under_collision_free",
             "smtWalk",
             "stepPair",
             "verifySmtCellProof",
             "verifySmtCellProof_empty_self_verifies",
             "verifySmtCellProof_walks_to_root",
+            "walkPreimages",
             "walk_leaf_inj_under_collision_free"
           ]
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 135,
+          "line": 139,
           "called": [
             "LegalKernel.Test.FaultProof.Smt",
             "SmtCellProof",
@@ -51016,6 +51251,7 @@
             "commitExtendedState_subcommits_eq_under_collision_free",
             "emptyCommit",
             "emptyEs",
+            "es",
             "getCellValue",
             "isCellAbsent",
             "setCell",
@@ -51024,7 +51260,8 @@
             "verifyCellProof",
             "verifyCellProof_complete",
             "verifyCellProof_complete_for_absent_cell",
-            "verifyCellProof_sound_under_collision_free",
+            "verifyCellProof_sound",
+            "verifyCellProof_witness_unique_under_collision_free",
             "verifyCellProofs"
           ]
         }
@@ -56717,6 +56954,86 @@
             "snapshotRoundtrip",
             "takeSnapshotShape",
             "truncatedSnapshotFile"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.Tools.AuditBinaries",
+      "path": "LegalKernel/Test/Tools/AuditBinaries.lean",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Tools.AuditBinaries",
+          "line": 47,
+          "called": [
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deferralDetectsUppercaseMarkers",
+          "line": 58,
+          "called": [
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deferralAcceptsCleanContent",
+          "line": 72,
+          "called": [
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "countSorriesSeesPastCharLiteral",
+          "line": 89,
+          "called": [
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "namingAuditParsesAttributedDeclarations",
+          "line": 123,
+          "called": [
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "namingAuditRejectsNonDeclarations",
+          "line": 148,
+          "called": [
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stubAuditFindsIndentedDocstring",
+          "line": 165,
+          "called": [
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 206,
+          "called": [
+            "LegalKernel.Test.Tools.AuditBinaries",
+            "TestCase",
+            "countSorriesSeesPastCharLiteral",
+            "deferralAcceptsCleanContent",
+            "deferralDetectsUppercaseMarkers",
+            "namingAuditParsesAttributedDeclarations",
+            "namingAuditRejectsNonDeclarations",
+            "stubAuditFindsIndentedDocstring"
           ]
         }
       ]
@@ -62896,6 +63213,21 @@
             "parseGlobalFlags",
             "runReplay",
             "usage"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "StubAudit",
+      "path": "StubAudit.lean",
+      "declaration_count": 1,
+      "declarations": [
+        {
+          "kind": "def",
+          "name": "main",
+          "line": 31,
+          "called": [
+            "aggregate"
           ]
         }
       ]

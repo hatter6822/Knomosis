@@ -54,9 +54,10 @@ example : True := by
   let _api :
       ∀ {K V : Type} [BitsKey K] [Encodable K] [Encodable V],
         Function.Injective (Encodable.encode : V → Stream) →
-        CollisionFree hashBytes →
         ∀ (root : ByteArray) (key : K) (v₁ v₂ : V)
           (proof₁ proof₂ : SmtCellProof),
+          CollisionFreeOn
+            (smtCellProofPreimages key v₁ v₂ proof₁ proof₂) hashBytes →
           verifySmtCellProof root key v₁ proof₁ = true →
           verifySmtCellProof root key v₂ proof₂ = true →
           v₁ = v₂ :=
@@ -69,9 +70,10 @@ example : True := by
   let _api :
       ∀ {K V : Type} [BitsKey K] [Encodable K] [Encodable V],
         Function.Injective (Encodable.encode : V → Stream) →
-        CollisionFree hashBytes →
         ∀ (root : ByteArray) (key : K) (v₁ v₂ : V)
           (proof₁ proof₂ : SmtCellProof),
+          CollisionFreeOn
+            (smtCellProofPreimages key v₁ v₂ proof₁ proof₂) hashBytes →
           verifySmtCellProof root key v₁ proof₁ = true →
           verifySmtCellProof root key v₂ proof₂ = true →
           v₁ = v₂ :=
@@ -81,22 +83,24 @@ example : True := by
 /-- API-stability term for the step-injectivity lemma. -/
 example : True := by
   let _api :
-      CollisionFree hashBytes →
-      ∀ (c₁ c₂ s₁ s₂ : ByteArray),
+      ∀ (c₁ c₂ s₁ s₂ : ByteArray) (bit : Bool),
+        CollisionFreeOn
+          [smtStepPreimage c₁ s₁ bit, smtStepPreimage c₂ s₂ bit] hashBytes →
         c₁.size = 32 → c₂.size = 32 →
         s₁.size = 32 → s₂.size = 32 →
-        ∀ (bit : Bool),
-          smtStep c₁ s₁ bit = smtStep c₂ s₂ bit →
-          c₁ = c₂ ∧ s₁ = s₂ :=
+        smtStep c₁ s₁ bit = smtStep c₂ s₂ bit →
+        c₁ = c₂ ∧ s₁ = s₂ :=
     @smtStep_inj_under_collision_free
   trivial
 
 /-- API-stability term for the walk-leaf-injectivity lemma. -/
 example : True := by
   let _api :
-      CollisionFree hashBytes →
       ∀ (bits : List Bool) (sibs₁ sibs₂ : List ByteArray)
         (leaf₁ leaf₂ : ByteArray),
+        CollisionFreeOn
+          (walkPreimages leaf₁ (sibs₁.zip bits) ++
+           walkPreimages leaf₂ (sibs₂.zip bits)) hashBytes →
         sibs₁.length = bits.length →
         sibs₂.length = bits.length →
         leaf₁.size = 32 →

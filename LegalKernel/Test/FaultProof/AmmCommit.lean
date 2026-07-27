@@ -393,7 +393,9 @@ def tests : List TestCase :=
         -- equalities; this pins its arity so a future field added to
         -- `ExtendedState` without extending the commitment is caught.
         let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
-            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            Bridge.CollisionFreeOn
+              [extendedStatePreimage es₁, extendedStatePreimage es₂]
+              LegalKernel.Runtime.hashBytes →
             commitExtendedState es₁ = commitExtendedState es₂ →
             commitState es₁.base = commitState es₂.base ∧
             commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
@@ -410,7 +412,12 @@ def tests : List TestCase :=
   , { name := "GP.11.10: commitBridgeState_reflects_ammDisabled API stable"
     , body := do
         let _proof : ∀ (bs₁ bs₂ : Bridge.BridgeState),
-            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            Bridge.CollisionFreeOn
+              [ ByteArray.mk (Encoding.Encodable.encode
+                  (T := Bridge.BridgeState) bs₁).toArray
+              , ByteArray.mk (Encoding.Encodable.encode
+                  (T := Bridge.BridgeState) bs₂).toArray ]
+              LegalKernel.Runtime.hashBytes →
             bs₁.consumed.toList = bs₂.consumed.toList →
             bs₁.pending.toList = bs₂.pending.toList →
             bs₁.nextWdId = bs₂.nextWdId →
@@ -431,7 +438,9 @@ def tests : List TestCase :=
   , { name := "GP.11.10: commitExtendedState_reflects_ammDisabled API stable"
     , body := do
         let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
-            Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+            Bridge.CollisionFreeOn
+              (extendedStateCommitPreimages es₁ es₂)
+              LegalKernel.Runtime.hashBytes →
             es₁.bridge.consumed.toList = es₂.bridge.consumed.toList →
             es₁.bridge.pending.toList = es₂.bridge.pending.toList →
             es₁.bridge.nextWdId = es₂.bridge.nextWdId →

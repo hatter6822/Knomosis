@@ -39,9 +39,9 @@ by their logical sub-state + key:
 *witness* `ExtendedState` plus the cell tag and value.  Verification
 re-commits the witness state and checks that (a) the recommitted
 hash equals the public commit and (b) the witness state has the
-claimed cell value at the claimed tag.  Under `CollisionFree
-hashBytes`, the witness state is unique up to extensional
-equality.
+claimed cell value at the claimed tag.  Under collision-freeness of
+`hashBytes` on the commitment chain's pre-images, that witness state
+is the unique one behind the commit, up to extensional equality.
 
 This design is **mathematically equivalent to a Sparse Merkle
 Tree** for soundness purposes — the SMT version optimises the L1
@@ -52,7 +52,7 @@ module) is the simpler reference; the SMT form
 (`LegalKernel/FaultProof/Smt.lean`) is gas-efficient and used by
 L1 deployments.  Deployments select the form via the
 `KnomosisStateRootSubmission` parameter set; both have full Lean
-soundness proofs under `CollisionFree hashBytes`.
+soundness proofs under collision-freeness of `hashBytes` on the pre-images below.
 
 This module is **not** part of the trusted computing base.  Bugs
 here would only affect the deployment-side fault-proof tooling;
@@ -126,7 +126,7 @@ def CellTag.kindIndex : CellTag → Nat
 
 The proof carries a *witness* `ExtendedState` from which the
 verifier can recompute the top-level commit and the cell at the
-claimed tag.  Under `CollisionFree hashBytes`, the witness state
+claimed tag.  Under collision-freeness of `hashBytes` on the pre-images below, the witness state
 is unique up to extensional equality, so a verifying proof
 authoritatively binds the cell value to the public commit.
 
@@ -147,7 +147,7 @@ implementation prioritises mathematical clarity over gas. -/
       1. `commitExtendedState witnessState = committed root`
       2. `getCellValue witnessState cellTag = cellValue`
 
-    Under `CollisionFree hashBytes`, condition 1 plus
+    Under collision-freeness of `hashBytes` on the pre-images below, condition 1 plus
     `commitExtendedState`'s injectivity (theorem #220) makes the
     `witnessState` unique up to extensional equality, so the
     verifier authoritatively binds `cellValue` to the public
@@ -214,22 +214,25 @@ abbrev smtVerify := @verifySmtCellProof
 /-- Re-export: SMT cell-proof soundness theorem
     (`LegalKernel.FaultProof.smtCellProof_sound_under_collision_free`).
     Documents the operational binding property: under
-    `CollisionFree hashBytes`, the verifier accepts at most one
-    value per `(root, key)` pair. -/
+    collision-freeness of `hashBytes` on the proofs' own hash
+    pre-images, the verifier accepts at most one value per
+    `(root, key)` pair. -/
 theorem smtSound
     {K V : Type} [BitsKey K]
     [LegalKernel.Encoding.Encodable K] [LegalKernel.Encoding.Encodable V]
     (hVInj : Function.Injective
                 (LegalKernel.Encoding.Encodable.encode :
                   V → LegalKernel.Encoding.Stream))
-    (h_cf : Bridge.CollisionFree LegalKernel.Runtime.hashBytes)
     (root : ByteArray) (key : K) (v₁ v₂ : V)
     (proof₁ proof₂ : SmtCellProof)
+    (h_cf : Bridge.CollisionFreeOn
+      (smtCellProofPreimages key v₁ v₂ proof₁ proof₂)
+      LegalKernel.Runtime.hashBytes)
     (h_verify₁ : verifySmtCellProof root key v₁ proof₁ = true)
     (h_verify₂ : verifySmtCellProof root key v₂ proof₂ = true) :
     v₁ = v₂ :=
-  smtCellProof_sound_under_collision_free hVInj h_cf root key v₁ v₂
-    proof₁ proof₂ h_verify₁ h_verify₂
+  smtCellProof_sound_under_collision_free hVInj root key v₁ v₂
+    proof₁ proof₂ h_cf h_verify₁ h_verify₂
 
 end Cell
 

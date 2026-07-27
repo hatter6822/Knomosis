@@ -122,7 +122,7 @@ def correctAnchorAcceptance : TestCase := {
     are structurally equal (and therefore both extensionally
     equal); a non-empty-log variant exercising the full
     `ExtendedState.extEq` chain would also rely on a deployment-
-    side `Bridge.CollisionFree hashBytes` assumption that is
+    side `Bridge.CollisionFreeOn` assumption that is
     out of scope for the integration suite. -/
 def finalStateEqualsGenesis : TestCase := {
   name := "AR.23.3: bootstrap from genesis snapshot matches bootstrap from-genesis"

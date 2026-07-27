@@ -31,7 +31,7 @@ Coverage (per the integration plan):
   * D.1.3 — `verifyProof_complete` (unconditional — completeness is
     a structural recursion identity).
   * D.1.4 — `verifyProof_sound` (hash-conditional — soundness rests
-    on `CollisionFree H`, a `Prop` parameter that production
+    on `CollisionFreeOn ... H`, a `Prop` parameter that production
     deployments discharge by linking the keccak256 binding).
 
 The hash function is parameterised (`H : ByteArray → ByteArray`) so
@@ -92,7 +92,7 @@ proof.siblings)`, so under CR plus size constraints, two distinct
 proofs cannot produce the same root.
 
 This module is **not** part of the trusted computing base.  The
-soundness theorem `verifyProof_sound` rests on `CollisionFree`,
+soundness theorem `verifyProof_sound` rests on `CollisionFreeOn`,
 `UniformOutputSize`, and an explicit leaf-size hypothesis;
 production deployments discharge these by linking the keccak256
 binding plus the runtime adaptor's leaf-canonicalisation
@@ -166,6 +166,20 @@ def hashUp (H : ByteArray → ByteArray)
     H (sibling ++ current)
   else
     H (current ++ sibling)
+
+/-- The byte string `hashUp` hashes.  Named so the injectivity
+    theorems can list it as a hash pre-image (see
+    `CollisionFreeOn`). -/
+def hashUpPreimage (right? : Bool) (current : ByteArray) (sibling : ByteArray) :
+    ByteArray :=
+  if right? then sibling ++ current else current ++ sibling
+
+/-- `hashUp H` is `H` applied to `hashUpPreimage`. -/
+theorem hashUp_eq_hash_preimage (H : ByteArray → ByteArray)
+    (right? : Bool) (current sibling : ByteArray) :
+    hashUp H right? current sibling = H (hashUpPreimage right? current sibling) := by
+  unfold hashUp hashUpPreimage
+  cases right? <;> rfl
 
 /-! ## leafBytes: the canonical leaf encoding -/
 
@@ -667,14 +681,6 @@ function arguments, not Lean axioms).  The `#print axioms`
 report for `verifyProof_sound` returns only `[propext,
 Classical.choice, Quot.sound]`. -/
 
-/-- `CollisionFree` injectivity helper.  Imported from
-    `Bridge/Eip712.lean`'s definition: `CollisionFree H` says
-    `∀ x y, H x = H y → x = y`. -/
-private theorem collisionFree_inj {H : ByteArray → ByteArray}
-    (hCF : CollisionFree H)
-    {x y : ByteArray} (h : H x = H y) : x = y :=
-  hCF x y h
-
 /-- `H` produces uniformly-sized outputs (= 32 bytes for keccak256). -/
 def UniformOutputSize (H : ByteArray → ByteArray) (n : Nat) : Prop :=
   ∀ b, (H b).size = n
@@ -711,22 +717,28 @@ private theorem byteArray_append_inj
 /-- `hashUp` injectivity: under collision-freeness and matching
     operand sizes, equal `hashUp` outputs imply equal operands. -/
 private theorem hashUp_inj_of_collisionFree
-    {H : ByteArray → ByteArray} (hCF : CollisionFree H)
+    {H : ByteArray → ByteArray}
     (right? : Bool) {a₁ s₁ a₂ s₂ : ByteArray}
+    (hCF : CollisionFreeOn
+      [hashUpPreimage right? a₁ s₁, hashUpPreimage right? a₂ s₂] H)
     (h_eq : hashUp H right? a₁ s₁ = hashUp H right? a₂ s₂)
     (h_size_a : a₁.size = a₂.size)
     (h_size_s : s₁.size = s₂.size) :
     a₁ = a₂ ∧ s₁ = s₂ := by
-  unfold hashUp at h_eq
+  have h_pre : hashUpPreimage right? a₁ s₁ = hashUpPreimage right? a₂ s₂ := by
+    refine hCF.apply (by simp) (by simp) ?_
+    rw [hashUp_eq_hash_preimage H right? a₁ s₁,
+        hashUp_eq_hash_preimage H right? a₂ s₂] at h_eq
+    exact h_eq
+  unfold hashUpPreimage at h_pre
   cases right? with
   | true =>
-    -- After unfold + cases, h_eq is already H (s₁ ++ a₁) = H (s₂ ++ a₂).
-    have h_inner : (s₁ ++ a₁) = (s₂ ++ a₂) := collisionFree_inj hCF h_eq
-    have ⟨h_s, h_a⟩ := byteArray_append_inj h_inner h_size_s
+    simp only [if_true] at h_pre
+    have ⟨h_s, h_a⟩ := byteArray_append_inj h_pre h_size_s
     exact ⟨h_a, h_s⟩
   | false =>
-    have h_inner : (a₁ ++ s₁) = (a₂ ++ s₂) := collisionFree_inj hCF h_eq
-    exact byteArray_append_inj h_inner h_size_a
+    simp only [Bool.false_eq_true, if_false] at h_pre
+    exact byteArray_append_inj h_pre h_size_a
 
 /-- The verifier's output at level `k+1` is always the result of
     a `hashUp`, hence has size 32 under `UniformOutputSize`. -/
@@ -765,6 +777,19 @@ theorem siblingsHaveMatchingSizes_of_all_32
   have ⟨hp₁, hp₂⟩ := List.of_mem_zip hp
   rw [h₁ _ hp₁, h₂ _ hp₂]
 
+/-- Every pre-image `verifyProofRec` feeds to `H`, in the order the
+    recursion produces them (outermost level first).  Mirrors
+    `verifyProofRec`'s own recursion: at level `k+1` the level's
+    pre-image is the concatenation of the level-`k` result and the
+    level's sibling, in path-bit order. -/
+def verifyProofPreimages (H : ByteArray → ByteArray) (idx : WithdrawalId)
+    (leaf : ByteArray) : List ByteArray → Nat → List ByteArray
+  | s :: rest, k + 1 =>
+      hashUpPreimage (pathBitAtLevel idx k)
+          (verifyProofRec H idx leaf rest k) s ::
+        verifyProofPreimages H idx leaf rest k
+  | _, _ => []
+
 /-- Verifier injectivity (general form): under CR + uniform output
     size + matched leaf size + element-wise sibling size match,
     two proof-data tuples that produce the same verifier output
@@ -775,10 +800,13 @@ theorem siblingsHaveMatchingSizes_of_all_32
     `leafBytes wd` ~56 bytes when the other leaf in the deepest
     pair is populated). -/
 theorem verifyProofRec_inj
-    {H : ByteArray → ByteArray} (hCF : CollisionFree H)
+    {H : ByteArray → ByteArray}
     (h_uniform : UniformOutputSize H 32)
     (idx : WithdrawalId) (level : Nat) :
     ∀ (leaf₁ leaf₂ : ByteArray) (sibs₁ sibs₂ : List ByteArray),
+      CollisionFreeOn
+        (verifyProofPreimages H idx leaf₁ sibs₁ level ++
+         verifyProofPreimages H idx leaf₂ sibs₂ level) H →
       sibs₁.length = level → sibs₂.length = level →
       leaf₁.size = leaf₂.size →
       siblingsHaveMatchingSizes sibs₁ sibs₂ →
@@ -787,7 +815,7 @@ theorem verifyProofRec_inj
       leaf₁ = leaf₂ ∧ sibs₁ = sibs₂ := by
   induction level with
   | zero =>
-    intro leaf₁ leaf₂ sibs₁ sibs₂ h_len₁ h_len₂ _ _ h_eq
+    intro leaf₁ leaf₂ sibs₁ sibs₂ _ h_len₁ h_len₂ _ _ h_eq
     have h_sibs_nil : sibs₁ = [] ∧ sibs₂ = [] := by
       refine ⟨?_, ?_⟩
       · exact List.length_eq_zero_iff.mp h_len₁
@@ -798,7 +826,7 @@ theorem verifyProofRec_inj
     have : leaf₁ = leaf₂ := h_eq
     exact ⟨this, rfl⟩
   | succ k ih =>
-    intro leaf₁ leaf₂ sibs₁ sibs₂ h_len₁ h_len₂ h_leaf_size h_sibs_match h_eq
+    intro leaf₁ leaf₂ sibs₁ sibs₂ hCF h_len₁ h_len₂ h_leaf_size h_sibs_match h_eq
     -- sibs are non-empty.
     cases sibs₁ with
     | nil => simp at h_len₁
@@ -853,13 +881,48 @@ theorem verifyProofRec_inj
         | cons s₂' rest₂' =>
         rw [verifyProofRec_size_succ h_uniform,
             verifyProofRec_size_succ h_uniform]
+    -- The level's two pre-images head each half of the list; the
+    -- induction hypothesis needs exactly the two tails.
+    have h_expand :
+        verifyProofPreimages H idx leaf₁ (s₁ :: rest₁) (k + 1) ++
+        verifyProofPreimages H idx leaf₂ (s₂ :: rest₂) (k + 1) =
+        hashUpPreimage (pathBitAtLevel idx k)
+            (verifyProofRec H idx leaf₁ rest₁ k) s₁ ::
+          (verifyProofPreimages H idx leaf₁ rest₁ k ++
+            (hashUpPreimage (pathBitAtLevel idx k)
+                (verifyProofRec H idx leaf₂ rest₂ k) s₂ ::
+              verifyProofPreimages H idx leaf₂ rest₂ k)) := by
+      simp [verifyProofPreimages]
+    rw [h_expand] at hCF
+    have hCF_head :
+        CollisionFreeOn
+          [ hashUpPreimage (pathBitAtLevel idx k)
+              (verifyProofRec H idx leaf₁ rest₁ k) s₁
+          , hashUpPreimage (pathBitAtLevel idx k)
+              (verifyProofRec H idx leaf₂ rest₂ k) s₂ ] H := by
+      refine hCF.mono ?_
+      intro z hz
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
+      rcases hz with rfl | rfl
+      · exact List.mem_cons_self
+      · exact List.mem_cons_of_mem _ (List.mem_append_right _ List.mem_cons_self)
+    have hCF_rest :
+        CollisionFreeOn
+          (verifyProofPreimages H idx leaf₁ rest₁ k ++
+           verifyProofPreimages H idx leaf₂ rest₂ k) H := by
+      refine hCF.mono ?_
+      intro z hz
+      rcases List.mem_append.mp hz with hz₁ | hz₂
+      · exact List.mem_cons_of_mem _ (List.mem_append_left _ hz₁)
+      · exact List.mem_cons_of_mem _ (List.mem_append_right _
+          (List.mem_cons_of_mem _ hz₂))
     -- Apply hashUp_inj to recover inner equality + sibling equality.
     have ⟨h_inner_eq, h_s_eq⟩ :=
-      hashUp_inj_of_collisionFree hCF (pathBitAtLevel idx k)
+      hashUp_inj_of_collisionFree (pathBitAtLevel idx k) hCF_head
         h_eq h_inner_size h_size_s
     -- Apply IH to inner equality.
     have ⟨h_leaf_eq, h_rest_eq⟩ :=
-      ih leaf₁ leaf₂ rest₁ rest₂ h_rest_len₁ h_rest_len₂
+      ih leaf₁ leaf₂ rest₁ rest₂ hCF_rest h_rest_len₁ h_rest_len₂
         h_leaf_size h_rest_match h_inner_eq
     refine ⟨h_leaf_eq, ?_⟩
     rw [h_s_eq, h_rest_eq]
@@ -1016,9 +1079,15 @@ canonical's bytes (computed from the bridge state). -/
     soundness conclusion — but the adaptor's `verifyProof_complete`
     consumer never exercises that path. -/
 theorem verifyProof_sound
-    {H : ByteArray → ByteArray} (hCF : CollisionFree H)
+    {H : ByteArray → ByteArray}
     (h_uniform : UniformOutputSize H 32)
     (b : BridgeState) (proof : WithdrawalProof)
+    (hCF : CollisionFreeOn
+      (verifyProofPreimages H proof.index proof.leaf
+          proof.siblings.toList smtHeight ++
+       verifyProofPreimages H proof.index
+          (constructProof H b proof.index).leaf
+          (constructProof H b proof.index).siblings.toList smtHeight) H)
     (h_leaf_size :
       proof.leaf.size = (constructProof H b proof.index).leaf.size)
     (h_sibs_match :
@@ -1060,11 +1129,12 @@ theorem verifyProof_sound
   have h_index_eq : proof.index = (constructProof H b proof.index).index := by
     rw [constructProof_index]
   have ⟨h_leaf, h_sibs_list⟩ :=
-    verifyProofRec_inj hCF h_uniform proof.index smtHeight
+    verifyProofRec_inj h_uniform proof.index smtHeight
       proof.leaf
       (constructProof H b proof.index).leaf
       proof.siblings.toList
       (constructProof H b proof.index).siblings.toList
+      hCF
       h_proof_sibs_len h_canonical_sibs_len
       h_leaf_size h_sibs_match
       (h_index_eq ▸ h_verifier_eq)
@@ -1082,9 +1152,15 @@ theorem verifyProof_sound
     SMT (the standard SMT design that deviates from the integration
     plan's `proof.leaf = encode wd` semantics). -/
 theorem verifyProof_sound_all_32
-    {H : ByteArray → ByteArray} (hCF : CollisionFree H)
+    {H : ByteArray → ByteArray}
     (h_uniform : UniformOutputSize H 32)
     (b : BridgeState) (proof : WithdrawalProof)
+    (hCF : CollisionFreeOn
+      (verifyProofPreimages H proof.index proof.leaf
+          proof.siblings.toList smtHeight ++
+       verifyProofPreimages H proof.index
+          (constructProof H b proof.index).leaf
+          (constructProof H b proof.index).siblings.toList smtHeight) H)
     (h_leaf_size :
       proof.leaf.size = (constructProof H b proof.index).leaf.size)
     (h_proof_sibs_size :
@@ -1094,7 +1170,7 @@ theorem verifyProof_sound_all_32
     (hVerify : verifyProof H proof (withdrawalRoot H b) = true) :
     proof.leaf = (constructProof H b proof.index).leaf ∧
     proof.siblings = (constructProof H b proof.index).siblings :=
-  verifyProof_sound hCF h_uniform b proof h_leaf_size
+  verifyProof_sound h_uniform b proof hCF h_leaf_size
     (siblingsHaveMatchingSizes_of_all_32 _ _ h_proof_sibs_size h_canonical_sibs_size)
     hVerify
 

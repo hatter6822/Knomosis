@@ -378,18 +378,33 @@ separate Lake package, so the TCB equals exactly the Lean core
 distribution plus `Kernel.lean` + `RBMapLemmas.lean`.  Every other
 module is non-TCB deployment-facing infrastructure.
 
-**Trust assumptions.**  Two non-Lean assumptions surface through
-opaque declarations rather than axioms (so `#print axioms` stays at
+**Trust assumptions.**  Two non-Lean assumptions surface as ordinary
+Lean declarations rather than axioms (so `#print axioms` stays at
 exactly `propext`, `Classical.choice`, `Quot.sound`):
 
 1. `Authority.Crypto.Verify` — the deployment-supplied signature
-   scheme is EUF-CMA secure.  `@[extern "knomosis_verify_ecdsa"]`
-   routes the compiled runtime call to the secp256k1 adaptor (fail-
-   closed reject-all fallback for tests); the logical value stays
-   opaque, so the trust assumption is preserved.
+   scheme is EUF-CMA secure.  Surfaced as an `opaque` declaration.
+   `@[extern "knomosis_verify_ecdsa"]` routes the compiled runtime
+   call to the secp256k1 adaptor (fail-closed reject-all fallback for
+   tests); the logical value stays opaque, so the trust assumption is
+   preserved.
 2. `Runtime.Hash.hashBytes` — the production hash function (BLAKE3
    via `@[extern]`; FNV-1a-64 fallback for tests) is
-   collision-resistant.
+   collision-resistant.  This one is **not** opaque: `hashBytes` has a
+   real Lean body and `hashBytes_size` proves every output is 32
+   bytes.  The assumption is therefore carried where it is used, as
+   the explicit theorem hypothesis `Bridge.CollisionFreeOn S hashBytes`
+   — `hashBytes` is injective on the finite pre-image set `S` that the
+   theorem itself hashes.
+
+   The scoping is load-bearing, not cosmetic.  A global-injectivity
+   predicate (`∀ b₁ b₂, h b₁ = h b₂ → b₁ = b₂`) is *refutable inside
+   Lean* once `hashBytes_size` is available — `ByteArray` is infinite
+   and the 32-byte arrays are not — so every theorem conditioned on it
+   would be vacuously true.  `CollisionFreeOn` is satisfiable, and the
+   witnesses are exhibited (`Bridge.collisionFreeOn_id`,
+   `Bridge.exists_uniformOutputSize_collisionFreeOn_of_ne`) rather
+   than assumed.
 
 ## Reading large files
 

@@ -1647,7 +1647,8 @@ def test_commitExtendedState_subcommits_extensional_eq_api : TestCase := {
   name := "commitExtendedState_subcommits_extensional_eq API stability"
   body := do
     let _proof : ∀ (es₁ es₂ : LegalKernel.Authority.ExtendedState),
-        LegalKernel.Bridge.CollisionFree LegalKernel.Runtime.hashBytes →
+        LegalKernel.Bridge.CollisionFreeOn
+          (extendedStateCommitPreimages es₁ es₂) LegalKernel.Runtime.hashBytes →
         ExtendedState.CanonicalBounds es₁ → ExtendedState.CanonicalBounds es₂ →
         commitExtendedState es₁ = commitExtendedState es₂ →
         ExtendedState.extEq es₁ es₂ :=

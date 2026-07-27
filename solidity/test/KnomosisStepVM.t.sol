@@ -685,13 +685,14 @@ contract KnomosisStepVMTest is Test {
         proofs[1] = _makeCellProof(
             0, 1, 99, _encodeCbeAmount(0), FIXTURE_PRE_COMMIT);
 
-        // kind 20: gasResource=1, gasAmount=50, budgetIncrement=1000,
-        //          poolActor=99.
+        // kind 20 (40 bytes): gasResource=1 | gasAmount=50 (uint128) |
+        //          budgetIncrement=1000 | poolActor=99.
         bytes memory fields20 = abi.encodePacked(
-            uint64(1), uint64(50), uint64(1000), uint64(99));
-        // kind 21: recipient=50, then the SAME gas-transfer fields.
+            uint64(1), uint128(50), uint64(1000), uint64(99));
+        // kind 21 (48 bytes): recipient=50, then the SAME gas-transfer
+        //          fields.
         bytes memory fields21 = abi.encodePacked(
-            uint64(50), uint64(1), uint64(50), uint64(1000), uint64(99));
+            uint64(50), uint64(1), uint128(50), uint64(1000), uint64(99));
 
         bytes32 r20 = stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(20), fields20, uint64(10), proofs);
@@ -825,16 +826,22 @@ contract KnomosisStepVMTest is Test {
     }
 
     /// @notice GP.9.1 product-overflow regression — `budgetUnits *
-    ///         weiPerBudgetUnit` MUST be computed in uint256, never
-    ///         uint64.  With both factors = 2^33 the true (uint256)
-    ///         product is 2^66 — far beyond a small pool, so the
-    ///         solvency guard reverts.  A buggy uint64-truncating
-    ///         contract would compute `2^66 mod 2^64 = 0`, find the pool
-    ///         solvent, and NOT revert (silently crediting 0).  So this
-    ///         expect-revert pins that the product is the full uint256
-    ///         value.  (A pool funded ≥ 2^64 is unrepresentable in a
-    ///         uint64 cell, so the no-truncation property is observable
-    ///         only through this solvency-threshold behaviour.)
+    ///         weiPerBudgetUnit` MUST be computed in uint256, never a
+    ///         narrower type.  `budgetUnits` is a unit count in a
+    ///         uint64 field; `weiPerBudgetUnit` is a wei-denominated
+    ///         rate in a uint128 field (C-1), so the product reaches
+    ///         ~2^192 and BOTH a uint64- and a uint128-truncating
+    ///         contract are now possible bugs.
+    ///
+    ///         The factors below are chosen so the true product is
+    ///         exactly 2^128: it is `0 mod 2^128` AND `0 mod 2^64`, so
+    ///         a contract truncating at either width finds the pool
+    ///         solvent and silently credits 0 instead of reverting.
+    ///         In uint256 the product is far beyond a 1000-wei pool, so
+    ///         the solvency guard reverts — which is what this
+    ///         expect-revert pins.  (A pool funded ≥ 2^128 is
+    ///         unrepresentable in a cell, so the no-truncation property
+    ///         is observable only through this solvency threshold.)
     function test_claimBudgetRefund_uint256_product_no_overflow() public {
         KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
         proofs[0] = _makeCellProof(
@@ -842,11 +849,12 @@ contract KnomosisStepVMTest is Test {
         proofs[1] = _makeCellProof(
             0, 1, 99, _encodeCbeAmount(1000), FIXTURE_PRE_COMMIT);   // pool gas = 1000
 
-        // budgetUnits = 2^33, weiPerBudgetUnit = 2^33 (each < 2^64, fit
-        // uint64); true product = 2^66 >> pool 1000 => revert.
+        // budgetUnits = 2^33 (fits uint64), weiPerBudgetUnit = 2^95
+        // (fits uint128); true product = 2^128 >> pool 1000 => revert.
         uint64 units = uint64(1) << 33;
+        uint128 rate = uint128(1) << 95;
         bytes memory actionFields = abi.encodePacked(
-            uint64(1), units, units, uint64(99));
+            uint64(1), units, rate, uint64(99));
         vm.expectRevert(KnomosisStepVM.InsufficientBalance.selector);
         stepVM.executeStep(
             FIXTURE_PRE_COMMIT, uint8(22), actionFields, uint64(10), proofs);

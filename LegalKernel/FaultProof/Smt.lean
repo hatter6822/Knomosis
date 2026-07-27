@@ -33,9 +33,10 @@ siblings from the on-wire encoding without losing information).
 **Headline theorems.**
 
   * `smtCellProof_no_value_substitution` (the load-bearing
-    operational security property) — under `CollisionFree
-    hashBytes` + encoder injectivity for the value type, the
-    verifier accepts at most one value per `(root, key)` pair.
+    operational security property) — under collision-freeness of
+    `hashBytes` on the proofs' own hash pre-images, plus encoder
+    injectivity for the value type, the verifier accepts at most one
+    value per `(root, key)` pair.
   * `smtCellProof_sound_under_collision_free` — alias for
     `no_value_substitution` matching the plan's naming.
 
@@ -43,7 +44,7 @@ siblings from the on-wire encoding without losing information).
 existential soundness theorem of the shape
 `∃ m : TreeMap, smtRoot m = root ∧ m[key]? = some v` after a
 verifying proof.  The literal existential is not provable under
-`CollisionFree hashBytes` alone: constructing the witness map
+collision-freeness alone: constructing the witness map
 requires finding pre-images of arbitrary `ByteArray` sibling
 hashes, which is a hash-inversion problem that collision-
 resistance does not solve.  The operationally-meaningful
@@ -149,7 +150,7 @@ private def buildEmptyHashesAux : Nat → Array ByteArray → Array ByteArray
 
     The values depend on the linked `hashBytes` implementation;
     the SMT spec is implementation-agnostic — it relies only on
-    `hashBytes_size` and `CollisionFree hashBytes`. -/
+    `hashBytes_size` and `CollisionFreeOn`. -/
 def emptySubtreeHashes : Array ByteArray :=
   buildEmptyHashesAux 255 #[hashBytes emptyLeafSeedBytes]
 
@@ -359,6 +360,18 @@ def smtStep (current sibling : ByteArray) (bit : Bool) : ByteArray :=
   else
     hashBytes (current ++ sibling)
 
+/-- The byte string `smtStep` hashes.  Named so the injectivity
+    theorems can list it as a hash pre-image (see
+    `Bridge.CollisionFreeOn`). -/
+def smtStepPreimage (current sibling : ByteArray) (bit : Bool) : ByteArray :=
+  if bit then sibling ++ current else current ++ sibling
+
+/-- `smtStep` is `hashBytes` applied to `smtStepPreimage`. -/
+theorem smtStep_eq_hash_preimage (current sibling : ByteArray) (bit : Bool) :
+    smtStep current sibling bit = hashBytes (smtStepPreimage current sibling bit) := by
+  unfold smtStep smtStepPreimage
+  cases bit <;> rfl
+
 /-- `smtStep`'s output is always exactly 32 bytes. -/
 theorem smtStep_size (current sibling : ByteArray) (bit : Bool) :
     (smtStep current sibling bit).size = 32 := by
@@ -398,29 +411,34 @@ theorem byteArray_append_inj_left
         congr 1
         exact Array.toList_inj.mp h_b
 
-/-! ## Step-injectivity under `CollisionFree` -/
+/-! ## Step-injectivity under collision-freeness on the level's pre-images -/
 
-/-- Backward-step injectivity: under `CollisionFree`, two SMT
+/-- Backward-step injectivity: under collision-freeness on the level's pre-images, two SMT
     steps produce the same parent hash only if their current
     and sibling components agree pairwise. -/
 theorem smtStep_inj_under_collision_free
-    (h_cf : CollisionFree hashBytes)
-    (c₁ c₂ s₁ s₂ : ByteArray)
+    (c₁ c₂ s₁ s₂ : ByteArray) (bit : Bool)
+    (h_cf : CollisionFreeOn
+      [smtStepPreimage c₁ s₁ bit, smtStepPreimage c₂ s₂ bit] hashBytes)
     (h_c₁_size : c₁.size = 32) (h_c₂_size : c₂.size = 32)
     (h_s₁_size : s₁.size = 32) (h_s₂_size : s₂.size = 32)
-    (bit : Bool)
     (h_step : smtStep c₁ s₁ bit = smtStep c₂ s₂ bit) :
     c₁ = c₂ ∧ s₁ = s₂ := by
-  unfold smtStep at h_step
+  have h_pre_eq :
+      smtStepPreimage c₁ s₁ bit = smtStepPreimage c₂ s₂ bit := by
+    refine h_cf.apply (by simp) (by simp) ?_
+    rw [← smtStep_eq_hash_preimage, ← smtStep_eq_hash_preimage]
+    exact h_step
+  unfold smtStepPreimage at h_pre_eq
   cases bit with
   | false =>
-    have h_pre : c₁ ++ s₁ = c₂ ++ s₂ := h_cf _ _ h_step
+    simp only [Bool.false_eq_true, if_false] at h_pre_eq
     have h_c_size : c₁.size = c₂.size := by rw [h_c₁_size, h_c₂_size]
-    exact byteArray_append_inj_left c₁ s₁ c₂ s₂ h_pre h_c_size
+    exact byteArray_append_inj_left c₁ s₁ c₂ s₂ h_pre_eq h_c_size
   | true =>
-    have h_pre : s₁ ++ c₁ = s₂ ++ c₂ := h_cf _ _ h_step
+    simp only [if_true] at h_pre_eq
     have h_s_size : s₁.size = s₂.size := by rw [h_s₁_size, h_s₂_size]
-    obtain ⟨h_s, h_c⟩ := byteArray_append_inj_left s₁ c₁ s₂ c₂ h_pre h_s_size
+    obtain ⟨h_s, h_c⟩ := byteArray_append_inj_left s₁ c₁ s₂ c₂ h_pre_eq h_s_size
     exact ⟨h_c, h_s⟩
 
 /-! ## SMT walk (list-based for clean inductive proofs) -/
@@ -853,9 +871,18 @@ theorem keyBits_length {K : Type} [BitsKey K] (key : K) :
   unfold keyBits
   rw [List.length_map, List.length_range]
 
+/-- Every pre-image a `stepPair` fold feeds to `hashBytes`, in walk
+    order.  Mirrors the `List.foldl` in `smtWalk`: at each level the
+    current accumulator and the level's sibling are concatenated in
+    bit order, and that concatenation is the hashed pre-image. -/
+def walkPreimages : ByteArray → List (ByteArray × Bool) → List ByteArray
+  | _,   []            => []
+  | cur, (s, bit) :: rest =>
+      smtStepPreimage cur s bit :: walkPreimages (stepPair cur (s, bit)) rest
+
 /-! ## Walk injectivity in the leaf -/
 
-/-- Walk-leaf injectivity: under `CollisionFree`, two folds of
+/-- Walk-leaf injectivity: under collision-freeness on the level's pre-images, two folds of
     `stepPair` ending at the same value must coincide on the
     starting leaf, provided:
       * the two pair-lists have the same length,
@@ -865,10 +892,12 @@ theorem keyBits_length {K : Type} [BitsKey K] (key : K) :
 
     The siblings themselves may differ between the two walks;
     the conclusion is about the starting leaf alone. -/
-theorem walk_leaf_inj_under_collision_free
-    (h_cf : CollisionFree hashBytes) :
+theorem walk_leaf_inj_under_collision_free :
     ∀ (bits : List Bool) (sibs₁ sibs₂ : List ByteArray)
       (leaf₁ leaf₂ : ByteArray),
+      CollisionFreeOn
+        (walkPreimages leaf₁ (sibs₁.zip bits) ++
+         walkPreimages leaf₂ (sibs₂.zip bits)) hashBytes →
       sibs₁.length = bits.length →
       sibs₂.length = bits.length →
       leaf₁.size = 32 →
@@ -881,14 +910,14 @@ theorem walk_leaf_inj_under_collision_free
   intro bits
   induction bits with
   | nil =>
-    intro sibs₁ sibs₂ leaf₁ leaf₂
+    intro sibs₁ sibs₂ leaf₁ leaf₂ _
       h_len₁ h_len₂ _ _ _ _ h_walk_eq
     have hsibs₁ : sibs₁ = [] := List.eq_nil_of_length_eq_zero h_len₁
     have hsibs₂ : sibs₂ = [] := List.eq_nil_of_length_eq_zero h_len₂
     subst hsibs₁ hsibs₂
     simpa using h_walk_eq
   | cons b rest_bits ih =>
-    intro sibs₁ sibs₂ leaf₁ leaf₂
+    intro sibs₁ sibs₂ leaf₁ leaf₂ h_cf
       h_len₁ h_len₂ h_leaf₁_size h_leaf₂_size
       h_sibs₁_32 h_sibs₂_32 h_walk_eq
     -- sibs₁ and sibs₂ each have a head element.
@@ -920,24 +949,71 @@ theorem walk_leaf_inj_under_collision_free
           simp [List.length_cons] at h_len₁; exact h_len₁
         have h_len_rest₂ : rest_sibs₂.length = rest_bits.length := by
           simp [List.length_cons] at h_len₂; exact h_len₂
+        -- The level's two pre-images head each half of the list, and
+        -- the induction hypothesis needs exactly the two tails.
+        have h_expand :
+            walkPreimages leaf₁ ((s₁ :: rest_sibs₁).zip (b :: rest_bits)) ++
+            walkPreimages leaf₂ ((s₂ :: rest_sibs₂).zip (b :: rest_bits)) =
+            smtStepPreimage leaf₁ s₁ b ::
+              (walkPreimages (stepPair leaf₁ (s₁, b)) (rest_sibs₁.zip rest_bits) ++
+                (smtStepPreimage leaf₂ s₂ b ::
+                  walkPreimages (stepPair leaf₂ (s₂, b))
+                    (rest_sibs₂.zip rest_bits))) := by
+          simp [List.zip_cons_cons, walkPreimages]
+        rw [h_expand] at h_cf
+        have h_cf_rest :
+            CollisionFreeOn
+              (walkPreimages (stepPair leaf₁ (s₁, b)) (rest_sibs₁.zip rest_bits) ++
+               walkPreimages (stepPair leaf₂ (s₂, b)) (rest_sibs₂.zip rest_bits))
+              hashBytes := by
+          refine h_cf.mono ?_
+          intro z hz
+          rcases List.mem_append.mp hz with hz₁ | hz₂
+          · exact List.mem_cons_of_mem _ (List.mem_append_left _ hz₁)
+          · exact List.mem_cons_of_mem _ (List.mem_append_right _
+              (List.mem_cons_of_mem _ hz₂))
         have h_step_eq : stepPair leaf₁ (s₁, b) = stepPair leaf₂ (s₂, b) :=
           ih rest_sibs₁ rest_sibs₂ (stepPair leaf₁ (s₁, b)) (stepPair leaf₂ (s₂, b))
+            h_cf_rest
             h_len_rest₁ h_len_rest₂ h_step_size₁ h_step_size₂
             h_rest_sibs₁_32 h_rest_sibs₂_32 h_walk_eq
         -- One-step injectivity: extract leaf₁ = leaf₂ from step equality.
         have h_s₁_32 : s₁.size = 32 := h_sibs₁_32 s₁ List.mem_cons_self
         have h_s₂_32 : s₂.size = 32 := h_sibs₂_32 s₂ List.mem_cons_self
+        have h_cf_head :
+            CollisionFreeOn
+              [smtStepPreimage leaf₁ s₁ b, smtStepPreimage leaf₂ s₂ b]
+              hashBytes := by
+          refine h_cf.mono ?_
+          intro z hz
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
+          rcases hz with rfl | rfl
+          · exact List.mem_cons_self
+          · exact List.mem_cons_of_mem _ (List.mem_append_right _
+              List.mem_cons_self)
         unfold stepPair at h_step_eq
         have ⟨h_leaf_eq, _⟩ :=
-          smtStep_inj_under_collision_free h_cf
-            leaf₁ leaf₂ s₁ s₂
+          smtStep_inj_under_collision_free
+            leaf₁ leaf₂ s₁ s₂ b h_cf_head
             h_leaf₁_size h_leaf₂_size h_s₁_32 h_s₂_32
-            b h_step_eq
+            h_step_eq
         exact h_leaf_eq
 
 /-! ## Top-level soundness (SC.1.d / SC.1.e) -/
 
-/-- Soundness (uniqueness form): under `CollisionFree hashBytes`
+/-- Every pre-image the `smtCellProof` soundness chain feeds to
+    `hashBytes`: both walks' per-level concatenations, plus the two
+    leaf pre-images underneath them. -/
+def smtCellProofPreimages {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
+    (key : K) (v₁ v₂ : V) (proof₁ proof₂ : SmtCellProof) : List ByteArray :=
+  (walkPreimages (leafHash key v₁)
+      ((expandSiblings proof₁).zip (keyBits key)) ++
+    walkPreimages (leafHash key v₂)
+      ((expandSiblings proof₂).zip (keyBits key))) ++
+  [ encodeAsBytes key ++ encodeAsBytes v₁
+  , encodeAsBytes key ++ encodeAsBytes v₂ ]
+
+/-- Soundness (uniqueness form): under collision-freeness of `hashBytes` on the pre-images below
     and value-encoder injectivity, the verifier accepts at most
     one value per `(root, key)`.  Two verifying proofs for the
     same root and key must claim the same value.
@@ -950,9 +1026,10 @@ theorem walk_leaf_inj_under_collision_free
 theorem smtCellProof_no_value_substitution
     {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
     (hVInj : Function.Injective (Encodable.encode : V → Stream))
-    (h_cf : CollisionFree hashBytes)
     (root : ByteArray) (key : K) (v₁ v₂ : V)
     (proof₁ proof₂ : SmtCellProof)
+    (h_cf : CollisionFreeOn
+      (smtCellProofPreimages key v₁ v₂ proof₁ proof₂) hashBytes)
     (h_verify₁ : verifySmtCellProof root key v₁ proof₁ = true)
     (h_verify₂ : verifySmtCellProof root key v₂ proof₂ = true) :
     v₁ = v₂ := by
@@ -980,9 +1057,11 @@ theorem smtCellProof_no_value_substitution
   have h_exp_sizes₂ : ∀ s ∈ expandSiblings proof₂, s.size = 32 :=
     expandSiblings_all_32 proof₂ h_wf₂
   have h_leaf_eq : leafHash key v₁ = leafHash key v₂ :=
-    walk_leaf_inj_under_collision_free h_cf
+    walk_leaf_inj_under_collision_free
       (keyBits key) (expandSiblings proof₁) (expandSiblings proof₂)
       (leafHash key v₁) (leafHash key v₂)
+      (h_cf.mono (fun _ hz =>
+        List.mem_append_left _ hz))
       h_exp_len₁ h_exp_len₂
       h_leaf_size₁ h_leaf_size₂
       h_exp_sizes₁ h_exp_sizes₂
@@ -991,7 +1070,9 @@ theorem smtCellProof_no_value_substitution
   unfold leafHash at h_leaf_eq
   have h_bytes_eq : encodeAsBytes key ++ encodeAsBytes v₁ =
                    encodeAsBytes key ++ encodeAsBytes v₂ :=
-    h_cf _ _ h_leaf_eq
+    h_cf.apply
+      (List.mem_append_right _ (by simp))
+      (List.mem_append_right _ (by simp)) h_leaf_eq
   have h_key_size : (encodeAsBytes key).size = (encodeAsBytes key).size := rfl
   obtain ⟨_, h_value_bytes_eq⟩ :=
     byteArray_append_inj_left (encodeAsBytes key) (encodeAsBytes v₁)
@@ -1014,14 +1095,15 @@ theorem smtCellProof_no_value_substitution
 theorem smtCellProof_sound_under_collision_free
     {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
     (hVInj : Function.Injective (Encodable.encode : V → Stream))
-    (h_cf : CollisionFree hashBytes)
     (root : ByteArray) (key : K) (v₁ v₂ : V)
     (proof₁ proof₂ : SmtCellProof)
+    (h_cf : CollisionFreeOn
+      (smtCellProofPreimages key v₁ v₂ proof₁ proof₂) hashBytes)
     (h_verify₁ : verifySmtCellProof root key v₁ proof₁ = true)
     (h_verify₂ : verifySmtCellProof root key v₂ proof₂ = true) :
     v₁ = v₂ :=
-  smtCellProof_no_value_substitution hVInj h_cf root key v₁ v₂
-    proof₁ proof₂ h_verify₁ h_verify₂
+  smtCellProof_no_value_substitution hVInj root key v₁ v₂
+    proof₁ proof₂ h_cf h_verify₁ h_verify₂
 
 end FaultProof
 end LegalKernel

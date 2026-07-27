@@ -25,7 +25,7 @@ tag and value.  Verification:
   3. Check the witness state has the claimed cell value at the
      claimed tag.
 
-Under `CollisionFree hashBytes`, condition 1 plus
+Under collision-freeness of `hashBytes` on the pre-images below, condition 1 plus
 `commitExtendedState`'s injectivity (theorem #220) makes the
 witness state unique up to extensional equality.  Condition 3
 then authoritatively binds the cell value to the underlying
@@ -46,9 +46,13 @@ state.
   * `verifyCellProof_complete` — the canonical proof for any
     cell at any state always verifies against the state's
     commit.  Unconditional.
-  * `verifyCellProof_sound_under_collision_free` — under
-    `CollisionFree hashBytes`, a verifying proof's witness state
-    has the claimed cell value at the claimed tag.
+  * `verifyCellProof_sound` — a verifying proof's witness state
+    has the claimed cell value at the claimed tag.  Unconditional:
+    the verifier's own two checks establish it.
+  * `verifyCellProof_witness_unique_under_collision_free` — under
+    collision-freeness on the commitment chain's hash pre-images,
+    that witness is the ONLY state behind the published root, so a
+    responder cannot substitute a different cell value.
   * `updateCommitment_agrees_with_setCell` — recomputing the
     commit after writing one cell agrees with `commitExtendedState`
     on the post-state.
@@ -285,7 +289,7 @@ theorem verifyCellProofs_deterministic
 
 /-- The canonical cell proof for any cell at any state always
     verifies against that state's commit.  Unconditional —
-    no `CollisionFree` hypothesis needed for completeness. -/
+    no collision-freeness hypothesis needed for completeness. -/
 theorem verifyCellProof_complete (es : ExtendedState) (tag : CellTag) :
     verifyCellProof (commitExtendedState es) (buildCellProof es tag) = true := by
   unfold verifyCellProof buildCellProof
@@ -316,7 +320,7 @@ theorem verifyCellProofs_complete_for_canonical_bundle
   obtain ⟨t, _, rfl⟩ := hp
   exact verifyCellProof_complete es t
 
-/-! ## #222 — Verifier soundness under `CollisionFree` -/
+/-! ## #222 — Verifier soundness under collision-freeness on the level's pre-images -/
 
 /-- A verifying proof's witness state recommits to the public
     commit.  Direct from the verifier's first check. -/
@@ -342,23 +346,49 @@ theorem verifyCellProof_witness_has_cell_value
   obtain ⟨_, h₂⟩ := h
   exact decide_eq_true_eq.mp h₂
 
-/-- #222 — Soundness: under `CollisionFree hashBytes`, a verifying
-    proof witnesses an existing state whose cell at the claimed
-    tag has the claimed value.
+/-- #222 — Existence: a verifying proof witnesses a state whose
+    cell at the claimed tag has the claimed value.
 
-    The witness state is the proof's `witnessState` field;
-    `CollisionFree` plus `commitExtendedState`'s injectivity
-    (theorem #220) makes the witness state unique up to
-    extensional equality. -/
-theorem verifyCellProof_sound_under_collision_free
+    The witness state is the proof's `witnessState` field, and the
+    verifier's own two checks establish both conjuncts, so this
+    direction needs no collision-resistance hypothesis at all.  The
+    hypothesis that makes the witness *unique* is stated separately
+    by `verifyCellProof_witness_unique_under_collision_free` below —
+    that is the property a fault-proof consumer actually relies on,
+    and carrying it as an unused argument here stated nothing. -/
+theorem verifyCellProof_sound
     (commit : StateCommit) (proof : CellProof)
-    (_h_cf : Bridge.CollisionFree LegalKernel.Runtime.hashBytes)
     (h_verify : verifyCellProof commit proof = true) :
     ∃ es, commitExtendedState es = commit ∧
           getCellValue es proof.cellTag = proof.cellValue :=
   ⟨proof.witnessState,
    verifyCellProof_witness_recommits commit proof h_verify,
    verifyCellProof_witness_has_cell_value commit proof h_verify⟩
+
+/-- #222 — Uniqueness: any state that commits to the same root as a
+    verifying proof is extensionally equal to that proof's witness.
+
+    This is the operational content of cell-proof soundness: an
+    adversarial responder cannot exhibit a *different* state behind
+    the same published root and thereby claim a different cell
+    value.  It rests on `commitExtendedState`'s injectivity
+    (theorem #220 / EI.8), which is where the collision-resistance
+    hypothesis genuinely does work — scoped, as everywhere else, to
+    the pre-images the commitment chain actually hashes. -/
+theorem verifyCellProof_witness_unique_under_collision_free
+    (commit : StateCommit) (proof : CellProof) (es : ExtendedState)
+    (h_cf : Bridge.CollisionFreeOn
+      (extendedStateCommitPreimages es proof.witnessState)
+      LegalKernel.Runtime.hashBytes)
+    (h_b₁ : ExtendedState.CanonicalBounds es)
+    (h_b₂ : ExtendedState.CanonicalBounds proof.witnessState)
+    (h_verify : verifyCellProof commit proof = true)
+    (h_commit : commitExtendedState es = commit) :
+    ExtendedState.extEq es proof.witnessState :=
+  commitExtendedState_subcommits_extensional_eq_under_collision_free
+    es proof.witnessState h_cf h_b₁ h_b₂
+    (h_commit.trans
+      (verifyCellProof_witness_recommits commit proof h_verify).symm)
 
 /-! ## #223 — Update commitment agrees with setCell
 

@@ -626,7 +626,8 @@ theorem stepCommitBurn_size
   unfold stepCommitBurn
   exact LegalKernel.Runtime.hashBytes_size _
 
-/-- `hashString` is injective under `CollisionFree hashBytes`:
+/-- `hashString` is injective under collision-freeness of
+    `hashBytes` on the two UTF-8 encodings:
     equal hashes imply equal UTF-8 encodings.  This is the
     forward direction of CR lifted across the `hashString =
     hashBytes ∘ toUTF8` composition.  Each per-variant tag
@@ -634,12 +635,12 @@ theorem stepCommitBurn_size
     `hashString "<name>"`, so this lemma gives per-tag
     distinguishability under CR. -/
 theorem hashString_inj_under_collision_free
-    (h_cf : LegalKernel.Bridge.CollisionFree
-              LegalKernel.Runtime.hashBytes)
-    (s₁ s₂ : String) :
+    (s₁ s₂ : String)
+    (h_cf : LegalKernel.Bridge.CollisionFreeOn
+              [s₁.toUTF8, s₂.toUTF8] LegalKernel.Runtime.hashBytes) :
     hashString s₁ = hashString s₂ → s₁.toUTF8 = s₂.toUTF8 := by
   intro h_eq
-  exact h_cf _ _ h_eq
+  exact h_cf.apply (by simp) (by simp) h_eq
 
 end SolidityStepVMCommit
 end FaultProof
