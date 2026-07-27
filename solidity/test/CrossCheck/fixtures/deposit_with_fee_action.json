@@ -1,6 +1,6 @@
 {
   "header": {
-    "identifier": "knomosis-l1-ingest/deposit-with-fee-action/v1",
+    "identifier": "knomosis-l1-ingest/deposit-with-fee-action/v2",
     "count": 23,
     "countDepositWithFee": 8,
     "countTopUpBudget": 5,

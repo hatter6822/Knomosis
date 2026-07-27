@@ -1,6 +1,6 @@
 {
   "header": {
-    "identifier": "knomosis/bold-deposit-crossstack/v1",
+    "identifier": "knomosis/bold-deposit-crossstack/v2",
     "count": 190,
     "isKeccak256Linked": false,
     "hashIdentifier": "fnv1a64-padded-32",
