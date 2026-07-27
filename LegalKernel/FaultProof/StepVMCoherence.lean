@@ -239,9 +239,19 @@ def actionKindByteCases : List UInt8 :=
 For STRUCTURED variants (Transfer, Mint, Burn, FreezeResource,
 ReplaceKey, Reward, DistributeOthers, ProportionalDilute,
 RegisterIdentity, Deposit, Withdraw): the layout is a sequence of
-fixed-width big-endian fields (`uint64BE` per primitive numeric)
-followed by any variable-length trailing payload.  This matches
-the Solidity `_stepXX::_decodeUint64BE` reads byte-for-byte.
+fixed-width big-endian fields followed by any variable-length
+trailing payload.  Field width is set by what the field *is*:
+identifiers, log indices, deposit ids and budget-unit counts are
+`uint64BE` (8 bytes); value-carrying amounts are `uint128BE`
+(16 bytes).  This matches the Solidity `_stepXX` decoder's
+`_decodeUint64BE` / `_decodeUint128BE` reads byte-for-byte.
+
+The amount width is not the CBE codec's.  `actionFieldsForL1` is a
+*separate* encoding — untagged, big-endian, fixed-width — read only
+by the L1 step VM, so it carried its own independent `2^64`
+truncation boundary.  Widening the CBE head alone would have left
+the fault proof unable to adjudicate an action whose amount the L2
+can represent.
 
 For OPAQUE variants (Dispute, DisputeWithdraw, Verdict, Rollback,
 DeclareLocalPolicy, RevokeLocalPolicy, FaultProofChallenge,
@@ -251,8 +261,9 @@ use the Lean-side `Encodable.encode` payload directly, which is
 the most natural cross-stack convention.
 
 **Width discipline.**  Each `uint64BE` produces exactly 8 bytes;
-each `uint256BE` produces exactly 32 bytes; variable-length
-trailers (newKey, pk, recipientL1) are appended as-is. -/
+each `uint128BE` exactly 16; each `uint256BE` exactly 32;
+variable-length trailers (newKey, pk, recipientL1) are appended
+as-is. -/
 
 /-- The canonical byte layout the L1 step VM's `_stepXX` decoder
     consumes.  For structured variants this is a sequence of
@@ -260,33 +271,34 @@ trailers (newKey, pk, recipientL1) are appended as-is. -/
     payload; for opaque variants this is the Lean-side
     `Encodable.encode` payload (the L1 step VM only hashes it). -/
 def actionFieldsForL1 : Action → ByteArray
-  -- Structured variants: `uint64BE r || uint64BE sender || ...`
+  -- Structured variants: identifiers on `uint64BE`, amounts on
+  -- `uint128BE`, e.g. `uint64BE r || uint64BE sender || ...`
   | .transfer r sender receiver amount =>
       uint64BE r.toNat ++ uint64BE sender.toNat ++
-      uint64BE receiver.toNat ++ uint64BE amount
+      uint64BE receiver.toNat ++ uint128BE amount
   | .mint r to amount =>
-      uint64BE r.toNat ++ uint64BE to.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE to.toNat ++ uint128BE amount
   | .burn r fromActor amount =>
-      uint64BE r.toNat ++ uint64BE fromActor.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE fromActor.toNat ++ uint128BE amount
   | .freezeResource r =>
       uint64BE r.toNat
   | .replaceKey actor newKey =>
       -- `uint64BE actor || newKey-bytes` (variable trailer).
       uint64BE actor.toNat ++ newKey
   | .reward r to amount =>
-      uint64BE r.toNat ++ uint64BE to.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE to.toNat ++ uint128BE amount
   | .distributeOthers r excluded amount =>
-      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint64BE amount
+      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint128BE amount
   | .proportionalDilute r excluded totalReward =>
-      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint64BE totalReward
+      uint64BE r.toNat ++ uint64BE excluded.toNat ++ uint128BE totalReward
   | .registerIdentity actor pk =>
       uint64BE actor.toNat ++ pk
   | .deposit r recipient amount depositId =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++
-      uint64BE amount ++ uint64BE depositId
+      uint128BE amount ++ uint64BE depositId
   | .withdraw r sender amount recipientL1 =>
       uint64BE r.toNat ++ uint64BE sender.toNat ++
-      uint64BE amount ++ Bridge.EthAddress.toBytes recipientL1
+      uint128BE amount ++ Bridge.EthAddress.toBytes recipientL1
   -- Opaque variants: use Lean's CBE encoding (the L1 step VM only
   -- hashes the bytes; structure is internal to both sides).
   | .dispute d =>
@@ -313,23 +325,26 @@ def actionFieldsForL1 : Action → ByteArray
       ByteArray.mk (Encodable.encode (T := Nat) revertFromIdx).toArray
   -- Workstream GP (v1.0): depositWithFee is a structured variant:
   -- `uint64BE resource || uint64BE recipient || uint64BE poolActor ||
-  -- uint64BE userAmount || uint64BE poolAmount || uint64BE budgetGrant
+  -- uint128BE userAmount || uint128BE poolAmount || uint64BE budgetGrant
   -- || uint64BE depositId`.  Mirrors the Solidity `_step19` decoder's
-  -- byte-for-byte field reads.
+  -- byte-for-byte field reads.  `budgetGrant` is a budget UNIT count
+  -- and `depositId` an identifier, so both stay 8 bytes.
   | .depositWithFee r recipient poolActor userAmount poolAmount budgetGrant depositId =>
       uint64BE r.toNat ++ uint64BE recipient.toNat ++ uint64BE poolActor.toNat ++
-      uint64BE userAmount ++ uint64BE poolAmount ++ uint64BE budgetGrant ++
+      uint128BE userAmount ++ uint128BE poolAmount ++ uint64BE budgetGrant ++
       uint64BE depositId
   -- topUpActionBudget is a structured variant:
-  -- `uint64BE gasResource || uint64BE gasAmount || uint64BE budgetIncrement ||
-  -- uint64BE poolActor`.  The signer is provided separately to the L1 step VM
-  -- via the SignedAction payload, not encoded in the action fields.
+  -- `uint64BE gasResource || uint128BE gasAmount || uint64BE budgetIncrement ||
+  -- uint64BE poolActor`.  `gasAmount` is wei-denominated and so rides the
+  -- wide field; `budgetIncrement` is a UNIT count and stays 8 bytes.  The
+  -- signer is provided separately to the L1 step VM via the SignedAction
+  -- payload, not encoded in the action fields.
   | .topUpActionBudget gasResource gasAmount budgetIncrement poolActor =>
-      uint64BE gasResource.toNat ++ uint64BE gasAmount ++
+      uint64BE gasResource.toNat ++ uint128BE gasAmount ++
       uint64BE budgetIncrement ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.3.4 / GP.5.3): delegated top-up is a structured
   -- variant: `uint64BE recipient || uint64BE gasResource ||
-  -- uint64BE gasAmount || uint64BE budgetIncrement || uint64BE
+  -- uint128BE gasAmount || uint64BE budgetIncrement || uint64BE
   -- poolActor`.  The kernel-state effect mirrors `topUpActionBudget`
   -- (debit signer at gasResource, credit poolActor); `recipient` and
   -- `budgetIncrement` are admission-layer fields (recipient consent +
@@ -339,10 +354,10 @@ def actionFieldsForL1 : Action → ByteArray
   -- execution arm.
   | .topUpActionBudgetFor recipient gasResource gasAmount budgetIncrement poolActor =>
       uint64BE recipient.toNat ++ uint64BE gasResource.toNat ++
-      uint64BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
+      uint128BE gasAmount ++ uint64BE budgetIncrement ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.9.1): claimBudgetRefund is a structured variant:
   -- `uint64BE gasResource || uint64BE budgetUnits ||
-  -- uint64BE weiPerBudgetUnit || uint64BE poolActor`.  The kernel-state
+  -- uint128BE weiPerBudgetUnit || uint64BE poolActor`.  The kernel-state
   -- effect (debit poolActor at gasResource by `budgetUnits ×
   -- weiPerBudgetUnit`, credit the signer/claimant) is the MIRROR of
   -- `topUpActionBudget`; `weiPerBudgetUnit` is decoded for layout
@@ -350,33 +365,33 @@ def actionFieldsForL1 : Action → ByteArray
   -- (claimant) is provided to the L1 step VM via the SignedAction
   -- payload, not encoded in the action fields.  This frozen layout is
   -- what the GP.9.1 `stepVMHash`/Solidity `_step22` follow-on consumes.
-  -- OVERFLOW NOTE for that follow-on: `budgetUnits` and
-  -- `weiPerBudgetUnit` are each `fieldsBounded` to < 2^64, so each fits a
-  -- `uint64`, but their PRODUCT (the payout) can reach ~2^128 — the
+  -- OVERFLOW NOTE for that follow-on: `budgetUnits` is `fieldsBounded`
+  -- to < 2^64 and `weiPerBudgetUnit` (a wei-denominated rate) to
+  -- < 2^128, so their PRODUCT (the payout) can reach ~2^192 — the
   -- Solidity `_step22` MUST compute `budgetUnits * weiPerBudgetUnit` in
-  -- `uint256`, never `uint64` (as `_stepTopUpActionBudget` handles its
-  -- own gas-transfer amount).
+  -- `uint256`, never a narrower type (as `_stepTopUpActionBudget`
+  -- handles its own gas-transfer amount).
   | .claimBudgetRefund gasResource budgetUnits weiPerBudgetUnit poolActor =>
       uint64BE gasResource.toNat ++ uint64BE budgetUnits ++
-      uint64BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
+      uint128BE weiPerBudgetUnit ++ uint64BE poolActor.toNat
   -- Workstream GP (GP.11.4): ammSwap is a structured variant:
-  -- `uint64BE fromResource || uint64BE toResource || uint64BE amountIn
-  -- || uint64BE amountOut || uint64BE ammReserveActor`.  The kernel-
+  -- `uint64BE fromResource || uint64BE toResource || uint128BE amountIn
+  -- || uint128BE amountOut || uint64BE ammReserveActor`.  The kernel-
   -- state effect (credit ammReserveActor at fromResource by amountIn,
   -- debit ammReserveActor at toResource by amountOut) is mirrored
   -- byte-for-byte by the Solidity `_stepAmmSwap`.
   | .ammSwap fromResource toResource amountIn amountOut ammReserveActor =>
       uint64BE fromResource.toNat ++ uint64BE toResource.toNat ++
-      uint64BE amountIn ++ uint64BE amountOut ++ uint64BE ammReserveActor.toNat
+      uint128BE amountIn ++ uint128BE amountOut ++ uint64BE ammReserveActor.toNat
   -- Workstream GP (GP.11.10): reclaimAmmReserves is a structured
-  -- variant: `uint64BE r || uint64BE amount || uint64BE reserveActor
+  -- variant: `uint64BE r || uint128BE amount || uint64BE reserveActor
   -- || uint64BE poolActor`.  The kernel-state effect (debit
   -- reserveActor at r by amount — its entire balance under the
   -- exact-sweep precondition — and credit poolActor the same amount)
   -- is mirrored byte-for-byte by the Solidity
   -- `_stepReclaimAmmReserves`.
   | .reclaimAmmReserves r amount reserveActor poolActor =>
-      uint64BE r.toNat ++ uint64BE amount ++
+      uint64BE r.toNat ++ uint128BE amount ++
       uint64BE reserveActor.toNat ++ uint64BE poolActor.toNat
 
 /-! ## Helpers for reading cell values from cell-proof bundles
@@ -420,42 +435,46 @@ def readCellValue (bundle : CellProofBundle) (tag : CellTag) :
     revert leaves the game in-progress until the responsible
     party times out).
 
-    **Concrete decoder.**
+    **Concrete decoder — exact-width, tag-dispatched.**  The payload
+    width is derived from the leading CBE type byte, and the slice
+    must match it exactly.  This mirrors Solidity's `_decodeNat`
+    arm-for-arm:
       * `bytes.size == 0` → return 0.  Matches Solidity's
         `if (data.length == 0) return 0` early-out.  This is the
         canonical-absent path: when a balance cell is absent from
         the bundle, `readCellValue` returns
         `canonicalAbsentValue` (= empty bytes), and both sides
         treat the absent cell as a 0 pre-balance.
-      * `1 ≤ bytes.size < 9` → return 0.  Solidity reverts here;
-        see the section above on why this returns 0 rather than
-        attempting to model a revert in a pure `Nat`-valued
-        function.  In practice this case never arises on canonical
-        cell bytes (which are always exactly 9 bytes:
-        `[tag(1) ++ payload(8)]`).
-      * `bytes.size ≥ 9` → read `bytes[1..9]` little-endian as a
-        `Nat`, **ignoring the tag byte at offset 0**.  This is
-        the byte-for-byte mirror of Solidity's
-        `result |= uint256(uint8(data[1 + i])) << (8 * i)` loop.
-        Excess bytes after offset 9 are silently ignored,
-        matching Solidity's slice-only semantics. -/
+      * tag `cbeTagUint` with exactly 9 bytes → read the 8-byte
+        little-endian payload.  Identifier-width cells (nonces, the
+        next-withdrawal id).
+      * tag `cbeTagAmount` with exactly 17 bytes → read the 16-byte
+        little-endian payload.  Balance cells, which are
+        wei-denominated and therefore cross `2^64`.
+      * anything else — unknown tag, or a length that does not match
+        its tag → return 0.  Solidity reverts here; see the section
+        above on why this returns 0 rather than modelling a revert in
+        a pure `Nat`-valued function.  Both outcomes mean "the
+        dispatcher cannot produce the responsible party's claim".
+
+    Deriving the width from the tag rather than assuming 8 bytes is
+    load-bearing.  A fixed 8-byte read against a 17-byte amount cell
+    returns the low 64 bits — a *wrong balance*, silently, on exactly
+    the values a bisection game settles against. -/
 def decodeCellNat (bytes : ByteArray) : Nat :=
   if bytes.size = 0 then 0
-  else if bytes.size < 9 then 0
   else
-    -- Read `bytes[1..9]` as a little-endian `Nat`, ignoring the
-    -- tag byte at offset 0.  Mirrors Solidity's `_decodeNat`'s
-    -- inner loop byte-for-byte (offset 1, 8 bytes, LE order).
-    let b1 := bytes.data[1]!.toNat
-    let b2 := bytes.data[2]!.toNat
-    let b3 := bytes.data[3]!.toNat
-    let b4 := bytes.data[4]!.toNat
-    let b5 := bytes.data[5]!.toNat
-    let b6 := bytes.data[6]!.toNat
-    let b7 := bytes.data[7]!.toNat
-    let b8 := bytes.data[8]!.toNat
-    b1 ||| (b2 <<< 8) ||| (b3 <<< 16) ||| (b4 <<< 24) |||
-    (b5 <<< 32) ||| (b6 <<< 40) ||| (b7 <<< 48) ||| (b8 <<< 56)
+    let tag := bytes.data[0]!
+    let width :=
+      if tag = Encoding.cbeTagUint then 8
+      else if tag = Encoding.cbeTagAmount then 16
+      else 0
+    if width = 0 ∨ bytes.size ≠ 1 + width then 0
+    else
+      -- Read `bytes[1 .. 1+width]` little-endian.  Mirrors Solidity's
+      -- `result |= uint256(uint8(data[1 + i])) << (8 * i)` loop.
+      (List.range width).foldl
+        (fun acc i => acc ||| (bytes.data[1 + i]!.toNat <<< (8 * i))) 0
 
 /-! ## `stepVMHash` — unified dispatcher
 
@@ -498,6 +517,22 @@ def readUint64BE (bytes : ByteArray) (offset : Nat) : Nat :=
     (b0 <<< 56) ||| (b1 <<< 48) ||| (b2 <<< 40) ||| (b3 <<< 32) |||
     (b4 <<< 24) ||| (b5 <<< 16) ||| (b6 <<< 8) ||| b7
 
+/-- Read a big-endian `uint128` (16 bytes) from `bytes` at offset `o`.
+
+    **Cross-stack contract.**  The 16-byte counterpart of
+    `readUint64BE`, mirroring Solidity's `_decodeUint128BE(bytes,
+    offset)`, with the same out-of-bounds convention (Lean returns 0;
+    Solidity reverts — both map to "dispatcher cannot produce the
+    responsible party's claim", so the success domains still match
+    byte-for-byte).
+
+    Used for every value-carrying amount field.  Identifiers, log
+    indices, deposit ids and budget-unit counts keep `readUint64BE`. -/
+def readUint128BE (bytes : ByteArray) (offset : Nat) : Nat :=
+  if offset + 16 > bytes.size then 0
+  else
+    (readUint64BE bytes offset) <<< 64 ||| (readUint64BE bytes (offset + 8))
+
 /-- Slice a byte array from `offset` to its end.  Mirrors
     Solidity's `actionFields[offset:]` slice expression. -/
 def sliceFrom (bytes : ByteArray) (offset : Nat) : ByteArray :=
@@ -522,9 +557,10 @@ def maxRecipientsPerBulkAction : Nat := 256
     Verified at the cross-stack fixture corpus level (WU H.10.1,
     SVC.5.e).
 
-    **Unknown-kind handling.**  Kinds ≥ 22 return an empty hash
-    (which cannot equal any L1 output).  Production callers must
-    construct `kind` from `actionKindByte`, which is in 0..21. -/
+    **Unknown-kind handling.**  Kinds ≥ 25 return an empty hash
+    (which cannot equal any L1 output) — see
+    `stepVMHash_unknown_kind_empty`.  Production callers must
+    construct `kind` from `actionKindByte`, which is in 0..24. -/
 def stepVMHash
     (preCommit : ByteArray) (kind : UInt8) (fields : ByteArray)
     (signer : Nat) (bundle : CellProofBundle) : ByteArray :=
@@ -534,7 +570,7 @@ def stepVMHash
     let r        := readUint64BE fields 0
     let sender   := readUint64BE fields 8
     let receiver := readUint64BE fields 16
-    let amount   := readUint64BE fields 24
+    let amount   := readUint128BE fields 24
     let senderBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 sender.toUInt64))
@@ -556,7 +592,7 @@ def stepVMHash
   | 1 =>
     let r      := readUint64BE fields 0
     let to     := readUint64BE fields 8
-    let amount := readUint64BE fields 16
+    let amount := readUint128BE fields 16
     let toBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 to.toUInt64))
@@ -565,7 +601,7 @@ def stepVMHash
   | 2 =>
     let r         := readUint64BE fields 0
     let fromActor := readUint64BE fields 8
-    let amount    := readUint64BE fields 16
+    let amount    := readUint128BE fields 16
     let fromBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 fromActor.toUInt64))
@@ -583,7 +619,7 @@ def stepVMHash
   | 5 =>
     let r      := readUint64BE fields 0
     let to     := readUint64BE fields 8
-    let amount := readUint64BE fields 16
+    let amount := readUint128BE fields 16
     let toBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 to.toUInt64))
@@ -598,7 +634,7 @@ def stepVMHash
   | 6 =>
     let r        := readUint64BE fields 0
     let excluded := readUint64BE fields 8
-    let amount   := readUint64BE fields 16
+    let amount   := readUint128BE fields 16
     let head :=
       stepCommitDistributeOthersHead preCommit r excluded signer amount
     (bundle.proofs.take maxRecipientsPerBulkAction).foldl
@@ -625,7 +661,7 @@ def stepVMHash
   | 7 =>
     let r           := readUint64BE fields 0
     let excluded    := readUint64BE fields 8
-    let totalReward := readUint64BE fields 16
+    let totalReward := readUint128BE fields 16
     let capped := bundle.proofs.take maxRecipientsPerBulkAction
     let sumOthers : Nat :=
       capped.foldl
@@ -675,8 +711,8 @@ def stepVMHash
   | 13 =>
     let r         := readUint64BE fields 0
     let recipient := readUint64BE fields 8
-    let amount    := readUint64BE fields 16
-    let depositId := readUint64BE fields 24
+    let amount    := readUint128BE fields 16
+    let depositId := readUint64BE fields 32
     let recipientBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 recipient.toUInt64))
@@ -686,8 +722,8 @@ def stepVMHash
   | 14 =>
     let r           := readUint64BE fields 0
     let sender      := readUint64BE fields 8
-    let amount      := readUint64BE fields 16
-    let recipientL1 := sliceFrom fields 24
+    let amount      := readUint128BE fields 16
+    let recipientL1 := sliceFrom fields 32
     let senderBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 sender.toUInt64))
@@ -723,10 +759,10 @@ def stepVMHash
     let r          := readUint64BE fields 0
     let recipient  := readUint64BE fields 8
     let poolActor  := readUint64BE fields 16
-    let userAmount := readUint64BE fields 24
-    let poolAmount := readUint64BE fields 32
+    let userAmount := readUint128BE fields 24
+    let poolAmount := readUint128BE fields 40
     -- fields 40..48 = budgetGrant (admission-layer; not hashed)
-    let depositId  := readUint64BE fields 48
+    let depositId  := readUint64BE fields 64
     let recipientBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 recipient.toUInt64))
@@ -761,9 +797,9 @@ def stepVMHash
   -- the step-VM hash by design.
   | 20 =>
     let gasResource := readUint64BE fields 0
-    let gasAmount   := readUint64BE fields 8
+    let gasAmount   := readUint128BE fields 8
     -- fields 16..24 = budgetIncrement (admission-layer; not hashed)
-    let poolActor   := readUint64BE fields 24
+    let poolActor   := readUint64BE fields 32
     let signerBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance gasResource.toUInt64 signer.toUInt64))
@@ -802,9 +838,9 @@ def stepVMHash
   | 21 =>
     -- fields 0..8 = recipient (admission-layer; not hashed)
     let gasResource := readUint64BE fields 8
-    let gasAmount   := readUint64BE fields 16
+    let gasAmount   := readUint128BE fields 16
     -- fields 24..32 = budgetIncrement (admission-layer; not hashed)
-    let poolActor   := readUint64BE fields 32
+    let poolActor   := readUint64BE fields 40
     let signerBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance gasResource.toUInt64 signer.toUInt64))
@@ -837,8 +873,8 @@ def stepVMHash
   | 22 =>
     let gasResource      := readUint64BE fields 0
     let budgetUnits      := readUint64BE fields 8
-    let weiPerBudgetUnit := readUint64BE fields 16
-    let poolActor        := readUint64BE fields 24
+    let weiPerBudgetUnit := readUint128BE fields 16
+    let poolActor        := readUint64BE fields 32
     let refundAmount     := budgetUnits * weiPerBudgetUnit
     let signerBalance :=
       decodeCellNat (readCellValue bundle
@@ -862,9 +898,9 @@ def stepVMHash
   | 23 =>
     let fromResource     := readUint64BE fields 0
     let toResource       := readUint64BE fields 8
-    let amountIn         := readUint64BE fields 16
-    let amountOut        := readUint64BE fields 24
-    let ammReserveActor  := readUint64BE fields 32
+    let amountIn         := readUint128BE fields 16
+    let amountOut        := readUint128BE fields 32
+    let ammReserveActor  := readUint64BE fields 48
     let fromBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance fromResource.toUInt64 ammReserveActor.toUInt64))
@@ -883,9 +919,9 @@ def stepVMHash
   -- amount.
   | 24 =>
     let r            := readUint64BE fields 0
-    let amount       := readUint64BE fields 8
-    let reserveActor := readUint64BE fields 16
-    let poolActor    := readUint64BE fields 24
+    let amount       := readUint128BE fields 8
+    let reserveActor := readUint64BE fields 24
+    let poolActor    := readUint64BE fields 32
     let reserveBalance :=
       decodeCellNat (readCellValue bundle
                       (.balance r.toUInt64 reserveActor.toUInt64))
@@ -948,7 +984,7 @@ theorem stepVMHash_transfer_kind
     (let r        := readUint64BE fields 0
      let sender   := readUint64BE fields 8
      let receiver := readUint64BE fields 16
-     let amount   := readUint64BE fields 24
+     let amount   := readUint128BE fields 24
      let senderBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 sender.toUInt64))
@@ -972,7 +1008,7 @@ theorem stepVMHash_mint_kind
     stepVMHash preCommit 1 fields signer bundle =
     (let r      := readUint64BE fields 0
      let to     := readUint64BE fields 8
-     let amount := readUint64BE fields 16
+     let amount := readUint128BE fields 16
      let toBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 to.toUInt64))
@@ -985,7 +1021,7 @@ theorem stepVMHash_burn_kind
     stepVMHash preCommit 2 fields signer bundle =
     (let r         := readUint64BE fields 0
      let fromActor := readUint64BE fields 8
-     let amount    := readUint64BE fields 16
+     let amount    := readUint128BE fields 16
      let fromBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 fromActor.toUInt64))
@@ -1013,7 +1049,7 @@ theorem stepVMHash_reward_kind
     stepVMHash preCommit 5 fields signer bundle =
     (let r      := readUint64BE fields 0
      let to     := readUint64BE fields 8
-     let amount := readUint64BE fields 16
+     let amount := readUint128BE fields 16
      let toBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 to.toUInt64))
@@ -1031,7 +1067,7 @@ theorem stepVMHash_distributeOthers_kind
     stepVMHash preCommit 6 fields signer bundle =
     (let r        := readUint64BE fields 0
      let excluded := readUint64BE fields 8
-     let amount   := readUint64BE fields 16
+     let amount   := readUint128BE fields 16
      let head :=
        stepCommitDistributeOthersHead preCommit r excluded signer amount
      (bundle.proofs.take maxRecipientsPerBulkAction).foldl
@@ -1058,7 +1094,7 @@ theorem stepVMHash_proportionalDilute_kind
     stepVMHash preCommit 7 fields signer bundle =
     (let r           := readUint64BE fields 0
      let excluded    := readUint64BE fields 8
-     let totalReward := readUint64BE fields 16
+     let totalReward := readUint128BE fields 16
      let capped := bundle.proofs.take maxRecipientsPerBulkAction
      let sumOthers : Nat :=
        capped.foldl
@@ -1131,8 +1167,8 @@ theorem stepVMHash_deposit_kind
     stepVMHash preCommit 13 fields signer bundle =
     (let r         := readUint64BE fields 0
      let recipient := readUint64BE fields 8
-     let amount    := readUint64BE fields 16
-     let depositId := readUint64BE fields 24
+     let amount    := readUint128BE fields 16
+     let depositId := readUint64BE fields 32
      let recipientBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 recipient.toUInt64))
@@ -1146,8 +1182,8 @@ theorem stepVMHash_withdraw_kind
     stepVMHash preCommit 14 fields signer bundle =
     (let r           := readUint64BE fields 0
      let sender      := readUint64BE fields 8
-     let amount      := readUint64BE fields 16
-     let recipientL1 := sliceFrom fields 24
+     let amount      := readUint128BE fields 16
+     let recipientL1 := sliceFrom fields 32
      let senderBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 sender.toUInt64))
@@ -1198,9 +1234,9 @@ theorem stepVMHash_depositWithFee_kind
     (let r          := readUint64BE fields 0
      let recipient  := readUint64BE fields 8
      let poolActor  := readUint64BE fields 16
-     let userAmount := readUint64BE fields 24
-     let poolAmount := readUint64BE fields 32
-     let depositId  := readUint64BE fields 48
+     let userAmount := readUint128BE fields 24
+     let poolAmount := readUint128BE fields 40
+     let depositId  := readUint64BE fields 64
      let recipientBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 recipient.toUInt64))
@@ -1234,8 +1270,8 @@ theorem stepVMHash_topUpActionBudget_kind
     (bundle : CellProofBundle) :
     stepVMHash preCommit 20 fields signer bundle =
     (let gasResource := readUint64BE fields 0
-     let gasAmount   := readUint64BE fields 8
-     let poolActor   := readUint64BE fields 24
+     let gasAmount   := readUint128BE fields 8
+     let poolActor   := readUint64BE fields 32
      let signerBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance gasResource.toUInt64 signer.toUInt64))
@@ -1271,8 +1307,8 @@ theorem stepVMHash_topUpActionBudgetFor_kind
     (bundle : CellProofBundle) :
     stepVMHash preCommit 21 fields signer bundle =
     (let gasResource := readUint64BE fields 8
-     let gasAmount   := readUint64BE fields 16
-     let poolActor   := readUint64BE fields 32
+     let gasAmount   := readUint128BE fields 16
+     let poolActor   := readUint64BE fields 40
      let signerBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance gasResource.toUInt64 signer.toUInt64))
@@ -1304,8 +1340,8 @@ theorem stepVMHash_claimBudgetRefund_kind
     stepVMHash preCommit 22 fields signer bundle =
     (let gasResource      := readUint64BE fields 0
      let budgetUnits      := readUint64BE fields 8
-     let weiPerBudgetUnit := readUint64BE fields 16
-     let poolActor        := readUint64BE fields 24
+     let weiPerBudgetUnit := readUint128BE fields 16
+     let poolActor        := readUint64BE fields 32
      let refundAmount     := budgetUnits * weiPerBudgetUnit
      let signerBalance :=
        decodeCellNat (readCellValue bundle
@@ -1334,9 +1370,9 @@ theorem stepVMHash_ammSwap_kind
     stepVMHash preCommit 23 fields signer bundle =
     (let fromResource    := readUint64BE fields 0
      let toResource      := readUint64BE fields 8
-     let amountIn        := readUint64BE fields 16
-     let amountOut       := readUint64BE fields 24
-     let ammReserveActor := readUint64BE fields 32
+     let amountIn        := readUint128BE fields 16
+     let amountOut       := readUint128BE fields 32
+     let ammReserveActor := readUint64BE fields 48
      let fromBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance fromResource.toUInt64 ammReserveActor.toUInt64))
@@ -1359,9 +1395,9 @@ theorem stepVMHash_reclaimAmmReserves_kind
     (bundle : CellProofBundle) :
     stepVMHash preCommit 24 fields signer bundle =
     (let r            := readUint64BE fields 0
-     let amount       := readUint64BE fields 8
-     let reserveActor := readUint64BE fields 16
-     let poolActor    := readUint64BE fields 24
+     let amount       := readUint128BE fields 8
+     let reserveActor := readUint64BE fields 24
+     let poolActor    := readUint64BE fields 32
      let reserveBalance :=
        decodeCellNat (readCellValue bundle
                        (.balance r.toUInt64 reserveActor.toUInt64))

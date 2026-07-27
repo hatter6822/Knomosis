@@ -77,11 +77,15 @@ that `getCellValue` returns when the underlying sub-state has no
 entry for the cell key. -/
 
 /-- The canonical "absent" value for each cell type:
-    * `balance`, `nonce`, `bridgeNextWdId`: CBE-encoded `0`.
+    * `balance`: a CBE `0` on the 17-byte amount head — the same
+      head a present balance uses, so absent and present cells are
+      read by one decoder path.
+    * `nonce`, `bridgeNextWdId`: a CBE `0` on the 9-byte uint head
+      (counters, not wei).
     * `registry`, `localPolicy`, `bridgeConsumed`, `bridgePending`:
       empty bytes. -/
 def canonicalAbsentValue : CellTag → ByteArray
-  | .balance _ _      => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .balance _ _      => ByteArray.mk (Encoding.encodeAmount 0).toArray
   | .nonce _          => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
   | .registry _       => ByteArray.empty
   | .localPolicy _    => ByteArray.empty
@@ -95,14 +99,19 @@ def canonicalAbsentValue : CellTag → ByteArray
     `ExtendedState`.  Total: absent cells return
     `canonicalAbsentValue tag`.
 
-    The byte form matches the encoder's per-cell value layout
-    (CBE uint for amounts/nonces; CBE byte string for keys
-    /policies/etc.). -/
+    The byte form matches the encoder's per-cell value layout: the
+    CBE amount head for balances, the CBE uint head for nonces and
+    the next-withdrawal id, a CBE byte string for keys / policies /
+    bridge records. -/
 def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
   match tag with
   | .balance r a =>
+    -- A balance is value-carrying, so it rides the 17-byte amount
+    -- head rather than the 9-byte identifier head.  The nonce and
+    -- next-withdrawal-id cells below keep the narrow head: they are
+    -- counters, not wei.
     ByteArray.mk
-      (Encodable.encode (T := Nat) (LegalKernel.getBalance es.base r a)).toArray
+      (Encoding.encodeAmount (LegalKernel.getBalance es.base r a)).toArray
   | .nonce a =>
     ByteArray.mk
       (Encodable.encode (T := Nat) (Authority.expectsNonce es a)).toArray
@@ -169,8 +178,11 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
     ExtendedState :=
   match tag with
   | .balance r a =>
-    -- Decode the value as a Nat; on failure leave the cell unchanged.
-    match Encodable.decode (T := Nat) value.data.toList with
+    -- Decode the value off the amount head — the symmetric inverse of
+    -- `getCellValue`'s balance arm.  Reading it on the narrow uint
+    -- head would fail closed on the tag rather than silently truncate,
+    -- but it would still leave every balance write a no-op.
+    match Encoding.decodeAmount value.data.toList with
     | .ok (v, _) => { es with base := LegalKernel.setBalance es.base r a v }
     | .error _   => es
   | .nonce _a =>

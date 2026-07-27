@@ -109,8 +109,11 @@ def Action.distributeOthers_subSteps
       postBalance := p.2 + amount,
       cellProof :=
         { cellTag := CellTag.balance r p.1,
+          -- Balance cells ride the amount head; this must stay the
+          -- exact byte form `getCellValue` produces or the proof
+          -- stops verifying against the pre-state commit.
           cellValue :=
-            ByteArray.mk (Encodable.encode (T := Nat) p.2).toArray,
+            ByteArray.mk (Encoding.encodeAmount p.2).toArray,
           witnessState := es } })
 
 /-- Construct the sub-step list for a `proportionalDilute`
@@ -140,8 +143,11 @@ def Action.proportionalDilute_subSteps
       postBalance := p.2 + credit,
       cellProof :=
         { cellTag := CellTag.balance r p.1,
+          -- Balance cells ride the amount head; this must stay the
+          -- exact byte form `getCellValue` produces or the proof
+          -- stops verifying against the pre-state commit.
           cellValue :=
-            ByteArray.mk (Encodable.encode (T := Nat) p.2).toArray,
+            ByteArray.mk (Encoding.encodeAmount p.2).toArray,
           witnessState := es } })
 
 /-- Top-level entry: dispatch on action variant. -/

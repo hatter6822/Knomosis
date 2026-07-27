@@ -168,9 +168,10 @@ def tests : List TestCase :=
         let bundle := buildTerminateBundle es entry
         assertEq (expected := (19 : UInt8)) (actual := bundle.actionKind)
           "depositWithFee's actionKind is 19"
-        -- 7 × uint64BE = 56-byte L1 field layout.
-        assertEq (expected := 56) (actual := bundle.actionFields.size)
-          "depositWithFee actionFields = 56 bytes"
+        -- 5 × uint64BE + 2 × uint128BE = 72-byte L1 field layout
+        -- (userAmount and poolAmount are wei-denominated).
+        assertEq (expected := 72) (actual := bundle.actionFields.size)
+          "depositWithFee actionFields = 72 bytes"
         -- claimedPostCommit matches the production dispatcher path.
         let expected := stepVMHashFromAction es
                           entry.signedAction.action entry.signedAction.signer
@@ -195,9 +196,11 @@ def tests : List TestCase :=
         let bundle := buildTerminateBundle es entry
         assertEq (expected := (20 : UInt8)) (actual := bundle.actionKind)
           "topUpActionBudget's actionKind is 20"
-        -- 4 × uint64BE = 32-byte L1 field layout.
-        assertEq (expected := 32) (actual := bundle.actionFields.size)
-          "topUpActionBudget actionFields = 32 bytes"
+        -- 3 × uint64BE + 1 × uint128BE = 40-byte L1 field layout
+        -- (gasAmount is wei-denominated; budgetIncrement is a unit
+        -- count and stays 8 bytes).
+        assertEq (expected := 40) (actual := bundle.actionFields.size)
+          "topUpActionBudget actionFields = 40 bytes"
         let expected := stepVMHashFromAction es
                           entry.signedAction.action entry.signedAction.signer
         assertEq (expected := expected) (actual := bundle.claimedPostCommit)

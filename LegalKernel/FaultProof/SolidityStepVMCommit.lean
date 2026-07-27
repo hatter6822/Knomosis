@@ -79,6 +79,36 @@ def uint64BE (n : Nat) : ByteArray :=
       ((n >>>  8) &&& 0xFF).toUInt8,
       ( n         &&& 0xFF).toUInt8]
 
+/-- Encode a `Nat` (assumed `< 2^128`) as 16 big-endian bytes.
+    Matches Solidity's `abi.encodePacked(uint128)`.
+
+    The width for *value-carrying* fields in the L1 step-VM calldata
+    layout.  `uint64BE` remains correct for identifiers, log indices
+    and deposit ids, which are `UInt64`-typed at the source and cannot
+    exceed the narrower range; an amount can — a wei-denominated one
+    crosses `2^64` at ~18.45 ETH — and this layout is a *separate*
+    encoding from the CBE codec, with its own truncation boundary.
+    Widening one without the other would leave the fault proof unable
+    to adjudicate a large-amount action. -/
+def uint128BE (n : Nat) : ByteArray :=
+  ByteArray.mk
+    #[((n >>> 120) &&& 0xFF).toUInt8,
+      ((n >>> 112) &&& 0xFF).toUInt8,
+      ((n >>> 104) &&& 0xFF).toUInt8,
+      ((n >>>  96) &&& 0xFF).toUInt8,
+      ((n >>>  88) &&& 0xFF).toUInt8,
+      ((n >>>  80) &&& 0xFF).toUInt8,
+      ((n >>>  72) &&& 0xFF).toUInt8,
+      ((n >>>  64) &&& 0xFF).toUInt8,
+      ((n >>>  56) &&& 0xFF).toUInt8,
+      ((n >>>  48) &&& 0xFF).toUInt8,
+      ((n >>>  40) &&& 0xFF).toUInt8,
+      ((n >>>  32) &&& 0xFF).toUInt8,
+      ((n >>>  24) &&& 0xFF).toUInt8,
+      ((n >>>  16) &&& 0xFF).toUInt8,
+      ((n >>>   8) &&& 0xFF).toUInt8,
+      ( n          &&& 0xFF).toUInt8]
+
 /-- Encode a `Nat` (assumed `< 2^256`) as 32 big-endian bytes.
     Matches Solidity's `abi.encodePacked(uint256)`.  Inlined as
     a 32-element array literal so `rfl` can decide its size. -/
@@ -120,6 +150,11 @@ def uint256BE (n : Nat) : ByteArray :=
 /-- Size of `uint64BE` is exactly 8. -/
 theorem uint64BE_size (n : Nat) : (uint64BE n).size = 8 := by
   unfold uint64BE
+  rfl
+
+/-- Size of `uint128BE` is exactly 16. -/
+theorem uint128BE_size (n : Nat) : (uint128BE n).size = 16 := by
+  unfold uint128BE
   rfl
 
 /-- Size of `uint256BE` is exactly 32. -/

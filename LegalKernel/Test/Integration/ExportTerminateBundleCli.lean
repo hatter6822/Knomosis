@@ -201,13 +201,15 @@ def actionKind_dispatch_for_all_variants : IO Unit := do
 def json_byte_pinning_transfer_minimal : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
   let json := formatTerminateBundleJson "log[0]" bundle
-  -- Transfer 0→0 amount 0 ⇒ actionFields = 32 zero bytes;
-  -- hex = "0000000000000000000000000000000000000000000000000000000000000000".
+  -- Transfer 0→0 amount 0 ⇒ actionFields = 3 × uint64BE (r, sender,
+  -- receiver) + 1 × uint128BE (amount) = 40 zero bytes, i.e. 80 hex
+  -- characters.  Spelled out rather than computed so a layout change
+  -- has to be re-typed here deliberately.
   let expectedPrefix :=
     "{\"fixture_id\":\"log[0]\"," ++
     "\"action_kind\":0," ++
     "\"action_fields_hex\":" ++
-    "\"0000000000000000000000000000000000000000000000000000000000000000\"," ++
+    "\"00000000000000000000000000000000000000000000000000000000000000000000000000000000\"," ++
     "\"signer\":0,"
   unless json.startsWith expectedPrefix do
     throw (IO.userError
