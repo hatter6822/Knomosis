@@ -173,10 +173,20 @@ impl BoundedQueue {
         self.capacity
     }
 
-    /// Try to enqueue a request.  Returns `Enqueued(receiver)` on
-    /// success, `Busy` if the queue is full, or panics only if the
-    /// channel has been disconnected (which indicates the worker
-    /// thread has died — an unrecoverable host bug).
+    /// Try to enqueue a request.  Returns `Enqueued(receiver)` on success
+    /// and `Busy` otherwise.  This function never panics.
+    ///
+    /// `Busy` covers two distinct conditions: the queue is momentarily
+    /// full (transient — a retry may succeed), and the worker thread has
+    /// died so the channel is disconnected (permanent — every subsequent
+    /// request will fail too).  Collapsing them is deliberate: panicking
+    /// on the dead-worker path would kill the calling connection thread
+    /// without letting the listener log and drain, so the body returns
+    /// `Busy` there and the operator-facing recovery is a process restart.
+    /// Callers therefore cannot distinguish "loaded" from "dead" through
+    /// this return value; a client retrying `Busy` with backoff will retry
+    /// indefinitely against a dead worker.  Liveness is the listener's and
+    /// the readiness probe's concern, not this function's.
     ///
     /// The 1-capacity reply channel ensures the worker can always
     /// place its response without blocking even if the client

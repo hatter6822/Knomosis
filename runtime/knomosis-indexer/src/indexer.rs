@@ -546,10 +546,14 @@ fn balance_debit(
     }
 }
 
-/// Advance the cursor inside the combined tx.  Mirrors
-/// [`crate::cursor::advance_cursor_in_tx`] using the combined-tx
-/// kv methods.  Returns CursorError on non-monotonic advance or
-/// corrupt cell.
+/// Advance the cursor inside the combined tx, using the combined-tx kv
+/// methods.  Returns CursorError on non-monotonic advance or corrupt cell.
+///
+/// Follows [`crate::cursor::advance_cursor_in_tx`] but is deliberately
+/// STRICTER: that function admits `new_value == current` (an idempotent
+/// re-write of a bare cursor cell), whereas this one rejects it, because
+/// the batch's balance/budget effects are staged in the same transaction
+/// and re-applying them would double-count.  See the check below.
 fn advance_cursor_via_combined(
     tx: &mut dyn CombinedTransactionOps,
     in_memory_cursor: u64,
@@ -574,8 +578,22 @@ fn advance_cursor_via_combined(
     // value); if not, we have an external writer or a recovery
     // anomaly.  Use the stricter of the two for the monotonicity
     // check.
+    //
+    // STRICTER than the generic `cursor::advance_cursor_in_tx`, which
+    // permits `new_value == current` because re-writing a cursor cell to
+    // the value it already holds is harmless for a bare cursor write.
+    // Here it is NOT harmless: this call is the tail of `apply_batch`,
+    // which has already staged the batch's balance and budget effects in
+    // the same transaction.  `apply_batch`'s entry guard rejects
+    // `seq <= self.cursor`, so `current == new_value` can only mean
+    // `on_disk_cursor == seq` while our in-memory cursor lagged — i.e.
+    // exactly the "external writer" anomaly the comment above names,
+    // where another writer already applied this seq.  Committing would
+    // then count every non-authoritative credit/debit in the batch a
+    // second time.  Reject instead; the normal path is unaffected because
+    // there `current == self.cursor < seq`.
     let current = on_disk_cursor.max(in_memory_cursor);
-    if new_value < current {
+    if new_value <= current {
         return Err(IndexerError::Cursor(CursorError::NonMonotonicAdvance {
             current,
             attempted: new_value,
@@ -767,6 +785,56 @@ mod tests {
             Err(IndexerError::StaleEvent { seq: 5, cursor: 5 })
         ));
         assert_eq!(ix.cursor(), 5);
+    }
+
+    /// **Audit-regression**: an external writer that already committed
+    /// this seq must not have its batch applied a second time.
+    ///
+    /// `apply_batch`'s entry guard only compares against the IN-MEMORY
+    /// cursor, so a second writer that commits seq N while this instance
+    /// still believes it is at N-1 sails past it.  The in-transaction
+    /// guard is the backstop, and it must reject `new_value == on-disk`
+    /// (not just `<`): otherwise the batch's credits are counted twice.
+    #[test]
+    fn batch_at_an_externally_committed_seq_is_rejected() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let mut ix = Indexer::open(&s).unwrap();
+        ix.apply_batch(
+            1,
+            &[Event::BalanceChanged {
+                resource: 0,
+                actor: 1,
+                old_value: 0,
+                new_value: 500,
+            }],
+        )
+        .unwrap();
+
+        // Simulate the external writer: advance ONLY the on-disk cursor to
+        // seq 2, leaving this instance's in-memory cursor at 1.
+        crate::cursor::write_cursor(&s, 2).unwrap();
+
+        // A DepositCredited is non-authoritative (no BalanceChanged for the
+        // pair), so a double-apply would credit +100 twice.
+        let batch = [Event::DepositCredited {
+            resource: 0,
+            recipient: 1,
+            amount: 100,
+            deposit_id: 7,
+        }];
+        let err = ix.apply_batch(2, &batch).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                IndexerError::Cursor(crate::cursor::CursorError::NonMonotonicAdvance {
+                    current: 2,
+                    attempted: 2
+                })
+            ),
+            "expected NonMonotonicAdvance at the externally-committed seq, got {err:?}"
+        );
+        // The transaction rolled back: the balance is untouched.
+        assert_eq!(BalanceView::new(&s).get(1, 0).unwrap(), 500);
     }
 
     /// **Audit-regression**: a multi-event batch (transfer-shaped)

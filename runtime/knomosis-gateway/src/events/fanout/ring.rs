@@ -54,6 +54,27 @@ impl Cursor {
     pub fn new(seq: u64, index: u32) -> Self {
         Self { seq, index }
     }
+
+    /// Whether `self` sits immediately before `next` — i.e. no record can
+    /// exist strictly between them, so a client at `self` whose next-unseen
+    /// record is `next` has missed nothing.
+    ///
+    /// Two shapes qualify:
+    ///   * same group, adjacent indices (`(5,0)` → `(5,1)`); and
+    ///   * a cursor that consumed its whole group (`index == u32::MAX`, the
+    ///     encoding `parse_resume` gives a bare `since=S` / `Last-Event-ID:
+    ///     S`) immediately before the START of the next group
+    ///     (`(40,MAX)` → `(41,0)`).
+    ///
+    /// Used by [`EventRing::position`] to tell a genuinely contiguous
+    /// resume from one with a gap, without needing to know the log origin.
+    #[must_use]
+    pub fn is_immediately_before(self, next: Cursor) -> bool {
+        if self.seq == next.seq {
+            return self.index != u32::MAX && self.index + 1 == next.index;
+        }
+        self.index == u32::MAX && next.index == 0 && self.seq.checked_add(1) == Some(next.seq)
+    }
 }
 
 /// A fanned-out event record: its [`Cursor`] key, the SSE `event:` type
@@ -218,11 +239,17 @@ impl EventRing {
     /// resume-tier decision).
     ///
     /// `InWindow` iff the client's next-unseen record is still retained:
-    /// either nothing has ever been evicted, or the cursor is at-or-after
-    /// the most-recently-evicted record (so the client already saw
-    /// everything that was dropped).  A cursor *before* an evicted record
-    /// is `Behind` (a possible gap); a cursor at-or-after the newest is
-    /// `AtTail` (caught up).
+    /// the cursor is at-or-after the most-recently-evicted record (so the
+    /// client already saw everything that was dropped), or — before any
+    /// eviction — at-or-after the oldest record the ring actually holds.
+    /// A cursor below that coverage floor is `Behind` (a possible gap,
+    /// carrying `oldest_seq` as the backfill hint); a cursor at-or-after
+    /// the newest is `AtTail` (caught up).
+    ///
+    /// Note that "nothing evicted" does **not** imply the ring covers the
+    /// whole log: it is fed by a live-tail subscription and so may begin at
+    /// an arbitrary seq after a restart.  The floor is therefore taken from
+    /// the retained records, not from eviction history.
     #[must_use]
     pub fn position(&self, cursor: Cursor) -> CursorPosition {
         let Some(newest) = self.newest() else {
@@ -231,17 +258,39 @@ impl EventRing {
         if cursor >= newest {
             return CursorPosition::AtTail;
         }
-        match self.last_evicted {
-            // Nothing evicted → the ring holds the full ingested history,
-            // so any cursor below the newest is served from the window.
-            None => CursorPosition::InWindow,
+        let contiguous = match self.last_evicted {
             // The client saw the last-evicted record (or a later one) → no
             // gap; everything after the cursor is retained.
-            Some(ev) if cursor >= ev => CursorPosition::InWindow,
-            // The cursor predates an evicted record → a possible gap.
-            Some(_) => CursorPosition::Behind {
+            Some(ev) => cursor >= ev,
+            // Nothing has been evicted, but that does NOT mean the ring
+            // holds the full LOG history — only the full *ingested* history.
+            // The ring is filled by a live-tail subscription, so after a
+            // gateway restart (or a mux resubscribe) its first record can be
+            // any seq, with `last_evicted` still `None`.  Inferring
+            // window-completeness from eviction history alone would classify
+            // a cursor far below the ring's floor as `InWindow`, and the
+            // client would be streamed the retained suffix with NO `Behind`
+            // signal — silently losing every record between its cursor and
+            // the ring's oldest, which for an event-sourced consumer means
+            // missed balance changes it never learns to backfill.
+            //
+            // Fall back to the ring's actual coverage floor: the client is
+            // contiguous iff its next-unseen record is one we still hold —
+            // i.e. it either already saw the oldest retained record, or sits
+            // immediately before it (the ordinary `since=S` resume, whose
+            // cursor is `(S, u32::MAX)`, against a ring whose oldest is
+            // `(S+1, 0)`).  Anything further back has records between it and
+            // our floor that this ring never ingested.
+            None => self
+                .oldest()
+                .is_some_and(|oldest| cursor >= oldest || cursor.is_immediately_before(oldest)),
+        };
+        if contiguous {
+            CursorPosition::InWindow
+        } else {
+            CursorPosition::Behind {
                 oldest_seq: self.oldest_seq().unwrap_or(0),
-            },
+            }
         }
     }
 }
@@ -320,6 +369,45 @@ mod tests {
         );
     }
 
+    /// The gateway-restart scenario, spelled out end to end.
+    ///
+    /// `MuxState::run` opens its first subscription with `resume_from = 0`,
+    /// which `UpstreamSubscription` documents as "start from the live tail"
+    /// (§11.3).  So after a restart the ring's first record is whatever seq
+    /// the log had reached — nothing has been evicted, yet the ring covers
+    /// almost none of the log.  A client reconnecting with an older
+    /// `Last-Event-ID` must be told it is `Behind` so it backfills via
+    /// `GET /v1/events`; classifying it `InWindow` would hand it the
+    /// retained suffix as though it were contiguous and it would never learn
+    /// of the records in between.
+    #[test]
+    fn stale_cursor_after_a_live_tail_restart_is_behind_not_in_window() {
+        let mut ring = EventRing::new(64);
+        // Restart: the live tail is at seq 5000; the ring starts there.
+        for seq in 5000..5003 {
+            ring.push(rec(seq, 0));
+        }
+        assert_eq!(ring.oldest_seq(), Some(5000));
+
+        // A client resuming from long before the tail: a real gap exists
+        // (101..4999 were never ingested by THIS ring), so it must be told.
+        assert_eq!(
+            ring.position(Cursor::new(100, 0)),
+            CursorPosition::Behind { oldest_seq: 5000 },
+            "a cursor below a live-tail ring's floor must signal Behind"
+        );
+        // The floor itself and anything above it stream normally.
+        assert_eq!(
+            ring.position(Cursor::new(5000, 0)),
+            CursorPosition::InWindow
+        );
+        assert_eq!(
+            ring.position(Cursor::new(5001, 0)),
+            CursorPosition::InWindow
+        );
+        assert_eq!(ring.position(Cursor::new(5002, 0)), CursorPosition::AtTail);
+    }
+
     #[test]
     fn position_tiers() {
         let mut ring = EventRing::new(3);
@@ -328,8 +416,19 @@ mod tests {
         for (s, i) in [(5, 0), (6, 0), (7, 0)] {
             ring.push(rec(s, i));
         }
-        // Nothing evicted yet → any sub-newest cursor is InWindow.
-        assert_eq!(ring.position(Cursor::ORIGIN), CursorPosition::InWindow);
+        // Nothing evicted, but the ring STARTS at seq 5 — the production mux
+        // opens its first subscription with `resume_from = 0`, i.e. the live
+        // tail, so a fresh ring's floor is wherever the log happened to be.
+        // A cursor below that floor is `Behind` (seqs 1..4 are unserveable
+        // here), NOT `InWindow`: classifying it `InWindow` would stream the
+        // retained suffix with no gap signal and the client would silently
+        // never learn it missed them.
+        assert_eq!(
+            ring.position(Cursor::ORIGIN),
+            CursorPosition::Behind { oldest_seq: 5 }
+        );
+        // A cursor AT the floor is contiguous: its next-unseen record is
+        // (6,0), which the ring holds.
         assert_eq!(ring.position(Cursor::new(5, 0)), CursorPosition::InWindow);
         // At / past the newest → AtTail.
         assert_eq!(ring.position(Cursor::new(7, 0)), CursorPosition::AtTail);
@@ -513,13 +612,27 @@ mod tests {
             let want = match retained.last() {
                 None => CursorPosition::AtTail,
                 Some(&newest) if query >= newest => CursorPosition::AtTail,
-                Some(_) => match evicted_frontier {
-                    None => CursorPosition::InWindow,
-                    Some(ev) if query >= ev => CursorPosition::InWindow,
-                    Some(_) => CursorPosition::Behind {
-                        oldest_seq: retained[0].seq,
-                    },
-                },
+                Some(_) => {
+                    // Contiguous iff the query is at-or-after the ring's
+                    // coverage floor.  With an eviction the floor's
+                    // predecessor is exactly `evicted_frontier`; without one
+                    // the ring covers only from its oldest RETAINED record —
+                    // the live-tail start means "nothing evicted" does not
+                    // imply "covers the whole log".
+                    let contiguous = match evicted_frontier {
+                        Some(ev) => query >= ev,
+                        None => {
+                            query >= retained[0] || query.is_immediately_before(retained[0])
+                        }
+                    };
+                    if contiguous {
+                        CursorPosition::InWindow
+                    } else {
+                        CursorPosition::Behind {
+                            oldest_seq: retained[0].seq,
+                        }
+                    }
+                }
             };
             prop_assert_eq!(ring.position(query), want);
         }

@@ -236,6 +236,7 @@ mod tests {
     /// then stop the stream and return the captured output.
     fn capture(
         state: &Arc<FanoutState>,
+        from: Cursor,
         types: &[String],
         config: StreamConfig,
         done: impl Fn(&str) -> bool,
@@ -251,7 +252,7 @@ mod tests {
             );
             thread::spawn(move || {
                 let mut sink = SharedSink(data);
-                run_stream(&mut sink, &st, Cursor::ORIGIN, &tys, &config, &sd)
+                run_stream(&mut sink, &st, from, &tys, &config, &sd)
             })
         };
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
@@ -271,11 +272,19 @@ mod tests {
         let state = FanoutState::new(64);
         {
             let mut ring = state.ring();
+            // Seed the ring's coverage floor: a real client resumes from a
+            // record the ring still holds, so its cursor is at-or-above the
+            // oldest retained one.  Resuming from BELOW the floor is the
+            // gap case, which `position` now correctly reports as `Behind`
+            // (see `stale_cursor_after_a_live_tail_restart_is_behind_not_in_window`).
+            ring.push(rec(4, 0, "balanceChanged"));
             ring.push(rec(5, 0, "balanceChanged"));
             ring.push(rec(5, 1, "nonceAdvanced"));
             ring.push(rec(6, 0, "balanceChanged"));
         }
-        let out = capture(&state, &[], brisk(64), |t| t.contains("id: 6.0"));
+        let out = capture(&state, Cursor::new(4, 0), &[], brisk(64), |t| {
+            t.contains("id: 6.0")
+        });
         assert!(out.contains("id: 5.0\nevent: balanceChanged\ndata: {"));
         assert!(out.contains("id: 5.1\nevent: nonceAdvanced\ndata: {"));
         assert!(out.contains("id: 6.0\nevent: balanceChanged\ndata: {"));
@@ -291,6 +300,8 @@ mod tests {
         let state = FanoutState::new(64);
         {
             let mut ring = state.ring();
+            // Seed the coverage floor (see the sibling test above).
+            ring.push(rec(4, 0, "balanceChanged"));
             ring.push(rec(5, 0, "balanceChanged"));
             ring.push(rec(5, 1, "nonceAdvanced"));
             ring.push(rec(6, 0, "balanceChanged"));
@@ -298,9 +309,13 @@ mod tests {
         // Wait until the (filtered) nonceAdvanced record and a later
         // unfiltered record (6.0) have both been processed, so we know the
         // filter dropped the balanceChanged records rather than lagging.
-        let out = capture(&state, &["nonceAdvanced".to_string()], brisk(64), |t| {
-            t.contains("id: 5.1")
-        });
+        let out = capture(
+            &state,
+            Cursor::new(4, 0),
+            &["nonceAdvanced".to_string()],
+            brisk(64),
+            |t| t.contains("id: 5.1"),
+        );
         assert!(out.contains("id: 5.1\nevent: nonceAdvanced"));
         assert!(!out.contains("balanceChanged"));
         // Exactly one record (the filtered nonceAdvanced); the trailing
@@ -419,6 +434,9 @@ mod tests {
     #[test]
     fn slow_client_does_not_stall_a_fast_client() {
         let state = FanoutState::new(1024);
+        // Seed the coverage floor at ORIGIN so the clients' ORIGIN resume is
+        // AT the floor (a below-floor cursor is now `Behind` → evicted).
+        state.ring().push(rec(0, 0, "balanceChanged"));
         for s in 1..=50u64 {
             state.ring().push(rec(s, 0, "balanceChanged"));
         }
