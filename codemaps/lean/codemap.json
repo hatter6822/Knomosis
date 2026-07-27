@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "9123da9a7a961c8da8c6f9b9bc73d43f8c6237d5df03a60c691cba56f08f04a9"
+    "source_digest": "c65084eb4dbc26d53ca6b9fbbb5dd1282b0b8c252e3d44f85167a815e98078d1"
   },
   "summary": {
     "module_count": 308,
-    "declaration_count": 5178
+    "declaration_count": 5179
   },
   "modules": [
     {
@@ -24003,19 +24003,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 141,
-          "called": []
-        },
-        {
-          "kind": "namespace",
-          "name": "FaultProof",
           "line": 142,
           "called": []
         },
         {
           "kind": "namespace",
-          "name": "StepVMCoherence",
+          "name": "FaultProof",
           "line": 143,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "StepVMCoherence",
+          "line": 144,
           "called": [
             "LegalKernel.Bridge",
             "LegalKernel.Runtime"
@@ -24024,7 +24024,7 @@
         {
           "kind": "def",
           "name": "actionKindByte",
-          "line": 167,
+          "line": 169,
           "called": [
             "Action",
             "ammSwap",
@@ -24047,13 +24047,13 @@
         {
           "kind": "def",
           "name": "actionKindByteCases",
-          "line": 231,
+          "line": 233,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionFieldsForL1",
-          "line": 259,
+          "line": 261,
           "called": [
             "Action",
             "Dispute",
@@ -24086,7 +24086,7 @@
         {
           "kind": "def",
           "name": "findCellProof",
-          "line": 388,
+          "line": 390,
           "called": [
             "CellProof",
             "CellProofBundle",
@@ -24096,7 +24096,7 @@
         {
           "kind": "def",
           "name": "readCellValue",
-          "line": 396,
+          "line": 398,
           "called": [
             "CellProofBundle",
             "CellTag",
@@ -24107,31 +24107,31 @@
         {
           "kind": "def",
           "name": "decodeCellNat",
-          "line": 439,
+          "line": 441,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint64BE",
-          "line": 484,
+          "line": 486,
           "called": []
         },
         {
           "kind": "def",
           "name": "sliceFrom",
-          "line": 500,
+          "line": 502,
           "called": []
         },
         {
           "kind": "def",
           "name": "maxRecipientsPerBulkAction",
-          "line": 510,
+          "line": 512,
           "called": []
         },
         {
           "kind": "def",
           "name": "stepVMHash",
-          "line": 525,
+          "line": 527,
           "called": [
             "CellProofBundle",
             "ammReserveActor",
@@ -24178,7 +24178,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_deterministic",
-          "line": 907,
+          "line": 909,
           "called": [
             "CellProofBundle",
             "stepVMHash"
@@ -24187,7 +24187,7 @@
         {
           "kind": "theorem",
           "name": "actionKindByte_deterministic",
-          "line": 917,
+          "line": 919,
           "called": [
             "Action",
             "actionKindByte"
@@ -24196,7 +24196,7 @@
         {
           "kind": "theorem",
           "name": "actionFieldsForL1_deterministic",
-          "line": 923,
+          "line": 925,
           "called": [
             "Action",
             "actionFieldsForL1"
@@ -24205,7 +24205,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_transfer_kind",
-          "line": 940,
+          "line": 943,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24220,7 +24220,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_mint_kind",
-          "line": 965,
+          "line": 968,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24233,7 +24233,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_burn_kind",
-          "line": 978,
+          "line": 981,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24246,7 +24246,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_freezeResource_kind",
-          "line": 991,
+          "line": 994,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -24257,7 +24257,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_replaceKey_kind",
-          "line": 998,
+          "line": 1001,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -24269,7 +24269,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_reward_kind",
-          "line": 1006,
+          "line": 1009,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24282,7 +24282,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_distributeOthers_kind",
-          "line": 1024,
+          "line": 1027,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24296,7 +24296,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_proportionalDilute_kind",
-          "line": 1051,
+          "line": 1054,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24311,7 +24311,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_dispute_kind",
-          "line": 1088,
+          "line": 1091,
           "called": [
             "CellProofBundle",
             "stepCommitDispute",
@@ -24321,7 +24321,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_disputeWithdraw_kind",
-          "line": 1095,
+          "line": 1098,
           "called": [
             "CellProofBundle",
             "stepCommitDisputeWithdraw",
@@ -24331,7 +24331,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_verdict_kind",
-          "line": 1102,
+          "line": 1105,
           "called": [
             "CellProofBundle",
             "stepCommitVerdict",
@@ -24341,7 +24341,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_rollback_kind",
-          "line": 1109,
+          "line": 1112,
           "called": [
             "CellProofBundle",
             "stepCommitRollback",
@@ -24351,7 +24351,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_registerIdentity_kind",
-          "line": 1116,
+          "line": 1119,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -24363,7 +24363,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_deposit_kind",
-          "line": 1124,
+          "line": 1127,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24376,7 +24376,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_withdraw_kind",
-          "line": 1139,
+          "line": 1142,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24391,7 +24391,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_declareLocalPolicy_kind",
-          "line": 1154,
+          "line": 1157,
           "called": [
             "CellProofBundle",
             "stepCommitDeclareLocalPolicy",
@@ -24401,7 +24401,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_revokeLocalPolicy_kind",
-          "line": 1161,
+          "line": 1164,
           "called": [
             "CellProofBundle",
             "stepCommitRevokeLocalPolicy",
@@ -24411,7 +24411,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofChallenge_kind",
-          "line": 1168,
+          "line": 1171,
           "called": [
             "CellProofBundle",
             "stepCommitFaultProofChallenge",
@@ -24421,7 +24421,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofResolution_kind",
-          "line": 1175,
+          "line": 1178,
           "called": [
             "CellProofBundle",
             "stepCommitFaultProofResolution",
@@ -24431,7 +24431,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_depositWithFee_kind",
-          "line": 1190,
+          "line": 1193,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24445,7 +24445,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_topUpActionBudget_kind",
-          "line": 1228,
+          "line": 1231,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24460,7 +24460,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_topUpActionBudgetFor_kind",
-          "line": 1265,
+          "line": 1268,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24475,7 +24475,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_claimBudgetRefund_kind",
-          "line": 1297,
+          "line": 1300,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24491,7 +24491,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_ammSwap_kind",
-          "line": 1327,
+          "line": 1330,
           "called": [
             "CellProofBundle",
             "ammReserveActor",
@@ -24505,7 +24505,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_reclaimAmmReserves_kind",
-          "line": 1353,
+          "line": 1356,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -24519,7 +24519,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_unknown_kind_empty",
-          "line": 1381,
+          "line": 1384,
           "called": [
             "CellProofBundle",
             "stepVMHash"
@@ -24528,7 +24528,7 @@
         {
           "kind": "def",
           "name": "stepVMHashFromAction",
-          "line": 1409,
+          "line": 1412,
           "called": [
             "Action",
             "ActorId",
@@ -24543,7 +24543,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_deterministic",
-          "line": 1417,
+          "line": 1420,
           "called": [
             "Action",
             "ActorId",
@@ -24555,7 +24555,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_dispute",
-          "line": 1437,
+          "line": 1440,
           "called": [
             "ActorId",
             "Dispute",
@@ -24570,7 +24570,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_disputeWithdraw",
-          "line": 1445,
+          "line": 1448,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24584,7 +24584,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_verdict",
-          "line": 1453,
+          "line": 1456,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24599,7 +24599,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_rollback",
-          "line": 1460,
+          "line": 1463,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24613,7 +24613,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_declareLocalPolicy",
-          "line": 1467,
+          "line": 1470,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24628,7 +24628,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_revokeLocalPolicy",
-          "line": 1474,
+          "line": 1477,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24642,7 +24642,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofChallenge",
-          "line": 1481,
+          "line": 1484,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24656,7 +24656,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofResolution",
-          "line": 1490,
+          "line": 1493,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24670,7 +24670,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_freezeResource",
-          "line": 1499,
+          "line": 1502,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -24687,7 +24687,7 @@
         {
           "kind": "theorem",
           "name": "step_vm_dispatch_well_typed",
-          "line": 1545,
+          "line": 1548,
           "called": [
             "Action",
             "ActorId",
@@ -46127,30 +46127,30 @@
     {
       "module": "LegalKernel.Test.Encoding.Event",
       "path": "LegalKernel/Test/Encoding/Event.lean",
-      "declaration_count": 16,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Encoding",
-          "line": 24,
+          "line": 25,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "EventTests",
-          "line": 25,
+          "line": 26,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleAddr",
-          "line": 34,
+          "line": 35,
           "called": []
         },
         {
           "kind": "def",
           "name": "sampleEvents",
-          "line": 43,
+          "line": 52,
           "called": [
             "Event",
             "sampleAddr"
@@ -46158,8 +46158,16 @@
         },
         {
           "kind": "def",
+          "name": "requiredTag",
+          "line": 89,
+          "called": [
+            "Event"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "assertRoundtrips",
-          "line": 68,
+          "line": 116,
           "called": [
             "Event",
             "Event.decode",
@@ -46170,7 +46178,7 @@
         {
           "kind": "def",
           "name": "roundtripAllConstructors",
-          "line": 78,
+          "line": 126,
           "called": [
             "TestCase",
             "assertRoundtrips",
@@ -46180,17 +46188,19 @@
         {
           "kind": "def",
           "name": "roundtripCoversAllTags",
-          "line": 88,
+          "line": 137,
           "called": [
             "Event.tag",
             "TestCase",
-            "assertEq"
+            "assertEq",
+            "requiredTag",
+            "sampleEvents"
           ]
         },
         {
           "kind": "def",
           "name": "gasPoolClaimByteLayout",
-          "line": 100,
+          "line": 156,
           "called": [
             "Event",
             "TestCase",
@@ -46200,7 +46210,7 @@
         {
           "kind": "def",
           "name": "leadingTagHeadMatchesTag",
-          "line": 118,
+          "line": 174,
           "called": [
             "Event",
             "Event.tag",
@@ -46212,7 +46222,7 @@
         {
           "kind": "def",
           "name": "gasPoolFamilyDistinct",
-          "line": 132,
+          "line": 188,
           "called": [
             "Event",
             "TestCase",
@@ -46222,7 +46232,7 @@
         {
           "kind": "def",
           "name": "encodeDeterministic",
-          "line": 153,
+          "line": 209,
           "called": [
             "Event",
             "TestCase",
@@ -46233,7 +46243,7 @@
         {
           "kind": "def",
           "name": "decodeRejectsUnknownTag",
-          "line": 164,
+          "line": 220,
           "called": [
             "Event.decode",
             "TestCase",
@@ -46244,7 +46254,7 @@
         {
           "kind": "def",
           "name": "decodeNeverPanics",
-          "line": 176,
+          "line": 232,
           "called": [
             "Event.decode",
             "Stream",
@@ -46254,7 +46264,7 @@
         {
           "kind": "def",
           "name": "tagMatchesEncodeTagAPI",
-          "line": 190,
+          "line": 246,
           "called": [
             "Event",
             "Event.tag",
@@ -46266,7 +46276,7 @@
         {
           "kind": "def",
           "name": "localPolicyDeclaredPolicyIsByteString",
-          "line": 207,
+          "line": 263,
           "called": [
             "Event",
             "TestCase",
@@ -46276,7 +46286,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 217,
+          "line": 273,
           "called": [
             "EventTests",
             "LegalKernel.Test.Encoding",
