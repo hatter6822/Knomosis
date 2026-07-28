@@ -766,17 +766,51 @@ pub mod tcp {
                                 let handle = handle.clone();
                                 let config = config.clone();
                                 let conn_stop = Arc::clone(&stop);
-                                thread::spawn(move || {
-                                    handle_single_connection(
-                                        stream, peer, handle, config, slot, conn_id, conn_stop,
+                                // A second handle on the same socket, and the
+                                // write timeout, both taken BEFORE the move, so
+                                // a spawn failure can still answer `Busy`
+                                // instead of dropping the client silently.
+                                let busy_handle = stream.try_clone().ok();
+                                let busy_timeout = config.bounded_connection_timeout();
+                                let spawned = thread::Builder::new()
+                                    .name(format!("knomosis-conn-{conn_id}"))
+                                    .spawn(move || {
+                                        handle_single_connection(
+                                            stream, peer, handle, config, slot, conn_id, conn_stop,
+                                        );
+                                    });
+                                // `thread::spawn` PANICS when the OS refuses a
+                                // thread (EAGAIN under fd/thread pressure —
+                                // exactly when a server is under load), and
+                                // that panic unwinds the accept loop: the
+                                // listener stops accepting entirely.  Handle
+                                // the error instead.  The closure is dropped
+                                // on failure, so the moved `ConnectionSlot`
+                                // runs its `Drop` and the slot accounting stays
+                                // correct.
+                                if let Err(e) = spawned {
+                                    tracing::warn!(
+                                        peer = %peer,
+                                        error = %e,
+                                        "failed to spawn a connection thread; responding Busy"
                                     );
-                                });
+                                    if let Some(mut s) = busy_handle {
+                                        let _ = s.set_write_timeout(Some(busy_timeout));
+                                        let bytes =
+                                            VerdictResponse::from_verdict(Verdict::Busy).encode();
+                                        let _ = s.write_all(&bytes);
+                                        let _ = s.flush();
+                                    }
+                                }
                             }
                             None => {
-                                // Spawn a tiny inline writer so we
-                                // don't block the accept loop on
-                                // the slow client.  Acceptable: the
-                                // write is a fixed 5-byte response.
+                                // The Busy write is synchronous on the accept
+                                // loop, not handed to a thread: it is a fixed
+                                // 5-byte response under a bounded write
+                                // timeout, so it cannot stall the loop for
+                                // longer than that timeout, and spawning a
+                                // thread to send 5 bytes is exactly the
+                                // resource pressure the cap exists to relieve.
                                 tracing::warn!(
                                     peer = %peer,
                                     "max_concurrent_connections reached; responding Busy"
@@ -919,11 +953,27 @@ pub mod tls {
                                 let handle = handle.clone();
                                 let config = config.clone();
                                 let tls_config = Arc::clone(&self.tls_config);
-                                thread::spawn(move || {
-                                    handle_tls_connection(
-                                        stream, peer, handle, config, tls_config, slot, conn_id,
+                                // See the plaintext listener: a refused thread
+                                // must not panic the accept loop.  No `Busy`
+                                // write here — a plaintext verdict sent to a
+                                // TLS-expecting client is not meaningful, the
+                                // same reasoning the `None` branch below
+                                // records.  Dropping the closure closes the
+                                // socket and releases the slot.
+                                if let Err(e) = thread::Builder::new()
+                                    .name(format!("knomosis-tls-conn-{conn_id}"))
+                                    .spawn(move || {
+                                        handle_tls_connection(
+                                            stream, peer, handle, config, tls_config, slot, conn_id,
+                                        );
+                                    })
+                                {
+                                    tracing::warn!(
+                                        peer = %peer,
+                                        error = %e,
+                                        "TLS: failed to spawn a connection thread; closing"
                                     );
-                                });
+                                }
                             }
                             None => {
                                 tracing::warn!(
@@ -1280,11 +1330,30 @@ pub mod unix {
                                 let handle = handle.clone();
                                 let config = config.clone();
                                 let conn_stop = Arc::clone(&stop);
-                                thread::spawn(move || {
-                                    handle_single_unix_connection(
-                                        stream, handle, config, slot, conn_id, conn_stop,
+                                // See the plaintext TCP listener.
+                                let busy_handle = stream.try_clone().ok();
+                                let busy_timeout = config.bounded_connection_timeout();
+                                if let Err(e) = thread::Builder::new()
+                                    .name(format!("knomosis-unix-conn-{conn_id}"))
+                                    .spawn(move || {
+                                        handle_single_unix_connection(
+                                            stream, handle, config, slot, conn_id, conn_stop,
+                                        );
+                                    })
+                                {
+                                    tracing::warn!(
+                                        error = %e,
+                                        "Unix: failed to spawn a connection thread; \
+                                         responding Busy"
                                     );
-                                });
+                                    if let Some(mut s) = busy_handle {
+                                        let _ = s.set_write_timeout(Some(busy_timeout));
+                                        let bytes =
+                                            VerdictResponse::from_verdict(Verdict::Busy).encode();
+                                        let _ = s.write_all(&bytes);
+                                        let _ = s.flush();
+                                    }
+                                }
                             }
                             None => {
                                 tracing::warn!(

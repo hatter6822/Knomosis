@@ -35,7 +35,7 @@ use knomosis_storage::sqlite::SqliteStorage;
 
 use crate::client::{ClientError, ServerFrame, SubscribeClient};
 use crate::decoder::decode_event;
-use crate::indexer::{Indexer, IndexerError};
+use crate::indexer::{Indexer, IndexerError, INDEXER_MAX_BATCH_BYTES, INDEXER_MAX_BATCH_EVENTS};
 
 /// Outcome of consuming the server's event stream for one
 /// session (one TCP connection).
@@ -159,6 +159,11 @@ pub fn consume_batched(
     first_payload: Vec<u8>,
 ) -> ConsumeOutcome {
     let mut current_seq = first_seq;
+    // Accumulated decoded-payload bytes for the in-flight batch.  The
+    // event count alone does not bound memory — 1024 events each
+    // carrying a maximal payload is far more than 1024 small ones — so
+    // both are capped.
+    let mut batch_bytes: usize = first_payload.len();
     let mut batch = match decode_event(&first_payload) {
         Ok(e) => vec![e],
         Err(e) => {
@@ -200,15 +205,51 @@ pub fn consume_batched(
         };
         match frame {
             ServerFrame::Event { seq, payload } => match seq.cmp(&current_seq) {
-                std::cmp::Ordering::Equal => match decode_event(&payload) {
-                    Ok(e) => batch.push(e),
-                    Err(e) => {
-                        return ConsumeOutcome::IndexerError(IndexerError::Decode {
-                            seq,
-                            source: e,
+                std::cmp::Ordering::Equal => {
+                    // Bound the accumulator AT PUSH TIME.  `apply_batch`
+                    // also checks `INDEXER_MAX_BATCH_EVENTS`, but it only
+                    // runs when the seq advances — and a peer that
+                    // repeats one seq forever never advances it, so the
+                    // commit-time check was unreachable and the batch grew
+                    // until the process was killed.  Halting with a typed
+                    // error surfaces the misbehaving peer instead.
+                    if batch.len() >= INDEXER_MAX_BATCH_EVENTS {
+                        tracing::error!(
+                            current_seq,
+                            in_flight_events = batch.len(),
+                            "server sent more than the per-seq event cap without advancing seq"
+                        );
+                        return ConsumeOutcome::IndexerError(IndexerError::BatchTooLarge {
+                            size: batch.len() + 1,
+                            max: INDEXER_MAX_BATCH_EVENTS,
                         });
                     }
-                },
+                    let next_bytes = batch_bytes.saturating_add(payload.len());
+                    if next_bytes > INDEXER_MAX_BATCH_BYTES {
+                        tracing::error!(
+                            current_seq,
+                            in_flight_events = batch.len(),
+                            in_flight_bytes = next_bytes,
+                            "server exceeded the per-seq batch byte cap without advancing seq"
+                        );
+                        return ConsumeOutcome::IndexerError(IndexerError::BatchTooLarge {
+                            size: batch.len() + 1,
+                            max: INDEXER_MAX_BATCH_EVENTS,
+                        });
+                    }
+                    match decode_event(&payload) {
+                        Ok(e) => {
+                            batch.push(e);
+                            batch_bytes = next_bytes;
+                        }
+                        Err(e) => {
+                            return ConsumeOutcome::IndexerError(IndexerError::Decode {
+                                seq,
+                                source: e,
+                            });
+                        }
+                    }
+                }
                 std::cmp::Ordering::Greater => {
                     // The previous seq's batch is now known to be
                     // complete (the server has moved on to a new
@@ -218,6 +259,7 @@ pub fn consume_batched(
                     }
                     current_seq = seq;
                     batch.clear();
+                    batch_bytes = payload.len();
                     match decode_event(&payload) {
                         Ok(e) => batch.push(e),
                         Err(e) => {

@@ -76,7 +76,9 @@ fn drain_all_through(q: &FairQueue, kernel: &dyn Kernel) -> Vec<Vec<u8>> {
 #[test]
 fn fairness_whale_does_not_bury_small() {
     let q = fair(64, 64, 256);
-    let kernel = MockKernel::new();
+    // Recording is opt-in: this test asserts the kernel saw the exact
+    // dispatch ORDER, which is what `recorded()` guarantees.
+    let kernel = MockKernel::new().with_recording();
     // Whale = conn 1 (payload 1), 10 deep.  Small = conn 2 (payload 2).
     for _ in 0..10 {
         assert!(matches!(

@@ -133,6 +133,49 @@ pub enum KeyError {
         #[source]
         source: std::io::Error,
     },
+    /// The keystore file is readable or writable by "other".
+    #[error(
+        "keystore at {path} has insecure permissions {mode:04o}: a raw secp256k1 \
+         private key must not be accessible by other (chmod 600)"
+    )]
+    InsecurePermissions {
+        /// The path that failed.
+        path: String,
+        /// The offending mode, masked to the permission bits.
+        mode: u32,
+    },
+}
+
+/// Refuse a keystore file accessible by "other" (any of the low three
+/// mode bits set).  Reads the metadata from the already-open handle so
+/// the check and the read cannot be split by a path swap.
+#[cfg(unix)]
+fn check_key_file_permissions(
+    file: &std::fs::File,
+    path: &std::path::Path,
+) -> Result<(), KeyError> {
+    use std::os::unix::fs::PermissionsExt;
+    let meta = file.metadata().map_err(|source| KeyError::Io {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let mode = meta.permissions().mode();
+    if mode & 0o007 != 0 {
+        return Err(KeyError::InsecurePermissions {
+            path: path.display().to_string(),
+            mode: mode & 0o777,
+        });
+    }
+    Ok(())
+}
+
+/// Non-Unix targets have no POSIX permission model — nothing to check.
+#[cfg(not(unix))]
+fn check_key_file_permissions(
+    _file: &std::fs::File,
+    _path: &std::path::Path,
+) -> Result<(), KeyError> {
+    Ok(())
 }
 
 impl BridgeActorKey {
@@ -184,10 +227,17 @@ impl BridgeActorKey {
     /// misconfigured operator pointing at `/dev/zero` or a
     /// large arbitrary file would otherwise exhaust memory).
     ///
+    /// On Unix the file must not be accessible by "other": this is a
+    /// raw secp256k1 private key, strictly more sensitive than the
+    /// gateway bearer token the workspace already refuses to load when
+    /// world-readable.  Group access is left to the operator
+    /// (service-group deployments), matching that precedent.
+    ///
     /// # Errors
     ///
     /// Returns `KeyError::Io` if the file cannot be opened or
-    /// read, `KeyError::InvalidLength` if the file is too short,
+    /// read, `KeyError::InsecurePermissions` if it is accessible by
+    /// other, `KeyError::InvalidLength` if the file is too short,
     /// and `KeyError::InvalidScalar` if the scalar is invalid.
     pub fn from_file(path: &std::path::Path) -> Result<Self, KeyError> {
         use std::io::Read;
@@ -195,6 +245,10 @@ impl BridgeActorKey {
             path: path.display().to_string(),
             source,
         })?;
+        // Checked on the OPEN HANDLE, not by stat-ing the path a second
+        // time: a second stat is a different object from the one we are
+        // about to read if the path is swapped in between.
+        check_key_file_permissions(&file, path)?;
         // Read exactly PRIVATE_KEY_LEN bytes.  `read_exact`
         // returns `UnexpectedEof` if the file is shorter than
         // 32 bytes, which we map to `InvalidLength`.
@@ -468,6 +522,19 @@ mod tests {
         assert_ne!(s1, s2);
     }
 
+    /// Write a keystore file with secret-safe (owner-only) permissions,
+    /// so the load-time permission check accepts it.  A test that wrote
+    /// with the process umask would be asserting the *umask*, not the
+    /// loader.
+    fn write_key_file(path: &std::path::Path, bytes: &[u8]) {
+        std::fs::write(path, bytes).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
+
     /// Loading from a file round-trips via `from_private_bytes`.
     #[test]
     fn from_file_round_trip() {
@@ -475,7 +542,7 @@ mod tests {
         let path = temp.path().join("key.bin");
         let mut scalar = [0u8; PRIVATE_KEY_LEN];
         scalar[31] = 42;
-        std::fs::write(&path, scalar).unwrap();
+        write_key_file(&path, &scalar);
         let key = BridgeActorKey::from_file(&path).unwrap();
         let direct = BridgeActorKey::from_private_bytes(&scalar).unwrap();
         assert_eq!(key.public_key_compressed(), direct.public_key_compressed());
@@ -486,7 +553,7 @@ mod tests {
     fn from_file_too_short() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("key.bin");
-        std::fs::write(&path, [0u8; 16]).unwrap();
+        write_key_file(&path, &[0u8; 16]);
         assert!(matches!(
             BridgeActorKey::from_file(&path),
             Err(KeyError::InvalidLength {
@@ -494,6 +561,53 @@ mod tests {
                 expected: 32
             })
         ));
+    }
+
+    /// A keystore readable by "other" is refused at load.
+    ///
+    /// This is a raw secp256k1 private key — strictly more sensitive
+    /// than the gateway bearer token the workspace already refuses to
+    /// load when world-readable — and it had no permission check at all.
+    #[cfg(unix)]
+    #[test]
+    fn from_file_rejects_world_readable_keystore() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let mut scalar = [0u8; PRIVATE_KEY_LEN];
+        scalar[31] = 7;
+        for mode in [0o644u32, 0o604, 0o606, 0o777] {
+            let path = temp.path().join(format!("key-{mode:o}.bin"));
+            std::fs::write(&path, scalar).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            match BridgeActorKey::from_file(&path) {
+                Err(KeyError::InsecurePermissions { mode: got, .. }) => {
+                    assert_eq!(got, mode & 0o777);
+                }
+                Err(other) => panic!("mode {mode:o}: wrong rejection {other:?}"),
+                Ok(_) => panic!("mode {mode:o} must be refused, was accepted"),
+            }
+        }
+    }
+
+    /// Owner-only and owner+group modes still load: group access is the
+    /// operator's call (service-group deployments), matching the
+    /// gateway token-file precedent.
+    #[cfg(unix)]
+    #[test]
+    fn from_file_accepts_owner_and_group_only_keystores() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let mut scalar = [0u8; PRIVATE_KEY_LEN];
+        scalar[31] = 9;
+        for mode in [0o600u32, 0o400, 0o640, 0o660] {
+            let path = temp.path().join(format!("key-{mode:o}.bin"));
+            std::fs::write(&path, scalar).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            assert!(
+                BridgeActorKey::from_file(&path).is_ok(),
+                "mode {mode:o} must load"
+            );
+        }
     }
 
     /// Non-existent file path returns `Io`.
@@ -514,7 +628,7 @@ mod tests {
         let path = temp.path().join("oversize.bin");
         // Write 5 KiB (above the 4 KiB threshold).
         let oversize_bytes = vec![0x11u8; 5 * 1024];
-        std::fs::write(&path, &oversize_bytes).unwrap();
+        write_key_file(&path, &oversize_bytes);
         let result = BridgeActorKey::from_file(&path);
         match result {
             Err(KeyError::InvalidLength { got, expected }) => {
@@ -533,7 +647,7 @@ mod tests {
         let path = temp.path().join("ok.bin");
         let mut scalar = [0u8; PRIVATE_KEY_LEN];
         scalar[31] = 9;
-        std::fs::write(&path, scalar).unwrap();
+        write_key_file(&path, &scalar);
         let key = BridgeActorKey::from_file(&path).unwrap();
         assert!(matches!(key.public_key_compressed()[0], 0x02 | 0x03));
     }
@@ -549,7 +663,7 @@ mod tests {
         let path = temp.path().join("ok.bin");
         let mut data = vec![0u8; PRIVATE_KEY_LEN + 100];
         data[31] = 13; // valid scalar
-        std::fs::write(&path, &data).unwrap();
+        write_key_file(&path, &data);
         let key = BridgeActorKey::from_file(&path).unwrap();
         // Sanity: pubkey is from the first-32-bytes scalar.
         let direct = BridgeActorKey::from_private_bytes(&data[..PRIVATE_KEY_LEN]).unwrap();

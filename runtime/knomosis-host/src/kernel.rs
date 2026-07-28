@@ -325,8 +325,21 @@ pub mod mock {
     /// The mock kernel's mutable interior.
     #[derive(Debug)]
     struct MockInner {
-        /// Every submission recorded in arrival order.
+        /// Every submission recorded in arrival order — populated ONLY
+        /// when [`MockKernel::with_recording`] has been called.
+        ///
+        /// Recording is off by default because `--mock` runs the mock
+        /// as a long-lived dev server: an unconditional record retains
+        /// every payload the process has ever seen, so the daemon's
+        /// memory grows without bound for the whole run.  Tests that
+        /// assert on payload ORDER opt in; the submission count is
+        /// tracked separately and is always accurate.
         recorded: Vec<Vec<u8>>,
+        /// Whether `recorded` is being populated.
+        record_submissions: bool,
+        /// Number of submissions seen, tracked unconditionally so
+        /// `len` / `is_empty` stay correct with recording off.
+        submission_count: usize,
         /// Response sequence; cycles when exhausted.  Empty
         /// sequence means "always Ok".
         responses: Vec<KernelResponse>,
@@ -349,6 +362,8 @@ pub mod mock {
         fn default() -> Self {
             Self {
                 recorded: Vec::new(),
+                record_submissions: false,
+                submission_count: 0,
                 responses: Vec::new(),
                 next_response: 0,
                 ok_stage: AdmissionStage::Finalized,
@@ -434,24 +449,51 @@ pub mod mock {
                 .map(|g| g.current_budget(actor))
         }
 
-        /// Clone the recorded submissions.  Order-preserving.
+        /// Retain every submitted payload so [`Self::recorded`] can
+        /// return them.  Off by default — see `MockInner::recorded`.
+        ///
+        /// Intended for tests that assert on payload content or
+        /// ORDER.  A long-running `--mock` server must not enable it:
+        /// the retained payloads are never released.
         #[must_use]
-        pub fn recorded(&self) -> Vec<Vec<u8>> {
+        pub fn with_recording(self) -> Self {
             self.inner
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
-                .recorded
-                .clone()
+                .record_submissions = true;
+            self
         }
 
-        /// Number of recorded submissions.
+        /// Clone the recorded submissions.  Order-preserving and
+        /// COMPLETE: every submission since recording was enabled, in
+        /// arrival order.
+        ///
+        /// # Panics
+        ///
+        /// Panics if recording was never enabled.  Returning an empty
+        /// vec instead would silently break the completeness this
+        /// method promises — a caller asserting "these are all the
+        /// submissions" would read a truthful-looking empty answer.
+        #[must_use]
+        pub fn recorded(&self) -> Vec<Vec<u8>> {
+            let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+            assert!(
+                inner.record_submissions,
+                "MockKernel::recorded() requires MockKernel::with_recording(); \
+                 recording is off by default so a long-running --mock server does \
+                 not retain every payload it has ever seen"
+            );
+            inner.recorded.clone()
+        }
+
+        /// Number of submissions seen.  Accurate whether or not
+        /// recording is enabled.
         #[must_use]
         pub fn len(&self) -> usize {
             self.inner
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
-                .recorded
-                .len()
+                .submission_count
         }
 
         /// `true` iff nothing has been submitted yet.
@@ -464,7 +506,10 @@ pub mod mock {
     impl Kernel for MockKernel {
         fn submit(&self, signed_action_bytes: &[u8]) -> KernelResponse {
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
-            inner.recorded.push(signed_action_bytes.to_vec());
+            inner.submission_count += 1;
+            if inner.record_submissions {
+                inner.recorded.push(signed_action_bytes.to_vec());
+            }
             // 1. Compute the pre-budget verdict from the configured
             //    response sequence (cycling; empty means "always Ok").
             let base = if inner.responses.is_empty() {
@@ -574,7 +619,7 @@ pub mod mock {
         /// Mock records every submission in arrival order.
         #[test]
         fn records_in_order() {
-            let k = MockKernel::new();
+            let k = MockKernel::new().with_recording();
             k.submit(b"a");
             k.submit(b"b");
             k.submit(b"c");
@@ -582,6 +627,29 @@ pub mod mock {
                 k.recorded(),
                 vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()]
             );
+        }
+
+        /// Recording is OFF by default: a long-running `--mock`
+        /// server must not retain every payload it has ever seen.
+        /// The submission count stays accurate regardless.
+        #[test]
+        fn recording_is_off_by_default_but_the_count_is_not() {
+            let k = MockKernel::new();
+            assert!(k.is_empty());
+            k.submit(b"a");
+            k.submit(b"b");
+            assert_eq!(k.len(), 2);
+            assert!(!k.is_empty());
+        }
+
+        /// `recorded()` promises completeness, so with recording off it
+        /// panics rather than returning a truthful-looking empty vec.
+        #[test]
+        #[should_panic(expected = "requires MockKernel::with_recording")]
+        fn recorded_without_opt_in_panics_rather_than_lying() {
+            let k = MockKernel::new();
+            k.submit(b"a");
+            let _ = k.recorded();
         }
 
         /// Response sequence cycles when exhausted.
@@ -653,7 +721,7 @@ pub mod mock {
         /// non-UTF-8 sequences).
         #[test]
         fn raw_bytes_preserved() {
-            let k = MockKernel::new();
+            let k = MockKernel::new().with_recording();
             let payload = vec![0x00u8, 0xff, 0xaa, 0x55, 0xc3, 0x28]; // includes invalid UTF-8
             k.submit(&payload);
             assert_eq!(k.recorded()[0], payload);

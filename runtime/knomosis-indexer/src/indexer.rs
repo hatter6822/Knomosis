@@ -83,6 +83,15 @@ use crate::INDEXER_IDENTIFIER;
 /// `knomosis-event-subscribe::extract::HARD_MAX_EVENT_COUNT`.
 pub const INDEXER_MAX_BATCH_EVENTS: usize = 1024;
 
+/// Maximum accumulated payload bytes for one in-flight batch.
+///
+/// The event-count cap alone does not bound memory: 1024 maximal
+/// payloads are far larger than 1024 small ones.  Sized generously
+/// against any legitimate single-seq batch (a seq's events are the
+/// effects of ONE action), so it fires only on a misbehaving or
+/// hostile peer.
+pub const INDEXER_MAX_BATCH_BYTES: usize = 8 * 1024 * 1024;
+
 /// Indexer-level errors.
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerError {
