@@ -193,6 +193,7 @@ import LegalKernel.Test.Properties.FaultProofDeep
 import LegalKernel.Test.Integration.CrossDeployment
 import LegalKernel.Test.Integration.SnapshotBootstrap
 import LegalKernel.Test.Integration.AttestedSnapshotCli
+import LegalKernel.Test.Integration.ReplayCliFlags
 import LegalKernel.Test.Integration.ReplayUpToCli
 import LegalKernel.Test.Integration.ExportCellProofsCli
 import LegalKernel.Test.Integration.ExportTerminateBundleCli
@@ -276,6 +277,8 @@ def main : IO UInt32 := do
                                     Lex.Test.Tools.DiagnosticCoverage.tests)
   failed := failed + (← runAll "tools-audit-binaries"
                                     LegalKernel.Test.Tools.AuditBinaries.tests)
+  failed := failed + (← runAll "replay-cli-flags"
+                                    LegalKernel.Test.Integration.ReplayCliFlags.tests)
   failed := failed + (← runAll "dsl-lex-deployment"
                                     Lex.Test.DSL.DeploymentTests.tests)
   failed := failed + (← runAll "deployments-usd-clearing"

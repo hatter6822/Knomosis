@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f059a4fcb731047b566d29d52ee8718e0f31cb9d7b7444fe945e9bf417529713"
+    "source_digest": "e03e9e4f431bc7f362a176fd7a36589c814b427c55d358150dd2238b108cf911"
   },
   "summary": {
     "module_count": 311,
-    "declaration_count": 5267
+    "declaration_count": 5258
   },
   "modules": [
     {
@@ -63116,103 +63116,14 @@
     {
       "module": "Replay",
       "path": "Replay.lean",
-      "declaration_count": 10,
+      "declaration_count": 1,
       "declarations": [
         {
           "kind": "def",
-          "name": "replayPolicy",
-          "line": 43,
-          "called": [
-            "AuthorityPolicy",
-            "AuthorityPolicy.unrestricted"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "replayGenesis",
-          "line": 46,
-          "called": [
-            "ExtendedState",
-            "ExtendedState.empty"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "formatHashHex",
-          "line": 53,
-          "called": [
-            "ContentHash"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "usage",
-          "line": 64,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "runReplay",
-          "line": 121,
-          "called": [
-            "AuthorityPolicy",
-            "ContentHash",
-            "ExtendedState",
-            "ResourceId",
-            "Verify",
-            "deploymentId",
-            "entries",
-            "hashEncodable",
-            "loadSnapshot",
-            "readAllEntries",
-            "refundRate",
-            "replayFromSeedWith",
-            "replayGenesis",
-            "replayPolicy",
-            "restoreSnapshot",
-            "toRefundRate",
-            "zeroHash"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "checkHashGrade",
-          "line": 216,
-          "called": [
-            "isProductionHash"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "hexCharToNibble",
-          "line": 233,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "decodeHexString",
-          "line": 240,
-          "called": [
-            "hexCharToNibble"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "parseGlobalFlags",
-          "line": 258,
-          "called": [
-            "decodeHexString"
-          ]
-        },
-        {
-          "kind": "def",
           "name": "main",
-          "line": 283,
+          "line": 30,
           "called": [
-            "checkHashGrade",
-            "parseGlobalFlags",
-            "runReplay",
-            "usage"
+            "parseGlobalFlags"
           ]
         }
       ]
@@ -63240,7 +63151,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 214,
+          "line": 215,
           "called": [
             "runAll"
           ]
