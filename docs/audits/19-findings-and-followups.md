@@ -52,7 +52,12 @@ Landed:
     additively, with coverage and binding tests.
 
 Not landed: swapping `commitExtendedState` to that root, and making
-`executeStep` compute the post-root from the proven writes.
+`executeStep` compute the post-root from the proven writes.  The
+implementation spec for both — including the SMT root-injectivity
+theorem that must replace the EI.8 guarantee, and the
+`getCellValue` absent-vs-empty ambiguity that has to be resolved
+during the swap rather than after — is
+`docs/planning/state_root_merkleisation_plan.md`.
 
 Stated precisely, from source rather than from the plan documents:
 

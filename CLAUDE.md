@@ -1105,7 +1105,9 @@ key on-chain rather than accepting one, and
 — but `commitExtendedState` itself is unchanged and `executeStep`
 still returns the other construction.
 `docs/audits/19-findings-and-followups.md` records the remaining
-blast radius.  Until it lands the fault-proof game must not be
+blast radius and
+`docs/planning/state_root_merkleisation_plan.md` is the
+implementation spec.  Until it lands the fault-proof game must not be
 treated as an adjudicating backstop; the bisection narrowing is
 proved and unaffected.
 
