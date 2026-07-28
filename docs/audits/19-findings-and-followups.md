@@ -33,14 +33,28 @@ findings outside the TCB.  Their dispositions:
 | **B-1** — unbounded budget minting | `Authority/SignedAction.lean` | **Closed.**  `topUpPriceCheck` + `MAX_TOPUP_BUDGET_PER_ACTION` + `poolActor`/`gasResource` pinning, mirrored in the `knomosis-host` pre-filter. |
 | **B-2** — vacuous headline injectivity theorems | `Bridge/Eip712.lean` and every `CollisionFree` consumer | **Closed.**  `CollisionFreeOn S h` replaces the globally-injective (and hence *refutable*) predicate; satisfiability is exhibited, not assumed. |
 | **B-4a** — terminate ABI drift | `knomosis-faultproof-observer/src/submitter.rs` | **Closed.**  Rust moved to the contract's 5-argument form, and the selector table is now pinned against `method_selectors.json`, emitted from the COMPILED artifacts by `solidity/scripts/export_method_selectors.py` and gated in `ci-solidity.yml` — so the pin can no longer re-derive its expectation from the string it tests. |
-| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **OPEN.**  See "Open critical: the fault-proof commit-recipe split" below. |
-| **B-4b** — game-model fidelity (Lean) | `FaultProof/Game.lean`, `FaultProof/Step.lean` | **OPEN.**  Coupled to B-3; see below. |
+| **B-4b** — game-model fidelity (Lean/Rust) | `FaultProof/Game.lean`, `FaultProof/Step.lean`, observer `game.rs` | **Closed.**  `kernelStepApply` computes through `stepVMHash` instead of echoing the responder's `postStateCommit`; `terminateOnSingleStep` dropped `claimedPostCommit` and reads both sides from the game state; `submitMidpoint` carries only a commit and the index is derived, which made the convergence bound logarithmic (`bisection_converges_in_log_rounds`). |
+| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **OPEN — prerequisites landed.**  See "Open critical: the fault-proof commit-recipe split" below. |
 
 ### Open critical: the fault-proof commit-recipe split
 
-B-3 and the Lean half of B-4 are one defect wearing two hats, and
-neither can be closed without the other.  Stated precisely, from
-source rather than from the plan documents:
+**Status: the three prerequisites are in; the root swap is not.**
+
+Landed:
+
+  * the cell space now covers all seven `ExtendedState` fields
+    (tags 7–16 — the AMM mirror, the kill switch, the epoch budgets
+    and the budget policy previously had no tag at all);
+  * `smtCellKey` / `StepVMMerkle.deriveCellSmtKey` derive the SMT
+    key on-chain from the cell's identity instead of accepting one,
+    pinned byte-for-byte across the stacks by `cell_key.json`;
+  * `commitExtendedStateSmt` builds the SMT root over those cells,
+    additively, with coverage and binding tests.
+
+Not landed: swapping `commitExtendedState` to that root, and making
+`executeStep` compute the post-root from the proven writes.
+
+Stated precisely, from source rather than from the plan documents:
 
 1. `KnomosisFaultProofGame.initiateChallenge` anchors **both**
    endpoints to submitted state roots: `g.high.commit` is the
@@ -61,14 +75,16 @@ every game it correctly defends.  The per-entry byte-equivalence
 assertion in `solidity/test/CrossCheck/StepVM.t.sol` is skipped
 for exactly this reason, which is why no suite reports it.
 
-On the Lean side the same split shows up as vacuity rather than
-as a wrong winner.  `kernelStepApply` returns
-`step.postStateCommit` — the responder's own claim — whenever
-`verifyCellProofs` passes, and `verifyCellProofs` is `List.all`
-over the bundle, so an **empty** bundle passes vacuously.
-`GameTransition.terminateOnSingleStep` then compares that value
-against the caller's `claimedPostCommit`.  The responder supplies
-both sides, so the responder always wins.
+The Lean side USED to compound this with a vacuity: `kernelStepApply`
+returned `step.postStateCommit` — the responder's own claim —
+whenever `verifyCellProofs` passed, and that is `List.all` over the
+bundle, so an **empty** bundle passed vacuously; the transition then
+compared the result against the caller's own `claimedPostCommit`.
+That half is closed (B-4b above): `kernelStepApply` computes through
+`stepVMHash`, and the transition reads both sides from the game
+state.  What remains is purely the recipe mismatch — the Lean model
+now faithfully mirrors a contract whose terminal comparison is
+between two different constructions.
 
 Closing this is a protocol workstream, not a patch.  The step VM
 sees only proven cells, so for its output to live in state-root
@@ -82,25 +98,23 @@ a consensus split — the same failure mode the C-1 amount
 migration had to be carried across all three stacks to avoid.
 
 Until it lands, the fault-proof game must be treated as
-**not adjudicating**: the bisection narrowing is proved
-(`range_size_after_k_rounds`), but the terminal step is not.
-Deployments must not rely on it as the sole backstop.
+**not adjudicating**: the bisection narrowing is proved, now
+logarithmically, but the terminal step is not.  Deployments must
+not rely on it as the sole backstop.
 
-**Also open, and independent of the above.**
+**Closed, and independently of the above.**
 `KnomosisFaultProofGame.submitMidpoint` derives
-`mpIdx = (g.low.idx + g.high.idx) / 2` on-chain, but Lean's
-`GameTransition.submitMidpoint` takes the whole `Claim` — index
-included — from the caller and accepts any interior index.
-`DisputedRange.midpointIdx` exists and is used by `Strategy.lean`
-and one test, but `applyTransition` never consults it.  That is
-why `bisection_converges_after_enough_rounds` proves only
-*linear* narrowing, and why its depth-64 corollary covers initial
+`mpIdx = (g.low.idx + g.high.idx) / 2` on-chain; Lean's
+`GameTransition.submitMidpoint` and the Rust observer took the whole
+`Claim` — index included — from the caller and accepted any interior
+index, which is why `bisection_converges_after_enough_rounds` proved
+only *linear* narrowing and its depth-64 corollary covered initial
 widths ≤ 64 rather than the `2^64` the `MAX_BISECTION_DEPTH`
-docstring claims.  Canonicalising the Lean midpoint would make
-the logarithmic bound provable and close the drift; it is
-deferred here only because it regenerates the shared 50-trace
-observer game-trace corpus, which must move in lockstep with
-`runtime/knomosis-faultproof-observer/src/game.rs`.
+docstring claims.  Both now carry only a commit and derive the
+index, and the logarithmic bound is proved
+(`bisection_converges_in_log_rounds`,
+`bisection_converges_at_max_depth`).  The shared 50-trace observer
+game-trace corpus moved with them.
 
 ### The kernel TCB itself
 

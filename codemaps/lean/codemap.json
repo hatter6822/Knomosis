@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6d49ff2a6916f5c5aac70dfdb892f3e02e2d5ba66a942d92e9dfa0e8a9536d29"
+    "source_digest": "13ae04140c61420d01a977b6be98b6e21bf10ecbba5afd976e91217da204e2b4"
   },
   "summary": {
-    "module_count": 316,
-    "declaration_count": 5364
+    "module_count": 318,
+    "declaration_count": 5378
   },
   "modules": [
     {
@@ -24775,6 +24775,133 @@
             "LegalKernel",
             "SolidityStepVMCommit",
             "hashString"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.FaultProof.StateCells",
+      "path": "LegalKernel/FaultProof/StateCells.lean",
+      "declaration_count": 11,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 59,
+          "called": [
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "singletonCellTags",
+          "line": 68,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stateCellTags",
+          "line": 88,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "es",
+            "singletonCellTags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stateCellEntries",
+          "line": 102,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "smtCellKey",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "commitExtendedStateSmt",
+          "line": 115,
+          "called": [
+            "ExtendedState",
+            "StateCommit",
+            "es",
+            "smtDepth",
+            "smtRootListAux",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "commitExtendedStateSmt_size",
+          "line": 120,
+          "called": [
+            "ExtendedState",
+            "commitExtendedStateSmt",
+            "es",
+            "smtDepth",
+            "smtRootListAux_size"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "commitExtendedStateSmt_deterministic",
+          "line": 125,
+          "called": [
+            "ExtendedState",
+            "commitExtendedStateSmt",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "singleton_tags_enumerated",
+          "line": 137,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "es",
+            "singletonCellTags",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balance_tag_enumerated",
+          "line": 144,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceMap",
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "epochBudget_tag_enumerated",
+          "line": 160,
+          "called": [
+            "ActorBudget",
+            "ActorId",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "es",
+            "stateCellTags"
           ]
         }
       ]
@@ -51644,6 +51771,51 @@
             "uint64BE",
             "uint64BE_size",
             "zero32"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.FaultProof.StateCells",
+      "path": "LegalKernel/Test/FaultProof/StateCells.lean",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.StateCells",
+          "line": 28,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "populated",
+          "line": 32,
+          "called": [
+            "ActorId",
+            "BalanceMap",
+            "EpochBudgetState",
+            "ExtendedState",
+            "KeyRegistry",
+            "LocalPolicies",
+            "Nonce",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 63,
+          "called": [
+            "ExtendedState",
+            "LegalKernel.Test.FaultProof.StateCells",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "commitExtendedStateSmt",
+            "entries",
+            "populated",
+            "stateCellEntries",
+            "stateCellTags"
           ]
         }
       ]

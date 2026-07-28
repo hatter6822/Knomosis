@@ -1083,20 +1083,31 @@ defends.  The per-entry byte-equivalence assertion in
 `solidity/test/CrossCheck/StepVM.t.sol` is skipped for exactly
 this reason, which is why no suite reports it.
 
-On the Lean side the same split appears as vacuity:
-`kernelStepApply` returns the responder's own
-`step.postStateCommit` whenever `verifyCellProofs` passes, and
-that is `List.all` over the bundle — an **empty** bundle passes
-vacuously — after which `GameTransition.terminateOnSingleStep`
-compares the value against the responder's own
-`claimedPostCommit`.
+The Lean side used to compound this with a vacuity —
+`kernelStepApply` returned the responder's own
+`step.postStateCommit` whenever `verifyCellProofs` passed, and that
+is `List.all` over the bundle, so an **empty** bundle passed — after
+which the transition compared the value against the responder's own
+`claimedPostCommit`.  That half is closed: `kernelStepApply`
+computes through `StepVMCoherence.stepVMHash`, and
+`terminateOnSingleStep` reads both the pre-state and the target from
+the game state.  The midpoint is derived rather than caller-chosen
+on all three stacks, so convergence is now proved *logarithmically*
+(`bisection_converges_in_log_rounds`).
 
-Closing it means Merkleising the state root so a post-root is
-recomputable from the pre-root plus the proven cell writes;
-`docs/audits/19-findings-and-followups.md` records the full
-blast radius.  Until then the fault-proof game must not be
-treated as an adjudicating backstop.  The bisection narrowing
-itself is proved and unaffected.
+What remains is the recipe mismatch alone.  Closing it means
+Merkleising the state root so a post-root is recomputable from the
+pre-root plus the proven cell writes.  Three prerequisites are in —
+the cell space now covers all seven `ExtendedState` fields (tags
+7–16), `smtCellKey` / `StepVMMerkle.deriveCellSmtKey` derive the SMT
+key on-chain rather than accepting one, and
+`commitExtendedStateSmt` builds the root over those cells additively
+— but `commitExtendedState` itself is unchanged and `executeStep`
+still returns the other construction.
+`docs/audits/19-findings-and-followups.md` records the remaining
+blast radius.  Until it lands the fault-proof game must not be
+treated as an adjudicating backstop; the bisection narrowing is
+proved and unaffected.
 
 ### Fair queuing (Workstream FQ / GP.8)
 
