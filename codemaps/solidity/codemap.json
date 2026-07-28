@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0115e08e3934ff75f6697509564342cc176796b160e0ed24c75d56785793827c"
+    "source_digest": "d4513b963bd94b00ab1cd009226ea43920f2a2b7925c8f3b71a1372dba90870d"
   },
   "summary": {
-    "module_count": 89,
-    "declaration_count": 1978
+    "module_count": 90,
+    "declaration_count": 1984
   },
   "modules": [
     {
@@ -10857,6 +10857,55 @@
           "kind": "function",
           "name": "_decodeDepositWithFee",
           "line": 513,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "CellKey.t",
+      "path": "solidity/test/CrossCheck/CellKey.t.sol",
+      "declaration_count": 6,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "CellKeyCrossCheck",
+          "line": 31,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_fixture",
+          "line": 34,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_preimage_layout_matches_lean",
+          "line": 41,
+          "called": [
+            "_fixture",
+            "_parseDecimalString"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_derived_key_matches_lean",
+          "line": 79,
+          "called": [
+            "_fixture",
+            "_parseDecimalString"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_distinct_cells_derive_distinct_keys",
+          "line": 108,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_parseDecimalString",
+          "line": 134,
           "called": []
         }
       ]

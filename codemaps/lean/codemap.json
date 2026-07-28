@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d9d956458ca25d2e154c5d888b0d2f2b6082ae0b01bcb537d547fa735a4a2da1"
+    "source_digest": "6d49ff2a6916f5c5aac70dfdb892f3e02e2d5ba66a942d92e9dfa0e8a9536d29"
   },
   "summary": {
-    "module_count": 315,
-    "declaration_count": 5356
+    "module_count": 316,
+    "declaration_count": 5364
   },
   "modules": [
     {
@@ -37594,6 +37594,93 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Bridge.CrossCheck.CellKey",
+      "path": "LegalKernel/Test/Bridge/CrossCheck/CellKey.lean",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Bridge.CrossCheck",
+          "line": 41,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime",
+            "LegalKernel.Test"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "CellKey",
+          "line": 49,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "corpusTags",
+          "line": 54,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "entryJson",
+          "line": 79,
+          "called": [
+            "CellTag",
+            "Json",
+            "cellKeyPreimage",
+            "hexFromBytes",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "encodeFixture",
+          "line": 90,
+          "called": [
+            "Json",
+            "entryJson",
+            "hashImplementationIdentifier",
+            "isKeccak256Linked"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "fixtureName",
+          "line": 100,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "writeCorpus",
+          "line": 103,
+          "called": [
+            "fixtureName",
+            "writeFixture"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 107,
+          "called": [
+            "CellKey",
+            "CellTag",
+            "LegalKernel.Test.Bridge.CrossCheck",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "cellKeyPreimage",
+            "corpusTags",
+            "smtCellKey",
+            "writeCorpus"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Bridge.CrossCheck.DepositFeeSplit",
       "path": "LegalKernel/Test/Bridge/CrossCheck/DepositFeeSplit.lean",
       "declaration_count": 25,
@@ -64046,7 +64133,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 216,
+          "line": 217,
           "called": [
             "runAll"
           ]
