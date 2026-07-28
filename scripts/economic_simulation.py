@@ -208,6 +208,16 @@ def simulate_pool(
 # Report
 # --------------------------------------------------------------------------
 
+# Acceptability ceilings and margins.  These are the INDEPENDENT
+# yardsticks the invariant checks measure against — deliberately not
+# derived from the model, so a green run reports that the model's
+# outputs land inside an operator-acceptable envelope rather than
+# merely that the model agrees with itself.
+MAX_DEPLOYABLE_BOND_ETH = 5.0      # a bond above this is not postable in practice
+MIN_DETERRENCE_FRACTION = 0.25     # a frivolous challenger must lose >= 25% of its bond
+MAX_DEPLOYABLE_STAKE_ETH = 50.0    # a dispute stake above this closes the pipeline
+MIN_STAKE_MULTIPLE = 1.5           # the stake must exceed the attacker gain by 1.5x
+
 GAS_PRICES = [5.0, 20.0, 50.0, 100.0]      # gwei
 TRACE_DEPTHS = [256, 4_096, 65_536, 1_048_576]
 BONDS = [0.01, 0.05, 0.1, 0.5, 1.0]        # ETH
@@ -250,25 +260,72 @@ def section_fault_proof() -> bool:
               f"{fmt_eth(out.frivolous_net_eth)} | {fmt_eth(out.defender_net_eth)} |")
     print()
 
-    # Invariant: across the WHOLE grid, the min-bond search must return a
-    # finite bond (an IC-compatible bond always exists), a frivolous
-    # challenge is always -EV, and the honest party (winning w.p. 1) is
-    # never worse off than the frivolous attacker.
+    # Invariants over the WHOLE grid.
+    #
+    # These are deliberately NOT re-derivations of the search's own exit
+    # condition.  `min_incentive_compatible_bond` returns the first bond
+    # at which `ic1_ok and ic2_defender_ok and ic2_attacker_ok` holds, so
+    # re-simulating at that bond and asserting `ic2_attacker_ok` — which
+    # is what this block used to do — is true by construction and would
+    # stay green under any model, including a broken one.  Each check
+    # below can fail for a real reason.
+    prev_bond_by_depth: dict[int, float] = {}
     for n in TRACE_DEPTHS:
         for gp in GAS_PRICES:
             b = min_incentive_compatible_bond(n, gp)
             if not math.isfinite(b):
                 print(f"  !! IC VIOLATION: no IC-compatible bond at N={n}, {gp} gwei")
                 ok = False
+                continue
+
+            # (1) DEPLOYABILITY CEILING.  An IC-compatible bond that no
+            # operator would post is not a usable parameter.  A bond
+            # above this is a modelling result worth failing on, not a
+            # success.
+            if b > MAX_DEPLOYABLE_BOND_ETH:
+                print(f"  !! BOND UNDEPLOYABLE: {b:.3f} ETH > "
+                      f"{MAX_DEPLOYABLE_BOND_ETH} ETH ceiling at N={n}, {gp} gwei")
+                ok = False
+
             out = simulate_game(n, b, gp)
-            if not out.ic2_attacker_ok:
-                print(f"  !! IC-2 VIOLATION: frivolous challenge +EV at N={n}, {gp} gwei")
+
+            # (2) DETERRENCE HEADROOM.  `ic2_attacker_ok` only asks that
+            # the frivolous attacker's net be non-positive.  A margin of
+            # a few wei is not a deterrent; require the loss to be a
+            # meaningful fraction of the bond the attacker posted.
+            required_loss = MIN_DETERRENCE_FRACTION * b
+            if -out.frivolous_net_eth < required_loss:
+                print(f"  !! DETERRENCE TOO THIN: frivolous net "
+                      f"{out.frivolous_net_eth:+.4f} ETH, needed a loss of at "
+                      f"least {required_loss:.4f} ETH at N={n}, {gp} gwei")
                 ok = False
-            if out.honest_net_eth < out.frivolous_net_eth:
-                print(f"  !! INCENTIVE INVERSION at N={n}, {gp} gwei")
+
+            # (3) HONEST-PARTY MARGIN.  The honest challenger must not
+            # merely beat the attacker, it must come out ahead in
+            # absolute terms — otherwise nobody challenges and the game
+            # is never played.
+            if out.honest_net_eth <= 0.0:
+                print(f"  !! HONEST CHALLENGE NOT PROFITABLE: "
+                      f"{out.honest_net_eth:+.4f} ETH at N={n}, {gp} gwei")
                 ok = False
+
+            # (4) MONOTONICITY IN GAS PRICE.  Gas is the challenger's
+            # cost, so the bond required to keep the game IC-compatible
+            # must not DECREASE as gas gets more expensive.  A violation
+            # means the cost model is inverted somewhere — a genuine bug
+            # signal that no pass/fail re-derivation would surface.
+            prev = prev_bond_by_depth.get(n)
+            if prev is not None and b < prev - 1e-12:
+                print(f"  !! NON-MONOTONE IN GAS: bond fell from {prev:.3f} to "
+                      f"{b:.3f} ETH at N={n} when gas rose to {gp} gwei")
+                ok = False
+            prev_bond_by_depth[n] = b
+
     print(f"_IC-1/IC-2 invariants over the {len(TRACE_DEPTHS)}×{len(GAS_PRICES)} "
           f"grid: {'HELD' if ok else 'VIOLATED'}._\n")
+    print(f"_Checked: deployability (bond ≤ {MAX_DEPLOYABLE_BOND_ETH} ETH), "
+          f"deterrence headroom (≥ {MIN_DETERRENCE_FRACTION:.0%} of bond), "
+          f"honest-party profitability, and monotonicity in gas price._\n")
     return ok
 
 
@@ -288,8 +345,25 @@ def section_staking() -> bool:
     for gain, adj, p in scenarios:
         s = min_anti_spam_stake(gain, adj, p)
         print(f"| {gain:g} ETH | {adj:g} ETH | {p:.2f} | {s:.3f} ETH (${usd(s):,.0f}) |")
-        if not math.isfinite(s) or s <= gain:
-            print("  !! IC-5 VIOLATION: stake does not exceed the attacker gain")
+        # `min_anti_spam_stake` returns `(gain + adj) / p` with
+        # `0 < p <= 1` and `adj > 0`, so `s > gain` is arithmetically
+        # forced — asserting it checked nothing.  These do:
+        if not math.isfinite(s):
+            print("  !! IC-5 VIOLATION: no finite anti-spam stake")
+            ok = False
+            continue
+        # (1) DETERRENCE MULTIPLE.  Exceeding the gain by an epsilon is
+        # not a deterrent under any uncertainty in the gain estimate.
+        if s < MIN_STAKE_MULTIPLE * gain:
+            print(f"  !! IC-5 TOO THIN: stake {s:.3f} ETH is under "
+                  f"{MIN_STAKE_MULTIPLE}x the {gain:g} ETH attacker gain")
+            ok = False
+        # (2) USABILITY CEILING.  A stake nobody can post closes the
+        # dispute pipeline to honest challengers, which is a liveness
+        # failure dressed as a security parameter.
+        if s > MAX_DEPLOYABLE_STAKE_ETH:
+            print(f"  !! IC-5 UNDEPLOYABLE: stake {s:.3f} ETH exceeds the "
+                  f"{MAX_DEPLOYABLE_STAKE_ETH} ETH usability ceiling")
             ok = False
     print()
     print("_Note: `stakeAmount = 0` disables staking (open filing); the "

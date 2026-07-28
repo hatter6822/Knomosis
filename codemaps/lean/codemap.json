@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "683ea224a93ec049e97d8febffb6aebae6171dfc7099e28d401895ef82c92a6f"
+    "source_digest": "acff01be4186ce75a11c77d27f642668ce41959d2607da60e0b038e37e10a804"
   },
   "summary": {
     "module_count": 313,
-    "declaration_count": 5294
+    "declaration_count": 5298
   },
   "modules": [
     {
@@ -58098,7 +58098,7 @@
     {
       "module": "Lex.DSL.Law",
       "path": "Lex/DSL/Law.lean",
-      "declaration_count": 15,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
@@ -58107,27 +58107,70 @@
           "called": []
         },
         {
+          "kind": "namespace",
+          "name": "Lex",
+          "line": 104,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "ImplStmt.kindAndResource",
+          "line": 136,
+          "called": [
+            "ImplStmt",
+            "ImplStmtKind",
+            "burn",
+            "freezeResource",
+            "mint",
+            "reward"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "implStmtsToKindAndResource",
+          "line": 153,
+          "called": [
+            "ImplStmt",
+            "ImplStmt.kindAndResource",
+            "ImplStmtKind"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kindAndResource_resource_iff_balance_bearing",
+          "line": 162,
+          "called": [
+            "ImplStmt",
+            "ImplStmt.kindAndResource",
+            "Lex",
+            "burn",
+            "freezeResource",
+            "mint",
+            "reward"
+          ]
+        },
+        {
           "kind": "structure",
           "name": "ParsedLaw",
-          "line": 161,
+          "line": 230,
           "called": []
         },
         {
           "kind": "def",
           "name": "renderSyntax",
-          "line": 215,
+          "line": 284,
           "called": []
         },
         {
           "kind": "def",
           "name": "normaliseSourceFile",
-          "line": 232,
+          "line": 301,
           "called": []
         },
         {
           "kind": "def",
           "name": "parseClause",
-          "line": 287,
+          "line": 356,
           "called": [
             "ParsedLaw",
             "renderSyntax"
@@ -58136,7 +58179,7 @@
         {
           "kind": "def",
           "name": "validateRequiredClauses",
-          "line": 380,
+          "line": 449,
           "called": [
             "ParsedLaw"
           ]
@@ -58144,7 +58187,7 @@
         {
           "kind": "def",
           "name": "paramSpecsFromBinder",
-          "line": 423,
+          "line": 492,
           "called": [
             "renderSyntax"
           ]
@@ -58152,7 +58195,7 @@
         {
           "kind": "def",
           "name": "paramSpecsFromBinders",
-          "line": 514,
+          "line": 583,
           "called": [
             "paramSpecsFromBinder"
           ]
@@ -58160,7 +58203,7 @@
         {
           "kind": "def",
           "name": "buildLawDecl",
-          "line": 535,
+          "line": 604,
           "called": [
             "ParsedLaw",
             "paramSpecsFromBinders"
@@ -58169,37 +58212,37 @@
         {
           "kind": "def",
           "name": "writeCodegenInputForLaw",
-          "line": 598,
+          "line": 667,
           "called": []
         },
         {
           "kind": "def",
           "name": "transitionDefName",
-          "line": 615,
+          "line": 684,
           "called": []
         },
         {
           "kind": "def",
           "name": "intentDefName",
-          "line": 620,
+          "line": 689,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionIndexDefName",
-          "line": 625,
+          "line": 694,
           "called": []
         },
         {
           "kind": "def",
           "name": "identifierDefName",
-          "line": 630,
+          "line": 699,
           "called": []
         },
         {
           "kind": "def",
           "name": "versionDefName",
-          "line": 635,
+          "line": 704,
           "called": [
             "LegalKernel.DSL",
             "ParsedLaw",

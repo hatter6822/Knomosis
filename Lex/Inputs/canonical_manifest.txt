@@ -322,3 +322,22 @@ satisfies:
   - registry_preserving
 source: LegalKernel/Laws/AmmSwap.lean
 
+## reserved.gp.reclaimAmmReserves (action_index = 21)
+version: 1.0.0
+intent: Sweep the disabled AMM's frozen L2 reserve balance at one resource into the gas-pool actor.  The bridge actor signs this action after the L1 `emergencyDisableAmm()` kill switch fires; admission additionally requires the L2 `ammDisabled` state-root mirror to be set.  The sweep is exact (the action's `amount` must equal the reserve actor's entire balance), so the reserve drains to zero and the reclaimed liquidity becomes ordinary sequencer-claimable free-pool funds.
+params:
+  - r : ResourceId (explicit)
+  - amount : Amount (explicit)
+  - reserveActor : ActorId (explicit)
+  - poolActor : ActorId (explicit)
+signed_by: bridge
+registry_effect: none
+satisfies:
+  - conservative
+  - monotonic
+  - local
+  - freeze_preserving
+  - nonce_advances
+  - registry_preserving
+source: LegalKernel/Laws/ReclaimAmmReserves.lean
+
