@@ -21,24 +21,34 @@ function terminateOnSingleStep(
     uint8 actionKind,
     bytes calldata actionFields,
     uint64 signer,
-    KnomosisStepVM.CellProof[] calldata cellProofs,
-    bytes32 claimedPostCommit
+    KnomosisStepVM.CellProof[] calldata cellProofs
 ) external nonReentrant
 ```
 
-The five non-`gameId` arguments are derivable from a canonical
+**Five arguments, not six.**  This block used to spell a trailing
+`bytes32 claimedPostCommit`, and the Rust submitter was built
+against that shape — a different 4-byte selector, so every honest
+terminate reverted into the unknown-selector fallback.  The
+contract's shape is also the better design: it runs the step VM
+from `g.low.commit` and compares the result against
+`g.high.commit`, both already on-chain, so the post-commit is not
+the caller's to claim.
+
+The four non-`gameId` arguments are derivable from a canonical
 `(ExtendedState, LogEntry)` pair via the per-variant encoders this
 module composes:
 
-  * `actionKind`        := `actionKindByte action`
-  * `actionFields`      := `actionFieldsForL1 action`
-  * `signer`            := `entry.signedAction.signer`
-  * `cellProofs`        := `buildObserverCellProofs preState action signer`
-  * `claimedPostCommit` := `stepVMHashFromAction preState action signer`
+  * `actionKind`   := `actionKindByte action`
+  * `actionFields` := `actionFieldsForL1 action`
+  * `signer`       := `entry.signedAction.signer`
+  * `cellProofs`   := `buildObserverCellProofs preState action signer`
 
-A `TerminateBundle` value bundles these five fields; the
-`buildTerminateBundle` function constructs the canonical bundle
-for a (pre-state, log-entry) pair.
+A `TerminateBundle` carries those four plus
+`expectedPostCommit := stepVMHashFromAction preState action signer`.
+The fifth is **not** calldata: it is what the observer expects the
+step VM to compute, retained so the observer can cross-check its
+own bundle against an independent oracle before broadcasting
+(`BundleCommitMismatch`).  Shipping it would change the selector.
 
 ## Wire format
 
@@ -53,7 +63,7 @@ serde-deserialize default conventions, so the Rust observer's
   "action_kind": 0,
   "action_fields_hex": "00000000000000010000000000000002000...",
   "signer": 5,
-  "claimed_post_commit_hex": "abcd1234...",
+  "expected_post_commit_hex": "abcd1234...",
   "cell_proofs": [
     {"cell_kind": 0, "key_a": "0x01", "key_b": "0x05", ...},
     ...
@@ -96,7 +106,7 @@ derived bundle). -/
     pair plus the per-variant encoders.  Bundle construction is
     pure (no IO, no error paths); validity is established by the
     builder's contract:
-      * `claimedPostCommit` equals what the L1 step VM would
+      * `expectedPostCommit` equals what the L1 step VM would
         compute on the same inputs (under the production keccak256
         binding).
       * `cellProofs` includes proofs for every cell the per-variant
@@ -114,8 +124,13 @@ structure TerminateBundle where
   signer            : ActorId
   /-- The canonical step-VM hash for this step.  Under the
       production keccak256 binding, this equals what
-      `KnomosisStepVM.executeStep` returns on the same inputs. -/
-  claimedPostCommit : ByteArray
+      `KnomosisStepVM.executeStep` returns on the same inputs.
+
+      **Not part of the calldata** — see the module docstring.  The
+      contract derives both sides of its comparison from the game
+      state; this field exists so the observer can check its own
+      bundle against an independent oracle before it broadcasts. -/
+  expectedPostCommit : ByteArray
   /-- The cell-proof bundle for the action's required cells,
       witnessed by the pre-state. -/
   cellProofs        : CellProofBundle
@@ -132,7 +147,7 @@ The canonical builder threads the per-variant encoders together: -/
       `actionKind        := actionKindByte action`
       `actionFields      := actionFieldsForL1 action`
       `signer            := entry.signedAction.signer`
-      `claimedPostCommit := stepVMHashFromAction preState action signer`
+      `expectedPostCommit := stepVMHashFromAction preState action signer`
       `cellProofs        := buildObserverCellProofs preState action signer`
 
     Pre-conditions:
@@ -149,7 +164,7 @@ def buildTerminateBundle
   { actionKind        := actionKindByte action,
     actionFields      := actionFieldsForL1 action,
     signer            := signer,
-    claimedPostCommit := stepVMHashFromAction preState action signer,
+    expectedPostCommit := stepVMHashFromAction preState action signer,
     cellProofs        := Observer.buildObserverCellProofs preState action signer }
 
 /-! ## Well-formedness theorems -/
@@ -179,11 +194,11 @@ theorem buildTerminateBundle_signer
     (buildTerminateBundle es entry).signer =
     entry.signedAction.signer := rfl
 
-/-- The bundle's `claimedPostCommit` agrees with
+/-- The bundle's `expectedPostCommit` agrees with
     `stepVMHashFromAction`. -/
-theorem buildTerminateBundle_claimedPostCommit
+theorem buildTerminateBundle_expectedPostCommit
     (es : ExtendedState) (entry : LogEntry) :
-    (buildTerminateBundle es entry).claimedPostCommit =
+    (buildTerminateBundle es entry).expectedPostCommit =
     stepVMHashFromAction es entry.signedAction.action
       entry.signedAction.signer := rfl
 
@@ -244,7 +259,7 @@ def formatTerminateBundleJson (fixtureId : String)
     (bundle : TerminateBundle) : String :=
   let q := "\""
   let actionFieldsHex := bytesHex bundle.actionFields
-  let claimedPostCommitHex := bytesHex bundle.claimedPostCommit
+  let expectedPostCommitHex := bytesHex bundle.expectedPostCommit
   let cellProofsArr := formatCellProofsArray bundle.cellProofs
   let parts : List String := [
     "{",
@@ -252,8 +267,8 @@ def formatTerminateBundleJson (fixtureId : String)
     q ++ "action_kind" ++ q, ":", formatUInt8 bundle.actionKind, ",",
     q ++ "action_fields_hex" ++ q, ":", q ++ actionFieldsHex ++ q, ",",
     q ++ "signer" ++ q, ":", formatUInt64 bundle.signer, ",",
-    q ++ "claimed_post_commit_hex" ++ q, ":",
-      q ++ claimedPostCommitHex ++ q, ",",
+    q ++ "expected_post_commit_hex" ++ q, ":",
+      q ++ expectedPostCommitHex ++ q, ",",
     q ++ "cell_proofs" ++ q, ":", cellProofsArr,
     "}"
   ]

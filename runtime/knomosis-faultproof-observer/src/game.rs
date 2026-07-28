@@ -252,8 +252,17 @@ pub struct GameState {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GameTransition {
-    /// The party whose turn it is submits a midpoint commit.
-    SubmitMidpoint(Claim),
+    /// The party whose turn it is submits the commit it claims for
+    /// the canonical midpoint of the current range.
+    ///
+    /// Carries only the COMMIT.  The index is derived by
+    /// [`apply_transition`] as `(low.idx + high.idx) / 2`, mirroring
+    /// `KnomosisFaultProofGame.submitMidpoint`'s on-chain `mpIdx`
+    /// and Lean's `DisputedRange.midpointIdx`.  Taking the index
+    /// from the caller — as this used to — let a party narrow by a
+    /// single step per round instead of halving, which is what
+    /// limited the Lean convergence theorem to a linear bound.
+    SubmitMidpoint(StateCommit),
     /// The opposing party agrees with the pending midpoint; range
     /// narrows to `[mid.idx, high.idx]`.
     RespondAgree,
@@ -268,9 +277,18 @@ pub enum GameTransition {
     /// the observer observes the resulting `FaultProofGameSettled`
     /// event and applies it via [`apply_settlement`].
     TerminateOnSingleStep {
-        /// The claimed post-commit (what we believe the L1 step VM
-        /// will compute).
-        claimed_post_commit: StateCommit,
+        /// The post-commit the observer expects the L1 step VM to
+        /// compute.
+        ///
+        /// **Local only — this is not part of the calldata.**  The
+        /// contract's 5-argument `terminateOnSingleStep` takes no
+        /// claimed post-commit: it runs the step VM from
+        /// `g.low.commit` and compares the result against
+        /// `g.high.commit`, both already on-chain.  The field is
+        /// retained solely for the observer's own
+        /// `BundleCommitMismatch` cross-oracle check before it
+        /// broadcasts.
+        expected_post_commit: StateCommit,
     },
     /// A party times out (`BISECTION_RESPONSE_TIMEOUT` exceeded).
     /// The loser is *derived* from `gs.turn` at apply-time: the
@@ -348,7 +366,7 @@ pub enum GameError {
 /// See [`GameError`].
 pub fn apply_transition(gs: &GameState, t: GameTransition) -> Result<GameState, GameError> {
     match t {
-        GameTransition::SubmitMidpoint(mp) => apply_submit_midpoint(gs, mp),
+        GameTransition::SubmitMidpoint(c) => apply_submit_midpoint(gs, c),
         GameTransition::RespondAgree => apply_respond(gs, /* agree = */ true),
         GameTransition::RespondDisagree => apply_respond(gs, /* agree = */ false),
         GameTransition::TerminateOnSingleStep { .. } => apply_terminate_on_single_step(gs),
@@ -357,7 +375,15 @@ pub fn apply_transition(gs: &GameState, t: GameTransition) -> Result<GameState, 
 }
 
 /// Implementation of [`apply_transition`] for `SubmitMidpoint`.
-fn apply_submit_midpoint(gs: &GameState, mp: Claim) -> Result<GameState, GameError> {
+///
+/// The index is DERIVED from the range, never supplied.  With it
+/// derived, `MidpointOutOfRange` can fire for exactly one reason —
+/// the range is too narrow to bisect — which is the condition that
+/// forces `terminateOnSingleStep` instead.
+fn apply_submit_midpoint(
+    gs: &GameState,
+    midpoint_commit: StateCommit,
+) -> Result<GameState, GameError> {
     if !gs.status.is_in_progress() {
         return Err(GameError::GameAlreadyEnded);
     }
@@ -367,11 +393,15 @@ fn apply_submit_midpoint(gs: &GameState, mp: Claim) -> Result<GameState, GameErr
     if gs.depth >= MAX_BISECTION_DEPTH {
         return Err(GameError::BisectionDepthExceeded);
     }
-    if mp.idx <= gs.range.low.idx || gs.range.high.idx <= mp.idx {
+    let mid_idx = gs.range.midpoint_idx();
+    if mid_idx <= gs.range.low.idx || gs.range.high.idx <= mid_idx {
         return Err(GameError::MidpointOutOfRange);
     }
     Ok(GameState {
-        pending_midpoint: Some(mp),
+        pending_midpoint: Some(Claim {
+            idx: mid_idx,
+            commit: midpoint_commit,
+        }),
         turn: gs.turn.flip(),
         ..gs.clone()
     })
@@ -670,41 +700,51 @@ mod tests {
     #[test]
     fn submit_midpoint_happy_path() {
         let gs = fresh_game(0, 64, TurnSide::Sequencer);
-        let mp = Claim {
-            idx: 32,
-            commit: commit(99),
-        };
-        let next = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap();
-        assert_eq!(next.pending_midpoint, Some(mp));
+        let next = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap();
+        // The index is DERIVED as (0 + 64) / 2, not supplied.
+        assert_eq!(
+            next.pending_midpoint,
+            Some(Claim {
+                idx: 32,
+                commit: commit(99),
+            })
+        );
         assert_eq!(next.turn, TurnSide::Challenger);
         assert_eq!(next.range, gs.range, "range unchanged after submit");
         assert_eq!(next.depth, gs.depth, "depth unchanged after submit");
     }
 
-    /// `submitMidpoint` rejects out-of-range mid.
+    /// `submitMidpoint` rejects exactly on a degenerate range.
+    ///
+    /// A caller-chosen out-of-range index is no longer expressible:
+    /// the transition derives the index from the range.  The guard
+    /// therefore fires for one reason only — the range is too narrow
+    /// to bisect — which is what forces `terminateOnSingleStep`.
     #[test]
-    fn submit_midpoint_out_of_range() {
-        let gs = fresh_game(10, 20, TurnSide::Sequencer);
-        let mp_low_oor = Claim {
-            idx: 10,
-            commit: commit(99),
-        };
-        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(mp_low_oor)).unwrap_err();
+    fn submit_midpoint_rejects_only_degenerate_range() {
+        // Width 1: (10 + 11) / 2 == 10 lands on `low`.
+        let gs = fresh_game(10, 11, TurnSide::Sequencer);
+        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap_err();
         assert_eq!(err, GameError::MidpointOutOfRange);
 
-        let mp_high_oor = Claim {
-            idx: 20,
-            commit: commit(99),
-        };
-        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(mp_high_oor)).unwrap_err();
+        // Width 0: the midpoint equals both endpoints.
+        let gs = fresh_game(10, 10, TurnSide::Sequencer);
+        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap_err();
         assert_eq!(err, GameError::MidpointOutOfRange);
 
-        let mp_above = Claim {
-            idx: 21,
-            commit: commit(99),
-        };
-        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(mp_above)).unwrap_err();
+        // Inverted (`high < low`) — a malformed state the contract's
+        // `initiateChallenge` rejects up front; refuse it here too.
+        let gs = fresh_game(20, 10, TurnSide::Sequencer);
+        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap_err();
         assert_eq!(err, GameError::MidpointOutOfRange);
+
+        // Width 2 is the narrowest bisectable range: (10 + 12) / 2
+        // == 11 is strictly interior, so this must SUCCEED.  Without
+        // it the three rejections above could pass for the wrong
+        // reason.
+        let gs = fresh_game(10, 12, TurnSide::Sequencer);
+        let next = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap();
+        assert_eq!(next.pending_midpoint.map(|c| c.idx), Some(11));
     }
 
     /// `submitMidpoint` rejects when game is settled.
@@ -712,11 +752,7 @@ mod tests {
     fn submit_midpoint_rejects_settled_game() {
         let mut gs = fresh_game(0, 64, TurnSide::Sequencer);
         gs.status = GameStatus::SequencerWon;
-        let mp = Claim {
-            idx: 32,
-            commit: commit(99),
-        };
-        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap_err();
+        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap_err();
         assert_eq!(err, GameError::GameAlreadyEnded);
     }
 
@@ -728,11 +764,7 @@ mod tests {
             idx: 32,
             commit: commit(7),
         });
-        let mp = Claim {
-            idx: 16,
-            commit: commit(99),
-        };
-        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap_err();
+        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap_err();
         assert_eq!(err, GameError::MidpointDuringResponse);
     }
 
@@ -741,11 +773,7 @@ mod tests {
     fn submit_midpoint_rejects_at_depth_cap() {
         let mut gs = fresh_game(0, u64::from(MAX_BISECTION_DEPTH) * 2, TurnSide::Sequencer);
         gs.depth = MAX_BISECTION_DEPTH;
-        let mp = Claim {
-            idx: u64::from(MAX_BISECTION_DEPTH),
-            commit: commit(99),
-        };
-        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap_err();
+        let err = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap_err();
         assert_eq!(err, GameError::BisectionDepthExceeded);
     }
 
@@ -809,7 +837,7 @@ mod tests {
     fn terminate_rejects_multi_step_range() {
         let gs = fresh_game(0, 64, TurnSide::Sequencer);
         let t = GameTransition::TerminateOnSingleStep {
-            claimed_post_commit: commit(99),
+            expected_post_commit: commit(99),
         };
         let err = apply_transition(&gs, t).unwrap_err();
         assert_eq!(err, GameError::RangeNotSingleStep);
@@ -821,7 +849,7 @@ mod tests {
     fn terminate_accepts_single_step() {
         let gs = fresh_game(5, 6, TurnSide::Sequencer);
         let t = GameTransition::TerminateOnSingleStep {
-            claimed_post_commit: commit(99),
+            expected_post_commit: commit(99),
         };
         let next = apply_transition(&gs, t).unwrap();
         // Rust port leaves status unchanged; settlement is
@@ -884,12 +912,11 @@ mod tests {
         let mut current_width = gs.range.width();
         let mut step: u8 = 0;
         while !gs.range.is_single_step() && step < 100 {
-            let mid_idx = gs.range.midpoint_idx();
-            let mp = Claim {
-                idx: mid_idx,
-                commit: commit(step.wrapping_add(7)),
-            };
-            gs = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap();
+            gs = apply_transition(
+                &gs,
+                GameTransition::SubmitMidpoint(commit(step.wrapping_add(7))),
+            )
+            .unwrap();
             gs = apply_transition(&gs, GameTransition::RespondDisagree).unwrap();
             // Each respond_disagree must strictly narrow.
             let new_width = gs.range.width();
@@ -943,11 +970,7 @@ mod tests {
     #[test]
     fn turn_flips_after_submit() {
         let gs = fresh_game(0, 16, TurnSide::Sequencer);
-        let mp = Claim {
-            idx: 8,
-            commit: commit(7),
-        };
-        let next = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap();
+        let next = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(7))).unwrap();
         assert_eq!(next.turn, TurnSide::Challenger);
     }
 
@@ -979,14 +1002,7 @@ mod tests {
                 commit: commit(7),
             });
             assert_eq!(
-                apply_transition(
-                    &gs,
-                    GameTransition::SubmitMidpoint(Claim {
-                        idx: 16,
-                        commit: commit(99)
-                    })
-                )
-                .unwrap_err(),
+                apply_transition(&gs, GameTransition::SubmitMidpoint(commit(99))).unwrap_err(),
                 GameError::GameAlreadyEnded
             );
             assert_eq!(
@@ -1001,7 +1017,7 @@ mod tests {
                 apply_transition(
                     &gs,
                     GameTransition::TerminateOnSingleStep {
-                        claimed_post_commit: commit(99),
+                        expected_post_commit: commit(99),
                     },
                 )
                 .unwrap_err(),
@@ -1019,11 +1035,7 @@ mod tests {
     #[test]
     fn apply_transition_deterministic() {
         let gs = fresh_game(0, 64, TurnSide::Sequencer);
-        let mp = Claim {
-            idx: 32,
-            commit: commit(99),
-        };
-        let t = GameTransition::SubmitMidpoint(mp);
+        let t = GameTransition::SubmitMidpoint(commit(99));
         let r1 = apply_transition(&gs, t);
         let r2 = apply_transition(&gs, t);
         assert_eq!(r1, r2);

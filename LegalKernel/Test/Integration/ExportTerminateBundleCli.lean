@@ -90,14 +90,14 @@ def signer_matches_entry : IO Unit := do
     throw (IO.userError
       s!"signer mismatch: expected {exampleEntry.signedAction.signer}, got {bundle.signer}")
 
-/-- The bundle's `claimedPostCommit` matches `stepVMHashFromAction`. -/
-def claimedPostCommit_matches_stepVMHashFromAction : IO Unit := do
+/-- The bundle's `expectedPostCommit` matches `stepVMHashFromAction`. -/
+def expectedPostCommit_matches_stepVMHashFromAction : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
   let expected := stepVMHashFromAction exampleState
                     exampleEntry.signedAction.action
                     exampleEntry.signedAction.signer
-  unless bundle.claimedPostCommit = expected do
-    throw (IO.userError "claimedPostCommit does not match stepVMHashFromAction")
+  unless bundle.expectedPostCommit = expected do
+    throw (IO.userError "expectedPostCommit does not match stepVMHashFromAction")
 
 /-- The bundle's cell-proof bundle verifies against the
     pre-state's commit. -/
@@ -137,7 +137,7 @@ def json_has_snake_case_fields : IO Unit := do
     "\"action_kind\"",
     "\"action_fields_hex\"",
     "\"signer\"",
-    "\"claimed_post_commit_hex\"",
+    "\"expected_post_commit_hex\"",
     "\"cell_proofs\""
   ]
   for field in requiredFields do
@@ -150,8 +150,8 @@ def json_has_snake_case_fields : IO Unit := do
     "\"actionKind\"",
     "\"actionFields\"",
     "\"actionFieldsHex\"",
-    "\"claimedPostCommit\"",
-    "\"claimedPostCommitHex\"",
+    "\"expectedPostCommit\"",
+    "\"expectedPostCommitHex\"",
     "\"cellProofs\""
   ]
   for field in forbiddenFields do
@@ -196,7 +196,7 @@ def actionKind_dispatch_for_all_variants : IO Unit := do
 /-- Byte-pinning for a minimal transfer entry's JSON output
     PREFIX.  Pin only the deterministic parts (fixture_id +
     action_kind + action_fields_hex + signer); the
-    claimed_post_commit_hex and witness_commit fields are
+    expected_post_commit_hex and witness_commit fields are
     hash-dependent. -/
 def json_byte_pinning_transfer_minimal : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
@@ -233,7 +233,7 @@ def json_byte_pinning_revoke_local_policy : IO Unit := do
 
 /-- The JSON envelope has exactly the 6 documented top-level
     fields (fixture_id, action_kind, action_fields_hex,
-    signer, claimed_post_commit_hex, cell_proofs).  Counting
+    signer, expected_post_commit_hex, cell_proofs).  Counting
     the `":` separators (where `"` is a field-name terminator)
     in the TOP-LEVEL object excluding nested cell-proof
     objects.  A maintainer adding a 7th field would silently
@@ -258,7 +258,7 @@ def json_exactly_six_top_level_fields : IO Unit := do
     "\"action_kind\":",
     "\"action_fields_hex\":",
     "\"signer\":",
-    "\"claimed_post_commit_hex\":",
+    "\"expected_post_commit_hex\":",
     "\"cell_proofs\":"
   ]
   for key in topLevelKeys do
@@ -287,8 +287,8 @@ def tests : List TestCase := [
     actionFields_matches_encoder⟩,
   ⟨"export-terminate-bundle: signer matches entry",
     signer_matches_entry⟩,
-  ⟨"export-terminate-bundle: claimedPostCommit matches stepVMHashFromAction",
-    claimedPostCommit_matches_stepVMHashFromAction⟩,
+  ⟨"export-terminate-bundle: expectedPostCommit matches stepVMHashFromAction",
+    expectedPostCommit_matches_stepVMHashFromAction⟩,
   ⟨"export-terminate-bundle: cellProofs verify against preCommit",
     cellProofs_verify_against_preCommit⟩,
   ⟨"export-terminate-bundle: bundle is deterministic",

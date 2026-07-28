@@ -43,15 +43,24 @@ inductive ResponseTrace :
   /-- Empty trace. -/
   | refl  {gs : LegalKernel.FaultProof.GameState} :
       ResponseTrace gs 0 gs
-  /-- Extend by one response. -/
+  /-- Extend by one response.
+
+      `h_canonical` records that the pending midpoint is the one
+      `applyTransition` derives.  It is not an extra assumption on
+      the game: `submitMidpoint_installs_canonical` shows no other
+      pending midpoint is reachable, so a trace admitting one would
+      be modelling states the contract cannot produce.  Carrying it
+      is what makes the halving lemmas — and hence the logarithmic
+      convergence bound — available at every node. -/
   | step  {gs gs' gs_k : LegalKernel.FaultProof.GameState} {k : Nat}
           {mp : Claim} {t : GameTransition}
-          (h_pending : gs.pendingMidpoint = some mp)
-          (h_status  : gs.status = .inProgress)
-          (h_wf_mp   : gs.range.low.idx < mp.idx ∧ mp.idx < gs.range.high.idx)
-          (h_t       : t = .respondAgree ∨ t = .respondDisagree)
-          (h_apply   : applyTransition gs t = .ok gs')
-          (h_tail    : ResponseTrace gs' k gs_k) :
+          (h_pending   : gs.pendingMidpoint = some mp)
+          (h_status    : gs.status = .inProgress)
+          (h_canonical : mp.idx = gs.range.midpointIdx)
+          (h_wf_mp     : gs.range.low.idx < mp.idx ∧ mp.idx < gs.range.high.idx)
+          (h_t         : t = .respondAgree ∨ t = .respondDisagree)
+          (h_apply     : applyTransition gs t = .ok gs')
+          (h_tail      : ResponseTrace gs' k gs_k) :
       ResponseTrace gs (k + 1) gs_k
 
 /-! ## Honest response traces
@@ -92,15 +101,16 @@ inductive HonestResponseTrace (truth : LegalKernel.Disputes.LogIndex → StateCo
       hypothesis ranging over every transition applicable here. -/
   | step  {gs gs' gs_k : LegalKernel.FaultProof.GameState} {k : Nat}
           {mp : Claim} {t : GameTransition}
-          (h_pending : gs.pendingMidpoint = some mp)
-          (h_status  : gs.status = .inProgress)
-          (h_wf_mp   : gs.range.low.idx < mp.idx ∧ mp.idx < gs.range.high.idx)
-          (h_t       : t = .respondAgree ∨ t = .respondDisagree)
-          (h_apply   : applyTransition gs t = .ok gs')
-          (h_honest  :
+          (h_pending   : gs.pendingMidpoint = some mp)
+          (h_status    : gs.status = .inProgress)
+          (h_canonical : mp.idx = gs.range.midpointIdx)
+          (h_wf_mp     : gs.range.low.idx < mp.idx ∧ mp.idx < gs.range.high.idx)
+          (h_t         : t = .respondAgree ∨ t = .respondDisagree)
+          (h_apply     : applyTransition gs t = .ok gs')
+          (h_honest    :
             (t = .respondAgree    → mp.commit = truth mp.idx) ∧
             (t = .respondDisagree → mp.commit ≠ truth mp.idx))
-          (h_tail    : HonestResponseTrace truth gs' k gs_k) :
+          (h_tail      : HonestResponseTrace truth gs' k gs_k) :
       HonestResponseTrace truth gs (k + 1) gs_k
 
 /-- An honest trace is in particular a response trace, so every
@@ -113,8 +123,9 @@ theorem HonestResponseTrace.toResponseTrace
     ResponseTrace gs₀ k gs_k := by
   induction h with
   | refl => exact ResponseTrace.refl
-  | @step gs gs' gs_k k mp t h_pending h_status h_wf_mp h_t h_apply _h_honest _h_tail ih =>
-    exact ResponseTrace.step h_pending h_status h_wf_mp h_t h_apply ih
+  | @step gs gs' gs_k k mp t h_pending h_status h_canonical h_wf_mp h_t h_apply
+          _h_honest _h_tail ih =>
+    exact ResponseTrace.step h_pending h_status h_canonical h_wf_mp h_t h_apply ih
 
 /-- The honest-trace relation is inhabited: the empty trace is one
     for every truth function and every state.  Exhibiting a witness
@@ -146,7 +157,8 @@ theorem range_size_after_k_rounds
     show gs.range.high.idx - gs.range.low.idx + 0 ≤
          gs.range.high.idx - gs.range.low.idx
     exact Nat.le_of_eq rfl
-  | @step gs gs' gs_k k mp t h_pending h_status h_wf_mp h_t h_apply _h_tail ih =>
+  | @step gs gs' gs_k k mp t h_pending h_status _h_canonical h_wf_mp h_t h_apply
+          _h_tail ih =>
     -- Strict descent: gs'.width + 1 ≤ gs.width.
     have h_descent : gs'.range.high.idx - gs'.range.low.idx + 1 ≤
                     gs.range.high.idx - gs.range.low.idx := by
@@ -210,6 +222,115 @@ theorem bisection_converges_after_enough_rounds
   have h := range_narrows_to_zero_after_enough_rounds gs₀ gs_k k h_trace h_k
   rw [h]
   exact Nat.zero_le _
+
+/-! ## Logarithmic convergence (the canonical-midpoint bound)
+
+The results above hold for any interior midpoint and are
+therefore only *linear*: `k` rounds remove at least `k` from the
+width.  With the midpoint canonical — which
+`submitMidpoint_installs_canonical` shows is the only reachable
+shape — each round instead **halves** the width, so `k` rounds
+divide it by `2^k`.  This is what the `MAX_BISECTION_DEPTH = 64`
+docstring has always claimed ("covers log lengths up to `2^64`"),
+and it is now proved rather than asserted. -/
+
+/-- One ceiling-halving: the width a single canonical bisection
+    round can leave behind. -/
+def halveCeil (w : Nat) : Nat := (w + 1) / 2
+
+/-- `k` ceiling-halvings of `w`.  Spelled as an explicit
+    recursion rather than `halveCeil^[k]`: `Function.iterate` and
+    its `iterate_succ_apply` lemmas are Mathlib, and the kernel
+    imports Lean core only. -/
+def halveCeilIter : Nat → Nat → Nat
+  | 0,     w => w
+  | n + 1, w => halveCeilIter n (halveCeil w)
+
+/-- `halveCeilIter` is monotone in the width: a narrower range
+    stays narrower under any number of rounds. -/
+theorem halveCeilIter_mono (n : Nat) : ∀ (a b : Nat), a ≤ b →
+    halveCeilIter n a ≤ halveCeilIter n b := by
+  induction n with
+  | zero => intro a b h; exact h
+  | succ m ih =>
+    intro a b h
+    show halveCeilIter m (halveCeil a) ≤ halveCeilIter m (halveCeil b)
+    exact ih _ _ (by unfold halveCeil; omega)
+
+/-- If the width is at most `2^k`, then `k` halvings bring it to
+    at most 1 — the single-step range that forces termination. -/
+theorem halveCeilIter_le_one (k w : Nat) (h : w ≤ 2 ^ k) :
+    halveCeilIter k w ≤ 1 := by
+  induction k generalizing w with
+  | zero =>
+    -- `2 ^ 0 = 1`, so `w ≤ 1` already.
+    simpa [halveCeilIter] using h
+  | succ n ih =>
+    -- One halving takes `w ≤ 2^(n+1)` to `(w+1)/2 ≤ 2^n`.
+    show halveCeilIter n (halveCeil w) ≤ 1
+    refine ih (halveCeil w) ?_
+    unfold halveCeil
+    have h_pow : 2 ^ (n + 1) = 2 * 2 ^ n := by
+      rw [Nat.pow_succ]; omega
+    rw [h_pow] at h
+    omega
+
+/-- After `k` canonical response rounds the width is at most
+    `halveCeilIter k` of the initial width. -/
+theorem range_size_after_k_canonical_rounds
+    (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat)
+    (h_trace : ResponseTrace gs₀ k gs_k) :
+    gs_k.range.high.idx - gs_k.range.low.idx ≤
+      halveCeilIter k (gs₀.range.high.idx - gs₀.range.low.idx) := by
+  induction h_trace with
+  | @refl gs => exact Nat.le_of_eq rfl
+  | @step gs gs' gs_k k mp t h_pending h_status h_canonical _h_wf_mp h_t h_apply
+          _h_tail ih =>
+    -- One canonical round halves; then the induction hypothesis,
+    -- moved across by monotonicity of the remaining rounds.
+    have h_half : gs'.range.high.idx - gs'.range.low.idx ≤
+        halveCeil (gs.range.high.idx - gs.range.low.idx) := by
+      unfold halveCeil
+      rcases h_t with h_a | h_d
+      · subst h_a
+        exact range_halves_on_response_agree gs gs' mp h_pending h_canonical
+                h_status h_apply
+      · subst h_d
+        exact range_halves_on_response_disagree gs gs' mp h_pending h_canonical
+                h_status h_apply
+    show gs_k.range.high.idx - gs_k.range.low.idx ≤
+      halveCeilIter k (halveCeil (gs.range.high.idx - gs.range.low.idx))
+    exact Nat.le_trans ih (halveCeilIter_mono k _ _ h_half)
+
+/-- **Logarithmic convergence.**  `k` canonical response rounds
+    narrow an initial range of width at most `2^k` to a single
+    step.
+
+    Contrast `bisection_converges_after_enough_rounds`, which needs
+    `k ≥ w₀`: this needs only `2^k ≥ w₀`.  At the shipped
+    `MAX_BISECTION_DEPTH = 64` that is the difference between
+    covering widths up to 64 and covering widths up to `2^64` —
+    the bound the constant's docstring has always claimed. -/
+theorem bisection_converges_in_log_rounds
+    (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat)
+    (h_trace : ResponseTrace gs₀ k gs_k)
+    (h_k : gs₀.range.high.idx - gs₀.range.low.idx ≤ 2 ^ k) :
+    gs_k.range.high.idx - gs_k.range.low.idx ≤ 1 :=
+  Nat.le_trans
+    (range_size_after_k_canonical_rounds gs₀ gs_k k h_trace)
+    (halveCeilIter_le_one k _ h_k)
+
+/-- The shipped depth cap covers every log length the `LogIndex`
+    type can express.  `MAX_BISECTION_DEPTH = 64` rounds suffice
+    for any initial width up to `2^64`, which is what makes the
+    cap a non-restriction in practice rather than a limit that a
+    long enough log could exceed. -/
+theorem bisection_converges_at_max_depth
+    (gs₀ gs_k : LegalKernel.FaultProof.GameState)
+    (h_trace : ResponseTrace gs₀ MAX_BISECTION_DEPTH gs_k)
+    (h_width : gs₀.range.high.idx - gs₀.range.low.idx ≤ 2 ^ 64) :
+    gs_k.range.high.idx - gs_k.range.low.idx ≤ 1 :=
+  bisection_converges_in_log_rounds gs₀ gs_k MAX_BISECTION_DEPTH h_trace h_width
 
 /-! ## #267 — Termination depth bound -/
 

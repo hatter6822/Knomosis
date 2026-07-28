@@ -463,7 +463,7 @@ pub(crate) struct _TerminateBundleCellProofDocsAnchor;
 ///   * `action_fields` — canonical byte layout the L1 `_stepXX`
 ///     decoder consumes.
 ///   * `signer` — the action's signer's `ActorId` (`u64`).
-///   * `claimed_post_commit` — the Lean-computed step-VM hash
+///   * `expected_post_commit` — the Lean-computed step-VM hash
 ///     for the step.  Under the production keccak256 binding,
 ///     this byte-equals what `KnomosisStepVM.executeStep` returns.
 ///   * `cell_proofs` — cell-proof bundle for the action's
@@ -499,11 +499,11 @@ pub struct TerminateBundle {
     /// JSON wire format: Lean emits as a 64-hex-char string
     /// (lowercase, no `0x` prefix).
     #[serde(
-        rename = "claimed_post_commit_hex",
+        rename = "expected_post_commit_hex",
         serialize_with = "serialize_bytes32_hex_lower",
         deserialize_with = "deserialize_bytes32_hex_or_array"
     )]
-    pub claimed_post_commit: [u8; 32],
+    pub expected_post_commit: [u8; 32],
     /// The cell-proof bundle for the action's required cells.
     pub cell_proofs: Vec<crate::submitter::CellProof>,
 }
@@ -641,7 +641,7 @@ fn deserialize_bytes32_hex_or_array<'de, D: serde::Deserializer<'de>>(
             let trimmed = s.strip_prefix("0x").unwrap_or(&s);
             if trimmed.len() != 64 {
                 return Err(D::Error::custom(format!(
-                    "claimed_post_commit hex must be 64 chars, got {}",
+                    "expected_post_commit hex must be 64 chars, got {}",
                     trimmed.len()
                 )));
             }
@@ -652,7 +652,7 @@ fn deserialize_bytes32_hex_or_array<'de, D: serde::Deserializer<'de>>(
     };
     let arr: [u8; 32] = bytes
         .try_into()
-        .map_err(|_| D::Error::custom("claimed_post_commit must be exactly 32 bytes"))?;
+        .map_err(|_| D::Error::custom("expected_post_commit must be exactly 32 bytes"))?;
     Ok(arr)
 }
 
@@ -973,9 +973,12 @@ pub enum HonestMove {
     /// claimed post-commit (the truthful commit at the high
     /// index of the range).
     TerminateOnSingleStep {
-        /// The honest claim for what the L1 step VM should
-        /// compute.
-        claimed_post_commit: StateCommit,
+        /// The honest expectation for what the L1 step VM will
+        /// compute.  Local only: the contract's 5-argument
+        /// `terminateOnSingleStep` takes no claimed post-commit, so
+        /// this never reaches the calldata — it feeds the observer's
+        /// own pre-broadcast `BundleCommitMismatch` cross-check.
+        expected_post_commit: StateCommit,
     },
 }
 
@@ -987,13 +990,14 @@ impl HonestMove {
     pub fn to_transition(self) -> Option<GameTransition> {
         match self {
             Self::NoMove => None,
-            Self::Submit(c) => Some(GameTransition::SubmitMidpoint(c)),
+            // Only the commit: the transition derives the index.
+            Self::Submit(c) => Some(GameTransition::SubmitMidpoint(c.commit)),
             Self::RespondAgree => Some(GameTransition::RespondAgree),
             Self::RespondDisagree => Some(GameTransition::RespondDisagree),
             Self::TerminateOnSingleStep {
-                claimed_post_commit,
+                expected_post_commit,
             } => Some(GameTransition::TerminateOnSingleStep {
-                claimed_post_commit,
+                expected_post_commit,
             }),
         }
     }
@@ -1039,7 +1043,7 @@ pub fn compute_next_move<O: TruthOracle + ?Sized>(
                     },
                 )?;
                 Ok(HonestMove::TerminateOnSingleStep {
-                    claimed_post_commit: truth_high,
+                    expected_post_commit: truth_high,
                 })
             } else {
                 let mid_idx = gs.range.midpoint_idx();
@@ -1238,9 +1242,9 @@ mod tests {
         let mv = compute_next_move(&oracle, &gs, TurnSide::Sequencer).unwrap();
         match mv {
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit,
+                expected_post_commit,
             } => {
-                assert_eq!(claimed_post_commit, commit(42));
+                assert_eq!(expected_post_commit, commit(42));
             }
             other => panic!("expected TerminateOnSingleStep, got {other:?}"),
         }
@@ -1278,7 +1282,7 @@ mod tests {
         ));
         assert!(matches!(
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: commit(99)
+                expected_post_commit: commit(99)
             }
             .to_transition(),
             Some(crate::game::GameTransition::TerminateOnSingleStep { .. })
@@ -1348,13 +1352,10 @@ mod tests {
         // midpoint commit) and challenger-the-honest (uses our
         // strategy).
         while !gs.range.is_single_step() && rounds < 100 {
-            // Sequencer's turn: submit a wrong midpoint.
-            let mid_idx = gs.range.midpoint_idx();
-            let wrong_mp = Claim {
-                idx: mid_idx,
-                commit: commit(123), // intentionally wrong
-            };
-            gs = apply_transition(&gs, GameTransition::SubmitMidpoint(wrong_mp)).unwrap();
+            // Sequencer's turn: submit a wrong midpoint COMMIT.
+            // The index is not the sequencer's to choose — the
+            // transition derives it — so only the commit can lie.
+            gs = apply_transition(&gs, GameTransition::SubmitMidpoint(commit(123))).unwrap();
 
             // Challenger's turn: respond honestly.
             let mv = compute_next_move(&oracle, &gs, TurnSide::Challenger).unwrap();
@@ -1724,7 +1725,7 @@ mod terminate_bundle_tests {
             action_kind: 1,
             action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
             signer: 5,
-            claimed_post_commit: [0xCD; 32],
+            expected_post_commit: [0xCD; 32],
             cell_proofs: vec![],
         }
     }
@@ -1821,12 +1822,12 @@ mod terminate_bundle_tests {
             "action_kind": 0,
             "action_fields_hex": "deadbeef",
             "signer": 0,
-            "claimed_post_commit_hex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "expected_post_commit_hex": "0000000000000000000000000000000000000000000000000000000000000001",
             "cell_proofs": []
         }"#;
         let parsed = parse_terminate_bundle_json(0, json).unwrap();
         assert_eq!(parsed.action_fields, vec![0xde, 0xad, 0xbe, 0xef]);
-        assert_eq!(parsed.claimed_post_commit[31], 0x01);
+        assert_eq!(parsed.expected_post_commit[31], 0x01);
     }
 
     /// Parser rejects an oversize cell-proof count.
@@ -1849,7 +1850,7 @@ mod terminate_bundle_tests {
             action_kind: 0,
             action_fields: vec![],
             signer: 0,
-            claimed_post_commit: [0; 32],
+            expected_post_commit: [0; 32],
             cell_proofs: proofs,
         };
         let json = serde_json::to_string(&bundle).unwrap();
@@ -1874,14 +1875,14 @@ mod terminate_bundle_tests {
     #[test]
     fn lean_emitted_json_compatible_with_rust_construction() {
         // Synthesize a Lean-shape JSON (hex strings, snake_case
-        // fields, claimed_post_commit_hex as 64-char lowercase
+        // fields, expected_post_commit_hex as 64-char lowercase
         // hex).
         let lean_json = r#"{
             "fixture_id": "log[7]",
             "action_kind": 3,
             "action_fields_hex": "0000000000000005",
             "signer": 42,
-            "claimed_post_commit_hex": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            "expected_post_commit_hex": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             "cell_proofs": []
         }"#;
         let parsed = parse_terminate_bundle_json(7, lean_json).unwrap();
@@ -1890,7 +1891,7 @@ mod terminate_bundle_tests {
         assert_eq!(parsed.action_fields.len(), 8);
         assert_eq!(parsed.signer, 42);
         // The commit hex decodes to 0xde repeated.
-        assert_eq!(parsed.claimed_post_commit[0], 0xde);
-        assert_eq!(parsed.claimed_post_commit[31], 0xef);
+        assert_eq!(parsed.expected_post_commit[0], 0xde);
+        assert_eq!(parsed.expected_post_commit[31], 0xef);
     }
 }

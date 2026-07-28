@@ -34,7 +34,6 @@ import LegalKernel.Disputes.Evidence
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.Commit
-import LegalKernel.FaultProof.Strategy
 import LegalKernel.FaultProof.Verify
 import LegalKernel.Runtime.LogFile
 
@@ -89,24 +88,19 @@ theorem buildObserverCellProofs_verifies
   unfold buildObserverCellProofs
   exact verifyCellProofs_complete_for_canonical_bundle es _
 
-/-! ## Honest-strategy game player -/
+/-! ## Honest-strategy game player
 
-/-- Compute the next honest move in a game.  Wraps
-    `honestStrategy` (Strategy.lean) with deployment-config-
-    aware behaviour: uses the deployment's truth function +
-    the player's identity. -/
-def computeNextMove
-    (truth : LogIndex → StateCommit)
-    (gs : LegalKernel.FaultProof.GameState) (me : TurnSide) :
-    Option GameTransition :=
-  honestStrategy truth gs me
-
-/-- The computed move is the unique honest move (per
-    `honest_strategy_unique`). -/
-theorem computeNextMove_is_honest
-    (truth : LogIndex → StateCommit)
-    (gs : LegalKernel.FaultProof.GameState) (me : TurnSide) :
-    computeNextMove truth gs me = honestStrategy truth gs me := rfl
+`Observer.computeNextMove` — the third of the three tools this
+module specifies — lives in `Strategy.lean`, and the split is a
+layering constraint rather than a preference.  `kernelStepApply`
+(`Step.lean`) computes the post-state commitment through
+`StepVMCoherence.stepVMHash`, so `Step` imports
+`StepVMCoherence`, which imports THIS module for
+`buildObserverCellProofs`.  A `Game`-dependent wrapper here would
+close the cycle
+`Step → StepVMCoherence → Observer → Strategy → Game → Step`.
+The declaration keeps its `Observer` namespace, so its fully
+qualified name does not move. -/
 
 /-! ## Smoke checks -/
 

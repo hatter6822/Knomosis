@@ -175,9 +175,9 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
     assert_eq!(bundle.action_fields[39], 100, "amount=100 in BE last byte");
     assert_eq!(bundle.signer, 1, "Transfer signer is 1");
     assert_eq!(
-        bundle.claimed_post_commit.len(),
+        bundle.expected_post_commit.len(),
         32,
-        "claimed_post_commit is 32 bytes"
+        "expected_post_commit is 32 bytes"
     );
     // Transfer's cell-proof bundle has 4 cells (registry,
     // balance×2, nonce).

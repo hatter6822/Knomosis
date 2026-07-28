@@ -30,6 +30,7 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.FaultProof.Coherence
+import LegalKernel.FaultProof.Step
 
 namespace LegalKernel
 namespace FaultProof

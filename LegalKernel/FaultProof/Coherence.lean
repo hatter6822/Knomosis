@@ -50,7 +50,6 @@ This module is **not** part of the trusted computing base.
 import LegalKernel.Disputes.Evidence
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Commit
-import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.StepVariants
 import LegalKernel.FaultProof.Verify
 import LegalKernel.Runtime.LogFile
@@ -291,26 +290,19 @@ theorem recomputeCommitment_chain_coherent_with_kernelOnlyReplay
     commitExtendedState (kernelOnlyReplay es log) := by
   rw [foldStepApplyOverLog_eq_kernelOnlyReplay]
 
-/-! ## Reduction theorem for `kernelStepApply` (interface coherence)
+/-! ## The canonical cell-proof bundle
 
-The `kernelStepApply` function (defined in `Step.lean`) verifies
-the cell proofs and returns the claimed `postStateCommit` if
-verification succeeds.  Coherence with the semantic core
-(`recomputeCommitment`) requires that the claimed
-`postStateCommit` actually equals `recomputeCommitment` — i.e.
-the responding party must compute it correctly to win the game.
+`buildCellProofsForAction` is the full canonical bundle for a
+state + action: one cell proof per required cell tag, every
+witness state equal to the pre-state.
 
-The L1 game contract enforces this *operationally*: in
-`terminateOnSingleStep`, the L1 step VM computes
-`recomputeCommitment` itself and compares against the responding
-party's claim.  The `kernelStepApply` function in Lean is the
-*verifier-side* form; the comparison happens in the
-`terminateOnSingleStep` transition (see `Game.lean`).
-
-The theorem below establishes the reduction: under the
-canonical `buildCellProofs` (where every proof's witnessState is
-the full pre-state) plus a correctly-claimed post-commit,
-`kernelStepApply` returns `some (recomputeCommitment es st)`. -/
+The `KernelStep` layer built on top of it — `buildKernelStep`,
+`buildKernelStep_verifies`, and the `kernelStepApply` reduction —
+lives in `Step.lean`, not here.  `kernelStepApply` computes its
+result through `StepVMCoherence.stepVMHash`, so `Step` imports
+`StepVMCoherence`, which imports `Observer`, which imports this
+module.  Keeping `KernelStep`-shaped declarations here would
+require `Coherence` to import `Step` and close the cycle. -/
 
 /-- Build the full canonical cell-proof bundle for a state +
     action: one cell proof per required cell tag, all witness
@@ -320,36 +312,13 @@ def buildCellProofsForAction
   { proofs := (Authority.Action.requiredCells st.action st.signer).map
                 (fun t => buildCellProof es t) }
 
-/-- The canonical `KernelStep` derived from a pre-state + signed
-    action.  Used by the responding party in
-    `terminateOnSingleStep`. -/
-def buildKernelStep
-    (es : ExtendedState) (st : SignedAction) : KernelStep where
-  preStateCommit  := commitExtendedState es
-  signedAction    := st
-  postStateCommit := recomputeCommitment es st
-  cellProofs      := buildCellProofsForAction es st
-
-/-- The canonical KernelStep verifies (cell proofs all verify
-    against the pre-state commit). -/
-theorem buildKernelStep_verifies (es : ExtendedState) (st : SignedAction) :
+/-- The canonical bundle verifies against the pre-state commit. -/
+theorem buildCellProofsForAction_verifies
+    (es : ExtendedState) (st : SignedAction) :
     verifyCellProofs (commitExtendedState es)
       (buildCellProofsForAction es st) = true := by
   unfold buildCellProofsForAction
   exact verifyCellProofs_complete_for_canonical_bundle es _
-
-/-- The canonical KernelStep's `kernelStepApply` returns
-    `some (recomputeCommitment es st)`.  By construction. -/
-theorem kernelStepApply_canonical
-    (es : ExtendedState) (st : SignedAction) :
-    kernelStepApply (buildKernelStep es st) =
-    some (recomputeCommitment es st) := by
-  unfold kernelStepApply buildKernelStep
-  -- The verify check passes by `buildKernelStep_verifies`; the
-  -- function returns `some step.postStateCommit` =
-  -- `some (recomputeCommitment es st)`.
-  have h := buildKernelStep_verifies es st
-  simp [h]
 
 end FaultProof
 end LegalKernel

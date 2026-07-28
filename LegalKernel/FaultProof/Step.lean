@@ -30,12 +30,18 @@ cannot violate any kernel invariant.
 import LegalKernel.Authority.SignedAction
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Commit
+import LegalKernel.FaultProof.StepVMCoherence
 import LegalKernel.FaultProof.Verify
 
 namespace LegalKernel
 namespace FaultProof
 
 open LegalKernel.Authority
+-- `stepVMHash` / `stepVMHashFromAction` / `actionKindByte` /
+-- `actionFieldsForL1`: the step-VM dispatch `kernelStepApply`
+-- computes through, and the same one `KnomosisStepVM.executeStep`
+-- implements on L1.
+open LegalKernel.FaultProof.StepVMCoherence
 
 /-! ## `KernelStep` (§12.1.1) -/
 
@@ -63,37 +69,87 @@ structure KernelStep where
 
 /-! ## `kernelStepApply` (§12.1.2)
 
-The first-pass `kernelStepApply` is a *cell-proof verifier*: it
-returns `some postStateCommit` when (a) every cell proof
-verifies against `preStateCommit`, AND (b) the claimed
-postStateCommit is structurally consistent with the action's
-declared writes.
+`kernelStepApply` verifies the cell proofs against the pre-state
+commitment and then **computes** the post-state commitment by
+re-executing the step through `StepVMCoherence.stepVMHash` —
+the same dispatch `KnomosisStepVM.executeStep` performs on L1,
+pinned byte-for-byte against it by the SVC cross-stack corpus.
 
-The full per-cell semantic-write rules (i.e. "for `transfer r s
-rcv amt`, the post-state's `balance r s` cell is preStateValue -
-amt" etc.) live in the per-variant Solidity step functions
-(WU H.5.2.*); the Lean side establishes the *interface* and the
-coherence theorem with `kernelOnlyApply` (WU H.1.3).
+It did neither for a while.  The body returned
+`step.postStateCommit` — the *responder's own claim* — whenever
+the proofs verified, and `verifyCellProofs` is `List.all` over
+the bundle, so an **empty** bundle verified vacuously.  A
+responder could hand in an empty proof bundle carrying any
+post-commit they liked, and
+`applyTransition .terminateOnSingleStep` would find the
+"computed" value equal to the claim and award them the game.
+The step VM adjudicated nothing.
 
-The function is total (returns `Option StateCommit`) and
-decidable.  The L1 step VM mirrors this dispatch logic. -/
+The per-variant write rules are not re-derived here: routing
+through `stepVMHash` is what makes this function's output the
+same object the L1 contract computes, which is the property the
+single-step termination rests on. -/
 
 /-- The Merkle-state-aware step function.  Given the pre-state
-    commitment, the action, and the Merkle proofs for the
-    touched cells, compute the claimed post-state commitment.
+    commitment, the action, and the Merkle proofs for the touched
+    cells, **compute** the post-state commitment.
 
     Returns `none` if any cell proof fails to verify against
-    `preStateCommit`.  Returns `some step.postStateCommit` if
-    every proof verifies.  The actual post-state computation
-    (per-variant cell writes) is delegated to the L1 step VM /
-    Solidity-side `_step<Variant>` functions; this function
-    captures the *interface* the L1 fault-proof game contract
-    consumes. -/
+    `preStateCommit`.  Otherwise returns the step-VM hash for
+    `(preStateCommit, actionKindByte, actionFieldsForL1, signer,
+    cellProofs)` — the value
+    `KnomosisStepVM.executeStep(step.preStateCommit, …)` returns
+    under the production keccak256 binding.
+
+    `step.postStateCommit` is deliberately **not** consulted: it
+    is the claim under dispute, and a function that returned it
+    would make the single-step adjudication self-affirming. -/
 def kernelStepApply (step : KernelStep) : Option StateCommit :=
   if verifyCellProofs step.preStateCommit step.cellProofs then
-    some step.postStateCommit
+    some (stepVMHash step.preStateCommit
+            (actionKindByte step.signedAction.action)
+            (actionFieldsForL1 step.signedAction.action)
+            step.signedAction.signer.toNat
+            step.cellProofs)
   else
     none
+
+/-- `kernelStepApply` agrees with the claim exactly when the
+    claim is what the step VM computes.  The correctness of the
+    claim is an explicit hypothesis rather than something the
+    function assumes — folding it into the definition is what
+    made the adjudication vacuous. -/
+theorem kernelStepApply_eq_claim_iff_correct
+    (step : KernelStep)
+    (h_proofs : verifyCellProofs step.preStateCommit step.cellProofs = true) :
+    kernelStepApply step = some step.postStateCommit ↔
+      stepVMHash step.preStateCommit
+        (actionKindByte step.signedAction.action)
+        (actionFieldsForL1 step.signedAction.action)
+        step.signedAction.signer.toNat
+        step.cellProofs = step.postStateCommit := by
+  -- `simp only`, not `rw`: the `if` condition sits under a
+  -- `Decidable` instance that mentions the same term, so a
+  -- rewrite cannot build a type-correct motive.
+  unfold kernelStepApply
+  simp only [h_proofs, if_true, Option.some.injEq]
+
+/-- An empty proof bundle no longer wins the game for free.  It
+    still *verifies* — `List.all` over `[]` is vacuously `true` —
+    but the value returned is the step VM's own output on an
+    empty bundle, which the responder does not control.  This is
+    the regression that the old `some step.postStateCommit` body
+    could not satisfy for any statement at all. -/
+theorem kernelStepApply_empty_bundle_computes
+    (pre : StateCommit) (sa : SignedAction) (claim : StateCommit) :
+    kernelStepApply
+        { preStateCommit := pre, signedAction := sa,
+          postStateCommit := claim, cellProofs := { proofs := [] } } =
+      some (stepVMHash pre (actionKindByte sa.action)
+              (actionFieldsForL1 sa.action) sa.signer.toNat
+              { proofs := [] }) := by
+  unfold kernelStepApply verifyCellProofs
+  simp
 
 /-! ## Decidability + determinism -/
 
@@ -192,6 +248,72 @@ theorem chainKernelStepApply_split
     · -- Mismatch: both sides return `none`.
       simp only [chainKernelStepApply, h_match, dite_false]
       rfl
+
+/-! ## The canonical `KernelStep` (relocated from `Coherence.lean`)
+
+These live here rather than in `Coherence.lean` because
+`kernelStepApply` now routes through `StepVMCoherence.stepVMHash`,
+so `Step` imports `StepVMCoherence → Observer → Coherence`.  A
+`KernelStep`-shaped declaration in `Coherence` would need the
+reverse import and close the cycle. -/
+
+/-- The canonical `KernelStep` derived from a pre-state + signed
+    action.  This is what the responding party builds for
+    `terminateOnSingleStep`. -/
+def buildKernelStep
+    (es : ExtendedState) (st : SignedAction) : KernelStep where
+  preStateCommit  := commitExtendedState es
+  signedAction    := st
+  postStateCommit := recomputeCommitment es st
+  cellProofs      := buildCellProofsForAction es st
+
+/-- The canonical `KernelStep`'s cell proofs verify against the
+    pre-state commit. -/
+theorem buildKernelStep_verifies (es : ExtendedState) (st : SignedAction) :
+    verifyCellProofs (commitExtendedState es)
+      (buildCellProofsForAction es st) = true :=
+  buildCellProofsForAction_verifies es st
+
+/-- `buildCellProofsForAction` and `Observer.buildObserverCellProofs`
+    are the same bundle — both map `buildCellProof es` over
+    `Action.requiredCells`.  They were maintained as independent
+    copies with nothing tying them together; this is the tie, and
+    it is what lets `kernelStepApply_canonical` below be stated in
+    terms of the observer's own `stepVMHashFromAction`. -/
+theorem buildCellProofsForAction_eq_observer
+    (es : ExtendedState) (st : SignedAction) :
+    buildCellProofsForAction es st =
+      Observer.buildObserverCellProofs es st.action st.signer := rfl
+
+/-- The canonical step's `kernelStepApply` is exactly the step-VM
+    hash the observer's terminate-bundle builder computes for the
+    same `(state, action, signer)` triple.
+
+    This is the statement that ties the Lean game model to the L1
+    contract: `stepVMHashFromAction` is what
+    `TerminateBundle.buildTerminateBundle` emits and what the SVC
+    cross-stack corpus pins against
+    `KnomosisStepVM.executeStep`.
+
+    Note what it does **not** say.  The old form claimed
+    `= some (recomputeCommitment es st)`, which held only because
+    the function returned the claim it was handed;
+    `recomputeCommitment` is `commitExtendedState ∘ stepApply`, a
+    5-component hash over the whole post-state, while `stepVMHash`
+    is a per-step hash over the proven cells.  Those two recipes
+    are not equal today, and reconciling them is the open
+    state-root Merkleisation work recorded in
+    `docs/audits/19-findings-and-followups.md`.  Stating the
+    reduction against the recipe the step VM actually uses makes
+    that gap visible instead of papering over it. -/
+theorem kernelStepApply_canonical
+    (es : ExtendedState) (st : SignedAction) :
+    kernelStepApply (buildKernelStep es st) =
+      some (stepVMHashFromAction es st.action st.signer) := by
+  unfold kernelStepApply buildKernelStep stepVMHashFromAction
+  have h := buildKernelStep_verifies es st
+  simp only [h, if_true]
+  rfl
 
 /-! ## Smoke checks -/
 

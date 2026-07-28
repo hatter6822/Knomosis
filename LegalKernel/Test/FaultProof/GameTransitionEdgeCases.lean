@@ -39,9 +39,16 @@ def tests : List TestCase :=
         let _ := @applyTransition_rejects_post_settlement
         assert true "API exists"
     }
-  , { name := "#271.6: applyTransition_rejects_malformed_midpoint API stable"
+  , { name := "#271.6: submitMidpoint rejects iff the range is degenerate"
     , body := do
-        let _ := @applyTransition_rejects_malformed_midpoint
+        let _proof :
+            ∀ (gs : LegalKernel.FaultProof.GameState) (c : StateCommit),
+              gs.status = .inProgress →
+              gs.pendingMidpoint = none →
+              ¬ MAX_BISECTION_DEPTH ≤ gs.depth →
+              ((∃ e, applyTransition gs (.submitMidpoint c) = .error e) ↔
+                gs.range.high.idx ≤ gs.range.low.idx + 1) :=
+          applyTransition_submitMidpoint_rejects_iff_degenerate
         assert true "API exists"
     }
   ]

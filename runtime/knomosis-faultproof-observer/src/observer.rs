@@ -1159,8 +1159,23 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
             return Ok(EventHandling::Recorded);
         }
         // Full state is known: drive the state machine.
-        let mp = Claim { idx, commit };
-        match apply_transition(&rec.state, GameTransition::SubmitMidpoint(mp)) {
+        //
+        // The event carries the index the contract derived; the
+        // transition derives it again from the range.  A mismatch
+        // means our view of the range has drifted from L1's, which is
+        // a resync condition, not a move to play on.
+        let derived_idx = rec.state.range.midpoint_idx();
+        if idx != derived_idx {
+            tracing::warn!(
+                game_id = %game_id,
+                event_idx = idx,
+                derived_idx = derived_idx,
+                "midpoint index disagrees with the derived midpoint; \
+                 local range is stale, not computing a move",
+            );
+            return Ok(EventHandling::Recorded);
+        }
+        match apply_transition(&rec.state, GameTransition::SubmitMidpoint(commit)) {
             Ok(new_state) => {
                 let mut new_rec = rec.clone();
                 new_rec.state = new_state;
@@ -1546,8 +1561,8 @@ impl<S: L1Source, Sub: Submitter, T: TruthOracle> Observer<S, Sub, T> {
                 return None;
             }
         };
-        // Defence-in-depth: the bundle's `claimed_post_commit`
-        // MUST agree with the strategy's `claimed_post_commit`
+        // Defence-in-depth: the bundle's `expected_post_commit`
+        // MUST agree with the strategy's `expected_post_commit`
         // (the truth oracle's view of the L1 step VM hash at the
         // pivot).  `encode_calldata_with_bundle` enforces this
         // and surfaces `BundleCommitMismatch` on drift; if the
@@ -2942,7 +2957,7 @@ mod tests {
             super::pivot_for_move(
                 &state,
                 HonestMove::TerminateOnSingleStep {
-                    claimed_post_commit: commit(7)
+                    expected_post_commit: commit(7)
                 },
             ),
             Some(64),
@@ -2982,7 +2997,7 @@ mod tests {
             action_kind: 1,
             action_fields: vec![0u8; 16],
             signer: 5,
-            claimed_post_commit: commit,
+            expected_post_commit: commit,
             cell_proofs: vec![],
         }
     }
@@ -3027,7 +3042,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: [0xAB; 32],
+            expected_post_commit: [0xAB; 32],
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         // Empty oracle ⇒ Missed ⇒ None.
@@ -3070,7 +3085,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: [0xAB; 32],
+            expected_post_commit: [0xAB; 32],
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         assert!(result.is_none(), "no bundle oracle ⇒ None (deferral)");
@@ -3112,7 +3127,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: commit,
+            expected_post_commit: commit,
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         let calldata = result.expect("bundle oracle hit ⇒ Some(calldata)");
@@ -3132,8 +3147,8 @@ mod tests {
         );
     }
 
-    /// When the bundle's `claimed_post_commit` disagrees with
-    /// the strategy's `claimed_post_commit`,
+    /// When the bundle's `expected_post_commit` disagrees with
+    /// the strategy's `expected_post_commit`,
     /// `build_terminate_calldata` refuses and returns `None`
     /// (logs `BundleCommitMismatch`).
     #[test]
@@ -3173,7 +3188,7 @@ mod tests {
             state_known: true,
         };
         let mv = HonestMove::TerminateOnSingleStep {
-            claimed_post_commit: strategy_commit,
+            expected_post_commit: strategy_commit,
         };
         let result = obs.build_terminate_calldata(&rec, mv);
         assert!(

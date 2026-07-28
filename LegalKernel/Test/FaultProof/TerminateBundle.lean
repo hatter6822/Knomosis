@@ -70,14 +70,14 @@ def tests : List TestCase :=
           (actual := bundle.signer)
           "bundle's signer = entry's signer"
     }
-  , { name := "buildTerminateBundle: claimedPostCommit matches stepVMHashFromAction"
+  , { name := "buildTerminateBundle: expectedPostCommit matches stepVMHashFromAction"
     , body := do
         let bundle := buildTerminateBundle exampleState exampleEntry
         let expected := stepVMHashFromAction exampleState
                           exampleEntry.signedAction.action
                           exampleEntry.signedAction.signer
-        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
-          "claimedPostCommit = stepVMHashFromAction"
+        assertEq (expected := expected) (actual := bundle.expectedPostCommit)
+          "expectedPostCommit = stepVMHashFromAction"
     }
   , { name := "buildTerminateBundle: cellProofs matches observer's bundle"
     , body := do
@@ -98,9 +98,9 @@ def tests : List TestCase :=
           "actionKind agrees"
         assertEq (expected := b1.actionFields) (actual := b2.actionFields)
           "actionFields agrees"
-        assertEq (expected := b1.claimedPostCommit)
-          (actual := b2.claimedPostCommit)
-          "claimedPostCommit agrees"
+        assertEq (expected := b1.expectedPostCommit)
+          (actual := b2.expectedPostCommit)
+          "expectedPostCommit agrees"
     }
     -- ## Cell-proof bundle verification
   , { name := "buildTerminateBundle: cell-proof bundle verifies against pre-state commit"
@@ -148,7 +148,7 @@ def tests : List TestCase :=
     -- ## GP.3.3: terminate-bundle coverage for the new variants.
     -- These verify the off-chain observer's terminate-move payload
     -- builder produces the right actionKind, the right L1 field
-    -- layout, a claimedPostCommit equal to the production
+    -- layout, a expectedPostCommit equal to the production
     -- `stepVMHashFromAction` path, and a cell-proof bundle that
     -- verifies against the pre-state commit — for the two
     -- Workstream-GP variants at indices 19 / 20.
@@ -172,11 +172,11 @@ def tests : List TestCase :=
         -- (userAmount and poolAmount are wei-denominated).
         assertEq (expected := 72) (actual := bundle.actionFields.size)
           "depositWithFee actionFields = 72 bytes"
-        -- claimedPostCommit matches the production dispatcher path.
+        -- expectedPostCommit matches the production dispatcher path.
         let expected := stepVMHashFromAction es
                           entry.signedAction.action entry.signedAction.signer
-        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
-          "claimedPostCommit = stepVMHashFromAction for depositWithFee"
+        assertEq (expected := expected) (actual := bundle.expectedPostCommit)
+          "expectedPostCommit = stepVMHashFromAction for depositWithFee"
         -- The cell-proof bundle verifies against the pre-state commit.
         assert (verifyCellProofs (commitExtendedState es) bundle.cellProofs)
           "depositWithFee cell-proof bundle verifies"
@@ -203,8 +203,8 @@ def tests : List TestCase :=
           "topUpActionBudget actionFields = 40 bytes"
         let expected := stepVMHashFromAction es
                           entry.signedAction.action entry.signedAction.signer
-        assertEq (expected := expected) (actual := bundle.claimedPostCommit)
-          "claimedPostCommit = stepVMHashFromAction for topUpActionBudget"
+        assertEq (expected := expected) (actual := bundle.expectedPostCommit)
+          "expectedPostCommit = stepVMHashFromAction for topUpActionBudget"
         assert (verifyCellProofs (commitExtendedState es) bundle.cellProofs)
           "topUpActionBudget cell-proof bundle verifies"
     }
@@ -223,8 +223,8 @@ def tests : List TestCase :=
           "JSON contains action_fields_hex field"
         assert (json.splitOn "\"signer\"" |>.length |> (· > 1))
           "JSON contains signer field"
-        assert (json.splitOn "\"claimed_post_commit_hex\"" |>.length |> (· > 1))
-          "JSON contains claimed_post_commit_hex field"
+        assert (json.splitOn "\"expected_post_commit_hex\"" |>.length |> (· > 1))
+          "JSON contains expected_post_commit_hex field"
         assert (json.splitOn "\"cell_proofs\"" |>.length |> (· > 1))
           "JSON contains cell_proofs field"
     }

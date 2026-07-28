@@ -94,21 +94,60 @@ theorem applyTransition_rejects_post_settlement
   | timedOutSequencer => cases t <;> exact ⟨_, rfl⟩
   | timedOutChallenger => cases t <;> exact ⟨_, rfl⟩
 
-/-- #271.6 — `applyTransition` rejects a malformed
-    `submitMidpoint` whose midpoint index is at-or-beyond the
-    high boundary or at-or-below the low boundary.  The
-    structural guard inside `applyTransition` catches this. -/
-theorem applyTransition_rejects_malformed_midpoint
-    (gs : LegalKernel.FaultProof.GameState) (mp : Claim)
-    (h_oob : mp.idx ≤ gs.range.low.idx ∨ gs.range.high.idx ≤ mp.idx)
+/-- The floor midpoint of `[lo, hi]` escapes the open interval
+    exactly when the range is too narrow to bisect.
+
+    Stated over bare `Nat` because `omega` cannot see through the
+    `DisputedRange`/`Claim` projections to the underlying
+    arithmetic; with the projections generalised away it decides
+    the statement directly. -/
+theorem midpointIdx_degenerate_iff (lo hi : Nat) :
+    ((lo + hi) / 2 ≤ lo ∨ hi ≤ (lo + hi) / 2) ↔ hi ≤ lo + 1 := by
+  omega
+
+/-- #271.6 — `applyTransition` rejects `submitMidpoint` exactly on
+    a **degenerate** range (width ≤ 1).
+
+    This used to be stated about a caller-supplied out-of-range
+    midpoint index.  That statement no longer has a subject: the
+    index is derived as `gs.range.midpointIdx`, mirroring
+    `KnomosisFaultProofGame.submitMidpoint`'s
+    `mpIdx = (g.low.idx + g.high.idx) / 2`, so a caller cannot
+    supply a malformed one.  The guard survives because the
+    derived value CAN still be out of range — but only when the
+    range is too narrow to bisect, which is precisely the
+    condition that forces `terminateOnSingleStep` instead.
+
+    Stated as an `iff` rather than a one-way rejection, because
+    the reverse direction is what the convergence argument needs:
+    on any range of width ≥ 2 the midpoint is strictly interior,
+    so bisection can always proceed. -/
+theorem applyTransition_submitMidpoint_rejects_iff_degenerate
+    (gs : LegalKernel.FaultProof.GameState) (c : StateCommit)
     (h_status : gs.status = .inProgress)
     (h_no_pending : gs.pendingMidpoint = none)
     (h_depth : ¬ MAX_BISECTION_DEPTH ≤ gs.depth) :
-    ∃ e, applyTransition gs (.submitMidpoint mp) = .error e := by
+    (∃ e, applyTransition gs (.submitMidpoint c) = .error e) ↔
+      gs.range.high.idx ≤ gs.range.low.idx + 1 := by
+  have h_guard :
+      (gs.range.midpointIdx ≤ gs.range.low.idx
+        ∨ gs.range.high.idx ≤ gs.range.midpointIdx) ↔
+      gs.range.high.idx ≤ gs.range.low.idx + 1 :=
+    midpointIdx_degenerate_iff gs.range.low.idx gs.range.high.idx
   unfold applyTransition
   rw [h_status, h_no_pending]
-  simp only [if_neg h_depth, if_pos h_oob]
-  exact ⟨_, rfl⟩
+  simp only [if_neg h_depth]
+  constructor
+  · intro ⟨_, h_err⟩
+    by_cases h_deg :
+        gs.range.midpointIdx ≤ gs.range.low.idx
+          ∨ gs.range.high.idx ≤ gs.range.midpointIdx
+    · exact h_guard.mp h_deg
+    · simp only [if_neg h_deg] at h_err
+      exact absurd h_err (by simp)
+  · intro h
+    simp only [if_pos (h_guard.mpr h)]
+    exact ⟨_, rfl⟩
 
 end FaultProof
 end LegalKernel

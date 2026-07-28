@@ -647,7 +647,7 @@ def cmdExportCellProofs (logPath : System.FilePath) (idxStr : String)
 
     Output: a single JSON object on stdout containing
     `action_kind`, `action_fields_hex`, `signer`,
-    `claimed_post_commit_hex`, and `cell_proofs` (an array of
+    `expected_post_commit_hex`, and `cell_proofs` (an array of
     cell-proof objects).  See
     `LegalKernel/FaultProof/TerminateBundle.lean` for the
     canonical wire format.
@@ -661,7 +661,7 @@ def cmdExportTerminateBundle (logPath : System.FilePath) (idxStr : String)
     (genesis : ExtendedState := demoGenesis)
     (gasPoolCfg : Option Bridge.GasPoolConfig := none) : IO UInt32 := do
   let _ := deploymentId
-  -- GP.7.4: the terminate bundle's `claimedPostCommit` +
+  -- GP.7.4: the terminate bundle's `expectedPostCommit` +
   -- `cellProofs` are computed against `commitExtendedState preState`,
   -- which INCLUDES `commitLocalPolicies` — so the gas-pool genesis
   -- declaration (a `localPolicies` entry) affects the bundle.  A

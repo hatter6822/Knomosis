@@ -123,14 +123,9 @@ proptest! {
     #[test]
     fn apply_transition_is_deterministic(
         gs in in_progress_game_strategy(),
-        mp_idx in log_index_strategy(),
         mp_commit in commit_strategy(),
     ) {
-        let mp = Claim {
-            idx: mp_idx,
-            commit: mp_commit,
-        };
-        let t = GameTransition::SubmitMidpoint(mp);
+        let t = GameTransition::SubmitMidpoint(mp_commit);
         let r1 = apply_transition(&gs, t);
         let r2 = apply_transition(&gs, t);
         prop_assert_eq!(r1, r2);
@@ -207,14 +202,11 @@ proptest! {
         claimed_commit in commit_strategy(),
     ) {
         for t in [
-            GameTransition::SubmitMidpoint(Claim {
-                idx: gs.range.low.idx + 1,
-                commit: mp_commit,
-            }),
+            GameTransition::SubmitMidpoint(mp_commit),
             GameTransition::RespondAgree,
             GameTransition::RespondDisagree,
             GameTransition::TerminateOnSingleStep {
-                claimed_post_commit: claimed_commit,
+                expected_post_commit: claimed_commit,
             },
             GameTransition::TimeoutLoss,
         ] {
@@ -255,12 +247,9 @@ proptest! {
         if mid_idx <= gs.range.low.idx || mid_idx >= gs.range.high.idx {
             return Ok(());
         }
-        let mp = Claim {
-            idx: mid_idx,
-            commit: mp_commit,
-        };
         let original_depth = gs.depth;
-        let after_submit = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap();
+        let after_submit =
+            apply_transition(&gs, GameTransition::SubmitMidpoint(mp_commit)).unwrap();
         prop_assert_eq!(after_submit.depth, original_depth);
         let after_respond =
             apply_transition(&after_submit, GameTransition::RespondAgree).unwrap();
@@ -352,12 +341,9 @@ proptest! {
         if mid_idx <= gs.range.low.idx || mid_idx >= gs.range.high.idx {
             return Ok(());
         }
-        let mp = Claim {
-            idx: mid_idx,
-            commit: mp_commit,
-        };
         let original_turn = gs.turn;
-        let after_submit = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap();
+        let after_submit =
+            apply_transition(&gs, GameTransition::SubmitMidpoint(mp_commit)).unwrap();
         prop_assert_eq!(after_submit.turn, original_turn.flip());
         let after_respond = apply_transition(&after_submit, GameTransition::RespondAgree).unwrap();
         prop_assert_eq!(after_respond.turn, original_turn);
@@ -418,12 +404,7 @@ proptest! {
         };
         let mut rounds = 0;
         while !gs.range.is_single_step() && rounds < 64 {
-            let mid_idx = gs.range.midpoint_idx();
-            let mp = Claim {
-                idx: mid_idx,
-                commit: [3u8; 32],
-            };
-            gs = apply_transition(&gs, GameTransition::SubmitMidpoint(mp)).unwrap();
+            gs = apply_transition(&gs, GameTransition::SubmitMidpoint([3u8; 32])).unwrap();
             gs = apply_transition(&gs, GameTransition::RespondDisagree).unwrap();
             rounds += 1;
         }
@@ -475,13 +456,11 @@ proptest! {
         adversarial.depth = MAX_BISECTION_DEPTH;
         // mp.idx = low.idx → MidpointOutOfRange would fire if
         // we reached the range guard.
-        let mp = Claim {
-            idx: adversarial.range.low.idx,
-            commit: mp_commit,
-        };
-        let err =
-            crate::observer_audit::apply_transition_test(&adversarial, GameTransition::SubmitMidpoint(mp))
-                .unwrap_err();
+        let err = crate::observer_audit::apply_transition_test(
+            &adversarial,
+            GameTransition::SubmitMidpoint(mp_commit),
+        )
+        .unwrap_err();
         // First guard: status.
         prop_assert_eq!(err, GameError::GameAlreadyEnded);
     }

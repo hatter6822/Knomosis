@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6840e90e6529bbd9a619ff191dc5c7176d6e36aabc650150b36336a05afb1a0c"
+    "source_digest": "4f53f24b1e75ed9db98077b780904c6e9e575e86ceff910e827d3e2f65166f21"
   },
   "summary": {
     "module_count": 315,
-    "declaration_count": 5314
+    "declaration_count": 5335
   },
   "modules": [
     {
@@ -20400,18 +20400,18 @@
     {
       "module": "LegalKernel.FaultProof.Coherence",
       "path": "LegalKernel/FaultProof/Coherence.lean",
-      "declaration_count": 20,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 57,
+          "line": 56,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 58,
+          "line": 57,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -20419,7 +20419,7 @@
         {
           "kind": "def",
           "name": "applyCellWrites_to_state",
-          "line": 78,
+          "line": 77,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20431,7 +20431,7 @@
         {
           "kind": "def",
           "name": "recomputeCommitment",
-          "line": 96,
+          "line": 95,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20444,7 +20444,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_deterministic",
-          "line": 103,
+          "line": 102,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20455,7 +20455,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_total",
-          "line": 115,
+          "line": 114,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20466,7 +20466,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_deterministic",
-          "line": 121,
+          "line": 120,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20477,7 +20477,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_extensional",
-          "line": 129,
+          "line": 128,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20489,7 +20489,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_coherent_with_kernelOnlyApply",
-          "line": 162,
+          "line": 161,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20504,7 +20504,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_preserves_bridge",
-          "line": 198,
+          "line": 197,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20516,7 +20516,7 @@
         {
           "kind": "def",
           "name": "foldStepApplyOverLog",
-          "line": 216,
+          "line": 215,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20527,7 +20527,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_nil",
-          "line": 224,
+          "line": 223,
           "called": [
             "ExtendedState",
             "es",
@@ -20537,7 +20537,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_cons",
-          "line": 229,
+          "line": 228,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20549,7 +20549,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_eq_kernelOnlyApply",
-          "line": 241,
+          "line": 240,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20561,7 +20561,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_eq_kernelOnlyReplay",
-          "line": 261,
+          "line": 260,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20575,7 +20575,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_chain_coherent_with_kernelOnlyReplay",
-          "line": 287,
+          "line": 286,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20589,7 +20589,7 @@
         {
           "kind": "def",
           "name": "buildCellProofsForAction",
-          "line": 317,
+          "line": 309,
           "called": [
             "CellProofBundle",
             "ExtendedState",
@@ -20599,47 +20599,19 @@
           ]
         },
         {
-          "kind": "def",
-          "name": "buildKernelStep",
-          "line": 325,
-          "called": [
-            "ExtendedState",
-            "KernelStep",
-            "SignedAction",
-            "buildCellProofsForAction",
-            "commitExtendedState",
-            "es",
-            "recomputeCommitment"
-          ]
-        },
-        {
           "kind": "theorem",
-          "name": "buildKernelStep_verifies",
-          "line": 334,
+          "name": "buildCellProofsForAction_verifies",
+          "line": 315,
           "called": [
             "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
             "SignedAction",
             "buildCellProofsForAction",
             "commitExtendedState",
             "es",
             "verifyCellProofs",
             "verifyCellProofs_complete_for_canonical_bundle"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "kernelStepApply_canonical",
-          "line": 342,
-          "called": [
-            "ExtendedState",
-            "FaultProof",
-            "LegalKernel",
-            "SignedAction",
-            "buildKernelStep",
-            "buildKernelStep_verifies",
-            "es",
-            "kernelStepApply",
-            "recomputeCommitment"
           ]
         }
       ]
@@ -21261,7 +21233,7 @@
     {
       "module": "LegalKernel.FaultProof.Convergence",
       "path": "LegalKernel/FaultProof/Convergence.lean",
-      "declaration_count": 10,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "namespace",
@@ -21289,7 +21261,7 @@
         {
           "kind": "inductive",
           "name": "HonestResponseTrace",
-          "line": 83,
+          "line": 92,
           "called": [
             "Claim",
             "GameTransition",
@@ -21301,7 +21273,7 @@
         {
           "kind": "theorem",
           "name": "HonestResponseTrace.toResponseTrace",
-          "line": 108,
+          "line": 118,
           "called": [
             "HonestResponseTrace",
             "ResponseTrace",
@@ -21312,7 +21284,7 @@
         {
           "kind": "theorem",
           "name": "honestResponseTrace_refl_exists",
-          "line": 122,
+          "line": 133,
           "called": [
             "HonestResponseTrace",
             "StateCommit"
@@ -21321,7 +21293,7 @@
         {
           "kind": "theorem",
           "name": "range_size_after_k_rounds",
-          "line": 137,
+          "line": 148,
           "called": [
             "ResponseTrace",
             "range_narrows_on_response_agree",
@@ -21332,7 +21304,7 @@
         {
           "kind": "theorem",
           "name": "range_narrows_to_zero_after_enough_rounds",
-          "line": 180,
+          "line": 192,
           "called": [
             "ResponseTrace",
             "range_size_after_k_rounds"
@@ -21341,16 +21313,82 @@
         {
           "kind": "theorem",
           "name": "bisection_converges_after_enough_rounds",
-          "line": 204,
+          "line": 216,
           "called": [
             "ResponseTrace",
             "range_narrows_to_zero_after_enough_rounds"
           ]
         },
         {
+          "kind": "def",
+          "name": "halveCeil",
+          "line": 238,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "halveCeilIter",
+          "line": 244,
+          "called": [
+            "halveCeil"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "halveCeilIter_mono",
+          "line": 250,
+          "called": [
+            "halveCeil",
+            "halveCeilIter"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "halveCeilIter_le_one",
+          "line": 261,
+          "called": [
+            "halveCeil",
+            "halveCeilIter"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "range_size_after_k_canonical_rounds",
+          "line": 279,
+          "called": [
+            "ResponseTrace",
+            "halveCeil",
+            "halveCeilIter",
+            "halveCeilIter_mono",
+            "range_halves_on_response_agree",
+            "range_halves_on_response_disagree",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bisection_converges_in_log_rounds",
+          "line": 313,
+          "called": [
+            "ResponseTrace",
+            "halveCeilIter_le_one",
+            "range_size_after_k_canonical_rounds"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bisection_converges_at_max_depth",
+          "line": 327,
+          "called": [
+            "MAX_BISECTION_DEPTH",
+            "ResponseTrace",
+            "bisection_converges_in_log_rounds"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "bisection_terminates_in_at_most_max_depth_rounds",
-          "line": 221,
+          "line": 342,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -21525,7 +21563,7 @@
     {
       "module": "LegalKernel.FaultProof.Game",
       "path": "LegalKernel/FaultProof/Game.lean",
-      "declaration_count": 26,
+      "declaration_count": 30,
       "declarations": [
         {
           "kind": "namespace",
@@ -21593,9 +21631,8 @@
         {
           "kind": "inductive",
           "name": "GameTransition",
-          "line": 148,
+          "line": 170,
           "called": [
-            "Claim",
             "KernelStep",
             "StateCommit"
           ]
@@ -21603,13 +21640,13 @@
         {
           "kind": "inductive",
           "name": "GameError",
-          "line": 178,
+          "line": 201,
           "called": []
         },
         {
           "kind": "def",
           "name": "DisputedRange.midpointIdx",
-          "line": 202,
+          "line": 225,
           "called": [
             "DisputedRange",
             "LogIndex"
@@ -21618,7 +21655,7 @@
         {
           "kind": "def",
           "name": "DisputedRange.isSingleStep",
-          "line": 208,
+          "line": 231,
           "called": [
             "DisputedRange"
           ]
@@ -21626,7 +21663,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsSingleStep",
-          "line": 212,
+          "line": 235,
           "called": [
             "DisputedRange",
             "DisputedRange.isSingleStep"
@@ -21635,7 +21672,7 @@
         {
           "kind": "def",
           "name": "TurnSide.flip",
-          "line": 219,
+          "line": 242,
           "called": [
             "TurnSide",
             "challenger"
@@ -21644,7 +21681,7 @@
         {
           "kind": "def",
           "name": "applyTransition",
-          "line": 226,
+          "line": 249,
           "called": [
             "GameError",
             "GameState",
@@ -21658,7 +21695,7 @@
         {
           "kind": "theorem",
           "name": "applyTransition_deterministic",
-          "line": 332,
+          "line": 377,
           "called": [
             "GameState",
             "GameTransition",
@@ -21668,7 +21705,7 @@
         {
           "kind": "def",
           "name": "pendingMidpointInRange",
-          "line": 343,
+          "line": 388,
           "called": [
             "GameState"
           ]
@@ -21676,7 +21713,7 @@
         {
           "kind": "instance",
           "name": "instDecidablePendingMidpointInRange",
-          "line": 350,
+          "line": 395,
           "called": [
             "GameState",
             "pendingMidpointInRange"
@@ -21685,7 +21722,7 @@
         {
           "kind": "def",
           "name": "gameWellFormed",
-          "line": 368,
+          "line": 413,
           "called": [
             "GameState",
             "MAX_BISECTION_DEPTH",
@@ -21695,7 +21732,7 @@
         {
           "kind": "instance",
           "name": "instDecidableGameWellFormed",
-          "line": 378,
+          "line": 423,
           "called": [
             "GameState",
             "gameWellFormed"
@@ -21704,7 +21741,7 @@
         {
           "kind": "theorem",
           "name": "applyTransition_respondAgree_shape",
-          "line": 393,
+          "line": 438,
           "called": [
             "Claim",
             "GameState",
@@ -21715,7 +21752,7 @@
         {
           "kind": "theorem",
           "name": "applyTransition_respondDisagree_shape",
-          "line": 414,
+          "line": 459,
           "called": [
             "Claim",
             "GameState",
@@ -21726,19 +21763,19 @@
         {
           "kind": "theorem",
           "name": "nat_sub_lt_sub_left",
-          "line": 432,
+          "line": 477,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "nat_sub_lt_sub_right",
-          "line": 438,
+          "line": 483,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "range_narrows_on_response_agree",
-          "line": 446,
+          "line": 491,
           "called": [
             "Claim",
             "GameState",
@@ -21750,18 +21787,60 @@
         {
           "kind": "theorem",
           "name": "range_narrows_on_response_disagree",
-          "line": 463,
+          "line": 508,
           "called": [
             "Claim",
+            "GameState",
+            "applyTransition",
+            "applyTransition_respondDisagree_shape",
+            "nat_sub_lt_sub_right"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "midpoint_halves",
+          "line": 542,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "range_halves_on_response_agree",
+          "line": 549,
+          "called": [
+            "Claim",
+            "DisputedRange.midpointIdx",
+            "GameState",
+            "applyTransition",
+            "applyTransition_respondAgree_shape",
+            "midpoint_halves"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "range_halves_on_response_disagree",
+          "line": 566,
+          "called": [
+            "Claim",
+            "DisputedRange.midpointIdx",
+            "GameState",
+            "applyTransition",
+            "applyTransition_respondDisagree_shape",
+            "midpoint_halves"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "submitMidpoint_installs_canonical",
+          "line": 585,
+          "called": [
             "DisputedRange",
             "DisputedRange.midpointIdx",
             "FaultProof",
             "GameState",
             "LegalKernel",
             "MAX_BISECTION_DEPTH",
-            "applyTransition",
-            "applyTransition_respondDisagree_shape",
-            "nat_sub_lt_sub_right"
+            "StateCommit",
+            "applyTransition"
           ]
         }
       ]
@@ -21769,7 +21848,7 @@
     {
       "module": "LegalKernel.FaultProof.GameTransitionEdgeCases",
       "path": "LegalKernel/FaultProof/GameTransitionEdgeCases.lean",
-      "declaration_count": 6,
+      "declaration_count": 7,
       "declarations": [
         {
           "kind": "namespace",
@@ -21812,14 +21891,21 @@
         },
         {
           "kind": "theorem",
-          "name": "applyTransition_rejects_malformed_midpoint",
-          "line": 100,
+          "name": "midpointIdx_degenerate_iff",
+          "line": 103,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "applyTransition_submitMidpoint_rejects_iff_degenerate",
+          "line": 124,
           "called": [
-            "Claim",
             "FaultProof",
             "LegalKernel",
             "MAX_BISECTION_DEPTH",
-            "applyTransition"
+            "StateCommit",
+            "applyTransition",
+            "midpointIdx_degenerate_iff"
           ]
         }
       ]
@@ -22235,24 +22321,24 @@
     {
       "module": "LegalKernel.FaultProof.Observer",
       "path": "LegalKernel/FaultProof/Observer.lean",
-      "declaration_count": 9,
+      "declaration_count": 7,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 40,
+          "line": 39,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 41,
+          "line": 40,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Observer",
-          "line": 42,
+          "line": 41,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -22260,7 +22346,7 @@
         {
           "kind": "def",
           "name": "detectFault",
-          "line": 55,
+          "line": 54,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -22274,7 +22360,7 @@
         {
           "kind": "theorem",
           "name": "detectFault_deterministic",
-          "line": 63,
+          "line": 62,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -22286,7 +22372,7 @@
         {
           "kind": "def",
           "name": "buildObserverCellProofs",
-          "line": 76,
+          "line": 75,
           "called": [
             "Action",
             "Action.requiredCells",
@@ -22300,35 +22386,9 @@
         {
           "kind": "theorem",
           "name": "buildObserverCellProofs_verifies",
-          "line": 84,
+          "line": 83,
           "called": [
             "Action",
-            "ActorId",
-            "ExtendedState",
-            "buildObserverCellProofs",
-            "commitExtendedState",
-            "es",
-            "verifyCellProofs",
-            "verifyCellProofs_complete_for_canonical_bundle"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "computeNextMove",
-          "line": 97,
-          "called": [
-            "GameTransition",
-            "LogIndex",
-            "StateCommit",
-            "TurnSide",
-            "honestStrategy"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "computeNextMove_is_honest",
-          "line": 105,
-          "called": [
             "Action.readOnlyCells",
             "Action.requiredCells",
             "Action.writeCells",
@@ -22337,15 +22397,13 @@
             "ExtendedState",
             "FaultProof",
             "LegalKernel",
-            "LogIndex",
             "Observer",
-            "StateCommit",
-            "TurnSide",
             "buildObserverCellProofs",
-            "computeNextMove",
+            "commitExtendedState",
             "es",
-            "honestStrategy",
-            "transfer"
+            "transfer",
+            "verifyCellProofs",
+            "verifyCellProofs_complete_for_canonical_bundle"
           ]
         }
       ]
@@ -23312,7 +23370,7 @@
     {
       "module": "LegalKernel.FaultProof.Settlement",
       "path": "LegalKernel/FaultProof/Settlement.lean",
-      "declaration_count": 9,
+      "declaration_count": 10,
       "declarations": [
         {
           "kind": "namespace",
@@ -23328,8 +23386,21 @@
         },
         {
           "kind": "theorem",
-          "name": "honest_challenger_responds_truthfully_wins",
-          "line": 75,
+          "name": "terminate_responder_wins_when_step_reproduces_high",
+          "line": 79,
+          "called": [
+            "GameState",
+            "KernelStep",
+            "applyTransition",
+            "challenger",
+            "kernelStepApply",
+            "step"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "terminate_responder_loses_when_step_differs",
+          "line": 103,
           "called": [
             "GameState",
             "KernelStep",
@@ -23342,34 +23413,33 @@
         },
         {
           "kind": "theorem",
-          "name": "sequencer_responding_with_disputed_high_loses",
-          "line": 120,
+          "name": "terminate_responder_with_invalid_proofs_loses",
+          "line": 124,
           "called": [
             "GameState",
             "KernelStep",
-            "StateCommit",
             "applyTransition",
+            "challenger",
             "kernelStepApply",
             "step"
           ]
         },
         {
           "kind": "theorem",
-          "name": "sequencer_responding_with_invalid_proofs_loses",
-          "line": 146,
+          "name": "terminate_responder_with_wrong_prestate_loses",
+          "line": 150,
           "called": [
             "GameState",
             "KernelStep",
-            "StateCommit",
             "applyTransition",
-            "kernelStepApply",
+            "challenger",
             "step"
           ]
         },
         {
           "kind": "def",
           "name": "settlementDisagreement",
-          "line": 182,
+          "line": 185,
           "called": [
             "GameState",
             "LogIndex",
@@ -23379,7 +23449,7 @@
         {
           "kind": "instance",
           "name": "instDecidableSettlementDisagreement",
-          "line": 189,
+          "line": 192,
           "called": [
             "GameState",
             "LogIndex",
@@ -23390,25 +23460,23 @@
         {
           "kind": "theorem",
           "name": "honest_challenger_wins_against_invalid_state_root",
-          "line": 213,
+          "line": 211,
           "called": [
             "GameState",
             "KernelStep",
             "LogIndex",
             "StateCommit",
             "applyTransition",
-            "challenger",
-            "honest_challenger_responds_truthfully_wins",
             "kernelStepApply",
-            "sequencer_responding_with_disputed_high_loses",
             "settlementDisagreement",
-            "step"
+            "step",
+            "terminate_responder_loses_when_step_differs"
           ]
         },
         {
           "kind": "theorem",
           "name": "inDisagreementWithTruth_implies_settlementDisagreement",
-          "line": 262,
+          "line": 250,
           "called": [
             "FaultProof",
             "GameState",
@@ -24611,24 +24679,24 @@
     {
       "module": "LegalKernel.FaultProof.Step",
       "path": "LegalKernel/FaultProof/Step.lean",
-      "declaration_count": 11,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 34,
+          "line": 35,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 35,
+          "line": 36,
           "called": []
         },
         {
           "kind": "structure",
           "name": "KernelStep",
-          "line": 51,
+          "line": 57,
           "called": [
             "CellProofBundle",
             "SignedAction",
@@ -24638,18 +24706,49 @@
         {
           "kind": "def",
           "name": "kernelStepApply",
-          "line": 91,
+          "line": 106,
           "called": [
             "KernelStep",
             "StateCommit",
+            "actionFieldsForL1",
+            "actionKindByte",
             "step",
+            "stepVMHash",
+            "verifyCellProofs"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelStepApply_eq_claim_iff_correct",
+          "line": 121,
+          "called": [
+            "KernelStep",
+            "actionFieldsForL1",
+            "actionKindByte",
+            "kernelStepApply",
+            "step",
+            "stepVMHash",
+            "verifyCellProofs"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelStepApply_empty_bundle_computes",
+          "line": 142,
+          "called": [
+            "SignedAction",
+            "StateCommit",
+            "actionFieldsForL1",
+            "actionKindByte",
+            "kernelStepApply",
+            "stepVMHash",
             "verifyCellProofs"
           ]
         },
         {
           "kind": "instance",
           "name": "instDecidableKernelStepApplySome",
-          "line": 100,
+          "line": 156,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -24660,7 +24759,7 @@
         {
           "kind": "theorem",
           "name": "kernelStepApply_deterministic",
-          "line": 107,
+          "line": 163,
           "called": [
             "KernelStep",
             "kernelStepApply"
@@ -24669,7 +24768,7 @@
         {
           "kind": "def",
           "name": "chainKernelStepApply",
-          "line": 116,
+          "line": 172,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -24679,7 +24778,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_empty",
-          "line": 128,
+          "line": 184,
           "called": [
             "StateCommit",
             "chainKernelStepApply"
@@ -24688,7 +24787,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_deterministic",
-          "line": 133,
+          "line": 189,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -24698,7 +24797,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_singleton_match",
-          "line": 144,
+          "line": 200,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -24709,15 +24808,70 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_split",
-          "line": 160,
+          "line": 216,
           "called": [
-            "FaultProof",
             "KernelStep",
-            "LegalKernel",
             "StateCommit",
             "chainKernelStepApply",
             "chainKernelStepApply_empty",
             "kernelStepApply"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildKernelStep",
+          "line": 262,
+          "called": [
+            "ExtendedState",
+            "KernelStep",
+            "SignedAction",
+            "buildCellProofsForAction",
+            "commitExtendedState",
+            "es",
+            "recomputeCommitment"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "buildKernelStep_verifies",
+          "line": 271,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "buildCellProofsForAction",
+            "buildCellProofsForAction_verifies",
+            "commitExtendedState",
+            "es",
+            "verifyCellProofs"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "buildCellProofsForAction_eq_observer",
+          "line": 282,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "buildCellProofsForAction",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelStepApply_canonical",
+          "line": 308,
+          "called": [
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "SignedAction",
+            "StateCommit",
+            "buildKernelStep",
+            "buildKernelStep_verifies",
+            "chainKernelStepApply",
+            "es",
+            "kernelStepApply",
+            "stepVMHashFromAction"
           ]
         }
       ]
@@ -25592,7 +25746,7 @@
     {
       "module": "LegalKernel.FaultProof.Strategy",
       "path": "LegalKernel/FaultProof/Strategy.lean",
-      "declaration_count": 8,
+      "declaration_count": 11,
       "declarations": [
         {
           "kind": "namespace",
@@ -25655,7 +25809,7 @@
         {
           "kind": "def",
           "name": "isHonestByTruth",
-          "line": 121,
+          "line": 124,
           "called": [
             "GameTransition",
             "LogIndex",
@@ -25667,16 +25821,47 @@
         {
           "kind": "theorem",
           "name": "honest_strategy_unique",
-          "line": 137,
+          "line": 140,
           "called": [
-            "FaultProof",
             "GameTransition",
-            "LegalKernel",
             "LogIndex",
             "StateCommit",
             "TurnSide",
             "honestStrategy",
             "isHonestByTruth"
+          ]
+        },
+        {
+          "kind": "namespace",
+          "name": "Observer",
+          "line": 163,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "computeNextMove",
+          "line": 168,
+          "called": [
+            "GameTransition",
+            "LogIndex",
+            "StateCommit",
+            "TurnSide",
+            "honestStrategy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "computeNextMove_is_honest",
+          "line": 176,
+          "called": [
+            "FaultProof",
+            "LegalKernel",
+            "LogIndex",
+            "Observer",
+            "StateCommit",
+            "TurnSide",
+            "computeNextMove",
+            "honestStrategy"
           ]
         }
       ]
@@ -25805,19 +25990,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 74,
+          "line": 84,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 75,
+          "line": 85,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "TerminateBundle",
-          "line": 76,
+          "line": 86,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -25825,7 +26010,7 @@
         {
           "kind": "structure",
           "name": "TerminateBundle",
-          "line": 105,
+          "line": 115,
           "called": [
             "ActorId",
             "CellProofBundle"
@@ -25834,7 +26019,7 @@
         {
           "kind": "def",
           "name": "buildTerminateBundle",
-          "line": 144,
+          "line": 159,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -25847,7 +26032,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_deterministic",
-          "line": 157,
+          "line": 172,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -25858,7 +26043,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionKind",
-          "line": 164,
+          "line": 179,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -25870,7 +26055,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionFields",
-          "line": 170,
+          "line": 185,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -25882,7 +26067,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_signer",
-          "line": 176,
+          "line": 191,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -25892,8 +26077,8 @@
         },
         {
           "kind": "theorem",
-          "name": "buildTerminateBundle_claimedPostCommit",
-          "line": 183,
+          "name": "buildTerminateBundle_expectedPostCommit",
+          "line": 198,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -25905,7 +26090,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_cellProofs",
-          "line": 191,
+          "line": 206,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -25916,7 +26101,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_cellProofs_verify",
-          "line": 199,
+          "line": 214,
           "called": [
             "ExtendedState",
             "LegalKernel.Runtime.CellProofJson",
@@ -25931,19 +26116,19 @@
         {
           "kind": "def",
           "name": "formatUInt8",
-          "line": 215,
+          "line": 230,
           "called": []
         },
         {
           "kind": "def",
           "name": "formatUInt64",
-          "line": 219,
+          "line": 234,
           "called": []
         },
         {
           "kind": "def",
           "name": "formatCellProofsArray",
-          "line": 225,
+          "line": 240,
           "called": [
             "CellProofBundle",
             "entries",
@@ -25953,7 +26138,7 @@
         {
           "kind": "def",
           "name": "formatTerminateBundleJson",
-          "line": 242,
+          "line": 257,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -25974,13 +26159,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 33,
+          "line": 34,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 34,
+          "line": 35,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -25988,7 +26173,7 @@
         {
           "kind": "def",
           "name": "applyCellWrites",
-          "line": 49,
+          "line": 50,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -25999,7 +26184,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_deterministic",
-          "line": 53,
+          "line": 54,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -26010,7 +26195,7 @@
         {
           "kind": "def",
           "name": "extractRequiredCells",
-          "line": 64,
+          "line": 65,
           "called": [
             "Action.requiredCells",
             "CellTag",
@@ -26020,7 +26205,7 @@
         {
           "kind": "theorem",
           "name": "extractRequiredCells_deterministic",
-          "line": 68,
+          "line": 69,
           "called": [
             "SignedAction",
             "extractRequiredCells"
@@ -26029,7 +26214,7 @@
         {
           "kind": "def",
           "name": "Action.requiredCellProofs",
-          "line": 78,
+          "line": 79,
           "called": [
             "CellProofBundle",
             "ExtendedState",
@@ -26041,7 +26226,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCellProofs_size",
-          "line": 84,
+          "line": 85,
           "called": [
             "Action.requiredCellProofs",
             "ExtendedState",
@@ -26054,7 +26239,7 @@
         {
           "kind": "structure",
           "name": "NonMembershipProof",
-          "line": 97,
+          "line": 98,
           "called": [
             "CellTag",
             "ExtendedState"
@@ -26063,7 +26248,7 @@
         {
           "kind": "def",
           "name": "NonMembershipProof.build",
-          "line": 110,
+          "line": 111,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26075,7 +26260,7 @@
         {
           "kind": "theorem",
           "name": "NonMembershipProof.build_deterministic",
-          "line": 117,
+          "line": 118,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26086,7 +26271,7 @@
         {
           "kind": "def",
           "name": "isLegalTranscript",
-          "line": 129,
+          "line": 130,
           "called": [
             "KernelStep",
             "StateCommit"
@@ -26095,7 +26280,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsLegalTranscript",
-          "line": 138,
+          "line": 139,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -26105,7 +26290,7 @@
         {
           "kind": "theorem",
           "name": "isLegalTranscript_nil",
-          "line": 152,
+          "line": 153,
           "called": [
             "StateCommit",
             "isLegalTranscript"
@@ -26114,7 +26299,7 @@
         {
           "kind": "theorem",
           "name": "isLegalTranscript_singleton",
-          "line": 157,
+          "line": 158,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -26124,7 +26309,7 @@
         {
           "kind": "def",
           "name": "chainKernelStepApplyFromLog",
-          "line": 176,
+          "line": 177,
           "called": [
             "ExtendedState",
             "KernelStep",
@@ -26138,7 +26323,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_empty",
-          "line": 184,
+          "line": 185,
           "called": [
             "ExtendedState",
             "chainKernelStepApplyFromLog",
@@ -26148,7 +26333,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_length",
-          "line": 188,
+          "line": 189,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -26160,7 +26345,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_first_preCommit",
-          "line": 199,
+          "line": 200,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -26172,7 +26357,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_isLegalTranscript",
-          "line": 209,
+          "line": 210,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -39518,14 +39703,13 @@
           "line": 114,
           "called": [
             "GameTransition",
-            "claimJson",
             "commitHex"
           ]
         },
         {
           "kind": "def",
           "name": "outcomeJson",
-          "line": 136,
+          "line": 141,
           "called": [
             "GameError",
             "GameState",
@@ -39535,7 +39719,7 @@
         {
           "kind": "structure",
           "name": "TraceStep",
-          "line": 158,
+          "line": 163,
           "called": [
             "GameError",
             "GameState",
@@ -39545,7 +39729,7 @@
         {
           "kind": "structure",
           "name": "Trace",
-          "line": 167,
+          "line": 172,
           "called": [
             "GameState",
             "TraceStep"
@@ -39554,7 +39738,7 @@
         {
           "kind": "def",
           "name": "traceStepJson",
-          "line": 179,
+          "line": 184,
           "called": [
             "TraceStep",
             "outcomeJson",
@@ -39564,7 +39748,7 @@
         {
           "kind": "def",
           "name": "traceJson",
-          "line": 184,
+          "line": 189,
           "called": [
             "Trace",
             "gameStateJson",
@@ -39574,7 +39758,7 @@
         {
           "kind": "def",
           "name": "mkCommit",
-          "line": 195,
+          "line": 200,
           "called": [
             "StateCommit"
           ]
@@ -39582,13 +39766,13 @@
         {
           "kind": "def",
           "name": "canonicalDeploymentId",
-          "line": 201,
+          "line": 206,
           "called": []
         },
         {
           "kind": "def",
           "name": "mkInitialState",
-          "line": 207,
+          "line": 212,
           "called": [
             "ActorId",
             "GameState",
@@ -39602,7 +39786,7 @@
         {
           "kind": "def",
           "name": "step",
-          "line": 226,
+          "line": 231,
           "called": [
             "GameState",
             "GameTransition",
@@ -39613,7 +39797,7 @@
         {
           "kind": "def",
           "name": "runSequence",
-          "line": 236,
+          "line": 241,
           "called": [
             "GameState",
             "GameTransition",
@@ -39624,7 +39808,7 @@
         {
           "kind": "def",
           "name": "mkTrace",
-          "line": 246,
+          "line": 251,
           "called": [
             "GameState",
             "GameTransition",
@@ -39635,7 +39819,7 @@
         {
           "kind": "def",
           "name": "traceSingleStepAgree",
-          "line": 255,
+          "line": 260,
           "called": [
             "Trace",
             "mkCommit",
@@ -39646,7 +39830,7 @@
         {
           "kind": "def",
           "name": "traceSingleStepDisagree",
-          "line": 265,
+          "line": 270,
           "called": [
             "Trace",
             "mkCommit",
@@ -39657,7 +39841,7 @@
         {
           "kind": "def",
           "name": "traceBisection4Agree",
-          "line": 274,
+          "line": 279,
           "called": [
             "Trace",
             "mkCommit",
@@ -39668,7 +39852,7 @@
         {
           "kind": "def",
           "name": "traceTimeoutSequencer",
-          "line": 291,
+          "line": 296,
           "called": [
             "Trace",
             "mkInitialState",
@@ -39678,7 +39862,7 @@
         {
           "kind": "def",
           "name": "traceTimeoutChallenger",
-          "line": 299,
+          "line": 304,
           "called": [
             "Trace",
             "challenger",
@@ -39689,7 +39873,7 @@
         {
           "kind": "def",
           "name": "traceRespondAgreeNoPending",
-          "line": 308,
+          "line": 313,
           "called": [
             "Trace",
             "mkInitialState",
@@ -39699,7 +39883,7 @@
         {
           "kind": "def",
           "name": "traceSubmitWhilePending",
-          "line": 317,
+          "line": 322,
           "called": [
             "Trace",
             "mkCommit",
@@ -39709,8 +39893,8 @@
         },
         {
           "kind": "def",
-          "name": "traceMidpointBelowRange",
-          "line": 326,
+          "name": "traceMidpointDerived",
+          "line": 344,
           "called": [
             "Trace",
             "mkCommit",
@@ -39720,8 +39904,8 @@
         },
         {
           "kind": "def",
-          "name": "traceMidpointAboveRange",
-          "line": 334,
+          "name": "traceMidpointSingleStepRange",
+          "line": 354,
           "called": [
             "Trace",
             "mkCommit",
@@ -39731,8 +39915,8 @@
         },
         {
           "kind": "def",
-          "name": "traceMidpointAtLow",
-          "line": 343,
+          "name": "traceMidpointEmptyRange",
+          "line": 363,
           "called": [
             "Trace",
             "mkCommit",
@@ -39742,8 +39926,8 @@
         },
         {
           "kind": "def",
-          "name": "traceMidpointAtHigh",
-          "line": 351,
+          "name": "traceMidpointInvertedRange",
+          "line": 374,
           "called": [
             "Trace",
             "mkCommit",
@@ -39754,7 +39938,7 @@
         {
           "kind": "def",
           "name": "traceTransitionToSettled",
-          "line": 360,
+          "line": 383,
           "called": [
             "Trace",
             "mkCommit",
@@ -39765,7 +39949,7 @@
         {
           "kind": "def",
           "name": "traceRespondDisagreeNoPending",
-          "line": 369,
+          "line": 392,
           "called": [
             "Trace",
             "mkInitialState",
@@ -39775,7 +39959,7 @@
         {
           "kind": "def",
           "name": "traceBisection2ChallengerStart",
-          "line": 377,
+          "line": 400,
           "called": [
             "Trace",
             "challenger",
@@ -39787,7 +39971,7 @@
         {
           "kind": "def",
           "name": "traceBisection8Deep",
-          "line": 388,
+          "line": 411,
           "called": [
             "Trace",
             "mkCommit",
@@ -39798,7 +39982,7 @@
         {
           "kind": "def",
           "name": "happyTraces",
-          "line": 413,
+          "line": 436,
           "called": [
             "GameTransition",
             "Trace",
@@ -39810,13 +39994,13 @@
         {
           "kind": "def",
           "name": "errorTraces",
-          "line": 439,
+          "line": 462,
           "called": [
             "Trace",
-            "traceMidpointAboveRange",
-            "traceMidpointAtHigh",
-            "traceMidpointAtLow",
-            "traceMidpointBelowRange",
+            "traceMidpointDerived",
+            "traceMidpointEmptyRange",
+            "traceMidpointInvertedRange",
+            "traceMidpointSingleStepRange",
             "traceRespondAgreeNoPending",
             "traceRespondDisagreeNoPending",
             "traceSubmitWhilePending",
@@ -39826,7 +40010,7 @@
         {
           "kind": "def",
           "name": "timeoutTraces",
-          "line": 450,
+          "line": 473,
           "called": [
             "Trace",
             "traceTimeoutChallenger",
@@ -39836,7 +40020,7 @@
         {
           "kind": "def",
           "name": "singleStepTraces",
-          "line": 454,
+          "line": 477,
           "called": [
             "Trace",
             "traceSingleStepAgree",
@@ -39846,7 +40030,7 @@
         {
           "kind": "def",
           "name": "multiRoundTraces",
-          "line": 458,
+          "line": 481,
           "called": [
             "Trace",
             "mkCommit",
@@ -39860,7 +40044,7 @@
         {
           "kind": "def",
           "name": "variedActorTraces",
-          "line": 476,
+          "line": 499,
           "called": [
             "Trace",
             "challenger",
@@ -39872,7 +40056,7 @@
         {
           "kind": "def",
           "name": "variedBondTraces",
-          "line": 497,
+          "line": 520,
           "called": [
             "Trace",
             "challenger",
@@ -39884,7 +40068,7 @@
         {
           "kind": "def",
           "name": "depthCapTraces",
-          "line": 517,
+          "line": 540,
           "called": [
             "GameTransition",
             "Trace",
@@ -39897,7 +40081,7 @@
         {
           "kind": "def",
           "name": "baseCorpus",
-          "line": 550,
+          "line": 573,
           "called": [
             "Trace",
             "depthCapTraces",
@@ -39913,7 +40097,7 @@
         {
           "kind": "def",
           "name": "proceduralBatch",
-          "line": 558,
+          "line": 581,
           "called": [
             "Trace",
             "TurnSide",
@@ -39926,7 +40110,7 @@
         {
           "kind": "def",
           "name": "corpus",
-          "line": 590,
+          "line": 612,
           "called": [
             "Trace",
             "baseCorpus",
@@ -39936,7 +40120,7 @@
         {
           "kind": "def",
           "name": "encodeFixture",
-          "line": 596,
+          "line": 618,
           "called": [
             "traceJson"
           ]
@@ -39944,7 +40128,7 @@
         {
           "kind": "def",
           "name": "writeCorpus",
-          "line": 606,
+          "line": 628,
           "called": [
             "encodeFixture"
           ]
@@ -39952,7 +40136,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 612,
+          "line": 634,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.ObserverGameTraces",
             "applyTransition",
@@ -50707,7 +50891,6 @@
           "name": "tests",
           "line": 44,
           "called": [
-            "Claim",
             "DisputedRange",
             "LegalKernel.Test.FaultProof.Game",
             "MAX_BISECTION_DEPTH",
@@ -50740,11 +50923,14 @@
           "line": 25,
           "called": [
             "LegalKernel.Test.FaultProof.GameTransitionEdgeCases",
+            "MAX_BISECTION_DEPTH",
+            "StateCommit",
             "TestCase",
+            "applyTransition",
             "applyTransition_rejects_disagree_without_pendingMidpoint",
-            "applyTransition_rejects_malformed_midpoint",
             "applyTransition_rejects_post_settlement",
             "applyTransition_rejects_response_without_pendingMidpoint",
+            "applyTransition_submitMidpoint_rejects_iff_degenerate",
             "assert"
           ]
         }
@@ -50908,18 +51094,18 @@
     {
       "module": "LegalKernel.Test.FaultProof.Settlement",
       "path": "LegalKernel/Test/FaultProof/Settlement.lean",
-      "declaration_count": 10,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.Settlement",
-          "line": 34,
+          "line": 43,
           "called": []
         },
         {
           "kind": "def",
           "name": "oneCommit",
-          "line": 37,
+          "line": 46,
           "called": [
             "StateCommit"
           ]
@@ -50927,7 +51113,7 @@
         {
           "kind": "def",
           "name": "twoCommit",
-          "line": 44,
+          "line": 53,
           "called": [
             "StateCommit"
           ]
@@ -50935,7 +51121,7 @@
         {
           "kind": "def",
           "name": "threeCommit",
-          "line": 51,
+          "line": 60,
           "called": [
             "StateCommit"
           ]
@@ -50943,7 +51129,7 @@
         {
           "kind": "def",
           "name": "singleStepRange",
-          "line": 59,
+          "line": 68,
           "called": [
             "DisputedRange",
             "oneCommit",
@@ -50953,7 +51139,7 @@
         {
           "kind": "def",
           "name": "challengerRespondingGame",
-          "line": 65,
+          "line": 74,
           "called": [
             "GameState",
             "challenger",
@@ -50964,7 +51150,7 @@
         {
           "kind": "def",
           "name": "sequencerRespondingGame",
-          "line": 79,
+          "line": 88,
           "called": [
             "GameState",
             "challenger",
@@ -50975,7 +51161,7 @@
         {
           "kind": "def",
           "name": "trivialSignedAction",
-          "line": 92,
+          "line": 101,
           "called": [
             "SignedAction",
             "freezeResource"
@@ -50984,7 +51170,7 @@
         {
           "kind": "def",
           "name": "stepClaiming",
-          "line": 100,
+          "line": 110,
           "called": [
             "CellProofBundle.empty",
             "KernelStep",
@@ -50994,9 +51180,42 @@
         },
         {
           "kind": "def",
-          "name": "tests",
-          "line": 107,
+          "name": "computedFor",
+          "line": 125,
           "called": [
+            "CellProofBundle.empty",
+            "StateCommit"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "matchingGame",
+          "line": 134,
+          "called": [
+            "GameState",
+            "TurnSide",
+            "challengerRespondingGame",
+            "computedFor",
+            "oneCommit"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mismatchGame",
+          "line": 142,
+          "called": [
+            "GameState",
+            "TurnSide",
+            "challengerRespondingGame"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 146,
+          "called": [
+            "GameState",
+            "KernelStep",
             "LegalKernel.Test.FaultProof.Settlement",
             "LogIndex",
             "StateCommit",
@@ -51004,17 +51223,21 @@
             "applyTransition",
             "assert",
             "assertEq",
+            "challenger",
             "challengerRespondingGame",
-            "honest_challenger_responds_truthfully_wins",
+            "computedFor",
             "honest_challenger_wins_against_invalid_state_root",
             "inDisagreementWithTruth",
             "inDisagreementWithTruth_implies_settlementDisagreement",
+            "kernelStepApply",
+            "matchingGame",
+            "mismatchGame",
             "oneCommit",
-            "sequencerRespondingGame",
-            "sequencer_responding_with_disputed_high_loses",
             "settlementDisagreement",
             "step",
             "stepClaiming",
+            "terminate_responder_loses_when_step_differs",
+            "terminate_responder_wins_when_step_reproduces_high",
             "threeCommit",
             "twoCommit"
           ]
@@ -52173,7 +52396,7 @@
         },
         {
           "kind": "def",
-          "name": "claimedPostCommit_matches_stepVMHashFromAction",
+          "name": "expectedPostCommit_matches_stepVMHashFromAction",
           "line": 93,
           "called": [
             "buildTerminateBundle",
@@ -52326,7 +52549,7 @@
             "build_terminate_bundle_api_stable",
             "bundle_is_deterministic",
             "cellProofs_verify_against_preCommit",
-            "claimedPostCommit_matches_stepVMHashFromAction",
+            "expectedPostCommit_matches_stepVMHashFromAction",
             "format_terminate_bundle_json_api_stable",
             "json_byte_pinning_revoke_local_policy",
             "json_byte_pinning_transfer_minimal",
@@ -53726,14 +53949,13 @@
           "name": "simulateRound",
           "line": 81,
           "called": [
-            "Claim",
             "applyTransition"
           ]
         },
         {
           "kind": "def",
           "name": "simulateNRounds",
-          "line": 100,
+          "line": 101,
           "called": [
             "simulateRound"
           ]
@@ -53741,7 +53963,7 @@
         {
           "kind": "def",
           "name": "multiRoundDisagreementPersists",
-          "line": 110,
+          "line": 111,
           "called": [
             "MultiRoundInput",
             "simulateNRounds"
@@ -53750,7 +53972,7 @@
         {
           "kind": "def",
           "name": "runMultiRoundDisagreement",
-          "line": 125,
+          "line": 126,
           "called": [
             "forAll",
             "genMultiRoundInput",
@@ -53762,13 +53984,13 @@
         {
           "kind": "structure",
           "name": "BondConservationInput",
-          "line": 138,
+          "line": 139,
           "called": []
         },
         {
           "kind": "def",
           "name": "genBondConservationInput",
-          "line": 146,
+          "line": 147,
           "called": [
             "BondConservationInput",
             "Gen",
@@ -53780,7 +54002,7 @@
         {
           "kind": "def",
           "name": "bondPoolConserved",
-          "line": 167,
+          "line": 168,
           "called": [
             "BondConservationInput",
             "simulateNRounds"
@@ -53789,7 +54011,7 @@
         {
           "kind": "def",
           "name": "runBondConservation",
-          "line": 176,
+          "line": 177,
           "called": [
             "bondPoolConserved",
             "forAll",
@@ -53801,13 +54023,13 @@
         {
           "kind": "structure",
           "name": "PerfInput",
-          "line": 188,
+          "line": 189,
           "called": []
         },
         {
           "kind": "def",
           "name": "genPerfInput",
-          "line": 194,
+          "line": 195,
           "called": [
             "Gen",
             "PerfInput",
@@ -53817,7 +54039,7 @@
         {
           "kind": "def",
           "name": "roundCountWithinLinearBound",
-          "line": 202,
+          "line": 203,
           "called": [
             "PerfInput",
             "challenger",
@@ -53828,7 +54050,7 @@
         {
           "kind": "def",
           "name": "runPerfProperty",
-          "line": 226,
+          "line": 227,
           "called": [
             "forAll",
             "genPerfInput",
@@ -53840,7 +54062,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 235,
+          "line": 236,
           "called": [
             "LegalKernel.Test.Properties.FaultProofDeep",
             "TestCase",

@@ -72,21 +72,33 @@ def tests : List TestCase :=
         assert (TurnSide.flip .sequencer = .challenger) "sequencer flips to challenger"
         assert (TurnSide.flip .challenger = .sequencer) "challenger flips to sequencer"
     }
-  , { name := "submitMidpoint succeeds within range"
+  , { name := "submitMidpoint installs the CANONICAL midpoint index"
     , body := do
-        let mp : Claim := { idx := 32, commit := ByteArray.empty }
-        match applyTransition initialGame (.submitMidpoint mp) with
+        -- The caller supplies only a commit; the index is derived as
+        -- `(low + high) / 2`, mirroring the L1 contract's `mpIdx`.
+        -- `initialGame`'s range is [0, 64], so the midpoint is 32.
+        match applyTransition initialGame (.submitMidpoint ByteArray.empty) with
         | .ok gs' =>
-          assert gs'.pendingMidpoint.isSome "midpoint pending after submit"
+          match gs'.pendingMidpoint with
+          | none    => assert false "midpoint should be pending after submit"
+          | some mp =>
+            assertEq (expected := 32) (actual := mp.idx)
+              "the derived midpoint index, not a caller-supplied one"
           assertEq (expected := TurnSide.challenger) (actual := gs'.turn)
             "turn flipped after submit"
         | .error _ => assert false "submitMidpoint should succeed"
     }
-  , { name := "submitMidpoint rejects out-of-range midpoint"
+  , { name := "submitMidpoint rejects only on a DEGENERATE range"
     , body := do
-        let mp : Claim := { idx := 100, commit := ByteArray.empty }
-        match applyTransition initialGame (.submitMidpoint mp) with
-        | .ok _   => assert false "should reject mp outside range"
+        -- An out-of-range index is no longer expressible: the guard
+        -- can fire only when the range is too narrow to bisect, which
+        -- is what forces `terminateOnSingleStep` instead.
+        let singleStep : LegalKernel.FaultProof.GameState :=
+          { initialGame with
+              range := { low  := { idx := 5, commit := ByteArray.empty },
+                         high := { idx := 6, commit := ByteArray.empty } } }
+        match applyTransition singleStep (.submitMidpoint ByteArray.empty) with
+        | .ok _   => assert false "should reject a degenerate range"
         | .error e =>
           assertEq (expected := GameError.midpointOutOfRange) (actual := e)
             "got expected error variant"
@@ -134,8 +146,7 @@ def tests : List TestCase :=
     , body := do
         let endedGame : LegalKernel.FaultProof.GameState :=
           { initialGame with status := .sequencerWon }
-        let mp : Claim := { idx := 32, commit := ByteArray.empty }
-        match applyTransition endedGame (.submitMidpoint mp) with
+        match applyTransition endedGame (.submitMidpoint ByteArray.empty) with
         | .ok _   => assert false "should reject moves on ended game"
         | .error e =>
           assertEq (expected := GameError.gameAlreadyEnded) (actual := e)
@@ -229,9 +240,8 @@ def tests : List TestCase :=
         -- equal outputs.  We don't have BEq on `Except GameError
         -- GameState`, so we project both into the success branch
         -- and compare the GameState fields.
-        let mp : Claim := { idx := 32, commit := ByteArray.empty }
-        match applyTransition initialGame (.submitMidpoint mp),
-              applyTransition initialGame (.submitMidpoint mp) with
+        match applyTransition initialGame (.submitMidpoint ByteArray.empty),
+              applyTransition initialGame (.submitMidpoint ByteArray.empty) with
         | .ok gs1, .ok gs2 =>
           -- Compare critical fields.  GameState doesn't have BEq
           -- (ByteArray field), so compare a couple of observable

@@ -96,8 +96,11 @@ def honestStrategy
         -- My turn to submit: pick the truthful midpoint.
         let midIdx := gs.range.midpointIdx
         if gs.range.low.idx < midIdx ∧ midIdx < gs.range.high.idx then
-          some (.submitMidpoint
-                  { idx := midIdx, commit := truth midIdx })
+          -- Only the COMMIT is submitted; `applyTransition` derives
+          -- the index as `gs.range.midpointIdx`, the same value
+          -- computed here.  The strategy no longer has to be trusted
+          -- to pick the canonical index — it cannot pick another one.
+          some (.submitMidpoint (truth midIdx))
         else
           -- Range is single-step (or degenerate); termination
           -- needs a KernelStep argument the strategy doesn't have.
@@ -144,6 +147,39 @@ theorem honest_strategy_unique
     (h_turn : gs.turn = me) :
     strategy gs me = honestStrategy truth gs me :=
   h gs me h_status h_turn
+
+/-! ## The observer's honest-move entry point
+
+`Observer.computeNextMove` lives here rather than in
+`Observer.lean` for a layering reason: `Step.kernelStepApply`
+computes the post-state commitment via
+`StepVMCoherence.stepVMHash`, so `Step` imports
+`StepVMCoherence`, which imports `Observer` for
+`buildObserverCellProofs`.  Keeping a `Game`-dependent wrapper in
+`Observer.lean` would close the cycle
+`Step → StepVMCoherence → Observer → Strategy → Game → Step`.
+The `Observer` namespace is preserved, so the declaration's fully
+qualified name is unchanged. -/
+
+namespace Observer
+
+/-- Compute the next honest move in a game.  Wraps
+    `honestStrategy` with deployment-config-aware behaviour: uses
+    the deployment's truth function + the player's identity. -/
+def computeNextMove
+    (truth : LogIndex → StateCommit)
+    (gs : LegalKernel.FaultProof.GameState) (me : TurnSide) :
+    Option GameTransition :=
+  honestStrategy truth gs me
+
+/-- The computed move is the unique honest move (per
+    `honest_strategy_unique`). -/
+theorem computeNextMove_is_honest
+    (truth : LogIndex → StateCommit)
+    (gs : LegalKernel.FaultProof.GameState) (me : TurnSide) :
+    computeNextMove truth gs me = honestStrategy truth gs me := rfl
+
+end Observer
 
 /-! ## Smoke checks -/
 

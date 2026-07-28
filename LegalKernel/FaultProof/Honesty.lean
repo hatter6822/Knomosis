@@ -259,7 +259,8 @@ theorem disagreement_persists_along_trace
     inDisagreementWithTruth truth gs_k := by
   induction h_trace with
   | refl => exact h_disagree₀
-  | @step gs gs' gs_k k mp t h_pending h_status _h_wf_mp h_t h_apply h_honest _h_tail ih =>
+  | @step gs gs' gs_k k mp t h_pending h_status _h_canonical _h_wf_mp h_t h_apply
+          h_honest _h_tail ih =>
     -- The node's own response carries its honesty obligation.
     have h_disagree' :=
       honest_challenger_wins_per_round truth gs gs' mp

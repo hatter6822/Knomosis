@@ -184,14 +184,14 @@ pub enum SubmitError {
     #[error("mock submitter received unexpected network call")]
     MockUnsupported,
 
-    /// The off-chain terminate-bundle oracle's `claimed_post_commit`
-    /// disagrees with the strategy's `claimed_post_commit`.  This
+    /// The off-chain terminate-bundle oracle's `expected_post_commit`
+    /// disagrees with the strategy's `expected_post_commit`.  This
     /// indicates the truth oracle and the bundle oracle have
     /// drifted (e.g., operator pointed at two different knomosis
     /// binaries / log files).  Workstream SVC.5 defence-in-depth:
     /// refuse to broadcast a calldata that would lose the game.
     #[error(
-        "terminate-bundle oracle's claimed_post_commit disagrees with strategy's; \
+        "terminate-bundle oracle's expected_post_commit disagrees with strategy's; \
          truth oracle and bundle oracle have drifted"
     )]
     BundleCommitMismatch,
@@ -262,7 +262,7 @@ pub fn encode_calldata_with_bundle(
     match (mv, bundle) {
         (
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit,
+                expected_post_commit,
             },
             Some(b),
         ) => {
@@ -273,7 +273,7 @@ pub fn encode_calldata_with_bundle(
             // operator pointed at two different `knomosis` binaries
             // or two different log files).  Refuse to broadcast
             // a calldata that would lose the game.
-            if b.claimed_post_commit != claimed_post_commit {
+            if b.expected_post_commit != expected_post_commit {
                 return Err(SubmitError::BundleCommitMismatch);
             }
             Ok(encode_terminate_full_calldata(
@@ -315,11 +315,11 @@ pub fn encode_respond_calldata(game_id: u128, agree: bool) -> Vec<u8> {
 /// contract's signature; use [`encode_terminate_full_calldata`]
 /// for production calldata.
 #[must_use]
-pub fn encode_terminate_calldata(game_id: u128, claimed_post_commit: StateCommit) -> Vec<u8> {
+pub fn encode_terminate_calldata(game_id: u128, expected_post_commit: StateCommit) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 32 + 32);
     out.extend_from_slice(&MethodSelector::TerminateOnSingleStep.selector());
     out.extend_from_slice(&u256_be(game_id));
-    out.extend_from_slice(&claimed_post_commit);
+    out.extend_from_slice(&expected_post_commit);
     out
 }
 
@@ -685,7 +685,7 @@ pub fn encode_terminate_full_calldata(
     //   word 3: signer            (uint64 in uint256 slot)
     //   word 4: cellProofs offset (relative to start of args)
     //
-    // `claimed_post_commit` is NOT a calldata word — the contract
+    // `expected_post_commit` is NOT a calldata word — the contract
     // recomputes the post-commit and compares it against the on-chain
     // `g.high.commit`.  The parameter is retained here only to feed
     // the caller's `BundleCommitMismatch` cross-oracle check.
@@ -1268,7 +1268,7 @@ mod tests {
         let err = encode_calldata(
             42,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: commit(7),
+                expected_post_commit: commit(7),
             },
         )
         .unwrap_err();
@@ -1740,7 +1740,7 @@ mod tests {
             action_kind: 1,
             action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
             signer: 5,
-            claimed_post_commit: commit_bytes,
+            expected_post_commit: commit_bytes,
             cell_proofs: vec![],
         }
     }
@@ -1766,7 +1766,7 @@ mod tests {
         let result = crate::submitter::encode_calldata_with_bundle(
             10,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: c,
+                expected_post_commit: c,
             },
             None,
         );
@@ -1782,7 +1782,7 @@ mod tests {
         let calldata = crate::submitter::encode_calldata_with_bundle(
             10,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: c,
+                expected_post_commit: c,
             },
             Some(&bundle),
         )
@@ -1796,8 +1796,8 @@ mod tests {
     }
 
     /// `encode_calldata_with_bundle` refuses when the bundle's
-    /// `claimed_post_commit` disagrees with the strategy's
-    /// `claimed_post_commit` (defence-in-depth against oracle
+    /// `expected_post_commit` disagrees with the strategy's
+    /// `expected_post_commit` (defence-in-depth against oracle
     /// drift).
     #[test]
     fn encode_with_bundle_terminate_commit_mismatch_errors() {
@@ -1807,7 +1807,7 @@ mod tests {
         let result = crate::submitter::encode_calldata_with_bundle(
             10,
             HonestMove::TerminateOnSingleStep {
-                claimed_post_commit: c2,
+                expected_post_commit: c2,
             },
             Some(&bundle),
         );
