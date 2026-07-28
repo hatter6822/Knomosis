@@ -87,15 +87,33 @@ entry for the cell key. -/
     * `nonce`, `bridgeNextWdId`: a CBE `0` on the 9-byte uint head
       (counters, not wei).
     * `registry`, `localPolicy`, `bridgeConsumed`, `bridgePending`:
-      empty bytes. -/
+      empty bytes.
+    * The bridge scalars, the budget-policy scalars and the flags:
+      a CBE `0` on the head their present form uses (amount head for
+      the value-carrying ones, uint head for counters and flags), so
+      absent and present are read by one decoder path.
+    * `epochBudget`: two CBE `0`s, matching the present form's
+      `lastSeenEpoch ++ budgetBalance` pair. -/
 def canonicalAbsentValue : CellTag → ByteArray
-  | .balance _ _      => ByteArray.mk (Encoding.encodeAmount 0).toArray
-  | .nonce _          => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
-  | .registry _       => ByteArray.empty
-  | .localPolicy _    => ByteArray.empty
-  | .bridgeConsumed _ => ByteArray.empty
-  | .bridgePending _  => ByteArray.empty
-  | .bridgeNextWdId   => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .balance _ _                => ByteArray.mk (Encoding.encodeAmount 0).toArray
+  | .nonce _                    => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .registry _                 => ByteArray.empty
+  | .localPolicy _              => ByteArray.empty
+  | .bridgeConsumed _           => ByteArray.empty
+  | .bridgePending _            => ByteArray.empty
+  | .bridgeNextWdId             => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .bridgeAmmReserveEth        => ByteArray.mk (Encoding.encodeAmount 0).toArray
+  | .bridgeAmmReserveBold       => ByteArray.mk (Encoding.encodeAmount 0).toArray
+  | .bridgeBoldCircuitClosed    => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .bridgeBoldTvlCap           => ByteArray.mk (Encoding.encodeAmount 0).toArray
+  | .bridgeBoldTotalLockedValue => ByteArray.mk (Encoding.encodeAmount 0).toArray
+  | .bridgeAmmDisabled          => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .epochBudget _              =>
+    ByteArray.mk
+      ((Encodable.encode (T := Nat) 0) ++ (Encodable.encode (T := Nat) 0)).toArray
+  | .budgetPolicyFreeTier       => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .budgetPolicyActionCost     => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .budgetPolicyCurrentEpoch   => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
 
 /-! ## `getCellValue` (§12.1.2 helper) -/
 
@@ -144,6 +162,50 @@ def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
   | .bridgeNextWdId =>
     ByteArray.mk
       (Encodable.encode (T := Nat) es.bridge.nextWdId).toArray
+  -- GP.11.8 / GP.11.10 bridge scalars.  `commitExtendedState` binds
+  -- all of `BridgeState`, but until these tags existed there was no
+  -- cell to *prove* them against, so a dispute that turned on the AMM
+  -- mirror or the kill switch had nothing to open.  Reserves and the
+  -- TVL figures are value-carrying, so they ride the 17-byte amount
+  -- head; the two flags ride the uint head as 0/1.
+  | .bridgeAmmReserveEth =>
+    ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveEth).toArray
+  | .bridgeAmmReserveBold =>
+    ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveBold).toArray
+  | .bridgeBoldCircuitClosed =>
+    ByteArray.mk
+      (Encodable.encode (T := Nat) (if es.bridge.boldCircuitClosed then 1 else 0)).toArray
+  | .bridgeBoldTvlCap =>
+    ByteArray.mk (Encoding.encodeAmount es.bridge.boldTvlCap).toArray
+  | .bridgeBoldTotalLockedValue =>
+    ByteArray.mk (Encoding.encodeAmount es.bridge.boldTotalLockedValue).toArray
+  | .bridgeAmmDisabled =>
+    ByteArray.mk
+      (Encodable.encode (T := Nat) (if es.bridge.ammDisabled then 1 else 0)).toArray
+  -- Per-actor epoch budget.  Both components in one cell, so a proof
+  -- cannot open the balance without also fixing the epoch it belongs
+  -- to — reading them apart would let a stale-epoch balance be
+  -- presented as current.
+  | .epochBudget a =>
+    let b := es.epochBudgets[a]?.getD Authority.ActorBudget.empty
+    ByteArray.mk
+      ((Encodable.encode (T := Nat) b.lastSeenEpoch) ++
+       (Encodable.encode (T := Nat) b.budgetBalance)).toArray
+  -- Budget-policy scalars, one cell each: a dispute normally turns on
+  -- exactly one of them, and a single packed cell would force the
+  -- responder to open all three.
+  | .budgetPolicyFreeTier =>
+    match es.budgetPolicy with
+    | .bounded freeTier _ _ =>
+      ByteArray.mk (Encodable.encode (T := Nat) freeTier).toArray
+  | .budgetPolicyActionCost =>
+    match es.budgetPolicy with
+    | .bounded _ actionCost _ =>
+      ByteArray.mk (Encodable.encode (T := Nat) actionCost).toArray
+  | .budgetPolicyCurrentEpoch =>
+    match es.budgetPolicy with
+    | .bounded _ _ currentEpoch =>
+      ByteArray.mk (Encodable.encode (T := Nat) currentEpoch).toArray
 
 /-- Determinism of `getCellValue`: equal states + equal tags
     produce equal cell values.  Mechanical via `rfl`. -/
@@ -151,6 +213,98 @@ theorem getCellValue_deterministic
     (es₁ es₂ : ExtendedState) (tag₁ tag₂ : CellTag)
     (h_es : es₁ = es₂) (h_tag : tag₁ = tag₂) :
     getCellValue es₁ tag₁ = getCellValue es₂ tag₂ := by rw [h_es, h_tag]
+
+/-! ## Cell-space coverage
+
+`commitExtendedState` binds all seven `ExtendedState` fields, but
+the cell space only ever covered part of them.  Concretely: the
+GP.11.8 AMM mirror, the GP.11.10 kill switch, the per-actor epoch
+budgets and the budget policy were all inside the published state
+root and had **no cell tag**, so a fault proof could not open them.
+A dispute that turned on "the sequencer forged `ammDisabled`" or
+"the sequencer inflated an actor's budget" had nothing to prove
+against — the step VM could not be shown a value it could check.
+
+The lemmas below are the coverage obligation, one per field the
+extension added: each says the field is *readable through a cell*,
+so a cell proof can bind it.  They are `rfl`-class by construction;
+the point is that they could not be stated at all before, and that
+a future field added to `ExtendedState` without a matching tag
+leaves an obvious hole here. -/
+
+/-- The AMM ETH reserve is readable through its cell. -/
+theorem getCellValue_ammReserveEth (es : ExtendedState) :
+    getCellValue es .bridgeAmmReserveEth =
+      ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveEth).toArray := rfl
+
+/-- The AMM BOLD reserve is readable through its cell. -/
+theorem getCellValue_ammReserveBold (es : ExtendedState) :
+    getCellValue es .bridgeAmmReserveBold =
+      ByteArray.mk (Encoding.encodeAmount es.bridge.ammReserveBold).toArray := rfl
+
+/-- The BOLD circuit-breaker flag is readable through its cell. -/
+theorem getCellValue_boldCircuitClosed (es : ExtendedState) :
+    getCellValue es .bridgeBoldCircuitClosed =
+      ByteArray.mk
+        (Encodable.encode (T := Nat)
+          (if es.bridge.boldCircuitClosed then 1 else 0)).toArray := rfl
+
+/-- The BOLD TVL cap is readable through its cell. -/
+theorem getCellValue_boldTvlCap (es : ExtendedState) :
+    getCellValue es .bridgeBoldTvlCap =
+      ByteArray.mk (Encoding.encodeAmount es.bridge.boldTvlCap).toArray := rfl
+
+/-- The BOLD total-locked-value figure is readable through its
+    cell. -/
+theorem getCellValue_boldTotalLockedValue (es : ExtendedState) :
+    getCellValue es .bridgeBoldTotalLockedValue =
+      ByteArray.mk (Encoding.encodeAmount es.bridge.boldTotalLockedValue).toArray :=
+  rfl
+
+/-- The GP.11.10 AMM kill switch is readable through its cell.
+
+    This is the one the GP.11.10 workstream most needs: `ammDisabled`
+    was committed to the state root precisely so the fault-proof game
+    could adjudicate disputes about it, and until this tag existed
+    that was not possible. -/
+theorem getCellValue_ammDisabled (es : ExtendedState) :
+    getCellValue es .bridgeAmmDisabled =
+      ByteArray.mk
+        (Encodable.encode (T := Nat)
+          (if es.bridge.ammDisabled then 1 else 0)).toArray := rfl
+
+/-- The kill switch's two states produce different cell values, so
+    the cell genuinely distinguishes them.  A "coverage" lemma that
+    only exhibited a formula would not rule out a constant. -/
+theorem getCellValue_ammDisabled_distinguishes
+    (es : ExtendedState) (h : es.bridge.ammDisabled = true) :
+    getCellValue es .bridgeAmmDisabled ≠
+      getCellValue { es with bridge := { es.bridge with ammDisabled := false } }
+        .bridgeAmmDisabled := by
+  simp [getCellValue, h]
+  decide
+
+/-- An actor's epoch budget is readable through its cell, with the
+    epoch and the balance in one value. -/
+theorem getCellValue_epochBudget (es : ExtendedState) (a : ActorId) :
+    getCellValue es (.epochBudget a) =
+      (let b := es.epochBudgets[a]?.getD Authority.ActorBudget.empty
+       ByteArray.mk
+         ((Encodable.encode (T := Nat) b.lastSeenEpoch) ++
+          (Encodable.encode (T := Nat) b.budgetBalance)).toArray) := rfl
+
+/-- The budget policy's three scalars are readable through their
+    cells. -/
+theorem getCellValue_budgetPolicy_scalars
+    (es : ExtendedState) (freeTier actionCost currentEpoch : Nat)
+    (h : es.budgetPolicy = .bounded freeTier actionCost currentEpoch) :
+    getCellValue es .budgetPolicyFreeTier =
+        ByteArray.mk (Encodable.encode (T := Nat) freeTier).toArray ∧
+    getCellValue es .budgetPolicyActionCost =
+        ByteArray.mk (Encodable.encode (T := Nat) actionCost).toArray ∧
+    getCellValue es .budgetPolicyCurrentEpoch =
+        ByteArray.mk (Encodable.encode (T := Nat) currentEpoch).toArray := by
+  refine ⟨?_, ?_, ?_⟩ <;> simp [getCellValue, h]
 
 /-! ## `isCellAbsent` (§12.3.4 helper) -/
 
@@ -223,6 +377,68 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
     | .ok (n, _) =>
       { es with bridge := { es.bridge with nextWdId := n } }
     | .error _   => es
+  -- The bridge scalars decode off the head their `getCellValue` arm
+  -- writes: the amount head for the value-carrying ones, the uint
+  -- head for the flags.  A decode failure is a no-op, matching every
+  -- arm above — the cell-write primitive never fails, so a malformed
+  -- value cannot corrupt the state.
+  | .bridgeAmmReserveEth =>
+    match Encoding.decodeAmount value.data.toList with
+    | .ok (v, _) => { es with bridge := { es.bridge with ammReserveEth := v } }
+    | .error _   => es
+  | .bridgeAmmReserveBold =>
+    match Encoding.decodeAmount value.data.toList with
+    | .ok (v, _) => { es with bridge := { es.bridge with ammReserveBold := v } }
+    | .error _   => es
+  | .bridgeBoldCircuitClosed =>
+    match Encodable.decode (T := Nat) value.data.toList with
+    | .ok (n, _) =>
+      { es with bridge := { es.bridge with boldCircuitClosed := n != 0 } }
+    | .error _   => es
+  | .bridgeBoldTvlCap =>
+    match Encoding.decodeAmount value.data.toList with
+    | .ok (v, _) => { es with bridge := { es.bridge with boldTvlCap := v } }
+    | .error _   => es
+  | .bridgeBoldTotalLockedValue =>
+    match Encoding.decodeAmount value.data.toList with
+    | .ok (v, _) =>
+      { es with bridge := { es.bridge with boldTotalLockedValue := v } }
+    | .error _   => es
+  | .bridgeAmmDisabled =>
+    match Encodable.decode (T := Nat) value.data.toList with
+    | .ok (n, _) =>
+      { es with bridge := { es.bridge with ammDisabled := n != 0 } }
+    | .error _   => es
+  | .epochBudget a =>
+    -- Both components in one cell, decoded in sequence: the epoch
+    -- must travel with the balance it belongs to.
+    match Encodable.decode (T := Nat) value.data.toList with
+    | .ok (epoch, rest) =>
+      match Encodable.decode (T := Nat) rest with
+      | .ok (bal, _) =>
+        { es with
+            epochBudgets :=
+              es.epochBudgets.insert a
+                { lastSeenEpoch := epoch, budgetBalance := bal } }
+      | .error _ => es
+    | .error _ => es
+  -- The policy is a single `bounded` constructor, so each scalar
+  -- write rebuilds it with the other two preserved.
+  | .budgetPolicyFreeTier =>
+    match Encodable.decode (T := Nat) value.data.toList, es.budgetPolicy with
+    | .ok (v, _), .bounded _ actionCost currentEpoch =>
+      { es with budgetPolicy := .bounded v actionCost currentEpoch }
+    | .error _, _ => es
+  | .budgetPolicyActionCost =>
+    match Encodable.decode (T := Nat) value.data.toList, es.budgetPolicy with
+    | .ok (v, _), .bounded freeTier _ currentEpoch =>
+      { es with budgetPolicy := .bounded freeTier v currentEpoch }
+    | .error _, _ => es
+  | .budgetPolicyCurrentEpoch =>
+    match Encodable.decode (T := Nat) value.data.toList, es.budgetPolicy with
+    | .ok (v, _), .bounded freeTier actionCost _ =>
+      { es with budgetPolicy := .bounded freeTier actionCost v }
+    | .error _, _ => es
 
 /-- Determinism of `setCell`. -/
 theorem setCell_deterministic

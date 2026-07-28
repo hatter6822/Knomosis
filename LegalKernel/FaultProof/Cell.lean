@@ -106,21 +106,61 @@ inductive CellTag
   /-- The bridge `nextWdId` counter (no key needed; singleton).
       Frozen tag 6. -/
   | bridgeNextWdId
+  /-- GP.11.8 L2 mirror of the L1 AMM ETH reserve.  Tag 7. -/
+  | bridgeAmmReserveEth
+  /-- GP.11.8 L2 mirror of the L1 AMM BOLD reserve.  Tag 8. -/
+  | bridgeAmmReserveBold
+  /-- GP.11.8 BOLD circuit-breaker flag.  Tag 9. -/
+  | bridgeBoldCircuitClosed
+  /-- GP.11.8 per-BOLD TVL cap.  Tag 10. -/
+  | bridgeBoldTvlCap
+  /-- GP.11.8 per-BOLD total locked value.  Tag 11. -/
+  | bridgeBoldTotalLockedValue
+  /-- GP.11.10 AMM kill-switch flag.  Tag 12. -/
+  | bridgeAmmDisabled
+  /-- An actor's epoch-budget cell (`lastSeenEpoch`,
+      `budgetBalance`).  Tag 13. -/
+  | epochBudget (actor : ActorId)
+  /-- The budget policy's free-tier floor.  Tag 14. -/
+  | budgetPolicyFreeTier
+  /-- The budget policy's per-action cost.  Tag 15. -/
+  | budgetPolicyActionCost
+  /-- The budget policy's current epoch index.  Tag 16. -/
+  | budgetPolicyCurrentEpoch
   deriving Repr, DecidableEq
 
 /-- Project a `CellTag` to its discriminator index, for canonical
     encoding and equality dispatch.  Aligns with the Solidity-side
     enum.  The frozen tag indices are:
     0 = balance, 1 = nonce, 2 = registry, 3 = localPolicy,
-    4 = bridgeConsumed, 5 = bridgePending, 6 = bridgeNextWdId. -/
+    4 = bridgeConsumed, 5 = bridgePending, 6 = bridgeNextWdId,
+    7 = bridgeAmmReserveEth, 8 = bridgeAmmReserveBold,
+    9 = bridgeBoldCircuitClosed, 10 = bridgeBoldTvlCap,
+    11 = bridgeBoldTotalLockedValue, 12 = bridgeAmmDisabled,
+    13 = epochBudget, 14 = budgetPolicyFreeTier,
+    15 = budgetPolicyActionCost, 16 = budgetPolicyCurrentEpoch.
+
+    **0–6 are frozen** (they are mirrored in the Solidity `CellKind`
+    enum and pinned by the cross-stack corpus); 7–16 append to them.
+    Indices are never reused or reordered. -/
 def CellTag.kindIndex : CellTag → Nat
-  | .balance _ _      => 0
-  | .nonce _          => 1
-  | .registry _       => 2
-  | .localPolicy _    => 3
-  | .bridgeConsumed _ => 4
-  | .bridgePending _  => 5
-  | .bridgeNextWdId   => 6
+  | .balance _ _                => 0
+  | .nonce _                    => 1
+  | .registry _                 => 2
+  | .localPolicy _              => 3
+  | .bridgeConsumed _           => 4
+  | .bridgePending _            => 5
+  | .bridgeNextWdId             => 6
+  | .bridgeAmmReserveEth        => 7
+  | .bridgeAmmReserveBold       => 8
+  | .bridgeBoldCircuitClosed    => 9
+  | .bridgeBoldTvlCap           => 10
+  | .bridgeBoldTotalLockedValue => 11
+  | .bridgeAmmDisabled          => 12
+  | .epochBudget _              => 13
+  | .budgetPolicyFreeTier       => 14
+  | .budgetPolicyActionCost     => 15
+  | .budgetPolicyCurrentEpoch   => 16
 
 /-! ## `CellProof` (§12.1.4)
 

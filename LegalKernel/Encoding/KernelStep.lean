@@ -57,7 +57,8 @@ open LegalKernel.Authority
 /-! ## `CellTag` codec
 
 Encoded as `<kindIndex uint> ++ <key fields>`.  The `kindIndex`
-is the frozen tag (0..6); the key fields depend on the variant.
+is the frozen tag (0..16); the key fields depend on the
+variant.  Singleton cells encode the tag alone.
 -/
 
 /-- Encode a `CellTag` to its CBE byte sequence. -/
@@ -83,6 +84,18 @@ def CellTag.encode : FaultProof.CellTag → Stream
     Encodable.encode (T := Nat) wd
   | .bridgeNextWdId =>
     Encodable.encode (T := Nat) 6
+  | .bridgeAmmReserveEth        => Encodable.encode (T := Nat) 7
+  | .bridgeAmmReserveBold       => Encodable.encode (T := Nat) 8
+  | .bridgeBoldCircuitClosed    => Encodable.encode (T := Nat) 9
+  | .bridgeBoldTvlCap           => Encodable.encode (T := Nat) 10
+  | .bridgeBoldTotalLockedValue => Encodable.encode (T := Nat) 11
+  | .bridgeAmmDisabled          => Encodable.encode (T := Nat) 12
+  | .epochBudget a =>
+    Encodable.encode (T := Nat) 13 ++
+    Encodable.encode (T := Nat) a.toNat
+  | .budgetPolicyFreeTier       => Encodable.encode (T := Nat) 14
+  | .budgetPolicyActionCost     => Encodable.encode (T := Nat) 15
+  | .budgetPolicyCurrentEpoch   => Encodable.encode (T := Nat) 16
 
 /-- Decode a `CellTag` from a stream.  Returns the tag and
     residual stream.  Rejects unknown variant indices. -/

@@ -71,14 +71,36 @@ contract KnomosisStepVM {
 
     /// @notice Cell-tag discriminator.  Frozen indices match the
     ///         Lean-side `CellTag.kindIndex`.
+    /// @dev Mirrors `LegalKernel.FaultProof.CellTag.kindIndex`.
+    ///      Indices 0–6 are frozen (pinned by the cross-stack
+    ///      corpus); 7–16 append to them and are never reordered.
+    ///
+    ///      7–16 exist because `commitExtendedState` binds all seven
+    ///      `ExtendedState` fields while the cell space covered only
+    ///      part of them: the GP.11.8 AMM mirror, the GP.11.10 kill
+    ///      switch, the per-actor epoch budgets and the budget policy
+    ///      were inside the published state root with no cell tag, so
+    ///      a fault proof could not open them.  A dispute turning on
+    ///      a forged `ammDisabled` or an inflated actor budget had
+    ///      nothing to prove against.
     enum CellKind {
-        Balance,        // 0
-        Nonce,          // 1
-        Registry,       // 2
-        LocalPolicy,    // 3
-        BridgeConsumed, // 4
-        BridgePending,  // 5
-        BridgeNextWdId  // 6
+        Balance,                    // 0
+        Nonce,                      // 1
+        Registry,                   // 2
+        LocalPolicy,                // 3
+        BridgeConsumed,             // 4
+        BridgePending,              // 5
+        BridgeNextWdId,             // 6
+        BridgeAmmReserveEth,        // 7
+        BridgeAmmReserveBold,       // 8
+        BridgeBoldCircuitClosed,    // 9
+        BridgeBoldTvlCap,           // 10
+        BridgeBoldTotalLockedValue, // 11
+        BridgeAmmDisabled,          // 12
+        EpochBudget,                // 13
+        BudgetPolicyFreeTier,       // 14
+        BudgetPolicyActionCost,     // 15
+        BudgetPolicyCurrentEpoch    // 16
     }
 
     /* ---------------------------------------------------------- */

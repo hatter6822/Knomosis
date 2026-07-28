@@ -141,6 +141,16 @@ private def cellProofForFixtureFromCellProof (p : CellProof) :
     | .bridgeConsumed d  => (4, d, 0)
     | .bridgePending w   => (5, w, 0)
     | .bridgeNextWdId    => (6, 0, 0)
+    | .bridgeAmmReserveEth        => (7, 0, 0)
+    | .bridgeAmmReserveBold       => (8, 0, 0)
+    | .bridgeBoldCircuitClosed    => (9, 0, 0)
+    | .bridgeBoldTvlCap           => (10, 0, 0)
+    | .bridgeBoldTotalLockedValue => (11, 0, 0)
+    | .bridgeAmmDisabled          => (12, 0, 0)
+    | .epochBudget a              => (13, a.toNat, 0)
+    | .budgetPolicyFreeTier       => (14, 0, 0)
+    | .budgetPolicyActionCost     => (15, 0, 0)
+    | .budgetPolicyCurrentEpoch   => (16, 0, 0)
   { cellKindNat       := kindNat,
     keyANat           := keyA,
     keyBNat           := keyB,
