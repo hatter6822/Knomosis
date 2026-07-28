@@ -196,6 +196,17 @@ jobs:
         # run `lake exe lex_codegen --canonical` and commit the result.
         run: lake exe lex_codegen --canonical --check
 
+      - name: lake exe api_stability_audit (term-level API-pin gate)
+        # CLAUDE.md promises every post-Phase-0 theorem carries a
+        # term-level test "whose elaboration fails if the theorem
+        # signature changes".  The type ascription is what delivers
+        # that — `let _ := @thm` pins only that the NAME exists, so
+        # reordering hypotheses or weakening a conclusion still
+        # elaborates and the test still reports PASS.  This gate
+        # blocks NEW unascribed pins; the pre-existing ones are frozen
+        # in `tools/api_stability_allowlist.txt` and burn down.
+        run: lake exe api_stability_audit
+
       - name: lake exe naming_audit (content-name discipline gate)
         # Enforces CLAUDE.md's "Names describe content, never
         # provenance" rule for file names AND declaration

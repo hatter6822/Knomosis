@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "acff01be4186ce75a11c77d27f642668ce41959d2607da60e0b038e37e10a804"
+    "source_digest": "81e26ac235fa816b2ade270307a2c6bee44f17433c39396046495d7e3ac21a02"
   },
   "summary": {
     "module_count": 313,
-    "declaration_count": 5298
+    "declaration_count": 5300
   },
   "modules": [
     {
@@ -53037,6 +53037,7 @@
             "ResourceId",
             "Signature",
             "SignedAction",
+            "State",
             "TestCase",
             "TotalSupply",
             "ammDisabled_constant_over_admitted_trace",
@@ -53052,6 +53053,8 @@
             "es",
             "gasPoolDeniedTags",
             "getBalance",
+            "other",
+            "poolActor",
             "reclaimAmmReserves",
             "reclaimAmmReserves_conserves_at",
             "reclaimAmmReserves_credits_pool",
@@ -57348,12 +57351,12 @@
     {
       "module": "LegalKernel.Test.Tools.AuditBinaries",
       "path": "LegalKernel/Test/Tools/AuditBinaries.lean",
-      "declaration_count": 8,
+      "declaration_count": 10,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Tools.AuditBinaries",
-          "line": 47,
+          "line": 48,
           "called": [
             "LegalKernel.Test"
           ]
@@ -57361,7 +57364,7 @@
         {
           "kind": "def",
           "name": "deferralDetectsUppercaseMarkers",
-          "line": 58,
+          "line": 59,
           "called": [
             "TestCase"
           ]
@@ -57369,7 +57372,7 @@
         {
           "kind": "def",
           "name": "deferralAcceptsCleanContent",
-          "line": 72,
+          "line": 73,
           "called": [
             "TestCase",
             "assertEq"
@@ -57378,7 +57381,7 @@
         {
           "kind": "def",
           "name": "countSorriesSeesPastCharLiteral",
-          "line": 89,
+          "line": 90,
           "called": [
             "TestCase"
           ]
@@ -57386,7 +57389,7 @@
         {
           "kind": "def",
           "name": "namingAuditParsesAttributedDeclarations",
-          "line": 123,
+          "line": 124,
           "called": [
             "TestCase",
             "assertEq"
@@ -57395,7 +57398,7 @@
         {
           "kind": "def",
           "name": "namingAuditRejectsNonDeclarations",
-          "line": 148,
+          "line": 149,
           "called": [
             "TestCase"
           ]
@@ -57403,18 +57406,37 @@
         {
           "kind": "def",
           "name": "stubAuditFindsIndentedDocstring",
-          "line": 165,
+          "line": 166,
           "called": [
             "TestCase"
           ]
         },
         {
           "kind": "def",
+          "name": "apiStabilityDetectsUnascribedPins",
+          "line": 216,
+          "called": [
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "apiStabilityAllowlistKeyShape",
+          "line": 250,
+          "called": [
+            "TestCase",
+            "assertEq"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 206,
+          "line": 261,
           "called": [
             "LegalKernel.Test.Tools.AuditBinaries",
             "TestCase",
+            "apiStabilityAllowlistKeyShape",
+            "apiStabilityDetectsUnascribedPins",
             "countSorriesSeesPastCharLiteral",
             "deferralAcceptsCleanContent",
             "deferralDetectsUppercaseMarkers",

@@ -159,23 +159,45 @@ def tests : List TestCase :=
     -- ## Headline theorem API pins
   , { name := "reclaimAmmReserves_zeroes_reserve API stable"
     , body := do
-        let _ := @reclaimAmmReserves_zeroes_reserve
-        assert true "API exists"
+        let _proof : ∀ (r : ResourceId) (amount : Amount)
+            (reserveActor poolActor : ActorId) (s : State),
+            (reclaimAmmReserves r amount reserveActor poolActor).pre s →
+            getBalance (step_impl s (reclaimAmmReserves r amount reserveActor
+              poolActor)) r reserveActor = 0 :=
+          @reclaimAmmReserves_zeroes_reserve
+        pure ()
     }
   , { name := "reclaimAmmReserves_credits_pool API stable"
     , body := do
-        let _ := @reclaimAmmReserves_credits_pool
-        assert true "API exists"
+        let _proof : ∀ (r : ResourceId) (amount : Amount)
+            (reserveActor poolActor : ActorId) (s : State),
+            (reclaimAmmReserves r amount reserveActor poolActor).pre s →
+            getBalance (step_impl s (reclaimAmmReserves r amount reserveActor
+              poolActor)) r poolActor = getBalance s r poolActor + amount :=
+          @reclaimAmmReserves_credits_pool
+        pure ()
     }
   , { name := "reclaimAmmReserves_conserves_at API stable"
     , body := do
-        let _ := @reclaimAmmReserves_conserves_at
-        assert true "API exists"
+        let _proof : ∀ (r : ResourceId) (amount : Amount)
+            (reserveActor poolActor : ActorId) (s : State),
+            (reclaimAmmReserves r amount reserveActor poolActor).pre s →
+            TotalSupply (step_impl s (reclaimAmmReserves r amount reserveActor
+              poolActor)) r = TotalSupply s r :=
+          @reclaimAmmReserves_conserves_at
+        pure ()
     }
   , { name := "reclaimAmmReserves_other_actor_untouched API stable"
     , body := do
-        let _ := @reclaimAmmReserves_other_actor_untouched
-        assert true "API exists"
+        let _proof : ∀ (r : ResourceId) (amount : Amount)
+            (reserveActor poolActor : ActorId)
+            (other : ActorId) (rq : ResourceId) (s : State),
+            (reclaimAmmReserves r amount reserveActor poolActor).pre s →
+            other ≠ reserveActor → other ≠ poolActor →
+            getBalance (step_impl s (reclaimAmmReserves r amount reserveActor
+              poolActor)) rq other = getBalance s rq other :=
+          @reclaimAmmReserves_other_actor_untouched
+        pure ()
     }
     -- ## Action wiring (frozen index 24)
   , { name := "Action.compileTransition maps reclaimAmmReserves to the law"

@@ -227,6 +227,12 @@ lean_lib CountSorriesLib where
 lean_lib StubAuditLib where
   roots := #[`Tools.StubAudit]
 
+/-- Term-level API-stability audit library.  Exposes
+    `Tools.ApiStabilityAudit` for the `api_stability_audit`
+    executable and the test driver's self-tests. -/
+lean_lib ApiStabilityAuditLib where
+  roots := #[`Tools.ApiStabilityAudit]
+
 /-- WU 1.11 (Phase 1) TCB-audit executable.  Enumerates the *direct
     imports* of the trusted-core source files (`Kernel.lean`,
     `RBMapLemmas.lean`) and compares each to the allowlist at
@@ -259,6 +265,26 @@ lean_exe count_sorries where
 @[default_target]
 lean_exe stub_audit where
   root := `StubAudit
+  supportInterpreter := true
+
+/-- Term-level API-stability gate.  CLAUDE.md promises that every
+    post-Phase-0 theorem carries a term-level test "whose elaboration
+    fails if the theorem signature changes".  The type ascription is
+    what delivers that; `let _ := @thm` pins only that the name
+    exists, so reordering hypotheses or weakening a conclusion still
+    elaborates and the test still reports PASS.
+
+    This gate flags the unascribed form under `LegalKernel/Test/**`
+    and `Lex/Test/**`.  Pre-existing occurrences are frozen in
+    `tools/api_stability_allowlist.txt` so the debt is bounded and
+    burns down; anything new fails the build.
+
+    Exit semantics:
+      * 0 — every unascribed pin is allowlisted.
+      * 1 — at least one new unascribed pin. -/
+@[default_target]
+lean_exe api_stability_audit where
+  root := `ApiStabilityAudit
   supportInterpreter := true
 
 /-- Content-name discipline enforcer.  Scans every `.lean` file

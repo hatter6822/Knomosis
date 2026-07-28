@@ -43,6 +43,7 @@ import LegalKernel.Test.Framework
 import Tools.CountSorries
 import Tools.DeferralAudit
 import Tools.NamingAudit
+import Tools.ApiStabilityAudit
 import Tools.StubAudit
 
 namespace LegalKernel.Test.Tools.AuditBinaries
@@ -203,6 +204,60 @@ def stubAuditFindsIndentedDocstring : TestCase := {
       throw <| IO.userError "BUG: a block was reported where no docstring exists"
 }
 
+/-! ## `api_stability_audit` — ascription detection -/
+
+/-- The unascribed API-pin shape is detected and the ascribed one is
+    not.
+
+    The gate exists because CLAUDE.md's API-stability guarantee rests
+    entirely on the type ascription: `let _ := @thm` elaborates against
+    whatever type `thm` happens to have, so a signature change still
+    passes.  A matcher that confused the two forms would either freeze
+    the wrong set or block correct code. -/
+def apiStabilityDetectsUnascribedPins : TestCase := {
+  name := "api_stability_audit: unascribed pins detected, ascribed ones are not"
+  body := do
+    let broken : List String :=
+      [ "        let _ := @some_theorem"
+      , "let _ := @some_theorem"
+      , "  let _proof := @Foo.bar_baz"
+      , "        let _name := @a.b.c"
+      ]
+    for line in broken do
+      if !Tools.ApiStabilityAudit.isUnascribedPin line then
+        throw <| IO.userError
+          s!"BUG: `{line}` was NOT flagged — a signature change here would \
+             elaborate and the test would still report PASS"
+    let fine : List String :=
+      [ -- Ascribed: the whole point.
+        "        let _proof : Nat → Nat := @id"
+      , "        let _proof : ∀ (n : Nat), n = n := fun _ => rfl"
+        -- Not an `@`-pin at all.
+      , "        let x := 5"
+      , "        let _ := foo bar"
+        -- Not a `let` binding.
+      , "        exact @some_theorem"
+      , "  -- let _ := @commented_out"
+      , ""
+      ]
+    for line in fine do
+      if Tools.ApiStabilityAudit.isUnascribedPin line then
+        throw <| IO.userError s!"BUG: `{line}` was flagged; it is not a broken pin"
+}
+
+/-- The allowlist key is `path:line` and omits the line text, so a
+    binding that gains its ascription stops matching and one that moves
+    is re-reported — the correct direction for a burn-down list. -/
+def apiStabilityAllowlistKeyShape : TestCase := {
+  name := "api_stability_audit: allowlist key is path:line only"
+  body := do
+    let v : Tools.ApiStabilityAudit.Violation :=
+      { path := "LegalKernel/Test/Foo.lean", lineNo := 42, rawLine := "let _ := @bar" }
+    assertEq (expected := "LegalKernel/Test/Foo.lean:42")
+      (actual := Tools.ApiStabilityAudit.Violation.key v)
+      "the key must not embed the line text"
+}
+
 /-- All audit-binary self-tests. -/
 def tests : List TestCase :=
   [ deferralDetectsUppercaseMarkers
@@ -211,6 +266,8 @@ def tests : List TestCase :=
   , namingAuditParsesAttributedDeclarations
   , namingAuditRejectsNonDeclarations
   , stubAuditFindsIndentedDocstring
+  , apiStabilityDetectsUnascribedPins
+  , apiStabilityAllowlistKeyShape
   ]
 
 end LegalKernel.Test.Tools.AuditBinaries
