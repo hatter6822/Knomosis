@@ -1003,6 +1003,82 @@ was about.
 
 ---
 
+## Refutation re-check (audit follow-up pass)
+
+The full-codebase audit produced 87 raw findings; 56 survived
+adversarial verification and 31 were refuted.  The refutations were
+produced under a verifier prompt that instructed *"default to
+refuted"*, an asymmetric burden that had already generated wrong
+refutations earlier in the same pass.  They therefore warranted a
+re-check under a neutral burden.
+
+**What was recoverable.**  17 of the 31 refutation rationales, with
+their file attributions:
+
+| File | Verdicts |
+|---|---|
+| `knomosis-host/src/queue.rs` | 3 refuted (2 confirmed) |
+| `knomosis-gateway/src/rate_limit.rs` | 1 refuted (1 confirmed) |
+| `knomosis-gateway/src/events/fanout/ring.rs` | 1 refuted (1 confirmed) |
+| `knomosis-gateway/src/events/fanout/resume.rs` | 3 refuted (0 confirmed) |
+| `knomosis-l1-ingest/src/receipt_verifier.rs` | 3 refuted (0 confirmed) |
+| `knomosis-indexer/src/indexer.rs` | 2 refuted (1 confirmed) |
+| (earlier block, file header not captured) | 4 refuted |
+
+The remaining 14 are not recoverable: the verifier output was not
+persisted as an artefact, and the surviving transcript records the
+rationales but not the finding texts they answer.
+
+**What the rationales look like.**  Contrary to the concern that
+motivated the re-check, most cite specific lines and are decisive on
+their own terms.  Three classes:
+
+  * *Self-refuting* — the finding conditioned itself on a file the
+    auditor said it had not read ("this finding is conditional on it
+    not doing so").  A conditional on an unexamined file is not a
+    finding.
+  * *Wrong premise* — e.g. the `receipt_verifier` claim required
+    `tx_hash` to be operator-chosen, but no line in that module reads
+    `tx_hash` from the claim; it is a separate parameter.
+  * *"It is documented"* — the weakest class, because on this project
+    a documented behaviour is not thereby correct (CLAUDE.md's
+    implement-the-improvement rule).  These were the ones re-checked
+    against source.
+
+**Re-checked in full, against source, under a neutral burden:**
+
+  * **`rate_limit.rs` — unbounded bucket map.**  The underlying
+    observation is true: `buckets: Mutex<HashMap<u64, TokenBucket>>`
+    grows via `entry(key).or_insert(…)` and is never paired with a
+    `remove`, `retain` or capacity check.  The refutation is
+    nonetheless correct, for a reason the finding did not state:
+    `http/handler.rs` calls
+    `auth::gate(…).or_else(|| auth::rate_limit_check(…))`, and
+    `or_else` evaluates its closure only when `gate` returned `None`
+    — i.e. only for a credential auth already admitted.  The map is
+    therefore bounded by the valid-token set, which is operator-
+    controlled and small, not by anything an attacker supplies.
+    **Refutation upheld.**
+
+  * **`indexer.rs` — saturating a balance cell to `u128::MAX` before
+    returning `CreditOverflow`.**  The write does happen, but every
+    per-event error propagates through `?` in `consume_batch` before
+    `tx.commit()`, so the transaction is dropped un-committed and
+    SQLite rolls it back.  The saturated value never persists.
+    **Refutation upheld.**  (Minor, not tracked as a finding: the
+    docstring describes an effect that is always discarded, so the
+    `balance_set(…, Amount::MAX)` on that path is dead.  The
+    documentation errs toward alarming rather than reassuring, which
+    is the harmless direction.)
+
+**Disposition.**  Nothing promoted.  The two refutations with real
+safety substance hold on inspection, and the remaining recovered
+rationales are of the self-refuting or wrong-premise classes, which
+do not depend on the burden of proof.  The 14 unrecoverable ones are
+recorded here as unre-checked rather than as cleared.
+
+---
+
 ## Closing notes
 
 The audit reviewed ~73,000 lines of Lean across 241 files.
