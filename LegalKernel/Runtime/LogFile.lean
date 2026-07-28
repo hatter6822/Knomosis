@@ -270,7 +270,108 @@ def decodeFrame (s : Stream) : Except FrameError (LogEntry × Stream) :=
       .error (.badMagic [b0, b1, b2, b3])
   | _ => .error .truncated
 
-/-! ## Stream-level multi-frame loader
+/-- Read a little-endian `Nat` of `width` bytes at `off`.  `none` if
+    the range runs past the end. -/
+def natAtLE (bytes : ByteArray) (off width : Nat) : Option Nat :=
+  if off + width ≤ bytes.size then
+    some ((List.range width).foldr
+      (fun i acc => acc * 256 + (bytes.get! (off + i)).toNat) 0)
+  else
+    none
+
+/-- Decode one frame starting at byte offset `off`.  Returns the entry
+    and the offset of the NEXT frame.
+
+    Byte-for-byte the same layout as `decodeFrame`: 4-byte magic,
+    8-byte LE payload length, payload, 8-byte trailer.  Only the
+    payload is converted to a `List UInt8`, because that is what
+    `LogEntry.decode` consumes; everything else is read by index. -/
+def decodeFrameAt (bytes : ByteArray) (off : Nat) :
+    Except FrameError (LogEntry × Nat) :=
+  if off + 4 > bytes.size then
+    .error .truncated
+  else
+    let b0 := bytes.get! off
+    let b1 := bytes.get! (off + 1)
+    let b2 := bytes.get! (off + 2)
+    let b3 := bytes.get! (off + 3)
+    if b0 = frameMagic0 ∧ b1 = frameMagic1 ∧
+       b2 = frameMagic2 ∧ b3 = frameMagic3 then
+      match natAtLE bytes (off + 4) 8 with
+      | none => .error .truncated
+      | some plen =>
+        let payloadStart := off + 12
+        let trailerStart := payloadStart + plen
+        let frameEnd := trailerStart + 8
+        if frameEnd > bytes.size then
+          .error .truncated
+        else
+          let payload :=
+            (List.range plen).map (fun i => bytes.get! (payloadStart + i))
+          let trailerBytes :=
+            (List.range 8).map (fun i => bytes.get! (trailerStart + i))
+          if trailerBytes = frameTrailer payload then
+            match LogEntry.decode payload with
+            | .ok (e, [])     => .ok (e, frameEnd)
+            | .ok (_, _ :: _) => .error (.payload (.trailingBytes 1))
+            | .error de       => .error (.payload de)
+          else
+            .error .badTrailer
+      else
+        .error (.badMagic [b0, b1, b2, b3])
+
+/-- Internal offset-based loader.  Fuel bounds the iteration count;
+    each successful frame consumes at least 20 bytes (4 magic + 8
+    length + 0 payload + 8 trailer), so `bytes.size + 1` can never run
+    out.  Fuel exhaustion is reported as `truncated` so the caller's
+    error path stays uniform. -/
+def decodeAllFramesFrom' (bytes : ByteArray) :
+    Nat → Nat → List LogEntry → List LogEntry × Nat × Option FrameError
+  | 0,        off, acc =>
+    if off ≥ bytes.size then (acc.reverse, off, none)
+    else (acc.reverse, off, some .truncated)
+  | fuel + 1, off, acc =>
+    if off ≥ bytes.size then
+      (acc.reverse, off, none)
+    else
+      match decodeFrameAt bytes off with
+      | .ok (e, next) =>
+        -- `decodeFrameAt` always advances (a frame is ≥ 20 bytes), but
+        -- guard anyway so a future layout change cannot spin.
+        if next ≤ off then (acc.reverse, off, some .truncated)
+        else decodeAllFramesFrom' bytes fuel next (e :: acc)
+      | .error err => (acc.reverse, off, some err)
+
+/-- Decode every frame in `bytes`, reading by offset rather than by
+    list traversal.  Same result shape as `decodeAllFrames`: the
+    entries in order, the offset of the first incomplete / corrupt
+    frame, and the error that stopped parsing. -/
+def decodeAllFramesFrom (bytes : ByteArray) :
+    List LogEntry × Nat × Option FrameError :=
+  decodeAllFramesFrom' bytes (bytes.size + 1) 0 []
+
+/-! ## Offset-based multi-frame loader (the file-reading path)
+
+The `Stream`-based loader below is the specification form: it is what
+the round-trip tests and the frame proofs elaborate against.  It is
+NOT what should read a file.
+
+`Stream = List UInt8`, so `List.length` is O(n).  `decodeFrame`
+evaluates `rest₁.length` twice in its bounds guard, and
+`decodeAllFrames'` computes `s.length - rest.length` to advance the
+consumed counter — every one of those walks the whole remaining
+stream.  Over F frames in an N-byte file that is O(N x F), on input
+whose framing an untrusted peer controls: a log of many small frames
+made startup quadratic.
+
+The offset form below reads the same bytes out of a `ByteArray`, where
+`size` is O(1) and indexing is O(1), and converts only the per-frame
+payload slice to a list (which the `LogEntry` decoder needs).  The two
+agree by construction — they share the frame layout constants — and
+`decodeAllFramesFrom_agrees_with_decodeAllFrames` in the test suite
+pins that agreement on real corpora.
+
+## Stream-level multi-frame loader
 
 Read as many complete frames as possible from `s`.  Returns the
 parsed entries (in order) and the byte offset of the first
@@ -374,20 +475,41 @@ def readAllEntries (path : System.FilePath) :
   let present ← path.pathExists
   if present then
     let bytes ← IO.FS.readBinFile path
-    pure (decodeAllFrames bytes.toList)
+    -- Offset-based: `decodeAllFrames` on `bytes.toList` walks the
+    -- remaining stream several times per frame, which is O(N x F) on
+    -- a file whose framing an untrusted peer controls.  See the
+    -- offset-loader section above.
+    pure (decodeAllFramesFrom bytes)
   else
     pure ([], 0, none)
 
 /-- Truncate the log file at `path` to the first `len` bytes.
     Used by `loadAndTruncate` to discard the partial tail of a
-    crashed write.  Implementation: read the prefix, then rewrite
-    the file with that prefix.  Less efficient than a real
-    `truncate(2)` syscall (which Lean core does not expose), but
-    correct.  Production deployments wire `truncate(2)` via FFI. -/
+    crashed write.
+
+    Implemented with `IO.FS.Handle.truncate`, which Lean core does
+    expose — the previous read-the-whole-file-and-rewrite-the-prefix
+    approach was documented as a stand-in for an FFI that was never
+    needed.  Rewriting also had a durability hazard the syscall does
+    not: it destroyed the file's contents before writing them back, so
+    a crash mid-write lost the recovered prefix as well as the partial
+    tail.  `truncate` shortens in place and never touches the retained
+    bytes. -/
 def truncateFile (path : System.FilePath) (len : Nat) : IO Unit := do
-  let bytes ← IO.FS.readBinFile path
-  let prefix' := bytes.toList.take len
-  IO.FS.writeBinFile path (ByteArray.mk prefix'.toArray)
+  let handle ← IO.FS.Handle.mk path IO.FS.Mode.readWrite
+  handle.rewind
+  -- `truncate` cuts at the handle's CURRENT position, and core exposes
+  -- no seek, so advance the cursor by reading the retained prefix.
+  -- The read is bounded by `len` (the recovered prefix), never by the
+  -- corrupt tail's declared length.
+  let kept ← handle.read (USize.ofNat len)
+  -- A short read means the file is already at most `len` bytes: the
+  -- cursor sits at EOF and truncating there is a no-op, which is the
+  -- correct behaviour for "truncate to a length we already satisfy".
+  if kept.size < len then
+    pure ()
+  else
+    handle.truncate
 
 /-- The runtime startup path: read the log, truncate the partial
     tail (if any), and return the recovered prefix of entries.

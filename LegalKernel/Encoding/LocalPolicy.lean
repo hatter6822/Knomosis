@@ -588,12 +588,15 @@ def LocalPolicies.decodeMap (s : Stream) :
             (fun (acc : List (ActorId × LocalPolicy))
                  (p : Nat × ByteArray) =>
               match LocalPolicy.decode p.2.data.toList with
-              | .ok (lp, []) => .ok (acc ++ [(p.1.toUInt64, lp)])
+              -- Cons + reverse: `acc ++ [x]` walks the whole
+              -- accumulator per element, so decoding an N-entry map
+              -- cost O(N^2) on attacker-controlled input.
+              | .ok (lp, []) => .ok ((p.1.toUInt64, lp) :: acc)
               | .ok (_, _ :: _) => .error (.trailingBytes 1)
               | .error e => .error e)
             []
         match inner with
-        | .ok entries => .ok (TreeMap.ofList entries compare, rest')
+        | .ok entries => .ok (TreeMap.ofList entries.reverse compare, rest')
         | .error e => .error e
       else
         .error (.nonCanonical "localPolicies map keys must be strictly ascending")

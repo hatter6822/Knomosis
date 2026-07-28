@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "e03e9e4f431bc7f362a176fd7a36589c814b427c55d358150dd2238b108cf911"
+    "source_digest": "95dc27b55b3c4b7111663fdfd6684b905c8ed7051ec89415071f518453f810e7"
   },
   "summary": {
-    "module_count": 311,
-    "declaration_count": 5258
+    "module_count": 313,
+    "declaration_count": 5283
   },
   "modules": [
     {
@@ -18437,7 +18437,7 @@
         {
           "kind": "instance",
           "name": "instEncodableLocalPolicies",
-          "line": 602,
+          "line": 605,
           "called": [
             "Encodable",
             "LocalPolicies",
@@ -18450,7 +18450,7 @@
         {
           "kind": "theorem",
           "name": "localPolicies_encodeMap_deterministic",
-          "line": 609,
+          "line": 612,
           "called": [
             "LocalPolicies",
             "LocalPolicies.encodeMap"
@@ -18459,7 +18459,7 @@
         {
           "kind": "theorem",
           "name": "localPolicies_encodeMap_deterministic_of_equiv",
-          "line": 617,
+          "line": 620,
           "called": [
             "Encoding",
             "LegalKernel",
@@ -18954,7 +18954,7 @@
         {
           "kind": "instance",
           "name": "instEncodableState",
-          "line": 671,
+          "line": 674,
           "called": [
             "Encodable",
             "State",
@@ -18967,7 +18967,7 @@
         {
           "kind": "def",
           "name": "NonceState.encode",
-          "line": 684,
+          "line": 687,
           "called": [
             "NonceState",
             "Stream",
@@ -18977,7 +18977,7 @@
         {
           "kind": "def",
           "name": "KeyRegistry.encodeMap",
-          "line": 688,
+          "line": 691,
           "called": [
             "KeyRegistry",
             "Stream",
@@ -18987,7 +18987,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.encode",
-          "line": 723,
+          "line": 726,
           "called": [
             "Stream",
             "encodeAmount"
@@ -18996,7 +18996,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.decode",
-          "line": 731,
+          "line": 734,
           "called": [
             "DecodeError",
             "Stream",
@@ -19006,7 +19006,7 @@
         {
           "kind": "def",
           "name": "Bridge.DepositRecord.encodeAsBytes",
-          "line": 762,
+          "line": 765,
           "called": [
             "Bridge.DepositRecord.encode"
           ]
@@ -19014,7 +19014,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encodeConsumed",
-          "line": 767,
+          "line": 770,
           "called": [
             "Bridge.DepositRecord.encodeAsBytes",
             "Stream",
@@ -19024,7 +19024,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.encode",
-          "line": 779,
+          "line": 782,
           "called": [
             "Stream",
             "encodeAmount"
@@ -19033,7 +19033,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.encodeAsBytes",
-          "line": 793,
+          "line": 796,
           "called": [
             "Bridge.PendingWithdrawal.encode"
           ]
@@ -19041,7 +19041,7 @@
         {
           "kind": "def",
           "name": "Bridge.PendingWithdrawal.decode",
-          "line": 798,
+          "line": 801,
           "called": [
             "DecodeError",
             "Stream",
@@ -19051,7 +19051,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encodePending",
-          "line": 827,
+          "line": 830,
           "called": [
             "Bridge.PendingWithdrawal.encodeAsBytes",
             "Stream",
@@ -19061,7 +19061,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.encode",
-          "line": 841,
+          "line": 844,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending",
@@ -19072,7 +19072,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decodeConsumed",
-          "line": 854,
+          "line": 857,
           "called": [
             "Bridge.DepositRecord.decode",
             "DecodeError",
@@ -19084,7 +19084,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decodePending",
-          "line": 873,
+          "line": 877,
           "called": [
             "Bridge.PendingWithdrawal.decode",
             "DecodeError",
@@ -19096,7 +19096,7 @@
         {
           "kind": "def",
           "name": "Bridge.BridgeState.decode",
-          "line": 894,
+          "line": 899,
           "called": [
             "Bridge.BridgeState.decodeConsumed",
             "Bridge.BridgeState.decodePending",
@@ -19108,7 +19108,7 @@
         {
           "kind": "instance",
           "name": "instEncodableBridgeState",
-          "line": 935,
+          "line": 940,
           "called": [
             "Bridge.BridgeState.decode",
             "Bridge.BridgeState.encode",
@@ -19120,7 +19120,7 @@
         {
           "kind": "def",
           "name": "ActorBudget.encode",
-          "line": 940,
+          "line": 945,
           "called": [
             "ActorBudget",
             "Stream"
@@ -19129,7 +19129,7 @@
         {
           "kind": "def",
           "name": "ActorBudget.decode",
-          "line": 945,
+          "line": 950,
           "called": [
             "ActorBudget",
             "DecodeError",
@@ -19139,7 +19139,7 @@
         {
           "kind": "instance",
           "name": "instEncodableActorBudget",
-          "line": 954,
+          "line": 959,
           "called": [
             "ActorBudget",
             "ActorBudget.decode",
@@ -19152,7 +19152,7 @@
         {
           "kind": "def",
           "name": "BudgetPolicy.encode",
-          "line": 960,
+          "line": 965,
           "called": [
             "BudgetPolicy",
             "Stream",
@@ -19163,7 +19163,7 @@
         {
           "kind": "def",
           "name": "BudgetPolicy.decode",
-          "line": 968,
+          "line": 973,
           "called": [
             "BudgetPolicy",
             "DecodeError",
@@ -19175,7 +19175,7 @@
         {
           "kind": "instance",
           "name": "instEncodableBudgetPolicy",
-          "line": 987,
+          "line": 992,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.decode",
@@ -19188,7 +19188,7 @@
         {
           "kind": "def",
           "name": "EpochBudgetState.encode",
-          "line": 1008,
+          "line": 1013,
           "called": [
             "EpochBudgetState",
             "Stream",
@@ -19198,7 +19198,7 @@
         {
           "kind": "def",
           "name": "EpochBudgetState.decode",
-          "line": 1015,
+          "line": 1020,
           "called": [
             "ActorBudget",
             "DecodeError",
@@ -19210,7 +19210,7 @@
         {
           "kind": "instance",
           "name": "instEncodableEpochBudgetState",
-          "line": 1022,
+          "line": 1027,
           "called": [
             "Encodable",
             "EpochBudgetState",
@@ -19223,7 +19223,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_roundtrip",
-          "line": 1051,
+          "line": 1056,
           "called": [
             "ActorBudget",
             "ActorBudget.decode",
@@ -19235,7 +19235,7 @@
         {
           "kind": "theorem",
           "name": "actorBudget_encode_injective",
-          "line": 1070,
+          "line": 1075,
           "called": [
             "ActorBudget",
             "ActorBudget.encode",
@@ -19247,7 +19247,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_bounded_roundtrip",
-          "line": 1093,
+          "line": 1098,
           "called": [
             "BudgetPolicy.decode",
             "BudgetPolicy.encode",
@@ -19260,7 +19260,7 @@
         {
           "kind": "theorem",
           "name": "budgetPolicy_encode_injective",
-          "line": 1128,
+          "line": 1133,
           "called": [
             "BudgetPolicy",
             "BudgetPolicy.encode",
@@ -19272,7 +19272,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.encode",
-          "line": 1158,
+          "line": 1163,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.encode",
@@ -19290,7 +19290,7 @@
         {
           "kind": "def",
           "name": "NonceState.decode",
-          "line": 1170,
+          "line": 1175,
           "called": [
             "ActorId",
             "DecodeError",
@@ -19303,7 +19303,7 @@
         {
           "kind": "def",
           "name": "KeyRegistry.decodeMap",
-          "line": 1180,
+          "line": 1185,
           "called": [
             "ActorId",
             "DecodeError",
@@ -19315,7 +19315,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.decode",
-          "line": 1191,
+          "line": 1196,
           "called": [
             "ActorBudget",
             "Bridge.BridgeState.decode",
@@ -19333,7 +19333,7 @@
         {
           "kind": "instance",
           "name": "instEncodableExtendedState",
-          "line": 1217,
+          "line": 1222,
           "called": [
             "Encodable",
             "ExtendedState",
@@ -19346,7 +19346,7 @@
         {
           "kind": "theorem",
           "name": "state_encode_deterministic",
-          "line": 1243,
+          "line": 1248,
           "called": [
             "State"
           ]
@@ -19354,7 +19354,7 @@
         {
           "kind": "theorem",
           "name": "balanceMap_encode_deterministic_of_equiv",
-          "line": 1250,
+          "line": 1255,
           "called": [
             "BalanceMap",
             "BalanceMap.encode"
@@ -19363,7 +19363,7 @@
         {
           "kind": "theorem",
           "name": "extendedState_encode_deterministic",
-          "line": 1260,
+          "line": 1265,
           "called": [
             "ExtendedState",
             "es"
@@ -19372,13 +19372,13 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_deterministic",
-          "line": 1271,
+          "line": 1276,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "depositRecord_encode_deterministic",
-          "line": 1279,
+          "line": 1284,
           "called": [
             "Bridge.DepositRecord.encode"
           ]
@@ -19386,7 +19386,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_encode_deterministic",
-          "line": 1285,
+          "line": 1290,
           "called": [
             "Bridge.PendingWithdrawal.encode"
           ]
@@ -19394,7 +19394,7 @@
         {
           "kind": "theorem",
           "name": "depositRecord_roundtrip",
-          "line": 1295,
+          "line": 1300,
           "called": [
             "Bridge.DepositRecord.decode",
             "Bridge.DepositRecord.encode",
@@ -19407,7 +19407,7 @@
         {
           "kind": "theorem",
           "name": "pendingWithdrawal_roundtrip",
-          "line": 1352,
+          "line": 1357,
           "called": [
             "Bridge.PendingWithdrawal.decode",
             "Bridge.PendingWithdrawal.encode",
@@ -19421,7 +19421,7 @@
         {
           "kind": "theorem",
           "name": "actorId_encode_injective",
-          "line": 1432,
+          "line": 1437,
           "called": [
             "ActorId",
             "Stream",
@@ -19431,7 +19431,7 @@
         {
           "kind": "theorem",
           "name": "resourceId_encode_injective",
-          "line": 1438,
+          "line": 1443,
           "called": [
             "ResourceId",
             "Stream",
@@ -19441,7 +19441,7 @@
         {
           "kind": "theorem",
           "name": "amount_encode_injective",
-          "line": 1444,
+          "line": 1449,
           "called": [
             "Amount",
             "nat_encode_injective"
@@ -19450,7 +19450,7 @@
         {
           "kind": "theorem",
           "name": "nonce_encode_injective",
-          "line": 1453,
+          "line": 1458,
           "called": [
             "Nonce",
             "nat_encode_injective"
@@ -19459,7 +19459,7 @@
         {
           "kind": "theorem",
           "name": "depositId_encode_injective",
-          "line": 1462,
+          "line": 1467,
           "called": [
             "nat_encode_injective"
           ]
@@ -19467,7 +19467,7 @@
         {
           "kind": "theorem",
           "name": "withdrawalId_encode_injective",
-          "line": 1472,
+          "line": 1477,
           "called": [
             "nat_encode_injective"
           ]
@@ -19475,7 +19475,7 @@
         {
           "kind": "theorem",
           "name": "publicKey_encode_injective",
-          "line": 1485,
+          "line": 1490,
           "called": [
             "Encoding",
             "LegalKernel",
@@ -30881,7 +30881,7 @@
     {
       "module": "LegalKernel.Runtime.LogFile",
       "path": "LegalKernel/Runtime/LogFile.lean",
-      "declaration_count": 30,
+      "declaration_count": 34,
       "declarations": [
         {
           "kind": "namespace",
@@ -31041,8 +31041,50 @@
         },
         {
           "kind": "def",
+          "name": "natAtLE",
+          "line": 274,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "decodeFrameAt",
+          "line": 288,
+          "called": [
+            "FrameError",
+            "LogEntry",
+            "LogEntry.decode",
+            "frameMagic0",
+            "frameMagic1",
+            "frameMagic2",
+            "frameMagic3",
+            "frameTrailer",
+            "natAtLE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeAllFramesFrom'",
+          "line": 327,
+          "called": [
+            "FrameError",
+            "LogEntry",
+            "decodeFrameAt"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeAllFramesFrom",
+          "line": 348,
+          "called": [
+            "FrameError",
+            "LogEntry",
+            "decodeAllFramesFrom'"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "decodeAllFrames'",
-          "line": 303,
+          "line": 404,
           "called": [
             "FrameError",
             "LogEntry",
@@ -31053,7 +31095,7 @@
         {
           "kind": "def",
           "name": "decodeAllFrames",
-          "line": 326,
+          "line": 427,
           "called": [
             "FrameError",
             "LogEntry",
@@ -31064,7 +31106,7 @@
         {
           "kind": "def",
           "name": "encodeAllFrames",
-          "line": 337,
+          "line": 438,
           "called": [
             "LogEntry",
             "Stream",
@@ -31075,7 +31117,7 @@
         {
           "kind": "def",
           "name": "appendEntry",
-          "line": 359,
+          "line": 460,
           "called": [
             "LogEntry",
             "encodeFrame"
@@ -31084,23 +31126,23 @@
         {
           "kind": "def",
           "name": "readAllEntries",
-          "line": 371,
+          "line": 472,
           "called": [
             "FrameError",
             "LogEntry",
-            "decodeAllFrames"
+            "decodeAllFramesFrom"
           ]
         },
         {
           "kind": "def",
           "name": "truncateFile",
-          "line": 386,
+          "line": 497,
           "called": []
         },
         {
           "kind": "def",
           "name": "loadAndTruncate",
-          "line": 403,
+          "line": 525,
           "called": [
             "FrameError",
             "LogEntry",
@@ -31112,7 +31154,7 @@
         {
           "kind": "def",
           "name": "verifyChain",
-          "line": 431,
+          "line": 553,
           "called": [
             "ContentHash",
             "LogEntry",
@@ -31123,7 +31165,7 @@
         {
           "kind": "theorem",
           "name": "encodeFrame_deterministic",
-          "line": 450,
+          "line": 572,
           "called": [
             "LogEntry",
             "encodeFrame"
@@ -31132,7 +31174,7 @@
         {
           "kind": "theorem",
           "name": "LogEntry_hash_deterministic",
-          "line": 455,
+          "line": 577,
           "called": [
             "LogEntry",
             "LogEntry.hash"
@@ -31141,13 +31183,13 @@
         {
           "kind": "theorem",
           "name": "frameMagicBytes_length",
-          "line": 460,
+          "line": 582,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "frameTrailer_length",
-          "line": 463,
+          "line": 585,
           "called": [
             "Stream",
             "frameTrailer",
@@ -31157,7 +31199,7 @@
         {
           "kind": "theorem",
           "name": "encodeFrame_length",
-          "line": 471,
+          "line": 593,
           "called": [
             "LegalKernel",
             "LogEntry",
@@ -31835,6 +31877,134 @@
             "Runtime",
             "genesis",
             "replay"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Runtime.ReplayCli",
+      "path": "LegalKernel/Runtime/ReplayCli.lean",
+      "declaration_count": 12,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Runtime.ReplayCli",
+          "line": 30,
+          "called": [
+            "LegalKernel",
+            "LegalKernel.Runtime"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "replayPolicy",
+          "line": 38,
+          "called": [
+            "AuthorityPolicy",
+            "AuthorityPolicy.unrestricted"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "replayGenesis",
+          "line": 41,
+          "called": [
+            "ExtendedState",
+            "ExtendedState.empty"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "formatHashHex",
+          "line": 48,
+          "called": [
+            "ContentHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "usage",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "runReplay",
+          "line": 128,
+          "called": [
+            "AuthorityPolicy",
+            "ContentHash",
+            "ExtendedState",
+            "KeyRegistry",
+            "PublicKey",
+            "ResourceId",
+            "Verify",
+            "attestorPk",
+            "deploymentId",
+            "entries",
+            "hashEncodable",
+            "loadAttestedSnapshot",
+            "loadSnapshot",
+            "readAllEntries",
+            "refundRate",
+            "replayFromSeedWith",
+            "replayGenesis",
+            "replayPolicy",
+            "restoreSnapshot",
+            "toRefundRate",
+            "verifyAttestationWith",
+            "zeroHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "checkHashGrade",
+          "line": 256,
+          "called": [
+            "isProductionHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "hexCharToNibble",
+          "line": 273,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "decodeHexString",
+          "line": 280,
+          "called": [
+            "hexCharToNibble"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "GlobalFlags",
+          "line": 304,
+          "called": [
+            "PublicKey",
+            "deploymentId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "GlobalFlags.withError",
+          "line": 320,
+          "called": [
+            "GlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "parseGlobalFlags",
+          "line": 331,
+          "called": [
+            "GlobalFlags",
+            "GlobalFlags.withError",
+            "LegalKernel.Runtime.ReplayCli",
+            "decodeHexString",
+            "deploymentId"
           ]
         }
       ]
@@ -52045,6 +52215,83 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.Integration.ReplayCliFlags",
+      "path": "LegalKernel/Test/Integration/ReplayCliFlags.lean",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.Integration.ReplayCliFlags",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "rejectsUnknownFlag",
+          "line": 45,
+          "called": [
+            "TestCase",
+            "parseGlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "rejectsMalformedValues",
+          "line": 59,
+          "called": [
+            "TestCase",
+            "parseGlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "parsesWellFormedFlags",
+          "line": 87,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "parseGlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "requireAttestationIsImplemented",
+          "line": 109,
+          "called": [
+            "PublicKey",
+            "TestCase",
+            "assertEq",
+            "parseGlobalFlags",
+            "runReplay"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "emptyArgsParseCleanly",
+          "line": 130,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "parseGlobalFlags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 139,
+          "called": [
+            "LegalKernel.Test.Integration.ReplayCliFlags",
+            "TestCase",
+            "emptyArgsParseCleanly",
+            "parsesWellFormedFlags",
+            "rejectsMalformedValues",
+            "rejectsUnknownFlag",
+            "requireAttestationIsImplemented"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.Integration.ReplayUpToCli",
       "path": "LegalKernel/Test/Integration/ReplayUpToCli.lean",
       "declaration_count": 8,
@@ -55272,7 +55519,7 @@
     {
       "module": "LegalKernel.Test.Runtime.LogFile",
       "path": "LegalKernel/Test/Runtime/LogFile.lean",
-      "declaration_count": 25,
+      "declaration_count": 27,
       "declarations": [
         {
           "kind": "namespace",
@@ -55581,8 +55828,36 @@
         },
         {
           "kind": "def",
+          "name": "offsetLoaderAgreesWithStreamLoader",
+          "line": 406,
+          "called": [
+            "LogEntry",
+            "LogEntry.hash",
+            "Stream",
+            "TestCase",
+            "assertEq",
+            "decodeAllFrames",
+            "decodeAllFramesFrom",
+            "dummyAction",
+            "dummyEntry",
+            "encodeAllFrames",
+            "hashStream"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "truncatePreservesTheRetainedPrefix",
+          "line": 450,
+          "called": [
+            "TestCase",
+            "assertEq",
+            "truncateFile"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 396,
+          "line": 475,
           "called": [
             "LegalKernel.Test.Runtime",
             "LogFileTests",
@@ -55601,9 +55876,11 @@
             "fileTwoEntries",
             "frameRoundtrip",
             "hashDeterminism",
+            "offsetLoaderAgreesWithStreamLoader",
             "partialTailConsumedIsExact",
             "partialTailRecovery",
             "trailerLengthAPI",
+            "truncatePreservesTheRetainedPrefix",
             "truncatedFrame",
             "truncationProducesCleanFile",
             "twoFrameRoundtrip"
@@ -63123,7 +63400,10 @@
           "name": "main",
           "line": 30,
           "called": [
-            "parseGlobalFlags"
+            "checkHashGrade",
+            "parseGlobalFlags",
+            "runReplay",
+            "usage"
           ]
         }
       ]

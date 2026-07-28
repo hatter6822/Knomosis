@@ -393,9 +393,89 @@ def trailerLengthAPI : TestCase := {
     pure ()
 }
 
+/-- The offset-based loader agrees with the Stream-based
+    specification form, on clean multi-frame input and on every
+    corruption shape.
+
+    `readAllEntries` reads files through `decodeAllFramesFrom` because
+    the `Stream` form is O(N x F) — `List.length` is O(n) and the
+    bounds guard plus the consumed-counter walk the remaining stream
+    several times per frame, on input whose framing an untrusted peer
+    controls.  The two must return byte-identical results, so this
+    pins them against each other rather than trusting the shared
+    layout constants. -/
+def offsetLoaderAgreesWithStreamLoader : TestCase := {
+  name := "decodeAllFramesFrom agrees with decodeAllFrames"
+  body := do
+    let entry2 : LogEntry :=
+      { prevHash := LogEntry.hash dummyEntry
+      , signedAction := { dummyAction with nonce := 1 }
+      , postStateHash := hashStream [0xAA] }
+    let entry3 : LogEntry :=
+      { prevHash := LogEntry.hash entry2
+      , signedAction := { dummyAction with nonce := 2 }
+      , postStateHash := hashStream [0xBB] }
+    let clean := encodeAllFrames [dummyEntry, entry2, entry3]
+    -- Every corruption shape the Stream loader distinguishes.
+    let cases : List (String × Stream) :=
+      [ ("empty", [])
+      , ("clean three frames", clean)
+      , ("partial tail", clean ++ [0x4B, 0x4E, 0x4F])
+      , ("truncated mid-payload", clean.take (clean.length - 5))
+      , ("bad magic", 0xFF :: clean.drop 1)
+      , ("bad trailer", clean.take (clean.length - 1) ++ [0x00])
+      , ("garbage only", [0x00, 0x01, 0x02, 0x03, 0x04])
+      ]
+    for (label, s) in cases do
+      let (e₁, c₁, err₁) := decodeAllFrames s
+      let (e₂, c₂, err₂) := decodeAllFramesFrom (ByteArray.mk s.toArray)
+      assertEq (expected := e₁.length) (actual := e₂.length)
+        s!"{label}: entry count"
+      assertEq (expected := c₁) (actual := c₂) s!"{label}: consumed offset"
+      assertEq (expected := err₁.isSome) (actual := err₂.isSome)
+        s!"{label}: error presence"
+      assertEq (expected := toString (repr err₁)) (actual := toString (repr err₂))
+        s!"{label}: error value"
+      -- The entries themselves, not merely their count.
+      assertEq (expected := encodeAllFrames e₁) (actual := encodeAllFrames e₂)
+        s!"{label}: recovered entries"
+}
+
+/-- `truncateFile` shortens in place and leaves the retained prefix
+    byte-identical.
+
+    It used to read the whole file and rewrite the prefix, which
+    destroyed the contents before writing them back — a crash
+    mid-rewrite lost the recovered prefix along with the partial tail.
+    It now uses `IO.FS.Handle.truncate`, which core exposes. -/
+def truncatePreservesTheRetainedPrefix : TestCase := {
+  name := "truncateFile shortens in place, prefix byte-identical"
+  body := do
+    let dir ← IO.currentDir
+    let path := dir / "zz-truncate-test.log"
+    let payload : ByteArray := ByteArray.mk #[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    IO.FS.writeBinFile path payload
+    truncateFile path 4
+    let after ← IO.FS.readBinFile path
+    assertEq (expected := 4) (actual := after.size) "truncated to 4 bytes"
+    assertEq (expected := [(1 : UInt8), 2, 3, 4]) (actual := after.toList)
+      "retained prefix is byte-identical"
+    -- Truncating to a length the file already satisfies is a no-op,
+    -- not an error and not a zero-fill.
+    truncateFile path 100
+    let after2 ← IO.FS.readBinFile path
+    assertEq (expected := 4) (actual := after2.size) "no-op when len >= size"
+    -- Truncating to 0 empties it.
+    truncateFile path 0
+    let after3 ← IO.FS.readBinFile path
+    assertEq (expected := 0) (actual := after3.size) "truncate to zero"
+    IO.FS.removeFile path
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
-  [entryRoundtrip, frameRoundtrip, twoFrameRoundtrip,
+  [offsetLoaderAgreesWithStreamLoader, truncatePreservesTheRetainedPrefix,
+   entryRoundtrip, frameRoundtrip, twoFrameRoundtrip,
    truncatedFrame, badMagicFrame, badTrailerFrame, partialTailRecovery,
    chainValid, chainBroken, hashDeterminism,
    fileRoundtrip, fileTwoEntries, crashConsistencyTruncation, crashConsistencySweep,

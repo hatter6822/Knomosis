@@ -656,16 +656,19 @@ def State.decode (s : Stream) : Except DecodeError (State × Stream) :=
   | .ok (pairs, rest) =>
     -- Each pair carries a serialised inner balance map (as a CBE
     -- byte string).  Re-decode each inner payload as a `BalanceMap`.
+    -- Accumulate by CONS and reverse once.  `acc ++ [x]` walks the
+    -- whole accumulator per element, so decoding an N-entry map cost
+    -- O(N^2) on input an untrusted peer controls the length of.
     let inner : Except DecodeError (List (ResourceId × BalanceMap)) := pairs.foldlM
       (fun (acc : List (ResourceId × BalanceMap)) (p : Nat × ByteArray) =>
         match BalanceMap.decode p.2.data.toList with
-        | .ok (bm, []) => .ok (acc ++ [(p.1.toUInt64, bm)])
+        | .ok (bm, []) => .ok ((p.1.toUInt64, bm) :: acc)
         | .ok (_, _ :: _) =>
           .error (.trailingBytes 1)
         | .error e => .error e)
       []
     match inner with
-    | .ok entries => .ok ({ balances := TreeMap.ofList entries compare }, rest)
+    | .ok entries => .ok ({ balances := TreeMap.ofList entries.reverse compare }, rest)
     | .error e => .error e
   | .error e => .error e
 
@@ -861,12 +864,13 @@ def Bridge.BridgeState.decodeConsumed (s : Stream) :
         (fun (acc : List (Bridge.DepositId × Bridge.DepositRecord))
              (p : Nat × ByteArray) =>
           match Bridge.DepositRecord.decode p.2.data.toList with
-          | .ok (rec, []) => .ok (acc ++ [(p.1, rec)])
+          -- Cons + reverse: see `State.decode`.
+          | .ok (rec, []) => .ok ((p.1, rec) :: acc)
           | .ok (_, _ :: _) => .error (.trailingBytes 1)
           | .error e => .error e)
         []
     match inner with
-    | .ok entries => .ok (TreeMap.ofList entries compare, rest)
+    | .ok entries => .ok (TreeMap.ofList entries.reverse compare, rest)
     | .error e => .error e
   | .error e => .error e
 
@@ -880,12 +884,13 @@ def Bridge.BridgeState.decodePending (s : Stream) :
         (fun (acc : List (Bridge.WithdrawalId × Bridge.PendingWithdrawal))
              (p : Nat × ByteArray) =>
           match Bridge.PendingWithdrawal.decode p.2.data.toList with
-          | .ok (wd, []) => .ok (acc ++ [(p.1, wd)])
+          -- Cons + reverse: see `State.decode`.
+          | .ok (wd, []) => .ok ((p.1, wd) :: acc)
           | .ok (_, _ :: _) => .error (.trailingBytes 1)
           | .error e => .error e)
         []
     match inner with
-    | .ok entries => .ok (TreeMap.ofList entries compare, rest)
+    | .ok entries => .ok (TreeMap.ofList entries.reverse compare, rest)
     | .error e => .error e
   | .error e => .error e
 
