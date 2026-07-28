@@ -207,9 +207,27 @@ contract KnomosisSequencerStakeTest is Test {
         stake.slash(7, challenger);
 
         assertEq(stake.totalStaked(), 0);
-        assertEq(challenger.balance, challengerBalBefore + 5 ether);
+        // The challenger's cut is CREDITED, not pushed: a push lets a
+        // reward recipient that rejects ETH revert the finalisation
+        // awarding it, which — since an open dispute now blocks
+        // `withdraw` — would freeze the stake permanently.
+        assertEq(stake.slashCredit(challenger), 5 ether);
+        assertEq(challenger.balance, challengerBalBefore, "not paid before the claim");
+        // The burn leg still pushes: `burnAddress` is chosen at
+        // deployment, not by an attacker.
         assertEq(address(0xdEaD).balance, burnBalBefore + 5 ether);
         assertTrue(stake.isSlashed(7));
+
+        // The money does reach the challenger, on their own call.
+        vm.prank(challenger);
+        assertEq(stake.claimSlashReward(), 5 ether);
+        assertEq(challenger.balance, challengerBalBefore + 5 ether);
+        assertEq(stake.slashCredit(challenger), 0);
+
+        // And a second claim finds nothing.
+        vm.prank(challenger);
+        vm.expectRevert(KnomosisSequencerStake.NothingToClaim.selector);
+        stake.claimSlashReward();
     }
 
     function test_slash_reverts_on_non_disputeVerifier() public {
@@ -262,6 +280,11 @@ contract KnomosisSequencerStakeTest is Test {
 
         vm.prank(address(verifier));
         stake.slash(1, challenger);
+
+        // Collect the credited leg so the conservation identity is
+        // measured on realised balances, not on the ledger alone.
+        vm.prank(challenger);
+        stake.claimSlashReward();
 
         uint256 paid = challenger.balance - challengerBalBefore;
         uint256 burned = address(0xdEaD).balance - burnBalBefore;

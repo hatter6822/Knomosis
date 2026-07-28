@@ -35,7 +35,22 @@ interface IKnomosisDisputeVerifier {
     function isApprovedAdjudicator(address addr) external view returns (bool);
 
     /// @notice Whether the dispute with id `disputeId` is in the
-    ///         `.open` state (filed, not yet decided).  Used by
-    ///         `KnomosisSequencerStake.withdraw` lock-up.
+    ///         `.open` state (filed, not yet decided).  Per-dispute
+    ///         introspection for tooling; the stake lock-up consults
+    ///         the aggregate `openDisputeCount` below, since a slash
+    ///         draws on the whole stake and is therefore not
+    ///         attributable to one dispute.
     function isDisputeOpen(uint64 disputeId) external view returns (bool);
+
+    /// @notice How many disputes are currently `.open`.
+    ///
+    ///         `KnomosisSequencerStake.withdraw` refuses while this is
+    ///         non-zero: `slash` zeroes the entire stake, so any open
+    ///         dispute puts the entire balance at risk and no part of
+    ///         it is safely withdrawable.
+    function openDisputeCount() external view returns (uint64);
+
+    /// @notice Wei a challenger must post to `fileDispute`.  Refunded
+    ///         on UPHELD, forfeited to the sequencer on REJECTED.
+    function challengerBond() external view returns (uint256);
 }

@@ -57,6 +57,12 @@ contract Deployer {
         uint256 slashRatioBps;
         uint64[] erc20ResourceIds;
         address[] erc20TokenAddrs;
+        /// @dev Wei a challenger must post to `fileDispute`.  Zero (the
+        ///      value the positional `deployAll` leaves) keeps filing
+        ///      free, which is what the bulk of the suite assumes;
+        ///      `deployAllParams` is the entry point for tests that
+        ///      exercise the bond.
+        uint256 challengerBond;
     }
 
     /// @notice Backwards-compatible positional entry point.  Copies the twelve
@@ -90,6 +96,20 @@ contract Deployer {
         p.slashRatioBps = slashRatioBps;
         p.erc20ResourceIds = erc20ResourceIds;
         p.erc20TokenAddrs = erc20TokenAddrs;
+        // `p.challengerBond` stays 0: permissionless, free filing, which
+        // is what every pre-existing caller of this positional form
+        // assumes.  Tests exercising the bond use `deployAllParams`.
+        return _deployAll(p);
+    }
+
+    /// @notice Struct-taking entry point.  Identical to `deployAll`
+    ///         except that every field — including the ones the
+    ///         positional form leaves at their zero value, such as
+    ///         `challengerBond` — is caller-supplied.
+    function deployAllParams(DeployParams memory p)
+        external
+        returns (Deployment memory)
+    {
         return _deployAll(p);
     }
 
@@ -156,7 +176,8 @@ contract Deployer {
                     identityRegistry: address(d.registry),
                     migration: address(0),
                     quorumThreshold: p.quorumThreshold,
-                    approvedAdjudicators: p.adjudicators
+                    approvedAdjudicators: p.adjudicators,
+                    challengerBond: p.challengerBond
                 })
             )
         );

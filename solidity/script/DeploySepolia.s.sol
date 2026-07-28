@@ -115,6 +115,14 @@ contract DeploySepolia is Script {
         uint256 ammMultisigThreshold;
         // Sequencer stake.
         uint256 slashRatioBps;
+        /// @dev Wei a challenger posts to `KnomosisDisputeVerifier.fileDispute`,
+        ///      refunded on UPHELD and forfeited to the sequencer on
+        ///      REJECTED.  An open dispute locks the sequencer's whole
+        ///      stake, so this is what prices the griefing vector that
+        ///      permissionless filing would otherwise open.  Defaulted
+        ///      to the cluster-B `minChallengeBond` so both bonded
+        ///      entry points to the adjudication surface cost the same.
+        uint256 verifierChallengerBond;
         // Cluster-B fault-proof params.
         uint128 stateRootBond;
         uint64 srDisputeWindow;
@@ -296,6 +304,9 @@ contract DeploySepolia is Script {
             uint128(vm.envOr("KNOMOSIS_MIN_CHALLENGE_BOND", uint256(0.05 ether)));
         cfg.minBisectionStepInterval =
             uint64(vm.envOr("KNOMOSIS_MIN_BISECTION_STEP_INTERVAL", uint256(5)));
+        cfg.verifierChallengerBond = vm.envOr(
+            "KNOMOSIS_VERIFIER_CHALLENGER_BOND", uint256(cfg.minChallengeBond)
+        );
 
         cfg.network = _networkName(block.chainid);
         cfg.outPath = vm.envOr(
@@ -682,7 +693,8 @@ contract DeploySepolia is Script {
                 identityRegistry: address(registry),
                 migration: address(0),
                 quorumThreshold: cfg.quorum,
-                approvedAdjudicators: cfg.adjudicators
+                approvedAdjudicators: cfg.adjudicators,
+                challengerBond: cfg.verifierChallengerBond
             })
         );
         require(address(verifier) == predV, "verifier prediction mismatch");

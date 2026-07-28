@@ -108,7 +108,8 @@ contract ConstructorHardeningTest is Test {
             identityRegistry: registry,
             migration: address(0),
             quorumThreshold: 1,
-            approvedAdjudicators: adj
+            approvedAdjudicators: adj,
+            challengerBond: 0
         });
     }
 
