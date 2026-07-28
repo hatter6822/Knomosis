@@ -16,10 +16,60 @@ Workstream-H fault-proof migration.
 
 ---
 
+## 0. DEPLOYMENT BLOCKER — the terminal step does not adjudicate
+
+**Do not deploy this system as an adjudicating backstop.**  The
+bisection narrowing works; the step that decides the winner does
+not.
+
+`KnomosisFaultProofGame.initiateChallenge` anchors *both* game
+endpoints to submitted state roots — `g.high.commit` is the
+disputed root's `rootStateCommit`, and `g.low.commit` is checked
+against `lowStateCommit`.  Both are therefore
+`commitExtendedState`-shaped state roots.
+`terminateOnSingleStep` calls
+`stepVM.executeStep(g.low.commit, …)` and compares the result to
+`g.high.commit`.  But `KnomosisStepVM`'s own contract header
+states that `executeStep` returns "a step-VM-specific 32-byte
+hash" that "is NOT byte-identical to the Lean side's
+`commitExtendedState(kernelOnlyApply es entry)` value".
+
+The two sides of that comparison are different constructions, so
+it never succeeds.  Operationally:
+
+  * **An honest sequencer loses every game it correctly
+    defends.**  A challenger who opens a game on a valid root and
+    plays to single-step wins, and the sequencer's bond is
+    slashed.
+  * The `forge test` suite does not report this.  The per-entry
+    byte-equivalence assertion in
+    `solidity/test/CrossCheck/StepVM.t.sol` gates itself on the
+    fixture header and skips, so the corpus never compares the
+    two recipes.
+
+**Until this is closed**, run the dispute pipeline
+(`KnomosisDisputeVerifier`, adjudicator quorum) as the operative
+backstop and treat the fault-proof game as observability only:
+useful for surfacing a disagreement, not for settling one.  If
+the game contracts are deployed at all, set
+`MIN_CHALLENGE_BOND` high enough that opening a game is not
+profitable purely from the guaranteed sequencer loss.
+
+The fix is to Merkleise the state root so a post-root is
+recomputable from the pre-root plus the proven cell writes.
+`docs/audits/19-findings-and-followups.md` ("Open critical: the
+fault-proof commit-recipe split") records the full blast radius:
+`commitState` and its siblings, the EI.8 injectivity chain,
+`KnomosisStepVM`, the observer, and every fixture corpus.
+
+---
+
 ## 1. Pre-deployment checklist
 
 Before deploying the Workstream-H contracts:
 
+  - [ ] **§0 read and accepted.**  The terminal step does not
+        adjudicate; the game is not a settlement backstop yet.
   - [ ] **Lean side green**: `lake build`, `lake test`,
         `lake exe count_sorries`, `lake exe tcb_audit`,
         `lake exe stub_audit`, `lake exe lex_lint`,

@@ -15,13 +15,28 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "81e26ac235fa816b2ade270307a2c6bee44f17433c39396046495d7e3ac21a02"
+    "source_digest": "6840e90e6529bbd9a619ff191dc5c7176d6e36aabc650150b36336a05afb1a0c"
   },
   "summary": {
-    "module_count": 313,
-    "declaration_count": 5300
+    "module_count": 315,
+    "declaration_count": 5314
   },
   "modules": [
+    {
+      "module": "ApiStabilityAudit",
+      "path": "ApiStabilityAudit.lean",
+      "declaration_count": 1,
+      "declarations": [
+        {
+          "kind": "def",
+          "name": "main",
+          "line": 24,
+          "called": [
+            "aggregate"
+          ]
+        }
+      ]
+    },
     {
       "module": "CountSorries",
       "path": "CountSorries.lean",
@@ -63609,6 +63624,119 @@
           "line": 215,
           "called": [
             "runAll"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "Tools.ApiStabilityAudit",
+      "path": "Tools/ApiStabilityAudit.lean",
+      "declaration_count": 13,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Tools.ApiStabilityAudit",
+          "line": 47,
+          "called": [
+            "LegalKernel.Tools",
+            "readFileSafe"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "searchRoots",
+          "line": 54,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "allowlistPath",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "strip",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "containsSub",
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "isUnascribedPin",
+          "line": 79,
+          "called": [
+            "containsSub",
+            "strip"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "Violation",
+          "line": 96,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "Violation.key",
+          "line": 109,
+          "called": [
+            "Violation"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "Violation.format",
+          "line": 112,
+          "called": [
+            "Violation"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "listLeanFiles",
+          "line": 116,
+          "called": [
+            "entries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "scanFile",
+          "line": 134,
+          "called": [
+            "Violation",
+            "isUnascribedPin",
+            "readFileSafe",
+            "strip"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "readAllowlist",
+          "line": 147,
+          "called": [
+            "allowlistPath",
+            "readFileSafe",
+            "strip"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "aggregate",
+          "line": 156,
+          "called": [
+            "LegalKernel.Tools.ApiStabilityAudit",
+            "Violation",
+            "listLeanFiles",
+            "readAllowlist",
+            "scanFile",
+            "searchRoots"
           ]
         }
       ]

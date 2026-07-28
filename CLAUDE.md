@@ -716,11 +716,11 @@ work units.  Status:
 | E-A–G | Ethereum integration (7 workstreams) | Complete |
 | LP | Actor-scoped policies | Complete (Lean side) |
 | LX-M1–M3 | Lex language (3 milestones) | Complete |
-| H | Fault-proof migration | Complete (Lean + Rust RH-G) |
+| H | Fault-proof migration | Built (Lean + Rust RH-G); **the terminal step does not adjudicate** — see the Workstream H section below |
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
-| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim shipped — **both legs** (Lean + Rust); OQ-GP-8b closed (BOLD-leg ETH→BOLD oracle + independent-observer receipt-fetch) |
+| FQ/GP.8 | Fair queuing (knomosis-host) | Tracks A + B + C complete; D documented; GP.8.5 v2 receipt-verified claim **built** — both legs (Lean gate + theorems, Rust builders/verifiers) — and OQ-GP-8b closed (BOLD-leg ETH→BOLD oracle + independent-observer receipt-fetch), but **not yet wired into a production admission path**: `receiptGatedAdmissibleUnified` has no non-test caller and `ConsumedReceipts` has no home in `BridgeState`, so the `min(cap, L1 wei cost)` bound is proved and available, not enforced.  Wiring it is workstream F1 (`docs/audits/19-findings-and-followups.md`) |
 | GP | Unified gas pool / budgets / AMM | In progress (GP.0–7.4, GP.8 Tracks A–C, GP.8.5 v2 both legs incl. OQ-GP-8b, GP.9.1, GP.11.1–10 complete; GP.10 final ratification remaining — now gated only on the two-reviewer pass, see `unified_gas_pool_plan.md` §GP.10) |
 | AR | Audit remediation | Complete (all findings closed; m-16 via CA) |
 | CA | Chain-level bridge accounting | Complete (closes m-16; §7.6.4 / §7.6.5) |
@@ -1043,7 +1043,7 @@ Plan: `docs/planning/unified_gas_pool_plan.md`
 | GP.5.1–5.5 | Complete | Solidity: ETH+BOLD fee-split deposits, cap audit gate, step-VM kind 21, BOLD circuit breaker + Liquity auto-trigger + TVL cap |
 | GP.6.1–6.5 | Complete | Rust: GP-family encoder, budget admission gate, event-type registry, indexer budget/pool views, BOLD cross-stack corpus |
 | GP.7.0–7.4 | Complete | Bridge-policy characterisation, reserved actors, `gasPoolPolicy`, inductive drain bound, genesis ratification + CLI |
-| GP.8.5 | Complete (both legs) | Receipt-verified claim gate: Lean `ReceiptVerifiedClaim` (`l1GasReceiptVerifier` + `l1EthBoldRateOracle` opaques, `SequencerReimbursementVerified{,Bold}` witnesses, `receiptVerifiedClaimAdmissible` + `…Bold…` + `receiptGatedAdmissibleUnified`, the `min(cap, cost)` double-bounds + pure-strengthening theorems) + Rust `build_receipt_backed{,_bold}` / `is_{,bold_}receipt_backed_by`. OQ-GP-8b closed: BOLD leg via the floored ETH→BOLD conversion + the independent-observer receipt-fetch binding (`knomosis-l1-ingest::receipt_verifier`: tx-keyed canonical binding hash, `derive_gas_receipt`, `verify_{eth,bold}_claim_independently{,_fresh}` with observer-path no-reuse keyed on the canonical re-derived hash, confirmation-depth re-org gate, batch-keyed `RateOracle` for BOLD, fail-closed `0x`/EIP-658 receipt parsing) |
+| GP.8.5 | Built, not wired (both legs) | Receipt-verified claim gate: Lean `ReceiptVerifiedClaim` (`l1GasReceiptVerifier` + `l1EthBoldRateOracle` opaques, `SequencerReimbursementVerified{,Bold}` witnesses, `receiptVerifiedClaimAdmissible` + `…Bold…` + `receiptGatedAdmissibleUnified`, the `min(cap, cost)` double-bounds + pure-strengthening theorems) + Rust `build_receipt_backed{,_bold}` / `is_{,bold_}receipt_backed_by`. OQ-GP-8b closed: BOLD leg via the floored ETH→BOLD conversion + the independent-observer receipt-fetch binding (`knomosis-l1-ingest::receipt_verifier`: tx-keyed canonical binding hash, `derive_gas_receipt`, `verify_{eth,bold}_claim_independently{,_fresh}` with observer-path no-reuse keyed on the canonical re-derived hash, confirmation-depth re-org gate, batch-keyed `RateOracle` for BOLD, fail-closed `0x`/EIP-658 receipt parsing) |
 | GP.9.1 | Complete | `claimBudgetRefund` (index 22); step-VM kind 22; Rust encoder + host gate |
 | GP.11.1–11.7 | Complete | L1 AMM scaffold, deposit seeding, constant-product swap, L2 `ammSwap` (index 23), `ammReserveActor` reservation, AMM reserve policy, cross-stack AMM corpus |
 | GP.11.8 | Complete | AMM state-root commitment integration: BridgeState encoder/decoder extended with 5 AMM fields, EI.7.e injectivity proof updated, `bridgeState_commit_includes_ammState` + `bridgeState_commit_extends_v1_2` + encoding-factoring theorems, strict Bool decoder, Solidity step-VM ammSwap handler, 268-entry cross-stack corpus, 19 acceptance tests |
@@ -1064,9 +1064,39 @@ corpus (278 entries / 170 happy).
 Plans: `docs/planning/fault_proof_migration_plan.md`,
 `docs/fault_proof_design.md`, `docs/fault_proof_runbook.md`
 
-Complete (Lean + Rust).  State-commitment scheme, bisection game,
+Built (Lean + Rust).  State-commitment scheme, bisection game,
 convergence / honesty / settlement theorem chain, SMT cell proofs
 (SC.1–SC.3), step-VM coherence (SVC), observer daemon (RH-G).
+
+**Open critical — the terminal step does not adjudicate.**
+`KnomosisFaultProofGame.initiateChallenge` anchors both game
+endpoints to submitted state roots, so `g.low.commit` and
+`g.high.commit` are `commitExtendedState`-shaped.
+`terminateOnSingleStep` then calls
+`stepVM.executeStep(g.low.commit, …)` and tests the result
+against `g.high.commit` — but `KnomosisStepVM`'s own header states
+that `executeStep` returns "a step-VM-specific 32-byte hash" that
+"is NOT byte-identical to" a `commitExtendedState` value.  The two
+sides of the comparison are different constructions, so it never
+succeeds and an honest sequencer loses every game it correctly
+defends.  The per-entry byte-equivalence assertion in
+`solidity/test/CrossCheck/StepVM.t.sol` is skipped for exactly
+this reason, which is why no suite reports it.
+
+On the Lean side the same split appears as vacuity:
+`kernelStepApply` returns the responder's own
+`step.postStateCommit` whenever `verifyCellProofs` passes, and
+that is `List.all` over the bundle — an **empty** bundle passes
+vacuously — after which `GameTransition.terminateOnSingleStep`
+compares the value against the responder's own
+`claimedPostCommit`.
+
+Closing it means Merkleising the state root so a post-root is
+recomputable from the pre-root plus the proven cell writes;
+`docs/audits/19-findings-and-followups.md` records the full
+blast radius.  Until then the fault-proof game must not be
+treated as an adjudicating backstop.  The bisection narrowing
+itself is proved and unaffected.
 
 ### Fair queuing (Workstream FQ / GP.8)
 
@@ -1077,7 +1107,8 @@ signer-hint wire protocol (`PROTOCOL_VERSION 2`), persistent
 pipelined connections.  Track B (v1 reimbursement claim) complete:
 `knomosis-l1-ingest::sequencer_claim::SequencerClaim::build` (capped,
 sequencer-only, `Zeroizing` pool key; `abi.md` §10.2.6).  GP.8.5 v2
-receipt-verified claim core complete: `LegalKernel.Bridge.ReceiptVerifiedClaim`
+receipt-verified claim core built (not yet wired into a
+production admission path — see the GP table row): `LegalKernel.Bridge.ReceiptVerifiedClaim`
 (the `l1GasReceiptVerifier` opaque + `SequencerReimbursementVerified`
 witness + `receiptVerifiedClaimAdmissible` gate; headline
 `receiptVerifiedClaim_capped_and_backed` = `min(cap, L1 wei cost)` bound;
