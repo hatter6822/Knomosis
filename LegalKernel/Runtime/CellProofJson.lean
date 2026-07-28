@@ -82,29 +82,12 @@ def formatCellTag (t : CellTag) : String × String × String :=
     let raw := Nat.toDigits 16 lo
     let pad := List.replicate (16 - raw.length) '0'
     String.ofList (pad ++ raw)
-  let kind := toString t.kindIndex
-  match t with
-  | .balance r a       => (kind, toHexU64 r.toNat, toHexU64 a.toNat)
-  | .nonce a           => (kind, toHexU64 a.toNat, toHexU64 0)
-  | .registry a        => (kind, toHexU64 a.toNat, toHexU64 0)
-  | .localPolicy a     => (kind, toHexU64 a.toNat, toHexU64 0)
-  -- DepositId / WithdrawalId are `Nat` already (per
-  -- Bridge/State.lean), so no `.toNat` projection.
-  | .bridgeConsumed d  => (kind, toHexU64 d, toHexU64 0)
-  | .bridgePending w   => (kind, toHexU64 w, toHexU64 0)
-  | .bridgeNextWdId    => (kind, toHexU64 0, toHexU64 0)
-  -- Singleton cells carry no key; the per-actor budget cell keys on
-  -- the actor, like `nonce` / `registry` / `localPolicy`.
-  | .bridgeAmmReserveEth        => (kind, toHexU64 0, toHexU64 0)
-  | .bridgeAmmReserveBold       => (kind, toHexU64 0, toHexU64 0)
-  | .bridgeBoldCircuitClosed    => (kind, toHexU64 0, toHexU64 0)
-  | .bridgeBoldTvlCap           => (kind, toHexU64 0, toHexU64 0)
-  | .bridgeBoldTotalLockedValue => (kind, toHexU64 0, toHexU64 0)
-  | .bridgeAmmDisabled          => (kind, toHexU64 0, toHexU64 0)
-  | .epochBudget a              => (kind, toHexU64 a.toNat, toHexU64 0)
-  | .budgetPolicyFreeTier       => (kind, toHexU64 0, toHexU64 0)
-  | .budgetPolicyActionCost     => (kind, toHexU64 0, toHexU64 0)
-  | .budgetPolicyCurrentEpoch   => (kind, toHexU64 0, toHexU64 0)
+  -- One source of truth: `CellTag.flatKey`.  This used to be an
+  -- exhaustive match duplicating the tag destructuring, which had to
+  -- be kept in lockstep with two other copies; a divergence is a
+  -- cross-stack key mismatch.
+  let (kind, keyA, keyB) := t.flatKey
+  (toString kind, toHexU64 keyA, toHexU64 keyB)
 
 /-- Encode a `ByteArray` as a lowercase hex string with no `0x`
     prefix.  Width = `2 × bytes.size`. -/

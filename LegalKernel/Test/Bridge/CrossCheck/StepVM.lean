@@ -133,24 +133,9 @@ private def encodeActionFields (action : Action) : String :=
     state) to the flat fixture-ready record. -/
 private def cellProofForFixtureFromCellProof (p : CellProof) :
     CellProofForFixture :=
-  let (kindNat, keyA, keyB) : Nat × Nat × Nat := match p.cellTag with
-    | .balance r a       => (0, r.toNat, a.toNat)
-    | .nonce a           => (1, a.toNat, 0)
-    | .registry a        => (2, a.toNat, 0)
-    | .localPolicy a     => (3, a.toNat, 0)
-    | .bridgeConsumed d  => (4, d, 0)
-    | .bridgePending w   => (5, w, 0)
-    | .bridgeNextWdId    => (6, 0, 0)
-    | .bridgeAmmReserveEth        => (7, 0, 0)
-    | .bridgeAmmReserveBold       => (8, 0, 0)
-    | .bridgeBoldCircuitClosed    => (9, 0, 0)
-    | .bridgeBoldTvlCap           => (10, 0, 0)
-    | .bridgeBoldTotalLockedValue => (11, 0, 0)
-    | .bridgeAmmDisabled          => (12, 0, 0)
-    | .epochBudget a              => (13, a.toNat, 0)
-    | .budgetPolicyFreeTier       => (14, 0, 0)
-    | .budgetPolicyActionCost     => (15, 0, 0)
-    | .budgetPolicyCurrentEpoch   => (16, 0, 0)
+  -- `CellTag.flatKey` is the single source of truth for this
+  -- destructuring (see `CellProofJson`).
+  let (kindNat, keyA, keyB) : Nat × Nat × Nat := p.cellTag.flatKey
   { cellKindNat       := kindNat,
     keyANat           := keyA,
     keyBNat           := keyB,

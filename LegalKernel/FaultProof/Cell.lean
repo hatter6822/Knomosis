@@ -162,6 +162,44 @@ def CellTag.kindIndex : CellTag → Nat
   | .budgetPolicyActionCost     => 15
   | .budgetPolicyCurrentEpoch   => 16
 
+/-- The two key components of a `CellTag`.  Singleton cells (the
+    bridge scalars, the budget-policy scalars) carry `(0, 0)`; the
+    kind index is what distinguishes them. -/
+def CellTag.keyParts : CellTag → Nat × Nat
+  | .balance r a                => (r.toNat, a.toNat)
+  | .nonce a                    => (a.toNat, 0)
+  | .registry a                 => (a.toNat, 0)
+  | .localPolicy a              => (a.toNat, 0)
+  -- `DepositId` / `WithdrawalId` are `Nat` already, so no `.toNat`.
+  | .bridgeConsumed d           => (d, 0)
+  | .bridgePending w            => (w, 0)
+  | .bridgeNextWdId             => (0, 0)
+  | .bridgeAmmReserveEth        => (0, 0)
+  | .bridgeAmmReserveBold       => (0, 0)
+  | .bridgeBoldCircuitClosed    => (0, 0)
+  | .bridgeBoldTvlCap           => (0, 0)
+  | .bridgeBoldTotalLockedValue => (0, 0)
+  | .bridgeAmmDisabled          => (0, 0)
+  | .epochBudget a              => (a.toNat, 0)
+  | .budgetPolicyFreeTier       => (0, 0)
+  | .budgetPolicyActionCost     => (0, 0)
+  | .budgetPolicyCurrentEpoch   => (0, 0)
+
+/-- `(kindIndex, keyA, keyB)` — the canonical flat projection of a
+    cell tag.
+
+    One source of truth for a destructuring that had been written
+    out three times (the SMT key derivation, the cell-proof JSON
+    formatter, and the cross-stack fixture writer), each an
+    exhaustive match that had to be extended in lockstep.  A
+    divergence between them is a cross-stack key mismatch — the
+    failure mode where a proof for one cell verifies against
+    another. -/
+def CellTag.flatKey (t : CellTag) : Nat × Nat × Nat :=
+  let (a, b) := t.keyParts
+  (t.kindIndex, a, b)
+
+
 /-! ## `CellProof` (§12.1.4)
 
 The proof carries a *witness* `ExtendedState` from which the

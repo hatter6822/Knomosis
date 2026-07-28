@@ -68,6 +68,50 @@ library StepVMMerkle {
     }
 
     /* ---------------------------------------------------------- */
+    /* Canonical cell-key derivation                              */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Derive the canonical SMT key for a cell from its
+    ///         logical identity.  Mirrors Lean's
+    ///         `LegalKernel.FaultProof.smtCellKey`.
+    ///
+    /// @dev    **Callers must DERIVE the key, never accept one.**
+    ///         An SMT cell proof opens one leaf, and which leaf is
+    ///         determined by the key.  If a caller supplies the key,
+    ///         a proof opening cell X can be presented as a proof
+    ///         about cell Y — the responder opens whichever balance
+    ///         cell it likes and offers the value as, say, the AMM
+    ///         kill switch.  `verifyCellSmtProof` below takes the key
+    ///         as calldata precisely so that the ONE place deriving
+    ///         it is this function.
+    ///
+    ///         The pre-image is `abi.encodePacked(uint8, uint256,
+    ///         uint256)` — 65 bytes, fixed-width, no length prefixes
+    ///         — which is byte-identical to Lean's
+    ///         `cellKeyPreimageOf`:
+    ///
+    ///             [kind : 1 byte] ++ [keyA : 32 BE] ++ [keyB : 32 BE]
+    ///
+    ///         Hashing rather than packing into 32 bytes directly is
+    ///         forced by the key types: Lean's `DepositId` /
+    ///         `WithdrawalId` are unbounded naturals, so a packed
+    ///         `1 + 8 + 8` key would alias ids agreeing mod 2^64.
+    ///
+    /// @param cellKind the `KnomosisStepVM.CellKind` discriminator.
+    /// @param keyA     the first key component (resource / actor /
+    ///                 deposit id / withdrawal id; 0 for singletons).
+    /// @param keyB     the second key component (actor for balance
+    ///                 cells; 0 otherwise).
+    /// @return the 32-byte SMT key.
+    function deriveCellSmtKey(uint8 cellKind, uint256 keyA, uint256 keyB)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encodePacked(cellKind, keyA, keyB));
+    }
+
+    /* ---------------------------------------------------------- */
     /* Cell-level proof verification (SMT form)                   */
     /* ---------------------------------------------------------- */
 

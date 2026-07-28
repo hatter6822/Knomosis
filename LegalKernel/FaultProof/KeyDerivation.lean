@@ -25,6 +25,7 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.Bridge.WithdrawalRoot
+import LegalKernel.FaultProof.Cell
 
 namespace LegalKernel
 namespace FaultProof
@@ -202,6 +203,116 @@ theorem smtPathFromNat_inj_under_bound
     rw [h_swap] at h
     exact h
   exact nat_eq_of_testBit_below n₁ n₂ smtHeight h_bound₁ h_bound₂ h_bits_reindexed
+
+/-! ## Canonical SMT key for a cell (WU H.2.6 / SC.2)
+
+An SMT cell proof opens ONE leaf of the state tree.  Which leaf is
+determined by the key, so if the key were caller-supplied a proof
+for cell X could be replayed as a proof for cell Y — the responder
+would open the balance cell it likes and present the value as, say,
+the AMM kill switch.  `KnomosisStepVM` must therefore DERIVE the
+key from `(cellKind, keyA, keyB)` rather than accept one, and the
+two stacks must derive byte-identically or they compute different
+roots.
+
+The pre-image layout is fixed-width and packed so the Solidity side
+is a single `abi.encodePacked`:
+
+```
+cellKeyPreimage t
+  = [kindIndex : 1 byte] ++ [keyA : 32 bytes BE] ++ [keyB : 32 bytes BE]
+```
+
+which is exactly
+`abi.encodePacked(uint8(cellKind), uint256(keyA), uint256(keyB))`
+— 65 bytes, no length prefixes, no padding ambiguity.
+
+Hashing rather than packing directly into 32 bytes is forced by the
+key types: `DepositId` and `WithdrawalId` are `Nat`, so a packed
+`(1 + 8 + 8)`-byte key would alias two deposit ids agreeing mod
+`2^64`.  Injectivity is therefore conditional on collision-freeness
+over the finitely many pre-images in play, in the same
+`Bridge.CollisionFreeOn` style the commitment chain uses. -/
+
+/-- Big-endian 32-byte encoding of a `Nat`, truncated mod `2^256`.
+    Mirrors Solidity's `uint256` word. -/
+def natToBytes32BE (n : Nat) : ByteArray :=
+  ByteArray.mk
+    ((List.range 32).map (fun i =>
+      UInt8.ofNat ((n >>> (8 * (31 - i))) % 256))).toArray
+
+/-- `natToBytes32BE` always produces exactly 32 bytes. -/
+theorem natToBytes32BE_size (n : Nat) : (natToBytes32BE n).size = 32 := by
+  unfold natToBytes32BE
+  simp [ByteArray.size]
+
+/-- The packed `(kind, keyA, keyB)` pre-image.  Kept separate from
+    `cellKeyPreimage` so the layout can be stated and reasoned about
+    without case-splitting the 17-constructor tag, and so the
+    Solidity mirror has a named counterpart to point at:
+
+        abi.encodePacked(uint8(kind), uint256(keyA), uint256(keyB)) -/
+def cellKeyPreimageOf (kind keyA keyB : Nat) : ByteArray :=
+  ByteArray.mk #[UInt8.ofNat (kind % 256)] ++
+    natToBytes32BE keyA ++ natToBytes32BE keyB
+
+/-- The packed pre-image is exactly 65 bytes: `1 + 32 + 32`. -/
+theorem cellKeyPreimageOf_size (kind keyA keyB : Nat) :
+    (cellKeyPreimageOf kind keyA keyB).size = 65 := by
+  -- Rewrite the appends first: letting `simp` at the whole term
+  -- unfold both 32-element `List.range` maps blows `maxRecDepth`.
+  unfold cellKeyPreimageOf
+  rw [ByteArray.size_append, ByteArray.size_append,
+      natToBytes32BE_size, natToBytes32BE_size]
+  simp [ByteArray.size]
+
+/-- The hash pre-image for a cell's SMT key. -/
+def cellKeyPreimage (t : CellTag) : ByteArray :=
+  let (kind, keyA, keyB) := t.flatKey
+  cellKeyPreimageOf kind keyA keyB
+
+/-- The pre-image is exactly 65 bytes, for every tag. -/
+theorem cellKeyPreimage_size (t : CellTag) :
+    (cellKeyPreimage t).size = 65 := by
+  unfold cellKeyPreimage
+  exact cellKeyPreimageOf_size _ _ _
+
+/-- The canonical SMT key for a cell.
+
+    `KnomosisStepVM` computes
+    `keccak256(abi.encodePacked(uint8(cellKind), uint256(keyA),
+    uint256(keyB)))`, which is this function under the production
+    keccak256 binding. -/
+def smtCellKey (t : CellTag) : ByteArray :=
+  LegalKernel.Runtime.hashBytes (cellKeyPreimage t)
+
+/-- The cell key is a 32-byte hash, so it indexes a depth-256 SMT. -/
+theorem smtCellKey_size (t : CellTag) : (smtCellKey t).size = 32 :=
+  LegalKernel.Runtime.hashBytes_size _
+
+/-- Distinct cells get distinct keys, under collision-freeness on
+    the two pre-images involved.
+
+    This is the property that makes an SMT cell proof
+    non-replayable: a proof opening `smtCellKey t₁` cannot be
+    presented as a proof about `t₂`.  Conditional rather than
+    unconditional because the pre-image itself is only injective up
+    to the `2^256` truncation of the `Nat` key components — which no
+    reachable `DepositId` approaches, but which the statement does
+    not get to assume. -/
+theorem smtCellKey_injective_under_collision_free
+    (t₁ t₂ : CellTag)
+    (h_cf : Bridge.CollisionFreeOn
+      [cellKeyPreimage t₁, cellKeyPreimage t₂] LegalKernel.Runtime.hashBytes)
+    (h_preimage_inj : cellKeyPreimage t₁ = cellKeyPreimage t₂ → t₁ = t₂)
+    (h_key : smtCellKey t₁ = smtCellKey t₂) :
+    t₁ = t₂ := by
+  apply h_preimage_inj
+  exact h_cf _ (by simp) _ (by simp) h_key
+
+/-- The key derivation is deterministic. -/
+theorem smtCellKey_deterministic (t₁ t₂ : CellTag) (h : t₁ = t₂) :
+    smtCellKey t₁ = smtCellKey t₂ := by rw [h]
 
 end FaultProof
 end LegalKernel

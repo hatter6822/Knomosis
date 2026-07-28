@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "3d3f2e63d1edb3fe951983b2cfd50e5fdc7584a26847979ea73ecce1f7b51a0c"
+    "source_digest": "0115e08e3934ff75f6697509564342cc176796b160e0ed24c75d56785793827c"
   },
   "summary": {
     "module_count": 89,
-    "declaration_count": 1977
+    "declaration_count": 1978
   },
   "modules": [
     {
@@ -4711,7 +4711,7 @@
     {
       "module": "StepVMMerkle",
       "path": "solidity/src/lib/StepVMMerkle.sol",
-      "declaration_count": 5,
+      "declaration_count": 6,
       "declarations": [
         {
           "kind": "library",
@@ -4733,14 +4733,20 @@
         },
         {
           "kind": "function",
-          "name": "verifyCellSmtProof",
+          "name": "deriveCellSmtKey",
           "line": 105,
           "called": []
         },
         {
           "kind": "function",
+          "name": "verifyCellSmtProof",
+          "line": 149,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "updateCommitment",
-          "line": 126,
+          "line": 170,
           "called": []
         }
       ]

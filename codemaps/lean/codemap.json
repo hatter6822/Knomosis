@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "eb9d13922f69034e71a10d0b59dff50436afc9e261ae0c9b04e7c89f94df44f3"
+    "source_digest": "d9d956458ca25d2e154c5d888b0d2f2b6082ae0b01bcb537d547fa735a4a2da1"
   },
   "summary": {
     "module_count": 315,
-    "declaration_count": 5344
+    "declaration_count": 5356
   },
   "modules": [
     {
@@ -20281,7 +20281,7 @@
     {
       "module": "LegalKernel.FaultProof.Cell",
       "path": "LegalKernel/FaultProof/Cell.lean",
-      "declaration_count": 13,
+      "declaration_count": 15,
       "declarations": [
         {
           "kind": "namespace",
@@ -20317,9 +20317,25 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "CellTag.keyParts",
+          "line": 167,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "CellTag.flatKey",
+          "line": 197,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
           "kind": "structure",
           "name": "CellProof",
-          "line": 194,
+          "line": 232,
           "called": [
             "CellTag",
             "ExtendedState"
@@ -20328,7 +20344,7 @@
         {
           "kind": "structure",
           "name": "CellProofBundle",
-          "line": 208,
+          "line": 246,
           "called": [
             "CellProof"
           ]
@@ -20336,7 +20352,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.empty",
-          "line": 217,
+          "line": 255,
           "called": [
             "CellProofBundle"
           ]
@@ -20344,7 +20360,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.push",
-          "line": 220,
+          "line": 258,
           "called": [
             "CellProof",
             "CellProofBundle"
@@ -20353,7 +20369,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.size",
-          "line": 225,
+          "line": 263,
           "called": [
             "CellProofBundle"
           ]
@@ -20361,13 +20377,13 @@
         {
           "kind": "namespace",
           "name": "Cell",
-          "line": 244,
+          "line": 282,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "SmtProof",
-          "line": 247,
+          "line": 285,
           "called": [
             "SmtCellProof"
           ]
@@ -20375,7 +20391,7 @@
         {
           "kind": "abbrev",
           "name": "smtVerify",
-          "line": 251,
+          "line": 289,
           "called": [
             "verifySmtCellProof"
           ]
@@ -20383,7 +20399,7 @@
         {
           "kind": "theorem",
           "name": "smtSound",
-          "line": 259,
+          "line": 297,
           "called": [
             "BitsKey",
             "Cell",
@@ -22024,18 +22040,18 @@
     {
       "module": "LegalKernel.FaultProof.KeyDerivation",
       "path": "LegalKernel/FaultProof/KeyDerivation.lean",
-      "declaration_count": 12,
+      "declaration_count": 22,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 28,
+          "line": 29,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 29,
+          "line": 30,
           "called": [
             "LegalKernel.Bridge"
           ]
@@ -22043,7 +22059,7 @@
         {
           "kind": "def",
           "name": "smtPathFromNat",
-          "line": 40,
+          "line": 41,
           "called": [
             "smtHeight"
           ]
@@ -22051,7 +22067,7 @@
         {
           "kind": "theorem",
           "name": "smtPathFromNat_length",
-          "line": 47,
+          "line": 48,
           "called": [
             "smtHeight",
             "smtPathFromNat"
@@ -22060,7 +22076,7 @@
         {
           "kind": "theorem",
           "name": "smtPathFromNat_deterministic",
-          "line": 53,
+          "line": 54,
           "called": [
             "smtPathFromNat"
           ]
@@ -22068,7 +22084,7 @@
         {
           "kind": "theorem",
           "name": "smtPathFromNat_eq_iff_bits_eq",
-          "line": 75,
+          "line": 76,
           "called": [
             "smtHeight",
             "smtPathFromNat"
@@ -22077,13 +22093,13 @@
         {
           "kind": "def",
           "name": "smtHeight",
-          "line": 116,
+          "line": 117,
           "called": []
         },
         {
           "kind": "def",
           "name": "smtPath",
-          "line": 119,
+          "line": 120,
           "called": [
             "smtHeight",
             "smtPathFromNat"
@@ -22092,7 +22108,7 @@
         {
           "kind": "theorem",
           "name": "smtPath_length",
-          "line": 122,
+          "line": 123,
           "called": [
             "smtPath",
             "smtPathFromNat_length"
@@ -22101,7 +22117,7 @@
         {
           "kind": "theorem",
           "name": "smtPath_bits_eq",
-          "line": 131,
+          "line": 132,
           "called": [
             "smtPath",
             "smtPathFromNat_eq_iff_bits_eq",
@@ -22111,20 +22127,107 @@
         {
           "kind": "theorem",
           "name": "nat_eq_of_testBit_below",
-          "line": 160,
+          "line": 161,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "smtPathFromNat_inj_under_bound",
-          "line": 184,
+          "line": 185,
           "called": [
-            "FaultProof",
-            "LegalKernel",
             "nat_eq_of_testBit_below",
             "smtHeight",
             "smtPathFromNat",
             "smtPathFromNat_eq_iff_bits_eq"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "natToBytes32BE",
+          "line": 238,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "natToBytes32BE_size",
+          "line": 244,
+          "called": [
+            "natToBytes32BE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cellKeyPreimageOf",
+          "line": 254,
+          "called": [
+            "natToBytes32BE"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cellKeyPreimageOf_size",
+          "line": 259,
+          "called": [
+            "cellKeyPreimageOf",
+            "natToBytes32BE_size"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cellKeyPreimage",
+          "line": 269,
+          "called": [
+            "CellTag",
+            "cellKeyPreimageOf"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cellKeyPreimage_size",
+          "line": 274,
+          "called": [
+            "CellTag",
+            "cellKeyPreimage",
+            "cellKeyPreimageOf_size"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "smtCellKey",
+          "line": 285,
+          "called": [
+            "CellTag",
+            "cellKeyPreimage"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtCellKey_size",
+          "line": 289,
+          "called": [
+            "CellTag",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtCellKey_injective_under_collision_free",
+          "line": 302,
+          "called": [
+            "CellTag",
+            "cellKeyPreimage",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtCellKey_deterministic",
+          "line": 313,
+          "called": [
+            "CellTag",
+            "FaultProof",
+            "LegalKernel",
+            "smtCellKey"
           ]
         }
       ]
@@ -30867,13 +30970,13 @@
         {
           "kind": "def",
           "name": "bytesHex",
-          "line": 110,
+          "line": 93,
           "called": []
         },
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 134,
+          "line": 117,
           "called": [
             "CellProof",
             "LegalKernel.Runtime.CellProofJson",
@@ -40594,7 +40697,7 @@
         {
           "kind": "def",
           "name": "stateWithBalances",
-          "line": 162,
+          "line": 147,
           "called": [
             "ActorId",
             "Amount",
@@ -40608,7 +40711,7 @@
         {
           "kind": "def",
           "name": "bundleToFixtureProofs",
-          "line": 171,
+          "line": 156,
           "called": [
             "CellProof",
             "CellProofForFixture",
@@ -40618,7 +40721,7 @@
         {
           "kind": "def",
           "name": "buildTransferHappy",
-          "line": 181,
+          "line": 166,
           "called": [
             "Action",
             "ActorId",
@@ -40645,7 +40748,7 @@
         {
           "kind": "def",
           "name": "buildMintHappy",
-          "line": 228,
+          "line": 213,
           "called": [
             "Action",
             "ActorId",
@@ -40669,7 +40772,7 @@
         {
           "kind": "def",
           "name": "buildBurnHappy",
-          "line": 259,
+          "line": 244,
           "called": [
             "Action",
             "ActorId",
@@ -40693,7 +40796,7 @@
         {
           "kind": "def",
           "name": "buildFreezeResourceHappy",
-          "line": 290,
+          "line": 275,
           "called": [
             "Action",
             "ActorId",
@@ -40716,7 +40819,7 @@
         {
           "kind": "def",
           "name": "buildReplaceKeyHappy",
-          "line": 316,
+          "line": 301,
           "called": [
             "Action",
             "ActorId",
@@ -40737,7 +40840,7 @@
         {
           "kind": "def",
           "name": "buildRewardHappy",
-          "line": 346,
+          "line": 331,
           "called": [
             "Action",
             "ActorId",
@@ -40761,7 +40864,7 @@
         {
           "kind": "def",
           "name": "buildDistributeOthersHappy",
-          "line": 384,
+          "line": 369,
           "called": [
             "Action",
             "ActorId",
@@ -40787,7 +40890,7 @@
         {
           "kind": "def",
           "name": "buildRegisterIdentityHappy",
-          "line": 444,
+          "line": 429,
           "called": [
             "Action",
             "ActorId",
@@ -40808,7 +40911,7 @@
         {
           "kind": "def",
           "name": "buildDepositHappy",
-          "line": 475,
+          "line": 460,
           "called": [
             "Action",
             "ActorId",
@@ -40832,7 +40935,7 @@
         {
           "kind": "def",
           "name": "buildWithdrawHappy",
-          "line": 509,
+          "line": 494,
           "called": [
             "Action",
             "ActorId",
@@ -40857,7 +40960,7 @@
         {
           "kind": "def",
           "name": "buildDepositWithFeeHappy",
-          "line": 556,
+          "line": 541,
           "called": [
             "Action",
             "ActorId",
@@ -40883,7 +40986,7 @@
         {
           "kind": "def",
           "name": "buildTopUpActionBudgetHappy",
-          "line": 625,
+          "line": 610,
           "called": [
             "Action",
             "ActorId",
@@ -40909,7 +41012,7 @@
         {
           "kind": "def",
           "name": "buildTopUpActionBudgetForHappy",
-          "line": 686,
+          "line": 671,
           "called": [
             "Action",
             "ActorId",
@@ -40935,7 +41038,7 @@
         {
           "kind": "def",
           "name": "buildClaimBudgetRefundHappy",
-          "line": 732,
+          "line": 717,
           "called": [
             "Action",
             "ActorId",
@@ -40961,7 +41064,7 @@
         {
           "kind": "def",
           "name": "buildOpaqueHappy",
-          "line": 783,
+          "line": 768,
           "called": [
             "Action",
             "ActorId",
@@ -40982,7 +41085,7 @@
         {
           "kind": "def",
           "name": "buildDisputeWithdrawHappy",
-          "line": 810,
+          "line": 795,
           "called": [
             "ActorId",
             "Nonce",
@@ -40994,7 +41097,7 @@
         {
           "kind": "def",
           "name": "buildRollbackHappy",
-          "line": 817,
+          "line": 802,
           "called": [
             "ActorId",
             "Nonce",
@@ -41006,7 +41109,7 @@
         {
           "kind": "def",
           "name": "buildRevokeLocalPolicyHappy",
-          "line": 824,
+          "line": 809,
           "called": [
             "ActorId",
             "Nonce",
@@ -41018,7 +41121,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofChallengeHappy",
-          "line": 831,
+          "line": 816,
           "called": [
             "ActorId",
             "Nonce",
@@ -41030,7 +41133,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofResolutionHappy",
-          "line": 840,
+          "line": 825,
           "called": [
             "ActorId",
             "Nonce",
@@ -41042,7 +41145,7 @@
         {
           "kind": "def",
           "name": "buildProportionalDiluteHappy",
-          "line": 858,
+          "line": 843,
           "called": [
             "Action",
             "ActorId",
@@ -41069,7 +41172,7 @@
         {
           "kind": "def",
           "name": "minimalDispute",
-          "line": 929,
+          "line": 914,
           "called": [
             "ActorId",
             "Nonce",
@@ -41079,7 +41182,7 @@
         {
           "kind": "def",
           "name": "buildDisputeHappy",
-          "line": 938,
+          "line": 923,
           "called": [
             "ActorId",
             "Nonce",
@@ -41092,7 +41195,7 @@
         {
           "kind": "def",
           "name": "buildVerdictHappy",
-          "line": 947,
+          "line": 932,
           "called": [
             "ActorId",
             "Nonce",
@@ -41104,7 +41207,7 @@
         {
           "kind": "def",
           "name": "buildDeclareLocalPolicyHappy",
-          "line": 959,
+          "line": 944,
           "called": [
             "ActorId",
             "LocalPolicy",
@@ -41118,7 +41221,7 @@
         {
           "kind": "def",
           "name": "buildAdversarialBadPreCommit",
-          "line": 971,
+          "line": 956,
           "called": [
             "StepVMFixture",
             "actionKindByte"
@@ -41127,7 +41230,7 @@
         {
           "kind": "def",
           "name": "transferFixtures",
-          "line": 993,
+          "line": 978,
           "called": [
             "ActorId",
             "Amount",
@@ -41141,7 +41244,7 @@
         {
           "kind": "def",
           "name": "mintFixtures",
-          "line": 1011,
+          "line": 996,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41151,7 +41254,7 @@
         {
           "kind": "def",
           "name": "burnFixtures",
-          "line": 1021,
+          "line": 1006,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -41162,7 +41265,7 @@
         {
           "kind": "def",
           "name": "freezeResourceFixtures",
-          "line": 1032,
+          "line": 1017,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41172,7 +41275,7 @@
         {
           "kind": "def",
           "name": "replaceKeyFixtures",
-          "line": 1040,
+          "line": 1025,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41182,7 +41285,7 @@
         {
           "kind": "def",
           "name": "rewardFixtures",
-          "line": 1051,
+          "line": 1036,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -41193,7 +41296,7 @@
         {
           "kind": "def",
           "name": "distributeOthersFixtures",
-          "line": 1062,
+          "line": 1047,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41203,7 +41306,7 @@
         {
           "kind": "def",
           "name": "proportionalDiluteFixtures",
-          "line": 1071,
+          "line": 1056,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41213,7 +41316,7 @@
         {
           "kind": "def",
           "name": "disputeFixtures",
-          "line": 1080,
+          "line": 1065,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41223,7 +41326,7 @@
         {
           "kind": "def",
           "name": "disputeWithdrawFixtures",
-          "line": 1088,
+          "line": 1073,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41233,7 +41336,7 @@
         {
           "kind": "def",
           "name": "verdictFixtures",
-          "line": 1096,
+          "line": 1081,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41243,7 +41346,7 @@
         {
           "kind": "def",
           "name": "rollbackFixtures",
-          "line": 1104,
+          "line": 1089,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41253,7 +41356,7 @@
         {
           "kind": "def",
           "name": "registerIdentityFixtures",
-          "line": 1112,
+          "line": 1097,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41263,7 +41366,7 @@
         {
           "kind": "def",
           "name": "depositFixtures",
-          "line": 1123,
+          "line": 1108,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -41274,7 +41377,7 @@
         {
           "kind": "def",
           "name": "withdrawFixtures",
-          "line": 1138,
+          "line": 1123,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -41285,7 +41388,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeFixtures",
-          "line": 1158,
+          "line": 1143,
           "called": [
             "ActorId",
             "Amount",
@@ -41298,7 +41401,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetFixtures",
-          "line": 1186,
+          "line": 1171,
           "called": [
             "ActorId",
             "Amount",
@@ -41311,7 +41414,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForFixtures",
-          "line": 1212,
+          "line": 1197,
           "called": [
             "ActorId",
             "Amount",
@@ -41324,7 +41427,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundFixtures",
-          "line": 1235,
+          "line": 1220,
           "called": [
             "ActorId",
             "ResourceId",
@@ -41339,7 +41442,7 @@
         {
           "kind": "def",
           "name": "buildAmmSwapHappy",
-          "line": 1276,
+          "line": 1261,
           "called": [
             "Action",
             "ActorId",
@@ -41363,7 +41466,7 @@
         {
           "kind": "def",
           "name": "ammSwapFixtures",
-          "line": 1319,
+          "line": 1304,
           "called": [
             "ActorId",
             "ResourceId",
@@ -41376,7 +41479,7 @@
         {
           "kind": "def",
           "name": "buildReclaimAmmReservesHappy",
-          "line": 1340,
+          "line": 1325,
           "called": [
             "Action",
             "ActorId",
@@ -41400,7 +41503,7 @@
         {
           "kind": "def",
           "name": "reclaimAmmReservesFixtures",
-          "line": 1381,
+          "line": 1366,
           "called": [
             "ActorId",
             "ResourceId",
@@ -41413,7 +41516,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyFixtures",
-          "line": 1396,
+          "line": 1381,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41423,7 +41526,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyFixtures",
-          "line": 1404,
+          "line": 1389,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41433,7 +41536,7 @@
         {
           "kind": "def",
           "name": "faultProofChallengeFixtures",
-          "line": 1412,
+          "line": 1397,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41443,7 +41546,7 @@
         {
           "kind": "def",
           "name": "faultProofResolutionFixtures",
-          "line": 1422,
+          "line": 1407,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -41453,7 +41556,7 @@
         {
           "kind": "def",
           "name": "allFixtures",
-          "line": 1435,
+          "line": 1420,
           "called": [
             "StepVMFixture",
             "ammSwapFixtures",
@@ -41486,7 +41589,7 @@
         {
           "kind": "def",
           "name": "cellProofForFixtureToJson",
-          "line": 1453,
+          "line": 1438,
           "called": [
             "CellProofForFixture"
           ]
@@ -41494,7 +41597,7 @@
         {
           "kind": "def",
           "name": "fixtureToJson",
-          "line": 1462,
+          "line": 1447,
           "called": [
             "StepVMFixture",
             "cellProofForFixtureToJson"
@@ -41503,19 +41606,19 @@
         {
           "kind": "def",
           "name": "packedLayoutU64Vals",
-          "line": 1498,
+          "line": 1483,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutU256Vals",
-          "line": 1505,
+          "line": 1490,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutGoldens",
-          "line": 1515,
+          "line": 1500,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -41524,7 +41627,7 @@
         {
           "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1532,
+          "line": 1517,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -41533,7 +41636,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1549,
+          "line": 1534,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "entries",
@@ -50690,24 +50793,27 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.Cell",
-          "line": 24,
+          "line": 25,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 27,
+          "line": 28,
           "called": [
             "CellProof",
+            "CellTag",
             "ExtendedState.empty",
             "LegalKernel.Test.FaultProof.Cell",
             "TestCase",
             "assert",
             "assertEq",
             "burn",
+            "cellKeyPreimage",
             "deposit",
             "freezeResource",
             "mint",
+            "smtCellKey",
             "transfer"
           ]
         }
@@ -63940,7 +64046,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 215,
+          "line": 216,
           "called": [
             "runAll"
           ]
