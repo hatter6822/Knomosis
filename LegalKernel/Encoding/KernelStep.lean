@@ -16,18 +16,26 @@ The L1 fault-proof game contract consumes the encoded form of a
 `terminateOnSingleStep`.  The encoded form is a CBE byte string:
 
 ```
-preStateCommit  : 32 bytes (CBE bstr; uniform-output ByteArray)
+preStateCommit  : 9 + 32   (CBE bstr: 9-byte head + 32-byte payload)
 signedAction    : variable, CBE-encoded (per Phase-4)
-postStateCommit : 32 bytes (CBE bstr)
-cellProofs      : length-prefixed list of CellProof encodings
+postStateCommit : 9 + 32
+cellProofs      : CBE array head (9 bytes, the count) followed by
+                  that many CellProof encodings
 ```
 
 Each `CellProof` encodes as:
 ```
-cellTag      : variable (variant-tag uint + per-variant fields)
-cellValue    : CBE bstr
+cellTag      : 9 (variant tag) + 9 per key field
+               (balance: 2 keys; nonce / registry / localPolicy /
+                bridgeConsumed / bridgePending: 1; bridgeNextWdId: 0)
+cellValue    : 9 + len   (CBE bstr)
 witnessState : CBE-encoded ExtendedState (Phase-4)
 ```
+
+The commits are 32-byte payloads behind a 9-byte CBE bytestring
+head, not bare 32-byte fields; the previous header omitted every
+head.  Likewise the cell-proof bundle carries a CBE array head, not
+a bare length prefix.
 
 This module is **not** part of the trusted computing base.
 Bugs here would produce incorrect serialisations, but cannot

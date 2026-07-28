@@ -55,7 +55,8 @@ table fails the build if a future ctor is inserted out-of-order.
   * `MAX_CLAUSES_PER_POLICY = 64`
   * `MAX_TAGS_PER_DENY = 64`
   * `MAX_RECIPIENTS_PER_REQUIRE = 64`
-  * `MAX_POLICY_ENCODE_BYTES = 16_384`
+  * `MAX_POLICY_ENCODE_BYTES = 38_601` (proven, see
+    `Encoding.LocalPolicy.encode_size_bound`)
 
 These bounds are enforced at the LP.2 `LocalPolicy.fieldsBounded`
 level (the canonical decoder rejects oversize inputs as
@@ -98,11 +99,22 @@ def MAX_RECIPIENTS_PER_REQUIRE : Nat := 64
 def MAX_DELEGATES_PER_ALLOW : Nat := 64
 
 /-- Upper bound on the encoded-byte size of a single declared
-    policy.  Holds by construction from
-    `MAX_CLAUSES_PER_POLICY * (per-clause max bytes)` plus the
-    CBE map / list overhead.  Asserted at the LP.2 encoder level
-    by the `LocalPolicy.encode_size_bound` lemma. -/
-def MAX_POLICY_ENCODE_BYTES : Nat := 16_384
+    policy, PROVEN by `Encoding.LocalPolicy.encode_size_bound`
+    rather than asserted.
+
+    `9` for the clause-list CBE head plus
+    `MAX_CLAUSES_PER_POLICY (64) * MAX_CLAUSE_ENCODE_BYTES (603)`,
+    where a clause is at most a 9-byte variant tag, a 9-byte
+    resource id, a 9-byte list head, and 64 nine-byte elements.
+
+    This was `16_384`, which is arithmetically FALSE at the
+    project's own per-clause sizes: `Encoding/LocalPolicy.lean`'s
+    own comment computed a ~38 KB worst case and described the
+    smaller value as holding "for any *practical* policy".  A DoS
+    bound that a conforming policy can exceed is not a bound.  The
+    constant is now the value the lemma proves, so it cannot drift
+    from the encoder again. -/
+def MAX_POLICY_ENCODE_BYTES : Nat := 9 + 64 * 603
 
 end LocalPolicy
 

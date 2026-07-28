@@ -586,7 +586,8 @@ re-snapshotting under the post-LP build (see Workstream-LP plan
 MAX_CLAUSES_PER_POLICY      := 64
 MAX_TAGS_PER_DENY           := 64
 MAX_RECIPIENTS_PER_REQUIRE  := 64
-MAX_POLICY_ENCODE_BYTES     := 16_384
+MAX_DELEGATES_PER_ALLOW     := 64
+MAX_POLICY_ENCODE_BYTES     := 38_601   -- 9 + 64 * 603, PROVEN
 ```
 
 These are part of the on-wire ABI contract; the canonical
@@ -595,6 +596,22 @@ decoder rejects oversize policies as
 `LocalPolicy.fieldsBounded` decidability check at the encoder
 level).  Loosening any bound requires the §13.6 two-reviewer
 gate.
+
+> **`MAX_POLICY_ENCODE_BYTES` correction.**  This was documented
+> and defined as `16_384`, a value no conforming policy was
+> obliged to respect: `Encoding/LocalPolicy.lean`'s own comment
+> computed a ~38 KB worst case and described the smaller number
+> as holding "for any *practical* policy".  A DoS bound a
+> conforming input can exceed is not a bound.  It is now the
+> value `Encoding.LocalPolicy.encode_size_bound` **proves** —
+> `9` for the clause-list CBE head plus
+> `MAX_CLAUSES_PER_POLICY (64) x MAX_CLAUSE_ENCODE_BYTES (603)`,
+> where a clause is at most a 9-byte variant tag, a 9-byte
+> resource id, a 9-byte list head, and 64 nine-byte elements.
+> Raising the constant is a widening, so no previously-accepted
+> policy is rejected; the constant and the encoder can no longer
+> drift apart, because the constant is what the theorem
+> concludes.
 
 #### 5.4.2 Admissibility extension (LP.7)
 

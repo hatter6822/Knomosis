@@ -701,7 +701,9 @@ landed, it will require:
      (`MAX_CLAUSES_PER_POLICY = 64`,
      `MAX_TAGS_PER_DENY = 64`,
      `MAX_RECIPIENTS_PER_REQUIRE = 64`,
-     `MAX_POLICY_ENCODE_BYTES = 16_384`).
+     `MAX_DELEGATES_PER_ALLOW = 64`,
+     `MAX_POLICY_ENCODE_BYTES = 38_601` — the proven bound, see
+     `Encoding.LocalPolicy.encode_size_bound`).
   2. An admissibility-check call in
      `KnomosisBridge.depositETH` / `depositERC20` that consults the
      depositor's L2 `localPolicies` lookup before crediting

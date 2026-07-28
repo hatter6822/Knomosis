@@ -232,35 +232,38 @@ theorem honest_challenger_wins_per_round
     exact disagreement_persists_on_disagree truth gs gs' mp
             h_pending h_status h_disagree h_dishonest h_apply
 
-/-- A `ResponseTrace` (from `Convergence.lean`) preserves
-    disagreement when each response is honest.  The full
-    operational form of the single-honest-challenger property
-    is this lemma plus #231 plus the L1 step VM's coherence. -/
+/-- An honest response trace (from `Convergence.lean`) preserves
+    disagreement.  The full operational form of the
+    single-honest-challenger property is this lemma plus #231 plus
+    the L1 step VM's coherence.
+
+    **Why the honesty hypothesis lives in the trace.**  This
+    previously took a `ResponseTrace` plus a free-standing
+    `h_each_honest` quantified over every `(gs, gs', mp, t)` with
+    `t` applicable at `gs`.  That hypothesis is unsatisfiable: from
+    any in-progress state with a pending midpoint BOTH
+    `respondAgree` and `respondDisagree` apply, so instantiating at
+    each in turn demands `mp.commit = truth mp.idx` and
+    `mp.commit ≠ truth mp.idx` for the same `mp`.  The theorem was
+    therefore vacuously true and asserted nothing about honest play.
+
+    `HonestResponseTrace` attaches the obligation to the response
+    actually taken at each node, which is satisfiable — and
+    `honestResponseTrace_refl_exists` exhibits an inhabitant rather
+    than leaving it to be assumed. -/
 theorem disagreement_persists_along_trace
     (truth : LogIndex → StateCommit)
     (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat)
-    (h_trace : ResponseTrace gs₀ k gs_k)
-    (h_disagree₀ : inDisagreementWithTruth truth gs₀)
-    -- The honesty hypothesis is implicit in the well-formed
-    -- trace + the per-round honest-choice conditions.  We
-    -- thread the per-round hypothesis through the trace.
-    (h_each_honest :
-      ∀ {gs gs' : LegalKernel.FaultProof.GameState} {mp : Claim}
-        {t : GameTransition},
-        gs.pendingMidpoint = some mp →
-        gs.status = .inProgress →
-        applyTransition gs t = .ok gs' →
-        (t = .respondAgree   → mp.commit  = truth mp.idx) ∧
-        (t = .respondDisagree → mp.commit ≠ truth mp.idx)) :
+    (h_trace : HonestResponseTrace truth gs₀ k gs_k)
+    (h_disagree₀ : inDisagreementWithTruth truth gs₀) :
     inDisagreementWithTruth truth gs_k := by
   induction h_trace with
   | refl => exact h_disagree₀
-  | @step gs gs' gs_k k mp t h_pending h_status _h_wf_mp h_t h_apply _h_tail ih =>
-    -- Apply the per-round disagreement persistence at this step.
-    have h_choice := h_each_honest h_pending h_status h_apply
+  | @step gs gs' gs_k k mp t h_pending h_status _h_wf_mp h_t h_apply h_honest _h_tail ih =>
+    -- The node's own response carries its honesty obligation.
     have h_disagree' :=
       honest_challenger_wins_per_round truth gs gs' mp
-        h_pending h_status h_disagree₀ t h_t h_apply h_choice
+        h_pending h_status h_disagree₀ t h_t h_apply h_honest
     -- Recurse on the tail with disagreement persisting at gs'.
     exact ih h_disagree'
 

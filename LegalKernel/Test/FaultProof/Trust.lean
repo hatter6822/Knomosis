@@ -83,6 +83,40 @@ def tests : List TestCase :=
           sequencer_high_truthful_breaks_disagreement
         assert true "API exists"
     }
+  , { name := "honesty hypothesis is satisfiable (not vacuous)"
+    , body := do
+        -- The point of `HonestResponseTrace`.  The predicate it
+        -- replaced quantified honesty over EVERY transition
+        -- applicable at a node; since both `respondAgree` and
+        -- `respondDisagree` apply at any in-progress node with a
+        -- pending midpoint, it demanded `mp.commit = truth mp.idx`
+        -- and `mp.commit ≠ truth mp.idx` for the same `mp` — so the
+        -- theorems carrying it were vacuously true.  Exhibit an
+        -- inhabitant rather than assume one exists.
+        let _witness : ∀ (truth : LogIndex → StateCommit)
+            (gs : LegalKernel.FaultProof.GameState),
+            HonestResponseTrace truth gs 0 gs :=
+          honestResponseTrace_refl_exists
+        -- And an honest trace really does erase to a response trace,
+        -- so the narrowing results still apply to it.
+        let _erase : ∀ {truth : LogIndex → StateCommit}
+            {gs₀ gs_k : LegalKernel.FaultProof.GameState} {k : Nat},
+            HonestResponseTrace truth gs₀ k gs_k → ResponseTrace gs₀ k gs_k :=
+          HonestResponseTrace.toResponseTrace
+        pure ()
+    }
+  , { name := "#256: disagreement_persists_along_trace takes an HONEST trace"
+    , body := do
+        -- Pin the signature: the honesty obligation must live in the
+        -- trace, not in a separate universally-quantified hypothesis.
+        let _proof : ∀ (truth : LogIndex → StateCommit)
+            (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat),
+            HonestResponseTrace truth gs₀ k gs_k →
+            inDisagreementWithTruth truth gs₀ →
+            inDisagreementWithTruth truth gs_k :=
+          disagreement_persists_along_trace
+        pure ()
+    }
   , { name := "#257: single_honest_challenger_narrows_with_disagreement API stable"
     , body := do
         -- Just verify the function signature is callable; the

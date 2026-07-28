@@ -42,8 +42,9 @@ The deployment-facing API exposed here:
     state-advance path; takes the admissibility witness as a
     dependent proof argument so that no admissibility check can be
     skipped.
-  * `nonce_uniqueness` — two distinct admissible signed actions by
-    the same signer cannot share a nonce.
+  * `nonce_uniqueness` — any two admissible signed actions by the
+    same signer carry the SAME nonce (the signer's next-expected
+    one); no admissible action exists at any other nonce.
   * `replay_impossible` — a successfully applied signed action is
     not admissible at the post-state.
 -/
@@ -2171,9 +2172,9 @@ theorem replenishment_via_epoch_advance
 
     The existing `nonce_uniqueness` theorem lifts transparently
     across the budget gate: the budget gate is downstream of the
-    nonce check (admissibility's condition 4), so two distinct
-    admissible actions by the same signer still cannot share a
-    nonce.  Restated against the parameterised `AdmissibleWith`. -/
+    nonce check (admissibility's condition 4), so any two admissible
+    actions by the same signer still carry the same nonce.  Restated
+    against the parameterised `AdmissibleWith`. -/
 theorem nonce_uniqueness_preserved
     (verify : PublicKey → ByteArray → Signature → Bool)
     (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
@@ -2792,11 +2793,24 @@ theorem refund_rejected_when_rate_disabled
 
 /-! ## Headline theorems (§8.5.2) -/
 
-/-- §8.5.2 / WU 3.7: two distinct signed actions by the same signer
-    cannot both be admissible at the same `ExtendedState`.
+/-- §8.5.2 / WU 3.7: any two signed actions by the same signer that
+    are both admissible at the same `ExtendedState` carry the SAME
+    nonce.
 
     Proof: condition 4 forces both actions' nonces to equal
-    `expectsNonce es signer`, hence to equal each other. -/
+    `expectsNonce es signer`, hence to equal each other.
+
+    **Read the direction carefully.**  This says admissibility PINS
+    the nonce to one value, not that two admissible actions cannot
+    share one — the conclusion is `st₁.nonce = st₂.nonce`, an
+    equality.  Two DISTINCT actions at that one nonce can both be
+    admissible; that is equivocation, and it is caught downstream by
+    `Disputes.Evidence.checkDoubleApply` rather than ruled out here.
+    What this theorem rules out is an admissible action at any OTHER
+    nonce, which is what makes the sequence gap-free: combined with
+    `Authority.expectsNonce_strict_mono`, each application advances
+    the expected nonce by exactly one, so a replay or a skip has no
+    admissible witness. -/
 theorem nonce_uniqueness
     (P : AuthorityPolicy) (es : ExtendedState)
     (st₁ st₂ : SignedAction)

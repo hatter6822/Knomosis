@@ -222,9 +222,9 @@ def tests : List TestCase :=
     , body := do
         assertEq (expected := 64) (actual := LocalPolicy.MAX_RECIPIENTS_PER_REQUIRE)
     }
-  , { name := "MAX_POLICY_ENCODE_BYTES = 16384"
+  , { name := "MAX_POLICY_ENCODE_BYTES = 38601 (the proven bound)"
     , body := do
-        assertEq (expected := 16384) (actual := LocalPolicy.MAX_POLICY_ENCODE_BYTES)
+        assertEq (expected := 38601) (actual := LocalPolicy.MAX_POLICY_ENCODE_BYTES)
     }
   ]
 

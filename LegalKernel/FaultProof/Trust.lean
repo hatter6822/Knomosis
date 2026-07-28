@@ -45,6 +45,13 @@ AND the disagreement-with-truth invariant still holds. -/
     along the trace, given enough rounds, narrows the range to
     width 1 while preserving the invariant.
 
+    Takes a `HonestResponseTrace`, which carries each node's honesty
+    obligation on the response actually taken there.  The previous
+    free-standing `h_each_honest` — quantified over every transition
+    applicable at every node — was unsatisfiable, since both
+    responses apply at an in-progress node and it demanded opposite
+    facts about the same midpoint under each.
+
     The conclusion is the conjunction of:
       * `disagreement_persists_along_trace` (the invariant
         survives every round).
@@ -55,23 +62,18 @@ AND the disagreement-with-truth invariant still holds. -/
 theorem single_honest_challenger_narrows_with_disagreement
     (truth : LogIndex → StateCommit)
     (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat)
-    (h_trace : ResponseTrace gs₀ k gs_k)
+    (h_trace : HonestResponseTrace truth gs₀ k gs_k)
     (h_disagree₀ : inDisagreementWithTruth truth gs₀)
-    (h_each_honest :
-      ∀ {gs gs' : LegalKernel.FaultProof.GameState} {mp : Claim}
-        {t : GameTransition},
-        gs.pendingMidpoint = some mp →
-        gs.status = .inProgress →
-        applyTransition gs t = .ok gs' →
-        (t = .respondAgree   → mp.commit  = truth mp.idx) ∧
-        (t = .respondDisagree → mp.commit ≠ truth mp.idx))
     (h_k : k ≥ gs₀.range.high.idx - gs₀.range.low.idx) :
     inDisagreementWithTruth truth gs_k ∧
     gs_k.range.high.idx - gs_k.range.low.idx ≤ 1 := by
   refine ⟨?_, ?_⟩
   · exact disagreement_persists_along_trace truth gs₀ gs_k k
-            h_trace h_disagree₀ h_each_honest
-  · exact bisection_converges_after_enough_rounds gs₀ gs_k k h_trace h_k
+            h_trace h_disagree₀
+  -- The honest trace erases to an ordinary response trace, so the
+  -- narrowing result applies unchanged.
+  · exact bisection_converges_after_enough_rounds gs₀ gs_k k
+            h_trace.toResponseTrace h_k
 
 /-! ## #266 — Terminal disagreement implies sequencer loss
 
@@ -147,16 +149,8 @@ The Lean-side packaging:
 theorem trust_model_upgrade_composite
     (truth : LogIndex → StateCommit)
     (gs₀ gs_k : LegalKernel.FaultProof.GameState) (k : Nat)
-    (h_trace : ResponseTrace gs₀ k gs_k)
+    (h_trace : HonestResponseTrace truth gs₀ k gs_k)
     (h_disagree₀ : inDisagreementWithTruth truth gs₀)
-    (h_each_honest :
-      ∀ {gs gs' : LegalKernel.FaultProof.GameState} {mp : Claim}
-        {t : GameTransition},
-        gs.pendingMidpoint = some mp →
-        gs.status = .inProgress →
-        applyTransition gs t = .ok gs' →
-        (t = .respondAgree   → mp.commit  = truth mp.idx) ∧
-        (t = .respondDisagree → mp.commit ≠ truth mp.idx))
     (h_k : k ≥ gs₀.range.high.idx - gs₀.range.low.idx) :
     -- The trifecta: disagreement persists, range narrows, and
     -- the sequencer's high-commit at termination is wrong.
@@ -165,7 +159,7 @@ theorem trust_model_upgrade_composite
     gs_k.range.high.commit ≠ truth gs_k.range.high.idx := by
   obtain ⟨h_inv, h_narrow⟩ :=
     single_honest_challenger_narrows_with_disagreement truth
-      gs₀ gs_k k h_trace h_disagree₀ h_each_honest h_k
+      gs₀ gs_k k h_trace h_disagree₀ h_k
   refine ⟨h_inv, h_narrow, ?_⟩
   exact terminal_disagreement_implies_sequencer_claim_wrong truth gs_k h_inv
 

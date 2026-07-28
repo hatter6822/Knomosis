@@ -54,6 +54,78 @@ inductive ResponseTrace :
           (h_tail    : ResponseTrace gs' k gs_k) :
       ResponseTrace gs (k + 1) gs_k
 
+/-! ## Honest response traces
+
+`ResponseTrace` says only that each step is a legal response.  A
+theorem about an HONEST challenger needs, at each node, that the
+response taken there matches the truth about that node's midpoint —
+and that obligation must attach to the node's OWN response, not to a
+free transition.
+
+Quantifying it over an arbitrary `t` (as
+`disagreement_persists_along_trace` originally did) is
+self-contradictory: from any in-progress state with a pending
+midpoint, BOTH `respondAgree` and `respondDisagree` apply, so a
+hypothesis demanding `mp.commit = truth mp.idx` under the first and
+`mp.commit ≠ truth mp.idx` under the second is unsatisfiable at that
+state.  A theorem carrying it is vacuously true.
+
+`HonestResponseTrace` carries the obligation per constructor, where
+`t` is the response actually taken. -/
+
+/-- A `ResponseTrace` in which every response is honest with respect
+    to `truth`: at each node, agreeing means the midpoint really does
+    match the truth, and disagreeing means it really does not.
+
+    Mirrors `ResponseTrace` constructor-for-constructor, so an
+    honest trace erases to a response trace
+    (`HonestResponseTrace.toResponseTrace`) and every existing
+    `ResponseTrace` theorem applies to it unchanged. -/
+inductive HonestResponseTrace (truth : LegalKernel.Disputes.LogIndex → StateCommit) :
+    LegalKernel.FaultProof.GameState → Nat →
+    LegalKernel.FaultProof.GameState → Prop
+  /-- Empty trace. -/
+  | refl  {gs : LegalKernel.FaultProof.GameState} :
+      HonestResponseTrace truth gs 0 gs
+  /-- Extend by one HONEST response.  `h_honest` constrains the
+      response `t` taken at THIS node, so it is satisfiable — unlike a
+      hypothesis ranging over every transition applicable here. -/
+  | step  {gs gs' gs_k : LegalKernel.FaultProof.GameState} {k : Nat}
+          {mp : Claim} {t : GameTransition}
+          (h_pending : gs.pendingMidpoint = some mp)
+          (h_status  : gs.status = .inProgress)
+          (h_wf_mp   : gs.range.low.idx < mp.idx ∧ mp.idx < gs.range.high.idx)
+          (h_t       : t = .respondAgree ∨ t = .respondDisagree)
+          (h_apply   : applyTransition gs t = .ok gs')
+          (h_honest  :
+            (t = .respondAgree    → mp.commit = truth mp.idx) ∧
+            (t = .respondDisagree → mp.commit ≠ truth mp.idx))
+          (h_tail    : HonestResponseTrace truth gs' k gs_k) :
+      HonestResponseTrace truth gs (k + 1) gs_k
+
+/-- An honest trace is in particular a response trace, so every
+    `ResponseTrace` result (range narrowing, convergence) applies to
+    it without restatement. -/
+theorem HonestResponseTrace.toResponseTrace
+    {truth : LegalKernel.Disputes.LogIndex → StateCommit}
+    {gs₀ gs_k : LegalKernel.FaultProof.GameState} {k : Nat}
+    (h : HonestResponseTrace truth gs₀ k gs_k) :
+    ResponseTrace gs₀ k gs_k := by
+  induction h with
+  | refl => exact ResponseTrace.refl
+  | @step gs gs' gs_k k mp t h_pending h_status h_wf_mp h_t h_apply _h_honest _h_tail ih =>
+    exact ResponseTrace.step h_pending h_status h_wf_mp h_t h_apply ih
+
+/-- The honest-trace relation is inhabited: the empty trace is one
+    for every truth function and every state.  Exhibiting a witness
+    is what distinguishes a conditional theorem from a vacuous one —
+    the predicate this replaces had none. -/
+theorem honestResponseTrace_refl_exists
+    (truth : LegalKernel.Disputes.LogIndex → StateCommit)
+    (gs : LegalKernel.FaultProof.GameState) :
+    HonestResponseTrace truth gs 0 gs :=
+  HonestResponseTrace.refl
+
 /-! ## #265 — Range size after `k` rounds -/
 
 /-- After any `k` legal responses, the range width has
