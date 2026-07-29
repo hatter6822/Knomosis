@@ -226,6 +226,104 @@ theorem emptySubtreeHash_size (d : Nat) (h : d < 256) :
   rw [Array.getElem?_eq_getElem hd]
   exact emptySubtreeHashes_get_size d hd
 
+/-! ### The empty-subtree chain relation
+
+`emptySubtreeHashes` is built by a tail-recursive `Array` push loop,
+which is efficient but opaque: nothing about the *relation* between
+consecutive entries is visible from the definition.  The SMT-root
+injectivity argument needs exactly that relation — an empty sub-tree
+at depth `d + 1` must be recognisable as `hashBytes (H_d ++ H_d)`, so
+that collision-freeness can rule out a populated sub-tree hashing to
+it.  The two lemmas below recover it. -/
+
+/-- The builder's loop invariant: the accumulator is non-empty and
+    each entry is the doubled hash of its predecessor. -/
+private def EmptyChainInv (acc : Array ByteArray) : Prop :=
+  0 < acc.size ∧
+    ∀ i x y, acc[i]? = some x → acc[i + 1]? = some y → y = hashBytes (x ++ x)
+
+/-- `buildEmptyHashesAux` never rewrites an index the accumulator
+    already holds. -/
+private theorem buildEmptyHashesAux_prefix (n : Nat) (acc : Array ByteArray)
+    (i : Nat) (h : i < acc.size) :
+    (buildEmptyHashesAux n acc)[i]? = acc[i]? := by
+  induction n generalizing acc with
+  | zero => rfl
+  | succ k ih =>
+    unfold buildEmptyHashesAux
+    rw [ih _ (by rw [Array.size_push]; omega), Array.getElem?_push,
+      if_neg (by omega)]
+
+/-- `buildEmptyHashesAux` preserves the chain invariant. -/
+private theorem buildEmptyHashesAux_chain (n : Nat) (acc : Array ByteArray)
+    (h : EmptyChainInv acc) : EmptyChainInv (buildEmptyHashesAux n acc) := by
+  induction n generalizing acc with
+  | zero => exact h
+  | succ k ih =>
+    unfold buildEmptyHashesAux
+    refine ih _ ⟨by rw [Array.size_push]; omega, ?_⟩
+    obtain ⟨h_pos, h_chain⟩ := h
+    intro i x y hx hy
+    -- `acc.back?` is the last entry, so the pushed value continues the
+    -- chain at index `acc.size`; every earlier index is untouched.
+    rw [Array.getElem?_push] at hx hy
+    by_cases h_i : i + 1 = acc.size
+    · -- `x` is the old last entry and `y` is the freshly pushed hash.
+      rw [if_neg (by omega)] at hx
+      rw [if_pos h_i] at hy
+      have h_back : acc.back? = some x := by
+        rw [Array.back?_eq_getElem?]
+        rw [show acc.size - 1 = i from by omega]
+        exact hx
+      rw [h_back] at hy
+      exact (Option.some.inj hy).symm
+    · by_cases h_i' : i = acc.size
+      · -- `x` is the pushed value; index `i + 1` is then out of range.
+        rw [if_pos h_i'] at hx
+        rw [if_neg h_i, Array.getElem?_eq_none (by omega)] at hy
+        exact absurd hy (by simp)
+      · rw [if_neg h_i'] at hx
+        rw [if_neg h_i] at hy
+        exact h_chain i x y hx hy
+
+/-- The chain invariant holds of `emptySubtreeHashes`. -/
+private theorem emptySubtreeHashes_chain : EmptyChainInv emptySubtreeHashes := by
+  refine buildEmptyHashesAux_chain 255 _ ⟨by decide, ?_⟩
+  intro i _x y _hx hy
+  -- The seed array holds one entry, so `[i + 1]?` is `none` for every
+  -- `i` and the invariant's premise cannot be met.
+  rw [Array.getElem?_eq_none
+    (show (#[hashBytes emptyLeafSeedBytes] : Array ByteArray).size ≤ i + 1 from
+      by simp)] at hy
+  exact absurd hy (by simp)
+
+/-- The depth-0 empty-subtree hash is the seed hash. -/
+theorem emptySubtreeHash_zero :
+    emptySubtreeHash 0 = hashBytes emptyLeafSeedBytes := by
+  unfold emptySubtreeHash emptySubtreeHashes
+  rw [buildEmptyHashesAux_prefix 255 _ 0 (by decide)]
+  rfl
+
+/-- The empty-subtree chain step: at every in-range depth, the
+    canonical empty-subtree hash is the doubled hash of the one
+    below it.  This is the shape collision-freeness needs in order to
+    separate an empty sub-tree from a populated one. -/
+theorem emptySubtreeHash_succ (d : Nat) (h : d + 1 < 256) :
+    emptySubtreeHash (d + 1) =
+      hashBytes (emptySubtreeHash d ++ emptySubtreeHash d) := by
+  have h_size : emptySubtreeHashes.size = 256 := emptySubtreeHashes_size
+  have hd : d < emptySubtreeHashes.size := by omega
+  have hd1 : d + 1 < emptySubtreeHashes.size := by omega
+  have hx : emptySubtreeHashes[d]? = some (emptySubtreeHash d) := by
+    unfold emptySubtreeHash
+    rw [Array.getElem?_eq_getElem hd]
+    rfl
+  have hy : emptySubtreeHashes[d + 1]? = some (emptySubtreeHash (d + 1)) := by
+    unfold emptySubtreeHash
+    rw [Array.getElem?_eq_getElem hd1]
+    rfl
+  exact emptySubtreeHashes_chain.2 d _ _ hx hy
+
 /-! ## `SmtCellProof` (SC.1.c) -/
 
 /-- A proof witnessing the value of a single cell at the

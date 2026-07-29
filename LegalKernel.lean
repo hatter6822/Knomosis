@@ -313,6 +313,8 @@ import LegalKernel.FaultProof.MigrationFreeze
 import LegalKernel.FaultProof.Observer
 import LegalKernel.FaultProof.SubStep
 import LegalKernel.FaultProof.KeyDerivation
+import LegalKernel.FaultProof.StateCells
+import LegalKernel.FaultProof.SmtInjective
 import LegalKernel.Encoding.KernelStep
 import LegalKernel.Encoding.GameState
 
