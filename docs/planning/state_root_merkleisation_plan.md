@@ -23,9 +23,9 @@ Everything below was read from source, not from plan documents.
 
 ## 1. What is already in place
 
-Three prerequisites landed and are green.  None of them changed a
-wire format; all three were additive on purpose, so the swap that
-follows is the first step that breaks compatibility.
+Every prerequisite has landed and is green.  None of them changed a
+wire format; all were additive on purpose, so the swap that follows
+is the first step that breaks compatibility.
 
 | Piece | Where | What it gives |
 |---|---|---|
@@ -35,6 +35,7 @@ follows is the first step that breaks compatibility.
 | **Root injectivity** | `FaultProof/SmtInjective.lean` | §2 below, complete. |
 | **Cell determination** | `FaultProof/StateCellsInjective.lean` | §2A below, complete. |
 | **Cell updates** | `FaultProof/SmtInjective.lean` `smtUpdateRoot` | §2B below, complete. |
+| **Path coherence** | `FaultProof/SmtInjective.lean` `canonicalSiblings` | §2C below, complete. |
 
 ## 2. The former blocker: SMT root injectivity — **DONE**
 
@@ -147,9 +148,26 @@ adjudication:
     establishes the per-level sibling equality on the way and then
     discards it; `walk_inj_under_collision_free` keeps it.
 
+## 2C. Canonical-path coherence — **DONE**
+
+Everything above is soundness, and soundness is stated over *any*
+verifying proofs — it does not care how one was built.  The honest
+defender's side does care: it must be able to construct an opening
+that reproduces the published root, or it cannot compute the
+post-root the L1 will accept, which is the failure mode this whole
+line of work exists to remove.
+
+`canonicalSiblings_walks_to_root` proves it: walking the canonical
+sibling path back from a key's leaf reproduces the bucket's root, for
+distinctly-keyed entries at any depth.  What remains is the
+representation half — that `buildSmtCellProof`'s bitmask-compressed
+encoding expands to that path — which is pinned by
+`faultproof-smt-injective` and is bookkeeping over `setBitmaskBit`
+rather than content.
+
 ## 3. The swap — REMAINING
 
-§2, §2A and §2B are in.  What is left is the consensus change
+§2, §2A, §2B and §2C are in.  What is left is the consensus change
 itself, in one commit (the C-1 amount migration is the precedent for
 why it cannot be split):
 
@@ -224,19 +242,18 @@ restates `PerVariantCoherence.lean`'s per-variant theorems.
 `Observer.buildObserverCellProofs` must emit real SMT openings, and
 `runtime/knomosis-faultproof-observer` mirrors the same.
 
-**Still unproved and needed for the honest-defender direction.**
-`buildSmtCellProof`'s operational coherence — `smtRoot m = smtWalk
-key v (buildSmtCellProof m key)` for `m[key]? = some v` — is
-currently validated only by the per-fixture tests in
-`Test/FaultProof/Smt.lean`, as its own docstring says.  §2B's
-soundness direction does not depend on it (it is stated over *any*
-verifying proofs), but a responder's canonical proof must reproduce
-the root or the honest defender cannot compute the post-root the L1
-will accept.  Prove it alongside §4.
+**The honest-defender direction is covered.**
+`canonicalSiblings_walks_to_root` (§2C) proves the substantive half
+of `buildSmtCellProof`'s operational coherence: the uncompressed
+sibling path along a key's route walks back to exactly the root
+`smtRootListAux` computes.  The representation half — that the
+shipped bitmask-compressed encoding expands to that path — is pinned
+by `faultproof-smt-injective` rather than proved, and is bookkeeping
+over `setBitmaskBit` rather than content.
 
 ## 5. Ordering
 
-§2 → §2A → §2B → §3 → §4, and §4's corpus regeneration last.  §2,
+§2 → §2A → §2B → §2C → §3 → §4, and §4's corpus regeneration last.  §2,
 §2A and §2B are additive and have landed on their own; §3 and §4 are
 one consensus change and must not be split across commits that could
 be deployed independently.

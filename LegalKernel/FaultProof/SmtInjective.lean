@@ -849,5 +849,142 @@ theorem smtUpdateRoot_proof_independent
   unfold smtUpdateRoot smtWalk
   rw [h_sibs]
 
+/-! ## Operational coherence of the canonical path
+
+Soundness — nothing above — is stated over *any* verifying proofs and
+does not care how a proof was built.  The honest defender's side does
+care: it must be able to construct an opening that reproduces the
+published root, or it cannot compute the post-root the L1 will
+accept, which is the failure mode this whole line of work exists to
+remove.
+
+`buildSmtCellProof`'s docstring records that coherence as validated
+by per-fixture tests rather than proved.  This section proves the
+substantive half: the canonical sibling path along a key's route
+walks back to exactly the root the recursion computes.  The
+representation half — that the shipped bitmask-compressed encoding
+expands to this path — is `expandSiblings ∘ buildSmtCellProof`, and
+is bookkeeping over `setBitmaskBit` rather than content. -/
+
+/-- The key's bit sequence up to depth `d`, in the order the walk
+    consumes it (depth 0 first, nearest the leaf). -/
+def keyBitsUpTo (d : Nat) (key : ByteArray) : List Bool :=
+  (List.range d).map (BitsKey.keyBit key)
+
+/-- `keyBits` is the full-depth instance. -/
+theorem keyBits_eq_keyBitsUpTo (key : ByteArray) :
+    keyBits key = keyBitsUpTo smtDepth key := rfl
+
+/-- `keyBitsUpTo d` has length `d`. -/
+theorem keyBitsUpTo_length (d : Nat) (key : ByteArray) :
+    (keyBitsUpTo d key).length = d := by
+  unfold keyBitsUpTo
+  rw [List.length_map, List.length_range]
+
+/-- The uncompressed sibling path for `key` through `entries`, depth
+    0 first.  At each level the sibling is the root of the half the
+    key does *not* live in. -/
+def canonicalSiblings : Nat → SmtEntries → ByteArray → List ByteArray
+  | 0,     _,       _   => []
+  | d + 1, entries, key =>
+    let lo := entries.filter (fun e => ! BitsKey.keyBit e.1 d)
+    let hi := entries.filter (fun e => BitsKey.keyBit e.1 d)
+    if BitsKey.keyBit key d then
+      canonicalSiblings d hi key ++ [smtRootListAux d lo]
+    else
+      canonicalSiblings d lo key ++ [smtRootListAux d hi]
+
+/-- The canonical path has one sibling per level. -/
+theorem canonicalSiblings_length (d : Nat) (entries : SmtEntries) (key : ByteArray) :
+    (canonicalSiblings d entries key).length = d := by
+  induction d generalizing entries with
+  | zero => rfl
+  | succ k ih =>
+    show (if BitsKey.keyBit key k then
+            canonicalSiblings k (entries.filter (fun e => BitsKey.keyBit e.1 k)) key ++
+              [smtRootListAux k (entries.filter (fun e => ! BitsKey.keyBit e.1 k))]
+          else
+            canonicalSiblings k (entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key ++
+              [smtRootListAux k (entries.filter (fun e => BitsKey.keyBit e.1 k))]).length
+        = k + 1
+    by_cases h : BitsKey.keyBit key k
+    · rw [if_pos h, List.length_append, List.length_singleton, ih]
+    · rw [if_neg h, List.length_append, List.length_singleton, ih]
+
+/-- **Canonical-path coherence.**  Walking the canonical sibling path
+    back from the key's leaf reproduces the bucket's root.
+
+    This is the honest defender's guarantee: the opening it can
+    construct is one the verifier accepts against the published root,
+    so the post-root it computes is the one the L1 computes too. -/
+theorem canonicalSiblings_walks_to_root :
+    ∀ (d : Nat) (entries : SmtEntries) (key value : ByteArray),
+      (key, value) ∈ entries → BitsDistinctBelow d entries →
+      ((canonicalSiblings d entries key).zip (keyBitsUpTo d key)).foldl stepPair
+          (leafHash key value)
+        = smtRootListAux d entries := by
+  intro d
+  induction d with
+  | zero =>
+    intro entries key value h_mem h_wf
+    -- At depth 0 the bucket holds this entry alone.
+    have h_len := length_le_one_of_bitsDistinctBelow_zero h_wf
+    match entries, h_mem, h_len with
+    | [(_, _)], h_mem, _ =>
+      rw [← List.mem_singleton.mp h_mem]
+      rfl
+  | succ k ih =>
+    intro entries key value h_mem h_wf
+    have h_ne : entries.isEmpty = false := by
+      cases entries with
+      | nil => exact absurd h_mem (by simp)
+      | cons _ _ => rfl
+    have h_bits : keyBitsUpTo (k + 1) key
+                = keyBitsUpTo k key ++ [BitsKey.keyBit key k] := by
+      unfold keyBitsUpTo
+      rw [List.range_succ, List.map_append, List.map_cons, List.map_nil]
+    have h_root : smtRootListAux (k + 1) entries
+                = hashBytes
+                    (smtRootListAux k (entries.filter (fun e => ! BitsKey.keyBit e.1 k)) ++
+                      smtRootListAux k (entries.filter (fun e => BitsKey.keyBit e.1 k))) := by
+      show (if entries.isEmpty then _ else _) = _
+      rw [if_neg (by simp [h_ne])]
+    have h_zip_len : ∀ (f : SmtEntries),
+        (canonicalSiblings k f key).length = (keyBitsUpTo k key).length := by
+      intro f
+      rw [canonicalSiblings_length, keyBitsUpTo_length]
+    have h_path : canonicalSiblings (k + 1) entries key
+                = (if BitsKey.keyBit key k then
+                     canonicalSiblings k (entries.filter (fun e => BitsKey.keyBit e.1 k)) key ++
+                       [smtRootListAux k (entries.filter (fun e => ! BitsKey.keyBit e.1 k))]
+                   else
+                     canonicalSiblings k (entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key ++
+                       [smtRootListAux k (entries.filter (fun e => BitsKey.keyBit e.1 k))]) := rfl
+    rw [h_path, h_bits, h_root]
+    by_cases h_bit : BitsKey.keyBit key k
+    · rw [if_pos h_bit, List.zip_append (h_zip_len _), List.foldl_append,
+        ih (entries.filter (fun e => BitsKey.keyBit e.1 k)) key value
+          (List.mem_filter.mpr ⟨h_mem, h_bit⟩) (BitsDistinctBelow.filter_high h_wf)]
+      show smtStep _ _ (BitsKey.keyBit key k) = _
+      rw [h_bit]
+      rfl
+    · rw [if_neg h_bit, List.zip_append (h_zip_len _), List.foldl_append,
+        ih (entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key value
+          (List.mem_filter.mpr ⟨h_mem, by simp [h_bit]⟩)
+          (BitsDistinctBelow.filter_low h_wf)]
+      show smtStep _ _ (BitsKey.keyBit key k) = _
+      rw [show BitsKey.keyBit key k = false from by simpa using h_bit]
+      rfl
+
+/-- Full-depth corollary: an opening built from the canonical path
+    verifies against the state's own SMT root. -/
+theorem canonicalSiblings_verifies (entries : SmtEntries) (key value : ByteArray)
+    (h_mem : (key, value) ∈ entries)
+    (h_wf : BitsDistinctBelow smtDepth entries) :
+    ((canonicalSiblings smtDepth entries key).zip (keyBits key)).foldl stepPair
+        (leafHash key value)
+      = smtRootListAux smtDepth entries :=
+  canonicalSiblings_walks_to_root smtDepth entries key value h_mem h_wf
+
 end FaultProof
 end LegalKernel

@@ -789,13 +789,23 @@ def buildSmtCellProofAux {K V : Type} [BitsKey K] [Encodable K] [Encodable V] :
     is non-canonical-empty.
 
     Operational coherence (`smtRoot m = smtWalk key v
-    (buildSmtCellProof m key)` for `m[key]? = some v`) is
-    validated by per-fixture tests in
-    `LegalKernel/Test/FaultProof/Smt.lean` across empty,
-    singleton, two-cell, three-cell, and four-cell maps.  The
-    soundness theorem (`smtCellProof_no_value_substitution`) is
+    (buildSmtCellProof m key)` for `m[key]? = some v`) splits in
+    two.  The substantive half is **proved**:
+    `SmtInjective.canonicalSiblings_walks_to_root` shows the
+    uncompressed sibling path along the key's route walks back to
+    exactly the root `smtRootListAux` computes, for distinctly-keyed
+    entries.  The representation half — that this constructor's
+    bitmask-compressed encoding expands to that path — is pinned by
+    `faultproof-smt-injective` ("the shipped compressed proof expands
+    to the canonical path") alongside the per-fixture tests in
+    `LegalKernel/Test/FaultProof/Smt.lean` across empty, singleton,
+    two-cell, three-cell, and four-cell maps.
+
+    The soundness theorem (`smtCellProof_no_value_substitution`) is
     independent of this constructor — it holds for ANY pair of
-    verifying proofs regardless of how they were built. -/
+    verifying proofs regardless of how they were built.  Coherence is
+    the *other* direction: it is what lets an honest defender build
+    an opening the verifier accepts. -/
 def buildSmtCellProof {K V : Type} [Ord K] [BitsKey K] [Encodable K] [Encodable V]
     (m : Std.TreeMap K V compare) (key : K) : SmtCellProof :=
   let entries := m.toList

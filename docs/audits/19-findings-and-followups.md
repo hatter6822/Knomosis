@@ -77,14 +77,20 @@ CBE byte-string encoder, whose 9-byte head is present even for a
 zero-length payload, and `getCellValue_of_not_mem` proves the absent
 reading is the canonical one.
 
+  * `canonicalSiblings_walks_to_root` — the honest-defender
+    direction.  Soundness above is stated over *any* verifying
+    proofs and does not care how one was built; a defender must be
+    able to CONSTRUCT an opening that reproduces the published root,
+    or it cannot compute the post-root the L1 will accept.  The
+    representation half (that `buildSmtCellProof`'s
+    bitmask-compressed encoding expands to that path) stays pinned by
+    tests rather than proved; it is bookkeeping over `setBitmaskBit`,
+    not content.
+
 Not landed: swapping `commitExtendedState` to that root, and making
 `executeStep` compute the post-root from the proven writes.  Those
 are one consensus change and must land together; the implementation
 spec is `docs/planning/state_root_merkleisation_plan.md` §3 / §4.
-One item there is still unproved and gates the honest-defender
-direction: `buildSmtCellProof`'s operational coherence
-(`smtRoot m = smtWalk key v (buildSmtCellProof m key)`), which its
-own docstring records as fixture-tested only.
 
 Stated precisely, from source rather than from the plan documents:
 

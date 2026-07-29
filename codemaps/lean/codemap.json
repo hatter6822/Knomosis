@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5fab977630937d16195216f8785c1832703614c04bbf5fb5a98984fa70d1c099"
+    "source_digest": "313f8812550cb63bbed908eb07af197469b2fdbaeb6b1cc5975719dd8bf1f742"
   },
   "summary": {
     "module_count": 322,
-    "declaration_count": 5454
+    "declaration_count": 5461
   },
   "modules": [
     {
@@ -24111,7 +24111,7 @@
         {
           "kind": "def",
           "name": "buildSmtCellProof",
-          "line": 798,
+          "line": 808,
           "called": [
             "BitsKey",
             "Encodable",
@@ -24125,7 +24125,7 @@
         {
           "kind": "def",
           "name": "verifySmtCellProof",
-          "line": 814,
+          "line": 824,
           "called": [
             "BitsKey",
             "Encodable",
@@ -24136,7 +24136,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_deterministic",
-          "line": 821,
+          "line": 831,
           "called": [
             "BitsKey",
             "Encodable",
@@ -24147,7 +24147,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_walks_to_root",
-          "line": 840,
+          "line": 850,
           "called": [
             "BitsKey",
             "Encodable",
@@ -24159,13 +24159,13 @@
         {
           "kind": "theorem",
           "name": "SmtCellProof.empty_isWellFormed",
-          "line": 853,
+          "line": 863,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_empty_self_verifies",
-          "line": 868,
+          "line": 878,
           "called": [
             "BitsKey",
             "Encodable",
@@ -24178,7 +24178,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_all_32",
-          "line": 895,
+          "line": 905,
           "called": [
             "SmtCellProof",
             "emptySubtreeHash_size",
@@ -24190,7 +24190,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_all_32",
-          "line": 936,
+          "line": 946,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -24201,7 +24201,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_length",
-          "line": 947,
+          "line": 957,
           "called": [
             "SmtCellProof",
             "expandSiblingsAux"
@@ -24210,7 +24210,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_length",
-          "line": 961,
+          "line": 971,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -24221,7 +24221,7 @@
         {
           "kind": "theorem",
           "name": "keyBits_length",
-          "line": 966,
+          "line": 976,
           "called": [
             "BitsKey",
             "keyBits",
@@ -24231,7 +24231,7 @@
         {
           "kind": "def",
           "name": "walkPreimages",
-          "line": 975,
+          "line": 985,
           "called": [
             "smtStepPreimage",
             "stepPair"
@@ -24240,7 +24240,7 @@
         {
           "kind": "theorem",
           "name": "walk_leaf_inj_under_collision_free",
-          "line": 992,
+          "line": 1002,
           "called": [
             "CollisionFreeOn",
             "hashBytes",
@@ -24254,7 +24254,7 @@
         {
           "kind": "def",
           "name": "smtCellProofPreimages",
-          "line": 1104,
+          "line": 1114,
           "called": [
             "BitsKey",
             "Encodable",
@@ -24269,7 +24269,7 @@
         {
           "kind": "theorem",
           "name": "smtCellProof_no_value_substitution",
-          "line": 1123,
+          "line": 1133,
           "called": [
             "BitsKey",
             "CollisionFreeOn",
@@ -24296,7 +24296,7 @@
         {
           "kind": "theorem",
           "name": "smtCellProof_sound_under_collision_free",
-          "line": 1192,
+          "line": 1202,
           "called": [
             "BitsKey",
             "CollisionFreeOn",
@@ -24316,7 +24316,7 @@
     {
       "module": "LegalKernel.FaultProof.SmtInjective",
       "path": "LegalKernel/FaultProof/SmtInjective.lean",
-      "declaration_count": 34,
+      "declaration_count": 41,
       "declarations": [
         {
           "kind": "namespace",
@@ -24686,8 +24686,6 @@
             "BitsKey",
             "CollisionFreeOn",
             "Encodable",
-            "FaultProof",
-            "LegalKernel",
             "SmtCellProof",
             "expandSiblings",
             "expandSiblings_all_32",
@@ -24703,6 +24701,92 @@
             "stepPair",
             "verifySmtCellProof",
             "walk_inj_under_collision_free"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "keyBitsUpTo",
+          "line": 870,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "keyBits_eq_keyBitsUpTo",
+          "line": 874,
+          "called": [
+            "keyBits",
+            "keyBitsUpTo",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "keyBitsUpTo_length",
+          "line": 878,
+          "called": [
+            "keyBitsUpTo"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "canonicalSiblings",
+          "line": 886,
+          "called": [
+            "SmtEntries",
+            "entries",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalSiblings_length",
+          "line": 897,
+          "called": [
+            "SmtEntries",
+            "canonicalSiblings",
+            "entries",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalSiblings_walks_to_root",
+          "line": 919,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.filter_high",
+            "BitsDistinctBelow.filter_low",
+            "SmtEntries",
+            "canonicalSiblings",
+            "canonicalSiblings_length",
+            "entries",
+            "hashBytes",
+            "keyBitsUpTo",
+            "keyBitsUpTo_length",
+            "leafHash",
+            "length_le_one_of_bitsDistinctBelow_zero",
+            "smtRootListAux",
+            "smtStep",
+            "stepPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalSiblings_verifies",
+          "line": 980,
+          "called": [
+            "BitsDistinctBelow",
+            "FaultProof",
+            "LegalKernel",
+            "SmtEntries",
+            "canonicalSiblings",
+            "canonicalSiblings_walks_to_root",
+            "entries",
+            "keyBits",
+            "leafHash",
+            "smtDepth",
+            "smtRootListAux",
+            "stepPair"
           ]
         }
       ]
@@ -52589,17 +52673,25 @@
             "assert",
             "assertEq",
             "bitsDistinctBelow_of_keys_pairwise_ne",
+            "buildSmtCellProofAux",
             "byteArray_eq_of_keyBits_eq",
+            "canonicalSiblings",
+            "canonicalSiblings_walks_to_root",
             "emptyLeafSeedBytes",
             "emptyRootAt",
             "emptyRootPreimages",
             "emptySubtreeHash",
             "emptySubtreeHash_succ",
             "encodeAsBytes",
+            "entries",
+            "expandSiblings",
             "hashBytes",
             "key32",
+            "keyBits",
+            "keyBitsUpTo",
             "leafHash",
             "leafHash_inj_under_collision_free",
+            "setBitmaskBit",
             "smtCellProofPreimages",
             "smtDepth",
             "smtRootListAux",
@@ -52611,6 +52703,7 @@
             "smtUpdateRoot_proof_independent",
             "smtUpdateRoot_verifies",
             "smtWalk",
+            "stepPair",
             "verifySmtCellProof"
           ]
         }

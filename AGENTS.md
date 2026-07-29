@@ -1097,7 +1097,7 @@ on all three stacks, so convergence is now proved *logarithmically*
 
 What remains is the recipe mismatch alone.  Closing it means
 Merkleising the state root so a post-root is recomputable from the
-pre-root plus the proven cell writes.  Six prerequisites are in —
+pre-root plus the proven cell writes.  Seven prerequisites are in —
 the cell space covers all seven `ExtendedState` fields (tags 7–16);
 `smtCellKey` / `StepVMMerkle.deriveCellSmtKey` derive the SMT key
 on-chain rather than accepting one; `commitExtendedStateSmt` builds
@@ -1109,7 +1109,10 @@ headline guarantee);
 enumeration, giving the behavioural form the game needs; and
 `smtUpdateRoot` supplies the incremental write with
 `smtUpdateRoot_proof_independent`, which is what stops a responder
-steering the post-root by choosing among verifying openings.  But
+steering the post-root by choosing among verifying openings; and
+`canonicalSiblings_walks_to_root` covers the honest-defender
+direction — the opening a defender can build reproduces the
+published root.  But
 `commitExtendedState` itself is unchanged and `executeStep` still
 returns the other construction.
 `docs/audits/19-findings-and-followups.md` records the remaining

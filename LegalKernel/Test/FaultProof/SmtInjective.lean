@@ -191,6 +191,55 @@ def tests : List TestCase :=
           (actual := (smtUpdateRoot k v p).toList)
           "an unchanged value leaves the root unchanged"
     }
+  , { name := "the canonical path walks back to the root"
+    , body := do
+        -- `canonicalSiblings_walks_to_root`, observed on multi-cell
+        -- buckets.  This is the honest defender's direction: the
+        -- opening it can build reproduces the published root, so the
+        -- post-root it computes is the one the L1 computes.
+        let entries : List (ByteArray × ByteArray) :=
+          [ (key32 11, ByteArray.mk #[1])
+          , (key32 12, ByteArray.mk #[2])
+          , (key32 13, ByteArray.mk #[3])
+          , (key32 14, ByteArray.mk #[4]) ]
+        for e in entries do
+          let sibs := canonicalSiblings smtDepth entries e.1
+          assertEq (expected := smtDepth) (actual := sibs.length)
+            "one sibling per level"
+          let walked := (sibs.zip (keyBits e.1)).foldl stepPair (leafHash e.1 e.2)
+          assertEq (expected := (smtRootListAux smtDepth entries).toList)
+            (actual := walked.toList)
+            "the canonical path reproduces the root"
+    }
+  , { name := "the shipped compressed proof expands to the canonical path"
+    , body := do
+        -- The representation half of coherence: `buildSmtCellProof`
+        -- drops canonical-empty siblings and records their depths in
+        -- a bitmask, and `expandSiblings` re-inserts them.  The proof
+        -- above is stated over the uncompressed path, so this pins
+        -- that the shipped encoding decodes to it.
+        let entries : List (ByteArray × ByteArray) :=
+          [ (key32 15, ByteArray.mk #[1])
+          , (key32 16, ByteArray.mk #[2])
+          , (key32 17, ByteArray.mk #[3]) ]
+        let root := smtRootListAux smtDepth entries
+        for e in entries do
+          -- `buildSmtCellProof` is `buildSmtCellProofAux` over
+          -- `m.toList` plus the bitmask fold; `ByteArray` has no
+          -- `Ord`, so drive the list form directly.
+          let (sibs, bitDepths) := buildSmtCellProofAux smtDepth entries e.1
+          let p : SmtCellProof :=
+            { siblings := sibs.toArray
+            , bitmask  := bitDepths.foldl setBitmaskBit
+                            (ByteArray.mk (Array.replicate 32 (0 : UInt8))) }
+          let expanded := (expandSiblings p).map ByteArray.toList
+          let canonical := (canonicalSiblings smtDepth entries e.1).map ByteArray.toList
+          assertEq (expected := canonical) (actual := expanded)
+            "expandSiblings ∘ buildSmtCellProof = canonicalSiblings"
+          assertEq (expected := true)
+            (actual := verifySmtCellProof root e.1 e.2 p)
+            "and the canonical proof verifies against the bucket's root"
+    }
   , { name := "API stability: SMT injectivity theorem signatures"
     , body := do
         -- Term-level pins.  Each ascription fails to elaborate if the
@@ -244,6 +293,12 @@ def tests : List TestCase :=
             verifySmtCellProof root key value proof₂ = true →
             smtUpdateRoot key newValue proof₁ = smtUpdateRoot key newValue proof₂ :=
           smtUpdateRoot_proof_independent
+        let _coh : ∀ (d : Nat) (entries : SmtEntries) (key value : ByteArray),
+            (key, value) ∈ entries → BitsDistinctBelow d entries →
+            ((canonicalSiblings d entries key).zip (keyBitsUpTo d key)).foldl stepPair
+                (leafHash key value)
+              = smtRootListAux d entries :=
+          canonicalSiblings_walks_to_root
         pure ()
     }
   ]
