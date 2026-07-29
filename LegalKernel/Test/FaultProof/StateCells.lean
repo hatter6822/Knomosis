@@ -118,10 +118,10 @@ def tests : List TestCase :=
     }
   , { name := "the SMT root is 32 bytes and deterministic"
     , body := do
-        assertEq (expected := 32) (actual := (commitExtendedStateSmt populated).size)
+        assertEq (expected := 32) (actual := (commitExtendedState populated).size)
           "root width"
-        assertEq (expected := (commitExtendedStateSmt populated).toList)
-          (actual := (commitExtendedStateSmt populated).toList)
+        assertEq (expected := (commitExtendedState populated).toList)
+          (actual := (commitExtendedState populated).toList)
           "root is stable across calls"
     }
   , { name := "the SMT root binds the AMM kill switch"
@@ -133,8 +133,8 @@ def tests : List TestCase :=
         let flipped : ExtendedState :=
           { populated with
               bridge := { populated.bridge with ammDisabled := false } }
-        assert ((commitExtendedStateSmt populated).toList
-                  != (commitExtendedStateSmt flipped).toList)
+        assert ((commitExtendedState populated).toList
+                  != (commitExtendedState flipped).toList)
           "flipping ammDisabled must change the SMT root"
     }
   , { name := "the SMT root binds an actor's epoch budget"
@@ -143,16 +143,16 @@ def tests : List TestCase :=
           { populated with
               epochBudgets := populated.epochBudgets.insert 7
                                 { lastSeenEpoch := 2, budgetBalance := 999_999 } }
-        assert ((commitExtendedStateSmt populated).toList
-                  != (commitExtendedStateSmt inflated).toList)
+        assert ((commitExtendedState populated).toList
+                  != (commitExtendedState inflated).toList)
           "inflating a budget must change the SMT root"
     }
   , { name := "the SMT root binds a balance"
     , body := do
         let moved : ExtendedState :=
           { populated with base := LegalKernel.setBalance populated.base 1 7 101 }
-        assert ((commitExtendedStateSmt populated).toList
-                  != (commitExtendedStateSmt moved).toList)
+        assert ((commitExtendedState populated).toList
+                  != (commitExtendedState moved).toList)
           "changing a balance must change the SMT root"
     }
   ]

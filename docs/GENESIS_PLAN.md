@@ -5049,7 +5049,10 @@ side `LegalKernel.FaultProof.Commit.commitExtendedState` is the
 reference function:
 
 ```
-commitExtendedState es =
+commitExtendedState es = smtRoot over the state's CELLS
+  -- LegalKernel.FaultProof.StateCells
+
+commitExtendedStateConcat es =                     -- retired
   hashBytes (commitState es.base ++ commitNonceState es.nonces ++
              commitKeyRegistry es.registry ++
              commitLocalPolicies es.localPolicies ++
@@ -5058,9 +5061,16 @@ commitExtendedState es =
              commitBudgetPolicy es.budgetPolicy)
 ```
 
-Seven components, not five: the H-1 widening brought the per-actor
-epoch budgets and the budget policy inside the root, so a forged
-budget is bound by the commitment like any other sub-state.
+The published root is the **cell root**.  The seven-component
+concatenation it replaced is retained as `commitExtendedStateConcat`
+with its theorems intact, because those theorems are true and worth
+keeping — but nothing publishes it any more, and the reason is
+structural, not aesthetic: see the sub-section below.
+
+Seven components was itself a correction — the H-1 widening had
+brought the per-actor epoch budgets and the budget policy inside
+the root while this section still said five, so a forged budget was
+bound by the commitment and the design document did not say so.
 
 **Why the collision-resistance hypothesis is scoped to a pre-image
 list.**  The obvious form — `∀ b₁ b₂, h b₁ = h b₂ → b₁ = b₂` — is
@@ -5096,22 +5106,28 @@ equality:
 Workstream H originally chose a single-hash form over a Sparse
 Merkle Tree on the grounds that the SMT was a gas optimisation and
 the soundness arguments held under either representation.  **That
-reasoning was wrong, and the error is the open critical finding
-below.**  The representation is not interchangeable: a concatenation
-hash cannot be updated incrementally, so the L1 step VM — which
-holds the root and the proven cells, never the sub-state encodings —
-cannot recompute a post-root from a pre-root.  It therefore returns
-a step-VM-specific hash, and the game's terminal comparison is
-between two different constructions.
+reasoning was wrong.**  The representation is not interchangeable: a
+concatenation hash cannot be updated incrementally, so the L1 step
+VM — which holds the root and the proven cells, never the sub-state
+encodings — cannot recompute a post-root from a pre-root.
 
-`LegalKernel.FaultProof.StateCells.commitExtendedStateSmt` is the
-replacement root, built over the cell space and shipped additively
-ahead of the swap.  Its injectivity
-(`smtRootListAux_perm_of_eq_under_collision_free`) and its
-cell-determination corollary
-(`commitExtendedStateSmt_determines_cells`) are proved, so the swap
-does not downgrade the guarantee above.
-`docs/planning/state_root_merkleisation_plan.md` is the spec.
+The root has been swapped.  `commitExtendedState` is now the SMT
+root over the state's cells
+(`LegalKernel.FaultProof.StateCells`), which a post-root IS
+computable from.  The guarantee above did not weaken across the
+swap: `smtRootListAux_perm_of_eq_under_collision_free` proves the
+new root injective and `commitExtendedState_determines_cells`
+composes that with the cell enumeration, concluding that two states
+behind one root read identically through every cell.  That
+conclusion is behavioural rather than `extEq`, deliberately —
+`State.Equiv` separates a resource present with an all-zero balance
+map from a resource absent entirely, and no cell read, hence no
+step, can tell those apart.
+
+The step VM has NOT yet been rewritten to exploit it, so §15B.2's
+open critical finding still stands.
+`docs/planning/state_root_merkleisation_plan.md` §4 is the spec for
+that half.
 
 ### 15B.2 Step semantics
 

@@ -145,8 +145,8 @@ def tests : List TestCase :=
         assert ((getCellValue withEmpty (.registry 8)).toList
                   != (getCellValue populated (.registry 8)).toList)
           "present-empty must differ from absent"
-        assert ((commitExtendedStateSmt withEmpty).toList
-                  != (commitExtendedStateSmt populated).toList)
+        assert ((commitExtendedState withEmpty).toList
+                  != (commitExtendedState populated).toList)
           "and must move the root"
     }
   , { name := "the cell-key pre-image enumeration covers every tag"
@@ -170,16 +170,16 @@ def tests : List TestCase :=
             StateCellsWellFormed es₁ → StateCellsWellFormed es₂ →
             LegalKernel.Bridge.CollisionFreeOn
               (stateCommitSmtPreimages es₁ es₂) LegalKernel.Runtime.hashBytes →
-            commitExtendedStateSmt es₁ = commitExtendedStateSmt es₂ →
+            commitExtendedState es₁ = commitExtendedState es₂ →
             (stateCellEntries es₁).Perm (stateCellEntries es₂) :=
           stateCellEntries_perm_of_commitSmt_eq
         let _det : ∀ (es₁ es₂ : ExtendedState),
             StateCellsWellFormed es₁ → StateCellsWellFormed es₂ →
             LegalKernel.Bridge.CollisionFreeOn
               (stateCommitSmtPreimages es₁ es₂) LegalKernel.Runtime.hashBytes →
-            commitExtendedStateSmt es₁ = commitExtendedStateSmt es₂ →
+            commitExtendedState es₁ = commitExtendedState es₂ →
             ∀ t : CellTag, getCellValue es₁ t = getCellValue es₂ t :=
-          commitExtendedStateSmt_determines_cells
+          commitExtendedState_determines_cells
         let _keyinj : ∀ (t₁ t₂ : CellTag), t₁.KeyBounded → t₂.KeyBounded →
             cellKeyPreimage t₁ = cellKeyPreimage t₂ → t₁ = t₂ :=
           cellKeyPreimage_injective

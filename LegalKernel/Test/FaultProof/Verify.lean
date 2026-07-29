@@ -167,14 +167,14 @@ def tests : List TestCase :=
         -- hypothesis attached to the statement that needs it.
         let _proof : ∀ (commit : StateCommit) (proof : CellProof) (es : ExtendedState),
             Bridge.CollisionFreeOn
-              (extendedStateCommitPreimages es proof.witnessState)
+              (stateCommitSmtPreimages es proof.witnessState)
               LegalKernel.Runtime.hashBytes →
-            ExtendedState.CanonicalBounds es →
-            ExtendedState.CanonicalBounds proof.witnessState →
+            StateCellsWellFormed es →
+            StateCellsWellFormed proof.witnessState →
             verifyCellProof commit proof = true →
             commitExtendedState es = commit →
-            ExtendedState.extEq es proof.witnessState :=
-          verifyCellProof_witness_unique_under_collision_free
+            ∀ t : CellTag, getCellValue es t = getCellValue proof.witnessState t :=
+          verifyCellProof_witness_cells_agree_under_collision_free
         pure ()
     }
   , { name := "Theorem #223 updateCommitment_agrees_with_setCell API"
@@ -202,7 +202,7 @@ def tests : List TestCase :=
             Bridge.CollisionFreeOn
               [extendedStatePreimage es₁, extendedStatePreimage es₂]
               LegalKernel.Runtime.hashBytes →
-            commitExtendedState es₁ = commitExtendedState es₂ →
+            commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂ →
             commitState es₁.base = commitState es₂.base ∧
             commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
             commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
@@ -210,7 +210,7 @@ def tests : List TestCase :=
             commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
             commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
             commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy :=
-          commitExtendedState_subcommits_eq_under_collision_free
+          commitExtendedStateConcat_subcommits_eq_under_collision_free
         pure ()
     }
   , -- ===== Absent vs present-but-empty =====

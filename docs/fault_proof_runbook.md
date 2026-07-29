@@ -56,24 +56,23 @@ the game contracts are deployed at all, set
 profitable purely from the guaranteed sequencer loss.
 
 The fix is to Merkleise the state root so a post-root is
-recomputable from the pre-root plus the proven cell writes.  Every
-prerequisite has landed — the cell space now covers all seven
-`ExtendedState` fields; the SMT cell key is derived on-chain rather
-than accepted from the caller; the SMT root over those cells is
-built and tested additively; that root is proved injective
+recomputable from the pre-root plus the proven cell writes.  **The
+root itself has been swapped**: `commitExtendedState` is now the SMT
+root over the state's cells, which a post-root IS computable from.
+Every prerequisite behind it has landed — the cell space covers all
+seven `ExtendedState` fields; the SMT cell key is derived on-chain
+rather than accepted from the caller; the root is proved injective
 (`smtRootListAux_perm_of_eq_under_collision_free`, the EI.8
 replacement) and proved to determine every cell
-(`commitExtendedStateSmt_determines_cells`); and the incremental
+(`commitExtendedState_determines_cells`); and the incremental
 write `smtUpdateRoot` is proved independent of which verifying
-opening the responder supplies.  But `commitExtendedState` itself is
-unchanged and `executeStep` still returns the other construction, so
-**§0 still applies in full**.  The remaining work is
-`docs/planning/state_root_merkleisation_plan.md` §3 and §4, which are
-one consensus change and must land together.
+opening the responder supplies.  But `executeStep` still returns the
+other construction, so **§0 still applies in full**.  The remaining
+work is `docs/planning/state_root_merkleisation_plan.md` §4.
 `docs/audits/19-findings-and-followups.md` ("Open critical: the
 fault-proof commit-recipe split") records the remaining blast
-radius: `commitState` and its siblings, the EI.8 injectivity chain,
-`KnomosisStepVM`, the observer, and every fixture corpus.
+radius: `KnomosisStepVM`'s 25 per-variant handlers, the observer,
+and the step-VM fixture corpus.
 
 ---
 

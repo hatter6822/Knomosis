@@ -1650,9 +1650,9 @@ def test_commitExtendedState_subcommits_extensional_eq_api : TestCase := {
         LegalKernel.Bridge.CollisionFreeOn
           (extendedStateCommitPreimages es₁ es₂) LegalKernel.Runtime.hashBytes →
         ExtendedState.CanonicalBounds es₁ → ExtendedState.CanonicalBounds es₂ →
-        commitExtendedState es₁ = commitExtendedState es₂ →
+        commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂ →
         ExtendedState.extEq es₁ es₂ :=
-      commitExtendedState_subcommits_extensional_eq_under_collision_free
+      commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free
     pure ()
 }
 

@@ -15,7 +15,7 @@ determines the state's cells.
 
 `smtRootListAux_perm_of_eq_under_collision_free` (SmtInjective)
 says equal SMT roots imply the *entry lists* are permutations.
-`commitExtendedStateSmt` builds its entry list from an
+`commitExtendedState` builds its entry list from an
 `ExtendedState`, so composing the two gives the property the
 fault-proof game actually needs: two states behind the same
 published root agree on every cell a proof can open.
@@ -456,7 +456,7 @@ theorem stateCellEntries_encodable (es : ExtendedState)
 theorem stateCellEntries_perm_of_commitSmt_eq (es₁ es₂ : ExtendedState)
     (h_wf₁ : StateCellsWellFormed es₁) (h_wf₂ : StateCellsWellFormed es₂)
     (h_cf : CollisionFreeOn (stateCommitSmtPreimages es₁ es₂) hashBytes)
-    (h : commitExtendedStateSmt es₁ = commitExtendedStateSmt es₂) :
+    (h : commitExtendedState es₁ = commitExtendedState es₂) :
     (stateCellEntries es₁).Perm (stateCellEntries es₂) := by
   have h_cf_key : CollisionFreeOn (stateCellKeyPreimages es₁ es₂) hashBytes :=
     h_cf.append_right
@@ -499,10 +499,10 @@ private theorem cell_transfer (es₁ es₂ : ExtendedState)
     should not be: `State.Equiv` separates a resource present with an
     all-zero balance map from a resource absent entirely, and no cell
     read — hence no step — can tell those apart. -/
-theorem commitExtendedStateSmt_determines_cells (es₁ es₂ : ExtendedState)
+theorem commitExtendedState_determines_cells (es₁ es₂ : ExtendedState)
     (h_wf₁ : StateCellsWellFormed es₁) (h_wf₂ : StateCellsWellFormed es₂)
     (h_cf : CollisionFreeOn (stateCommitSmtPreimages es₁ es₂) hashBytes)
-    (h : commitExtendedStateSmt es₁ = commitExtendedStateSmt es₂) :
+    (h : commitExtendedState es₁ = commitExtendedState es₂) :
     ∀ t : CellTag, getCellValue es₁ t = getCellValue es₂ t := by
   have h_cf_key : CollisionFreeOn (stateCellKeyPreimages es₁ es₂) hashBytes :=
     h_cf.append_right

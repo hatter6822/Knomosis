@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "fc3a2783dfde2fa5eab8f66ad1c0282f276bae40d464acabcf57b34beacb189c"
+    "source_digest": "fee62dbb9361cd2064d125bd98b7721634658ca7211fb2d03daf5d62e488c822"
   },
   "summary": {
-    "module_count": 323,
-    "declaration_count": 5458
+    "module_count": 324,
+    "declaration_count": 5478
   },
   "modules": [
     {
@@ -20467,6 +20467,214 @@
       ]
     },
     {
+      "module": "LegalKernel.FaultProof.CellValue",
+      "path": "LegalKernel/FaultProof/CellValue.lean",
+      "declaration_count": 19,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 38,
+          "called": [
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "canonicalAbsentValue",
+          "line": 64,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "getCellValue",
+          "line": 95,
+          "called": [
+            "Bridge.DepositRecord.encode",
+            "Bridge.PendingWithdrawal.encode",
+            "CellTag",
+            "ExtendedState",
+            "actionCost",
+            "es",
+            "freeTier"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_deterministic",
+          "line": 192,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_ammReserveEth",
+          "line": 216,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_ammReserveBold",
+          "line": 221,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_boldCircuitClosed",
+          "line": 226,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_boldTvlCap",
+          "line": 233,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_boldTotalLockedValue",
+          "line": 239,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_ammDisabled",
+          "line": 250,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_ammDisabled_distinguishes",
+          "line": 259,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_epochBudget",
+          "line": 269,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_budgetPolicy_scalars",
+          "line": 278,
+          "called": [
+            "ExtendedState",
+            "actionCost",
+            "es",
+            "freeTier",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "isCellAbsent",
+          "line": 293,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "canonicalAbsentValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "instance",
+          "name": "instDecidableIsCellAbsent",
+          "line": 298,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "es",
+            "isCellAbsent"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "setCell",
+          "line": 315,
+          "called": [
+            "Bridge.DepositRecord.decode",
+            "CellTag",
+            "ExtendedState",
+            "actionCost",
+            "es",
+            "freeTier"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "setCell_deterministic",
+          "line": 430,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "es",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildCellProof",
+          "line": 442,
+          "called": [
+            "CellProof",
+            "CellTag",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "es",
+            "getCellValue"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.FaultProof.Coherence",
       "path": "LegalKernel/FaultProof/Coherence.lean",
       "declaration_count": 18,
@@ -20665,6 +20873,7 @@
             "CellProofBundle",
             "ExtendedState",
             "SignedAction",
+            "buildCellProof",
             "es"
           ]
         },
@@ -20694,13 +20903,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 50,
+          "line": 67,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 51,
+          "line": 68,
           "called": [
             "LegalKernel.Bridge",
             "LegalKernel.Runtime"
@@ -20709,7 +20918,7 @@
         {
           "kind": "def",
           "name": "commitState",
-          "line": 64,
+          "line": 81,
           "called": [
             "State.encode",
             "hashBytes"
@@ -20718,7 +20927,7 @@
         {
           "kind": "def",
           "name": "commitNonceState",
-          "line": 68,
+          "line": 85,
           "called": [
             "NonceState",
             "NonceState.encode",
@@ -20728,7 +20937,7 @@
         {
           "kind": "def",
           "name": "commitKeyRegistry",
-          "line": 74,
+          "line": 91,
           "called": [
             "KeyRegistry",
             "KeyRegistry.encodeMap",
@@ -20738,7 +20947,7 @@
         {
           "kind": "def",
           "name": "commitLocalPolicies",
-          "line": 79,
+          "line": 96,
           "called": [
             "LocalPolicies",
             "hashBytes"
@@ -20747,7 +20956,7 @@
         {
           "kind": "def",
           "name": "commitBridgeState",
-          "line": 84,
+          "line": 101,
           "called": [
             "BridgeState",
             "hashBytes"
@@ -20756,7 +20965,7 @@
         {
           "kind": "def",
           "name": "commitEpochBudgets",
-          "line": 95,
+          "line": 112,
           "called": [
             "EpochBudgetState",
             "hashBytes"
@@ -20765,7 +20974,7 @@
         {
           "kind": "def",
           "name": "commitBudgetPolicy",
-          "line": 103,
+          "line": 120,
           "called": [
             "BudgetPolicy",
             "hashBytes"
@@ -20774,7 +20983,7 @@
         {
           "kind": "def",
           "name": "extendedStatePreimage",
-          "line": 112,
+          "line": 129,
           "called": [
             "ExtendedState",
             "commitBridgeState",
@@ -20789,8 +20998,8 @@
         },
         {
           "kind": "def",
-          "name": "commitExtendedState",
-          "line": 130,
+          "name": "commitExtendedStateConcat",
+          "line": 147,
           "called": [
             "ExtendedState",
             "StateCommit",
@@ -20802,7 +21011,7 @@
         {
           "kind": "def",
           "name": "subStatePreimages",
-          "line": 138,
+          "line": 155,
           "called": [
             "BridgeState",
             "BudgetPolicy",
@@ -20818,7 +21027,7 @@
         {
           "kind": "def",
           "name": "extendedStateCommitPreimages",
-          "line": 151,
+          "line": 168,
           "called": [
             "ExtendedState",
             "es",
@@ -20829,7 +21038,7 @@
         {
           "kind": "theorem",
           "name": "commitState_deterministic",
-          "line": 157,
+          "line": 174,
           "called": [
             "commitState"
           ]
@@ -20837,7 +21046,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_deterministic",
-          "line": 160,
+          "line": 177,
           "called": [
             "NonceState",
             "commitNonceState"
@@ -20846,7 +21055,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_deterministic",
-          "line": 163,
+          "line": 180,
           "called": [
             "KeyRegistry",
             "commitKeyRegistry"
@@ -20855,7 +21064,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_deterministic",
-          "line": 166,
+          "line": 183,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies"
@@ -20864,7 +21073,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_deterministic",
-          "line": 169,
+          "line": 186,
           "called": [
             "BridgeState",
             "commitBridgeState"
@@ -20872,21 +21081,21 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedState_deterministic",
-          "line": 172,
+          "name": "commitExtendedStateConcat_deterministic",
+          "line": 189,
           "called": [
             "ExtendedState",
-            "commitExtendedState",
+            "commitExtendedStateConcat",
             "es"
           ]
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedState_size",
-          "line": 177,
+          "name": "commitExtendedStateConcat_size",
+          "line": 194,
           "called": [
             "ExtendedState",
-            "commitExtendedState",
+            "commitExtendedStateConcat",
             "es",
             "hashAdaptor_thirty_two_byte_output"
           ]
@@ -20894,7 +21103,7 @@
         {
           "kind": "theorem",
           "name": "commitState_size",
-          "line": 182,
+          "line": 199,
           "called": [
             "commitState",
             "hashAdaptor_thirty_two_byte_output"
@@ -20903,7 +21112,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_size",
-          "line": 187,
+          "line": 204,
           "called": [
             "NonceState",
             "commitNonceState",
@@ -20913,7 +21122,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_size",
-          "line": 192,
+          "line": 209,
           "called": [
             "KeyRegistry",
             "commitKeyRegistry",
@@ -20923,7 +21132,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_size",
-          "line": 197,
+          "line": 214,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies",
@@ -20933,7 +21142,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_size",
-          "line": 202,
+          "line": 219,
           "called": [
             "BridgeState",
             "commitBridgeState",
@@ -20943,7 +21152,7 @@
         {
           "kind": "theorem",
           "name": "commitEpochBudgets_size",
-          "line": 208,
+          "line": 225,
           "called": [
             "EpochBudgetState",
             "commitEpochBudgets",
@@ -20953,7 +21162,7 @@
         {
           "kind": "theorem",
           "name": "commitBudgetPolicy_size",
-          "line": 214,
+          "line": 231,
           "called": [
             "BudgetPolicy",
             "commitBudgetPolicy",
@@ -20963,7 +21172,7 @@
         {
           "kind": "def",
           "name": "extendedStateExtensionallyEqual",
-          "line": 236,
+          "line": 253,
           "called": [
             "ExtendedState",
             "es"
@@ -20972,7 +21181,7 @@
         {
           "kind": "theorem",
           "name": "commitState_bytes_injective_under_collision_free",
-          "line": 260,
+          "line": 277,
           "called": [
             "State.encode",
             "commitState",
@@ -20982,7 +21191,7 @@
         {
           "kind": "theorem",
           "name": "commitNonceState_bytes_injective_under_collision_free",
-          "line": 271,
+          "line": 288,
           "called": [
             "NonceState",
             "NonceState.encode",
@@ -20993,7 +21202,7 @@
         {
           "kind": "theorem",
           "name": "commitKeyRegistry_bytes_injective_under_collision_free",
-          "line": 282,
+          "line": 299,
           "called": [
             "KeyRegistry",
             "KeyRegistry.encodeMap",
@@ -21004,7 +21213,7 @@
         {
           "kind": "theorem",
           "name": "commitLocalPolicies_bytes_injective_under_collision_free",
-          "line": 293,
+          "line": 310,
           "called": [
             "LocalPolicies",
             "commitLocalPolicies",
@@ -21014,7 +21223,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_bytes_injective_under_collision_free",
-          "line": 304,
+          "line": 321,
           "called": [
             "BridgeState",
             "commitBridgeState",
@@ -21024,7 +21233,7 @@
         {
           "kind": "theorem",
           "name": "commitEpochBudgets_bytes_injective_under_collision_free",
-          "line": 315,
+          "line": 332,
           "called": [
             "EpochBudgetState",
             "commitEpochBudgets",
@@ -21034,7 +21243,7 @@
         {
           "kind": "theorem",
           "name": "commitBudgetPolicy_bytes_injective_under_collision_free",
-          "line": 326,
+          "line": 343,
           "called": [
             "BudgetPolicy",
             "commitBudgetPolicy",
@@ -21044,13 +21253,13 @@
         {
           "kind": "theorem",
           "name": "byteArrayAppendInj",
-          "line": 364,
+          "line": 381,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "byteArray_concat_five_split",
-          "line": 390,
+          "line": 407,
           "called": [
             "byteArrayAppendInj"
           ]
@@ -21058,7 +21267,7 @@
         {
           "kind": "theorem",
           "name": "byteArray_concat_seven_split",
-          "line": 442,
+          "line": 459,
           "called": [
             "byteArrayAppendInj",
             "byteArray_concat_five_split"
@@ -21066,8 +21275,8 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedState_subcommits_eq_under_collision_free",
-          "line": 476,
+          "name": "commitExtendedStateConcat_subcommits_eq_under_collision_free",
+          "line": 493,
           "called": [
             "ExtendedState",
             "byteArray_concat_seven_split",
@@ -21077,7 +21286,7 @@
             "commitBudgetPolicy_size",
             "commitEpochBudgets",
             "commitEpochBudgets_size",
-            "commitExtendedState",
+            "commitExtendedStateConcat",
             "commitKeyRegistry",
             "commitKeyRegistry_size",
             "commitLocalPolicies",
@@ -21093,8 +21302,8 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedState_subcommits_bytes_eq_under_collision_free",
-          "line": 535,
+          "name": "commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free",
+          "line": 552,
           "called": [
             "BridgeState",
             "BudgetPolicy",
@@ -21107,8 +21316,8 @@
             "commitBridgeState_bytes_injective_under_collision_free",
             "commitBudgetPolicy_bytes_injective_under_collision_free",
             "commitEpochBudgets_bytes_injective_under_collision_free",
-            "commitExtendedState",
-            "commitExtendedState_subcommits_eq_under_collision_free",
+            "commitExtendedStateConcat",
+            "commitExtendedStateConcat_subcommits_eq_under_collision_free",
             "commitKeyRegistry_bytes_injective_under_collision_free",
             "commitLocalPolicies_bytes_injective_under_collision_free",
             "commitNonceState_bytes_injective_under_collision_free",
@@ -21122,7 +21331,7 @@
         {
           "kind": "def",
           "name": "ExtendedState.extEq",
-          "line": 656,
+          "line": 673,
           "called": [
             "ExtendedState",
             "State.Equiv",
@@ -21132,7 +21341,7 @@
         {
           "kind": "theorem",
           "name": "ExtendedState.extEq.refl",
-          "line": 673,
+          "line": 690,
           "called": [
             "ExtendedState",
             "ExtendedState.extEq",
@@ -21143,7 +21352,7 @@
         {
           "kind": "structure",
           "name": "ExtendedState.CanonicalBounds",
-          "line": 696,
+          "line": 713,
           "called": [
             "BalanceMap.encodeAsBytes",
             "Bridge.DepositRecord.encodeAsBytes",
@@ -21157,8 +21366,8 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedState_subcommits_extensional_eq_under_collision_free",
-          "line": 780,
+          "name": "commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free",
+          "line": 797,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encode_injective",
@@ -21176,8 +21385,8 @@
             "State.Equiv",
             "State.encode",
             "State.encode_injective",
-            "commitExtendedState",
-            "commitExtendedState_subcommits_bytes_eq_under_collision_free",
+            "commitExtendedStateConcat",
+            "commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free",
             "es",
             "extendedStateCommitPreimages",
             "hashBytes"
@@ -21186,7 +21395,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_includes_ammState",
-          "line": 910,
+          "line": 927,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21197,7 +21406,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeBase",
-          "line": 925,
+          "line": 942,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending"
@@ -21206,7 +21415,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeAmmSuffix",
-          "line": 935,
+          "line": 952,
           "called": [
             "encodeAmount"
           ]
@@ -21214,7 +21423,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_factored",
-          "line": 945,
+          "line": 962,
           "called": [
             "Bridge.BridgeState.encode",
             "bridgeStateEncodeAmmSuffix",
@@ -21224,7 +21433,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_amm_genesis_suffix_const",
-          "line": 954,
+          "line": 971,
           "called": [
             "bridgeStateEncodeAmmSuffix"
           ]
@@ -21232,7 +21441,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_2",
-          "line": 977,
+          "line": 994,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21248,7 +21457,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_3",
-          "line": 1012,
+          "line": 1029,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21260,7 +21469,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_reflects_ammDisabled",
-          "line": 1051,
+          "line": 1068,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21276,17 +21485,17 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedState_reflects_ammDisabled",
-          "line": 1141,
+          "name": "commitExtendedStateConcat_reflects_ammDisabled",
+          "line": 1158,
           "called": [
             "ExtendedState",
             "ExtendedState.empty",
             "FaultProof",
             "LegalKernel",
             "commitBridgeState_reflects_ammDisabled",
-            "commitExtendedState",
-            "commitExtendedState_size",
-            "commitExtendedState_subcommits_eq_under_collision_free",
+            "commitExtendedStateConcat",
+            "commitExtendedStateConcat_size",
+            "commitExtendedStateConcat_subcommits_eq_under_collision_free",
             "es",
             "extendedStateCommitPreimages",
             "hashBytes",
@@ -22590,6 +22799,7 @@
             "ActorId",
             "CellProofBundle",
             "ExtendedState",
+            "buildCellProof",
             "es"
           ]
         },
@@ -25655,13 +25865,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 58,
+          "line": 54,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 59,
+          "line": 55,
           "called": [
             "LegalKernel.Bridge"
           ]
@@ -25669,7 +25879,7 @@
         {
           "kind": "def",
           "name": "singletonCellTags",
-          "line": 68,
+          "line": 64,
           "called": [
             "CellTag"
           ]
@@ -25677,7 +25887,7 @@
         {
           "kind": "def",
           "name": "stateCellTags",
-          "line": 88,
+          "line": 84,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -25688,18 +25898,19 @@
         {
           "kind": "def",
           "name": "stateCellEntries",
-          "line": 102,
+          "line": 98,
           "called": [
             "ExtendedState",
             "es",
+            "getCellValue",
             "smtCellKey",
             "stateCellTags"
           ]
         },
         {
           "kind": "def",
-          "name": "commitExtendedStateSmt",
-          "line": 115,
+          "name": "commitExtendedState",
+          "line": 111,
           "called": [
             "ExtendedState",
             "StateCommit",
@@ -25711,11 +25922,11 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedStateSmt_size",
-          "line": 120,
+          "name": "commitExtendedState_size",
+          "line": 116,
           "called": [
             "ExtendedState",
-            "commitExtendedStateSmt",
+            "commitExtendedState",
             "es",
             "smtDepth",
             "smtRootListAux_size"
@@ -25723,18 +25934,18 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedStateSmt_deterministic",
-          "line": 125,
+          "name": "commitExtendedState_deterministic",
+          "line": 121,
           "called": [
             "ExtendedState",
-            "commitExtendedStateSmt",
+            "commitExtendedState",
             "es"
           ]
         },
         {
           "kind": "theorem",
           "name": "singleton_tags_enumerated",
-          "line": 137,
+          "line": 133,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -25746,7 +25957,7 @@
         {
           "kind": "theorem",
           "name": "balance_tag_enumerated",
-          "line": 144,
+          "line": 140,
           "called": [
             "ActorId",
             "Amount",
@@ -25760,7 +25971,7 @@
         {
           "kind": "theorem",
           "name": "epochBudget_tag_enumerated",
-          "line": 160,
+          "line": 156,
           "called": [
             "ActorBudget",
             "ActorId",
@@ -25916,8 +26127,10 @@
             "balance_tag_enumerated",
             "bridgeConsumed_tag_enumerated",
             "bridgePending_tag_enumerated",
+            "canonicalAbsentValue",
             "epochBudget_tag_enumerated",
             "es",
+            "getCellValue",
             "localPolicy_tag_enumerated",
             "nonce_tag_enumerated",
             "registry_tag_enumerated",
@@ -25932,6 +26145,7 @@
           "called": [
             "ExtendedState",
             "es",
+            "getCellValue",
             "stateCellTags"
           ]
         },
@@ -26031,7 +26245,7 @@
             "CollisionFreeOn",
             "ExtendedState",
             "StateCellsWellFormed",
-            "commitExtendedStateSmt",
+            "commitExtendedState",
             "es",
             "hashBytes",
             "smtDepth",
@@ -26053,6 +26267,7 @@
             "ExtendedState",
             "StateCellsWellFormed",
             "es",
+            "getCellValue",
             "hashBytes",
             "smtCellKey",
             "stateCellEntries",
@@ -26063,7 +26278,7 @@
         },
         {
           "kind": "theorem",
-          "name": "commitExtendedStateSmt_determines_cells",
+          "name": "commitExtendedState_determines_cells",
           "line": 501,
           "called": [
             "CellTag",
@@ -26073,8 +26288,9 @@
             "LegalKernel",
             "StateCellsWellFormed",
             "cell_transfer",
-            "commitExtendedStateSmt",
+            "commitExtendedState",
             "es",
+            "getCellValue",
             "getCellValue_of_not_mem",
             "hashBytes",
             "stateCellEntries_perm_of_commitSmt_eq",
@@ -26392,6 +26608,7 @@
           "called": [
             "CellProofBundle",
             "CellTag",
+            "canonicalAbsentValue",
             "findCellProof"
           ]
         },
@@ -27662,6 +27879,7 @@
             "CellTag",
             "ExtendedState",
             "NonMembershipProof",
+            "canonicalAbsentValue",
             "es"
           ]
         },
@@ -27965,7 +28183,9 @@
             "ExtendedState",
             "SignedAction",
             "TypedCellProofBundle",
-            "es"
+            "buildCellProof",
+            "es",
+            "getCellValue"
           ]
         },
         {
@@ -27976,8 +28196,10 @@
             "CellTag",
             "ExtendedState",
             "TypedCellProof.cellProof",
+            "buildCellProof",
             "commitExtendedState",
             "es",
+            "getCellValue",
             "verifyCellProof",
             "verifyCellProof_complete"
           ]
@@ -27993,6 +28215,7 @@
             "FaultProof",
             "LegalKernel",
             "SignedAction",
+            "buildCellProof",
             "buildTypedCellProofs",
             "commitExtendedState",
             "es",
@@ -28006,18 +28229,18 @@
     {
       "module": "LegalKernel.FaultProof.Verify",
       "path": "LegalKernel/FaultProof/Verify.lean",
-      "declaration_count": 19,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 70,
+          "line": 71,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 71,
+          "line": 72,
           "called": [
             "LegalKernel.Bridge"
           ]
@@ -28025,17 +28248,18 @@
         {
           "kind": "def",
           "name": "verifyCellProof",
-          "line": 86,
+          "line": 87,
           "called": [
             "CellProof",
             "StateCommit",
-            "commitExtendedState"
+            "commitExtendedState",
+            "getCellValue"
           ]
         },
         {
           "kind": "def",
           "name": "verifyCellProofs",
-          "line": 92,
+          "line": 93,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -28045,7 +28269,7 @@
         {
           "kind": "instance",
           "name": "instDecidableVerifyCellProof",
-          "line": 97,
+          "line": 98,
           "called": [
             "CellProof",
             "StateCommit",
@@ -28055,7 +28279,7 @@
         {
           "kind": "instance",
           "name": "instDecidableVerifyCellProofs",
-          "line": 103,
+          "line": 104,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -28065,7 +28289,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_deterministic",
-          "line": 110,
+          "line": 111,
           "called": [
             "CellProof",
             "StateCommit",
@@ -28075,7 +28299,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_deterministic",
-          "line": 115,
+          "line": 116,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -28085,10 +28309,11 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete",
-          "line": 125,
+          "line": 126,
           "called": [
             "CellTag",
             "ExtendedState",
+            "buildCellProof",
             "commitExtendedState",
             "es",
             "verifyCellProof"
@@ -28097,7 +28322,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_empty",
-          "line": 132,
+          "line": 133,
           "called": [
             "CellProofBundle.empty",
             "StateCommit",
@@ -28107,7 +28332,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_singleton",
-          "line": 136,
+          "line": 137,
           "called": [
             "CellProof",
             "StateCommit",
@@ -28118,10 +28343,11 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_complete_for_canonical_bundle",
-          "line": 145,
+          "line": 146,
           "called": [
             "CellTag",
             "ExtendedState",
+            "buildCellProof",
             "commitExtendedState",
             "es",
             "verifyCellProof_complete",
@@ -28131,7 +28357,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_recommits",
-          "line": 159,
+          "line": 160,
           "called": [
             "CellProof",
             "StateCommit",
@@ -28142,22 +28368,24 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_has_cell_value",
-          "line": 172,
+          "line": 173,
           "called": [
             "CellProof",
             "StateCommit",
+            "getCellValue",
             "verifyCellProof"
           ]
         },
         {
           "kind": "theorem",
           "name": "verifyCellProof_sound",
-          "line": 191,
+          "line": 192,
           "called": [
             "CellProof",
             "StateCommit",
             "commitExtendedState",
             "es",
+            "getCellValue",
             "verifyCellProof",
             "verifyCellProof_witness_has_cell_value",
             "verifyCellProof_witness_recommits"
@@ -28165,56 +28393,81 @@
         },
         {
           "kind": "theorem",
-          "name": "verifyCellProof_witness_unique_under_collision_free",
-          "line": 210,
+          "name": "verifyCellProof_witness_cells_agree_under_collision_free",
+          "line": 218,
           "called": [
             "CellProof",
+            "CellTag",
             "ExtendedState",
-            "ExtendedState.CanonicalBounds",
-            "ExtendedState.extEq",
+            "StateCellsWellFormed",
             "StateCommit",
             "commitExtendedState",
-            "commitExtendedState_subcommits_extensional_eq_under_collision_free",
+            "commitExtendedState_determines_cells",
             "es",
-            "extendedStateCommitPreimages",
+            "getCellValue",
+            "stateCommitSmtPreimages",
             "verifyCellProof",
             "verifyCellProof_witness_recommits"
           ]
         },
         {
+          "kind": "theorem",
+          "name": "verifyCellProof_no_value_substitution_under_collision_free",
+          "line": 236,
+          "called": [
+            "CellProof",
+            "ExtendedState",
+            "StateCellsWellFormed",
+            "StateCommit",
+            "commitExtendedState",
+            "es",
+            "getCellValue",
+            "stateCommitSmtPreimages",
+            "verifyCellProof",
+            "verifyCellProof_witness_cells_agree_under_collision_free",
+            "verifyCellProof_witness_has_cell_value"
+          ]
+        },
+        {
           "kind": "def",
           "name": "updateCommitment",
-          "line": 235,
+          "line": 260,
           "called": [
             "CellProof",
             "StateCommit",
-            "commitExtendedState"
+            "commitExtendedState",
+            "setCell"
           ]
         },
         {
           "kind": "theorem",
           "name": "updateCommitment_agrees_with_setCell",
-          "line": 241,
+          "line": 266,
           "called": [
             "CellTag",
             "ExtendedState",
+            "buildCellProof",
             "commitExtendedState",
             "es",
+            "setCell",
             "updateCommitment"
           ]
         },
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete_for_absent_cell",
-          "line": 252,
+          "line": 277,
           "called": [
             "CellTag",
             "ExtendedState",
             "ExtendedState.empty",
             "FaultProof",
             "LegalKernel",
+            "buildCellProof",
+            "canonicalAbsentValue",
             "commitExtendedState",
             "es",
+            "isCellAbsent",
             "verifyCellProof",
             "verifyCellProof_complete"
           ]
@@ -50180,8 +50433,8 @@
             "ExtendedState.CanonicalBounds",
             "ExtendedState.extEq",
             "TestCase",
-            "commitExtendedState",
-            "commitExtendedState_subcommits_extensional_eq_under_collision_free",
+            "commitExtendedStateConcat",
+            "commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free",
             "es",
             "extendedStateCommitPreimages"
           ]
@@ -52001,8 +52254,9 @@
             "commitBudgetPolicy",
             "commitEpochBudgets",
             "commitExtendedState",
-            "commitExtendedState_reflects_ammDisabled",
-            "commitExtendedState_subcommits_eq_under_collision_free",
+            "commitExtendedStateConcat",
+            "commitExtendedStateConcat_reflects_ammDisabled",
+            "commitExtendedStateConcat_subcommits_eq_under_collision_free",
             "commitKeyRegistry",
             "commitLocalPolicies",
             "commitNonceState",
@@ -52899,7 +53153,7 @@
             "TestCase",
             "assert",
             "assertEq",
-            "commitExtendedStateSmt",
+            "commitExtendedState",
             "entries",
             "populated",
             "stateCellEntries",
@@ -52957,11 +53211,13 @@
             "absentTags",
             "assert",
             "assertEq",
+            "canonicalAbsentValue",
             "cellKeyPreimage",
             "cellKeyPreimage_injective",
-            "commitExtendedStateSmt",
-            "commitExtendedStateSmt_determines_cells",
+            "commitExtendedState",
+            "commitExtendedState_determines_cells",
             "es",
+            "getCellValue",
             "getCellValue_of_not_mem",
             "populated",
             "smtCellKey",
@@ -53077,7 +53333,6 @@
             "burn",
             "claimBudgetRefund",
             "commitExtendedState",
-            "commitExtendedStateSmt",
             "decodeCellNat",
             "deploymentId",
             "deposit",
@@ -53085,6 +53340,7 @@
             "distributeOthers",
             "es",
             "freezeResource",
+            "getCellValue",
             "mint",
             "productionApply",
             "productionApplyBudget",
@@ -53390,19 +53646,21 @@
             "CellProofBundle.empty",
             "CellTag",
             "ExtendedState",
-            "ExtendedState.CanonicalBounds",
             "ExtendedState.empty",
-            "ExtendedState.extEq",
             "LegalKernel.Test.FaultProof.Verify",
+            "StateCellsWellFormed",
             "StateCommit",
             "TestCase",
             "assert",
             "assertEq",
+            "buildCellProof",
+            "canonicalAbsentValue",
             "commitBridgeState",
             "commitBudgetPolicy",
             "commitEpochBudgets",
             "commitExtendedState",
-            "commitExtendedState_subcommits_eq_under_collision_free",
+            "commitExtendedStateConcat",
+            "commitExtendedStateConcat_subcommits_eq_under_collision_free",
             "commitKeyRegistry",
             "commitLocalPolicies",
             "commitNonceState",
@@ -53410,15 +53668,18 @@
             "emptyCommit",
             "emptyEs",
             "es",
-            "extendedStateCommitPreimages",
             "extendedStatePreimage",
+            "getCellValue",
+            "isCellAbsent",
+            "setCell",
+            "stateCommitSmtPreimages",
             "updateCommitment",
             "updateCommitment_agrees_with_setCell",
             "verifyCellProof",
             "verifyCellProof_complete",
             "verifyCellProof_complete_for_absent_cell",
             "verifyCellProof_sound",
-            "verifyCellProof_witness_unique_under_collision_free",
+            "verifyCellProof_witness_cells_agree_under_collision_free",
             "verifyCellProofs"
           ]
         }

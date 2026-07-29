@@ -396,7 +396,7 @@ def tests : List TestCase :=
             Bridge.CollisionFreeOn
               [extendedStatePreimage es₁, extendedStatePreimage es₂]
               LegalKernel.Runtime.hashBytes →
-            commitExtendedState es₁ = commitExtendedState es₂ →
+            commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂ →
             commitState es₁.base = commitState es₂.base ∧
             commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
             commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
@@ -404,7 +404,7 @@ def tests : List TestCase :=
             commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
             commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
             commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy :=
-          commitExtendedState_subcommits_eq_under_collision_free
+          commitExtendedStateConcat_subcommits_eq_under_collision_free
         pure ()
     }
   -- 26. Term-level API: commitBridgeState_reflects_ammDisabled
@@ -431,11 +431,11 @@ def tests : List TestCase :=
           commitBridgeState_reflects_ammDisabled
         pure ()
     }
-  -- 27. Term-level API: commitExtendedState_reflects_ammDisabled —
+  -- 27. Term-level API: commitExtendedStateConcat_reflects_ammDisabled —
   --     the GP.11.10 TOP-LEVEL headline (the kill switch is reflected
   --     in the published state root itself, with no hypotheses on the
   --     non-bridge sub-states).
-  , { name := "GP.11.10: commitExtendedState_reflects_ammDisabled API stable"
+  , { name := "GP.11.10: commitExtendedStateConcat_reflects_ammDisabled API stable"
     , body := do
         let _proof : ∀ (es₁ es₂ : Authority.ExtendedState),
             Bridge.CollisionFreeOn
@@ -450,8 +450,8 @@ def tests : List TestCase :=
             es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap →
             es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue →
             es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled →
-            commitExtendedState es₁ ≠ commitExtendedState es₂ :=
-          commitExtendedState_reflects_ammDisabled
+            commitExtendedStateConcat es₁ ≠ commitExtendedStateConcat es₂ :=
+          commitExtendedStateConcat_reflects_ammDisabled
         pure ()
     }
   -- 28. Value-level: flipping ONLY ammDisabled on a populated extended

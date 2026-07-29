@@ -9,40 +9,36 @@
 
 /-
 LegalKernel.FaultProof.StateCells — the cell view of an
-`ExtendedState`, and the SMT root over it.
+`ExtendedState`, and the PUBLISHED state root over it.
 
-## Why this exists
+## Why the root is built this way
 
-`commitExtendedState` is a hash over seven concatenated sub-state
-ENCODINGS.  The L1 step VM never holds those encodings — it holds
-the 32-byte root and whatever cells the responder proves — so it
-cannot recompute a post-state root from a pre-state root plus the
-step's writes.  Its `executeStep` therefore returns a
-step-VM-specific hash, which is a different construction from the
-state root the game's endpoints carry, and the terminal comparison
-in `KnomosisFaultProofGame.terminateOnSingleStep` can never
-succeed.  `docs/audits/19-findings-and-followups.md` records the
-consequences.
+The root this module defines is `commitExtendedState`: the value a
+sequencer publishes to L1.  It replaced a hash over seven
+concatenated sub-state ENCODINGS
+(`commitExtendedStateConcat`, kept in `Commit.lean` as the record
+of the retired construction).
 
-A root over CELLS does not have that problem: writing a cell
-changes exactly one leaf, so a post-root is a function of the
-pre-root and the proven writes — computable on L1 from an
-`O(log N)` opening.
+The reason is structural, not gas.  The L1 step VM never holds the
+sub-state encodings — it holds the 32-byte root and whatever cells
+the responder proves — so from a concatenation hash it cannot
+recompute a post-state root from a pre-state root plus the step's
+writes.  A root over CELLS can: writing a cell changes exactly one
+leaf, so the post-root is a function of the pre-root and the proven
+writes, computable on L1 from an `O(log N)` opening
+(`smtUpdateRoot`, `FaultProof/SmtInjective.lean`).
 
-This module builds that view.  It is deliberately ADDITIVE:
-`commitExtendedStateSmt` sits alongside `commitExtendedState`
-rather than replacing it, so the construction can be exercised and
-its binding properties established before anything that changes
-the wire format.  Swapping the published root is a separate step —
-it invalidates every committed state commit, the EI.8 injectivity
-chain, the Solidity step handlers and the step-VM corpus, and
-those must move together.
+`KnomosisStepVM.executeStep` has NOT yet been rewritten to exploit
+that, so the fault-proof game still does not adjudicate — see
+`docs/audits/19-findings-and-followups.md` and
+`docs/planning/state_root_merkleisation_plan.md` §4.  This module is
+the half of the fix that makes the other half possible.
 
 ## Completeness
 
 `stateCellTags` must enumerate every cell the state has, or the
-root binds less than `commitExtendedState` does and swapping would
-be a regression.  The two halves:
+root binds less than the retired concatenation did and the swap
+would have been a regression.  The two halves:
 
   * **keyed cells** — one per live entry of each sub-state map.
   * **singleton cells** — the bridge scalars and the budget-policy
@@ -113,19 +109,19 @@ def stateCellEntries (es : ExtendedState) : List (ByteArray × ByteArray) :=
     collision silently changes the root.  `smtCellKey`'s
     injectivity (`smtCellKey_injective_under_collision_free`) is
     what rules that out. -/
-def commitExtendedStateSmt (es : ExtendedState) : StateCommit :=
+def commitExtendedState (es : ExtendedState) : StateCommit :=
   smtRootListAux smtDepth (stateCellEntries es)
 
 /-- The SMT state root is a 32-byte hash, like every other root in
     the system. -/
-theorem commitExtendedStateSmt_size (es : ExtendedState) :
-    (commitExtendedStateSmt es).size = 32 :=
+theorem commitExtendedState_size (es : ExtendedState) :
+    (commitExtendedState es).size = 32 :=
   smtRootListAux_size smtDepth _
 
 /-- Determinism. -/
-theorem commitExtendedStateSmt_deterministic
+theorem commitExtendedState_deterministic
     (es₁ es₂ : ExtendedState) (h : es₁ = es₂) :
-    commitExtendedStateSmt es₁ = commitExtendedStateSmt es₂ := by rw [h]
+    commitExtendedState es₁ = commitExtendedState es₂ := by rw [h]
 
 /-! ## Coverage
 

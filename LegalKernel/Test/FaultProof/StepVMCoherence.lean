@@ -1759,13 +1759,13 @@ def tests : List TestCase :=
         assert ((getCellValue realAfter (.bridgeConsumed d)).toList
                   != (getCellValue after (.bridgeConsumed d)).toList)
           "the runtime's advance records the deposit; the model's does not"
-        assert ((commitExtendedStateSmt realAfter).toList
-                  != (commitExtendedStateSmt after).toList)
+        assert ((commitExtendedState realAfter).toList
+                  != (commitExtendedState after).toList)
           "so the two post-states have different roots"
         -- `productionApply` is the total function the guarded
         -- production stepper computes, so it IS the state above.
-        assertEq (expected := (commitExtendedStateSmt realAfter).toList)
-          (actual := (commitExtendedStateSmt
+        assertEq (expected := (commitExtendedState realAfter).toList)
+          (actual := (commitExtendedState
                        (productionApply es entry.signedAction 0)).toList)
           "productionApply reproduces the runtime's post-state"
     }
@@ -1780,9 +1780,9 @@ def tests : List TestCase :=
           { action := .transfer 1 7 8 0, signer, nonce := 0
           , sig := ByteArray.empty }
         let es := ExtendedState.empty
-        assertEq (expected := (commitExtendedStateSmt
+        assertEq (expected := (commitExtendedState
                     (Disputes.kernelOnlyApply es (signedActionEntry st))).toList)
-          (actual := (commitExtendedStateSmt (productionApply es st 0)).toList)
+          (actual := (commitExtendedState (productionApply es st 0)).toList)
           "non-bridge: the two cores agree"
     }
   , { name := "productionApplyBudget models the epoch-budget leg"
@@ -1805,8 +1805,8 @@ def tests : List TestCase :=
         assert ((getCellValue viaBudget (.epochBudget signer)).toList
                   != (getCellValue viaBridge (.epochBudget signer)).toList)
           "the budget leg moves the signer's epoch-budget cell"
-        assert ((commitExtendedStateSmt viaBudget).toList
-                  != (commitExtendedStateSmt viaBridge).toList)
+        assert ((commitExtendedState viaBudget).toList
+                  != (commitExtendedState viaBridge).toList)
           "and therefore the root"
         -- `bridgeActor` is exempt from the consume, so its budget
         -- cell does not move.

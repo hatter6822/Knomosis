@@ -87,10 +87,21 @@ reading is the canonical one.
     tests rather than proved; it is bookkeeping over `setBitmaskBit`,
     not content.
 
-Not landed: swapping `commitExtendedState` to that root, and making
-`executeStep` compute the post-root from the proven writes.  Those
-are one consensus change and must land together; the implementation
-spec is `docs/planning/state_root_merkleisation_plan.md` §3 / §4.
+**§3 has landed.**  `commitExtendedState` IS the SMT cell root; the
+seven-component concatenation is retained as
+`commitExtendedStateConcat` with its theorems intact, but nothing
+publishes it.  The guarantee did not weaken across the swap —
+`commitExtendedState_determines_cells` replaces the EI.8 row for the
+published root — and `verifyCellProof`'s witness-uniqueness theorem
+became `verifyCellProof_witness_cells_agree_under_collision_free`,
+which concludes per-cell agreement.  That is a strengthening in the
+direction a cell proof cares about.
+
+Not landed: **§4**, making `executeStep` compute the post-root from
+the proven writes.  That is what closes this finding; the swap was
+its precondition, since a post-root is not computable from a
+concatenation hash at all.  §0 of `docs/fault_proof_runbook.md`
+stands until §4 lands.
 
 Three obligations for that work were read from source during this
 pass and are pinned as tests (`faultproof-stepvm-coherence`, the

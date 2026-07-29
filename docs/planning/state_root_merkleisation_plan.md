@@ -23,15 +23,15 @@ Everything below was read from source, not from plan documents.
 
 ## 1. What is already in place
 
-Every prerequisite has landed and is green.  None of them changed a
-wire format; all were additive on purpose, so the swap that follows
-is the first step that breaks compatibility.
+Every prerequisite landed additively and green, and §3 — the swap
+itself — has now landed on top of them.  What remains is §4, the
+step VM.
 
 | Piece | Where | What it gives |
 |---|---|---|
 | Complete cell space | `FaultProof/Cell.lean` tags 0–16, `FaultProof/Verify.lean` | Every one of `ExtendedState`'s seven fields is now readable through some `CellTag`.  Before this, `ammDisabled`, `epochBudgets`, `budgetPolicy` and the AMM/BOLD scalars were inside the published root with no tag, so no cell proof could speak about them. |
 | On-chain key derivation | `FaultProof/KeyDerivation.lean` `smtCellKey`, `StepVMMerkle.deriveCellSmtKey` | The SMT key is derived from `(kind, keyA, keyB)` rather than accepted from the caller, so a proof opening cell X cannot be replayed as a proof about cell Y.  Pinned byte-for-byte across the stacks by `cell_key.json`. |
-| The SMT root, additively | `FaultProof/StateCells.lean` `commitExtendedStateSmt` | The root over those cells exists, is covered (`stateCells_covers_every_kind`), and demonstrably binds the fields the seven-hash bound — flipping `ammDisabled`, inflating a budget, moving a balance each move it. |
+| The SMT root | `FaultProof/StateCells.lean` `commitExtendedState` | The root over those cells is now the PUBLISHED root (§3, done).  Covered by `stateCells_covers_every_kind`, and it binds the fields the seven-hash bound — flipping `ammDisabled`, inflating a budget, moving a balance each move it. |
 | **Root injectivity** | `FaultProof/SmtInjective.lean` | §2 below, complete. |
 | **Cell determination** | `FaultProof/StateCellsInjective.lean` | §2A below, complete. |
 | **Cell updates** | `FaultProof/SmtInjective.lean` `smtUpdateRoot` | §2B below, complete. |
@@ -39,8 +39,8 @@ is the first step that breaks compatibility.
 
 ## 2. The former blocker: SMT root injectivity — **DONE**
 
-The swap replaces a hash whose injectivity is proved
-(`commitExtendedState_subcommits_extensional_eq_under_collision_free`,
+The swap replaced a hash whose injectivity is proved
+(`commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free`,
 via the `extendedStateCommitPreimages` decomposition) with one whose
 injectivity had not been proved.  Landing the swap without the
 replacement theorem would have silently downgraded the EI.8
@@ -97,7 +97,7 @@ bridges from distinct 32-byte keys via
 enumeration:
 
 ```
-commitExtendedStateSmt es₁ = commitExtendedStateSmt es₂ →
+commitExtendedState es₁ = commitExtendedState es₂ →
   ∀ t : CellTag, getCellValue es₁ t = getCellValue es₂ t
 ```
 
@@ -165,38 +165,47 @@ encoding expands to that path — which is pinned by
 `faultproof-smt-injective` and is bookkeeping over `setBitmaskBit`
 rather than content.
 
-## 3. The swap — REMAINING
+## 3. The swap — **DONE**
 
-§2, §2A, §2B and §2C are in.  What is left is the consensus change
-itself, in one commit (the C-1 amount migration is the precedent for
-why it cannot be split):
+`commitExtendedState` is the SMT root over the state's cells.  The
+seven-component concatenation is retained as
+`commitExtendedStateConcat` with its ~33 theorems intact — they are
+true and worth keeping — but nothing publishes it.
 
-1. `commitExtendedState es := commitExtendedStateSmt es`.
-2. Retire `extendedStatePreimage` / `subStatePreimages` /
-   `extendedStateCommitPreimages` and the ~33 theorems in
-   `FaultProof/Commit.lean` stated over them, replacing the EI.8
-   headline row in CLAUDE.md with
-   `commitExtendedStateSmt_determines_cells` (§2A).
-3. `Verify.lean`'s `verifyCellProof` witness-state form: it
-   re-commits the witness state, so it keeps working unchanged —
-   but it is now strictly dominated by the SMT form and should be
-   marked legacy rather than left as an equal alternative.
-4. Regenerate every fixture carrying a state commit.
+What the swap actually cost, against the estimate above:
 
-Roughly 34 `.lean` files reference `commitExtendedState`; the dense
-ones are `FaultProof/Commit.lean` (34 references),
-`PerVariantCoherence.lean` (31), `Verify.lean` (22),
-`StepVMCoherence.lean` (19) and the cross-stack writer
-`Test/Bridge/CrossCheck/StepVM.lean` (21).
+  * **One structural obstacle, fixed first.**  `getCellValue` lived
+    in `Verify.lean`, which imports `Commit.lean`; a root built from
+    `getCellValue` with the reader above it is an import cycle.
+    `FaultProof/CellValue.lean` now holds the reader and writer, and
+    `StateCommit` moved to `Cell.lean` so the cell layer can name its
+    own output type.  Pure move, no values changed.
+  * **Three broken proof sites, not thirty.**  The ~34 files that
+    mention `commitExtendedState` mostly use it opaquely
+    (determinism, size, equality), so they carried over untouched.
+    Only the theorems that decompose the concatenation had to move:
+    `Verify.lean`'s witness-uniqueness, and two test ascriptions.
+  * **`verifyCellProof_witness_unique_under_collision_free` became
+    `verifyCellProof_witness_cells_agree_under_collision_free`**,
+    concluding per-cell agreement instead of `ExtendedState.extEq`.
+    That is a strengthening in the direction that matters: a cell
+    proof speaks about a cell, and what a consumer needs is that the
+    cell reads the same in every state behind the root.  The
+    consumer-facing corollary
+    `verifyCellProof_no_value_substitution_under_collision_free`
+    states it at the tag the proof claims.
+  * **One fixture drifted**: `step_vm.json`, in its
+    `preStateCommitHex` / `expectedPostStateCommitHex` /
+    `expectedStepVMCommitHex` / `cellProofs` fields.  Everything else
+    generates commits the same way on both sides and was unaffected.
 
 **The absent-vs-empty gap this section used to flag is closed.**
-`getCellValue`'s registry and local-policy arms now route through the
+`getCellValue`'s registry and local-policy arms route through the
 CBE byte-string encoder, whose 9-byte head is present even for a
 zero-length payload, so present-empty and absent are distinguishable;
 `getCellValue_of_not_mem` (§2A) proves the absent reading is the
 canonical one, and `faultproof-state-cells-injective` pins that a
-registration with the empty key moves the root.  The swap is now
-mechanical throughout.
+registration with the empty key moves the root.
 
 ## 4. The step VM — REMAINING
 

@@ -66,6 +66,7 @@ import LegalKernel.Authority.LocalPolicy
 import LegalKernel.Bridge.Eip712
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.CellValue
+import LegalKernel.FaultProof.StateCellsInjective
 import LegalKernel.FaultProof.Commit
 
 namespace LegalKernel
@@ -199,29 +200,53 @@ theorem verifyCellProof_sound
    verifyCellProof_witness_has_cell_value commit proof h_verify⟩
 
 /-- #222 — Uniqueness: any state that commits to the same root as a
-    verifying proof is extensionally equal to that proof's witness.
+    verifying proof reads identically through every cell.
 
     This is the operational content of cell-proof soundness: an
     adversarial responder cannot exhibit a *different* state behind
     the same published root and thereby claim a different cell
-    value.  It rests on `commitExtendedState`'s injectivity
-    (theorem #220 / EI.8), which is where the collision-resistance
-    hypothesis genuinely does work — scoped, as everywhere else, to
-    the pre-images the commitment chain actually hashes. -/
-theorem verifyCellProof_witness_unique_under_collision_free
+    value.
+
+    The conclusion is per-cell agreement rather than
+    `ExtendedState.extEq`, and that is a strengthening in the
+    direction that matters rather than a concession.  A cell proof
+    speaks about a cell; what a consumer needs is that the cell reads
+    the same in every state behind the root, which is exactly this.
+    `extEq` was also unreachable for a cell root and should not have
+    been the target: `State.Equiv` separates a resource present with
+    an all-zero balance map from a resource absent entirely, and no
+    cell read — hence no step — can tell those apart. -/
+theorem verifyCellProof_witness_cells_agree_under_collision_free
     (commit : StateCommit) (proof : CellProof) (es : ExtendedState)
     (h_cf : Bridge.CollisionFreeOn
-      (extendedStateCommitPreimages es proof.witnessState)
+      (stateCommitSmtPreimages es proof.witnessState)
       LegalKernel.Runtime.hashBytes)
-    (h_b₁ : ExtendedState.CanonicalBounds es)
-    (h_b₂ : ExtendedState.CanonicalBounds proof.witnessState)
+    (h_wf₁ : StateCellsWellFormed es)
+    (h_wf₂ : StateCellsWellFormed proof.witnessState)
     (h_verify : verifyCellProof commit proof = true)
     (h_commit : commitExtendedState es = commit) :
-    ExtendedState.extEq es proof.witnessState :=
-  commitExtendedState_subcommits_extensional_eq_under_collision_free
-    es proof.witnessState h_cf h_b₁ h_b₂
+    ∀ t : CellTag, getCellValue es t = getCellValue proof.witnessState t :=
+  commitExtendedState_determines_cells es proof.witnessState h_wf₁ h_wf₂ h_cf
     (h_commit.trans
       (verifyCellProof_witness_recommits commit proof h_verify).symm)
+
+/-- The consumer-facing corollary: the value a verifying proof claims
+    is the value ANY state behind that root holds at the proof's
+    tag.  No value substitution, stated where a fault-proof consumer
+    reads it. -/
+theorem verifyCellProof_no_value_substitution_under_collision_free
+    (commit : StateCommit) (proof : CellProof) (es : ExtendedState)
+    (h_cf : Bridge.CollisionFreeOn
+      (stateCommitSmtPreimages es proof.witnessState)
+      LegalKernel.Runtime.hashBytes)
+    (h_wf₁ : StateCellsWellFormed es)
+    (h_wf₂ : StateCellsWellFormed proof.witnessState)
+    (h_verify : verifyCellProof commit proof = true)
+    (h_commit : commitExtendedState es = commit) :
+    getCellValue es proof.cellTag = proof.cellValue :=
+  (verifyCellProof_witness_cells_agree_under_collision_free commit proof es
+      h_cf h_wf₁ h_wf₂ h_verify h_commit proof.cellTag).trans
+    (verifyCellProof_witness_has_cell_value commit proof h_verify)
 
 /-! ## #223 — Update commitment agrees with setCell
 

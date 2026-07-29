@@ -8,28 +8,44 @@
 -/
 
 /-
-LegalKernel.FaultProof.Commit — state-commitment scheme for the
-fault-proof game (Workstream H §12 / WUs H.2.1 – H.2.5).
+LegalKernel.FaultProof.Commit — the RETIRED concatenation
+state-commitment (Workstream H §12 / WUs H.2.1 – H.2.5).
 
-**Design.**  Each sub-state of `ExtendedState` is committed via
-its canonical CBE encoding hashed with the deployment-supplied
-hash function; the top-level `commitExtendedState` combines all
-five sub-state commits via a final hash.
+**This is not the published root.**  `commitExtendedState`, the
+value a sequencer publishes to L1, is the SMT root over the state's
+cells (`FaultProof/StateCells.lean`).  `commitExtendedStateConcat`
+below is the construction it replaced: each sub-state of
+`ExtendedState` committed via its canonical CBE encoding, and the
+seven sub-state commits hashed together.
 
-The plan §12.2 also describes a Sparse-Merkle-Tree variant that
-allows L1 gas-efficient cell-level Merkle proofs.  The
-correctness arguments below hold under the simpler hash-of-
-canonical-encoding scheme; SMT is a deployment-time optimisation
-(documented as a follow-up; see Genesis Plan §15.8).
+**Why it was replaced, and why it is kept.**  Workstream H chose
+the concatenation over a Sparse Merkle Tree on the grounds that the
+SMT was a gas optimisation and the soundness arguments held under
+either representation.  The first half was wrong: a concatenation
+hash cannot be updated incrementally, so the L1 step VM — which
+holds the root and the proven cells, never the sub-state encodings —
+cannot recompute a post-root from a pre-root, and the fault-proof
+game's terminal comparison was between two different constructions.
+The representation was never a gas question.
+
+The theorems below are true and are retained as the record of that
+construction and as the migration reference for a deployment that
+published concatenation roots.  They are NOT an equal alternative:
+nothing computes `commitExtendedStateConcat` on any production
+path.
 
 **Headline theorems.**
 
-  * `commitExtendedState_size = 32` — uniform 32-byte output.
-  * `commitExtendedState_deterministic` — equal states ⇒ equal commits.
-  * `commitExtendedState_injective_under_collision_free` (#220) — under
+  * `commitExtendedStateConcat_size = 32` — uniform 32-byte output.
+  * `commitExtendedStateConcat_deterministic` — equal states ⇒ equal commits.
+  * `commitExtendedStateConcat_injective_under_collision_free` (#220) — under
     collision-freeness of `hashBytes` on the commitment chain's own
-    pre-images, equal commits imply observably-equal states.  This is one of the four load-bearing theorems of
-    Workstream H.
+    pre-images, equal commits imply observably-equal states.  The
+    published root's counterpart is
+    `commitExtendedState_determines_cells`
+    (`FaultProof/StateCellsInjective.lean`), which concludes
+    per-cell agreement — behavioural rather than `extEq`, because a
+    cell root cannot separate states no cell read can separate.
 
 This module is **not** part of the trusted computing base.  Bugs
 here would weaken fault-proof game's correctness but cannot
@@ -43,6 +59,7 @@ import LegalKernel.Bridge.HashAdaptor
 import LegalKernel.Bridge.State
 import LegalKernel.Encoding.State
 import LegalKernel.FaultProof.Cell
+import LegalKernel.FaultProof.StateCells
 import LegalKernel.Encoding.StateInjective
 import LegalKernel.Encoding.LocalPolicyInjective
 import LegalKernel.Encoding.BridgeInjective
@@ -107,7 +124,7 @@ def commitBudgetPolicy (bp : BudgetPolicy) : ByteArray :=
 
 /-! ## Top-level state commitment -/
 
-/-- The byte string `commitExtendedState` hashes: the seven
+/-- The byte string `commitExtendedStateConcat` hashes: the seven
     sub-state commits concatenated in canonical order.  Named so the
     injectivity theorems can list it as a hash pre-image. -/
 def extendedStatePreimage (es : ExtendedState) : ByteArray :=
@@ -128,10 +145,10 @@ def extendedStatePreimage (es : ExtendedState) : ByteArray :=
     omitted, so the published root did not fix the per-actor budget
     ledger or the metering parameters, and a fault proof had nothing to
     challenge when they were forged. -/
-def commitExtendedState (es : ExtendedState) : StateCommit :=
+def commitExtendedStateConcat (es : ExtendedState) : StateCommit :=
   hashBytes (extendedStatePreimage es)
 
-/-- The seven sub-state encodings `commitExtendedState` hashes
+/-- The seven sub-state encodings `commitExtendedStateConcat` hashes
     beneath its top-level pre-image, in commit order.  Naming them
     lets the injectivity chain state exactly which pre-images its
     collision-resistance hypothesis covers (see
@@ -145,7 +162,7 @@ def subStatePreimages (es : ExtendedState) : List ByteArray :=
   , ByteArray.mk (Encodable.encode (T := EpochBudgetState) es.epochBudgets).toArray
   , ByteArray.mk (Encodable.encode (T := BudgetPolicy) es.budgetPolicy).toArray ]
 
-/-- Every pre-image the `commitExtendedState` injectivity chain
+/-- Every pre-image the `commitExtendedStateConcat` injectivity chain
     feeds to `hashBytes` for a pair of states: the two top-level
     seven-commit concatenations, then each side's seven sub-state
     encodings. -/
@@ -170,14 +187,14 @@ theorem commitLocalPolicies_deterministic (lp₁ lp₂ : LocalPolicies) (h : lp�
 theorem commitBridgeState_deterministic (bs₁ bs₂ : BridgeState) (h : bs₁ = bs₂) :
     commitBridgeState bs₁ = commitBridgeState bs₂ := by rw [h]
 
-theorem commitExtendedState_deterministic (es₁ es₂ : ExtendedState) (h : es₁ = es₂) :
-    commitExtendedState es₁ = commitExtendedState es₂ := by rw [h]
+theorem commitExtendedStateConcat_deterministic (es₁ es₂ : ExtendedState) (h : es₁ = es₂) :
+    commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂ := by rw [h]
 
 /-! ## Output-size theorems -/
 
-theorem commitExtendedState_size (es : ExtendedState) :
-    (commitExtendedState es).size = 32 := by
-  unfold commitExtendedState
+theorem commitExtendedStateConcat_size (es : ExtendedState) :
+    (commitExtendedStateConcat es).size = 32 := by
+  unfold commitExtendedStateConcat
   exact hashAdaptor_thirty_two_byte_output _
 
 theorem commitState_size (s : LegalKernel.State) :
@@ -470,15 +487,15 @@ private theorem byteArray_concat_seven_split
       s₁ s₂ s₃ s₄ s₅ t₁ t₂ t₃ t₄ t₅ h5
   exact ⟨e₁, e₂, e₃, e₄, e₅, h_a₆, h_a₇⟩
 
-/-- The seven-component decomposition of `commitExtendedState`'s
+/-- The seven-component decomposition of `commitExtendedStateConcat`'s
     pre-image hash.  Under collision-freeness of `hashBytes` on the pre-images below plus the
     32-byte size invariants, equal top-level commits imply
     sub-state-commit-wise equality. -/
-theorem commitExtendedState_subcommits_eq_under_collision_free
+theorem commitExtendedStateConcat_subcommits_eq_under_collision_free
     (es₁ es₂ : ExtendedState)
     (h_cf : Bridge.CollisionFreeOn
       [extendedStatePreimage es₁, extendedStatePreimage es₂] hashBytes)
-    (h : commitExtendedState es₁ = commitExtendedState es₂) :
+    (h : commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂) :
     commitState es₁.base = commitState es₂.base ∧
     commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
     commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
@@ -486,7 +503,7 @@ theorem commitExtendedState_subcommits_eq_under_collision_free
     commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
     commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
     commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy := by
-  -- commitExtendedState es = hashBytes (7 sub-commits concatenated).
+  -- commitExtendedStateConcat es = hashBytes (7 sub-commits concatenated).
   -- Under collision-freedom, equal hashes ⇒ equal pre-images.
   have h_concat :
       commitState es₁.base ++ commitNonceState es₁.nonces ++
@@ -533,11 +550,11 @@ theorem commitExtendedState_subcommits_eq_under_collision_free
     through bytes-equality (which is what the cryptographic
     argument gives) and then closes via the encoder's
     determinism + canonicalisation. -/
-theorem commitExtendedState_subcommits_bytes_eq_under_collision_free
+theorem commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free
     (es₁ es₂ : ExtendedState)
     (h_cf : Bridge.CollisionFreeOn
       (extendedStateCommitPreimages es₁ es₂) hashBytes)
-    (h : commitExtendedState es₁ = commitExtendedState es₂) :
+    (h : commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂) :
     ByteArray.mk (State.encode es₁.base).toArray =
       ByteArray.mk (State.encode es₂.base).toArray ∧
     ByteArray.mk (NonceState.encode es₁.nonces).toArray =
@@ -576,7 +593,7 @@ theorem commitExtendedState_subcommits_bytes_eq_under_collision_free
     exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
       (List.mem_append_right _ hz))
   obtain ⟨h_s, h_n, h_kr, h_lp, h_bs, h_eb, h_bp⟩ :=
-    commitExtendedState_subcommits_eq_under_collision_free es₁ es₂
+    commitExtendedStateConcat_subcommits_eq_under_collision_free es₁ es₂
       (h_cf.mono (by
         intro z hz
         simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
@@ -609,7 +626,7 @@ theorem commitExtendedState_subcommits_bytes_eq_under_collision_free
 /-! ## EI.8 — Extensional-equality lift of the subcommits theorem
 
 The bytes-equality theorem
-`commitExtendedState_subcommits_bytes_eq_under_collision_free`
+`commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free`
 establishes that under collision-freedom of `hashBytes`, equal
 top-level commits imply equal sub-state CBE encodings (modulo
 `ByteArray.mk ∘ .toArray` framing).  Workstream EI lifts this from
@@ -625,7 +642,7 @@ This sub-section ships:
     requires the EI.2 `State.Equiv` rather than a flat `Std.TreeMap.Equiv`.
 
   * **EI.8.b**
-    `commitExtendedState_subcommits_extensional_eq_under_collision_free`
+    `commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free`
     — the headline composition theorem.  Routes the five sub-state
     bytes-equalities (from the existing theorem) through EI.2.d /
     EI.3.a / EI.4.a / EI.5.d / EI.7.e to derive the per-sub-state
@@ -648,7 +665,7 @@ fault-proof game's correctness. -/
     encode to the same canonical bytes" through the EI.2 – EI.7
     `Equiv` conclusions.
 
-    The shape mirrors the byte-decomposition of `commitExtendedState`:
+    The shape mirrors the byte-decomposition of `commitExtendedStateConcat`:
     five conjuncts for the five sub-states (`base`, `nonces`,
     `registry`, `localPolicies`, `bridge`-as-three-fields).
 
@@ -762,7 +779,7 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
     conjunction packaged as `ExtendedState.extEq`).
 
     **Proof.**  Compose the existing bytes-equality theorem
-    `commitExtendedState_subcommits_bytes_eq_under_collision_free`
+    `commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free`
     with the per-sub-state EI lemmas:
 
       * `State.encode_injective` (EI.2.d) for `base`.
@@ -778,18 +795,18 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
 
     Workstream EI (`docs/planning/encoder_injectivity_plan.md` §4.8
     EI.8.b).  Retires CLAUDE.md footnote 1. -/
-theorem commitExtendedState_subcommits_extensional_eq_under_collision_free
+theorem commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free
     (es₁ es₂ : ExtendedState)
     (h_cf : Bridge.CollisionFreeOn
       (extendedStateCommitPreimages es₁ es₂) hashBytes)
     (h_b₁ : ExtendedState.CanonicalBounds es₁)
     (h_b₂ : ExtendedState.CanonicalBounds es₂)
-    (h : commitExtendedState es₁ = commitExtendedState es₂) :
+    (h : commitExtendedStateConcat es₁ = commitExtendedStateConcat es₂) :
     ExtendedState.extEq es₁ es₂ := by
   -- Step 1: Apply the existing bytes-equality theorem to extract the
   -- five sub-state byte-array equalities.
   obtain ⟨h_b, h_n, h_kr, h_lp, h_bs, _h_eb, h_bp⟩ :=
-    commitExtendedState_subcommits_bytes_eq_under_collision_free es₁ es₂ h_cf h
+    commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free es₁ es₂ h_cf h
   -- Step 2: Strip the `ByteArray.mk ∘ .toArray` framing on each
   -- sub-state byte-equality to recover the underlying `Stream` (List
   -- UInt8) equality that the EI lemmas consume.
@@ -1131,15 +1148,15 @@ theorem commitBridgeState_reflects_ammDisabled
     published STATE ROOT itself.  Under collision-freeness of `hashBytes` on the pre-images below, two
     extended states whose bridge sub-states agree on every other
     field but differ on the `ammDisabled` kill-switch mirror produce
-    **different** `commitExtendedState` roots — regardless of their
+    **different** `commitExtendedStateConcat` roots — regardless of their
     kernel / nonce / registry / policy sub-states.
 
     **Proof.**  Equal top-level roots decompose (under
     collision-freedom) into equal per-sub-state commits
-    (`commitExtendedState_subcommits_eq_under_collision_free`); the
+    (`commitExtendedStateConcat_subcommits_eq_under_collision_free`); the
     bridge sub-commit equality then contradicts
     `commitBridgeState_reflects_ammDisabled`. -/
-theorem commitExtendedState_reflects_ammDisabled
+theorem commitExtendedStateConcat_reflects_ammDisabled
     (es₁ es₂ : ExtendedState)
     (h_cf : Bridge.CollisionFreeOn
       (extendedStateCommitPreimages es₁ es₂) hashBytes)
@@ -1152,10 +1169,10 @@ theorem commitExtendedState_reflects_ammDisabled
     (h_tvlCap   : es₁.bridge.boldTvlCap = es₂.bridge.boldTvlCap)
     (h_totalLocked : es₁.bridge.boldTotalLockedValue = es₂.bridge.boldTotalLockedValue)
     (h_ne : es₁.bridge.ammDisabled ≠ es₂.bridge.ammDisabled) :
-    commitExtendedState es₁ ≠ commitExtendedState es₂ := by
+    commitExtendedStateConcat es₁ ≠ commitExtendedStateConcat es₂ := by
   intro h_eq
   obtain ⟨_, _, _, _, h_bs, _, _⟩ :=
-    commitExtendedState_subcommits_eq_under_collision_free es₁ es₂
+    commitExtendedStateConcat_subcommits_eq_under_collision_free es₁ es₂
       (h_cf.mono (by
         intro z hz
         simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
@@ -1180,8 +1197,8 @@ theorem commitExtendedState_reflects_ammDisabled
 
 /-- An empty `ExtendedState` has a deterministic, well-formed
     commit. -/
-example : (commitExtendedState ExtendedState.empty).size = 32 :=
-  commitExtendedState_size _
+example : (commitExtendedStateConcat ExtendedState.empty).size = 32 :=
+  commitExtendedStateConcat_size _
 
 end FaultProof
 end LegalKernel
