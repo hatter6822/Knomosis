@@ -283,13 +283,21 @@ front rather than halfway through the rewrite:
      from both sides — the two cores agree off the bridge path and
      differ exactly by the consumed-deposit record on it.
 
+     The budget leg is covered too: `apply_bridge_admissible_with_budget`
+     returns `Option` because five admission gates can refuse, so its
+     total form splits into the computation
+     (`productionApplyBudget`) and the gate (`budgetGateAdmits`),
+     recomposed by `apply_bridge_admissible_with_budget_eq`.  The
+     split is the right shape for a step VM, which needs what the
+     advance produced rather than whether admission would have
+     allowed it — by the time a game reaches a single step,
+     admission already happened on L2 and the dispute is over what
+     the state became.
+
      What remains for §4 is repointing `Coherence.lean`'s
-     `applyCellWrites_to_state` at `productionApply`, restating the
-     ~33 `PerVariantCoherence.lean` theorems, and modelling the
-     budget leg (`apply_bridge_admissible_with_budget` returns
-     `Option` because five gates can refuse, so its total form has a
-     different shape; the epoch-budget cells are already tag 13, so
-     the root binds it already).
+     `applyCellWrites_to_state` at `productionApplyBudget` and
+     restating the ~33 `PerVariantCoherence.lean` theorems against
+     it.
 
   3. **Bulk actions need the sub-step machinery.**
      `distributeOthers` and `proportionalDilute` touch every

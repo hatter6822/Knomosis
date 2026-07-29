@@ -114,11 +114,13 @@ otherwise surface halfway through the rewrite:
     step-VM output to a real state root; an adjudication error on
     every bridge action the moment the swap makes that comparison.
     `FaultProof/ProductionApply.lean` now supplies the total,
-    production-faithful core the re-anchoring needs
-    (`apply_bridge_admissible_with_eq_productionApply`); what remains
-    is repointing `Coherence.lean` at it, restating the ~33
-    `PerVariantCoherence.lean` theorems, and modelling the budget
-    leg;
+    production-faithful core the re-anchoring needs — both legs:
+    `apply_bridge_admissible_with_eq_productionApply` for the bridge
+    advance and `apply_bridge_admissible_with_budget_eq` for the
+    budget one (split into computation + gate, since the guarded
+    entry point returns `Option`).  What remains is repointing
+    `Coherence.lean` at it and restating the ~33
+    `PerVariantCoherence.lean` theorems;
   * `distributeOthers` / `proportionalDilute` touch unboundedly many
     balance cells and must route through `FaultProof/SubStep.lean`
     rather than the single-step path.

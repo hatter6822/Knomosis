@@ -1785,6 +1785,64 @@ def tests : List TestCase :=
           (actual := (commitExtendedStateSmt (productionApply es st 0)).toList)
           "non-bridge: the two cores agree"
     }
+  , { name := "productionApplyBudget models the epoch-budget leg"
+    , body := do
+        -- The budget leg is the other half of the divergence: the
+        -- runtime consumes the signer's epoch budget on every
+        -- non-bridgeActor action, and `kernelOnlyApply` models none
+        -- of it.  Budget cells are tag 13, so the root binds them.
+        let signer : ActorId := 7
+        let st : SignedAction :=
+          { action := .transfer 1 7 8 0, signer, nonce := 0
+          , sig := ByteArray.empty }
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+              budgetPolicy := .bounded 10 3 0
+            , epochBudgets := (∅ : EpochBudgetState).insert signer
+                                { lastSeenEpoch := 0, budgetBalance := 50 } }
+        let viaBudget := productionApplyBudget es st 0
+        let viaBridge := productionApply es st 0
+        assert ((getCellValue viaBudget (.epochBudget signer)).toList
+                  != (getCellValue viaBridge (.epochBudget signer)).toList)
+          "the budget leg moves the signer's epoch-budget cell"
+        assert ((commitExtendedStateSmt viaBudget).toList
+                  != (commitExtendedStateSmt viaBridge).toList)
+          "and therefore the root"
+        -- `bridgeActor` is exempt from the consume, so its budget
+        -- cell does not move.
+        let stBridge : SignedAction :=
+          { action := .transfer 1 0 8 0, signer := LegalKernel.Bridge.bridgeActor
+          , nonce := 0, sig := ByteArray.empty }
+        assertEq (expected := (getCellValue (productionApply es stBridge 0)
+                    (.epochBudget LegalKernel.Bridge.bridgeActor)).toList)
+          (actual := (getCellValue (productionApplyBudget es stBridge 0)
+                    (.epochBudget LegalKernel.Bridge.bridgeActor)).toList)
+          "bridgeActor is exempt from the consume"
+    }
+  , { name := "API stability: the production-faithful core"
+    , body := do
+        let _tot : ∀ (verify : Authority.PublicKey → ByteArray →
+              Authority.Signature → Bool)
+            (P : Authority.AuthorityPolicy) (deploymentId : ByteArray)
+            (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat)
+            (h : LegalKernel.Bridge.BridgeAdmissibleWith verify P deploymentId es st),
+            LegalKernel.Bridge.apply_bridge_admissible_with verify P deploymentId es st
+                l2LogIndex h
+              = productionApply es st l2LogIndex :=
+          apply_bridge_admissible_with_eq_productionApply
+        let _bud : ∀ (verify : Authority.PublicKey → ByteArray →
+              Authority.Signature → Bool)
+            (P : Authority.AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+            (st : SignedAction) (l2LogIndex : Nat)
+            (h : LegalKernel.Bridge.BridgeAdmissibleWith verify P d es st)
+            (refundRate : ResourceId → Nat),
+            LegalKernel.Bridge.apply_bridge_admissible_with_budget verify P d es st
+                l2LogIndex h refundRate
+              = (if budgetGateAdmits es st refundRate then
+                   some (productionApplyBudget es st l2LogIndex) else none) :=
+          apply_bridge_admissible_with_budget_eq
+        pure ()
+    }
   ]
 
 end LegalKernel.Test.FaultProof.StepVMCoherence

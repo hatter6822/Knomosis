@@ -39,15 +39,15 @@ the two agree wherever the guarded form is defined.
 
 ## Scope
 
-This covers the bridge leg.  The budget leg —
-`apply_bridge_admissible_with_budget`'s `epochBudgets` grant and
-consume — is a further difference between the guarded entry point
-and this core, and is called out rather than silently folded in:
-that stepper returns `Option ExtendedState` because five admission
-gates can refuse, so its total form has a different shape.  The
-epoch-budget cells are already in the cell space (tag 13), so
-representing it is a matter of extending this module, not of
-extending the root.
+Both legs are covered.  The bridge leg is `productionApply`.  The
+budget leg — `apply_bridge_admissible_with_budget`'s `epochBudgets`
+grant and consume — is `productionApplyBudget`, split from the
+five-gate admission predicate `budgetGateAdmits` because the guarded
+entry point returns `Option ExtendedState` and a step VM needs the
+computation, not the gate: by the time a bisection game reaches a
+single step, admission already happened on L2 and the dispute is
+over what the state became.  `apply_bridge_admissible_with_budget_eq`
+composes the two back into the guarded entry point.
 -/
 
 import LegalKernel.Bridge.Admissible
@@ -138,6 +138,123 @@ theorem apply_bridge_admissible_with_eq_productionApply
       productionApply es st l2LogIndex := by
   unfold apply_bridge_admissible_with productionApply
   rw [apply_admissible_with_eq_kernelOnlyApply]
+
+/-! ## The budget leg
+
+`apply_bridge_admissible_with_budget` is the entry point the runtime
+actually calls (`Runtime/Loop.lean:220`, `:558`).  On top of the
+bridge-aware advance it mutates `epochBudgets`: a grant for the three
+budget-granting actions, and a consume for every signer except
+`bridgeActor`.  It returns `Option ExtendedState` because five
+admission gates can refuse — which is exactly why its total form has
+to separate "what it computes when it admits" from "whether it
+admits".
+
+`productionApplyBudget` is the former.  `budgetGateAdmits` is the
+latter, and the two compose back into the guarded entry point by
+`apply_bridge_admissible_with_budget_eq`.  The step VM needs the
+computation, not the gate: by the time the bisection game reaches a
+single step, admission already happened on L2 and the dispute is
+over what the state became. -/
+
+/-- The epoch-budget grant leg: the three actions that mint budget,
+    and the identity for every other action. -/
+def budgetGrant (signer : ActorId) (action : Action)
+    (freeTier currentEpoch : Nat) (ebs : EpochBudgetState) : EpochBudgetState :=
+  match action with
+  | .depositWithFee _ recipient _ _ _ g _ =>
+      ebs.topUp recipient currentEpoch freeTier g
+  | .topUpActionBudget _ _ inc _ =>
+      ebs.topUp signer currentEpoch freeTier inc
+  | .topUpActionBudgetFor recipient _ _ inc _ =>
+      ebs.topUp recipient currentEpoch freeTier inc
+  | _ => ebs
+
+/-- Whether the five admission gates plus the consume succeed.  Split
+    out from the computation because the step VM needs what the
+    advance produces, not whether admission would have allowed it —
+    admission already happened on L2. -/
+def budgetGateAdmits (es : ExtendedState) (st : SignedAction)
+    (refundRate : ResourceId → Nat) : Bool :=
+  match es.budgetPolicy with
+  | .bounded freeTier actionCost currentEpoch =>
+      topUpActionBudget_gasCheck st.action st.signer es &&
+      depositWithFee_signerCheck st.action st.signer &&
+      topUpActionBudgetFor_gate st.action st.signer es &&
+      topUpRoundTripCheck st.action refundRate &&
+      claimBudgetRefund_gate st.action st.signer es refundRate &&
+      (st.signer = bridgeActor ||
+        (EpochBudgetState.consume es.epochBudgets st.signer currentEpoch freeTier
+          (actionCost + refundConsumeExtra st.action)).isSome)
+
+/-- What the runtime's budget-aware entry point computes when it
+    admits: the bridge-aware advance, then the consume (skipped for
+    `bridgeActor`), then the grant. -/
+def productionApplyBudget (es : ExtendedState) (st : SignedAction)
+    (l2LogIndex : Nat) : ExtendedState :=
+  match es.budgetPolicy with
+  | .bounded freeTier actionCost currentEpoch =>
+      let applied := productionApply es st l2LogIndex
+      if st.signer = bridgeActor then
+        { applied with
+            epochBudgets :=
+              budgetGrant st.signer st.action freeTier currentEpoch es.epochBudgets }
+      else
+        match EpochBudgetState.consume es.epochBudgets st.signer currentEpoch freeTier
+                (actionCost + refundConsumeExtra st.action) with
+        | none      => applied
+        | some ebs' =>
+            { applied with
+                epochBudgets :=
+                  budgetGrant st.signer st.action freeTier currentEpoch ebs' }
+
+/-- **The budget-aware core is faithful.**  Wherever the guarded
+    entry point admits, it returns exactly `productionApplyBudget`;
+    wherever it refuses, `budgetGateAdmits` is false.
+
+    This is the shape the step VM needs: one total function for the
+    computation, one decidable predicate for the gate, and a proof
+    that together they are the production entry point. -/
+theorem apply_bridge_admissible_with_budget_eq
+    (verify : PublicKey → ByteArray → Signature → Bool)
+    (P : AuthorityPolicy) (d : ByteArray) (es : ExtendedState)
+    (st : SignedAction) (l2LogIndex : Nat)
+    (h : BridgeAdmissibleWith verify P d es st)
+    (refundRate : ResourceId → Nat) :
+    apply_bridge_admissible_with_budget verify P d es st l2LogIndex h refundRate =
+      (if budgetGateAdmits es st refundRate then
+         some (productionApplyBudget es st l2LogIndex)
+       else none) := by
+  unfold apply_bridge_admissible_with_budget budgetGateAdmits productionApplyBudget
+  cases h_pol : es.budgetPolicy with
+  | bounded freeTier actionCost currentEpoch =>
+    -- Peel the five gates in order; each false arm is `none` on both
+    -- sides, and the surviving arm splits on the bridgeActor
+    -- exemption and then on the consume.
+    by_cases g₁ : topUpActionBudget_gasCheck st.action st.signer es
+    case neg => simp [g₁]
+    by_cases g₂ : depositWithFee_signerCheck st.action st.signer
+    case neg => simp [g₁, g₂]
+    by_cases g₃ : topUpActionBudgetFor_gate st.action st.signer es
+    case neg => simp [g₁, g₂, g₃]
+    by_cases g₄ : topUpRoundTripCheck st.action refundRate
+    case neg => simp [g₁, g₂, g₃, g₄]
+    by_cases g₅ : claimBudgetRefund_gate st.action st.signer es refundRate
+    case neg => simp [g₁, g₂, g₃, g₄, g₅]
+    simp only [g₁, g₂, g₃, g₄, g₅, Bool.true_and, Bool.and_true]
+    by_cases hb : st.signer = bridgeActor
+    · simp only [hb, if_pos, decide_true, Bool.true_or]
+      rw [apply_bridge_admissible_with_eq_productionApply]
+      simp only [budgetGrant]
+      cases st.action <;> rfl
+    · cases h_c : EpochBudgetState.consume es.epochBudgets st.signer currentEpoch
+                    freeTier (actionCost + refundConsumeExtra st.action) with
+      | none   => simp [hb]
+      | some _ =>
+        simp only [hb, decide_false, Bool.false_or, Option.isSome_some]
+        rw [apply_bridge_admissible_with_eq_productionApply]
+        simp only [budgetGrant]
+        cases st.action <;> rfl
 
 /-! ## What the current fault-proof core misses
 

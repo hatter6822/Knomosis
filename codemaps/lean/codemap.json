@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "9c6e179146d3a3950e2777ff928de9d5f26024c6747fec4b33c54ebfa4143699"
+    "source_digest": "25836a7badb283615e5e29c34dda09faa3794737ba608a541f5cb5afdb1db002"
   },
   "summary": {
-    "module_count": 322,
-    "declaration_count": 5461
+    "module_count": 323,
+    "declaration_count": 5475
   },
   "modules": [
     {
@@ -587,6 +587,7 @@
             "Verdict",
             "ammReserveActor",
             "ammSwap",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -616,6 +617,7 @@
             "Action",
             "Transition",
             "ammSwap",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -2725,6 +2727,7 @@
             "SignedAction",
             "actionCost",
             "apply_admissible_with",
+            "budgetGrant",
             "claimBudgetRefund_gate",
             "depositWithFee",
             "depositWithFee_signerCheck",
@@ -2999,6 +3002,7 @@
             "actionCost",
             "ammSwap",
             "apply_admissible_with_budget",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "claimBudgetRefund_gate",
@@ -3042,6 +3046,7 @@
             "Signature",
             "actionCost",
             "apply_admissible_with_budget",
+            "budgetGrant",
             "claimBudgetRefund_gate",
             "depositWithFee",
             "depositWithFee_signerCheck",
@@ -3070,6 +3075,7 @@
             "Signature",
             "actionCost",
             "apply_admissible_with_budget",
+            "budgetGrant",
             "claimBudgetRefund_gate",
             "depositWithFee",
             "depositWithFee_signerCheck",
@@ -4107,6 +4113,7 @@
             "Amount",
             "RegistryPreserving",
             "ResourceId",
+            "budgetGrant",
             "depositWithFee",
             "poolActor"
           ]
@@ -4817,6 +4824,7 @@
             "DepositId",
             "ResourceId",
             "applyActionToBridgeState",
+            "budgetGrant",
             "deposit"
           ]
         },
@@ -4831,6 +4839,7 @@
             "DepositId",
             "ResourceId",
             "applyActionToBridgeState",
+            "budgetGrant",
             "depositWithFee",
             "poolActor"
           ]
@@ -4937,6 +4946,7 @@
             "ResourceId",
             "applyActionToBridgeState",
             "applyActionToBridgeState_depositWithFee",
+            "budgetGrant",
             "depositWithFee",
             "es",
             "poolActor",
@@ -4956,6 +4966,7 @@
             "ResourceId",
             "applyActionToBridgeState",
             "applyActionToBridgeState_depositWithFee",
+            "budgetGrant",
             "depositWithFee",
             "es",
             "poolActor",
@@ -5060,6 +5071,7 @@
             "DepositId",
             "ResourceId",
             "State",
+            "budgetGrant",
             "getBalance",
             "getBalance_setBalance_other",
             "getBalance_setBalance_same",
@@ -5077,6 +5089,7 @@
             "ExtendedState",
             "ResourceId",
             "applyActionToBridgeState",
+            "budgetGrant",
             "depositWithFee",
             "depositWithFee_credits_poolActor",
             "es",
@@ -5619,6 +5632,7 @@
           "called": [
             "Action",
             "BridgeState",
+            "budgetGrant",
             "deposit",
             "depositWithFee",
             "withdraw"
@@ -5662,6 +5676,7 @@
             "DepositId",
             "ResourceId",
             "applyActionToBridgeState",
+            "budgetGrant",
             "depositWithFee",
             "poolActor"
           ]
@@ -5680,6 +5695,7 @@
             "SignedAction",
             "ammReserveActor",
             "bridgeActor",
+            "budgetGrant",
             "deploymentId",
             "deposit",
             "depositWithFee",
@@ -5738,6 +5754,7 @@
             "ResourceId",
             "Signature",
             "SignedAction",
+            "budgetGrant",
             "depositWithFee",
             "es",
             "poolActor"
@@ -5847,6 +5864,7 @@
             "actionCost",
             "apply_bridge_admissible_with",
             "bridgeActor",
+            "budgetGrant",
             "claimBudgetRefund_gate",
             "depositWithFee",
             "depositWithFee_signerCheck",
@@ -6101,6 +6119,7 @@
             "SignedAction",
             "applyActionToBridgeState",
             "apply_bridge_admissible_with",
+            "budgetGrant",
             "deposit",
             "es"
           ]
@@ -6338,6 +6357,7 @@
             "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
+            "budgetGrant",
             "depositWithFee",
             "depositWithFee_grants_budget",
             "es",
@@ -6363,6 +6383,7 @@
             "actionCost",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_kernel_epochBudgets",
+            "budgetGrant",
             "depositWithFee",
             "depositWithFee_budget_locality",
             "es",
@@ -7592,6 +7613,7 @@
             "bridgeActor",
             "bridgeAuthorizedAction",
             "bridgePolicy",
+            "budgetGrant",
             "depositWithFee",
             "poolActor"
           ]
@@ -7703,6 +7725,7 @@
             "Action",
             "ammSwap",
             "bridgeAuthorizedAction",
+            "budgetGrant",
             "deposit",
             "depositWithFee",
             "poolActor",
@@ -7720,6 +7743,7 @@
             "bridgePolicy_authorizes_depositWithFee",
             "bridgePolicy_authorizes_registerIdentity",
             "bridgePolicy_authorizes_replaceKey",
+            "budgetGrant",
             "deposit",
             "depositWithFee",
             "poolActor",
@@ -7742,6 +7766,7 @@
             "bridgeAuthorizedAction",
             "bridgeAuthorizedAction_eq_true_iff",
             "bridgePolicy",
+            "budgetGrant",
             "deposit",
             "depositWithFee",
             "gasPoolActor",
@@ -8117,6 +8142,7 @@
             "ResourceId",
             "State",
             "TotalSupply",
+            "budgetGrant",
             "getBalance",
             "poolActor",
             "setBalance",
@@ -8410,6 +8436,7 @@
             "WithdrawalsMonotonic",
             "applyActionToBridgeState",
             "apply_bridge_admissible_with",
+            "budgetGrant",
             "deposit",
             "depositWithFee",
             "es",
@@ -10678,6 +10705,7 @@
             "ammSwap",
             "apply_admissible_with",
             "apply_admissible_with_base",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -11105,6 +11133,7 @@
             "DepositId",
             "EthAddress",
             "ResourceId",
+            "budgetGrant",
             "deposit",
             "depositWithFee",
             "poolActor",
@@ -11810,7 +11839,8 @@
           "line": 186,
           "called": [
             "Amount",
-            "ResourceId"
+            "ResourceId",
+            "budgetGrant"
           ]
         },
         {
@@ -11828,7 +11858,8 @@
           "line": 228,
           "called": [
             "DepositRecord",
-            "LegacyDepositRecord"
+            "LegacyDepositRecord",
+            "budgetGrant"
           ]
         },
         {
@@ -11855,7 +11886,8 @@
           "line": 256,
           "called": [
             "DepositRecord",
-            "DepositRecord.fromLegacy"
+            "DepositRecord.fromLegacy",
+            "budgetGrant"
           ]
         },
         {
@@ -15841,6 +15873,7 @@
             "Verdict.fieldsBounded",
             "ammReserveActor",
             "ammSwap",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -15881,6 +15914,7 @@
             "Verdict",
             "ammReserveActor",
             "ammSwap",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -15945,6 +15979,7 @@
             "Verdict",
             "ammReserveActor",
             "ammSwap",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -16025,6 +16060,7 @@
             "Verdict",
             "ammReserveActor",
             "ammSwap",
+            "budgetGrant",
             "burn",
             "byteArray_roundtrip",
             "claimBudgetRefund",
@@ -16132,6 +16168,7 @@
             "Bridge.DepositRecord.encode",
             "DecodeError",
             "Stream",
+            "budgetGrant",
             "depositRecord_roundtrip"
           ]
         },
@@ -16142,7 +16179,8 @@
           "called": [
             "Bridge.DepositRecord.encode",
             "Bridge.DepositRecord.encodeAsBytes",
-            "Bridge.DepositRecord.encode_injective"
+            "Bridge.DepositRecord.encode_injective",
+            "budgetGrant"
           ]
         },
         {
@@ -16174,6 +16212,7 @@
             "Bridge.DepositRecord.encodeAsBytes_injective",
             "Stream",
             "bridgeState_encodeConsumed_eq_via_consumedProj",
+            "budgetGrant",
             "byteArray_roundtrip",
             "encodeSortedPairs_injective_bounded",
             "nat_roundtrip"
@@ -16288,6 +16327,7 @@
             "bool_as_nat_injective",
             "bridgeState_encodeConsumed_eq_via_consumedProj",
             "bridgeState_encodePending_eq_via_pendingProj",
+            "budgetGrant",
             "byteArray_roundtrip",
             "encodeSortedPairs_self_delim_split",
             "nat_encode_injective",
@@ -17789,6 +17829,7 @@
             "LocalPolicy.encodeAsBytes",
             "Stream",
             "ammReserveActor",
+            "budgetGrant",
             "challenger",
             "encodeAmount",
             "gasResource",
@@ -17810,6 +17851,7 @@
             "LocalPolicy.decode",
             "Stream",
             "ammReserveActor",
+            "budgetGrant",
             "challenger",
             "gasResource",
             "policy",
@@ -19097,6 +19139,7 @@
           "called": [
             "DecodeError",
             "Stream",
+            "budgetGrant",
             "decodeAmount"
           ]
         },
@@ -19497,6 +19540,7 @@
             "Bridge.DepositRecord.encode",
             "Stream",
             "amount_roundtrip",
+            "budgetGrant",
             "encodeAmount",
             "nat_roundtrip"
           ]
@@ -19888,6 +19932,7 @@
             "actionEvents",
             "ammReserveActor",
             "ammSwap",
+            "budgetGrant",
             "claimBudgetRefund",
             "deposit",
             "depositWithFee",
@@ -20042,6 +20087,7 @@
             "Nonce",
             "ResourceId",
             "Signature",
+            "budgetGrant",
             "depositWithFee",
             "extractEvents",
             "poolActor"
@@ -20109,6 +20155,7 @@
             "PublicKey",
             "ResourceId",
             "ammReserveActor",
+            "budgetGrant",
             "challenger",
             "gasResource",
             "policy",
@@ -20440,7 +20487,8 @@
             "ExtendedState",
             "SignedAction",
             "es",
-            "kernelOnlyApply"
+            "kernelOnlyApply",
+            "signedActionEntry"
           ]
         },
         {
@@ -20513,7 +20561,8 @@
             "commitExtendedState",
             "es",
             "kernelOnlyApply",
-            "recomputeCommitment"
+            "recomputeCommitment",
+            "signedActionEntry"
           ]
         },
         {
@@ -20570,7 +20619,8 @@
             "LogEntry",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply"
+            "kernelOnlyApply",
+            "signedActionEntry"
           ]
         },
         {
@@ -21102,6 +21152,7 @@
             "ExtendedState",
             "LocalPolicy.encodeAsBytes",
             "LocalPolicy.fieldsBounded",
+            "budgetGrant",
             "es"
           ]
         },
@@ -22962,6 +23013,7 @@
             "ExtendedState",
             "Nonce",
             "ResourceId",
+            "budgetGrant",
             "commitExtendedState",
             "depositWithFee",
             "es",
@@ -23420,6 +23472,7 @@
             "ResourceId",
             "applyCellWrites_eq_signedActionToLogEntry",
             "applyCellWrites_to_state",
+            "budgetGrant",
             "depositWithFee",
             "es",
             "kernelOnlyApply",
@@ -23524,6 +23577,226 @@
             "poolActor",
             "reclaimAmmReserves",
             "signedActionToLogEntry"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.FaultProof.ProductionApply",
+      "path": "LegalKernel/FaultProof/ProductionApply.lean",
+      "declaration_count": 14,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 56,
+          "called": [
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "signedActionEntry",
+          "line": 67,
+          "called": [
+            "LogEntry",
+            "SignedAction"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "applyActionToRegistry_eq_inlined",
+          "line": 84,
+          "called": [
+            "Action",
+            "KeyRegistry",
+            "applyActionToRegistry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "apply_admissible_with_eq_kernelOnlyApply",
+          "line": 95,
+          "called": [
+            "AdmissibleWith",
+            "AuthorityPolicy",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_admissible_with",
+            "es",
+            "kernelOnlyApply",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelOnlyApply_bridge",
+          "line": 106,
+          "called": [
+            "ExtendedState",
+            "LogEntry",
+            "es",
+            "kernelOnlyApply"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "productionApply",
+          "line": 120,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "es",
+            "kernelOnlyApply",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "apply_bridge_admissible_with_eq_productionApply",
+          "line": 131,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "Signature",
+            "SignedAction",
+            "apply_admissible_with_eq_kernelOnlyApply",
+            "apply_bridge_admissible_with",
+            "deploymentId",
+            "es",
+            "productionApply"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetGrant",
+          "line": 161,
+          "called": [
+            "Action",
+            "ActorId",
+            "EpochBudgetState",
+            "depositWithFee",
+            "freeTier",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetGateAdmits",
+          "line": 176,
+          "called": [
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "actionCost",
+            "bridgeActor",
+            "claimBudgetRefund_gate",
+            "depositWithFee_signerCheck",
+            "es",
+            "freeTier",
+            "refundConsumeExtra",
+            "refundRate",
+            "topUpActionBudgetFor_gate",
+            "topUpActionBudget_gasCheck",
+            "topUpRoundTripCheck"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "productionApplyBudget",
+          "line": 192,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "actionCost",
+            "bridgeActor",
+            "budgetGrant",
+            "es",
+            "freeTier",
+            "productionApply",
+            "refundConsumeExtra"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "apply_bridge_admissible_with_budget_eq",
+          "line": 217,
+          "called": [
+            "AuthorityPolicy",
+            "BridgeAdmissibleWith",
+            "ExtendedState",
+            "PublicKey",
+            "ResourceId",
+            "Signature",
+            "SignedAction",
+            "actionCost",
+            "apply_bridge_admissible_with_budget",
+            "apply_bridge_admissible_with_eq_productionApply",
+            "bridgeActor",
+            "budgetGateAdmits",
+            "budgetGrant",
+            "claimBudgetRefund_gate",
+            "depositWithFee_signerCheck",
+            "es",
+            "freeTier",
+            "productionApplyBudget",
+            "refundConsumeExtra",
+            "refundRate",
+            "topUpActionBudgetFor_gate",
+            "topUpActionBudget_gasCheck",
+            "topUpRoundTripCheck"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApply_eq_kernelOnlyApply_of_non_bridge",
+          "line": 268,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "applyActionToBridgeState_non_bridge",
+            "deposit",
+            "depositWithFee",
+            "es",
+            "kernelOnlyApply",
+            "kernelOnlyApply_bridge",
+            "poolActor",
+            "productionApply",
+            "sender",
+            "signedActionEntry",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApply_marks_deposit_consumed",
+          "line": 284,
+          "called": [
+            "ActorId",
+            "Amount",
+            "DepositId",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "ResourceId",
+            "SignedAction",
+            "budgetGrant",
+            "deposit",
+            "es",
+            "productionApply"
           ]
         }
       ]
@@ -26086,6 +26359,7 @@
             "Verdict",
             "ammReserveActor",
             "ammSwap",
+            "budgetGrant",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -29522,6 +29796,7 @@
             "LegalKernel",
             "ResourceId",
             "State",
+            "budgetGrant",
             "depositWithFee",
             "poolActor",
             "setBalance",
@@ -33204,6 +33479,7 @@
           "called": [
             "ExtendedState",
             "SignedAction",
+            "budgetGrant",
             "depositWithFee",
             "es",
             "poolActor"
@@ -36810,7 +37086,8 @@
           "name": "bs1",
           "line": 28,
           "called": [
-            "BridgeState"
+            "BridgeState",
+            "budgetGrant"
           ]
         },
         {
@@ -36827,7 +37104,8 @@
           "name": "bsFee",
           "line": 38,
           "called": [
-            "BridgeState"
+            "BridgeState",
+            "budgetGrant"
           ]
         },
         {
@@ -36836,6 +37114,7 @@
           "line": 45,
           "called": [
             "BridgeState",
+            "budgetGrant",
             "markConsumed"
           ]
         },
@@ -36891,6 +37170,7 @@
             "bs2",
             "bsFee",
             "bsMixed",
+            "budgetGrant",
             "deposit",
             "depositWithFee",
             "depositWithFee_admissible_credits_poolActor",
@@ -37083,6 +37363,7 @@
             "bridge_replay_impossible",
             "bs1",
             "bs2",
+            "budgetGrant",
             "burn",
             "deposit",
             "depositWithFee",
@@ -37398,6 +37679,7 @@
             "bridgePolicy_rejects_topUpActionBudgetFor",
             "bridgePolicy_rejects_transfer",
             "bridgePolicy_rejects_withdraw",
+            "budgetGrant",
             "burn",
             "deposit",
             "depositWithFee",
@@ -37703,7 +37985,8 @@
           "name": "bsDep",
           "line": 35,
           "called": [
-            "BridgeState"
+            "BridgeState",
+            "budgetGrant"
           ]
         },
         {
@@ -37720,7 +38003,8 @@
           "name": "bsFee",
           "line": 45,
           "called": [
-            "BridgeState"
+            "BridgeState",
+            "budgetGrant"
           ]
         },
         {
@@ -38352,6 +38636,7 @@
           "line": 151,
           "called": [
             "Action",
+            "budgetGrant",
             "depositWithFee",
             "fixedPoolActor",
             "fixedRecipient"
@@ -38364,6 +38649,7 @@
           "called": [
             "ActorBudget",
             "EpochBudgetState",
+            "budgetGrant",
             "fixedRecipient"
           ]
         },
@@ -38373,6 +38659,7 @@
           "line": 179,
           "called": [
             "EpochBudgetState",
+            "budgetGrant",
             "fixedRecipient"
           ]
         },
@@ -38381,6 +38668,7 @@
           "name": "recipientBudgetCell_currentBudget",
           "line": 188,
           "called": [
+            "budgetGrant",
             "fixedRecipient",
             "recipientBudgetLedger"
           ]
@@ -38401,6 +38689,7 @@
             "Signature",
             "actionCost",
             "apply_admissible_with_budget",
+            "budgetGrant",
             "depositWithFee",
             "depositWithFee_grants_budget",
             "es",
@@ -38414,7 +38703,9 @@
           "kind": "structure",
           "name": "Entry",
           "line": 248,
-          "called": []
+          "called": [
+            "budgetGrant"
+          ]
         },
         {
           "kind": "def",
@@ -38425,6 +38716,7 @@
             "actionBytes",
             "actionFor",
             "budgetBytes",
+            "budgetGrant",
             "recipientBudgetCell"
           ]
         },
@@ -38754,6 +39046,7 @@
           "name": "feeSplit",
           "line": 103,
           "called": [
+            "budgetGrant",
             "maxBudgetPerDeposit"
           ]
         },
@@ -38820,6 +39113,7 @@
           "name": "feeSplitReceiptTail",
           "line": 204,
           "called": [
+            "budgetGrant",
             "sender"
           ]
         },
@@ -38828,6 +39122,7 @@
           "name": "feeSplitReceiptPreimage",
           "line": 220,
           "called": [
+            "budgetGrant",
             "deploymentId",
             "feeSplitReceiptTail",
             "sender"
@@ -38838,6 +39133,7 @@
           "name": "computeFeeSplitReceiptHash",
           "line": 226,
           "called": [
+            "budgetGrant",
             "deploymentId",
             "feeSplitReceiptPreimage",
             "hashBytes",
@@ -38849,6 +39145,7 @@
           "name": "Entry",
           "line": 235,
           "called": [
+            "budgetGrant",
             "deploymentId",
             "sender"
           ]
@@ -38860,6 +39157,7 @@
           "called": [
             "Entry",
             "ammSeed",
+            "budgetGrant",
             "computeFeeSplitReceiptHash",
             "deploymentId",
             "feeSplit",
@@ -39034,6 +39332,7 @@
           "line": 94,
           "called": [
             "boldTokenAddr20",
+            "budgetGrant",
             "deploymentId",
             "resourceIdBold",
             "sender"
@@ -39428,6 +39727,7 @@
           "called": [
             "Action",
             "Json",
+            "budgetGrant",
             "depositWithFee",
             "encodeActionHex",
             "poolActor"
@@ -42098,6 +42398,7 @@
             "SignedAction",
             "StepVMFixture",
             "actionKindByte",
+            "budgetGrant",
             "bundleToFixtureProofs",
             "commitExtendedState",
             "depositWithFee",
@@ -42521,6 +42822,7 @@
             "ActorId",
             "Amount",
             "StepVMFixture",
+            "budgetGrant",
             "buildAdversarialBadPreCommit",
             "buildDepositWithFeeHappy",
             "poolActor"
@@ -44616,6 +44918,7 @@
             "assertEq",
             "bridgeState_encode_deterministic",
             "bs1",
+            "budgetGrant",
             "depositRecord_encode_deterministic",
             "depositRecord_roundtrip",
             "es",
@@ -49826,7 +50129,8 @@
           "called": [
             "Bridge.DepositRecord.encode",
             "Bridge.DepositRecord.encode_injective",
-            "TestCase"
+            "TestCase",
+            "budgetGrant"
           ]
         },
         {
@@ -49836,7 +50140,8 @@
           "called": [
             "Bridge.DepositRecord.encode",
             "TestCase",
-            "assert"
+            "assert",
+            "budgetGrant"
           ]
         },
         {
@@ -49846,7 +50151,8 @@
           "called": [
             "Bridge.DepositRecord.decode",
             "Bridge.DepositRecord.encode",
-            "TestCase"
+            "TestCase",
+            "budgetGrant"
           ]
         },
         {
@@ -49856,7 +50162,8 @@
           "called": [
             "Bridge.DepositRecord.decode",
             "Bridge.DepositRecord.encode",
-            "TestCase"
+            "TestCase",
+            "budgetGrant"
           ]
         },
         {
@@ -49886,7 +50193,8 @@
           "called": [
             "Bridge.DepositRecord.encodeAsBytes",
             "TestCase",
-            "assert"
+            "assert",
+            "budgetGrant"
           ]
         },
         {
@@ -49896,7 +50204,8 @@
           "called": [
             "Bridge.DepositRecord.encodeAsBytes",
             "Bridge.DepositRecord.encodeAsBytes_injective",
-            "TestCase"
+            "TestCase",
+            "budgetGrant"
           ]
         },
         {
@@ -49909,7 +50218,9 @@
           "kind": "def",
           "name": "genBridgeState_single_consumed",
           "line": 1371,
-          "called": []
+          "called": [
+            "budgetGrant"
+          ]
         },
         {
           "kind": "def",
@@ -49919,7 +50230,8 @@
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodeConsumed_injective",
             "Bridge.DepositRecord.encodeAsBytes",
-            "TestCase"
+            "TestCase",
+            "budgetGrant"
           ]
         },
         {
@@ -49932,6 +50244,7 @@
             "assert",
             "bs1",
             "bs2",
+            "budgetGrant",
             "genBridgeState_single_consumed"
           ]
         },
@@ -50003,7 +50316,8 @@
             "Bridge.BridgeState.encode_injective",
             "Bridge.DepositRecord.encodeAsBytes",
             "Bridge.PendingWithdrawal.encodeAsBytes",
-            "TestCase"
+            "TestCase",
+            "budgetGrant"
           ]
         },
         {
@@ -51892,6 +52206,7 @@
             "bridgeState_commit_includes_ammState",
             "bridgeState_encode_factored",
             "bs1",
+            "budgetGrant",
             "commitBridgeState",
             "commitBridgeState_reflects_ammDisabled",
             "commitBudgetPolicy",
@@ -52029,6 +52344,7 @@
             "applyCellWrites_to_state_preserves_bridge",
             "assert",
             "assertEq",
+            "budgetGrant",
             "commitExtendedState",
             "deposit",
             "depositWithFee",
@@ -52780,7 +53096,8 @@
             "KeyRegistry",
             "LocalPolicies",
             "Nonce",
-            "ResourceId"
+            "ResourceId",
+            "budgetGrant"
           ]
         },
         {
@@ -52825,7 +53142,8 @@
             "KeyRegistry",
             "LocalPolicies",
             "Nonce",
-            "ResourceId"
+            "ResourceId",
+            "budgetGrant"
           ]
         },
         {
@@ -52951,10 +53269,12 @@
             "CellProof",
             "CellProofBundle",
             "CellTag",
+            "EpochBudgetState",
             "ExtendedState",
             "ExtendedState.empty",
             "LegalKernel.Test.FaultProof.StepVMCoherence",
             "LocalPolicy.empty",
+            "ResourceId",
             "SignedAction",
             "TestCase",
             "actionFieldsForL1",
@@ -52962,13 +53282,17 @@
             "actionKindByteCases",
             "ammReserveActor",
             "ammSwap",
+            "apply_bridge_admissible_with_budget_eq",
+            "apply_bridge_admissible_with_eq_productionApply",
             "assert",
             "assertEq",
+            "budgetGateAdmits",
             "burn",
             "claimBudgetRefund",
             "commitExtendedState",
             "commitExtendedStateSmt",
             "decodeCellNat",
+            "deploymentId",
             "deposit",
             "depositWithFee",
             "distributeOthers",
@@ -52976,12 +53300,16 @@
             "freezeResource",
             "getCellValue",
             "mint",
+            "productionApply",
+            "productionApplyBudget",
             "proportionalDilute",
             "readCellValue",
             "readUint128BE",
             "readUint64BE",
             "reclaimAmmReserves",
+            "refundRate",
             "reward",
+            "signedActionEntry",
             "stepCommitAmmSwap",
             "stepCommitClaimBudgetRefund",
             "stepCommitDepositWithFee",
