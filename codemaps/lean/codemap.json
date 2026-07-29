@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "313f8812550cb63bbed908eb07af197469b2fdbaeb6b1cc5975719dd8bf1f742"
+    "source_digest": "5c9ea79a486c860df649c34602b9cf1321f0788e18fac86e7c6824929461c7ee"
   },
   "summary": {
     "module_count": 322,
@@ -52938,15 +52938,16 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.StepVMCoherence",
-          "line": 39,
+          "line": 41,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 42,
+          "line": 44,
           "called": [
             "Action",
+            "Action.writeCells",
             "ActorId",
             "CellProof",
             "CellProofBundle",
@@ -52972,6 +52973,7 @@
             "distributeOthers",
             "es",
             "freezeResource",
+            "getCellValue",
             "mint",
             "proportionalDilute",
             "readCellValue",

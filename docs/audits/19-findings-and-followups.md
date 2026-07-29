@@ -92,6 +92,27 @@ Not landed: swapping `commitExtendedState` to that root, and making
 are one consensus change and must land together; the implementation
 spec is `docs/planning/state_root_merkleisation_plan.md` §3 / §4.
 
+Three obligations for that work were read from source during this
+pass and are pinned as tests (`faultproof-stepvm-coherence`, the
+`OBLIGATION:` cases) rather than left as prose, because each would
+otherwise surface halfway through the rewrite:
+
+  * the 25 step-VM handlers compute `.balance` cells and nothing
+    else, while `Action.writeCells` correctly declares that every
+    action advances `.nonce signer` (plus registry / local-policy /
+    bridge cells for eight variants).  Harmless while the
+    dispatcher's output is compared only against another dispatcher
+    output; after the swap it makes the post-root wrong for EVERY
+    action;
+  * the coherence chain is anchored to
+    `commitExtendedState ∘ kernelOnlyApply`, which deliberately
+    models neither bridge nor budget effects, while the published
+    root reflects the real advance.  §4 has to settle which apply is
+    authoritative before the handlers can be written;
+  * `distributeOthers` / `proportionalDilute` touch unboundedly many
+    balance cells and must route through `FaultProof/SubStep.lean`
+    rather than the single-step path.
+
 Stated precisely, from source rather than from the plan documents:
 
 1. `KnomosisFaultProofGame.initiateChallenge` anchors **both**

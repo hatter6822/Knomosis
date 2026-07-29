@@ -222,6 +222,55 @@ space:
 5. Deploy-script guard so `DeploySepolia.s.sol` /
    `DeployFaultProof.s.sol` cannot ship the unsound configuration.
 
+**§4 is bigger than a return-type change, and the reason was not
+visible from the plan's original text.**  Three things were read from
+source and are now pinned as tests in `faultproof-stepvm-coherence`
+(the three `OBLIGATION:` cases) so a future implementer meets them up
+front rather than halfway through the rewrite:
+
+  1. **The handlers compute balance cells only.**  `stepVMHash`'s 25
+     arms and their Solidity mirrors read and emit `.balance` cells
+     and nothing else — 30 `.balance` references, zero for any other
+     tag.  `Action.writeCells` meanwhile declares, correctly, that
+     EVERY action advances `.nonce signer`, and that `replaceKey` /
+     `registerIdentity` write `.registry`, `declareLocalPolicy` /
+     `revokeLocalPolicy` write `.localPolicy`, `deposit` /
+     `depositWithFee` write `.bridgeConsumed`, and `withdraw` writes
+     `.bridgeNextWdId`.  Today that mismatch is harmless because the
+     dispatcher's output is only ever compared against another
+     dispatcher output.  After the swap it means the post-root is
+     wrong for *every* action, not for exotic ones: the nonce moves
+     on all 25.  So each handler must become semantically complete
+     against its own declaration, not merely restructured.
+     The declaration layer is the good news — `Action.writeCells`
+     already says which cells, so the work is per-variant value
+     computation, and the values are all derivable from
+     `actionFields` plus the opened pre-values (the CBE-wrapped key
+     for the registry cells; `actionFields` verbatim for
+     `declareLocalPolicy`, whose L1 bytes ARE the policy encoding;
+     `old + 1` for the nonce and the withdrawal counter).
+
+  2. **The reference apply is unsettled.**  The coherence chain is
+     anchored to `commitExtendedState ∘ kernelOnlyApply` (theorem
+     #225, `recomputeCommitment_coherent_with_kernelOnlyApply`), and
+     `kernelOnlyApply` deliberately models neither bridge nor budget
+     effects — a deposit leaves `bridge.consumed` untouched there.
+     The PUBLISHED state root reflects the real, bridge-aware
+     advance, so the two references disagree.  Harmless while the
+     comparison is dispatcher-against-dispatcher; an adjudication
+     error the moment it is dispatcher-against-state-root.  §4 must
+     settle which apply is authoritative *before* the handlers are
+     written, because the answer changes what several of them write.
+
+  3. **Bulk actions need the sub-step machinery.**
+     `distributeOthers` and `proportionalDilute` touch every
+     non-excluded actor's balance in a resource — unboundedly many
+     cells, which no `O(log N)` opening bundle can carry.
+     `Action.writeCells` already declines to enumerate them and
+     defers to `Action.subSteps`; §4 must route those two variants
+     through `FaultProof/SubStep.lean` rather than through the
+     single-step path.
+
 **Proof ordering within step 3.**  Openings become stale as soon as
 a write lands, so the bundle must be processed strictly in array
 order with proof `i` opening against `root_i` (`root_0 :=

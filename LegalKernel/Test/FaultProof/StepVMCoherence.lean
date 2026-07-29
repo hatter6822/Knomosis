@@ -28,6 +28,8 @@ Tests cover:
 -/
 
 import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.StateCells
+import LegalKernel.Disputes.Evidence
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -1648,6 +1650,104 @@ def tests : List TestCase :=
     , body := do
         let _ := @stepVMHash_reclaimAmmReserves_kind
         assert true "API exists"
+    }
+    -- ## Post-root completeness obligation (B-3 §4)
+    --
+    -- These two are not properties the current design HAS; they are
+    -- the gap the state-root swap has to close, pinned so it cannot
+    -- be discovered halfway through the rewrite.
+    --
+    -- `Action.writeCells` correctly declares that EVERY action
+    -- advances the signer's nonce, and that four variants also write
+    -- registry / local-policy cells.  `stepVMHash` reads and emits
+    -- BALANCE cells only.  That is sound today because its output is
+    -- only ever compared against another `stepVMHash`; the moment the
+    -- swap makes the comparison a state root, a handler that ignores
+    -- its declared writes computes a post-root that cannot match.
+    -- See `docs/planning/state_root_merkleisation_plan.md` §4.
+  , { name := "OBLIGATION: writeCells declares the nonce for every action"
+    , body := do
+        let signer : ActorId := 7
+        let actions : List Action :=
+          [ .transfer 1 7 8 5, .mint 1 8 5, .burn 1 8 5, .freezeResource 1
+          , .replaceKey 7 (ByteArray.mk #[1]), .reward 1 8 5
+          , .distributeOthers 1 2 5, .proportionalDilute 1 2 5
+          , .registerIdentity 7 (ByteArray.mk #[1])
+          , .deposit 1 8 5 3, .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero
+          , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
+          , .depositWithFee 1 8 9 5 1 1 3, .topUpActionBudget 1 5 1 9
+          , .topUpActionBudgetFor 8 1 5 1 9, .claimBudgetRefund 1 1 5 9
+          , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 5 9 8 ]
+        for a in actions do
+          if !((Action.writeCells a signer).contains (.nonce signer)) then
+            throw <| IO.userError
+              s!"writeCells omits the nonce for kind {actionKindByte a}"
+    }
+  , { name := "OBLIGATION: stepVMHash ignores the nonce cell it must write"
+    , body := do
+        -- Two bundles differing ONLY in the signer's nonce cell.  The
+        -- dispatcher agrees on both, so its output carries no
+        -- information about the nonce write — the post-root it would
+        -- produce after the swap is wrong for every action, not just
+        -- exotic ones.
+        let pc := ByteArray.mk #[(0xDD : UInt8)]
+        let signer : ActorId := 7
+        let fields := actionFieldsForL1 (.transfer 1 7 8 5)
+        let bal : CellProof :=
+          { cellTag := .balance 1 7
+          , cellValue := ByteArray.mk (Encoding.encodeAmount 100).toArray
+          , witnessState := ExtendedState.empty }
+        let bal2 : CellProof :=
+          { cellTag := .balance 1 8
+          , cellValue := ByteArray.mk (Encoding.encodeAmount 0).toArray
+          , witnessState := ExtendedState.empty }
+        let nonceCell (n : Nat) : CellProof :=
+          { cellTag := .nonce signer
+          , cellValue := ByteArray.mk
+              (Encoding.Encodable.encode (T := Nat) n).toArray
+          , witnessState := ExtendedState.empty }
+        let b₁ : CellProofBundle := { proofs := [bal, bal2, nonceCell 3] }
+        let b₂ : CellProofBundle := { proofs := [bal, bal2, nonceCell 99] }
+        assert ((readCellValue b₁ (.nonce signer)).toList
+                  != (readCellValue b₂ (.nonce signer)).toList)
+          "the two bundles really differ on the nonce cell"
+        assertEq (expected := (stepVMHash pc 0 fields signer.toNat b₁).toList)
+          (actual := (stepVMHash pc 0 fields signer.toNat b₂).toList)
+          "stepVMHash is blind to the nonce cell — the §4 gap"
+    }
+  , { name := "OBLIGATION: the reference apply omits a declared bridge write"
+    , body := do
+        -- The fault-proof coherence chain is anchored to
+        -- `commitExtendedState ∘ kernelOnlyApply` (theorem #225), and
+        -- `kernelOnlyApply` deliberately does not model bridge
+        -- mutations.  `Action.writeCells` for a deposit nonetheless
+        -- declares `.bridgeConsumed d` — correctly, because the
+        -- PUBLISHED state root reflects the real, bridge-aware
+        -- advance.  The two references disagree, which is harmless
+        -- while the step VM's output is only compared against itself
+        -- and an adjudication error the moment it is compared against
+        -- a state root.  §4 has to settle which apply is the
+        -- reference before the handlers can be written.
+        let signer : ActorId := 7
+        let d : LegalKernel.Bridge.DepositId := 3
+        let action : Action := .deposit 1 8 5 d
+        assert ((Action.writeCells action signer).contains (.bridgeConsumed d))
+          "writeCells declares the consumed-deposit write"
+        let es := ExtendedState.empty
+        let entry : Runtime.LogEntry :=
+          { prevHash := ByteArray.empty
+          , signedAction :=
+              { action, signer, nonce := 0, sig := ByteArray.empty }
+          , postStateHash := ByteArray.empty }
+        let after := Disputes.kernelOnlyApply es entry
+        assertEq (expected := (getCellValue es (.bridgeConsumed d)).toList)
+          (actual := (getCellValue after (.bridgeConsumed d)).toList)
+          "but kernelOnlyApply leaves the cell untouched"
+        -- The nonce, by contrast, does move — so the reference apply
+        -- is not simply inert.
+        assert ((getCellValue es (.nonce signer)).toList
+                  != (getCellValue after (.nonce signer)).toList)
+          "the reference apply does advance the nonce"
     }
   ]
 
