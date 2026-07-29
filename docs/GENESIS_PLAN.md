@@ -5053,12 +5053,34 @@ commitExtendedState es =
   hashBytes (commitState es.base ++ commitNonceState es.nonces ++
              commitKeyRegistry es.registry ++
              commitLocalPolicies es.localPolicies ++
-             commitBridgeState es.bridge)
+             commitBridgeState es.bridge ++
+             commitEpochBudgets es.epochBudgets ++
+             commitBudgetPolicy es.budgetPolicy)
 ```
 
+Seven components, not five: the H-1 widening brought the per-actor
+epoch budgets and the budget policy inside the root, so a forged
+budget is bound by the commitment like any other sub-state.
+
+**Why the collision-resistance hypothesis is scoped to a pre-image
+list.**  The obvious form — `∀ b₁ b₂, h b₁ = h b₂ → b₁ = b₂` — is
+unsatisfiable for any hash with bounded output, and Knomosis proves
+that bound (`Runtime.hashBytes_size`: every output is 32 bytes).
+`ByteArray` is infinite and the 32-byte arrays are not, so global
+injectivity is refutable *inside Lean* and every theorem conditioned
+on it is vacuously true.  `Bridge.CollisionFreeOn S h` scopes the
+hypothesis to the finite list `S` of pre-images a proof actually
+hashes, which is exactly the strength each proof uses.  Satisfiability
+is exhibited rather than assumed (`collisionFreeOn_id`,
+`exists_uniformOutputSize_collisionFreeOn_of_ne`).
+
 Each per-sub-state commit is `hashBytes` of the canonical CBE
-encoding.  Under `CollisionFree hashBytes`, top-level commit
-equality implies extensional state equality:
+encoding.  Under `Bridge.CollisionFreeOn` — collision-freeness
+scoped to the finite pre-image list each theorem actually hashes,
+because global injectivity of a 32-byte-output hash is refutable
+inside Lean and would make every theorem conditioned on it
+vacuous — top-level commit equality implies extensional state
+equality:
 
   * `commitExtendedState_subcommits_bytes_eq_under_collision_free`
     establishes per-sub-state CBE-bytes equality (theorem #220).
@@ -5071,10 +5093,25 @@ equality implies extensional state equality:
     canonical reconstruction) are extensionally equal but not
     structurally equal.
 
-Workstream H deliberately uses a single-hash form rather than a
-two-level Sparse Merkle Tree (SMT).  The SMT optimisation is a
-deployment-layer concern (saves L1 gas via O(log N) cell proofs);
-the soundness arguments hold under either representation.
+Workstream H originally chose a single-hash form over a Sparse
+Merkle Tree on the grounds that the SMT was a gas optimisation and
+the soundness arguments held under either representation.  **That
+reasoning was wrong, and the error is the open critical finding
+below.**  The representation is not interchangeable: a concatenation
+hash cannot be updated incrementally, so the L1 step VM — which
+holds the root and the proven cells, never the sub-state encodings —
+cannot recompute a post-root from a pre-root.  It therefore returns
+a step-VM-specific hash, and the game's terminal comparison is
+between two different constructions.
+
+`LegalKernel.FaultProof.StateCells.commitExtendedStateSmt` is the
+replacement root, built over the cell space and shipped additively
+ahead of the swap.  Its injectivity
+(`smtRootListAux_perm_of_eq_under_collision_free`) and its
+cell-determination corollary
+(`commitExtendedStateSmt_determines_cells`) are proved, so the swap
+does not downgrade the guarantee above.
+`docs/planning/state_root_merkleisation_plan.md` is the spec.
 
 ### 15B.2 Step semantics
 
@@ -5090,11 +5127,46 @@ structure KernelStep where
 ```
 
 The L1 step VM (`KnomosisStepVM.executeStep`) consumes a
-`KernelStep` plus per-cell Merkle proofs and computes the
-post-state commit.  Cross-stack equivalence with Lean's
-`recomputeCommitment` is established by theorem #225:
-`recomputeCommitment_coherent_with_kernelOnlyApply`, plus the
-WU H.10.1 fixture corpus.
+`KernelStep` plus per-cell proofs.
+
+**Open critical — it does not compute a state commit.**  Its own
+header says the value it returns is "a step-VM-specific 32-byte
+hash" that "is NOT byte-identical to" a `commitExtendedState` value,
+and `KnomosisFaultProofGame.terminateOnSingleStep` tests that value
+against `g.high.commit`, a submitted state root.  The two sides are
+different constructions, so the comparison never succeeds and an
+honest sequencer loses every game it correctly defends.  The
+per-entry byte-equivalence assertion in
+`solidity/test/CrossCheck/StepVM.t.sol` is skipped for exactly this
+reason, which is why no suite reports it.
+
+Theorem #225 (`recomputeCommitment_coherent_with_kernelOnlyApply`)
+does not close this and was never able to: `recomputeCommitment` is
+*defined* as `commitExtendedState ∘ kernelOnlyApply`, so the theorem
+is definitional and says nothing about the Solidity side.
+
+Two further modelling gaps sit behind it, both read from source and
+pinned as tests in `faultproof-stepvm-coherence`:
+
+  * the 25 per-variant step functions read and write `.balance`
+    cells only, while `Action.writeCells` correctly declares that
+    every action advances the signer's nonce (plus registry /
+    local-policy / bridge cells for eight variants).  Harmless while
+    the dispatcher's output is compared only against another
+    dispatcher output; wrong for every action once it is compared
+    against a state root;
+  * the semantic core `applyCellWrites_to_state` is
+    `kernelOnlyApply`, which models neither bridge nor budget
+    effects, while the runtime advances through
+    `apply_bridge_admissible_with_budget`.
+    `LegalKernel.FaultProof.ProductionApply` now supplies the total,
+    production-faithful core the re-anchoring needs, proved faithful
+    on both legs.
+
+Until the state-root Merkleisation lands, the fault-proof game must
+not be treated as an adjudicating backstop; the bisection narrowing
+is proved and unaffected.  `docs/fault_proof_runbook.md` §0 carries
+the operator consequences.
 
 ### 15B.3 Bisection game
 
@@ -5114,6 +5186,19 @@ established by:
   * Depth-cap bound (theorem #267:
     `bisection_terminates_in_at_most_max_depth_rounds` with
     `MAX_BISECTION_DEPTH = 64`).
+
+The midpoint is now DERIVED rather than caller-chosen on all three
+stacks — the contract always computed `(low + high) / 2` while the
+Lean model accepted any interior index, which is why the theorems
+above prove only linear narrowing and their depth-64 corollary
+covers width ≤ 64 rather than `2^64`.  With the canonical midpoint,
+convergence is logarithmic:
+
+  * Per-round halving (`range_halves_on_response_{agree,disagree}`).
+  * Multi-round halving (`range_size_after_k_canonical_rounds`).
+  * `bisection_converges_in_log_rounds`, and
+    `bisection_converges_at_max_depth` for the `2^64` width the
+    depth cap was always meant to cover.
 
 ### 15B.4 Single-honest-challenger property
 
@@ -5143,7 +5228,11 @@ single composite statement at the settlement boundary:
 
 Combined with the per-step coherence (#225) and the convergence
 chain (#231), an honest challenger always wins against a
-sequencer who has published an invalid state root.
+sequencer who has published an invalid state root — **in the Lean
+model**.  The deployed game does not yet deliver it, because its
+terminal step compares two different hash constructions (§15B.2).
+The bisection narrowing is unaffected; the settlement boundary is
+not reached.
 
 ### 15B.5 L1 contract surface
 
@@ -5210,6 +5299,15 @@ weaker because:
 The headline theorem #232 family establishes the trust-model
 upgrade at the type level.
 
+**Not yet in force operationally.**  The upgrade is contingent on
+the game adjudicating, and §15B.2 records why it does not.  Until
+the state-root Merkleisation lands, a deployment's operative
+backstop remains the Phase-6 adjudicator quorum
+(`KnomosisDisputeVerifier`) and the trust assumption remains M-of-N
+adjudicators honest.  Claiming the weaker assumption before then
+would overstate what is deployed, which is the one direction a trust
+model must not err in.
+
 ### 15B.9 Deviation block
 
 Workstream H deviates from the plan's spec in a few places:
@@ -5218,9 +5316,9 @@ Workstream H deviates from the plan's spec in a few places:
     calls for two-level SMTs; the implementation uses a single-
     hash-of-CBE-encoding form.  The shipped soundness theorem
     is `commitExtendedState_subcommits_bytes_eq_under_collision_free`
-    (under `CollisionFree hashBytes`, equal top-level commits
-    imply byte-equality of the five sub-state canonical
-    encodings).  Lifting bytes-equality to full extensional
+    (under `Bridge.CollisionFreeOn` over the pre-image list the
+    theorem itself hashes, equal top-level commits imply
+    byte-equality of the seven sub-state canonical encodings).  Lifting bytes-equality to full extensional
     equality on TreeMap-backed sub-states requires CBE encoder
     injectivity for `State` / `NonceState` / `KeyRegistry` /
     `LocalPolicies` / `BridgeState`, which ships at the
@@ -5242,9 +5340,9 @@ Workstream H deviates from the plan's spec in a few places:
     `docs/planning/smt_cell_proofs_plan.md`).  Headline
     theorems: `smtCellProof_no_value_substitution` (the
     load-bearing operational binding property — under
-    `CollisionFree hashBytes` and value-encoder injectivity,
-    two verifying proofs for the same `(root, key)` must
-    claim the same value) and `smtCellProof_sound_under
+    `CollisionFreeOn` over the two walks' pre-images and
+    value-encoder injectivity, two verifying proofs for the same
+    `(root, key)` must claim the same value) and `smtCellProof_sound_under
     _collision_free` (its plan-named alias).  Both forms
     (witness-state and SMT) ship side-by-side in the Lean
     kernel; deployments select the active form via the
@@ -5280,7 +5378,8 @@ Workstream H deviates from the plan's spec in a few places:
     (header shape, byte sizes, tamper-class coverage) run
     unconditionally.  Closes the operational off-chain audit
     gap with a mechanical L1-side defence: under
-    `CollisionFree keccak256`, the Lean theorem
+    `CollisionFreeOn` for keccak256 on the proofs' own pre-images,
+    the Lean theorem
     `smtCellProof_no_value_substitution` rules out adversarial
     substitution, and the cross-stack corpus mechanically
     confirms Lean and Solidity walk the same hashes
@@ -6054,7 +6153,8 @@ distinct modules with distinct depths.
   * `verifyProof_complete` — for any populated `WithdrawalId`
     `idx` in `b.pending`, the canonical `constructProof H b idx`
     verifies against `withdrawalRoot H b`.  (`D.1.3`)
-  * `verifyProof_sound` — under `CollisionFree H`, if
+  * `verifyProof_sound` — under `CollisionFreeOn` for `H` on the
+    proof's own hash pre-images, if
     `verifyProof H proof root = true`, then `proof` matches the
     canonical construction (`constructProof H b proof.index`)
     for some `b` whose pending map yields `proof.leaf` at
@@ -6179,8 +6279,9 @@ type string to appear in the encoded struct hash — without the
 redundant encoding, wallet UIs cannot parse the structured form.
 
 **Headline theorem.**  `eip712Wrap_injective` (`Bridge/Eip712.lean`):
-under `CollisionFree hashBytes`, `eip712Wrap` is injective on
-its `(DomainParams, Eip712Message)` argument tuple.  Companion
+under `CollisionFreeOn` over the wrap's own pre-images,
+`eip712Wrap` is injective on its `(DomainParams, Eip712Message)`
+argument tuple.  Companion
 theorem `eip712DomainSeparator_distinguishes` proves that
 distinct `DomainParams` produce distinct domain separators —
 the cross-deployment-replay rejection property.
