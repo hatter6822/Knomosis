@@ -29,7 +29,7 @@ Tests cover:
 
 import LegalKernel.FaultProof.StepVMCoherence
 import LegalKernel.FaultProof.StateCells
-import LegalKernel.Disputes.Evidence
+import LegalKernel.FaultProof.ProductionApply
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -1762,6 +1762,28 @@ def tests : List TestCase :=
         assert ((commitExtendedStateSmt realAfter).toList
                   != (commitExtendedStateSmt after).toList)
           "so the two post-states have different roots"
+        -- `productionApply` is the total function the guarded
+        -- production stepper computes, so it IS the state above.
+        assertEq (expected := (commitExtendedStateSmt realAfter).toList)
+          (actual := (commitExtendedStateSmt
+                       (productionApply es entry.signedAction 0)).toList)
+          "productionApply reproduces the runtime's post-state"
+    }
+  , { name := "productionApply agrees with the replay off the bridge path"
+    , body := do
+        -- The other half of the divergence: on a non-bridge action
+        -- the production advance and the dispute pipeline's replay
+        -- are the same state, so the fault-proof layer's current
+        -- choice of core is correct there and only there.
+        let signer : ActorId := 7
+        let st : SignedAction :=
+          { action := .transfer 1 7 8 0, signer, nonce := 0
+          , sig := ByteArray.empty }
+        let es := ExtendedState.empty
+        assertEq (expected := (commitExtendedStateSmt
+                    (Disputes.kernelOnlyApply es (signedActionEntry st))).toList)
+          (actual := (commitExtendedStateSmt (productionApply es st 0)).toList)
+          "non-bridge: the two cores agree"
     }
   ]
 

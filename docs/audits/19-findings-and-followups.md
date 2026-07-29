@@ -113,9 +113,12 @@ otherwise surface halfway through the rewrite:
     exhibits directly.  Invisible today because nothing compares a
     step-VM output to a real state root; an adjudication error on
     every bridge action the moment the swap makes that comparison.
-    The fault-proof chain has to be re-anchored on the production
-    stepper, which also restates the ~33 `PerVariantCoherence.lean`
-    theorems;
+    `FaultProof/ProductionApply.lean` now supplies the total,
+    production-faithful core the re-anchoring needs
+    (`apply_bridge_admissible_with_eq_productionApply`); what remains
+    is repointing `Coherence.lean` at it, restating the ~33
+    `PerVariantCoherence.lean` theorems, and modelling the budget
+    leg;
   * `distributeOthers` / `proportionalDilute` touch unboundedly many
     balance cells and must route through `FaultProof/SubStep.lean`
     rather than the single-step path.

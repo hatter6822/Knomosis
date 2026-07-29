@@ -51,6 +51,7 @@ import LegalKernel.Disputes.Evidence
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.StepVariants
+import LegalKernel.FaultProof.ProductionApply
 import LegalKernel.FaultProof.Verify
 import LegalKernel.Runtime.LogFile
 
@@ -77,12 +78,7 @@ We expose it under a fault-proof-namespace name. -/
     `signedActionToLogEntry` below. -/
 def applyCellWrites_to_state
     (es : ExtendedState) (st : SignedAction) : ExtendedState :=
-  let entry : LogEntry := {
-    prevHash := ByteArray.empty,
-    signedAction := st,
-    postStateHash := ByteArray.empty  -- not consumed by kernelOnlyApply
-  }
-  kernelOnlyApply es entry
+  kernelOnlyApply es (signedActionEntry st)
 
 /-! ## `recomputeCommitment` (Merkle bookkeeping)
 
@@ -165,7 +161,7 @@ theorem recomputeCommitment_coherent_with_kernelOnlyApply
     (h_entry : entry.signedAction = st) :
     recomputeCommitment es st =
     commitExtendedState (kernelOnlyApply es entry) := by
-  unfold recomputeCommitment applyCellWrites_to_state
+  unfold recomputeCommitment applyCellWrites_to_state signedActionEntry
   -- The two `kernelOnlyApply` calls receive the same signed action
   -- (h_entry) and the same pre-state.  The `prevHash` and
   -- `postStateHash` fields of `LogEntry` aren't consumed by
@@ -242,7 +238,7 @@ theorem applyCellWrites_to_state_eq_kernelOnlyApply
     (es : ExtendedState) (entry : LogEntry) :
     applyCellWrites_to_state es entry.signedAction =
     kernelOnlyApply es entry := by
-  unfold applyCellWrites_to_state
+  unfold applyCellWrites_to_state signedActionEntry
   -- The synthetic entry's `signedAction` equals `entry.signedAction`
   -- by construction; `kernelOnlyApply` ignores `prevHash` and
   -- `postStateHash` (it only matches on `entry.signedAction.action`

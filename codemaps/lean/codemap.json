@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "49dbfd8d3df25c036b99134b65af69600d74b747509977878a6e81440f8394e9"
+    "source_digest": "9c6e179146d3a3950e2777ff928de9d5f26024c6747fec4b33c54ebfa4143699"
   },
   "summary": {
     "module_count": 322,
@@ -543,13 +543,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 321,
+          "line": 322,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 337,
+          "line": 338,
           "called": [
             "LegalKernel"
           ]
@@ -20421,13 +20421,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 56,
+          "line": 57,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 57,
+          "line": 58,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -20435,10 +20435,9 @@
         {
           "kind": "def",
           "name": "applyCellWrites_to_state",
-          "line": 77,
+          "line": 78,
           "called": [
             "ExtendedState",
-            "LogEntry",
             "SignedAction",
             "es",
             "kernelOnlyApply"
@@ -20447,7 +20446,7 @@
         {
           "kind": "def",
           "name": "recomputeCommitment",
-          "line": 95,
+          "line": 91,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20460,7 +20459,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_deterministic",
-          "line": 102,
+          "line": 98,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20471,7 +20470,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_total",
-          "line": 114,
+          "line": 110,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20482,7 +20481,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_deterministic",
-          "line": 120,
+          "line": 116,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20493,7 +20492,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_extensional",
-          "line": 128,
+          "line": 124,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20505,7 +20504,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_coherent_with_kernelOnlyApply",
-          "line": 161,
+          "line": 157,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20520,7 +20519,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_preserves_bridge",
-          "line": 197,
+          "line": 193,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20532,7 +20531,7 @@
         {
           "kind": "def",
           "name": "foldStepApplyOverLog",
-          "line": 215,
+          "line": 211,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20543,7 +20542,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_nil",
-          "line": 223,
+          "line": 219,
           "called": [
             "ExtendedState",
             "es",
@@ -20553,7 +20552,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_cons",
-          "line": 228,
+          "line": 224,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20565,7 +20564,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_eq_kernelOnlyApply",
-          "line": 240,
+          "line": 236,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20577,7 +20576,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_eq_kernelOnlyReplay",
-          "line": 260,
+          "line": 256,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20591,7 +20590,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_chain_coherent_with_kernelOnlyReplay",
-          "line": 286,
+          "line": 282,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20605,7 +20604,7 @@
         {
           "kind": "def",
           "name": "buildCellProofsForAction",
-          "line": 309,
+          "line": 305,
           "called": [
             "CellProofBundle",
             "ExtendedState",
@@ -20617,7 +20616,7 @@
         {
           "kind": "theorem",
           "name": "buildCellProofsForAction_verifies",
-          "line": 315,
+          "line": 311,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -52956,6 +52955,7 @@
             "ExtendedState.empty",
             "LegalKernel.Test.FaultProof.StepVMCoherence",
             "LocalPolicy.empty",
+            "SignedAction",
             "TestCase",
             "actionFieldsForL1",
             "actionKindByte",

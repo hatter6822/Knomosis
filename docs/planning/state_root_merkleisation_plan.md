@@ -269,10 +269,27 @@ front rather than halfway through the rewrite:
      adjudication error on every bridge action: an honest sequencer's
      published root would not match what the game computes.  The fix
      is to re-anchor the fault-proof chain on the production stepper
-     rather than on the dispute pipeline's analytical replay — which
-     also means the ~33 `PerVariantCoherence.lean` theorems restate
-     against it.  This has to be settled *before* the handlers are
-     written, because the answer changes what several of them write.
+     rather than on the dispute pipeline's analytical replay.
+     `FaultProof/ProductionApply.lean` supplies what that needs.  The
+     guarded stepper takes a `BridgeAdmissibleWith` witness and so is
+     not a total function of `(state, action)`, which is why the
+     fault-proof layer reached for `kernelOnlyApply` in the first
+     place; `productionApply` is the total function the guarded one
+     computes, and
+     `apply_bridge_admissible_with_eq_productionApply` proves they
+     agree wherever the guarded form is defined.
+     `productionApply_eq_kernelOnlyApply_of_non_bridge` and
+     `productionApply_marks_deposit_consumed` bound the difference
+     from both sides — the two cores agree off the bridge path and
+     differ exactly by the consumed-deposit record on it.
+
+     What remains for §4 is repointing `Coherence.lean`'s
+     `applyCellWrites_to_state` at `productionApply`, restating the
+     ~33 `PerVariantCoherence.lean` theorems, and modelling the
+     budget leg (`apply_bridge_admissible_with_budget` returns
+     `Option` because five gates can refuse, so its total form has a
+     different shape; the epoch-budget cells are already tag 13, so
+     the root binds it already).
 
   3. **Bulk actions need the sub-step machinery.**
      `distributeOthers` and `proportionalDilute` touch every
