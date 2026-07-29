@@ -138,15 +138,28 @@ def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
     ByteArray.mk
       (Encodable.encode (T := Nat) (Authority.expectsNonce es a)).toArray
   | .registry a =>
+    -- Routed through the CBE byte-string encoder, NOT emitted raw.
+    -- `PublicKey` is a bare `ByteArray` and `registerIdentity`
+    -- accepts any value, so a registration with the EMPTY key would
+    -- otherwise read exactly like an absent one — and registration
+    -- is an admissibility gate, so those are different states.  The
+    -- CBE head is 9 bytes even for a zero-length payload, so
+    -- present-empty and absent are now distinguishable.
     match es.registry[a]? with
-    | some pk => pk
+    | some pk => ByteArray.mk (Encodable.encode (T := ByteArray) pk).toArray
     | none    => ByteArray.empty
   | .localPolicy a =>
-    -- Encode the policy via its CBE byte string; absent ⇒ empty.
-    let p := es.localPolicies.lookup a
-    if p.clauses.isEmpty then ByteArray.empty
-    else ByteArray.mk
-           (Encodable.encode (T := Authority.LocalPolicy) p).toArray
+    -- Keyed off the MAP, not `lookup`.  `lookup` defaults an absent
+    -- actor to `LocalPolicy.empty`, so the old `if p.clauses.isEmpty`
+    -- form collapsed "declared a policy with no clauses" onto
+    -- "declared nothing" — two different map states with the same
+    -- cell value, which a cell root must not do.  The encoding of a
+    -- clause-less policy still carries its CBE array head, so it is
+    -- non-empty and distinguishable from the absent marker.
+    match es.localPolicies[a]? with
+    | some p => ByteArray.mk
+                  (Encodable.encode (T := Authority.LocalPolicy) p).toArray
+    | none   => ByteArray.empty
   | .bridgeConsumed d =>
     if es.bridge.consumed.contains d then
       -- Encode the deposit-record bytes (an opaque marker is enough
@@ -349,9 +362,15 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
     -- `apply_admissible` is the canonical way to bump nonces).
     es
   | .registry a =>
-    -- The bytes ARE the public key (registry stores pk as ByteArray).
-    if value.size = 0 then es  -- empty bytes ⇒ no change
-    else { es with registry := es.registry.insert a value }
+    -- Inverse of `getCellValue`'s registry arm: the value is a CBE
+    -- byte string wrapping the key, not the raw key.  Decoding it is
+    -- what lets a registration with an empty public key round-trip
+    -- instead of being read back as a no-op.
+    if value.size = 0 then es  -- absent marker ⇒ no change
+    else
+      match Encodable.decode (T := ByteArray) value.data.toList with
+      | .ok (pk, _) => { es with registry := es.registry.insert a pk }
+      | .error _    => es
   | .localPolicy a =>
     if value.size = 0 then
       -- Empty bytes ⇒ revoke the policy.

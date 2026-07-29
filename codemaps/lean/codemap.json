@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "13ae04140c61420d01a977b6be98b6e21bf10ecbba5afd976e91217da204e2b4"
+    "source_digest": "1934d77526a6b0c4aabeda09c62fecb2f4a4d1b544a62d0b6c838cb2cb4a94e0"
   },
   "summary": {
     "module_count": 318,
@@ -26874,7 +26874,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_deterministic",
-          "line": 211,
+          "line": 224,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26885,7 +26885,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_ammReserveEth",
-          "line": 235,
+          "line": 248,
           "called": [
             "ExtendedState",
             "es",
@@ -26895,7 +26895,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_ammReserveBold",
-          "line": 240,
+          "line": 253,
           "called": [
             "ExtendedState",
             "es",
@@ -26905,26 +26905,6 @@
         {
           "kind": "theorem",
           "name": "getCellValue_boldCircuitClosed",
-          "line": 245,
-          "called": [
-            "ExtendedState",
-            "es",
-            "getCellValue"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "getCellValue_boldTvlCap",
-          "line": 252,
-          "called": [
-            "ExtendedState",
-            "es",
-            "getCellValue"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "getCellValue_boldTotalLockedValue",
           "line": 258,
           "called": [
             "ExtendedState",
@@ -26934,8 +26914,28 @@
         },
         {
           "kind": "theorem",
+          "name": "getCellValue_boldTvlCap",
+          "line": 265,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_boldTotalLockedValue",
+          "line": 271,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "getCellValue_ammDisabled",
-          "line": 269,
+          "line": 282,
           "called": [
             "ExtendedState",
             "es",
@@ -26945,7 +26945,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_ammDisabled_distinguishes",
-          "line": 278,
+          "line": 291,
           "called": [
             "ExtendedState",
             "es",
@@ -26955,7 +26955,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_epochBudget",
-          "line": 288,
+          "line": 301,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -26966,7 +26966,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_budgetPolicy_scalars",
-          "line": 297,
+          "line": 310,
           "called": [
             "ExtendedState",
             "actionCost",
@@ -26978,7 +26978,7 @@
         {
           "kind": "def",
           "name": "isCellAbsent",
-          "line": 312,
+          "line": 325,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26990,7 +26990,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsCellAbsent",
-          "line": 317,
+          "line": 330,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27001,7 +27001,7 @@
         {
           "kind": "def",
           "name": "setCell",
-          "line": 334,
+          "line": 347,
           "called": [
             "Bridge.DepositRecord.decode",
             "CellTag",
@@ -27014,7 +27014,7 @@
         {
           "kind": "theorem",
           "name": "setCell_deterministic",
-          "line": 443,
+          "line": 462,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27025,7 +27025,7 @@
         {
           "kind": "def",
           "name": "buildCellProof",
-          "line": 455,
+          "line": 474,
           "called": [
             "CellProof",
             "CellTag",
@@ -27037,7 +27037,7 @@
         {
           "kind": "def",
           "name": "verifyCellProof",
-          "line": 469,
+          "line": 488,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27048,7 +27048,7 @@
         {
           "kind": "def",
           "name": "verifyCellProofs",
-          "line": 475,
+          "line": 494,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -27058,7 +27058,7 @@
         {
           "kind": "instance",
           "name": "instDecidableVerifyCellProof",
-          "line": 480,
+          "line": 499,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27068,7 +27068,7 @@
         {
           "kind": "instance",
           "name": "instDecidableVerifyCellProofs",
-          "line": 486,
+          "line": 505,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -27078,7 +27078,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_deterministic",
-          "line": 493,
+          "line": 512,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27088,7 +27088,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_deterministic",
-          "line": 498,
+          "line": 517,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -27098,7 +27098,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete",
-          "line": 508,
+          "line": 527,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27111,7 +27111,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_empty",
-          "line": 515,
+          "line": 534,
           "called": [
             "CellProofBundle.empty",
             "StateCommit",
@@ -27121,7 +27121,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_singleton",
-          "line": 519,
+          "line": 538,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27132,7 +27132,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_complete_for_canonical_bundle",
-          "line": 528,
+          "line": 547,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27146,7 +27146,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_recommits",
-          "line": 542,
+          "line": 561,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27157,7 +27157,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_has_cell_value",
-          "line": 555,
+          "line": 574,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27168,7 +27168,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_sound",
-          "line": 574,
+          "line": 593,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27183,7 +27183,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_unique_under_collision_free",
-          "line": 593,
+          "line": 612,
           "called": [
             "CellProof",
             "ExtendedState",
@@ -27201,7 +27201,7 @@
         {
           "kind": "def",
           "name": "updateCommitment",
-          "line": 618,
+          "line": 637,
           "called": [
             "CellProof",
             "StateCommit",
@@ -27212,7 +27212,7 @@
         {
           "kind": "theorem",
           "name": "updateCommitment_agrees_with_setCell",
-          "line": 624,
+          "line": 643,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27226,7 +27226,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete_for_absent_cell",
-          "line": 635,
+          "line": 654,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -52216,10 +52216,15 @@
           "name": "tests",
           "line": 29,
           "called": [
+            "ActorId",
             "CellProof",
             "CellProofBundle",
             "CellProofBundle.empty",
             "CellTag",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "ExtendedState.empty",
+            "ExtendedState.extEq",
             "LegalKernel.Test.FaultProof.Verify",
             "StateCommit",
             "TestCase",
@@ -52227,11 +52232,20 @@
             "assertEq",
             "buildCellProof",
             "canonicalAbsentValue",
+            "commitBridgeState",
+            "commitBudgetPolicy",
+            "commitEpochBudgets",
             "commitExtendedState",
             "commitExtendedState_subcommits_eq_under_collision_free",
+            "commitKeyRegistry",
+            "commitLocalPolicies",
+            "commitNonceState",
+            "commitState",
             "emptyCommit",
             "emptyEs",
             "es",
+            "extendedStateCommitPreimages",
+            "extendedStatePreimage",
             "getCellValue",
             "isCellAbsent",
             "setCell",

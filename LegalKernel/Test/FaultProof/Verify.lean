@@ -125,15 +125,30 @@ def tests : List TestCase :=
     }
   , { name := "setCell + getCellValue round-trips on registry pk"
     , body := do
+        -- The round trip is now stated on the CELL VALUE, not on the
+        -- raw key.  `getCellValue` wraps the key in a CBE byte string
+        -- so that a registration with an EMPTY key is distinguishable
+        -- from no registration; `setCell` decodes that wrapper.
+        -- Feeding `setCell` the raw key would now be feeding it a
+        -- malformed cell value.
         let pk : ByteArray := ByteArray.mk #[0x01, 0x02, 0x03]
-        let updated := setCell emptyEs (CellTag.registry 7) pk
-        assertEq (expected := pk)
-                 (actual := getCellValue updated (CellTag.registry 7))
-                 "registry round-trip"
+        let cellValue :=
+          ByteArray.mk (LegalKernel.Encoding.Encodable.encode (T := ByteArray) pk).toArray
+        let updated := setCell emptyEs (CellTag.registry 7) cellValue
+        assertEq (expected := cellValue.toList)
+                 (actual := (getCellValue updated (CellTag.registry 7)).toList)
+                 "registry cell-value round-trip"
+        -- And the underlying key really is the one we wrote.
+        match updated.registry[(7 : ActorId)]? with
+        | none     => assert false "registration lost"
+        | some got => assertEq (expected := pk.toList) (actual := got.toList)
+                        "the stored key is the one written"
     }
   , { name := "Theorem #221 verifyCellProof_complete API"
     , body := do
-        let _proof := @verifyCellProof_complete
+        let _proof : ∀ (es : ExtendedState) (tag : CellTag),
+            verifyCellProof (commitExtendedState es) (buildCellProof es tag) = true :=
+          verifyCellProof_complete
         pure ()
     }
   , { name := "Theorem #222 verifyCellProof_sound API"
@@ -150,23 +165,106 @@ def tests : List TestCase :=
         -- The uniqueness half is what a fault-proof consumer relies
         -- on; pinning its signature keeps the collision-resistance
         -- hypothesis attached to the statement that needs it.
-        let _proof := @verifyCellProof_witness_unique_under_collision_free
+        let _proof : ∀ (commit : StateCommit) (proof : CellProof) (es : ExtendedState),
+            Bridge.CollisionFreeOn
+              (extendedStateCommitPreimages es proof.witnessState)
+              LegalKernel.Runtime.hashBytes →
+            ExtendedState.CanonicalBounds es →
+            ExtendedState.CanonicalBounds proof.witnessState →
+            verifyCellProof commit proof = true →
+            commitExtendedState es = commit →
+            ExtendedState.extEq es proof.witnessState :=
+          verifyCellProof_witness_unique_under_collision_free
         pure ()
     }
   , { name := "Theorem #223 updateCommitment_agrees_with_setCell API"
     , body := do
-        let _proof := @updateCommitment_agrees_with_setCell
+        let _proof : ∀ (es : ExtendedState) (tag : CellTag) (newValue : ByteArray),
+            updateCommitment (buildCellProof es tag) newValue =
+              commitExtendedState (setCell es tag newValue) :=
+          updateCommitment_agrees_with_setCell
         pure ()
     }
   , { name := "Theorem #260 verifyCellProof_complete_for_absent_cell API"
     , body := do
-        let _proof := @verifyCellProof_complete_for_absent_cell
+        let _proof : ∀ (es : ExtendedState) (tag : CellTag),
+            isCellAbsent es tag →
+            verifyCellProof (commitExtendedState es)
+              { cellTag := tag,
+                cellValue := canonicalAbsentValue tag,
+                witnessState := es } = true :=
+          verifyCellProof_complete_for_absent_cell
         pure ()
     }
   , { name := "Theorem #220 commitExtendedState_subcommits_eq API"
     , body := do
-        let _proof := @commitExtendedState_subcommits_eq_under_collision_free
+        let _proof : ∀ (es₁ es₂ : ExtendedState),
+            Bridge.CollisionFreeOn
+              [extendedStatePreimage es₁, extendedStatePreimage es₂]
+              LegalKernel.Runtime.hashBytes →
+            commitExtendedState es₁ = commitExtendedState es₂ →
+            commitState es₁.base = commitState es₂.base ∧
+            commitNonceState es₁.nonces = commitNonceState es₂.nonces ∧
+            commitKeyRegistry es₁.registry = commitKeyRegistry es₂.registry ∧
+            commitLocalPolicies es₁.localPolicies = commitLocalPolicies es₂.localPolicies ∧
+            commitBridgeState es₁.bridge = commitBridgeState es₂.bridge ∧
+            commitEpochBudgets es₁.epochBudgets = commitEpochBudgets es₂.epochBudgets ∧
+            commitBudgetPolicy es₁.budgetPolicy = commitBudgetPolicy es₂.budgetPolicy :=
+          commitExtendedState_subcommits_eq_under_collision_free
         pure ()
+    }
+  , -- ===== Absent vs present-but-empty =====
+    { name := "registry: an EMPTY public key is not read as absent"
+    , body := do
+        -- `PublicKey` is a bare `ByteArray` and `registerIdentity`
+        -- accepts any value, so registering the empty key is a
+        -- reachable state — and registration is an admissibility
+        -- gate, so it is a DIFFERENT state from unregistered.  The
+        -- cell value must say so, or a cell root cannot tell them
+        -- apart and a fault proof could not adjudicate the
+        -- difference.
+        let bare : ExtendedState := ExtendedState.empty
+        let registeredEmpty : ExtendedState :=
+          { bare with registry := bare.registry.insert 7 ByteArray.empty }
+        let absent := getCellValue bare (.registry 7)
+        let present := getCellValue registeredEmpty (.registry 7)
+        assert (absent.toList != present.toList)
+          "an empty registered key must not read as the absent marker"
+        assertEq (expected := 0) (actual := absent.size)
+          "absent stays the zero-length marker"
+        assert (present.size > 0)
+          "present carries its CBE head even with a zero-length key"
+    }
+  , { name := "registry: setCell inverts getCellValue on an empty key"
+    , body := do
+        -- The round trip is what makes the disambiguation usable
+        -- rather than merely observable: a step VM that reads the
+        -- cell and writes it back must not silently drop the
+        -- registration.
+        let bare : ExtendedState := ExtendedState.empty
+        let registeredEmpty : ExtendedState :=
+          { bare with registry := bare.registry.insert 7 ByteArray.empty }
+        let v := getCellValue registeredEmpty (.registry 7)
+        let restored := setCell bare (.registry 7) v
+        match restored.registry[(7 : ActorId)]? with
+        | none    => assert false "round trip lost the registration"
+        | some pk => assertEq (expected := 0) (actual := pk.size)
+                       "round trip preserved the empty key"
+    }
+  , { name := "localPolicy: a declared clause-less policy is not read as absent"
+    , body := do
+        -- `LocalPolicies.lookup` defaults an absent actor to
+        -- `LocalPolicy.empty`, so keying the cell off `lookup`
+        -- collapsed "declared nothing" onto "declared a policy with
+        -- no clauses".  The cell now keys off the map itself.
+        let bare : ExtendedState := ExtendedState.empty
+        let declaredEmpty : ExtendedState :=
+          { bare with
+              localPolicies := bare.localPolicies.insert 7 Authority.LocalPolicy.empty }
+        let absent := getCellValue bare (.localPolicy 7)
+        let present := getCellValue declaredEmpty (.localPolicy 7)
+        assert (absent.toList != present.toList)
+          "a declared clause-less policy must not read as the absent marker"
     }
   ]
 
