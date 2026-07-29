@@ -157,6 +157,40 @@ def tests : List TestCase :=
         assertEq (expected := 4) (actual := (emptyRootPreimages 3).length)
           "the empty chain contributes one pre-image per level plus the seed"
     }
+  , { name := "a cell update moves the root and re-verifies"
+    , body := do
+        -- `smtUpdateRoot` / `smtUpdateRoot_verifies`: writing a cell
+        -- replaces one leaf, so the same opening verifies the new
+        -- value against the new root.  That is what lets a
+        -- multi-write step chain openings — each against the root the
+        -- previous write produced.
+        let k := key32 9
+        let v := ByteArray.mk #[1]
+        let v' := ByteArray.mk #[2]
+        let p := SmtCellProof.empty
+        let root := smtWalk k v p
+        let root' := smtUpdateRoot k v' p
+        assert (root.toList != root'.toList) "the write must move the root"
+        assertEq (expected := true)
+          (actual := verifySmtCellProof root k v p)
+          "the opening verifies the old value at the old root"
+        assertEq (expected := true)
+          (actual := verifySmtCellProof root' k v' p)
+          "and the new value at the updated root"
+        assertEq (expected := false)
+          (actual := verifySmtCellProof root' k v p)
+          "but not the old value at the updated root"
+        assertEq (expected := 32) (actual := root'.size) "updated root width"
+    }
+  , { name := "rewriting a cell with its own value is a no-op"
+    , body := do
+        let k := key32 10
+        let v := ByteArray.mk #[7, 7]
+        let p := SmtCellProof.empty
+        assertEq (expected := (smtWalk k v p).toList)
+          (actual := (smtUpdateRoot k v p).toList)
+          "an unchanged value leaves the root unchanged"
+    }
   , { name := "API stability: SMT injectivity theorem signatures"
     , body := do
         -- Term-level pins.  Each ascription fails to elaborate if the
@@ -198,6 +232,18 @@ def tests : List TestCase :=
         let _bridge : ∀ {e : SmtEntries}, (∀ p ∈ e, p.1.size = 32) →
             e.Pairwise (fun a b => a.1 ≠ b.1) → BitsDistinctBelow smtDepth e :=
           bitsDistinctBelow_of_keys_pairwise_ne
+        let _upd_ok : ∀ (key value : ByteArray) (proof : SmtCellProof),
+            proof.isWellFormed = true →
+            verifySmtCellProof (smtUpdateRoot key value proof) key value proof = true :=
+          smtUpdateRoot_verifies
+        let _upd_indep : ∀ (root key value newValue : ByteArray)
+            (proof₁ proof₂ : SmtCellProof),
+            CollisionFreeOn
+              (smtCellProofPreimages key value value proof₁ proof₂) hashBytes →
+            verifySmtCellProof root key value proof₁ = true →
+            verifySmtCellProof root key value proof₂ = true →
+            smtUpdateRoot key newValue proof₁ = smtUpdateRoot key newValue proof₂ :=
+          smtUpdateRoot_proof_independent
         pure ()
     }
   ]

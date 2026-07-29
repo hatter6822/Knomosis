@@ -1097,19 +1097,28 @@ on all three stacks, so convergence is now proved *logarithmically*
 
 What remains is the recipe mismatch alone.  Closing it means
 Merkleising the state root so a post-root is recomputable from the
-pre-root plus the proven cell writes.  Three prerequisites are in —
-the cell space now covers all seven `ExtendedState` fields (tags
-7–16), `smtCellKey` / `StepVMMerkle.deriveCellSmtKey` derive the SMT
-key on-chain rather than accepting one, and
-`commitExtendedStateSmt` builds the root over those cells additively
-— but `commitExtendedState` itself is unchanged and `executeStep`
-still returns the other construction.
+pre-root plus the proven cell writes.  Six prerequisites are in —
+the cell space covers all seven `ExtendedState` fields (tags 7–16);
+`smtCellKey` / `StepVMMerkle.deriveCellSmtKey` derive the SMT key
+on-chain rather than accepting one; `commitExtendedStateSmt` builds
+the root over those cells additively;
+`smtRootListAux_perm_of_eq_under_collision_free` proves that root
+injective (the EI.8 replacement, so the swap cannot downgrade the
+headline guarantee);
+`commitExtendedStateSmt_determines_cells` composes it with the cell
+enumeration, giving the behavioural form the game needs; and
+`smtUpdateRoot` supplies the incremental write with
+`smtUpdateRoot_proof_independent`, which is what stops a responder
+steering the post-root by choosing among verifying openings.  But
+`commitExtendedState` itself is unchanged and `executeStep` still
+returns the other construction.
 `docs/audits/19-findings-and-followups.md` records the remaining
 blast radius and
 `docs/planning/state_root_merkleisation_plan.md` is the
-implementation spec.  Until it lands the fault-proof game must not be
-treated as an adjudicating backstop; the bisection narrowing is
-proved and unaffected.
+implementation spec (§3 and §4 are what is left; they are one
+consensus change and must land together).  Until it lands the
+fault-proof game must not be treated as an adjudicating backstop;
+the bisection narrowing is proved and unaffected.
 
 ### Fair queuing (Workstream FQ / GP.8)
 

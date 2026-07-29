@@ -52,7 +52,17 @@ At depth 0, `smtRootListAux` matches `[(k, v)]` and falls through to
 injectivity statement can survive that.  `BitsDistinctBelow` is the
 exact condition that rules it out, and it is stated on key *bits*
 rather than on keys because bits are all `smtRootListAux` ever reads.
-`bitsDistinct_of_keys_ne` bridges the two for 32-byte keys.
+`bitsDistinctBelow_of_keys_pairwise_ne` bridges the two for 32-byte
+keys.
+
+## Cell updates
+
+The last section builds on the same machinery: a cell root exists so
+a post-root is computable from a pre-root plus the proven writes, and
+`smtUpdateRoot_proof_independent` is what makes that computation
+non-manipulable — the post-root depends on `(pre-root, key, new
+value)`, not on which of several verifying openings the responder
+chose to supply.
 -/
 
 import LegalKernel.FaultProof.Smt
@@ -664,6 +674,180 @@ theorem smtRootListAux_perm_of_eq_under_collision_free :
             (by simpa using h_cf_half true) h_hi
         exact ((perm_partition d e₁).symm.trans
           (List.Perm.append p_lo p_hi)).trans (perm_partition d e₂)
+
+/-! ## Cell updates
+
+A cell root exists so that a post-root is computable on L1 from a
+pre-root plus the step's proven writes.  Writing a cell replaces one
+leaf and leaves every sibling on its path alone, so the new root is
+the same walk with a new leaf — that is all `smtUpdateRoot` is.
+
+The property that makes it usable in adjudication is not that it
+computes *something*, but that it computes the *same* thing whichever
+verifying proof the responder supplies.  Otherwise a responder facing
+a losing terminal step could shop for a proof whose update lands on
+the root it needs.  `smtUpdateRoot_proof_independent` rules that out,
+and it needs a strengthening of the existing walk injectivity: equal
+walks must force equal SIBLINGS, not only equal leaves. -/
+
+/-- Strengthened walk injectivity.  `walk_leaf_inj_under_collision_free`
+    concludes only `leaf₁ = leaf₂`; its induction establishes the
+    per-level sibling equality on the way and then discards it.  The
+    update argument needs it kept. -/
+theorem walk_inj_under_collision_free :
+    ∀ (bits : List Bool) (sibs₁ sibs₂ : List ByteArray)
+      (leaf₁ leaf₂ : ByteArray),
+      CollisionFreeOn
+        (walkPreimages leaf₁ (sibs₁.zip bits) ++
+         walkPreimages leaf₂ (sibs₂.zip bits)) hashBytes →
+      sibs₁.length = bits.length →
+      sibs₂.length = bits.length →
+      leaf₁.size = 32 →
+      leaf₂.size = 32 →
+      (∀ s ∈ sibs₁, s.size = 32) →
+      (∀ s ∈ sibs₂, s.size = 32) →
+      (sibs₁.zip bits).foldl stepPair leaf₁ =
+        (sibs₂.zip bits).foldl stepPair leaf₂ →
+      leaf₁ = leaf₂ ∧ sibs₁ = sibs₂ := by
+  intro bits
+  induction bits with
+  | nil =>
+    intro sibs₁ sibs₂ leaf₁ leaf₂ _ h_len₁ h_len₂ _ _ _ _ h_walk
+    have h₁ : sibs₁ = [] := List.eq_nil_of_length_eq_zero h_len₁
+    have h₂ : sibs₂ = [] := List.eq_nil_of_length_eq_zero h_len₂
+    subst h₁; subst h₂
+    exact ⟨by simpa using h_walk, rfl⟩
+  | cons b rest_bits ih =>
+    intro sibs₁ sibs₂ leaf₁ leaf₂ h_cf h_len₁ h_len₂
+      h_leaf₁ h_leaf₂ h_s₁ h_s₂ h_walk
+    cases sibs₁ with
+    | nil => simp at h_len₁
+    | cons s₁ rest₁ =>
+      cases sibs₂ with
+      | nil => simp at h_len₂
+      | cons s₂ rest₂ =>
+        -- Peel one level off each fold.
+        rw [show ((s₁ :: rest₁).zip (b :: rest_bits)).foldl stepPair leaf₁ =
+              (rest₁.zip rest_bits).foldl stepPair (stepPair leaf₁ (s₁, b)) from by
+            simp [List.zip_cons_cons, List.foldl_cons],
+          show ((s₂ :: rest₂).zip (b :: rest_bits)).foldl stepPair leaf₂ =
+              (rest₂.zip rest_bits).foldl stepPair (stepPair leaf₂ (s₂, b)) from by
+            simp [List.zip_cons_cons, List.foldl_cons]] at h_walk
+        have h_expand :
+            walkPreimages leaf₁ ((s₁ :: rest₁).zip (b :: rest_bits)) ++
+              walkPreimages leaf₂ ((s₂ :: rest₂).zip (b :: rest_bits)) =
+            smtStepPreimage leaf₁ s₁ b ::
+              (walkPreimages (stepPair leaf₁ (s₁, b)) (rest₁.zip rest_bits) ++
+                (smtStepPreimage leaf₂ s₂ b ::
+                  walkPreimages (stepPair leaf₂ (s₂, b)) (rest₂.zip rest_bits))) := by
+          simp [List.zip_cons_cons, walkPreimages]
+        rw [h_expand] at h_cf
+        obtain ⟨h_step_eq, h_rest_eq⟩ :=
+          ih rest₁ rest₂ (stepPair leaf₁ (s₁, b)) (stepPair leaf₂ (s₂, b))
+            (h_cf.mono (by
+              intro z hz
+              rcases List.mem_append.mp hz with hz₁ | hz₂
+              · exact List.mem_cons_of_mem _ (List.mem_append_left _ hz₁)
+              · exact List.mem_cons_of_mem _ (List.mem_append_right _
+                  (List.mem_cons_of_mem _ hz₂))))
+            (by simp [List.length_cons] at h_len₁; exact h_len₁)
+            (by simp [List.length_cons] at h_len₂; exact h_len₂)
+            (stepPair_size _ _) (stepPair_size _ _)
+            (fun s hs => h_s₁ s (List.mem_cons_of_mem _ hs))
+            (fun s hs => h_s₂ s (List.mem_cons_of_mem _ hs))
+            h_walk
+        -- One backward step recovers both the leaf and this level's sibling.
+        obtain ⟨h_leaf_eq, h_sib_eq⟩ :=
+          smtStep_inj_under_collision_free leaf₁ leaf₂ s₁ s₂ b
+            (h_cf.mono (by
+              intro z hz
+              simp only [List.mem_cons, List.not_mem_nil, or_false] at hz
+              rcases hz with rfl | rfl
+              · exact List.mem_cons_self
+              · exact List.mem_cons_of_mem _
+                  (List.mem_append_right _ List.mem_cons_self)))
+            h_leaf₁ h_leaf₂ (h_s₁ s₁ List.mem_cons_self) (h_s₂ s₂ List.mem_cons_self)
+            h_step_eq
+        exact ⟨h_leaf_eq, by rw [h_sib_eq, h_rest_eq]⟩
+
+/-- The root after writing `newValue` into the cell the proof opens.
+    Same walk, new leaf: writing a cell replaces exactly one leaf and
+    leaves every sibling on its path unchanged. -/
+def smtUpdateRoot {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
+    (key : K) (newValue : V) (proof : SmtCellProof) : ByteArray :=
+  smtWalk key newValue proof
+
+/-- The updated root is 32 bytes, so it composes with the next
+    update in a multi-write step. -/
+theorem smtUpdateRoot_size {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
+    (key : K) (newValue : V) (proof : SmtCellProof)
+    (h_wf : proof.isWellFormed = true) :
+    (smtUpdateRoot key newValue proof).size = 32 := by
+  unfold smtUpdateRoot smtWalk
+  -- The fold's carrier is 32 bytes at every step, starting from the leaf.
+  have h_gen : ∀ (l : List (ByteArray × Bool)) (acc : ByteArray),
+      acc.size = 32 → (l.foldl stepPair acc).size = 32 := by
+    intro l
+    induction l with
+    | nil => intro acc h; exact h
+    | cons p rest ih => intro acc _; exact ih (stepPair acc p) (stepPair_size _ _)
+  let _ := h_wf
+  exact h_gen _ _ (leafHash_size _ _)
+
+/-- Completeness of the update: the same opening verifies the new
+    value against the updated root.  This is what makes a chain of
+    writes well-formed — the next write's opening is against a root
+    the previous one produced. -/
+theorem smtUpdateRoot_verifies {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
+    (key : K) (newValue : V) (proof : SmtCellProof)
+    (h_wf : proof.isWellFormed = true) :
+    verifySmtCellProof (smtUpdateRoot key newValue proof) key newValue proof = true :=
+  verifySmtCellProof_walks_to_root key newValue proof h_wf
+
+/-- **The updated root does not depend on which verifying proof was
+    supplied.**
+
+    Two proofs that both open `(root, key, value)` produce the same
+    root after writing `newValue`.  Without this a responder facing a
+    losing terminal step could shop among openings for one whose
+    update lands on the root it needs; with it, the post-root the L1
+    computes is a function of `(pre-root, key, new value)` alone. -/
+theorem smtUpdateRoot_proof_independent
+    {K V : Type} [BitsKey K] [Encodable K] [Encodable V]
+    (root : ByteArray) (key : K) (value newValue : V)
+    (proof₁ proof₂ : SmtCellProof)
+    (h_cf : CollisionFreeOn
+      (smtCellProofPreimages key value value proof₁ proof₂) hashBytes)
+    (h₁ : verifySmtCellProof root key value proof₁ = true)
+    (h₂ : verifySmtCellProof root key value proof₂ = true) :
+    smtUpdateRoot key newValue proof₁ = smtUpdateRoot key newValue proof₂ := by
+  unfold verifySmtCellProof at h₁ h₂
+  rw [Bool.and_eq_true] at h₁ h₂
+  obtain ⟨h_wf₁, h_walk₁⟩ := h₁
+  obtain ⟨h_wf₂, h_walk₂⟩ := h₂
+  have h_eq : ((expandSiblings proof₁).zip (keyBits key)).foldl stepPair
+                (leafHash key value)
+            = ((expandSiblings proof₂).zip (keyBits key)).foldl stepPair
+                (leafHash key value) := by
+    have e₁ : smtWalk key value proof₁ = root := decide_eq_true_eq.mp h_walk₁
+    have e₂ : smtWalk key value proof₂ = root := decide_eq_true_eq.mp h_walk₂
+    unfold smtWalk at e₁ e₂
+    rw [e₁, e₂]
+  -- Equal walks with the same leaf force the sibling lists equal.
+  obtain ⟨_, h_sibs⟩ :=
+    walk_inj_under_collision_free (keyBits key)
+      (expandSiblings proof₁) (expandSiblings proof₂)
+      (leafHash key value) (leafHash key value)
+      h_cf.append_left
+      (by rw [expandSiblings_length, keyBits_length])
+      (by rw [expandSiblings_length, keyBits_length])
+      (leafHash_size _ _) (leafHash_size _ _)
+      (expandSiblings_all_32 proof₁ h_wf₁)
+      (expandSiblings_all_32 proof₂ h_wf₂)
+      h_eq
+  -- The new walk differs only in its leaf, so it agrees too.
+  unfold smtUpdateRoot smtWalk
+  rw [h_sibs]
 
 end FaultProof
 end LegalKernel

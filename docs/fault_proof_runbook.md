@@ -56,13 +56,20 @@ the game contracts are deployed at all, set
 profitable purely from the guaranteed sequencer loss.
 
 The fix is to Merkleise the state root so a post-root is
-recomputable from the pre-root plus the proven cell writes.  Three
-prerequisites have landed — the cell space now covers all seven
-`ExtendedState` fields, the SMT cell key is derived on-chain rather
-than accepted from the caller, and the SMT root over those cells is
-built and tested additively — but `commitExtendedState` itself is
+recomputable from the pre-root plus the proven cell writes.  Every
+prerequisite has landed — the cell space now covers all seven
+`ExtendedState` fields; the SMT cell key is derived on-chain rather
+than accepted from the caller; the SMT root over those cells is
+built and tested additively; that root is proved injective
+(`smtRootListAux_perm_of_eq_under_collision_free`, the EI.8
+replacement) and proved to determine every cell
+(`commitExtendedStateSmt_determines_cells`); and the incremental
+write `smtUpdateRoot` is proved independent of which verifying
+opening the responder supplies.  But `commitExtendedState` itself is
 unchanged and `executeStep` still returns the other construction, so
-**§0 still applies in full**.
+**§0 still applies in full**.  The remaining work is
+`docs/planning/state_root_merkleisation_plan.md` §3 and §4, which are
+one consensus change and must land together.
 `docs/audits/19-findings-and-followups.md` ("Open critical: the
 fault-proof commit-recipe split") records the remaining blast
 radius: `commitState` and its siblings, the EI.8 injectivity chain,

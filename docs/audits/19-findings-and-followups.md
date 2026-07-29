@@ -38,7 +38,7 @@ findings outside the TCB.  Their dispositions:
 
 ### Open critical: the fault-proof commit-recipe split
 
-**Status: the three prerequisites are in; the root swap is not.**
+**Status: every prerequisite is in; the root swap is not.**
 
 Landed:
 
@@ -49,15 +49,42 @@ Landed:
     key on-chain from the cell's identity instead of accepting one,
     pinned byte-for-byte across the stacks by `cell_key.json`;
   * `commitExtendedStateSmt` builds the SMT root over those cells,
-    additively, with coverage and binding tests.
+    additively, with coverage and binding tests;
+  * `smtRootListAux_perm_of_eq_under_collision_free`
+    (`FaultProof/SmtInjective.lean`) proves that root injective —
+    the EI.8 replacement, so the swap can no longer downgrade the
+    headline guarantee.  Needed `emptySubtreeHash_succ` (the chain
+    relation the tail-recursive array builder does not expose) and
+    a separation lemma for empty-vs-populated sub-trees, both of
+    which would have been easy to skip: the two sides are equally
+    well-formed 32-byte hashes;
+  * `commitExtendedStateSmt_determines_cells`
+    (`FaultProof/StateCellsInjective.lean`) composes it with the
+    cell enumeration, concluding `∀ t, getCellValue es₁ t =
+    getCellValue es₂ t` — behavioural rather than
+    `ExtendedState.extEq`, because `State.Equiv` separates a
+    resource present with an all-zero balance map from a resource
+    absent entirely and no cell read can;
+  * `smtUpdateRoot` plus `smtUpdateRoot_verifies` and
+    `smtUpdateRoot_proof_independent` — the incremental write the
+    step VM needs, and the guarantee that its result is a function
+    of `(pre-root, key, new value)` rather than of which verifying
+    opening the responder chose.
+
+The `getCellValue` absent-vs-empty ambiguity this entry used to
+flag is closed: the registry and local-policy arms route through the
+CBE byte-string encoder, whose 9-byte head is present even for a
+zero-length payload, and `getCellValue_of_not_mem` proves the absent
+reading is the canonical one.
 
 Not landed: swapping `commitExtendedState` to that root, and making
-`executeStep` compute the post-root from the proven writes.  The
-implementation spec for both — including the SMT root-injectivity
-theorem that must replace the EI.8 guarantee, and the
-`getCellValue` absent-vs-empty ambiguity that has to be resolved
-during the swap rather than after — is
-`docs/planning/state_root_merkleisation_plan.md`.
+`executeStep` compute the post-root from the proven writes.  Those
+are one consensus change and must land together; the implementation
+spec is `docs/planning/state_root_merkleisation_plan.md` §3 / §4.
+One item there is still unproved and gates the honest-defender
+direction: `buildSmtCellProof`'s operational coherence
+(`smtRoot m = smtWalk key v (buildSmtCellProof m key)`), which its
+own docstring records as fixture-tested only.
 
 Stated precisely, from source rather than from the plan documents:
 
