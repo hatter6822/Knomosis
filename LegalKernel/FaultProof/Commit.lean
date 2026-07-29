@@ -42,6 +42,7 @@ import LegalKernel.Bridge.Eip712
 import LegalKernel.Bridge.HashAdaptor
 import LegalKernel.Bridge.State
 import LegalKernel.Encoding.State
+import LegalKernel.FaultProof.Cell
 import LegalKernel.Encoding.StateInjective
 import LegalKernel.Encoding.LocalPolicyInjective
 import LegalKernel.Encoding.BridgeInjective
@@ -54,13 +55,6 @@ open LegalKernel.Authority
 open LegalKernel.Bridge
 open LegalKernel.Encoding
 open LegalKernel.Runtime
-
-/-! ## State commitment type -/
-
-/-- The 32-byte top-level state commitment.  The sequencer
-    publishes this value to L1 as the "state root"; the L1
-    fault-proof game contract holds it for dispute resolution. -/
-abbrev StateCommit : Type := ByteArray
 
 /-! ## Per-sub-state commit functions -/
 

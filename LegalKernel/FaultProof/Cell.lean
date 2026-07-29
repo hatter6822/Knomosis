@@ -72,6 +72,19 @@ namespace FaultProof
 open LegalKernel.Authority
 open LegalKernel.Bridge
 
+/-! ## State commitment type
+
+Declared here rather than beside `commitExtendedState` because the
+cell layer has to name it — `commitExtendedStateSmt` is a state
+commitment built out of cells, so the type must sit below both the
+cell reader and the commitment function that consumes it.  The
+`abbrev` is `ByteArray` either way, so no consumer moves. -/
+
+/-- The 32-byte top-level state commitment.  The sequencer
+    publishes this value to L1 as the "state root"; the L1
+    fault-proof game contract holds it for dispute resolution. -/
+abbrev StateCommit : Type := ByteArray
+
 /-! ## `CellTag` (§12.1.4) -/
 
 /-- The tag identifying which sub-state + cell key a `CellProof`

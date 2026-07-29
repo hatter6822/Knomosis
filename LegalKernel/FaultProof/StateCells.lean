@@ -53,8 +53,8 @@ be a regression.  The two halves:
 is caught rather than silently dropped from the root.
 -/
 
+import LegalKernel.FaultProof.CellValue
 import LegalKernel.FaultProof.KeyDerivation
-import LegalKernel.FaultProof.Verify
 
 namespace LegalKernel
 namespace FaultProof
