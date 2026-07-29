@@ -105,10 +105,17 @@ otherwise surface halfway through the rewrite:
     output; after the swap it makes the post-root wrong for EVERY
     action;
   * the coherence chain is anchored to
-    `commitExtendedState ∘ kernelOnlyApply`, which deliberately
-    models neither bridge nor budget effects, while the published
-    root reflects the real advance.  §4 has to settle which apply is
-    authoritative before the handlers can be written;
+    `commitExtendedState ∘ kernelOnlyApply` — `Coherence.lean`'s
+    semantic core `applyCellWrites_to_state` IS that function — while
+    the runtime advances through `apply_bridge_admissible_with_budget`
+    and its bridge leg records consumed deposits.  For a deposit the
+    two produce different states with different roots, which the pin
+    exhibits directly.  Invisible today because nothing compares a
+    step-VM output to a real state root; an adjudication error on
+    every bridge action the moment the swap makes that comparison.
+    The fault-proof chain has to be re-anchored on the production
+    stepper, which also restates the ~33 `PerVariantCoherence.lean`
+    theorems;
   * `distributeOthers` / `proportionalDilute` touch unboundedly many
     balance cells and must route through `FaultProof/SubStep.lean`
     rather than the single-step path.

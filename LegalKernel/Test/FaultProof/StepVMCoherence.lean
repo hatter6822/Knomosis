@@ -1748,6 +1748,20 @@ def tests : List TestCase :=
         assert ((getCellValue es (.nonce signer)).toList
                   != (getCellValue after (.nonce signer)).toList)
           "the reference apply does advance the nonce"
+        -- And the RUNTIME's advance does record the deposit: the
+        -- published root moves where the fault-proof model's does
+        -- not.  `Runtime.processSignedAction` goes through
+        -- `apply_bridge_admissible_with_budget`, whose bridge leg is
+        -- `applyActionToBridgeState`.
+        let realBridge :=
+          LegalKernel.Bridge.applyActionToBridgeState es.bridge action 0
+        let realAfter : ExtendedState := { after with bridge := realBridge }
+        assert ((getCellValue realAfter (.bridgeConsumed d)).toList
+                  != (getCellValue after (.bridgeConsumed d)).toList)
+          "the runtime's advance records the deposit; the model's does not"
+        assert ((commitExtendedStateSmt realAfter).toList
+                  != (commitExtendedStateSmt after).toList)
+          "so the two post-states have different roots"
     }
   ]
 

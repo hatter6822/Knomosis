@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5c9ea79a486c860df649c34602b9cf1321f0788e18fac86e7c6824929461c7ee"
+    "source_digest": "49dbfd8d3df25c036b99134b65af69600d74b747509977878a6e81440f8394e9"
   },
   "summary": {
     "module_count": 322,
@@ -52967,6 +52967,7 @@
             "burn",
             "claimBudgetRefund",
             "commitExtendedState",
+            "commitExtendedStateSmt",
             "decodeCellNat",
             "deposit",
             "depositWithFee",

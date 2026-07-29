@@ -250,16 +250,28 @@ front rather than halfway through the rewrite:
      `declareLocalPolicy`, whose L1 bytes ARE the policy encoding;
      `old + 1` for the nonce and the withdrawal counter).
 
-  2. **The reference apply is unsettled.**  The coherence chain is
-     anchored to `commitExtendedState ∘ kernelOnlyApply` (theorem
-     #225, `recomputeCommitment_coherent_with_kernelOnlyApply`), and
-     `kernelOnlyApply` deliberately models neither bridge nor budget
-     effects — a deposit leaves `bridge.consumed` untouched there.
-     The PUBLISHED state root reflects the real, bridge-aware
-     advance, so the two references disagree.  Harmless while the
-     comparison is dispatcher-against-dispatcher; an adjudication
-     error the moment it is dispatcher-against-state-root.  §4 must
-     settle which apply is authoritative *before* the handlers are
+  2. **The reference apply is the wrong function, and this is the
+     one that needs a decision rather than typing.**
+     `FaultProof/Coherence.lean`'s semantic core
+     `applyCellWrites_to_state` *is* `kernelOnlyApply`, explicitly —
+     and `kernelOnlyApply` deliberately models neither bridge nor
+     budget effects.  The runtime advances state through
+     `apply_bridge_admissible_with_budget` (`Runtime/Loop.lean:220`
+     and `:558`), whose bridge leg `applyActionToBridgeState` records
+     the consumed deposit.  So for a deposit the fault-proof model's
+     post-state and the state whose root is published are DIFFERENT
+     states with different roots — pinned by the third `OBLIGATION:`
+     test, which exhibits both the cell divergence and the root
+     divergence side by side.
+
+     Today nothing compares a step-VM output to a real state root, so
+     the divergence is invisible.  After the swap it is an
+     adjudication error on every bridge action: an honest sequencer's
+     published root would not match what the game computes.  The fix
+     is to re-anchor the fault-proof chain on the production stepper
+     rather than on the dispute pipeline's analytical replay — which
+     also means the ~33 `PerVariantCoherence.lean` theorems restate
+     against it.  This has to be settled *before* the handlers are
      written, because the answer changes what several of them write.
 
   3. **Bulk actions need the sub-step machinery.**
