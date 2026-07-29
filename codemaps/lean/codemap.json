@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "f3b56e79f9d12c7da8aeff6c0a1a2ed2f04823c24703b5adb11e3b4c0f49900e"
+    "source_digest": "74c3d7985bdd48f665f046b705149dbd8b928675f5f5f8e0435c55764ea1d501"
   },
   "summary": {
-    "module_count": 318,
-    "declaration_count": 5384
+    "module_count": 320,
+    "declaration_count": 5422
   },
   "modules": [
     {
@@ -543,13 +543,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 320,
+          "line": 321,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 336,
+          "line": 337,
           "called": [
             "LegalKernel"
           ]
@@ -22040,7 +22040,7 @@
     {
       "module": "LegalKernel.FaultProof.KeyDerivation",
       "path": "LegalKernel/FaultProof/KeyDerivation.lean",
-      "declaration_count": 22,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "namespace",
@@ -22144,13 +22144,21 @@
         {
           "kind": "def",
           "name": "natToBytes32BE",
-          "line": 238,
+          "line": 244,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "natToBytes32BE_size",
-          "line": 244,
+          "line": 248,
+          "called": [
+            "natToBytes32BE"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "natToBytes32BE_injective",
+          "line": 254,
           "called": [
             "natToBytes32BE"
           ]
@@ -22158,7 +22166,7 @@
         {
           "kind": "def",
           "name": "cellKeyPreimageOf",
-          "line": 254,
+          "line": 265,
           "called": [
             "natToBytes32BE"
           ]
@@ -22166,16 +22174,27 @@
         {
           "kind": "theorem",
           "name": "cellKeyPreimageOf_size",
-          "line": 259,
+          "line": 270,
           "called": [
             "cellKeyPreimageOf",
             "natToBytes32BE_size"
           ]
         },
         {
+          "kind": "theorem",
+          "name": "cellKeyPreimageOf_injective",
+          "line": 284,
+          "called": [
+            "byteArray_append_inj_left",
+            "cellKeyPreimageOf",
+            "natToBytes32BE_injective",
+            "natToBytes32BE_size"
+          ]
+        },
+        {
           "kind": "def",
           "name": "cellKeyPreimage",
-          "line": 269,
+          "line": 313,
           "called": [
             "CellTag",
             "cellKeyPreimageOf"
@@ -22184,7 +22203,7 @@
         {
           "kind": "theorem",
           "name": "cellKeyPreimage_size",
-          "line": 274,
+          "line": 318,
           "called": [
             "CellTag",
             "cellKeyPreimage",
@@ -22193,8 +22212,48 @@
         },
         {
           "kind": "def",
+          "name": "CellTag.KeyBounded",
+          "line": 336,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "CellTag.kindIndex_lt",
+          "line": 341,
+          "called": [
+            "CellTag",
+            "CellTag.kindIndex"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "CellTag.flatKey_injective",
+          "line": 347,
+          "called": [
+            "CellTag",
+            "CellTag.flatKey",
+            "CellTag.keyParts",
+            "CellTag.kindIndex"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cellKeyPreimage_injective",
+          "line": 356,
+          "called": [
+            "CellTag",
+            "CellTag.flatKey_injective",
+            "CellTag.kindIndex_lt",
+            "cellKeyPreimage",
+            "cellKeyPreimageOf_injective"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "smtCellKey",
-          "line": 285,
+          "line": 374,
           "called": [
             "CellTag",
             "cellKeyPreimage"
@@ -22203,7 +22262,7 @@
         {
           "kind": "theorem",
           "name": "smtCellKey_size",
-          "line": 289,
+          "line": 378,
           "called": [
             "CellTag",
             "smtCellKey"
@@ -22212,7 +22271,7 @@
         {
           "kind": "theorem",
           "name": "smtCellKey_injective_under_collision_free",
-          "line": 302,
+          "line": 391,
           "called": [
             "CellTag",
             "cellKeyPreimage",
@@ -22222,7 +22281,7 @@
         {
           "kind": "theorem",
           "name": "smtCellKey_deterministic",
-          "line": 313,
+          "line": 402,
           "called": [
             "CellTag",
             "FaultProof",
@@ -24250,6 +24309,322 @@
             "smtCellProofPreimages",
             "smtCellProof_no_value_substitution",
             "verifySmtCellProof"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.FaultProof.SmtInjective",
+      "path": "LegalKernel/FaultProof/SmtInjective.lean",
+      "declaration_count": 29,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 62,
+          "called": [
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime"
+          ]
+        },
+        {
+          "kind": "abbrev",
+          "name": "SmtEntries",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "emptyRootAt",
+          "line": 82,
+          "called": [
+            "emptySubtreeHash",
+            "hashBytes"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "emptyRootAt_size",
+          "line": 87,
+          "called": [
+            "emptyRootAt",
+            "emptySubtreeHash_size",
+            "hashBytes_size"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "emptyRootAt_eq_table",
+          "line": 94,
+          "called": [
+            "emptyRootAt",
+            "emptySubtreeHash",
+            "emptySubtreeHash_succ"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_nil",
+          "line": 103,
+          "called": [
+            "SmtEntries",
+            "emptyRootAt",
+            "emptyRootAt_eq_table",
+            "emptySubtreeHash",
+            "emptySubtreeHash_succ",
+            "hashBytes",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "emptyRootPreimages",
+          "line": 126,
+          "called": [
+            "emptyLeafSeedBytes",
+            "emptyRootAt"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "smtRootPreimages",
+          "line": 131,
+          "called": [
+            "SmtEntries",
+            "encodeAsBytes",
+            "entries",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "BitsDistinctBelow",
+          "line": 151,
+          "called": [
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "EntriesEncodable",
+          "line": 156,
+          "called": [
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "BitsDistinctBelow.sublist",
+          "line": 161,
+          "called": [
+            "BitsDistinctBelow",
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "BitsDistinctBelow.filter_low",
+          "line": 169,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.sublist",
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "BitsDistinctBelow.filter_high",
+          "line": 188,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.sublist",
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "EntriesEncodable.sublist",
+          "line": 203,
+          "called": [
+            "EntriesEncodable",
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "length_le_one_of_bitsDistinctBelow_zero",
+          "line": 210,
+          "called": [
+            "BitsDistinctBelow",
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "keyBit_byteArray_eq",
+          "line": 230,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "testBit_eq_decide",
+          "line": 241,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "byteArray_eq_of_keyBits_eq",
+          "line": 246,
+          "called": [
+            "keyBit_byteArray_eq",
+            "smtDepth",
+            "testBit_eq_decide"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "exists_keyBit_ne_of_ne",
+          "line": 273,
+          "called": [
+            "byteArray_eq_of_keyBits_eq",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bitsDistinctBelow_of_keys_pairwise_ne",
+          "line": 283,
+          "called": [
+            "BitsDistinctBelow",
+            "SmtEntries",
+            "exists_keyBit_ne_of_ne",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "encodeAsBytes_data_toList",
+          "line": 298,
+          "called": [
+            "Encodable",
+            "encodeAsBytes"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "encodeAsBytes_size_ge_nine",
+          "line": 305,
+          "called": [
+            "cborHeadEncode",
+            "encodeAsBytes",
+            "encodeBytesList",
+            "natToBytesLE_length"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "leafHash_inj_under_collision_free",
+          "line": 320,
+          "called": [
+            "CollisionFreeOn",
+            "DecodeError",
+            "Stream",
+            "byteArray_encode_injective",
+            "byteArray_roundtrip",
+            "encodeAsBytes",
+            "encodeAsBytes_data_toList",
+            "hashBytes",
+            "leafHash"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "leafHash_ne_emptyRootAt_zero",
+          "line": 360,
+          "called": [
+            "CollisionFreeOn",
+            "emptyLeafSeedBytes",
+            "emptyRootAt",
+            "emptySubtreeHash_zero",
+            "encodeAsBytes",
+            "encodeAsBytes_size_ge_nine",
+            "hashBytes",
+            "leafHash"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "filter_partition_ne_nil",
+          "line": 387,
+          "called": [
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_ne_emptyRootAt_under_collision_free",
+          "line": 407,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.filter_high",
+            "BitsDistinctBelow.filter_low",
+            "CollisionFreeOn",
+            "EntriesEncodable",
+            "EntriesEncodable.sublist",
+            "SmtEntries",
+            "byteArray_append_inj_left",
+            "emptyRootAt",
+            "emptyRootAt_size",
+            "emptyRootPreimages",
+            "filter_partition_ne_nil",
+            "hashBytes",
+            "leafHash_ne_emptyRootAt_zero",
+            "length_le_one_of_bitsDistinctBelow_zero",
+            "smtRootListAux",
+            "smtRootListAux_size",
+            "smtRootPreimages"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "perm_partition",
+          "line": 493,
+          "called": [
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_perm_of_eq_under_collision_free",
+          "line": 508,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.filter_high",
+            "BitsDistinctBelow.filter_low",
+            "CollisionFreeOn",
+            "EntriesEncodable",
+            "EntriesEncodable.sublist",
+            "FaultProof",
+            "LegalKernel",
+            "SmtEntries",
+            "byteArray_append_inj_left",
+            "emptyRootPreimages",
+            "hashBytes",
+            "leafHash_inj_under_collision_free",
+            "leafHash_ne_emptyRootAt_zero",
+            "length_le_one_of_bitsDistinctBelow_zero",
+            "perm_partition",
+            "smtRootListAux",
+            "smtRootListAux_ne_emptyRootAt_under_collision_free",
+            "smtRootListAux_nil",
+            "smtRootListAux_size",
+            "smtRootPreimages"
           ]
         }
       ]
@@ -51788,6 +52163,58 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.FaultProof.SmtInjective",
+      "path": "LegalKernel/Test/FaultProof/SmtInjective.lean",
+      "declaration_count": 3,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.SmtInjective",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "key32",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 45,
+          "called": [
+            "BitsDistinctBelow",
+            "CollisionFreeOn",
+            "EntriesEncodable",
+            "LegalKernel.Test.FaultProof.SmtInjective",
+            "SmtEntries",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "bitsDistinctBelow_of_keys_pairwise_ne",
+            "byteArray_eq_of_keyBits_eq",
+            "emptyLeafSeedBytes",
+            "emptyRootAt",
+            "emptyRootPreimages",
+            "emptySubtreeHash",
+            "emptySubtreeHash_succ",
+            "encodeAsBytes",
+            "hashBytes",
+            "key32",
+            "leafHash",
+            "leafHash_inj_under_collision_free",
+            "smtDepth",
+            "smtRootListAux",
+            "smtRootListAux_ne_emptyRootAt_under_collision_free",
+            "smtRootListAux_nil",
+            "smtRootListAux_perm_of_eq_under_collision_free",
+            "smtRootPreimages"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.FaultProof.SolidityStepVMCommit",
       "path": "LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean",
       "declaration_count": 3,
@@ -64380,7 +64807,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 218,
+          "line": 219,
           "called": [
             "runAll"
           ]

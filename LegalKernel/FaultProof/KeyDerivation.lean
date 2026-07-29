@@ -235,16 +235,27 @@ over the finitely many pre-images in play, in the same
 `Bridge.CollisionFreeOn` style the commitment chain uses. -/
 
 /-- Big-endian 32-byte encoding of a `Nat`, truncated mod `2^256`.
-    Mirrors Solidity's `uint256` word. -/
+    Mirrors Solidity's `uint256` word.
+
+    Byte `i` is `(n >>> (8 * (31 - i))) % 256`, which is exactly the
+    EIP-712 `uint256` word `Bridge.encodeUint256BE` already builds
+    (little-endian bytes, reversed).  Defined as that rather than
+    re-spelled, so the two encoders cannot drift and the bounded
+    injectivity below is the one already proved for it. -/
 def natToBytes32BE (n : Nat) : ByteArray :=
-  ByteArray.mk
-    ((List.range 32).map (fun i =>
-      UInt8.ofNat ((n >>> (8 * (31 - i))) % 256))).toArray
+  Bridge.encodeUint256BE n
 
 /-- `natToBytes32BE` always produces exactly 32 bytes. -/
-theorem natToBytes32BE_size (n : Nat) : (natToBytes32BE n).size = 32 := by
-  unfold natToBytes32BE
-  simp [ByteArray.size]
+theorem natToBytes32BE_size (n : Nat) : (natToBytes32BE n).size = 32 :=
+  Bridge.encodeUint256BE_size n
+
+/-- `natToBytes32BE` is injective below the `2^256` word boundary.
+    The bound is real rather than decorative: the encoding truncates,
+    so `0` and `2^256` share a word. -/
+theorem natToBytes32BE_injective (n₁ n₂ : Nat)
+    (h₁ : n₁ < 256 ^ 32) (h₂ : n₂ < 256 ^ 32)
+    (h : natToBytes32BE n₁ = natToBytes32BE n₂) : n₁ = n₂ :=
+  Bridge.encodeUint256BE_injective n₁ n₂ h₁ h₂ h
 
 /-- The packed `(kind, keyA, keyB)` pre-image.  Kept separate from
     `cellKeyPreimage` so the layout can be stated and reasoned about
@@ -266,6 +277,39 @@ theorem cellKeyPreimageOf_size (kind keyA keyB : Nat) :
       natToBytes32BE_size, natToBytes32BE_size]
   simp [ByteArray.size]
 
+/-- The packed pre-image determines `(kind, keyA, keyB)` inside the
+    widths it can represent.  The three bounds are the truncation
+    boundaries of the layout itself — a kind ≥ 256 aliases mod 256
+    and a key ≥ `2^256` aliases mod `2^256` — not incidental
+    hypotheses. -/
+theorem cellKeyPreimageOf_injective
+    (k₁ a₁ b₁ k₂ a₂ b₂ : Nat)
+    (hk₁ : k₁ < 256) (hk₂ : k₂ < 256)
+    (ha₁ : a₁ < 256 ^ 32) (ha₂ : a₂ < 256 ^ 32)
+    (hb₁ : b₁ < 256 ^ 32) (hb₂ : b₂ < 256 ^ 32)
+    (h : cellKeyPreimageOf k₁ a₁ b₁ = cellKeyPreimageOf k₂ a₂ b₂) :
+    k₁ = k₂ ∧ a₁ = a₂ ∧ b₁ = b₂ := by
+  -- The layout is `((kindByte ++ keyA) ++ keyB)`; split it right to
+  -- left at the two known widths.
+  obtain ⟨h_head, h_b⟩ :=
+    byteArray_append_inj_left _ _ _ _ h
+      (by rw [ByteArray.size_append, ByteArray.size_append,
+        natToBytes32BE_size, natToBytes32BE_size]
+          simp [ByteArray.size])
+  obtain ⟨h_kind, h_a⟩ :=
+    byteArray_append_inj_left _ _ _ _ h_head (by simp [ByteArray.size])
+  refine ⟨?_, natToBytes32BE_injective a₁ a₂ ha₁ ha₂ h_a,
+    natToBytes32BE_injective b₁ b₂ hb₁ hb₂ h_b⟩
+  -- The kind byte round-trips through `UInt8.ofNat` below 256.
+  have h_byte : UInt8.ofNat (k₁ % 256) = UInt8.ofNat (k₂ % 256) := by
+    have h_arr : (#[UInt8.ofNat (k₁ % 256)] : Array UInt8)
+               = #[UInt8.ofNat (k₂ % 256)] := by injection h_kind
+    have := congrArg (fun (arr : Array UInt8) => arr[0]?) h_arr
+    simpa using this
+  have h_nat := congrArg UInt8.toNat h_byte
+  simp at h_nat
+  omega
+
 /-- The hash pre-image for a cell's SMT key. -/
 def cellKeyPreimage (t : CellTag) : ByteArray :=
   let (kind, keyA, keyB) := t.flatKey
@@ -276,6 +320,51 @@ theorem cellKeyPreimage_size (t : CellTag) :
     (cellKeyPreimage t).size = 65 := by
   unfold cellKeyPreimage
   exact cellKeyPreimageOf_size _ _ _
+
+/-! ### Tag-level pre-image injectivity
+
+`smtCellKey_injective_under_collision_free` takes pre-image
+injectivity as a hypothesis rather than proving it, because the two
+`Nat`-typed key spaces (`DepositId`, `WithdrawalId`) are unbounded
+while the layout's word is 256 bits.  `CellTag.KeyBounded` is that
+side condition, stated once so callers discharge it from the state's
+canonical bounds instead of re-deriving it. -/
+
+/-- A cell tag whose key components fit the 256-bit words the
+    pre-image layout gives them.  Automatic for every tag keyed by a
+    `UInt64`-backed id; a real obligation only for `bridgeConsumed`
+    and `bridgePending`, whose ids are `Nat`. -/
+def CellTag.KeyBounded (t : CellTag) : Prop :=
+  t.keyParts.1 < 256 ^ 32 ∧ t.keyParts.2 < 256 ^ 32
+
+/-- Every kind index is a single byte, so the layout's kind slot
+    never truncates. -/
+theorem CellTag.kindIndex_lt (t : CellTag) : t.kindIndex < 256 := by
+  cases t <;> simp [CellTag.kindIndex]
+
+/-- `(kindIndex, keyA, keyB)` determines the tag.  The kind index
+    picks the constructor and the key parts carry its fields, so the
+    flat projection loses nothing. -/
+theorem CellTag.flatKey_injective (t₁ t₂ : CellTag)
+    (h : t₁.flatKey = t₂.flatKey) : t₁ = t₂ := by
+  cases t₁ <;> cases t₂ <;>
+    simp_all [CellTag.flatKey, CellTag.kindIndex, CellTag.keyParts,
+      UInt64.toNat_inj]
+
+/-- Pre-image injectivity for bounded tags: the hypothesis
+    `smtCellKey_injective_under_collision_free` asks for, discharged
+    rather than assumed. -/
+theorem cellKeyPreimage_injective (t₁ t₂ : CellTag)
+    (hb₁ : t₁.KeyBounded) (hb₂ : t₂.KeyBounded)
+    (h : cellKeyPreimage t₁ = cellKeyPreimage t₂) : t₁ = t₂ := by
+  obtain ⟨h_kind, h_a, h_b⟩ :=
+    cellKeyPreimageOf_injective _ _ _ _ _ _
+      (CellTag.kindIndex_lt t₁) (CellTag.kindIndex_lt t₂)
+      hb₁.1 hb₂.1 hb₁.2 hb₂.2 h
+  refine CellTag.flatKey_injective t₁ t₂ ?_
+  show (t₁.kindIndex, t₁.keyParts.1, t₁.keyParts.2)
+     = (t₂.kindIndex, t₂.keyParts.1, t₂.keyParts.2)
+  rw [h_kind, h_a, h_b]
 
 /-- The canonical SMT key for a cell.
 
