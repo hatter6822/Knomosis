@@ -649,6 +649,11 @@ The Genesis Plan promises a small set of type-level guarantees
 | Phase 4 | Domain-separated sign inputs | `signInput_*` | `Encoding/SignInput.lean` |
 | EI.2–7 | Encoder injectivity ladder | `*.encode_injective` | `Encoding/*Injective.lean` |
 | EI.8 | State-commit extensional eq | `commitExtendedState_subcommits_extensional_eq_under_collision_free` | `FaultProof/Commit.lean` |
+| B-3 | SMT root injectivity (EI.8 replacement) | `smtRootListAux_perm_of_eq_under_collision_free` | `FaultProof/SmtInjective.lean` |
+| B-3 | Cell root determines every cell | `commitExtendedStateSmt_determines_cells` | `FaultProof/StateCellsInjective.lean` |
+| B-3 | Cell update proof-independent | `smtUpdateRoot_proof_independent` | `FaultProof/SmtInjective.lean` |
+| B-3 | Canonical path walks to the root | `canonicalSiblings_walks_to_root` | `FaultProof/SmtInjective.lean` |
+| B-3 | Production-faithful semantic core | `apply_bridge_admissible_with_budget_eq` | `FaultProof/ProductionApply.lean` |
 | Phase 6 | Dispute filing rejects malformed | `fileDispute_rejects_*` | `Disputes/Filing.lean` |
 | Phase 6 | Evidence verifiers deterministic | `checkEvidence_deterministic` | `Disputes/Evidence.lean` |
 | LP | Meta-action independence | `localPolicy_meta_action_independent` | `Authority/SignedAction.lean` |
@@ -790,7 +795,7 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 060 | ~150 | `lake test` |
+| Lean | ~3 180 | ~158 | `lake test` |
 | Rust | ~2 350 | across 12 crates | `cargo test --workspace` |
 | Solidity | ~894 passed | 59 forge suites | `cd solidity && forge test` |
 
@@ -813,7 +818,13 @@ full catalogue):
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
 - `faultproof-stepvm-coherence` — 25-variant step-VM dispatcher
-  byte-equivalence (kinds 0–24).
+  byte-equivalence (kinds 0–24), plus the three `OBLIGATION:` cases
+  pinning what the state-root swap must close.
+- `faultproof-smt-injective` — B-3 SMT root injectivity, cell
+  updates, canonical-path coherence; includes the negative control
+  showing a duplicate-keyed bucket hashes as if it were empty.
+- `faultproof-state-cells-injective` — cell determination plus the
+  well-formedness side conditions checked on a real state.
 - `crosscheck-step-vm` — 278-entry cross-stack fixture corpus.
 - `reclaim-amm-reserves` — GP.11.10 exact-sweep law + AMM-mirror
   trace-constancy theorems.
