@@ -465,12 +465,18 @@ front rather than halfway through the rewrite:
          carry the induction, and the depth-0 singleton case is where
          distinctness is used), and §3B's theorems restated over Perm.
 
-         One gap to plan for: `List.perm_ext_iff_of_nodup` — "Nodup on
-         both sides plus equal membership gives Perm" — is **not** in
-         Lean core (checked against 4.29.1; `List.Perm.filter`,
-         `List.Perm.mem_iff` and `List.Perm.length_eq` are).  It has to
-         be proved locally, and it is the one piece of the route that
-         is not routine.
+         Library survey, done against 4.29.1 rather than assumed.
+         Present: `List.Perm.filter`, `List.Perm.mem_iff`,
+         `List.Perm.length_eq`, `List.perm_cons_erase`,
+         `List.mem_erase_of_ne` (an iff), `List.mem_of_mem_erase`,
+         `List.Nodup.erase`.  Absent: `List.perm_ext_iff_of_nodup` and
+         `List.Subperm` entirely — so the assembled "Nodup both sides
+         plus equal membership gives Perm" has to be stated locally.
+         With `perm_cons_erase` available its proof is a short
+         structural induction on the first list rather than anything
+         deep; `List.ne_of_mem_erase` is also absent, so the
+         `x ≠ a` step in the backward direction comes from the
+         `Nodup` hypothesis instead.
 
      Expect this to be the single largest proof obligation in §4, and
      schedule it before the per-variant handler work rather than
