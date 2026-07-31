@@ -653,6 +653,7 @@ The Genesis Plan promises a small set of type-level guarantees
 | B-3 | Published root determines every cell | `commitExtendedState_determines_cells` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | Cell update proof-independent | `smtUpdateRoot_proof_independent` | `FaultProof/SmtInjective.lean` |
 | B-3 | Canonical path walks to the root | `canonicalSiblings_walks_to_root` | `FaultProof/SmtInjective.lean` |
+| B-3 | Absent cells open against the root | `canonicalSiblings_verifies_absent` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | Production-faithful semantic core | `apply_bridge_admissible_with_budget_eq` | `FaultProof/ProductionApply.lean` |
 | Phase 6 | Dispute filing rejects malformed | `fileDispute_rejects_*` | `Disputes/Filing.lean` |
 | Phase 6 | Evidence verifiers deterministic | `checkEvidence_deterministic` | `Disputes/Evidence.lean` |

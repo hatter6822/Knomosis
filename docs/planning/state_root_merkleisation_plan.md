@@ -23,9 +23,10 @@ Everything below was read from source, not from plan documents.
 
 ## 1. What is already in place
 
-Every prerequisite landed additively and green, and §3 — the swap
-itself — has now landed on top of them.  What remains is §4, the
-step VM.
+Every prerequisite landed additively and green; §3 — the swap
+itself — landed on top of them, and §3A closed a defect in the
+shipped root that §4 would have hit on its first handler.  What
+remains is §4, the step VM.
 
 | Piece | Where | What it gives |
 |---|---|---|
@@ -36,6 +37,7 @@ step VM.
 | **Cell determination** | `FaultProof/StateCellsInjective.lean` | §2A below, complete. |
 | **Cell updates** | `FaultProof/SmtInjective.lean` `smtUpdateRoot` | §2B below, complete. |
 | **Path coherence** | `FaultProof/SmtInjective.lean` `canonicalSiblings` | §2C below, complete. |
+| **Cell openings** | `FaultProof/StateCellsInjective.lean` `verifyStateCellProof` | §3A below, complete — including absent cells, which the root as first shipped could not open at all. |
 
 ## 2. The former blocker: SMT root injectivity — **DONE**
 
@@ -207,6 +209,47 @@ zero-length payload, so present-empty and absent are distinguishable;
 canonical one, and `faultproof-state-cells-injective` pins that a
 registration with the empty key moves the root.
 
+## 3A. Opening a cell — **DONE**
+
+The step VM reads cells it does not hold the state for, so it needs
+a verifier that works against the published root alone.  Building
+that surfaced a defect in the root as first shipped, which §4 would
+have hit on its very first handler.
+
+**Absent cells were not openable.**  `stateCellTags` enumerates only
+LIVE cells, so a cell with no entry has an empty sub-tree beneath its
+key — not a leaf holding the canonical absent value.  An opening
+built the present-way walks from `leafHash key absentValue` and
+reconstructs a root the tree does not have, so it cannot verify.
+Crediting a receiver who holds no balance yet is the common case,
+not an edge case.
+
+The fix is that a cell's leaf branches on absence
+(`cellLeaf`), and the walk starts there
+(`verifyStateCellProof`).  Completeness is proved on both sides:
+`canonicalSiblings_verifies_present` and
+`canonicalSiblings_verifies_absent`, the latter resting on the new
+`canonicalSiblings_walks_to_root_absent` — the same induction as the
+present case, factored through `bucketAt` so both fall out of one
+proof.  `bucketAt_eq_nil_of_not_mem` is where the depth matters:
+after 256 levels the survivors agree with the key on every bit, and
+32-byte keys with equal bit-vectors are equal, so a survivor would
+have to BE the key.
+
+**And the verifier's present-vs-absent test needed the root
+canonicalised.**  It decides from the claimed value, which is only
+sound when "value is canonically absent" and "key is absent from the
+tree" coincide.  They did not: `setBalance s r a 0` leaves a LIVE map
+entry whose value is `encodeAmount 0`, reachable the moment a sender
+transfers their whole balance.  `stateCellEntries` now drops
+canonically-absent cells, which makes the two conditions the same
+condition — and makes the root a function of the state's OBSERVABLE
+content, since a balance explicitly zeroed and one never written are
+already indistinguishable through `getCellValue`.
+
+Both are pinned as tests, including the negative control that the
+present-style leaf does NOT reach the root for an absent cell.
+
 ## 4. The step VM — REMAINING
 
 `KnomosisStepVM.executeStep` must return a value in state-root
@@ -219,6 +262,13 @@ space:
    loop, whose only check is
    `cellProofs[i].witnessCommit != preStateCommit`, a caller-set
    struct field.
+
+   The leaf must branch on absence, mirroring `cellLeaf` (§3A): a
+   cell with no entry has an empty sub-tree beneath its key, so its
+   opening walks from the canonical empty leaf.  A Solidity verifier
+   that always starts from `keccak(key ‖ value)` cannot read an
+   absent cell, and a step crediting a fresh actor reads one on its
+   first line.
 2. Extend `CellProof` with `bytes proofData` (bitmask + siblings),
    matching the shipped `SmtCellVerifier` wire format.
 3. Compute the post-root by applying each write to the pre-root

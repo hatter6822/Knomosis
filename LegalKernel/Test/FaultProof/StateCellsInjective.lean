@@ -159,6 +159,68 @@ def tests : List TestCase :=
           (actual := (stateCellKeyPreimages populated populated).length)
           "one pre-image per tag on each side"
     }
+  , { name := "an absent cell opens against the published root"
+    , body := do
+        -- The case a step hits constantly: crediting a receiver who
+        -- holds no balance yet.  An absent cell has an EMPTY
+        -- sub-tree beneath its key, so its opening walks from the
+        -- canonical empty leaf.
+        let root := commitExtendedState populated
+        for t in absentTags do
+          let p := buildStateCellProof populated t
+          assertEq (expected := true)
+            (actual := verifyStateCellProof root t (getCellValue populated t) p)
+            s!"absent cell opens: {repr t}"
+    }
+  , { name := "NEGATIVE CONTROL: the present-style leaf fails for an absent cell"
+    , body := do
+        -- Why `cellLeaf` has to branch.  Starting the walk from
+        -- `leafHash key absentValue` reconstructs a root the tree
+        -- does not have, so an opening built that way is rejected —
+        -- which is the fail-closed direction, but it means a step VM
+        -- that did not branch could never read an absent cell.
+        let root := commitExtendedState populated
+        for t in absentTags do
+          let p := buildStateCellProof populated t
+          let naive := smtWalkFrom (leafHash (smtCellKey t) (getCellValue populated t))
+                         (smtCellKey t) p
+          assert (naive.toList != root.toList)
+            s!"present-style leaf must NOT reach the root for {repr t}"
+    }
+  , { name := "a live cell opens against the published root"
+    , body := do
+        let root := commitExtendedState populated
+        for t in [CellTag.balance 1 7, .nonce 7, .registry 7, .epochBudget 7,
+                  .bridgeConsumed 11, .bridgePending 4, .bridgeNextWdId] do
+          let p := buildStateCellProof populated t
+          assertEq (expected := true)
+            (actual := verifyStateCellProof root t (getCellValue populated t) p)
+            s!"live cell opens: {repr t}"
+    }
+  , { name := "a live-but-zero balance is canonicalised out of the root"
+    , body := do
+        -- The reason `stateCellEntries` filters canonically-absent
+        -- values.  `setBalance s r a 0` leaves a LIVE map entry whose
+        -- value is `encodeAmount 0` — reachable the moment a sender
+        -- transfers their whole balance — and without the filter the
+        -- verifier could not decide present-vs-absent from the value.
+        let zeroed : ExtendedState :=
+          { populated with base := LegalKernel.setBalance populated.base 3 9 0 }
+        assert ((stateCellTags zeroed).contains (.balance 3 9))
+          "the zero balance IS a live map entry"
+        assertEq (expected := (canonicalAbsentValue (CellTag.balance 3 9)).toList)
+          (actual := (getCellValue zeroed (.balance 3 9)).toList)
+          "and its value is the canonical absent one"
+        assertEq (expected := (commitExtendedState populated).toList)
+          (actual := (commitExtendedState zeroed).toList)
+          "so it must not move the root"
+        -- And it opens as an absent cell.
+        let p := buildStateCellProof zeroed (.balance 3 9)
+        assertEq (expected := true)
+          (actual := verifyStateCellProof (commitExtendedState zeroed)
+                       (.balance 3 9) (getCellValue zeroed (.balance 3 9)) p)
+          "and opens through the absent path"
+    }
   , { name := "API stability: cell-determination theorem signatures"
     , body := do
         let _nodup : ∀ (es : ExtendedState),

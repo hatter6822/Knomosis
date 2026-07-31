@@ -97,6 +97,21 @@ became `verifyCellProof_witness_cells_agree_under_collision_free`,
 which concludes per-cell agreement.  That is a strengthening in the
 direction a cell proof cares about.
 
+**§3A has landed too**, and it found a defect in the root as first
+shipped: absent cells were not openable.  `stateCellTags` enumerates
+only live cells, so a cell with no entry has an empty sub-tree
+beneath its key rather than a leaf holding the canonical absent
+value — and an opening built the present-way reconstructs a root the
+tree does not have.  Crediting a receiver who holds no balance yet is
+the common case, so §4's first handler would have hit it.  A cell's
+leaf now branches on absence (`cellLeaf` /
+`verifyStateCellProof`), with completeness proved on both sides, and
+`stateCellEntries` drops canonically-absent cells so that "value is
+canonically absent" and "key is absent from the tree" are the same
+condition — without which the verifier could not decide, since
+`setBalance s r a 0` leaves a live entry whose value is
+`encodeAmount 0`.
+
 Not landed: **§4**, making `executeStep` compute the post-root from
 the proven writes.  That is what closes this finding; the swap was
 its precondition, since a post-root is not computable from a

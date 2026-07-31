@@ -95,9 +95,57 @@ def stateCellTags (es : ExtendedState) : List CellTag :=
   singletonCellTags
 
 /-- The `(smtKey, value)` entries the state's SMT root is built
-    from. -/
+    from — the enumerated tags, MINUS any whose value is the
+    canonical absent one.
+
+    The subtraction is not tidiness.  An absent cell has an empty
+    sub-tree beneath its key, so opening one walks from the
+    canonical empty leaf rather than from `leafHash key value`, and
+    a verifier holding only the claimed value must be able to tell
+    which.  It can, exactly when "value is canonically absent" and
+    "key is absent from the tree" coincide — and without this filter
+    they do not: `setBalance s r a 0` leaves a LIVE map entry whose
+    value is `encodeAmount 0`, which is reachable the moment a
+    sender transfers their whole balance.
+
+    The filter also makes the root a function of the state's
+    OBSERVABLE content: a balance explicitly set to zero and a
+    balance never written are indistinguishable through
+    `getCellValue`, and now indistinguishable in the root too. -/
 def stateCellEntries (es : ExtendedState) : List (ByteArray × ByteArray) :=
-  (stateCellTags es).map (fun t => (smtCellKey t, getCellValue es t))
+  (stateCellTags es).filterMap (fun t =>
+    let v := getCellValue es t
+    if v = canonicalAbsentValue t then none else some (smtCellKey t, v))
+
+/-- A live, non-absent cell contributes its entry. -/
+theorem mem_stateCellEntries_of_ne_absent (es : ExtendedState) (t : CellTag)
+    (h_mem : t ∈ stateCellTags es)
+    (h_ne : getCellValue es t ≠ canonicalAbsentValue t) :
+    (smtCellKey t, getCellValue es t) ∈ stateCellEntries es := by
+  refine List.mem_filterMap.mpr ⟨t, h_mem, ?_⟩
+  show (if getCellValue es t = canonicalAbsentValue t then none
+        else some (smtCellKey t, getCellValue es t)) = _
+  rw [if_neg h_ne]
+
+/-- Conversely, every entry came from an enumerated tag whose value
+    is not the canonical absent one.  Together with the lemma above
+    this is the characterisation the verifier's present-vs-absent
+    test rests on. -/
+theorem stateCellEntries_spec (es : ExtendedState) :
+    ∀ p ∈ stateCellEntries es, ∃ t, t ∈ stateCellTags es ∧
+      p = (smtCellKey t, getCellValue es t) ∧
+      getCellValue es t ≠ canonicalAbsentValue t := by
+  intro p hp
+  obtain ⟨t, ht, h_eq⟩ := List.mem_filterMap.mp hp
+  by_cases h_abs : getCellValue es t = canonicalAbsentValue t
+  · rw [show (if getCellValue es t = canonicalAbsentValue t then none
+              else some (smtCellKey t, getCellValue es t)) = none from
+      if_pos h_abs] at h_eq
+    exact absurd h_eq (by simp)
+  · rw [show (if getCellValue es t = canonicalAbsentValue t then none
+              else some (smtCellKey t, getCellValue es t))
+            = some (smtCellKey t, getCellValue es t) from if_neg h_abs] at h_eq
+    exact ⟨t, ht, (Option.some.inj h_eq).symm, h_abs⟩
 
 /-! ## The SMT state root -/
 

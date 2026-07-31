@@ -57,12 +57,23 @@ keys.
 
 ## Cell updates
 
-The last section builds on the same machinery: a cell root exists so
-a post-root is computable from a pre-root plus the proven writes, and
+`smtUpdateRoot` builds on the same machinery: a cell root exists so a
+post-root is computable from a pre-root plus the proven writes, and
 `smtUpdateRoot_proof_independent` is what makes that computation
 non-manipulable — the post-root depends on `(pre-root, key, new
 value)`, not on which of several verifying openings the responder
 chose to supply.
+
+## Absent keys
+
+The last sections cover the case a step VM meets on its first line:
+reading a cell the state does not hold.  A key with no entry has an
+EMPTY SUB-TREE beneath it, not a leaf holding some "absent" value, so
+its opening walks from the canonical empty leaf rather than from
+`leafHash key value`.  `canonicalSiblings_walks_to_root_absent` is
+that completeness result; it and the present-key case are both
+corollaries of `canonicalSiblings_walks_from_bucket`, which is the
+same induction factored through `bucketAt`.
 -/
 
 import LegalKernel.FaultProof.Smt
@@ -985,6 +996,195 @@ theorem canonicalSiblings_verifies (entries : SmtEntries) (key value : ByteArray
         (leafHash key value)
       = smtRootListAux smtDepth entries :=
   canonicalSiblings_walks_to_root smtDepth entries key value h_mem h_wf
+
+/-! ## Walking from an arbitrary leaf
+
+`smtWalk` starts the walk from `leafHash key value`, which is right
+for a key the tree holds.  An ABSENT key needs the same walk from a
+different starting point, so the fold is named here — additively,
+because `Smt.lean` is the cross-stack-pinned SMT spec and mirrors
+`SmtCellVerifier.sol`.  `smtWalk_eq_smtWalkFrom` is `rfl`, so
+nothing about the shipped verifier moves. -/
+
+/-- The SMT walk from an arbitrary starting leaf. -/
+def smtWalkFrom (leaf : ByteArray) (key : ByteArray)
+    (proof : SmtCellProof) : ByteArray :=
+  ((expandSiblings proof).zip (keyBits key)).foldl stepPair leaf
+
+/-- `smtWalk` is the present-key instance of `smtWalkFrom`. -/
+theorem smtWalk_eq_smtWalkFrom (key value : ByteArray) (proof : SmtCellProof) :
+    smtWalk key value proof = smtWalkFrom (leafHash key value) key proof := rfl
+
+/-! ## Absent keys
+
+A key with no entry has an EMPTY SUB-TREE beneath it, not a leaf
+holding some "absent" value.  A walk started from
+`leafHash key absentValue` therefore reconstructs a root the tree
+does not have, and an opening built that way cannot verify — which
+matters because a step reads absent cells constantly (crediting a
+receiver who holds no balance yet is the common case).
+
+The walk for an absent key starts from the canonical empty leaf
+instead.  The induction is the same one as above; only the base case
+differs, so it is factored through `bucketAt` and both cases fall
+out. -/
+
+/-- The sub-bucket a key descends into after `d` levels of
+    partitioning. -/
+def bucketAt : Nat → SmtEntries → ByteArray → SmtEntries
+  | 0,     entries, _   => entries
+  | d + 1, entries, key =>
+    bucketAt d
+      (if BitsKey.keyBit key d then
+         entries.filter (fun e => BitsKey.keyBit e.1 d)
+       else entries.filter (fun e => ! BitsKey.keyBit e.1 d)) key
+
+/-- **Canonical-path coherence, general form.**  Walking the
+    canonical sibling path back from the root of the key's own
+    depth-0 bucket reproduces the bucket's root — whether that
+    bucket holds the key's leaf or is empty. -/
+theorem canonicalSiblings_walks_from_bucket :
+    ∀ (d : Nat), d ≤ 256 → ∀ (entries : SmtEntries) (key : ByteArray),
+      ((canonicalSiblings d entries key).zip (keyBitsUpTo d key)).foldl stepPair
+          (smtRootListAux 0 (bucketAt d entries key))
+        = smtRootListAux d entries := by
+  intro d
+  induction d with
+  | zero => intro _ entries key; rfl
+  | succ k ih =>
+    intro h_d entries key
+    have h_bits : keyBitsUpTo (k + 1) key
+                = keyBitsUpTo k key ++ [BitsKey.keyBit key k] := by
+      unfold keyBitsUpTo
+      rw [List.range_succ, List.map_append, List.map_cons, List.map_nil]
+    have h_zip_len : ∀ (f : SmtEntries),
+        (canonicalSiblings k f key).length = (keyBitsUpTo k key).length := by
+      intro f
+      rw [canonicalSiblings_length, keyBitsUpTo_length]
+    have h_path : canonicalSiblings (k + 1) entries key
+                = (if BitsKey.keyBit key k then
+                     canonicalSiblings k (entries.filter (fun e => BitsKey.keyBit e.1 k)) key ++
+                       [smtRootListAux k (entries.filter (fun e => ! BitsKey.keyBit e.1 k))]
+                   else
+                     canonicalSiblings k (entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key ++
+                       [smtRootListAux k (entries.filter (fun e => BitsKey.keyBit e.1 k))]) := rfl
+    have h_bucket : bucketAt (k + 1) entries key
+                  = bucketAt k (if BitsKey.keyBit key k then
+                                  entries.filter (fun e => BitsKey.keyBit e.1 k)
+                                else entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key := rfl
+    rw [h_path, h_bits, h_bucket]
+    by_cases h_bit : BitsKey.keyBit key k
+    · rw [if_pos h_bit, if_pos h_bit, List.zip_append (h_zip_len _), List.foldl_append,
+        ih (by omega) (entries.filter (fun e => BitsKey.keyBit e.1 k)) key]
+      by_cases h_empty : entries.isEmpty
+      · -- An empty bucket splits into two empty halves; both sides
+        -- are the canonical empty root at this depth.
+        rw [show entries = [] from by cases entries with
+              | nil => rfl
+              | cons _ _ => exact absurd h_empty (by simp)]
+        show smtStep _ _ (BitsKey.keyBit key k) = _
+        rw [h_bit]
+        simp only [List.filter_nil]
+        show hashBytes (smtRootListAux k [] ++ smtRootListAux k []) = _
+        rw [smtRootListAux_nil (k + 1) (by omega), smtRootListAux_nil k (by omega),
+          emptyRootAt]
+      · show smtStep _ _ (BitsKey.keyBit key k) = _
+        rw [h_bit]
+        show hashBytes _ = (if entries.isEmpty then _ else _)
+        rw [if_neg (by simp [h_empty])]
+    · rw [if_neg h_bit, if_neg h_bit, List.zip_append (h_zip_len _), List.foldl_append,
+        ih (by omega) (entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key]
+      by_cases h_empty : entries.isEmpty
+      · rw [show entries = [] from by cases entries with
+              | nil => rfl
+              | cons _ _ => exact absurd h_empty (by simp)]
+        show smtStep _ _ (BitsKey.keyBit key k) = _
+        rw [show BitsKey.keyBit key k = false from by simpa using h_bit]
+        simp only [List.filter_nil]
+        show hashBytes (smtRootListAux k [] ++ smtRootListAux k []) = _
+        rw [smtRootListAux_nil (k + 1) (by omega), smtRootListAux_nil k (by omega),
+          emptyRootAt]
+      · show smtStep _ _ (BitsKey.keyBit key k) = _
+        rw [show BitsKey.keyBit key k = false from by simpa using h_bit]
+        show hashBytes _ = (if entries.isEmpty then _ else _)
+        rw [if_neg (by simp [h_empty])]
+
+/-- The bucket only ever shrinks: its members came from the
+    entries. -/
+theorem bucketAt_subset :
+    ∀ (d : Nat) (entries : SmtEntries) (key : ByteArray),
+      ∀ p ∈ bucketAt d entries key, p ∈ entries := by
+  intro d
+  induction d with
+  | zero => intro _ _ p hp; exact hp
+  | succ k ih =>
+    intro entries key p hp
+    have := ih _ key p hp
+    by_cases h_bit : BitsKey.keyBit key k
+    · rw [if_pos h_bit] at this
+      exact (List.mem_filter.mp this).1
+    · rw [if_neg h_bit] at this
+      exact (List.mem_filter.mp this).1
+
+/-- Everything still in the bucket after `d` levels agrees with the
+    key on every bit below `d` — that is what the descent selected
+    for. -/
+theorem bucketAt_bits :
+    ∀ (d : Nat) (entries : SmtEntries) (key : ByteArray),
+      ∀ p ∈ bucketAt d entries key,
+        ∀ i, i < d → BitsKey.keyBit p.1 i = BitsKey.keyBit key i := by
+  intro d
+  induction d with
+  | zero => intro _ _ _ _ i hi; omega
+  | succ k ih =>
+    intro entries key p hp i hi
+    rcases Nat.lt_succ_iff_lt_or_eq.mp hi with h_lt | rfl
+    · exact ih _ key p hp i h_lt
+    · -- Bit `i` is the one this level filtered on.
+      have h_mem := bucketAt_subset i _ key p hp
+      by_cases h_bit : BitsKey.keyBit key i
+      · rw [if_pos h_bit] at h_mem
+        rw [(List.mem_filter.mp h_mem).2, h_bit]
+      · rw [if_neg h_bit] at h_mem
+        have := (List.mem_filter.mp h_mem).2
+        simp only [Bool.not_eq_true'] at this
+        rw [this, show BitsKey.keyBit key i = false from by simpa using h_bit]
+
+/-- A key absent from the entries has an empty bucket at full depth.
+    The depth matters: after 256 levels the survivors agree with the
+    key on every bit, and 32-byte keys with equal bit-vectors are
+    equal — so a survivor would have to BE the key. -/
+theorem bucketAt_eq_nil_of_not_mem
+    (entries : SmtEntries) (key : ByteArray)
+    (h_size : ∀ p ∈ entries, p.1.size = 32) (h_key : key.size = 32)
+    (h : ∀ p ∈ entries, p.1 ≠ key) :
+    bucketAt smtDepth entries key = [] := by
+  cases h_b : bucketAt smtDepth entries key with
+  | nil => rfl
+  | cons p _ =>
+    have hp : p ∈ bucketAt smtDepth entries key := by rw [h_b]; simp
+    have h_in := bucketAt_subset smtDepth entries key p hp
+    exact absurd
+      (byteArray_eq_of_keyBits_eq (h_size p h_in) h_key
+        (bucketAt_bits smtDepth entries key p hp))
+      (h p h_in)
+
+/-- **Absent-key coherence.**  For a key with no entry, the walk that
+    reproduces the root starts from the canonical EMPTY leaf.  This
+    is the opening an honest defender builds for a cell the state
+    does not hold — a receiver with no balance yet, say. -/
+theorem canonicalSiblings_walks_to_root_absent
+    (entries : SmtEntries) (key : ByteArray)
+    (h_size : ∀ p ∈ entries, p.1.size = 32) (h_key : key.size = 32)
+    (h : ∀ p ∈ entries, p.1 ≠ key) :
+    ((canonicalSiblings smtDepth entries key).zip
+        (keyBitsUpTo smtDepth key)).foldl stepPair (emptyRootAt 0)
+      = smtRootListAux smtDepth entries := by
+  have h_b := bucketAt_eq_nil_of_not_mem entries key h_size h_key h
+  have := canonicalSiblings_walks_from_bucket smtDepth (by unfold smtDepth; omega)
+    entries key
+  rw [h_b] at this
+  exact this
 
 end FaultProof
 end LegalKernel

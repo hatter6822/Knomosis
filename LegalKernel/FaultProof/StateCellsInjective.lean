@@ -393,7 +393,7 @@ def stateCommitSmtPreimages (es₁ es₂ : ExtendedState) : List ByteArray :=
 private theorem entries_key_size (es : ExtendedState) :
     ∀ p ∈ stateCellEntries es, p.1.size = 32 := by
   intro p hp
-  obtain ⟨t, _, rfl⟩ := List.mem_map.mp hp
+  obtain ⟨t, _, rfl, _⟩ := stateCellEntries_spec es p hp
   exact smtCellKey_size t
 
 /-- Distinct enumerated cells get distinct SMT keys. -/
@@ -433,18 +433,31 @@ theorem stateCellEntries_bitsDistinct (es₁ es₂ : ExtendedState)
     rcases h_es with rfl | rfl
     · exact List.mem_append_left _ ht
     · exact List.mem_append_right _ ht
+  -- The entries are the tags' images under a partial map, so
+  -- distinctness descends from tag distinctness: two entries come
+  -- from two distinct tags, and distinct tags have distinct keys.
   unfold stateCellEntries
-  rw [List.pairwise_map]
-  refine List.Pairwise.imp_of_mem ?_ (stateCellTags_nodup es)
-  intro a b ha hb h_ne h_key
+  refine List.pairwise_filterMap.mpr
+    (List.Pairwise.imp_of_mem ?_ (stateCellTags_nodup es))
+  intro a b ha hb h_ne x hx y hy
+  -- Read the key off each side's `some`.
+  have h_key : ∀ (t : CellTag) (z : ByteArray × ByteArray),
+      (if getCellValue es t = canonicalAbsentValue t then none
+       else some (smtCellKey t, getCellValue es t)) = some z → z.1 = smtCellKey t := by
+    intro t z hz
+    by_cases h_abs : getCellValue es t = canonicalAbsentValue t
+    · rw [if_pos h_abs] at hz; exact absurd hz (by simp)
+    · rw [if_neg h_abs] at hz; rw [← Option.some.inj hz]
+  rw [h_key a x hx, h_key b y hy]
+  intro h_eq
   exact h_ne (stateCellEntries_keys_pairwise_ne es₁ es₂ h_wf₁ h_wf₂ h_cf
-    (h_sub a ha) (h_sub b hb) h_key)
+    (h_sub a ha) (h_sub b hb) h_eq)
 
 /-- Both components of every entry fit the CBE byte-string head. -/
 theorem stateCellEntries_encodable (es : ExtendedState)
     (h_wf : StateCellsWellFormed es) : EntriesEncodable (stateCellEntries es) := by
   intro p hp
-  obtain ⟨t, ht, rfl⟩ := List.mem_map.mp hp
+  obtain ⟨t, ht, rfl, _⟩ := stateCellEntries_spec es p hp
   exact ⟨by rw [smtCellKey_size t]; decide, (h_wf t ht).2⟩
 
 /-! ## The determination theorem -/
@@ -467,24 +480,30 @@ theorem stateCellEntries_perm_of_commitSmt_eq (es₁ es₂ : ExtendedState)
     (stateCellEntries_encodable es₁ h_wf₁) (stateCellEntries_encodable es₂ h_wf₂)
     h_cf.append_left h
 
-/-- One direction of the transfer: an enumerated cell of `es₁` is
-    enumerated in `es₂` and reads the same there. -/
+/-- One direction of the transfer: a cell of `es₁` that carries a
+    non-absent value reads the same in `es₂`.
+
+    The hypothesis is non-absence rather than mere enumeration
+    because the entry list drops canonically-absent cells: those are
+    not in the tree at all, and the "reads the same" conclusion for
+    them comes from both sides reading canonically absent. -/
 private theorem cell_transfer (es₁ es₂ : ExtendedState)
     (h_wf₁ : StateCellsWellFormed es₁) (h_wf₂ : StateCellsWellFormed es₂)
     (h_cf : CollisionFreeOn (stateCellKeyPreimages es₁ es₂) hashBytes)
     (h_perm : (stateCellEntries es₁).Perm (stateCellEntries es₂))
-    (t : CellTag) (ht : t ∈ stateCellTags es₁) :
-    t ∈ stateCellTags es₂ ∧ getCellValue es₁ t = getCellValue es₂ t := by
+    (t : CellTag) (ht : t ∈ stateCellTags es₁)
+    (h_ne : getCellValue es₁ t ≠ canonicalAbsentValue t) :
+    getCellValue es₁ t = getCellValue es₂ t := by
   have h_mem : (smtCellKey t, getCellValue es₁ t) ∈ stateCellEntries es₂ :=
-    h_perm.mem_iff.mp (List.mem_map_of_mem ht)
-  obtain ⟨t', ht', h_pair⟩ := List.mem_map.mp h_mem
-  have h_key : smtCellKey t' = smtCellKey t := congrArg Prod.fst h_pair
-  have h_val : getCellValue es₂ t' = getCellValue es₁ t := congrArg Prod.snd h_pair
-  have h_eq : t' = t :=
+    h_perm.mem_iff.mp (mem_stateCellEntries_of_ne_absent es₁ t ht h_ne)
+  obtain ⟨t', ht', h_pair, _⟩ := stateCellEntries_spec es₂ _ h_mem
+  have h_key : smtCellKey t = smtCellKey t' := congrArg Prod.fst h_pair
+  have h_val : getCellValue es₁ t = getCellValue es₂ t' := congrArg Prod.snd h_pair
+  have h_eq : t = t' :=
     stateCellEntries_keys_pairwise_ne es₁ es₂ h_wf₁ h_wf₂ h_cf
-      (List.mem_append_right _ ht') (List.mem_append_left _ ht) h_key
-  subst h_eq
-  exact ⟨ht', h_val.symm⟩
+      (List.mem_append_left _ ht) (List.mem_append_right _ ht') h_key
+  rw [h_eq] at h_val ⊢
+  exact h_val
 
 /-- **The SMT state root determines every cell.**
 
@@ -517,14 +536,93 @@ theorem commitExtendedState_determines_cells (es₁ es₂ : ExtendedState)
     · exact List.mem_append_right _ ht'
     · exact List.mem_append_left _ ht'
   intro t
-  by_cases h₁ : t ∈ stateCellTags es₁
-  · exact (cell_transfer es₁ es₂ h_wf₁ h_wf₂ h_cf_key h_perm t h₁).2
-  · by_cases h₂ : t ∈ stateCellTags es₂
-    · -- Enumerated on the right only: the reverse transfer puts it
-      -- back on the left, contradicting `h₁`.
-      exact absurd (cell_transfer es₂ es₁ h_wf₂ h_wf₁ h_cf_key' h_perm.symm t h₂).1 h₁
-    · -- Enumerated on neither: both read the canonical absent value.
-      rw [getCellValue_of_not_mem es₁ t h₁, getCellValue_of_not_mem es₂ t h₂]
+  -- Three cases, keyed on non-absence rather than on enumeration:
+  -- a canonically-absent cell contributes no entry, so the entry
+  -- permutation says nothing about it — and nothing needs to be
+  -- said, since both sides then read the same canonical value.
+  by_cases h₁ : getCellValue es₁ t = canonicalAbsentValue t
+  · by_cases h₂ : getCellValue es₂ t = canonicalAbsentValue t
+    · rw [h₁, h₂]
+    · -- Absent on the left, present on the right: impossible, since
+      -- the reverse transfer carries the right's value to the left.
+      have h_mem₂ : t ∈ stateCellTags es₂ :=
+        Classical.byContradiction fun h_c => h₂ (getCellValue_of_not_mem es₂ t h_c)
+      exact absurd
+        ((cell_transfer es₂ es₁ h_wf₂ h_wf₁ h_cf_key' h_perm.symm t h_mem₂ h₂).trans h₁)
+        h₂
+  · have h_mem₁ : t ∈ stateCellTags es₁ :=
+      Classical.byContradiction fun h_c => h₁ (getCellValue_of_not_mem es₁ t h_c)
+    exact cell_transfer es₁ es₂ h_wf₁ h_wf₂ h_cf_key h_perm t h_mem₁ h₁
+
+/-! ## Opening a cell against the published root
+
+The step VM reads cells it does not hold the state for, so it needs
+a verifier that works against `commitExtendedState` alone.  The
+subtlety is absence: a cell with no entry has an EMPTY sub-tree
+beneath its key, not a leaf holding the canonical absent value, so
+its opening walks from a different starting leaf.  A verifier
+holding only the claimed value can tell which because
+`stateCellEntries` drops canonically-absent cells — that filter is
+what makes "value is canonically absent" and "key is absent from the
+tree" the same condition.
+
+Crediting a receiver who holds no balance yet is the common case,
+so this is not an edge case the step VM can decline to handle. -/
+
+/-- The leaf a cell occupies in the state root: its leaf hash when
+    present, the canonical empty leaf when canonically absent. -/
+def cellLeaf (t : CellTag) (value : ByteArray) : ByteArray :=
+  if value = canonicalAbsentValue t then emptyRootAt 0
+  else leafHash (smtCellKey t) value
+
+/-- Verify a cell opening against a published state root. -/
+def verifyStateCellProof (root : StateCommit) (t : CellTag)
+    (value : ByteArray) (proof : SmtCellProof) : Bool :=
+  proof.isWellFormed && decide (smtWalkFrom (cellLeaf t value) (smtCellKey t) proof = root)
+
+/-- The canonical opening for a cell of `es`: the sibling path along
+    its key. -/
+def buildStateCellProof (es : ExtendedState) (t : CellTag) : SmtCellProof :=
+  let (sibs, bitDepths) :=
+    buildSmtCellProofAux smtDepth (stateCellEntries es) (smtCellKey t)
+  { siblings := sibs.toArray
+  , bitmask  := bitDepths.foldl setBitmaskBit
+                  (ByteArray.mk (Array.replicate 32 (0 : UInt8))) }
+
+/-- **Completeness for a present cell.**  The canonical sibling path
+    walks a live cell's leaf back to the published root. -/
+theorem canonicalSiblings_verifies_present (es : ExtendedState) (t : CellTag)
+    (h_mem : t ∈ stateCellTags es)
+    (h_ne : getCellValue es t ≠ canonicalAbsentValue t)
+    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries es)) :
+    ((canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)).zip
+        (keyBits (smtCellKey t))).foldl stepPair (cellLeaf t (getCellValue es t))
+      = commitExtendedState es := by
+  unfold cellLeaf
+  rw [if_neg h_ne]
+  exact canonicalSiblings_walks_to_root smtDepth (stateCellEntries es)
+    (smtCellKey t) (getCellValue es t)
+    (mem_stateCellEntries_of_ne_absent es t h_mem h_ne) h_wf
+
+/-- **Completeness for an absent cell.**  A cell the state does not
+    hold walks from the canonical empty leaf back to the same root —
+    the case a step hits whenever it credits a fresh actor.
+
+    The key-injectivity hypothesis is what rules out some OTHER
+    cell's entry sitting at this cell's key. -/
+theorem canonicalSiblings_verifies_absent (es : ExtendedState) (t : CellTag)
+    (h_abs : getCellValue es t = canonicalAbsentValue t)
+    (h_keys : ∀ t' ∈ stateCellTags es, smtCellKey t' ≠ smtCellKey t) :
+    ((canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)).zip
+        (keyBits (smtCellKey t))).foldl stepPair (cellLeaf t (getCellValue es t))
+      = commitExtendedState es := by
+  unfold cellLeaf
+  rw [if_pos h_abs]
+  refine canonicalSiblings_walks_to_root_absent (stateCellEntries es) (smtCellKey t)
+    (entries_key_size es) (smtCellKey_size t) ?_
+  intro p hp
+  obtain ⟨t', ht', rfl, _⟩ := stateCellEntries_spec es p hp
+  exact h_keys t' ht'
 
 end FaultProof
 end LegalKernel
