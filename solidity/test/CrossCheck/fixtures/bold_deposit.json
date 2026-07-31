@@ -2,8 +2,8 @@
   "header": {
     "identifier": "knomosis/bold-deposit-crossstack/v2",
     "count": 190,
-    "isKeccak256Linked": true,
-    "hashIdentifier": "keccak256/EVM-compatible/v1",
+    "isKeccak256Linked": false,
+    "hashIdentifier": "fnv1a64-padded-32",
     "maxBudgetPerDeposit": 1000000000000,
     "maxFeeBpsCap": 5000,
     "minWeiPerBudgetUnit": 1,
