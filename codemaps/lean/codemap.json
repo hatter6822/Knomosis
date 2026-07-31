@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "ddb1306737951617eb5bf25f84754c3aa678b3f61bb2f50818b34940210c5821"
+    "source_digest": "9c7af7e0266984134b1b3f406779c2bd77a2852b36977bc0f9959c75edad853e"
   },
   "summary": {
     "module_count": 324,
@@ -26680,7 +26680,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_verifies_absent",
-          "line": 612,
+          "line": 619,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26705,7 +26705,7 @@
         {
           "kind": "theorem",
           "name": "cellLeaf_size",
-          "line": 641,
+          "line": 650,
           "called": [
             "CellTag",
             "canonicalAbsentValue",
@@ -26717,7 +26717,7 @@
         {
           "kind": "def",
           "name": "updateStateCellRoot",
-          "line": 651,
+          "line": 660,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -26730,7 +26730,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_updates_root",
-          "line": 662,
+          "line": 671,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26743,6 +26743,7 @@
             "entries_key_size",
             "es",
             "getCellValue",
+            "getCellValue_of_not_mem",
             "keyBits",
             "mem_stateCellEntries_of_ne_absent",
             "smtCellKey",
@@ -26759,7 +26760,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_eq_commit_of_canonical",
-          "line": 693,
+          "line": 709,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26784,7 +26785,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_proof_independent",
-          "line": 717,
+          "line": 733,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26804,7 +26805,7 @@
         {
           "kind": "def",
           "name": "applyStateCellWrite",
-          "line": 746,
+          "line": 762,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -26816,7 +26817,7 @@
         {
           "kind": "abbrev",
           "name": "StateCellWrite",
-          "line": 754,
+          "line": 770,
           "called": [
             "CellTag",
             "SmtCellProof"
@@ -26825,7 +26826,7 @@
         {
           "kind": "def",
           "name": "foldStateCellWrites",
-          "line": 757,
+          "line": 773,
           "called": [
             "StateCellWrite",
             "StateCommit",
@@ -26835,7 +26836,7 @@
         {
           "kind": "abbrev",
           "name": "CellWriteChain",
-          "line": 766,
+          "line": 782,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26845,7 +26846,7 @@
         {
           "kind": "def",
           "name": "chainWrites",
-          "line": 771,
+          "line": 787,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -26857,7 +26858,7 @@
         {
           "kind": "def",
           "name": "chainLast",
-          "line": 777,
+          "line": 793,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -26867,7 +26868,7 @@
         {
           "kind": "def",
           "name": "ChainCoherent",
-          "line": 785,
+          "line": 801,
           "called": [
             "BitsDistinctBelow",
             "CellWriteChain",
@@ -26889,7 +26890,7 @@
         {
           "kind": "theorem",
           "name": "foldStateCellWrites_eq_commit_of_coherent",
-          "line": 806,
+          "line": 821,
           "called": [
             "CellWriteChain",
             "ChainCoherent",

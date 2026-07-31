@@ -609,10 +609,19 @@ theorem canonicalSiblings_verifies_present (es : ExtendedState) (t : CellTag)
     the case a step hits whenever it credits a fresh actor.
 
     The key-injectivity hypothesis is what rules out some OTHER
-    cell's entry sitting at this cell's key. -/
+    cell's entry sitting at this cell's key.  It is scoped to the
+    tags that actually CONTRIBUTE an entry, and the scoping is
+    load-bearing rather than tidy: `stateCellTags` enumerates live map
+    entries, so `t` itself can be enumerated while reading as
+    canonically absent — `setBalance s r a 0` does exactly that — and
+    a hypothesis ranging over every enumerated tag would demand
+    `smtCellKey t ≠ smtCellKey t` in precisely that case, making the
+    theorem vacuous on a reachable state. -/
 theorem canonicalSiblings_verifies_absent (es : ExtendedState) (t : CellTag)
     (h_abs : getCellValue es t = canonicalAbsentValue t)
-    (h_keys : ∀ t' ∈ stateCellTags es, smtCellKey t' ≠ smtCellKey t) :
+    (h_keys : ∀ t' ∈ stateCellTags es,
+                getCellValue es t' ≠ canonicalAbsentValue t' →
+                smtCellKey t' ≠ smtCellKey t) :
     ((canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)).zip
         (keyBits (smtCellKey t))).foldl stepPair (cellLeaf t (getCellValue es t))
       = commitExtendedState es := by
@@ -621,8 +630,8 @@ theorem canonicalSiblings_verifies_absent (es : ExtendedState) (t : CellTag)
   refine canonicalSiblings_walks_to_root_absent (stateCellEntries es) (smtCellKey t)
     (entries_key_size es) (smtCellKey_size t) ?_
   intro p hp
-  obtain ⟨t', ht', rfl, _⟩ := stateCellEntries_spec es p hp
-  exact h_keys t' ht'
+  obtain ⟨t', ht', rfl, h_ne'⟩ := stateCellEntries_spec es p hp
+  exact h_keys t' ht' h_ne'
 
 /-! ## Writing a cell into the published root
 
@@ -665,9 +674,9 @@ theorem canonicalSiblings_updates_root
     (h_off : dropKey (stateCellEntries es) (smtCellKey t)
            = dropKey (stateCellEntries es') (smtCellKey t))
     (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
-    (h_keys' : getCellValue es' t = canonicalAbsentValue t →
-                 ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t)
-    (h_mem' : getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es') :
+    (h_keys' : ∀ t' ∈ stateCellTags es',
+                 getCellValue es' t' ≠ canonicalAbsentValue t' →
+                 smtCellKey t' ≠ smtCellKey t) :
     ((canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)).zip
         (keyBits (smtCellKey t))).foldl stepPair (cellLeaf t (getCellValue es' t))
       = commitExtendedState es' := by
@@ -676,11 +685,18 @@ theorem canonicalSiblings_updates_root
   · rw [if_pos h_abs]
     refine smtRootListAux_update_to_absent _ _ _ h_off (entries_key_size es')
       (smtCellKey_size t) (fun p hp => ?_)
-    obtain ⟨t', ht', rfl, _⟩ := stateCellEntries_spec es' p hp
-    exact h_keys' h_abs t' ht'
+    obtain ⟨t', ht', rfl, h_ne'⟩ := stateCellEntries_spec es' p hp
+    exact h_keys' t' ht' h_ne'
   · rw [if_neg h_abs]
-    exact smtRootListAux_update_to_present _ _ _ _ h_off h_wf'
-      (mem_stateCellEntries_of_ne_absent es' t (h_mem' h_abs) h_abs)
+    -- Enumeration is not an extra assumption: a cell reading anything
+    -- other than the canonical absent value is enumerated, because
+    -- `getCellValue_of_not_mem` says an unenumerated one reads exactly
+    -- that value.
+    refine smtRootListAux_update_to_present _ _ _ _ h_off h_wf'
+      (mem_stateCellEntries_of_ne_absent es' t ?_ h_abs)
+    by_cases hm : t ∈ stateCellTags es'
+    · exact hm
+    · exact absurd (getCellValue_of_not_mem es' t hm) h_abs
 
 /-- The step-VM-facing form: an opening whose expansion is the
     pre-state's canonical path computes the post-state's published
@@ -698,13 +714,13 @@ theorem updateStateCellRoot_eq_commit_of_canonical
     (h_off : dropKey (stateCellEntries es) (smtCellKey t)
            = dropKey (stateCellEntries es') (smtCellKey t))
     (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
-    (h_keys' : getCellValue es' t = canonicalAbsentValue t →
-                 ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t)
-    (h_mem' : getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es') :
+    (h_keys' : ∀ t' ∈ stateCellTags es',
+                 getCellValue es' t' ≠ canonicalAbsentValue t' →
+                 smtCellKey t' ≠ smtCellKey t) :
     updateStateCellRoot t (getCellValue es' t) canon = commitExtendedState es' := by
   unfold updateStateCellRoot smtWalkFrom
   rw [h_expand]
-  exact canonicalSiblings_updates_root es es' t h_off h_wf' h_keys' h_mem'
+  exact canonicalSiblings_updates_root es es' t h_off h_wf' h_keys'
 
 /-- **A responder cannot steer the post-root.**  Two openings that
     both verify the same cell against the same published root compute
@@ -790,9 +806,8 @@ def ChainCoherent (es : ExtendedState) : CellWriteChain → Prop
       ∧ dropKey (stateCellEntries es) (smtCellKey t)
           = dropKey (stateCellEntries es') (smtCellKey t)
       ∧ BitsDistinctBelow smtDepth (stateCellEntries es')
-      ∧ (getCellValue es' t = canonicalAbsentValue t →
-           ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t)
-      ∧ (getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es')
+      ∧ (∀ t' ∈ stateCellTags es', getCellValue es' t' ≠ canonicalAbsentValue t' →
+           smtCellKey t' ≠ smtCellKey t)
       ∧ verifyStateCellProof (commitExtendedState es) t (getCellValue es t) p = true
       ∧ ChainCoherent es' rest
 
@@ -814,7 +829,7 @@ theorem foldStateCellWrites_eq_commit_of_coherent :
   | cons hd rest ih =>
     obtain ⟨es', t, p⟩ := hd
     intro es hc
-    obtain ⟨h_exp, h_off, h_wf', h_keys', h_mem', h_ver, h_rest⟩ := hc
+    obtain ⟨h_exp, h_off, h_wf', h_keys', h_ver, h_rest⟩ := hc
     show (match applyStateCellWrite (commitExtendedState es) t (getCellValue es t)
                   (getCellValue es' t) p with
           | none    => none
@@ -825,7 +840,7 @@ theorem foldStateCellWrites_eq_commit_of_coherent :
           unfold applyStateCellWrite
           rw [if_pos h_ver,
             updateStateCellRoot_eq_commit_of_canonical es es' t p h_exp h_off h_wf'
-              h_keys' h_mem']]
+              h_keys']]
     exact ih es' h_rest
 
 end FaultProof

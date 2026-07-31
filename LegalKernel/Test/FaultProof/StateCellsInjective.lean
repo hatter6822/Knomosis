@@ -295,6 +295,34 @@ def tests : List TestCase :=
                         stale).map ByteArray.toList)
           "the stale second opening is rejected"
     }
+  , { name := "NON-VACUITY: the absent-cell hypothesis holds on a zeroed cell"
+    , body := do
+        -- `canonicalSiblings_verifies_absent` scopes its key-injectivity
+        -- hypothesis to the tags that CONTRIBUTE an entry.  Quantifying
+        -- over every enumerated tag would be unsatisfiable here, because
+        -- `setBalance s r a 0` leaves the tag enumerated while its value
+        -- reads canonically absent — so the theorem would be vacuous on
+        -- a state a single whole-balance transfer produces.
+        let t : CellTag := .balance 1 7
+        let zeroed : ExtendedState :=
+          { populated with base := LegalKernel.setBalance populated.base 1 7 0 }
+        assert ((stateCellTags zeroed).contains t)
+          "the zeroed cell is still enumerated"
+        assertEq (expected := (canonicalAbsentValue t).toList)
+          (actual := (getCellValue zeroed t).toList)
+          "and reads as canonically absent"
+        -- The scoped hypothesis: every CONTRIBUTING tag has a different
+        -- key.  Checked exhaustively over the enumeration.
+        for t' in stateCellTags zeroed do
+          if getCellValue zeroed t' != canonicalAbsentValue t' then
+            assert (smtCellKey t' != smtCellKey t)
+              s!"contributing tag shares the zeroed cell's key: {repr t'}"
+        -- And the opening still verifies, through the absent branch.
+        assertEq (expected := true)
+          (actual := verifyStateCellProof (commitExtendedState zeroed) t
+                       (getCellValue zeroed t) (buildStateCellProof zeroed t))
+          "the zeroed cell opens as absent"
+    }
   , { name := "API stability: cell-update theorem signatures"
     , body := do
         let _upd : ∀ (es es' : ExtendedState) (t : CellTag) (canon : SmtCellProof),
@@ -303,9 +331,8 @@ def tests : List TestCase :=
             dropKey (stateCellEntries es) (smtCellKey t)
               = dropKey (stateCellEntries es') (smtCellKey t) →
             BitsDistinctBelow smtDepth (stateCellEntries es') →
-            (getCellValue es' t = canonicalAbsentValue t →
-               ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t) →
-            (getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es') →
+            (∀ t' ∈ stateCellTags es', getCellValue es' t' ≠ canonicalAbsentValue t' →
+               smtCellKey t' ≠ smtCellKey t) →
             updateStateCellRoot t (getCellValue es' t) canon = commitExtendedState es' :=
           updateStateCellRoot_eq_commit_of_canonical
         let _indep : ∀ (es : ExtendedState) (t : CellTag) (newValue : ByteArray)

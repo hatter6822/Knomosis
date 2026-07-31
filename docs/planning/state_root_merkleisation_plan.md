@@ -250,6 +250,20 @@ already indistinguishable through `getCellValue`.
 Both are pinned as tests, including the negative control that the
 present-style leaf does NOT reach the root for an absent cell.
 
+**And the canonicalisation forced the absent-cell hypothesis to be
+scoped.**  `canonicalSiblings_verifies_absent` needs "no OTHER cell's
+entry sits at this cell's key", and stating that over every
+*enumerated* tag is unsatisfiable exactly where the canonicalisation
+bites: `setBalance s r a 0` leaves `t` enumerated while its value
+reads canonically absent, so the hypothesis would demand
+`smtCellKey t ≠ smtCellKey t`.  The theorem would then be vacuous on
+a state a single whole-balance transfer produces.  It is scoped to
+the tags that CONTRIBUTE an entry, which is all the proof ever used,
+and a non-vacuity test checks the scoped form actually holds on a
+zeroed cell.  The enumeration hypothesis in the present branch is
+likewise derived rather than assumed —
+`getCellValue_of_not_mem` already gives it.
+
 ## 3B. Writing a cell — **DONE**
 
 §2B's `smtUpdateRoot` computes *a* root from an opening and a new
