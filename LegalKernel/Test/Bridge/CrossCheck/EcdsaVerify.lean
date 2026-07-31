@@ -258,7 +258,7 @@ def tests : List TestCase :=
         let seed ← readSeed
         let (json, _) := buildFixture seed
         let content := json.encode
-        writeFixture fixtureName content
+        writeHashDependentFixture fixtureName content
     }
   , { name := "F.1.2: bytesOfHex parses a known vector (anchors the corpus parser)"
     , body := do

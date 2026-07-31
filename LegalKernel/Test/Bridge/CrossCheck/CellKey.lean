@@ -102,7 +102,7 @@ def fixtureName : String := "cell_key.json"
 
 /-- Write the fixture file. -/
 def writeCorpus : IO Unit :=
-  writeFixture fixtureName encodeFixture.encode
+  writeHashDependentFixture fixtureName encodeFixture.encode
 
 /-- Tests. -/
 def tests : List TestCase :=

@@ -824,7 +824,7 @@ def tests : List TestCase :=
     }
   , { name := "GP.6.5: write bold_deposit.json fixture file"
     , body :=
-        Test.Bridge.CrossCheck.writeFixture fixtureJsonName buildFixtureJson.encodeIndented
+        Test.Bridge.CrossCheck.writeHashDependentFixture fixtureJsonName buildFixtureJson.encodeIndented
     }
   , { name := "GP.6.5: write l1_ingest_bold.cxsf binary fixture file"
     , body :=

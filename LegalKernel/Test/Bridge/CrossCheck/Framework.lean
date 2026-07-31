@@ -43,6 +43,7 @@ Scope: the Lean side of the cross-stack contract.  The Solidity
 side lives in `solidity/test/CrossCheck/Framework.t.sol`.
 -/
 
+import LegalKernel.Bridge.HashAdaptor
 import LegalKernel.Test.Framework
 import LegalKernel.Test.Property
 
@@ -254,10 +255,55 @@ def readWriteMode : IO WriteFixtureMode := do
   | _        => pure .verify
 
 /-- Write a fixture using the env-var-driven mode.  Convenience
-    wrapper for use in fixture generators. -/
+    wrapper for use in fixture generators.
+
+    For a corpus whose bytes embed hash outputs, use
+    `writeHashDependentFixture` instead. -/
 def writeFixture (name : String) (content : String) : IO Unit := do
   let mode ← readWriteMode
   writeFixtureWith mode name content
+
+/-- Write a fixture whose bytes depend on which hash adaptor is
+    linked.
+
+    **Such a corpus is a keccak artifact by construction.**  Its whole
+    purpose is byte-equivalence between Lean and the EVM, which is
+    only meaningful when both compute the same hash.  A fallback-hash
+    build computes FNV-1a-64, so:
+
+      * it MUST NOT author one.  If it did, the committed bytes would
+        carry `isKeccak256Linked: false`, every Solidity consumer
+        would gate itself off, and a bare `forge test` would report
+        green having compared nothing — coverage that is not
+        coverage.  That is exactly the state this rule removes, so it
+        is enforced here rather than left to a convention.
+      * it cannot verify one either.  Comparing its FNV bytes against
+        committed keccak bytes is a guaranteed mismatch that says
+        nothing, so it reports the skip by name instead of failing —
+        and still refuses to author a missing file.
+
+    Regenerate through `./scripts/verify_keccak_crossstack.sh`, which
+    builds keccak-linked before running the writers. -/
+def writeHashDependentFixture (name : String) (content : String) : IO Unit := do
+  if LegalKernel.Bridge.isKeccak256Linked then
+    writeFixture name content
+  else
+    let pathPresent ← System.FilePath.pathExists (fixturePath name)
+    match (← readWriteMode) with
+    | .overwrite =>
+      throw <| IO.userError <|
+        s!"refusing to regenerate hash-dependent fixture {name} on a fallback-hash " ++
+        "build: its bytes would be FNV-1a-64 rather than keccak256, and every " ++
+        "Solidity consumer would gate itself off. Regenerate via " ++
+        "./scripts/verify_keccak_crossstack.sh"
+    | .verify =>
+      if !pathPresent then
+        throw <| IO.userError <|
+          s!"hash-dependent fixture {name} is missing and a fallback-hash build " ++
+          "cannot author it. Regenerate via ./scripts/verify_keccak_crossstack.sh"
+      IO.println <|
+        s!"      SKIP  {name} byte-stability — fallback hash; " ++
+        "the keccak lane is what verifies this corpus"
 
 /-! ## Binary (`.cxsf`) fixture writer
 

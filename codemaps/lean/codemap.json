@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "9c7af7e0266984134b1b3f406779c2bd77a2852b36977bc0f9959c75edad853e"
+    "source_digest": "846deace2aef8ad3f6b359c5b11cf4c5e74f7db48b89560102be5a749b377909"
   },
   "summary": {
     "module_count": 324,
-    "declaration_count": 5519
+    "declaration_count": 5521
   },
   "modules": [
     {
@@ -39641,7 +39641,7 @@
           "line": 103,
           "called": [
             "fixtureName",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         },
         {
@@ -39928,7 +39928,7 @@
             "maxBudgetPerDeposit",
             "readSeed",
             "skipWithReason",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]
@@ -40052,7 +40052,7 @@
             "readSeed",
             "resourceIdBold",
             "skipWithReason",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]
@@ -40329,7 +40329,7 @@
             "replay",
             "replayResistanceEntries",
             "skipWithReason",
-            "writeFixture",
+            "writeHashDependentFixture",
             "zeroAddr20"
           ]
         }
@@ -40681,7 +40681,7 @@
             "skipWithReason",
             "verdictDomain",
             "verdictEntries",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]
@@ -40831,7 +40831,7 @@
             "encode",
             "fixtureName",
             "readSeed",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]
@@ -41043,12 +41043,12 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.Framework",
       "path": "LegalKernel/Test/Bridge/CrossCheck/Framework.lean",
-      "declaration_count": 28,
+      "declaration_count": 29,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck",
-          "line": 48,
+          "line": 49,
           "called": [
             "LegalKernel.Test"
           ]
@@ -41056,19 +41056,19 @@
         {
           "kind": "inductive",
           "name": "Json",
-          "line": 62,
+          "line": 63,
           "called": []
         },
         {
           "kind": "def",
           "name": "escapeChar",
-          "line": 81,
+          "line": 82,
           "called": []
         },
         {
           "kind": "def",
           "name": "escapeStr",
-          "line": 99,
+          "line": 100,
           "called": [
             "escapeChar"
           ]
@@ -41076,7 +41076,7 @@
         {
           "kind": "def",
           "name": "Json.encode",
-          "line": 103,
+          "line": 104,
           "called": [
             "Json",
             "escapeStr"
@@ -41085,7 +41085,7 @@
         {
           "kind": "def",
           "name": "Json.encodeIndentedAux",
-          "line": 126,
+          "line": 127,
           "called": [
             "Json",
             "escapeStr"
@@ -41094,7 +41094,7 @@
         {
           "kind": "def",
           "name": "Json.encodeIndented",
-          "line": 156,
+          "line": 157,
           "called": [
             "Json",
             "Json.encodeIndentedAux"
@@ -41103,13 +41103,13 @@
         {
           "kind": "def",
           "name": "nibbleToHex",
-          "line": 162,
+          "line": 163,
           "called": []
         },
         {
           "kind": "def",
           "name": "hexFromUInt8",
-          "line": 167,
+          "line": 168,
           "called": [
             "nibbleToHex"
           ]
@@ -41117,7 +41117,7 @@
         {
           "kind": "def",
           "name": "hexFromBytes",
-          "line": 173,
+          "line": 174,
           "called": [
             "hexFromUInt8"
           ]
@@ -41125,7 +41125,7 @@
         {
           "kind": "def",
           "name": "hexFromUint256BE",
-          "line": 180,
+          "line": 181,
           "called": [
             "hexFromUInt8"
           ]
@@ -41133,7 +41133,7 @@
         {
           "kind": "def",
           "name": "hexFromUInt64BE",
-          "line": 189,
+          "line": 190,
           "called": [
             "hexFromUInt8"
           ]
@@ -41141,13 +41141,13 @@
         {
           "kind": "def",
           "name": "fixturesDir",
-          "line": 202,
+          "line": 203,
           "called": []
         },
         {
           "kind": "def",
           "name": "fixturePath",
-          "line": 205,
+          "line": 206,
           "called": [
             "fixturesDir"
           ]
@@ -41155,13 +41155,13 @@
         {
           "kind": "inductive",
           "name": "WriteFixtureMode",
-          "line": 212,
+          "line": 213,
           "called": []
         },
         {
           "kind": "def",
           "name": "writeFixtureWith",
-          "line": 233,
+          "line": 234,
           "called": [
             "WriteFixtureMode",
             "fixturePath"
@@ -41170,7 +41170,7 @@
         {
           "kind": "def",
           "name": "readWriteMode",
-          "line": 250,
+          "line": 251,
           "called": [
             "WriteFixtureMode"
           ]
@@ -41178,7 +41178,7 @@
         {
           "kind": "def",
           "name": "writeFixture",
-          "line": 257,
+          "line": 261,
           "called": [
             "readWriteMode",
             "writeFixtureWith"
@@ -41186,20 +41186,30 @@
         },
         {
           "kind": "def",
+          "name": "writeHashDependentFixture",
+          "line": 286,
+          "called": [
+            "fixturePath",
+            "readWriteMode",
+            "writeFixture"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "beBytes",
-          "line": 279,
+          "line": 325,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfFixturesDir",
-          "line": 290,
+          "line": 336,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfFixturePath",
-          "line": 293,
+          "line": 339,
           "called": [
             "cxsfFixturesDir"
           ]
@@ -41207,7 +41217,7 @@
         {
           "kind": "def",
           "name": "buildCxsf",
-          "line": 309,
+          "line": 355,
           "called": [
             "beBytes",
             "magic"
@@ -41216,7 +41226,7 @@
         {
           "kind": "def",
           "name": "writeBinFixtureWith",
-          "line": 331,
+          "line": 377,
           "called": [
             "WriteFixtureMode",
             "cxsfFixturePath"
@@ -41225,7 +41235,7 @@
         {
           "kind": "def",
           "name": "writeBinFixture",
-          "line": 348,
+          "line": 394,
           "called": [
             "readWriteMode",
             "writeBinFixtureWith"
@@ -41234,13 +41244,13 @@
         {
           "kind": "def",
           "name": "skipWithReason",
-          "line": 362,
+          "line": 408,
           "called": []
         },
         {
           "kind": "def",
           "name": "smokeFixture",
-          "line": 373,
+          "line": 419,
           "called": [
             "Json"
           ]
@@ -41248,13 +41258,13 @@
         {
           "kind": "def",
           "name": "smokeFixtureExpected",
-          "line": 380,
+          "line": 426,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 387,
+          "line": 433,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck",
             "TestCase",
@@ -41271,7 +41281,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.Goldens",
       "path": "LegalKernel/Test/Bridge/CrossCheck/Goldens.lean",
-      "declaration_count": 20,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "namespace",
@@ -41435,8 +41445,18 @@
         },
         {
           "kind": "def",
+          "name": "writeHashDependentGoldens",
+          "line": 208,
+          "called": [
+            "goldensPath",
+            "readWriteMode",
+            "writeGoldens"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "buildAllGoldens",
-          "line": 203,
+          "line": 231,
           "called": [
             "BlockHeader",
             "RlpEntry",
@@ -41449,7 +41469,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 214,
+          "line": 242,
           "called": [
             "Goldens",
             "LegalKernel.Test.Bridge.CrossCheck",
@@ -41462,7 +41482,8 @@
             "serializeRlpEntries",
             "serializeTxSigs",
             "skipWithReason",
-            "writeGoldens"
+            "writeGoldens",
+            "writeHashDependentGoldens"
           ]
         }
       ]
@@ -41610,7 +41631,7 @@
             "katEntries",
             "readSeed",
             "skipWithReason",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]
@@ -41903,7 +41924,7 @@
             "migrationStructHash",
             "readSeed",
             "skipWithReason",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]
@@ -42714,7 +42735,7 @@
             "isKeccak256Linked",
             "leanVerify",
             "skipWithReason",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]
@@ -43939,7 +43960,7 @@
             "tamperedEntries",
             "unmappedEntries",
             "verifyProof",
-            "writeFixture"
+            "writeHashDependentFixture"
           ]
         }
       ]

@@ -198,6 +198,34 @@ def writeGoldens (name : String) (content : String) : IO Unit := do
     else
       IO.FS.writeFile path content
 
+/-- Write a goldens file whose bytes embed hash outputs.
+
+    The goldens peer of `writeHashDependentFixture`, and for the same
+    reason: a corpus that exists to pin Lean against the EVM is a
+    keccak artifact by construction, so a fallback-hash build must
+    neither author one nor pretend to verify one.  Two of the three
+    goldens qualify — block-header hashes and RLP encodings both
+    carry keccak digests; transaction signatures do not. -/
+def writeHashDependentGoldens (name : String) (content : String) : IO Unit := do
+  if LegalKernel.Bridge.isKeccak256Linked then
+    writeGoldens name content
+  else
+    let pathPresent ← System.FilePath.pathExists (goldensPath name)
+    match (← readWriteMode) with
+    | .overwrite =>
+      throw <| IO.userError <|
+        s!"refusing to regenerate hash-dependent goldens {name} on a fallback-hash " ++
+        "build: its bytes would carry FNV-1a-64 digests rather than keccak256. " ++
+        "Regenerate via ./scripts/verify_keccak_crossstack.sh"
+    | .verify =>
+      if !pathPresent then
+        throw <| IO.userError <|
+          s!"hash-dependent goldens {name} is missing and a fallback-hash build " ++
+          "cannot author it. Regenerate via ./scripts/verify_keccak_crossstack.sh"
+      IO.println <|
+        s!"      SKIP  {name} byte-stability — fallback hash; " ++
+        "the keccak lane is what verifies this corpus"
+
 /-! ## Top-level corpus -/
 
 /-- Build all three goldens corpora, threaded through one seed. -/
@@ -266,7 +294,7 @@ def tests : List TestCase :=
     , body := do
         let seed ← readSeed
         let (bh, _, _) := buildAllGoldens seed
-        writeGoldens "block_header_hashes.txt" (serializeBlockHeaders bh)
+        writeHashDependentGoldens "block_header_hashes.txt" (serializeBlockHeaders bh)
     }
   , { name := "F.2: write transaction_signatures.txt"
     , body := do
@@ -278,7 +306,7 @@ def tests : List TestCase :=
     , body := do
         let seed ← readSeed
         let (_, _, rlp) := buildAllGoldens seed
-        writeGoldens "rlp_encodings.txt" (serializeRlpEntries rlp)
+        writeHashDependentGoldens "rlp_encodings.txt" (serializeRlpEntries rlp)
     }
   , { name := "F.2: keccak256 cross-check gated on isKeccak256Linked"
     , body := do

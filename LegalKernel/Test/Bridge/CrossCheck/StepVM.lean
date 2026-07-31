@@ -1908,7 +1908,7 @@ def tests : List Test.TestCase :=
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)
           ]
-        Test.Bridge.CrossCheck.writeFixture "step_vm.json" header.encode
+        Test.Bridge.CrossCheck.writeHashDependentFixture "step_vm.json" header.encode
     }
   ]
 
