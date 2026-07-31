@@ -624,5 +624,209 @@ theorem canonicalSiblings_verifies_absent (es : ExtendedState) (t : CellTag)
   obtain ⟨t', ht', rfl, _⟩ := stateCellEntries_spec es p hp
   exact h_keys t' ht'
 
+/-! ## Writing a cell into the published root
+
+The step VM holds a root and a bundle of openings, not a state, so
+the post-root has to be computable from those alone.  It is: the
+pre-state supplies the sibling path, the write supplies the leaf, and
+`smtRootListAux_update_single` says the two compose to the post-state's
+own published root — provided the two states really do agree at every
+other cell, which is `dropKey`-equality of their entry lists.
+
+Both directions of the absence branch appear here, because a step
+writes canonically-absent values routinely: `reclaimAmmReserves`
+sweeps a balance to zero and `revokeLocalPolicy` clears a policy. -/
+
+/-- A cell's leaf is 32 bytes either way, so it composes with the
+    next write in a multi-cell step. -/
+theorem cellLeaf_size (t : CellTag) (value : ByteArray) :
+    (cellLeaf t value).size = 32 := by
+  unfold cellLeaf
+  by_cases h : value = canonicalAbsentValue t
+  · rw [if_pos h]; exact emptyRootAt_size 0
+  · rw [if_neg h]; exact leafHash_size _ _
+
+/-- The root after writing `newValue` into the cell the opening
+    covers.  This is the L1 step VM's per-write primitive: same walk,
+    new leaf. -/
+def updateStateCellRoot (t : CellTag) (newValue : ByteArray)
+    (proof : SmtCellProof) : StateCommit :=
+  smtWalkFrom (cellLeaf t newValue) (smtCellKey t) proof
+
+/-- **The write lands on the post-state's own root.**  Walking the
+    PRE-state's canonical path for a cell, started from that cell's
+    POST leaf, reaches exactly `commitExtendedState es'`.
+
+    The `dropKey` hypothesis is the substantive one: it says the two
+    states' entry lists agree away from this cell, which is what
+    licenses reusing the pre-state's path. -/
+theorem canonicalSiblings_updates_root
+    (es es' : ExtendedState) (t : CellTag)
+    (h_off : dropKey (stateCellEntries es) (smtCellKey t)
+           = dropKey (stateCellEntries es') (smtCellKey t))
+    (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
+    (h_keys' : getCellValue es' t = canonicalAbsentValue t →
+                 ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t)
+    (h_mem' : getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es') :
+    ((canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)).zip
+        (keyBits (smtCellKey t))).foldl stepPair (cellLeaf t (getCellValue es' t))
+      = commitExtendedState es' := by
+  unfold cellLeaf
+  by_cases h_abs : getCellValue es' t = canonicalAbsentValue t
+  · rw [if_pos h_abs]
+    refine smtRootListAux_update_to_absent _ _ _ h_off (entries_key_size es')
+      (smtCellKey_size t) (fun p hp => ?_)
+    obtain ⟨t', ht', rfl, _⟩ := stateCellEntries_spec es' p hp
+    exact h_keys' h_abs t' ht'
+  · rw [if_neg h_abs]
+    exact smtRootListAux_update_to_present _ _ _ _ h_off h_wf'
+      (mem_stateCellEntries_of_ne_absent es' t (h_mem' h_abs) h_abs)
+
+/-- The step-VM-facing form: an opening whose expansion is the
+    pre-state's canonical path computes the post-state's published
+    root when re-walked from the post leaf.
+
+    The representation obligation stays where §2C left it — that
+    `buildStateCellProof`'s bitmask encoding expands to the canonical
+    path is pinned by `faultproof-smt-injective` rather than proved —
+    so it is taken as the hypothesis `h_expand` rather than assumed
+    silently. -/
+theorem updateStateCellRoot_eq_commit_of_canonical
+    (es es' : ExtendedState) (t : CellTag) (canon : SmtCellProof)
+    (h_expand : expandSiblings canon
+        = canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t))
+    (h_off : dropKey (stateCellEntries es) (smtCellKey t)
+           = dropKey (stateCellEntries es') (smtCellKey t))
+    (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
+    (h_keys' : getCellValue es' t = canonicalAbsentValue t →
+                 ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t)
+    (h_mem' : getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es') :
+    updateStateCellRoot t (getCellValue es' t) canon = commitExtendedState es' := by
+  unfold updateStateCellRoot smtWalkFrom
+  rw [h_expand]
+  exact canonicalSiblings_updates_root es es' t h_off h_wf' h_keys' h_mem'
+
+/-- **A responder cannot steer the post-root.**  Two openings that
+    both verify the same cell against the same published root compute
+    the same post-root for the same written value — so the value the
+    L1 folds is a function of `(pre-root, cell, new value)` alone.
+
+    This is `smtUpdateRoot_proof_independent` lifted through the
+    absence branch: the present case verifies from a leaf hash and the
+    absent case from the canonical empty leaf, so the guarantee has to
+    be stated over the starting leaf. -/
+theorem updateStateCellRoot_proof_independent
+    (es : ExtendedState) (t : CellTag) (newValue : ByteArray)
+    (proof₁ proof₂ : SmtCellProof)
+    (h_cf : Bridge.CollisionFreeOn
+      (smtWalkPairPreimages (cellLeaf t (getCellValue es t)) (smtCellKey t)
+        proof₁ proof₂) LegalKernel.Runtime.hashBytes)
+    (h₁ : verifyStateCellProof (commitExtendedState es) t (getCellValue es t) proof₁ = true)
+    (h₂ : verifyStateCellProof (commitExtendedState es) t (getCellValue es t) proof₂ = true) :
+    updateStateCellRoot t newValue proof₁ = updateStateCellRoot t newValue proof₂ := by
+  unfold verifyStateCellProof at h₁ h₂
+  rw [Bool.and_eq_true] at h₁ h₂
+  obtain ⟨h_wf₁, h_walk₁⟩ := h₁
+  obtain ⟨h_wf₂, h_walk₂⟩ := h₂
+  exact smtWalkFrom_proof_independent (commitExtendedState es) (smtCellKey t)
+    (cellLeaf t (getCellValue es t)) (cellLeaf t newValue) proof₁ proof₂
+    h_cf (cellLeaf_size t _) h_wf₁ h_wf₂
+    (decide_eq_true_eq.mp h_walk₁) (decide_eq_true_eq.mp h_walk₂)
+
+/-! ## Folding a step's writes
+
+A step writes several cells, and openings go stale the moment a write
+lands: the sibling roots along one cell's path move when a different
+cell under a shared ancestor is rewritten.  So the bundle is folded
+strictly in order, each opening checked against the root the previous
+write produced.  A duplicate entry for an already-written cell fails
+that check, which is the fail-closed direction. -/
+
+/-- One checked write: verify the opening against the CURRENT root,
+    then re-walk it from the new leaf. -/
+def applyStateCellWrite (root : StateCommit) (t : CellTag)
+    (oldValue newValue : ByteArray) (proof : SmtCellProof) : Option StateCommit :=
+  if verifyStateCellProof root t oldValue proof then
+    some (updateStateCellRoot t newValue proof)
+  else none
+
+/-- One entry of a step's write bundle: cell, proven pre-value, new
+    value, opening. -/
+abbrev StateCellWrite := CellTag × ByteArray × ByteArray × SmtCellProof
+
+/-- Fold a step's writes into the root, in order. -/
+def foldStateCellWrites (root : StateCommit) : List StateCellWrite → Option StateCommit
+  | [] => some root
+  | (t, oldV, newV, p) :: rest =>
+    match applyStateCellWrite root t oldV newV p with
+    | none    => none
+    | some r' => foldStateCellWrites r' rest
+
+/-- A step's writes, each paired with the state it produces and the
+    opening it used. -/
+abbrev CellWriteChain := List (ExtendedState × CellTag × SmtCellProof)
+
+/-- The write bundle a chain induces: each entry's pre-value is read
+    from the state it opens against and its new value from the state
+    it produces. -/
+def chainWrites (es : ExtendedState) : CellWriteChain → List StateCellWrite
+  | [] => []
+  | (es', t, p) :: rest =>
+      (t, getCellValue es t, getCellValue es' t, p) :: chainWrites es' rest
+
+/-- The state a chain ends in. -/
+def chainLast (es : ExtendedState) : CellWriteChain → ExtendedState
+  | [] => es
+  | (es', _, _) :: rest => chainLast es' rest
+
+/-- Every link is a well-formed single-cell write: the opening is the
+    canonical path of the state it opens against and verifies there,
+    and the successor state agrees with its predecessor away from the
+    written cell. -/
+def ChainCoherent (es : ExtendedState) : CellWriteChain → Prop
+  | [] => True
+  | (es', t, p) :: rest =>
+      expandSiblings p = canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)
+      ∧ dropKey (stateCellEntries es) (smtCellKey t)
+          = dropKey (stateCellEntries es') (smtCellKey t)
+      ∧ BitsDistinctBelow smtDepth (stateCellEntries es')
+      ∧ (getCellValue es' t = canonicalAbsentValue t →
+           ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t)
+      ∧ (getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es')
+      ∧ verifyStateCellProof (commitExtendedState es) t (getCellValue es t) p = true
+      ∧ ChainCoherent es' rest
+
+/-- **The step VM's fold lands on the post-state's published root.**
+    Given a coherent chain of single-cell writes, folding the bundle
+    into the pre-state's root computes exactly
+    `commitExtendedState` of the state the chain ends in.
+
+    This is what closes the loop the plan's §4 opens: the L1 holds a
+    root and openings rather than a state, and this says the number it
+    folds out of them is the root an honest sequencer publishes. -/
+theorem foldStateCellWrites_eq_commit_of_coherent :
+    ∀ (chain : CellWriteChain) (es : ExtendedState), ChainCoherent es chain →
+      foldStateCellWrites (commitExtendedState es) (chainWrites es chain)
+        = some (commitExtendedState (chainLast es chain)) := by
+  intro chain
+  induction chain with
+  | nil => intro _ _; rfl
+  | cons hd rest ih =>
+    obtain ⟨es', t, p⟩ := hd
+    intro es hc
+    obtain ⟨h_exp, h_off, h_wf', h_keys', h_mem', h_ver, h_rest⟩ := hc
+    show (match applyStateCellWrite (commitExtendedState es) t (getCellValue es t)
+                  (getCellValue es' t) p with
+          | none    => none
+          | some r' => foldStateCellWrites r' (chainWrites es' rest))
+        = some (commitExtendedState (chainLast es' rest))
+    rw [show applyStateCellWrite (commitExtendedState es) t (getCellValue es t)
+              (getCellValue es' t) p = some (commitExtendedState es') from by
+          unfold applyStateCellWrite
+          rw [if_pos h_ver,
+            updateStateCellRoot_eq_commit_of_canonical es es' t p h_exp h_off h_wf'
+              h_keys' h_mem']]
+    exact ih es' h_rest
+
 end FaultProof
 end LegalKernel

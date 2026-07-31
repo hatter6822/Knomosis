@@ -112,8 +112,25 @@ condition — without which the verifier could not decide, since
 `setBalance s r a 0` leaves a live entry whose value is
 `encodeAmount 0`.
 
+**§3B has landed**, and it supplies the statement §4's fold is
+otherwise missing.  §2B says `smtUpdateRoot` is well-defined and
+unsteerable; neither of those says the value it computes is the root
+of any state, so an L1 folding proven writes into a pre-root would be
+computing an arbitrary hash.  `smtRootListAux_update_single` closes
+that: the canonical path never reads the key's own entry, so two entry
+lists that agree off the key share it and the whole difference is the
+leaf — which composes with §3A's `canonicalSiblings_walks_from_bucket`
+to give both leaf branches without a second induction.  Lifted to
+cells, `updateStateCellRoot_eq_commit_of_canonical` says a re-walked
+opening lands on `commitExtendedState` of the post-state, and
+`foldStateCellWrites_eq_commit_of_coherent` says the ordered
+multi-write fold lands on the last state's root.  A stale opening —
+one built against the pre-root and replayed after an earlier write —
+is rejected by the fold, pinned as a negative control.
+
 Not landed: **§4**, making `executeStep` compute the post-root from
-the proven writes.  That is what closes this finding; the swap was
+the proven writes.  The fold is now generic and proved; what §4 owes
+is the per-variant write list that feeds it.  That is what closes this finding; the swap was
 its precondition, since a post-root is not computable from a
 concatenation hash at all.  §0 of `docs/fault_proof_runbook.md`
 stands until §4 lands.

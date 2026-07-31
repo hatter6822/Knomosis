@@ -250,6 +250,56 @@ already indistinguishable through `getCellValue`.
 Both are pinned as tests, including the negative control that the
 present-style leaf does NOT reach the root for an absent cell.
 
+## 3B. Writing a cell — **DONE**
+
+§2B's `smtUpdateRoot` computes *a* root from an opening and a new
+value, and §2B's theorems say it is well-defined and unsteerable.
+Neither says the number it computes is the root of any state.  That
+gap is the whole of §4's soundness: an L1 folding proven writes into
+a pre-root would otherwise be computing an arbitrary hash, and an
+honest sequencer's published root would not match it.
+
+The missing statement is about *two* entry lists rather than one, and
+it holds because the canonical sibling path never looks at the key's
+own entry — at every level the sibling is the root of the half the key
+does NOT descend into.  So two lists that agree off the key share the
+path, and the entire difference is concentrated in the leaf:
+
+  * `canonicalSiblings_eq_of_dropKey_eq` — the path is a function of
+    the entries away from the key.
+  * `smtRootListAux_update_single` — composing that with §3A's
+    `canonicalSiblings_walks_from_bucket` gives the post-root for
+    free, with no second induction.
+  * `smtRootListAux_update_to_present` /
+    `smtRootListAux_update_to_absent` — the two leaf branches.  Both
+    are reachable in production: `reclaimAmmReserves` sweeps a
+    balance to zero and `revokeLocalPolicy` clears a policy, and
+    §3A's canonicalisation turns each into a key the tree drops.
+  * `smtWalkFrom_proof_independent` — `smtUpdateRoot_proof_independent`
+    restated over the starting leaf, because an absent cell's opening
+    verifies from `emptyRootAt 0` rather than from a leaf hash.
+
+Lifted to state cells: `updateStateCellRoot` is the per-write
+primitive, `canonicalSiblings_updates_root` and
+`updateStateCellRoot_eq_commit_of_canonical` say the re-walk lands on
+`commitExtendedState` of the post-state, and
+`updateStateCellRoot_proof_independent` says a responder cannot steer
+it.  `foldStateCellWrites` is the multi-write fold — strictly ordered,
+each opening re-checked against the root the previous write produced —
+and `foldStateCellWrites_eq_commit_of_coherent` proves a coherent
+chain lands on the last state's published root.
+
+The representation obligation stays exactly where §2C left it:
+`updateStateCellRoot_eq_commit_of_canonical` takes
+`expandSiblings canon = canonicalSiblings …` as a hypothesis rather
+than deriving it, because that the bitmask encoding expands to the
+canonical path is pinned by `faultproof-smt-injective` rather than
+proved.
+
+Pinned by four value-level tests, including the fail-closed negative
+control: a second write whose opening was built against the PRE-root
+is rejected by the fold rather than folded into a wrong root.
+
 ## 4. The step VM — REMAINING
 
 `KnomosisStepVM.executeStep` must return a value in state-root
@@ -374,10 +424,12 @@ preStateCommit`, `root_{i+1} := smtUpdateRoot key_i newValue_i
 proof_i`).  Cells the step only reads carry `newValue = oldValue`,
 so they leave the root alone; a duplicate entry for an
 already-written cell fails verification against the updated root,
-which is the fail-closed direction.  §2B is what makes this
-well-defined: `smtUpdateRoot_verifies` gives the chaining and
-`smtUpdateRoot_proof_independent` gives that the responder cannot
-steer the result by choosing an opening.
+which is the fail-closed direction.  §3B is what makes this
+correct rather than merely well-defined: `foldStateCellWrites` is
+that fold, and `foldStateCellWrites_eq_commit_of_coherent` proves it
+lands on `commitExtendedState` of the state the writes produce.  What
+§4 still owes it is the per-variant write list — the fold is
+generic, the values are not.
 
 **Lean and Rust move with it.**  `StepVMCoherence.stepVMHash`'s
 25-arm match currently ends each arm in a `stepCommit<Variant>` hash;
@@ -398,10 +450,10 @@ over `setBitmaskBit` rather than content.
 
 ## 5. Ordering
 
-§2 → §2A → §2B → §2C → §3 → §4, and §4's corpus regeneration last.  §2,
-§2A and §2B are additive and have landed on their own; §3 and §4 are
-one consensus change and must not be split across commits that could
-be deployed independently.
+§2 → §2A → §2B → §2C → §3 → §3A → §3B → §4, and §4's corpus
+regeneration last.  §2, §2A, §2B and §3B are additive and have landed
+on their own; §3 / §3A and §4 are one consensus change and must not be
+split across releases that could be deployed independently.
 
 The runbook's §0 deployment blocker stays in force until §4 lands
 and `verify_keccak_crossstack.sh` reports the step-VM

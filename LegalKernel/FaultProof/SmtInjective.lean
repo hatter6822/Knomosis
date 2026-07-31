@@ -1186,5 +1186,259 @@ theorem canonicalSiblings_walks_to_root_absent
   rw [h_b] at this
   exact this
 
+/-! ## Writing one cell
+
+§2B's `smtUpdateRoot` computes *a* root from an opening and a new
+value.  What §4 needs is stronger and is a statement about two entry
+lists rather than one: that the value it computes is the root of the
+state *after* the write.  Without that, an L1 step VM folding proven
+writes into a pre-root is computing a number with no relation to any
+state, and an honest sequencer's published root would not match it.
+
+It holds because the canonical sibling path never looks at the key's
+own entry.  At every level the sibling is the root of the half the
+key does NOT descend into, so two entry lists that agree off `key`
+have the same path and the entire difference is concentrated in the
+leaf.  `canonicalSiblings_walks_from_bucket` (§3A) then supplies both
+end points, present and absent, without a second induction. -/
+
+/-- The entries with the key's own entry (if any) removed.  Two
+    states that differ at exactly one cell have equal `dropKey` at
+    that cell's key — that is the hypothesis the update theorems
+    consume. -/
+def dropKey (entries : SmtEntries) (key : ByteArray) : SmtEntries :=
+  entries.filter (fun p => decide (p.1 ≠ key))
+
+/-- `dropKey` commutes with the partition filters, which is what lets
+    the induction push its hypothesis into both halves. -/
+theorem dropKey_filter (entries : SmtEntries) (key : ByteArray)
+    (f : ByteArray × ByteArray → Bool) :
+    dropKey (entries.filter f) key = (dropKey entries key).filter f := by
+  unfold dropKey
+  simp only [List.filter_filter]
+  congr 1
+  funext p
+  exact Bool.and_comm _ _
+
+/-- A list none of whose entries carry the key is its own
+    `dropKey`. -/
+theorem dropKey_eq_self (entries : SmtEntries) (key : ByteArray)
+    (h : ∀ p ∈ entries, p.1 ≠ key) : dropKey entries key = entries := by
+  unfold dropKey
+  exact List.filter_eq_self.mpr (fun p hp => by simpa using h p hp)
+
+/-- **The canonical path ignores the key's own entry.**  Two entry
+    lists that agree off `key` produce the same sibling path for
+    `key`. -/
+theorem canonicalSiblings_eq_of_dropKey_eq :
+    ∀ (d : Nat) (e e' : SmtEntries) (key : ByteArray),
+      dropKey e key = dropKey e' key →
+      canonicalSiblings d e key = canonicalSiblings d e' key := by
+  intro d
+  induction d with
+  | zero => intro _ _ _ _; rfl
+  | succ k ih =>
+    intro e e' key h
+    have h_half : ∀ (f : ByteArray × ByteArray → Bool),
+        dropKey (e.filter f) key = dropKey (e'.filter f) key := by
+      intro f
+      rw [dropKey_filter, dropKey_filter, h]
+    -- The half the key does NOT descend into holds no entry for the
+    -- key, so there `dropKey` is the identity and the two lists are
+    -- equal outright — which is what the sibling root reads.
+    have h_off : ∀ (l : SmtEntries) (f : ByteArray × ByteArray → Bool),
+        (∀ p ∈ l.filter f, p.1 ≠ key) → dropKey (l.filter f) key = l.filter f :=
+      fun l f hl => dropKey_eq_self _ _ hl
+    have h_path : ∀ (l : SmtEntries), canonicalSiblings (k + 1) l key
+        = (if BitsKey.keyBit key k then
+             canonicalSiblings k (l.filter (fun p => BitsKey.keyBit p.1 k)) key ++
+               [smtRootListAux k (l.filter (fun p => ! BitsKey.keyBit p.1 k))]
+           else
+             canonicalSiblings k (l.filter (fun p => ! BitsKey.keyBit p.1 k)) key ++
+               [smtRootListAux k (l.filter (fun p => BitsKey.keyBit p.1 k))]) :=
+      fun _ => rfl
+    rw [h_path e, h_path e']
+    by_cases h_bit : BitsKey.keyBit key k
+    · rw [if_pos h_bit, if_pos h_bit, ih _ _ _ (h_half _)]
+      have h_ne : ∀ (l : SmtEntries),
+          ∀ p ∈ l.filter (fun p => ! BitsKey.keyBit p.1 k), p.1 ≠ key := by
+        intro l p hp h_eq
+        have hb : BitsKey.keyBit p.1 k = false := by
+          simpa using (List.mem_filter.mp hp).2
+        rw [h_eq, h_bit] at hb
+        exact Bool.noConfusion hb
+      rw [← h_off e _ (h_ne e), ← h_off e' _ (h_ne e'), h_half]
+    · rw [if_neg h_bit, if_neg h_bit, ih _ _ _ (h_half _)]
+      have h_ne : ∀ (l : SmtEntries),
+          ∀ p ∈ l.filter (fun p => BitsKey.keyBit p.1 k), p.1 ≠ key := by
+        intro l p hp h_eq
+        have hb : BitsKey.keyBit p.1 k = true := (List.mem_filter.mp hp).2
+        rw [h_eq] at hb
+        exact absurd hb h_bit
+      rw [← h_off e _ (h_ne e), ← h_off e' _ (h_ne e'), h_half]
+
+/-- The bucket is a sub-list of the entries it was descended from. -/
+theorem bucketAt_sublist :
+    ∀ (d : Nat) (entries : SmtEntries) (key : ByteArray),
+      (bucketAt d entries key).Sublist entries := by
+  intro d
+  induction d with
+  | zero => intro entries _; exact List.Sublist.refl entries
+  | succ k ih =>
+    intro entries key
+    show (bucketAt k (if BitsKey.keyBit key k then
+                        entries.filter (fun e => BitsKey.keyBit e.1 k)
+                      else entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key).Sublist
+         entries
+    by_cases h_bit : BitsKey.keyBit key k
+    · rw [if_pos h_bit]; exact (ih _ key).trans List.filter_sublist
+    · rw [if_neg h_bit]; exact (ih _ key).trans List.filter_sublist
+
+/-- A well-formed bucket holds at most one entry: everything left in
+    it agrees with the key on every bit below `d`, so two members
+    could not be distinguished. -/
+theorem length_bucketAt_le_one (d : Nat) (entries : SmtEntries) (key : ByteArray)
+    (h_wf : BitsDistinctBelow d entries) :
+    (bucketAt d entries key).length ≤ 1 := by
+  have h_wf' : BitsDistinctBelow d (bucketAt d entries key) :=
+    BitsDistinctBelow.sublist (bucketAt_sublist d entries key) h_wf
+  have h_bits := bucketAt_bits d entries key
+  cases hb : bucketAt d entries key with
+  | nil => simp
+  | cons a t =>
+    cases t with
+    | nil => simp
+    | cons b rest =>
+      exfalso
+      rw [hb] at h_wf'
+      obtain ⟨i, h_lt, h_ne⟩ := (List.pairwise_cons.mp h_wf').1 b (by simp)
+      have ha : a ∈ bucketAt d entries key := by rw [hb]; simp
+      have hbm : b ∈ bucketAt d entries key := by rw [hb]; simp
+      exact h_ne ((h_bits a ha i h_lt).trans (h_bits b hbm i h_lt).symm)
+
+/-- The key's own entry survives the descent. -/
+theorem mem_bucketAt_of_mem :
+    ∀ (d : Nat) (entries : SmtEntries) (key value : ByteArray),
+      (key, value) ∈ entries → (key, value) ∈ bucketAt d entries key := by
+  intro d
+  induction d with
+  | zero => intro _ _ _ h; exact h
+  | succ k ih =>
+    intro entries key value h
+    show (key, value) ∈ bucketAt k (if BitsKey.keyBit key k then
+                                      entries.filter (fun e => BitsKey.keyBit e.1 k)
+                                    else entries.filter (fun e => ! BitsKey.keyBit e.1 k)) key
+    by_cases h_bit : BitsKey.keyBit key k
+    · rw [if_pos h_bit]
+      exact ih _ key value (List.mem_filter.mpr ⟨h, h_bit⟩)
+    · rw [if_neg h_bit]
+      exact ih _ key value (List.mem_filter.mpr ⟨h, by simp [h_bit]⟩)
+
+/-- A well-formed list's bucket for a present key is exactly that
+    key's entry. -/
+theorem bucketAt_eq_singleton_of_mem (d : Nat) (entries : SmtEntries)
+    (key value : ByteArray) (h_wf : BitsDistinctBelow d entries)
+    (h_mem : (key, value) ∈ entries) :
+    bucketAt d entries key = [(key, value)] := by
+  have h1 := mem_bucketAt_of_mem d entries key value h_mem
+  have h2 := length_bucketAt_le_one d entries key h_wf
+  cases hb : bucketAt d entries key with
+  | nil => rw [hb] at h1; simp at h1
+  | cons a t =>
+    cases t with
+    | nil =>
+      rw [hb] at h1
+      simp only [List.mem_singleton] at h1
+      rw [h1]
+    | cons b rest =>
+      rw [hb] at h2
+      simp at h2
+
+/-- **Single-cell update.**  Two entry lists that agree off `key`
+    share the key's sibling path, so the second list's root is the
+    first list's path walked from the second list's bucket.
+
+    This is the statement that makes a post-root computable on L1
+    from a pre-root and the step's proven writes: the pre-state
+    supplies the path, the write supplies the leaf. -/
+theorem smtRootListAux_update_single
+    (e e' : SmtEntries) (key : ByteArray)
+    (h : dropKey e key = dropKey e' key) :
+    ((canonicalSiblings smtDepth e key).zip (keyBitsUpTo smtDepth key)).foldl stepPair
+        (smtRootListAux 0 (bucketAt smtDepth e' key))
+      = smtRootListAux smtDepth e' := by
+  rw [canonicalSiblings_eq_of_dropKey_eq smtDepth e e' key h]
+  exact canonicalSiblings_walks_from_bucket smtDepth (by unfold smtDepth; omega) e' key
+
+/-- Writing a value the tree keeps: the walk starts from that key's
+    leaf. -/
+theorem smtRootListAux_update_to_present
+    (e e' : SmtEntries) (key newValue : ByteArray)
+    (h : dropKey e key = dropKey e' key)
+    (h_wf' : BitsDistinctBelow smtDepth e')
+    (h_mem' : (key, newValue) ∈ e') :
+    ((canonicalSiblings smtDepth e key).zip (keyBitsUpTo smtDepth key)).foldl stepPair
+        (leafHash key newValue)
+      = smtRootListAux smtDepth e' := by
+  rw [← smtRootListAux_update_single e e' key h,
+    bucketAt_eq_singleton_of_mem smtDepth e' key newValue h_wf' h_mem']
+  rfl
+
+/-- Writing a value the tree drops — a balance zeroed, a policy
+    revoked: the walk starts from the canonical EMPTY leaf, because
+    the canonicalised entry list no longer holds the key. -/
+theorem smtRootListAux_update_to_absent
+    (e e' : SmtEntries) (key : ByteArray)
+    (h : dropKey e key = dropKey e' key)
+    (h_size : ∀ p ∈ e', p.1.size = 32) (h_key : key.size = 32)
+    (h_abs : ∀ p ∈ e', p.1 ≠ key) :
+    ((canonicalSiblings smtDepth e key).zip (keyBitsUpTo smtDepth key)).foldl stepPair
+        (emptyRootAt 0)
+      = smtRootListAux smtDepth e' := by
+  rw [← smtRootListAux_update_single e e' key h,
+    bucketAt_eq_nil_of_not_mem e' key h_size h_key h_abs, smtRootListAux_nil 0 (by omega)]
+
+/-! ### Proof-independence at an arbitrary leaf
+
+`smtUpdateRoot_proof_independent` covers the present case, whose
+opening verifies through `leafHash`.  An absent cell's opening
+verifies from `emptyRootAt 0` instead, so the same guarantee — the
+responder cannot steer the post-root by choosing among verifying
+openings — has to be stated over the starting leaf rather than over
+a value. -/
+
+/-- The `hashBytes` pre-images two openings of the same key consume
+    when walked from a common leaf. -/
+def smtWalkPairPreimages (leaf key : ByteArray)
+    (proof₁ proof₂ : SmtCellProof) : List ByteArray :=
+  walkPreimages leaf ((expandSiblings proof₁).zip (keyBits key)) ++
+    walkPreimages leaf ((expandSiblings proof₂).zip (keyBits key))
+
+/-- **Openings that agree on a root agree on every re-walk.**  Two
+    proofs that both walk `leaf` to `root` expand to the same sibling
+    list, so they walk any other leaf to the same place.  The
+    post-root is therefore a function of `(pre-root, key, new leaf)`
+    alone — a responder cannot shop among openings. -/
+theorem smtWalkFrom_proof_independent
+    (root key leaf newLeaf : ByteArray) (proof₁ proof₂ : SmtCellProof)
+    (h_cf : CollisionFreeOn (smtWalkPairPreimages leaf key proof₁ proof₂) hashBytes)
+    (h_leaf : leaf.size = 32)
+    (h_wf₁ : proof₁.isWellFormed = true) (h_wf₂ : proof₂.isWellFormed = true)
+    (h₁ : smtWalkFrom leaf key proof₁ = root)
+    (h₂ : smtWalkFrom leaf key proof₂ = root) :
+    smtWalkFrom newLeaf key proof₁ = smtWalkFrom newLeaf key proof₂ := by
+  obtain ⟨_, h_sibs⟩ :=
+    walk_inj_under_collision_free (keyBits key)
+      (expandSiblings proof₁) (expandSiblings proof₂) leaf leaf
+      h_cf
+      (by rw [expandSiblings_length, keyBits_length])
+      (by rw [expandSiblings_length, keyBits_length])
+      h_leaf h_leaf
+      (expandSiblings_all_32 proof₁ h_wf₁)
+      (expandSiblings_all_32 proof₂ h_wf₂)
+      (by unfold smtWalkFrom at h₁ h₂; rw [h₁, h₂])
+  unfold smtWalkFrom
+  rw [h_sibs]
+
 end FaultProof
 end LegalKernel

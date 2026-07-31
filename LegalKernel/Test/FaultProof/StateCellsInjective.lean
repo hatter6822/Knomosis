@@ -221,6 +221,116 @@ def tests : List TestCase :=
                        (.balance 3 9) (getCellValue zeroed (.balance 3 9)) p)
           "and opens through the absent path"
     }
+  , { name := "a write lands on the post-state's published root"
+    , body := do
+        -- The §4 primitive: the L1 holds a root and an opening, not a
+        -- state, and re-walks the opening from the new leaf.  What it
+        -- gets must be the root the sequencer publishes.
+        let t : CellTag := .balance 1 7
+        let post : ExtendedState :=
+          { populated with base := LegalKernel.setBalance populated.base 1 7 60 }
+        let p := buildStateCellProof populated t
+        assertEq (expected := (commitExtendedState post).toList)
+          (actual := (updateStateCellRoot t (getCellValue post t) p).toList)
+          "the re-walked root is the post-state's root"
+    }
+  , { name := "a write that empties a cell lands on the post root too"
+    , body := do
+        -- The absent branch of `cellLeaf` at write time: sweeping a
+        -- balance to zero removes the key from the canonicalised
+        -- entry list, so the new leaf is the empty one.  A step VM
+        -- that always wrote `leafHash` would compute a root no state
+        -- has — and `reclaimAmmReserves` does exactly this sweep.
+        let t : CellTag := .balance 2 7
+        let post : ExtendedState :=
+          { populated with base := LegalKernel.setBalance populated.base 2 7 0 }
+        assertEq (expected := (canonicalAbsentValue t).toList)
+          (actual := (getCellValue post t).toList)
+          "the swept cell reads as canonically absent"
+        let p := buildStateCellProof populated t
+        assertEq (expected := (commitExtendedState post).toList)
+          (actual := (updateStateCellRoot t (getCellValue post t) p).toList)
+          "and the write still lands on the post-state's root"
+    }
+  , { name := "a two-write fold lands on the two-write post root"
+    , body := do
+        let t₁ : CellTag := .balance 1 7
+        let t₂ : CellTag := .balance 2 7
+        let es₁ : ExtendedState :=
+          { populated with base := LegalKernel.setBalance populated.base 1 7 60 }
+        let es₂ : ExtendedState :=
+          { es₁ with base := LegalKernel.setBalance es₁.base 2 7 0 }
+        -- The second opening is built against the state the FIRST
+        -- write produced, not against the pre-state.
+        let writes : List StateCellWrite :=
+          [ (t₁, getCellValue populated t₁, getCellValue es₁ t₁,
+             buildStateCellProof populated t₁)
+          , (t₂, getCellValue es₁ t₂, getCellValue es₂ t₂,
+             buildStateCellProof es₁ t₂) ]
+        assertEq (expected := some (commitExtendedState es₂).toList)
+          (actual := (foldStateCellWrites (commitExtendedState populated)
+                        writes).map ByteArray.toList)
+          "the fold lands on the post-state's root"
+    }
+  , { name := "NEGATIVE CONTROL: a stale opening fails the fold"
+    , body := do
+        -- Openings go stale the moment a write lands under a shared
+        -- ancestor.  This is why the bundle is folded strictly in
+        -- order and each opening re-checked: a responder replaying a
+        -- pre-root opening after an earlier write must be rejected,
+        -- not silently folded into a wrong root.
+        let t₁ : CellTag := .balance 1 7
+        let t₂ : CellTag := .balance 2 7
+        let es₁ : ExtendedState :=
+          { populated with base := LegalKernel.setBalance populated.base 1 7 60 }
+        let es₂ : ExtendedState :=
+          { es₁ with base := LegalKernel.setBalance es₁.base 2 7 0 }
+        let stale : List StateCellWrite :=
+          [ (t₁, getCellValue populated t₁, getCellValue es₁ t₁,
+             buildStateCellProof populated t₁)
+          , (t₂, getCellValue es₁ t₂, getCellValue es₂ t₂,
+             buildStateCellProof populated t₂) ]
+        assertEq (expected := (none : Option (List UInt8)))
+          (actual := (foldStateCellWrites (commitExtendedState populated)
+                        stale).map ByteArray.toList)
+          "the stale second opening is rejected"
+    }
+  , { name := "API stability: cell-update theorem signatures"
+    , body := do
+        let _upd : ∀ (es es' : ExtendedState) (t : CellTag) (canon : SmtCellProof),
+            expandSiblings canon
+              = canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t) →
+            dropKey (stateCellEntries es) (smtCellKey t)
+              = dropKey (stateCellEntries es') (smtCellKey t) →
+            BitsDistinctBelow smtDepth (stateCellEntries es') →
+            (getCellValue es' t = canonicalAbsentValue t →
+               ∀ t' ∈ stateCellTags es', smtCellKey t' ≠ smtCellKey t) →
+            (getCellValue es' t ≠ canonicalAbsentValue t → t ∈ stateCellTags es') →
+            updateStateCellRoot t (getCellValue es' t) canon = commitExtendedState es' :=
+          updateStateCellRoot_eq_commit_of_canonical
+        let _indep : ∀ (es : ExtendedState) (t : CellTag) (newValue : ByteArray)
+            (proof₁ proof₂ : SmtCellProof),
+            LegalKernel.Bridge.CollisionFreeOn
+              (smtWalkPairPreimages (cellLeaf t (getCellValue es t)) (smtCellKey t)
+                proof₁ proof₂) LegalKernel.Runtime.hashBytes →
+            verifyStateCellProof (commitExtendedState es) t (getCellValue es t) proof₁ = true →
+            verifyStateCellProof (commitExtendedState es) t (getCellValue es t) proof₂ = true →
+            updateStateCellRoot t newValue proof₁ = updateStateCellRoot t newValue proof₂ :=
+          updateStateCellRoot_proof_independent
+        let _fold : ∀ (chain : CellWriteChain) (es : ExtendedState),
+            ChainCoherent es chain →
+            foldStateCellWrites (commitExtendedState es) (chainWrites es chain)
+              = some (commitExtendedState (chainLast es chain)) :=
+          foldStateCellWrites_eq_commit_of_coherent
+        let _single : ∀ (e e' : SmtEntries) (key : ByteArray),
+            dropKey e key = dropKey e' key →
+            ((canonicalSiblings smtDepth e key).zip
+                (keyBitsUpTo smtDepth key)).foldl stepPair
+              (smtRootListAux 0 (bucketAt smtDepth e' key))
+              = smtRootListAux smtDepth e' :=
+          smtRootListAux_update_single
+        pure ()
+    }
   , { name := "API stability: cell-determination theorem signatures"
     , body := do
         let _nodup : ∀ (es : ExtendedState),

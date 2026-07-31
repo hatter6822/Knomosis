@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2d58b14fb201120183f9503ea3383a526d8387955d42a1d6015569f48876cd35"
+    "source_digest": "ddb1306737951617eb5bf25f84754c3aa678b3f61bb2f50818b34940210c5821"
   },
   "summary": {
     "module_count": 324,
-    "declaration_count": 5493
+    "declaration_count": 5519
   },
   "modules": [
     {
@@ -24796,7 +24796,7 @@
     {
       "module": "LegalKernel.FaultProof.SmtInjective",
       "path": "LegalKernel/FaultProof/SmtInjective.lean",
-      "declaration_count": 49,
+      "declaration_count": 62,
       "declarations": [
         {
           "kind": "namespace",
@@ -25358,8 +25358,6 @@
           "name": "canonicalSiblings_walks_to_root_absent",
           "line": 1175,
           "called": [
-            "FaultProof",
-            "LegalKernel",
             "SmtEntries",
             "bucketAt_eq_nil_of_not_mem",
             "canonicalSiblings",
@@ -25370,6 +25368,180 @@
             "smtDepth",
             "smtRootListAux",
             "stepPair"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "dropKey",
+          "line": 1208,
+          "called": [
+            "SmtEntries",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "dropKey_filter",
+          "line": 1213,
+          "called": [
+            "SmtEntries",
+            "dropKey",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "dropKey_eq_self",
+          "line": 1224,
+          "called": [
+            "SmtEntries",
+            "dropKey",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalSiblings_eq_of_dropKey_eq",
+          "line": 1232,
+          "called": [
+            "SmtEntries",
+            "canonicalSiblings",
+            "dropKey",
+            "dropKey_eq_self",
+            "dropKey_filter",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bucketAt_sublist",
+          "line": 1280,
+          "called": [
+            "SmtEntries",
+            "bucketAt",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "length_bucketAt_le_one",
+          "line": 1299,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.sublist",
+            "SmtEntries",
+            "bucketAt",
+            "bucketAt_bits",
+            "bucketAt_sublist",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_bucketAt_of_mem",
+          "line": 1319,
+          "called": [
+            "SmtEntries",
+            "bucketAt",
+            "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bucketAt_eq_singleton_of_mem",
+          "line": 1338,
+          "called": [
+            "BitsDistinctBelow",
+            "SmtEntries",
+            "bucketAt",
+            "entries",
+            "length_bucketAt_le_one",
+            "mem_bucketAt_of_mem"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_update_single",
+          "line": 1363,
+          "called": [
+            "SmtEntries",
+            "bucketAt",
+            "canonicalSiblings",
+            "canonicalSiblings_eq_of_dropKey_eq",
+            "canonicalSiblings_walks_from_bucket",
+            "dropKey",
+            "keyBitsUpTo",
+            "smtDepth",
+            "smtRootListAux",
+            "stepPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_update_to_present",
+          "line": 1374,
+          "called": [
+            "BitsDistinctBelow",
+            "SmtEntries",
+            "bucketAt_eq_singleton_of_mem",
+            "canonicalSiblings",
+            "dropKey",
+            "keyBitsUpTo",
+            "leafHash",
+            "smtDepth",
+            "smtRootListAux",
+            "smtRootListAux_update_single",
+            "stepPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_update_to_absent",
+          "line": 1389,
+          "called": [
+            "SmtEntries",
+            "bucketAt_eq_nil_of_not_mem",
+            "canonicalSiblings",
+            "dropKey",
+            "emptyRootAt",
+            "keyBitsUpTo",
+            "smtDepth",
+            "smtRootListAux",
+            "smtRootListAux_nil",
+            "smtRootListAux_update_single",
+            "stepPair"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "smtWalkPairPreimages",
+          "line": 1411,
+          "called": [
+            "SmtCellProof",
+            "expandSiblings",
+            "keyBits",
+            "walkPreimages"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtWalkFrom_proof_independent",
+          "line": 1421,
+          "called": [
+            "CollisionFreeOn",
+            "FaultProof",
+            "LegalKernel",
+            "SmtCellProof",
+            "expandSiblings",
+            "expandSiblings_all_32",
+            "expandSiblings_length",
+            "hashBytes",
+            "isWellFormed",
+            "keyBits",
+            "keyBits_length",
+            "smtWalkFrom",
+            "smtWalkPairPreimages",
+            "walk_inj_under_collision_free"
           ]
         }
       ]
@@ -26120,7 +26292,7 @@
     {
       "module": "LegalKernel.FaultProof.StateCellsInjective",
       "path": "LegalKernel/FaultProof/StateCellsInjective.lean",
-      "declaration_count": 28,
+      "declaration_count": 41,
       "declarations": [
         {
           "kind": "namespace",
@@ -26512,8 +26684,6 @@
           "called": [
             "CellTag",
             "ExtendedState",
-            "FaultProof",
-            "LegalKernel",
             "canonicalAbsentValue",
             "canonicalSiblings",
             "canonicalSiblings_walks_to_root_absent",
@@ -26530,6 +26700,210 @@
             "stateCellEntries_spec",
             "stateCellTags",
             "stepPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "cellLeaf_size",
+          "line": 641,
+          "called": [
+            "CellTag",
+            "canonicalAbsentValue",
+            "cellLeaf",
+            "emptyRootAt_size",
+            "leafHash_size"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "updateStateCellRoot",
+          "line": 651,
+          "called": [
+            "CellTag",
+            "SmtCellProof",
+            "StateCommit",
+            "cellLeaf",
+            "smtCellKey",
+            "smtWalkFrom"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalSiblings_updates_root",
+          "line": 662,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "canonicalAbsentValue",
+            "canonicalSiblings",
+            "cellLeaf",
+            "commitExtendedState",
+            "dropKey",
+            "entries_key_size",
+            "es",
+            "getCellValue",
+            "keyBits",
+            "mem_stateCellEntries_of_ne_absent",
+            "smtCellKey",
+            "smtCellKey_size",
+            "smtDepth",
+            "smtRootListAux_update_to_absent",
+            "smtRootListAux_update_to_present",
+            "stateCellEntries",
+            "stateCellEntries_spec",
+            "stateCellTags",
+            "stepPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "updateStateCellRoot_eq_commit_of_canonical",
+          "line": 693,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "SmtCellProof",
+            "canonicalAbsentValue",
+            "canonicalSiblings",
+            "canonicalSiblings_updates_root",
+            "commitExtendedState",
+            "dropKey",
+            "es",
+            "expandSiblings",
+            "getCellValue",
+            "smtCellKey",
+            "smtDepth",
+            "smtWalkFrom",
+            "stateCellEntries",
+            "stateCellTags",
+            "updateStateCellRoot"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "updateStateCellRoot_proof_independent",
+          "line": 717,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "SmtCellProof",
+            "cellLeaf",
+            "cellLeaf_size",
+            "commitExtendedState",
+            "es",
+            "getCellValue",
+            "smtCellKey",
+            "smtWalkFrom_proof_independent",
+            "smtWalkPairPreimages",
+            "updateStateCellRoot",
+            "verifyStateCellProof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "applyStateCellWrite",
+          "line": 746,
+          "called": [
+            "CellTag",
+            "SmtCellProof",
+            "StateCommit",
+            "updateStateCellRoot",
+            "verifyStateCellProof"
+          ]
+        },
+        {
+          "kind": "abbrev",
+          "name": "StateCellWrite",
+          "line": 754,
+          "called": [
+            "CellTag",
+            "SmtCellProof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "foldStateCellWrites",
+          "line": 757,
+          "called": [
+            "StateCellWrite",
+            "StateCommit",
+            "applyStateCellWrite"
+          ]
+        },
+        {
+          "kind": "abbrev",
+          "name": "CellWriteChain",
+          "line": 766,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "SmtCellProof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "chainWrites",
+          "line": 771,
+          "called": [
+            "CellWriteChain",
+            "ExtendedState",
+            "StateCellWrite",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "chainLast",
+          "line": 777,
+          "called": [
+            "CellWriteChain",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "ChainCoherent",
+          "line": 785,
+          "called": [
+            "BitsDistinctBelow",
+            "CellWriteChain",
+            "ExtendedState",
+            "canonicalAbsentValue",
+            "canonicalSiblings",
+            "commitExtendedState",
+            "dropKey",
+            "es",
+            "expandSiblings",
+            "getCellValue",
+            "smtCellKey",
+            "smtDepth",
+            "stateCellEntries",
+            "stateCellTags",
+            "verifyStateCellProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "foldStateCellWrites_eq_commit_of_coherent",
+          "line": 806,
+          "called": [
+            "CellWriteChain",
+            "ChainCoherent",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "applyStateCellWrite",
+            "chainLast",
+            "chainWrites",
+            "commitExtendedState",
+            "es",
+            "foldStateCellWrites",
+            "getCellValue",
+            "updateStateCellRoot_eq_commit_of_canonical"
           ]
         }
       ]
@@ -53435,34 +53809,58 @@
           "name": "tests",
           "line": 68,
           "called": [
+            "BitsDistinctBelow",
             "CellTag",
             "CellTag.flatKey_injective",
+            "CellWriteChain",
+            "ChainCoherent",
             "ExtendedState",
             "LegalKernel.Test.FaultProof.StateCellsInjective",
+            "SmtCellProof",
+            "SmtEntries",
+            "StateCellWrite",
             "StateCellsWellFormed",
             "TestCase",
             "absentTags",
             "assert",
             "assertEq",
+            "bucketAt",
             "buildStateCellProof",
             "canonicalAbsentValue",
+            "canonicalSiblings",
             "cellKeyPreimage",
             "cellKeyPreimage_injective",
+            "cellLeaf",
+            "chainLast",
+            "chainWrites",
             "commitExtendedState",
             "commitExtendedState_determines_cells",
+            "dropKey",
             "es",
+            "expandSiblings",
+            "foldStateCellWrites",
+            "foldStateCellWrites_eq_commit_of_coherent",
             "getCellValue",
             "getCellValue_of_not_mem",
+            "keyBitsUpTo",
             "leafHash",
             "populated",
             "smtCellKey",
+            "smtDepth",
+            "smtRootListAux",
+            "smtRootListAux_update_single",
             "smtWalkFrom",
+            "smtWalkPairPreimages",
             "stateCellEntries",
             "stateCellEntries_perm_of_commitSmt_eq",
             "stateCellKeyPreimages",
             "stateCellTags",
             "stateCellTags_nodup",
             "stateCommitSmtPreimages",
+            "stepPair",
+            "updateStateCellRoot",
+            "updateStateCellRoot_eq_commit_of_canonical",
+            "updateStateCellRoot_proof_independent",
             "verifyStateCellProof"
           ]
         }

@@ -654,6 +654,8 @@ The Genesis Plan promises a small set of type-level guarantees
 | B-3 | Cell update proof-independent | `smtUpdateRoot_proof_independent` | `FaultProof/SmtInjective.lean` |
 | B-3 | Canonical path walks to the root | `canonicalSiblings_walks_to_root` | `FaultProof/SmtInjective.lean` |
 | B-3 | Absent cells open against the root | `canonicalSiblings_verifies_absent` | `FaultProof/StateCellsInjective.lean` |
+| B-3 | One write lands on the post-state root | `updateStateCellRoot_eq_commit_of_canonical` | `FaultProof/StateCellsInjective.lean` |
+| B-3 | Ordered write fold lands on the post root | `foldStateCellWrites_eq_commit_of_coherent` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | Production-faithful semantic core | `apply_bridge_admissible_with_budget_eq` | `FaultProof/ProductionApply.lean` |
 | Phase 6 | Dispute filing rejects malformed | `fileDispute_rejects_*` | `Disputes/Filing.lean` |
 | Phase 6 | Evidence verifiers deterministic | `checkEvidence_deterministic` | `Disputes/Evidence.lean` |
@@ -796,7 +798,7 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 180 | ~158 | `lake test` |
+| Lean | ~3 190 | ~158 | `lake test` |
 | Rust | ~2 350 | across 12 crates | `cargo test --workspace` |
 | Solidity | ~894 passed | 59 forge suites | `cd solidity && forge test` |
 
@@ -824,8 +826,12 @@ full catalogue):
 - `faultproof-smt-injective` — B-3 SMT root injectivity, cell
   updates, canonical-path coherence; includes the negative control
   showing a duplicate-keyed bucket hashes as if it were empty.
-- `faultproof-state-cells-injective` — cell determination plus the
-  well-formedness side conditions checked on a real state.
+- `faultproof-state-cells-injective` — cell determination, the
+  well-formedness side conditions checked on a real state, and the
+  write algebra: a single write lands on the post-state's published
+  root (both leaf branches), the ordered multi-write fold lands on the
+  last state's root, and a stale opening replayed after an earlier
+  write is rejected.
 - `crosscheck-step-vm` — 278-entry cross-stack fixture corpus.
 - `reclaim-amm-reserves` — GP.11.10 exact-sweep law + AMM-mirror
   trace-constancy theorems.
@@ -1109,28 +1115,41 @@ on all three stacks, so convergence is now proved *logarithmically*
 
 What remains is the recipe mismatch alone.  Closing it means
 Merkleising the state root so a post-root is recomputable from the
-pre-root plus the proven cell writes.  Seven prerequisites are in —
-the cell space covers all seven `ExtendedState` fields (tags 7–16);
-`smtCellKey` / `StepVMMerkle.deriveCellSmtKey` derive the SMT key
-on-chain rather than accepting one; the cell root is now the PUBLISHED `commitExtendedState`;
-`smtRootListAux_perm_of_eq_under_collision_free` proves that root
-injective (the EI.8 replacement, so the swap cannot downgrade the
-headline guarantee);
-`commitExtendedState_determines_cells` composes it with the cell
-enumeration, giving the behavioural form the game needs; and
-`smtUpdateRoot` supplies the incremental write with
-`smtUpdateRoot_proof_independent`, which is what stops a responder
-steering the post-root by choosing among verifying openings; and
-`canonicalSiblings_walks_to_root` covers the honest-defender
-direction — the opening a defender can build reproduces the
-published root.  But
-`commitExtendedState` itself is unchanged and `executeStep` still
-returns the other construction.
+pre-root plus the proven cell writes.  The Lean side of that is now
+complete.  `commitExtendedState` **is** the SMT cell root (the
+seven-component concatenation survives as
+`commitExtendedStateConcat`, published by nothing); the cell space
+covers all seven `ExtendedState` fields (tags 7–16); `smtCellKey` /
+`StepVMMerkle.deriveCellSmtKey` derive the SMT key on-chain rather
+than accepting one;
+`smtRootListAux_perm_of_eq_under_collision_free` proves the published
+root injective (the EI.8 replacement, so the swap did not downgrade
+the headline guarantee) and `commitExtendedState_determines_cells`
+composes it with the cell enumeration, giving the behavioural form the
+game needs; a cell's leaf branches on absence (`cellLeaf`) so a cell
+the state does not hold is openable at all, with completeness proved
+both ways (`canonicalSiblings_verifies_present` /
+`canonicalSiblings_verifies_absent`); and the write algebra is proved
+against the root rather than merely well-defined —
+`updateStateCellRoot_eq_commit_of_canonical` lands a single re-walked
+opening on `commitExtendedState` of the post-state,
+`foldStateCellWrites_eq_commit_of_coherent` lands the ordered
+multi-write fold on the last state's root, and
+`updateStateCellRoot_proof_independent` stops a responder steering
+either by choosing among verifying openings.
+
+But `executeStep` still returns the other construction.  What it owes
+is the per-variant write list that feeds the fold: the 25 handlers
+compute `.balance` cells only, while `Action.writeCells` correctly
+declares that every action advances `.nonce signer` (plus registry /
+local-policy / bridge cells for eight variants), the reference apply
+must move from `kernelOnlyApply` to `ProductionApply`'s
+`productionApplyBudget`, and the two bulk variants must route through
+`FaultProof/SubStep.lean`.
 `docs/audits/19-findings-and-followups.md` records the remaining
 blast radius and
 `docs/planning/state_root_merkleisation_plan.md` is the
-implementation spec (§3 and §4 are what is left; they are one
-consensus change and must land together).  Until it lands the
+implementation spec (§4 is what is left).  Until it lands the
 fault-proof game must not be treated as an adjudicating backstop;
 the bisection narrowing is proved and unaffected.
 
