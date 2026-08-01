@@ -14,6 +14,7 @@ WUs H.3.1 + H.3.2).
 -/
 
 import LegalKernel.FaultProof.Cell
+import LegalKernel.FaultProof.CellStore
 import LegalKernel.FaultProof.CellValue
 import LegalKernel.FaultProof.StateCells
 import LegalKernel.FaultProof.KeyDerivation
@@ -189,6 +190,47 @@ def tests : List TestCase :=
         assert ((commitExtendedState (setCell es (.bridgePending 4) pwBytes)).toList
                   != (commitExtendedState es).toList)
           "and the pending write moves the published root"
+    }
+  , { name := "setCell is local: one write leaves every other cell alone"
+    , body := do
+        -- `getCellValue_setCell_ne` at the value level.  Locality is
+        -- what discharges the off-cell hypothesis the write fold asks
+        -- of each link — `dropKey_stateCellEntries_perm_of_agree_off`
+        -- is stated over cell VALUES, which is exactly what this
+        -- supplies.
+        let es := ExtendedState.empty
+        let target : CellTag := .balance 1 7
+        let v := ByteArray.mk (Encoding.encodeAmount 42).toArray
+        let es' := setCell es target v
+        let others : List CellTag :=
+          [ .balance 1 8, .balance 2 7, .nonce 7, .registry 7, .localPolicy 7
+          , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
+          , .bridgeAmmReserveEth, .bridgeAmmDisabled, .epochBudget 7
+          , .budgetPolicyFreeTier, .budgetPolicyActionCost
+          , .budgetPolicyCurrentEpoch ]
+        for t in others do
+          assertEq (expected := (getCellValue es t).toList)
+            (actual := (getCellValue es' t).toList)
+            s!"write to {repr target} disturbed {repr t}"
+        assertEq (expected := v.toList) (actual := (getCellValue es' target).toList)
+          "and the target itself took the value"
+    }
+  , { name := "API stability: cell-store law signatures"
+    , body := do
+        let _local : ∀ (es : ExtendedState) (t t₀ : CellTag) (v : ByteArray),
+            t ≠ t₀ → getCellValue (setCell es t₀ v) t = getCellValue es t :=
+          getCellValue_setCell_ne
+        let _bal : ∀ (es : ExtendedState) (r : ResourceId) (a : ActorId) (n : Nat),
+            n < 256 ^ 16 →
+            getCellValue (setCell es (.balance r a) (amountCellValue n)) (.balance r a)
+              = amountCellValue n :=
+          getCellValue_setCell_balance
+        let _nonce : ∀ (es : ExtendedState) (a : ActorId) (n : Nat),
+            n < 256 ^ 8 →
+            getCellValue (setCell es (.nonce a) (natCellValue n)) (.nonce a)
+              = natCellValue n :=
+          getCellValue_setCell_nonce
+        pure ()
     }
   , -- ===== SMT cell-key derivation =====
     { name := "smtCellKey: every tag maps to a distinct 32-byte key"

@@ -286,6 +286,7 @@ import LegalKernel.Bridge.Finalisation
 -- `docs/planning/fault_proof_migration_plan.md` for the full plan.
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.CellValue
+import LegalKernel.FaultProof.CellStore
 import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.Smt
 import LegalKernel.FaultProof.LawClassification

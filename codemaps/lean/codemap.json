@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "525c5ff3fddb64f3d6764f773cfd4600478f7666e93a595f799b6d68e7f2c3ed"
+    "source_digest": "946d380924902ccfcb28679d44b86fd8ce757364b40e151b6b6eae699ad52e31"
   },
   "summary": {
     "module_count": 324,
@@ -543,13 +543,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 323,
+          "line": 324,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 339,
+          "line": 340,
           "called": [
             "LegalKernel"
           ]
@@ -53039,19 +53039,21 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.Cell",
-          "line": 27,
+          "line": 28,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 30,
+          "line": 31,
           "called": [
+            "ActorId",
             "CellProof",
             "CellTag",
             "ExtendedState",
             "ExtendedState.empty",
             "LegalKernel.Test.FaultProof.Cell",
+            "ResourceId",
             "TestCase",
             "assert",
             "assertEq",
