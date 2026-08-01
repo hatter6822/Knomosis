@@ -45,7 +45,9 @@ do not need to be.
 -/
 
 import LegalKernel.FaultProof.CellStore
+import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.StateCellsInjective
+import LegalKernel.FaultProof.StepVariants
 
 namespace LegalKernel
 namespace FaultProof
@@ -286,6 +288,333 @@ theorem fold_canonicalCellChain_eq_commit_of_cells_agree
   rw [fold_canonicalCellChain_eq_commit_applyCellWrites ws es h]
   exact congrArg some (commitExtendedState_eq_of_cells_agree _ post
     (CellWritesReady.distinctLast ws es h) h_wf h_agree)
+
+/-! ## The round-trip law
+
+A step's write list sets each cell it names to the value the
+production advance gives it — so every value written is one
+`getCellValue` produced.  That is exactly the class the per-kind laws
+above cover, and this composes them into the single statement the
+write list needs.
+
+The alternative would be for each of the twenty-five per-variant
+proofs to pick the right per-kind law for each of its up-to-six cells.
+This does it once, over all fifteen kinds. -/
+
+/-- The three cells `setCell` cannot clear.
+
+    Writing the canonical absent marker at these kinds is a NO-OP,
+    not an erase: no `Action` removes a registry entry, un-consumes a
+    deposit or retires a pending withdrawal inside a single step, so
+    the write primitive declines to express it and the fault proof
+    cannot be shown a step that does.
+
+    `localPolicy` is deliberately absent from this list — writing its
+    absent marker IS a real erase, because `revokeLocalPolicy` needs
+    one. -/
+def CellTag.appendOnly : CellTag → Bool
+  | .registry _       => true
+  | .bridgeConsumed _ => true
+  | .bridgePending _  => true
+  | _                 => false
+
+/-- **`setCell` round-trips the reader's own output.**
+
+    Writing the value a cell reads in one state into the same cell of
+    another state makes it read that value there.  This is what makes
+    a step's write list — "each declared cell, set to the value the
+    advance gives it" — actually land what it names.
+
+    Two side conditions, both real rather than technical:
+
+      * `CanonicalBounds` on the SOURCE state, because `setCell`
+        decodes the bytes it is handed and a value outside the arm's
+        encoder image is a no-op.  This is the same hypothesis the
+        commitment layer already carries, not a new one.
+      * at the three `appendOnly` kinds, the target must not already
+        hold a live entry the source lacks.  A step that would clear
+        one is a step this primitive cannot express — see
+        `CellTag.appendOnly`.
+
+    Note what is NOT required: the two states need no relation beyond
+    these.  In particular the target may be an intermediate state of a
+    write chain, which is exactly how the per-variant proofs use it. -/
+theorem getCellValue_setCell_getCellValue
+    (target source : ExtendedState) (t : CellTag)
+    (h_bounds : ExtendedState.CanonicalBounds source)
+    (h_append : t.appendOnly = true →
+      getCellValue source t = canonicalAbsentValue t →
+      getCellValue target t = canonicalAbsentValue t) :
+    getCellValue (setCell target t (getCellValue source t)) t = getCellValue source t := by
+  cases t with
+  | balance r a =>
+    rw [getCellValue_balance]
+    refine getCellValue_setCell_balance target r a _ ?_
+    exact getBalance_lt_of_canonicalBounds source r a h_bounds
+  | nonce a =>
+    rw [getCellValue_nonce]
+    exact getCellValue_setCell_nonce target a _
+      (expectsNonce_lt_of_canonicalBounds source a h_bounds)
+  | registry a =>
+    cases h_r : source.registry[a]? with
+    | none =>
+      have h_v : getCellValue source (.registry a) = ByteArray.empty := by
+        rw [getCellValue_registry, h_r]
+      have h_t : getCellValue target (.registry a) = ByteArray.empty := h_append rfl h_v
+      rw [h_v]
+      -- Writing the absent marker is a no-op at this kind, so the
+      -- target's own value is what stands — and `h_append` is exactly
+      -- what says that value is already absent.
+      show getCellValue (setCell target (.registry a) ByteArray.empty) (.registry a)
+        = ByteArray.empty
+      rw [show setCell target (.registry a) ByteArray.empty = target from by
+        simp only [setCell]
+        rw [if_pos (show ByteArray.empty.size = 0 from rfl)]]
+      exact h_t
+    | some pk =>
+      have h_v : getCellValue source (.registry a) = keyCellValue pk := by
+        rw [getCellValue_registry, h_r]
+      rw [h_v]
+      exact getCellValue_setCell_registry target a pk
+        (registry_size_lt_of_canonicalBounds source a pk h_r h_bounds)
+  | localPolicy a =>
+    cases h_p : source.localPolicies[a]? with
+    | none =>
+      have h_v : getCellValue source (.localPolicy a) = ByteArray.empty := by
+        rw [getCellValue_localPolicy, h_p]
+      rw [h_v]
+      exact getCellValue_setCell_localPolicy_absent target a
+    | some p =>
+      have h_v : getCellValue source (.localPolicy a) = policyCellValue p := by
+        rw [getCellValue_localPolicy, h_p]
+      rw [h_v]
+      exact getCellValue_setCell_localPolicy target a p
+        (localPolicy_bounded_of_canonicalBounds source a p h_p h_bounds)
+  | bridgeConsumed d =>
+    cases h_d : source.bridge.consumed[d]? with
+    | none =>
+      have h_v : getCellValue source (.bridgeConsumed d) = ByteArray.empty := by
+        rw [getCellValue_bridgeConsumed, h_d]
+      have h_t : getCellValue target (.bridgeConsumed d) = ByteArray.empty :=
+        h_append rfl h_v
+      rw [h_v]
+      show getCellValue (setCell target (.bridgeConsumed d) ByteArray.empty)
+          (.bridgeConsumed d) = ByteArray.empty
+      rw [show setCell target (.bridgeConsumed d) ByteArray.empty = target from by
+        simp only [setCell]
+        rw [if_pos (show ByteArray.empty.size = 0 from rfl)]]
+      exact h_t
+    | some rec =>
+      have h_v : getCellValue source (.bridgeConsumed d) = depositCellValue rec := by
+        rw [getCellValue_bridgeConsumed, h_d]
+      rw [h_v]
+      exact getCellValue_setCell_bridgeConsumed target d rec
+        (depositRecord_bounded_of_canonicalBounds source d rec h_d h_bounds)
+  | bridgePending w =>
+    cases h_w : source.bridge.pending[w]? with
+    | none =>
+      have h_v : getCellValue source (.bridgePending w) = ByteArray.empty := by
+        rw [getCellValue_bridgePending, h_w]
+      have h_t : getCellValue target (.bridgePending w) = ByteArray.empty :=
+        h_append rfl h_v
+      rw [h_v]
+      show getCellValue (setCell target (.bridgePending w) ByteArray.empty)
+          (.bridgePending w) = ByteArray.empty
+      rw [show setCell target (.bridgePending w) ByteArray.empty = target from by
+        simp only [setCell]
+        rw [if_pos (show ByteArray.empty.size = 0 from rfl)]]
+      exact h_t
+    | some pw =>
+      have h_v : getCellValue source (.bridgePending w) = withdrawalCellValue pw := by
+        rw [getCellValue_bridgePending, h_w]
+      rw [h_v]
+      obtain ⟨h_res, h_amt, h_idx⟩ :=
+        pendingWithdrawal_bounded_of_canonicalBounds source w pw h_w h_bounds
+      exact getCellValue_setCell_bridgePending target w pw h_res h_amt h_idx
+  | bridgeNextWdId =>
+    rw [getCellValue_bridgeNextWdId]
+    exact getCellValue_setCell_bridgeNextWdId target _ h_bounds.bs_nxt
+  | bridgeAmmReserveEth =>
+    show getCellValue (setCell target _ (amountCellValue source.bridge.ammReserveEth)) _
+      = amountCellValue source.bridge.ammReserveEth
+    exact getCellValue_setCell_bridgeAmmReserveEth target _ h_bounds.bs_ammEth
+  | bridgeAmmReserveBold =>
+    show getCellValue (setCell target _ (amountCellValue source.bridge.ammReserveBold)) _
+      = amountCellValue source.bridge.ammReserveBold
+    exact getCellValue_setCell_bridgeAmmReserveBold target _ h_bounds.bs_ammBold
+  | bridgeBoldCircuitClosed =>
+    show getCellValue (setCell target _
+        (natCellValue (if source.bridge.boldCircuitClosed then 1 else 0))) _
+      = natCellValue (if source.bridge.boldCircuitClosed then 1 else 0)
+    exact getCellValue_setCell_bridgeBoldCircuitClosed target _
+  | bridgeBoldTvlCap =>
+    show getCellValue (setCell target _ (amountCellValue source.bridge.boldTvlCap)) _
+      = amountCellValue source.bridge.boldTvlCap
+    exact getCellValue_setCell_bridgeBoldTvlCap target _ h_bounds.bs_tvlCap
+  | bridgeBoldTotalLockedValue =>
+    show getCellValue (setCell target _
+        (amountCellValue source.bridge.boldTotalLockedValue)) _
+      = amountCellValue source.bridge.boldTotalLockedValue
+    exact getCellValue_setCell_bridgeBoldTotalLockedValue target _ h_bounds.bs_totalLocked
+  | bridgeAmmDisabled =>
+    show getCellValue (setCell target _
+        (natCellValue (if source.bridge.ammDisabled then 1 else 0))) _
+      = natCellValue (if source.bridge.ammDisabled then 1 else 0)
+    exact getCellValue_setCell_bridgeAmmDisabled target _
+  | epochBudget a =>
+    rw [getCellValue_epochBudget']
+    obtain ⟨h_epoch, h_bal⟩ := actorBudget_bounded_of_canonicalBounds source a h_bounds
+    exact getCellValue_setCell_epochBudget target a _ h_epoch h_bal
+  | budgetPolicy =>
+    -- Named as an equation and REWRITTEN rather than case-split: the
+    -- read-back law is stated over the `bounded` constructor, and
+    -- leaving `source.budgetPolicy` in the goal makes the unifier
+    -- chase the encoder through it.
+    have h_ex : ∃ ft ac ce, source.budgetPolicy = .bounded ft ac ce := by
+      cases source.budgetPolicy with | bounded ft ac ce => exact ⟨ft, ac, ce, rfl⟩
+    obtain ⟨ft, ac, ce, h_eq⟩ := h_ex
+    obtain ⟨h_ft, h_ac, h_ce, h_pos⟩ := h_bounds.bp_val ft ac ce h_eq
+    have h_v : getCellValue source .budgetPolicy
+        = budgetPolicyCellValue (.bounded ft ac ce) := by
+      rw [getCellValue_budgetPolicy', h_eq]
+    rw [h_v]
+    exact getCellValue_setCell_budgetPolicy target ft ac ce h_ft h_ac h_ce h_pos
+
+/-! ## A step's write list
+
+Composing the pieces: a step writes each cell it declares, to the
+value the advance gives that cell.  What remains for a variant is
+COMPLETENESS — that the advance changes no cell the declaration omits
+— and that is the per-variant obligation §4 is really about.  It is
+also the property the bundle's sufficiency rests on: an L1 holding
+openings only for the declared cells can compute the post-root exactly
+when nothing else moved. -/
+
+/-- The writes a step performs: each declared cell, set to the value
+    the production advance gives it.
+
+    Note this is a SPECIFICATION, not a computation the L1 performs —
+    it reads the post-state.  The L1 is handed these values in the
+    bundle and checks them against the pre-root; reproducing them
+    on-chain is the step VM's handler job. -/
+def stepCellWrites (post : ExtendedState) (action : Authority.Action)
+    (signer : ActorId) : List CellWrite :=
+  (action.writeCells signer).map (fun t => (t, getCellValue post t))
+
+/-- Every declared cell appears in the write list, at its post value. -/
+theorem mem_stepCellWrites (post : ExtendedState) (action : Authority.Action)
+    (signer : ActorId) (t : CellTag) (h : t ∈ action.writeCells signer) :
+    (t, getCellValue post t) ∈ stepCellWrites post action signer :=
+  List.mem_map.mpr ⟨t, h, rfl⟩
+
+/-- The write list names exactly the declared cells. -/
+theorem stepCellWrites_tags (post : ExtendedState) (action : Authority.Action)
+    (signer : ActorId) :
+    (stepCellWrites post action signer).map Prod.fst = action.writeCells signer := by
+  unfold stepCellWrites
+  rw [List.map_map]
+  exact List.map_id _
+
+/-- **The declared write set is complete for a step.**
+
+    The obligation each of the twenty-five per-variant proofs
+    discharges, and the only one left after this module: the advance
+    changes no cell the declaration omits.
+
+    Stated over an arbitrary post-state rather than over
+    `productionApplyBudget` directly so the per-variant proofs can be
+    written against whichever form of the advance is convenient and
+    composed here. -/
+def WriteSetComplete (pre post : ExtendedState) (action : Authority.Action)
+    (signer : ActorId) : Prop :=
+  ∀ t : CellTag, t ∉ action.writeCells signer → getCellValue post t = getCellValue pre t
+
+/-- **A complete write set reproduces the post-state's cells.**
+
+    Given completeness, applying the step's write list to the
+    pre-state yields a state whose every cell reads as the
+    post-state's.  With `commitExtendedState_eq_of_cells_agree` that
+    is root equality, and with
+    `fold_canonicalCellChain_eq_commit_of_cells_agree` it is the
+    number the L1 folds.
+
+    The `NoDuplicates` hypothesis is what lets the written cells be
+    read off one at a time; every `Action.writeCells` arm satisfies it
+    except at a self-transfer, where sender and receiver coincide — see
+    `applyCellWrites`'s later-write-wins test. -/
+theorem getCellValue_applyCellWrites_stepCellWrites
+    (pre post : ExtendedState) (action : Authority.Action) (signer : ActorId)
+    (h_complete : WriteSetComplete pre post action signer)
+    (h_nodup : (action.writeCells signer).Nodup)
+    (h_bounds : ExtendedState.CanonicalBounds post)
+    (h_append : ∀ t : CellTag, t.appendOnly = true →
+      getCellValue post t = canonicalAbsentValue t →
+      getCellValue pre t = canonicalAbsentValue t)
+    (t : CellTag) :
+    getCellValue (applyCellWrites pre (stepCellWrites post action signer)) t
+      = getCellValue post t := by
+  by_cases h_mem : t ∈ action.writeCells signer
+  · -- A declared cell: split the list at its (unique) occurrence and
+    -- read the write back.
+    obtain ⟨l₁, l₂, h_split⟩ := List.append_of_mem h_mem
+    have h_nd : (l₁ ++ t :: l₂).Nodup := h_split ▸ h_nodup
+    obtain ⟨_, h_tail, h_cross⟩ := List.pairwise_append.mp h_nd
+    have h_notin₁ : t ∉ l₁ := fun hc => h_cross t hc t List.mem_cons_self rfl
+    have h_notin₂ : t ∉ l₂ := fun hc => (List.pairwise_cons.mp h_tail).1 t hc rfl
+    have h_ws : stepCellWrites post action signer
+        = l₁.map (fun t' => (t', getCellValue post t'))
+          ++ (t, getCellValue post t)
+            :: l₂.map (fun t' => (t', getCellValue post t')) := by
+      unfold stepCellWrites; rw [h_split]; simp
+    -- The writes before this one name other cells, so the state this
+    -- one lands in still reads `pre` at `t` — which is what carries
+    -- the append-only side condition inward.
+    have h_mid : getCellValue
+        (applyCellWrites pre (l₁.map (fun t' => (t', getCellValue post t')))) t
+          = getCellValue pre t :=
+      getCellValue_applyCellWrites_of_not_written _ pre t
+        (fun w hw => by
+          obtain ⟨t', ht', rfl⟩ := List.mem_map.mp hw
+          exact fun he => h_notin₁ (he ▸ ht'))
+    rw [h_ws, getCellValue_applyCellWrites_of_written _ t _ _ pre
+      (fun w hw => by
+        obtain ⟨t', ht', rfl⟩ := List.mem_map.mp hw
+        exact fun he => h_notin₂ (he ▸ ht'))]
+    exact getCellValue_setCell_getCellValue _ post t h_bounds
+      (fun h_ao h_abs => h_mid.trans (h_append t h_ao h_abs))
+  · -- An undeclared cell: no write names it, and completeness says
+    -- the advance left it alone.
+    rw [getCellValue_applyCellWrites_of_not_written _ pre t
+      (fun w hw => by
+        obtain ⟨t', ht', rfl⟩ := List.mem_map.mp hw
+        exact fun he => h_mem (he ▸ ht'))]
+    exact (h_complete t h_mem).symm
+
+/-- **The step-VM statement.**  Folding a step's write bundle into the
+    pre-state's published root computes the post-state's published
+    root.
+
+    This is what `docs/planning/state_root_merkleisation_plan.md` §4
+    asks for on the Lean side, reduced to its per-variant residue: the
+    only hypothesis that is not generic machinery or standing
+    well-formedness is `WriteSetComplete`, and that is exactly "the
+    declaration names every cell the advance moves". -/
+theorem fold_stepCellWrites_eq_commit_post
+    (pre post : ExtendedState) (action : Authority.Action) (signer : ActorId)
+    (h_ready : CellWritesReady pre (stepCellWrites post action signer))
+    (h_complete : WriteSetComplete pre post action signer)
+    (h_nodup : (action.writeCells signer).Nodup)
+    (h_bounds : ExtendedState.CanonicalBounds post)
+    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries post))
+    (h_append : ∀ t : CellTag, t.appendOnly = true →
+      getCellValue post t = canonicalAbsentValue t →
+      getCellValue pre t = canonicalAbsentValue t) :
+    foldStateCellWrites (commitExtendedState pre)
+        (chainWrites pre (canonicalCellChain pre (stepCellWrites post action signer)))
+      = some (commitExtendedState post) :=
+  fold_canonicalCellChain_eq_commit_of_cells_agree _ pre post h_ready h_wf
+    (getCellValue_applyCellWrites_stepCellWrites pre post action signer
+      h_complete h_nodup h_bounds h_append)
 
 end FaultProof
 end LegalKernel

@@ -449,5 +449,102 @@ theorem getCellValue_setCell_epochBudget (es : ExtendedState) (a : ActorId)
   simp only [setCell, hd₁, hd₂, getCellValue_epochBudget',
     LegalKernel.RBMap.find?_insert_self, Option.getD_some, budgetCellValue]
 
+/-! ## Read-back at the genesis cells
+
+No `Action` writes the bridge scalars or the budget policy — they are
+deployment parameters.  The step VM still has to be able to write
+them, and for one reason: `stepCellWrites` sets each cell it names to
+the value the advance gives it, and the generic round-trip law below
+(`getCellValue_setCell_getCellValue`) quantifies over EVERY cell kind.
+A law with holes at six kinds would push a case split into every
+caller for the sake of six arms that are true. -/
+
+/-- The AMM ETH reserve reads back. -/
+theorem getCellValue_setCell_bridgeAmmReserveEth (es : ExtendedState) (n : Nat)
+    (h : n < 256 ^ 16) :
+    getCellValue (setCell es .bridgeAmmReserveEth (amountCellValue n))
+        .bridgeAmmReserveEth = amountCellValue n := by
+  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
+
+/-- The AMM BOLD reserve reads back. -/
+theorem getCellValue_setCell_bridgeAmmReserveBold (es : ExtendedState) (n : Nat)
+    (h : n < 256 ^ 16) :
+    getCellValue (setCell es .bridgeAmmReserveBold (amountCellValue n))
+        .bridgeAmmReserveBold = amountCellValue n := by
+  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
+
+/-- The BOLD TVL cap reads back. -/
+theorem getCellValue_setCell_bridgeBoldTvlCap (es : ExtendedState) (n : Nat)
+    (h : n < 256 ^ 16) :
+    getCellValue (setCell es .bridgeBoldTvlCap (amountCellValue n))
+        .bridgeBoldTvlCap = amountCellValue n := by
+  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
+
+/-- The BOLD total-locked-value reads back. -/
+theorem getCellValue_setCell_bridgeBoldTotalLockedValue (es : ExtendedState) (n : Nat)
+    (h : n < 256 ^ 16) :
+    getCellValue (setCell es .bridgeBoldTotalLockedValue (amountCellValue n))
+        .bridgeBoldTotalLockedValue = amountCellValue n := by
+  simp only [setCell, amountCellValue, Encoding.amount_roundtrip_empty n h, getCellValue]
+
+/-- The BOLD circuit-breaker flag reads back.
+
+    Stated over the 0/1 encoding rather than over an arbitrary `Nat`,
+    because the write is lossy: `setCell` stores `n != 0`, so every
+    non-zero value reads back as `1`.  The reader only ever emits 0 or
+    1, which is why the round-trip law below still holds at this
+    kind. -/
+theorem getCellValue_setCell_bridgeBoldCircuitClosed (es : ExtendedState) (b : Bool) :
+    getCellValue (setCell es .bridgeBoldCircuitClosed (natCellValue (if b then 1 else 0)))
+        .bridgeBoldCircuitClosed = natCellValue (if b then 1 else 0) := by
+  -- Both branches close by computation: the written value is a
+  -- literal, so the decoder runs to a `Nat` literal and the flag's
+  -- `!= 0` test decides.  No round-trip lemma is needed, which is
+  -- itself the reason the lossy write is safe HERE and nowhere else.
+  cases b <;> rfl
+
+/-- The AMM kill switch reads back.  Lossy in the same way as the
+    circuit breaker, and stated the same way. -/
+theorem getCellValue_setCell_bridgeAmmDisabled (es : ExtendedState) (b : Bool) :
+    getCellValue (setCell es .bridgeAmmDisabled (natCellValue (if b then 1 else 0)))
+        .bridgeAmmDisabled = natCellValue (if b then 1 else 0) := by
+  -- Both branches close by computation: the written value is a
+  -- literal, so the decoder runs to a `Nat` literal and the flag's
+  -- `!= 0` test decides.  No round-trip lemma is needed, which is
+  -- itself the reason the lossy write is safe HERE and nowhere else.
+  cases b <;> rfl
+
+/-- The budget policy reads back.  One cell, so this is a plain
+    round-trip through the `BudgetPolicy` encoder rather than a
+    rebuild of a triple.
+
+    The `1 ≤ actionCost` hypothesis is the decoder's, not this
+    theorem's: `BudgetPolicy.decode` ends in `mkBounded`, which clamps
+    the per-action cost to at least one.  That clamp is the anti-spam
+    invariant — a zero-cost policy would make the budget gate
+    vacuous — so a policy with `actionCost = 0` is one the deployment
+    cannot hold, and the hypothesis records that rather than working
+    around it. -/
+theorem getCellValue_setCell_budgetPolicy (es : ExtendedState)
+    (freeTier actionCost currentEpoch : Nat)
+    (h_ft : freeTier < 256 ^ 8) (h_ac : actionCost < 256 ^ 8)
+    (h_ce : currentEpoch < 256 ^ 8) (h_pos : 1 ≤ actionCost) :
+    getCellValue
+        (setCell es .budgetPolicy
+          (budgetPolicyCellValue (.bounded freeTier actionCost currentEpoch)))
+        .budgetPolicy
+      = budgetPolicyCellValue (.bounded freeTier actionCost currentEpoch) := by
+  -- Stated on the UNFOLDED stream: `budgetPolicyCellValue` is in the
+  -- `simp only` set below, so a hypothesis phrased over the folded
+  -- form stops matching the moment the goal unfolds.
+  have hd : Encodable.decode (T := Authority.BudgetPolicy)
+      (Encodable.encode (T := Authority.BudgetPolicy)
+        (Authority.BudgetPolicy.bounded freeTier actionCost currentEpoch))
+      = .ok (Authority.BudgetPolicy.bounded freeTier actionCost currentEpoch, []) := by
+    simpa using
+      Encoding.budgetPolicy_bounded_roundtrip freeTier actionCost currentEpoch []
+        h_ft h_ac h_ce h_pos
+  simp only [setCell, budgetPolicyCellValue, hd, getCellValue_budgetPolicy']
+
 end FaultProof
 end LegalKernel

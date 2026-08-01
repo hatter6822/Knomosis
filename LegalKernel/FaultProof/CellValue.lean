@@ -172,9 +172,9 @@ def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
     ByteArray.mk
       ((Encodable.encode (T := Nat) b.lastSeenEpoch) ++
        (Encodable.encode (T := Nat) b.budgetBalance)).toArray
-  -- Budget-policy scalars, one cell each: a dispute normally turns on
-  -- exactly one of them, and a single packed cell would force the
-  -- responder to open all three.
+  -- The budget policy, whole.  One cell, because `BudgetPolicy` is one
+  -- value: a cell is the unit a write updates, and a cell holding a
+  -- component would make every write a read-modify-write of the rest.
   | .budgetPolicy =>
     ByteArray.mk (Encodable.encode (T := Authority.BudgetPolicy) es.budgetPolicy).toArray
 
@@ -425,8 +425,6 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
                 { lastSeenEpoch := epoch, budgetBalance := bal } }
       | .error _ => es
     | .error _ => es
-  -- The policy is a single `bounded` constructor, so each scalar
-  -- write rebuilds it with the other two preserved.
   | .budgetPolicy =>
     -- A genuine point write.  The three-cell form had to read the
     -- other two components back out of `es` and rebuild, so a

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "aeaa55848a78c4f875d5c19b384dbbc621e4fd03e98459fa53bf212133c99ba5"
+    "source_digest": "0538192c28ba190dc76ddce323ffea3dceb80d7806a6e2307e1cbc08a3e8a24b"
   },
   "summary": {
-    "module_count": 325,
-    "declaration_count": 5566
+    "module_count": 327,
+    "declaration_count": 5609
   },
   "modules": [
     {
@@ -156,6 +156,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "bridgeActor",
             "exampleBudgetPolicy",
             "examplePubKey",
@@ -2068,7 +2069,8 @@
             "LocalPolicies",
             "LocalPolicies.empty",
             "NonceState",
-            "State"
+            "State",
+            "base"
           ]
         },
         {
@@ -2080,6 +2082,7 @@
             "KeyRegistry.empty",
             "LocalPolicies.empty",
             "NonceState.empty",
+            "base",
             "genesisState"
           ]
         },
@@ -2162,6 +2165,7 @@
             "ActorId",
             "ExtendedState",
             "advanceNonce",
+            "base",
             "es"
           ]
         },
@@ -2495,6 +2499,7 @@
             "advanceNonce",
             "applyActionToLocalPolicies",
             "applyActionToRegistry",
+            "base",
             "es",
             "step_impl"
           ]
@@ -2512,6 +2517,7 @@
             "Signature",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es",
             "step_impl"
           ]
@@ -2768,6 +2774,7 @@
             "SignedAction",
             "ammSwap",
             "apply_admissible",
+            "base",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -2800,6 +2807,7 @@
             "ResourceId",
             "Signature",
             "apply_admissible",
+            "base",
             "es",
             "step_impl",
             "topUpActionBudget"
@@ -2819,6 +2827,7 @@
             "ResourceId",
             "Signature",
             "apply_admissible",
+            "base",
             "es",
             "step_impl",
             "topUpActionBudgetFor"
@@ -2851,6 +2860,7 @@
             "advanceNonce",
             "apply_admissible",
             "apply_admissible_with",
+            "base",
             "es",
             "expectsNonce",
             "expectsNonce_advance_other"
@@ -2868,6 +2878,7 @@
             "advanceNonce",
             "apply_admissible",
             "apply_admissible_with",
+            "base",
             "es",
             "expectsNonce",
             "expectsNonce_strict_mono"
@@ -3263,6 +3274,7 @@
             "advanceNonce",
             "apply_admissible_with",
             "apply_admissible_with_budget",
+            "base",
             "claimBudgetRefund_gate",
             "depositWithFee_signerCheck",
             "es",
@@ -3360,6 +3372,7 @@
             "Signature",
             "apply_admissible",
             "apply_admissible_base_topUpActionBudgetFor",
+            "base",
             "es",
             "getBalance",
             "topUpActionBudgetFor"
@@ -3669,6 +3682,7 @@
             "applyActionToRegistry",
             "apply_admissible",
             "apply_admissible_with",
+            "base",
             "es"
           ]
         },
@@ -3732,6 +3746,7 @@
             "applyActionToRegistry",
             "apply_admissible",
             "apply_admissible_with",
+            "base",
             "es"
           ]
         },
@@ -3751,6 +3766,7 @@
             "applyActionToRegistry",
             "apply_admissible",
             "apply_admissible_with",
+            "base",
             "es"
           ]
         },
@@ -3770,6 +3786,7 @@
             "applyActionToRegistry",
             "apply_admissible",
             "apply_admissible_with",
+            "base",
             "es"
           ]
         },
@@ -4270,6 +4287,7 @@
             "PendingWithdrawal.amountAt",
             "ResourceId",
             "WithdrawalId",
+            "base",
             "genesisState",
             "totalWithdrawn"
           ]
@@ -4285,6 +4303,7 @@
             "KeyRegistry.empty",
             "NonceState.empty",
             "ResourceId",
+            "base",
             "genesisState",
             "totalDeposited"
           ]
@@ -4300,6 +4319,7 @@
             "KeyRegistry.empty",
             "NonceState.empty",
             "ResourceId",
+            "base",
             "genesisState",
             "totalUserDeposited"
           ]
@@ -4315,6 +4335,7 @@
             "KeyRegistry.empty",
             "NonceState.empty",
             "ResourceId",
+            "base",
             "genesisState",
             "totalPoolDeposited"
           ]
@@ -4629,6 +4650,7 @@
             "KeyRegistry.empty",
             "NonceState.empty",
             "ResourceId",
+            "base",
             "bridgeEscrowBalance",
             "genesisState",
             "totalDeposited_genesis",
@@ -4643,6 +4665,7 @@
             "BridgeSolvent",
             "KeyRegistry.empty",
             "NonceState.empty",
+            "base",
             "genesisState",
             "totalDeposited_genesis",
             "totalWithdrawn_genesis"
@@ -5207,6 +5230,7 @@
             "SignedAction",
             "apply_bridge_admissible_with",
             "apply_bridge_admissible_with_base_agrees",
+            "base",
             "depositWithFee",
             "depositWithFee_credits_poolActor",
             "es",
@@ -5231,6 +5255,7 @@
             "Signature",
             "SignedAction",
             "apply_bridge_admissible_with",
+            "base",
             "depositWithFee",
             "depositWithFee_admissible_credits_poolActor",
             "es",
@@ -5256,6 +5281,7 @@
             "Signature",
             "SignedAction",
             "apply_bridge_admissible_with",
+            "base",
             "depositWithFee",
             "depositWithFee_admissible_credits_poolActor",
             "es",
@@ -6045,6 +6071,7 @@
             "SignedAction",
             "apply_admissible_with",
             "apply_bridge_admissible_with",
+            "base",
             "es"
           ]
         },
@@ -6183,6 +6210,7 @@
             "apply_bridge_admissible_with_base_agrees",
             "apply_bridge_admissible_with_nonces_agrees",
             "apply_bridge_admissible_with_registry_agrees",
+            "base",
             "es",
             "expectsNonce",
             "replay_impossible"
@@ -6267,6 +6295,7 @@
             "actionCost",
             "apply_bridge_admissible_with",
             "apply_bridge_admissible_with_budget",
+            "base",
             "es",
             "freeTier",
             "refundRate"
@@ -6953,6 +6982,7 @@
             "ExtendedState",
             "ammReserveGenesisPolicy",
             "ammReserveGenesisState",
+            "base",
             "policy"
           ]
         },
@@ -6990,6 +7020,7 @@
           "called": [
             "ExtendedState",
             "ammReserveGenesisState",
+            "base",
             "es"
           ]
         },
@@ -7069,6 +7100,7 @@
             "ammReserveGenesis",
             "ammReserveGenesisPolicy",
             "ammReserveGenesisState",
+            "base",
             "policy"
           ]
         },
@@ -7198,6 +7230,7 @@
             "ExtendedState",
             "ammReserveGenesisPolicyOfConfig",
             "ammReserveGenesisStateOfConfig",
+            "base",
             "policy"
           ]
         },
@@ -8062,6 +8095,7 @@
             "SignedAction",
             "apply_bridge_admissible_with",
             "apply_bridge_admissible_with_base",
+            "base",
             "es",
             "step_impl"
           ]
@@ -8083,6 +8117,7 @@
             "SignedAction",
             "TotalSupply",
             "apply_bridge_admissible_with",
+            "base",
             "deposit_step_base",
             "es"
           ]
@@ -8104,6 +8139,7 @@
             "SignedAction",
             "apply_bridge_admissible_with",
             "apply_bridge_admissible_with_base",
+            "base",
             "es",
             "sender",
             "step_impl"
@@ -8126,6 +8162,7 @@
             "SignedAction",
             "TotalSupply",
             "apply_bridge_admissible_with",
+            "base",
             "es",
             "sender",
             "withdraw_step_base"
@@ -8167,6 +8204,7 @@
             "SignedAction",
             "apply_bridge_admissible_with",
             "apply_bridge_admissible_with_base",
+            "base",
             "es",
             "step_impl"
           ]
@@ -8188,6 +8226,7 @@
             "SignedAction",
             "TotalSupply",
             "apply_bridge_admissible_with",
+            "base",
             "depositWithFee_step_base",
             "es",
             "totalSupply_after_depositWithFee"
@@ -8394,6 +8433,7 @@
             "ExtendedState",
             "KeyRegistry.empty",
             "NonceState.empty",
+            "base",
             "genesisState"
           ]
         },
@@ -9750,6 +9790,7 @@
             "AuthorityPolicy",
             "ExtendedState",
             "GasPoolGenesis",
+            "base",
             "gasPoolGenesisPolicy",
             "gasPoolGenesisState",
             "mBold",
@@ -9797,6 +9838,7 @@
           "called": [
             "Amount",
             "ExtendedState",
+            "base",
             "es",
             "gasPoolGenesisState",
             "mBold",
@@ -9947,6 +9989,7 @@
             "Amount",
             "AuthorityPolicy",
             "ExtendedState",
+            "base",
             "gasPoolGenesis",
             "gasPoolGenesisPolicy",
             "gasPoolGenesisState",
@@ -10044,6 +10087,7 @@
             "ExtendedState",
             "GasPoolConfig",
             "GasPoolGenesis",
+            "base",
             "gasPoolGenesisPolicyOfConfig",
             "gasPoolGenesisStateOfConfig",
             "policy"
@@ -10535,6 +10579,7 @@
             "SignedAction",
             "apply_admissible_with",
             "apply_admissible_with_base",
+            "base",
             "drain_eth_step_arith",
             "es",
             "gasPoolActor",
@@ -10565,6 +10610,7 @@
             "Signature",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es",
             "gasPoolActor",
             "gasPoolActorAuthorized",
@@ -10587,6 +10633,7 @@
             "Signature",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es",
             "gasPoolActor",
             "gasPoolActorAuthorized",
@@ -10610,6 +10657,7 @@
             "SignedAction",
             "apply_admissible_with",
             "apply_admissible_with_base",
+            "base",
             "es",
             "gasPoolActor",
             "getBalance",
@@ -10633,6 +10681,7 @@
             "SignedAction",
             "apply_admissible_with",
             "apply_admissible_with_base",
+            "base",
             "es",
             "gasPoolActor",
             "getBalance",
@@ -10705,6 +10754,7 @@
             "ammSwap",
             "apply_admissible_with",
             "apply_admissible_with_base",
+            "base",
             "budgetGrant",
             "burn",
             "claimBudgetRefund",
@@ -10748,6 +10798,7 @@
             "Signature",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es",
             "gasPoolActor",
             "getBalance",
@@ -10771,6 +10822,7 @@
             "Signature",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es",
             "gasPoolActor",
             "gasPoolActorAuthorized",
@@ -10796,6 +10848,7 @@
             "apply_bridge_admissible_with_base_agrees",
             "apply_bridge_admissible_with_budget",
             "apply_bridge_admissible_with_budget_base_bridge_eq",
+            "base",
             "es"
           ]
         },
@@ -10859,6 +10912,7 @@
             "Signature",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es",
             "es0",
             "gasPoolActor",
@@ -10884,6 +10938,7 @@
             "Signature",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es0",
             "gasPoolActor",
             "gasPoolActorAuthorized",
@@ -11064,6 +11119,7 @@
             "SignedAction",
             "applyTrace",
             "apply_admissible_with",
+            "base",
             "es",
             "es0",
             "gasPoolActor",
@@ -11095,6 +11151,7 @@
             "SignedAction",
             "applyTrace",
             "apply_admissible_with",
+            "base",
             "es",
             "es0",
             "gasPoolActor",
@@ -11195,6 +11252,7 @@
             "Signature",
             "SignedAction",
             "apply_bridge_admissible_with",
+            "base",
             "es",
             "step_impl"
           ]
@@ -13394,6 +13452,7 @@
             "LogEntry",
             "advanceNonce",
             "ammSwap",
+            "base",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -19467,7 +19526,8 @@
             "LocalPolicies.decodeMap",
             "NonceState.decode",
             "State.decode",
-            "Stream"
+            "Stream",
+            "base"
           ]
         },
         {
@@ -20469,7 +20529,7 @@
     {
       "module": "LegalKernel.FaultProof.CellStore",
       "path": "LegalKernel/FaultProof/CellStore.lean",
-      "declaration_count": 30,
+      "declaration_count": 37,
       "declarations": [
         {
           "kind": "namespace",
@@ -20800,12 +20860,99 @@
           "called": [
             "ActorId",
             "ExtendedState",
-            "FaultProof",
-            "LegalKernel",
             "budgetCellValue",
             "es",
             "getCellValue",
             "getCellValue_epochBudget'",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeAmmReserveEth",
+          "line": 462,
+          "called": [
+            "ExtendedState",
+            "amountCellValue",
+            "es",
+            "getCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeAmmReserveBold",
+          "line": 469,
+          "called": [
+            "ExtendedState",
+            "amountCellValue",
+            "es",
+            "getCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeBoldTvlCap",
+          "line": 476,
+          "called": [
+            "ExtendedState",
+            "amountCellValue",
+            "es",
+            "getCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeBoldTotalLockedValue",
+          "line": 483,
+          "called": [
+            "ExtendedState",
+            "amountCellValue",
+            "es",
+            "getCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeBoldCircuitClosed",
+          "line": 496,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "natCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeAmmDisabled",
+          "line": 507,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "natCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_budgetPolicy",
+          "line": 527,
+          "called": [
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "actionCost",
+            "budgetPolicyCellValue",
+            "es",
+            "freeTier",
+            "getCellValue",
+            "getCellValue_budgetPolicy'",
             "setCell"
           ]
         }
@@ -20984,13 +21131,14 @@
             "Bridge.PendingWithdrawal.decode",
             "CellTag",
             "ExtendedState",
+            "base",
             "es"
           ]
         },
         {
           "kind": "theorem",
           "name": "setCell_deterministic",
-          "line": 439,
+          "line": 437,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -21001,7 +21149,7 @@
         {
           "kind": "def",
           "name": "buildCellProof",
-          "line": 451,
+          "line": 449,
           "called": [
             "CellProof",
             "CellTag",
@@ -21010,6 +21158,400 @@
             "LegalKernel",
             "es",
             "getCellValue"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.FaultProof.CellWrites",
+      "path": "LegalKernel/FaultProof/CellWrites.lean",
+      "declaration_count": 24,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 51,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 52,
+          "called": [
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "abbrev",
+          "name": "CellWrite",
+          "line": 61,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "applyCellWrites",
+          "line": 65,
+          "called": [
+            "CellWrite",
+            "ExtendedState",
+            "es",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_applyCellWrites_of_not_written",
+          "line": 75,
+          "called": [
+            "CellTag",
+            "CellWrite",
+            "ExtendedState",
+            "applyCellWrites",
+            "es",
+            "getCellValue",
+            "getCellValue_setCell_ne",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_applyCellWrites_of_written",
+          "line": 98,
+          "called": [
+            "CellTag",
+            "CellWrite",
+            "ExtendedState",
+            "applyCellWrites",
+            "es",
+            "getCellValue",
+            "getCellValue_applyCellWrites_of_not_written",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "canonicalCellChain",
+          "line": 119,
+          "called": [
+            "CellWrite",
+            "CellWriteChain",
+            "ExtendedState",
+            "buildStateCellProof",
+            "es",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "chainLast_canonicalCellChain",
+          "line": 126,
+          "called": [
+            "CellWrite",
+            "ExtendedState",
+            "applyCellWrites",
+            "canonicalCellChain",
+            "chainLast",
+            "es",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "CellWriteReady",
+          "line": 160,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "buildStateCellProof",
+            "canonicalAbsentValue",
+            "canonicalSiblings",
+            "es",
+            "expandSiblings",
+            "getCellValue",
+            "isWellFormed",
+            "smtCellKey",
+            "smtDepth",
+            "stateCellEntries",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "CellWritesReady",
+          "line": 174,
+          "called": [
+            "BitsDistinctBelow",
+            "CellWrite",
+            "CellWriteReady",
+            "ExtendedState",
+            "es",
+            "setCell",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "CellWritesReady.distinctHead",
+          "line": 183,
+          "called": [
+            "BitsDistinctBelow",
+            "CellWrite",
+            "CellWritesReady",
+            "ExtendedState",
+            "es",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "CellWritesReady.distinctLast",
+          "line": 192,
+          "called": [
+            "BitsDistinctBelow",
+            "CellWrite",
+            "CellWritesReady",
+            "ExtendedState",
+            "applyCellWrites",
+            "es",
+            "setCell",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "verifyStateCellProof_buildStateCellProof",
+          "line": 213,
+          "called": [
+            "CellTag",
+            "CellWriteReady",
+            "ExtendedState",
+            "buildStateCellProof",
+            "canonicalAbsentValue",
+            "canonicalSiblings_verifies_absent",
+            "canonicalSiblings_verifies_present",
+            "commitExtendedState",
+            "es",
+            "getCellValue",
+            "getCellValue_of_not_mem",
+            "smtWalkFrom",
+            "stateCellTags",
+            "verifyStateCellProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "chainCoherent_canonicalCellChain",
+          "line": 236,
+          "called": [
+            "CellWrite",
+            "CellWritesReady",
+            "ChainCoherent",
+            "ExtendedState",
+            "canonicalCellChain",
+            "dropKey_stateCellEntries_perm_of_agree_off",
+            "es",
+            "getCellValue_setCell_ne",
+            "setCell",
+            "verifyStateCellProof_buildStateCellProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "fold_canonicalCellChain_eq_commit_applyCellWrites",
+          "line": 261,
+          "called": [
+            "CellWrite",
+            "CellWritesReady",
+            "ExtendedState",
+            "applyCellWrites",
+            "canonicalCellChain",
+            "chainCoherent_canonicalCellChain",
+            "chainLast_canonicalCellChain",
+            "chainWrites",
+            "commitExtendedState",
+            "es",
+            "foldStateCellWrites",
+            "foldStateCellWrites_eq_commit_of_coherent"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "fold_canonicalCellChain_eq_commit_of_cells_agree",
+          "line": 279,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "CellWrite",
+            "CellWritesReady",
+            "CellWritesReady.distinctLast",
+            "ExtendedState",
+            "applyCellWrites",
+            "canonicalCellChain",
+            "chainWrites",
+            "commitExtendedState",
+            "commitExtendedState_eq_of_cells_agree",
+            "es",
+            "foldStateCellWrites",
+            "fold_canonicalCellChain_eq_commit_applyCellWrites",
+            "getCellValue",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "CellTag.appendOnly",
+          "line": 314,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_getCellValue",
+          "line": 341,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "actorBudget_bounded_of_canonicalBounds",
+            "amountCellValue",
+            "budgetPolicyCellValue",
+            "canonicalAbsentValue",
+            "depositCellValue",
+            "depositRecord_bounded_of_canonicalBounds",
+            "expectsNonce_lt_of_canonicalBounds",
+            "getBalance_lt_of_canonicalBounds",
+            "getCellValue",
+            "getCellValue_balance",
+            "getCellValue_bridgeConsumed",
+            "getCellValue_bridgeNextWdId",
+            "getCellValue_bridgePending",
+            "getCellValue_budgetPolicy'",
+            "getCellValue_epochBudget'",
+            "getCellValue_localPolicy",
+            "getCellValue_nonce",
+            "getCellValue_registry",
+            "getCellValue_setCell_balance",
+            "getCellValue_setCell_bridgeAmmDisabled",
+            "getCellValue_setCell_bridgeAmmReserveBold",
+            "getCellValue_setCell_bridgeAmmReserveEth",
+            "getCellValue_setCell_bridgeBoldCircuitClosed",
+            "getCellValue_setCell_bridgeBoldTotalLockedValue",
+            "getCellValue_setCell_bridgeBoldTvlCap",
+            "getCellValue_setCell_bridgeConsumed",
+            "getCellValue_setCell_bridgeNextWdId",
+            "getCellValue_setCell_bridgePending",
+            "getCellValue_setCell_budgetPolicy",
+            "getCellValue_setCell_epochBudget",
+            "getCellValue_setCell_localPolicy",
+            "getCellValue_setCell_localPolicy_absent",
+            "getCellValue_setCell_nonce",
+            "getCellValue_setCell_registry",
+            "keyCellValue",
+            "localPolicy_bounded_of_canonicalBounds",
+            "natCellValue",
+            "pendingWithdrawal_bounded_of_canonicalBounds",
+            "policyCellValue",
+            "registry_size_lt_of_canonicalBounds",
+            "setCell",
+            "withdrawalCellValue"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stepCellWrites",
+          "line": 499,
+          "called": [
+            "ActorId",
+            "CellWrite",
+            "ExtendedState",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_stepCellWrites",
+          "line": 504,
+          "called": [
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "getCellValue",
+            "stepCellWrites"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "stepCellWrites_tags",
+          "line": 510,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "stepCellWrites"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "WriteSetComplete",
+          "line": 527,
+          "called": [
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_applyCellWrites_stepCellWrites",
+          "line": 544,
+          "called": [
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "WriteSetComplete",
+            "applyCellWrites",
+            "canonicalAbsentValue",
+            "getCellValue",
+            "getCellValue_applyCellWrites_of_not_written",
+            "getCellValue_applyCellWrites_of_written",
+            "getCellValue_setCell_getCellValue",
+            "stepCellWrites"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "fold_stepCellWrites_eq_commit_post",
+          "line": 601,
+          "called": [
+            "ActorId",
+            "BitsDistinctBelow",
+            "CellTag",
+            "CellWritesReady",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "FaultProof",
+            "LegalKernel",
+            "WriteSetComplete",
+            "canonicalAbsentValue",
+            "canonicalCellChain",
+            "chainWrites",
+            "commitExtendedState",
+            "foldStateCellWrites",
+            "fold_canonicalCellChain_eq_commit_of_cells_agree",
+            "getCellValue",
+            "getCellValue_applyCellWrites_stepCellWrites",
+            "smtDepth",
+            "stateCellEntries",
+            "stepCellWrites"
           ]
         }
       ]
@@ -21233,7 +21775,7 @@
     {
       "module": "LegalKernel.FaultProof.Commit",
       "path": "LegalKernel/FaultProof/Commit.lean",
-      "declaration_count": 53,
+      "declaration_count": 61,
       "declarations": [
         {
           "kind": "namespace",
@@ -21614,6 +22156,7 @@
           "line": 493,
           "called": [
             "ExtendedState",
+            "base",
             "byteArray_concat_seven_split",
             "commitBridgeState",
             "commitBridgeState_size",
@@ -21648,6 +22191,7 @@
             "LocalPolicies",
             "NonceState.encode",
             "State.encode",
+            "base",
             "commitBridgeState_bytes_injective_under_collision_free",
             "commitBudgetPolicy_bytes_injective_under_collision_free",
             "commitEpochBudgets_bytes_injective_under_collision_free",
@@ -21670,6 +22214,7 @@
           "called": [
             "ExtendedState",
             "State.Equiv",
+            "base",
             "es"
           ]
         },
@@ -21701,8 +22246,95 @@
         },
         {
           "kind": "theorem",
+          "name": "getBalance_lt_of_canonicalBounds",
+          "line": 801,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "ResourceId",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "expectsNonce_lt_of_canonicalBounds",
+          "line": 817,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "registry_size_lt_of_canonicalBounds",
+          "line": 829,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "localPolicy_bounded_of_canonicalBounds",
+          "line": 835,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "LocalPolicy.fieldsBounded",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "depositRecord_bounded_of_canonicalBounds",
+          "line": 841,
+          "called": [
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pendingWithdrawal_bounded_of_canonicalBounds",
+          "line": 850,
+          "called": [
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "actorBudget_bounded_of_canonicalBounds",
+          "line": 859,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "budgetPolicy_bounded_of_canonicalBounds",
+          "line": 872,
+          "called": [
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "commitExtendedStateConcat_subcommits_extensional_eq_under_collision_free",
-          "line": 797,
+          "line": 902,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encode_injective",
@@ -21720,6 +22352,7 @@
             "State.Equiv",
             "State.encode",
             "State.encode_injective",
+            "base",
             "commitExtendedStateConcat",
             "commitExtendedStateConcat_subcommits_bytes_eq_under_collision_free",
             "es",
@@ -21730,7 +22363,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_includes_ammState",
-          "line": 927,
+          "line": 1032,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21741,7 +22374,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeBase",
-          "line": 942,
+          "line": 1047,
           "called": [
             "Bridge.BridgeState.encodeConsumed",
             "Bridge.BridgeState.encodePending"
@@ -21750,7 +22383,7 @@
         {
           "kind": "def",
           "name": "bridgeStateEncodeAmmSuffix",
-          "line": 952,
+          "line": 1057,
           "called": [
             "encodeAmount"
           ]
@@ -21758,7 +22391,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_encode_factored",
-          "line": 962,
+          "line": 1067,
           "called": [
             "Bridge.BridgeState.encode",
             "bridgeStateEncodeAmmSuffix",
@@ -21768,7 +22401,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_amm_genesis_suffix_const",
-          "line": 971,
+          "line": 1076,
           "called": [
             "bridgeStateEncodeAmmSuffix"
           ]
@@ -21776,7 +22409,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_2",
-          "line": 994,
+          "line": 1099,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21792,7 +22425,7 @@
         {
           "kind": "theorem",
           "name": "bridgeState_commit_extends_v1_3",
-          "line": 1029,
+          "line": 1134,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21804,7 +22437,7 @@
         {
           "kind": "theorem",
           "name": "commitBridgeState_reflects_ammDisabled",
-          "line": 1068,
+          "line": 1173,
           "called": [
             "Bridge.BridgeState.encode",
             "Bridge.BridgeState.encodeConsumed",
@@ -21821,7 +22454,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedStateConcat_reflects_ammDisabled",
-          "line": 1158,
+          "line": 1263,
           "called": [
             "ExtendedState",
             "ExtendedState.empty",
@@ -29897,6 +30530,7 @@
           "called": [
             "State",
             "Transition",
+            "base",
             "step",
             "step_impl"
           ]
@@ -29908,6 +30542,7 @@
           "called": [
             "Reachable",
             "State",
+            "base",
             "step",
             "step_impl"
           ]
@@ -29939,6 +30574,7 @@
           "called": [
             "Reachable",
             "State",
+            "base",
             "step"
           ]
         },
@@ -29949,6 +30585,7 @@
           "called": [
             "State",
             "Transition",
+            "base",
             "step",
             "step_impl"
           ]
@@ -29962,6 +30599,7 @@
             "ReachableViaLaws",
             "State",
             "Transition",
+            "base",
             "step"
           ]
         },
@@ -29974,6 +30612,7 @@
             "ReachableViaLaws",
             "State",
             "Transition",
+            "base",
             "step",
             "step_impl"
           ]
@@ -35290,6 +35929,7 @@
             "NonceState.empty",
             "State",
             "actionCost",
+            "base",
             "delegateA",
             "delegateB",
             "emptyState",
@@ -35663,6 +36303,7 @@
             "State",
             "TestCase",
             "admit",
+            "base",
             "delegatedTopupAction",
             "emptyState",
             "es",
@@ -35685,6 +36326,7 @@
             "State",
             "TestCase",
             "admit",
+            "base",
             "delegatedTopupAction",
             "emptyState",
             "es",
@@ -36472,6 +37114,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "emptyState",
             "mockPubKey",
             "setBalance"
@@ -36613,6 +37256,7 @@
             "LocalPolicy",
             "TestCase",
             "apply_admissible_with",
+            "base",
             "es0",
             "mkSignedAction",
             "mockVerify",
@@ -36790,6 +37434,7 @@
             "advanceNonce",
             "assert",
             "assertEq",
+            "base",
             "emptyState",
             "es",
             "expectsNonce",
@@ -36845,6 +37490,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "emptyState",
             "k1",
             "setBalance"
@@ -36925,6 +37571,7 @@
             "apply_admissible_with_budget",
             "assert",
             "assertEq",
+            "base",
             "burn",
             "distributeOthers",
             "es",
@@ -37099,6 +37746,7 @@
             "NonceState.empty",
             "State",
             "actionCost",
+            "base",
             "emptyState",
             "freeTier",
             "mockPubKey",
@@ -37174,6 +37822,7 @@
             "TestCase",
             "apply_admissible_with_budget",
             "assertEq",
+            "base",
             "emptyState",
             "es",
             "mkSignedAction",
@@ -37215,6 +37864,7 @@
             "TestCase",
             "apply_admissible_with_budget",
             "assertEq",
+            "base",
             "depositWithFee",
             "emptyState",
             "es",
@@ -37238,6 +37888,7 @@
             "TestCase",
             "apply_admissible_with_budget",
             "assertEq",
+            "base",
             "depositWithFee",
             "emptyState",
             "es",
@@ -37406,6 +38057,7 @@
             "NonceState.empty",
             "State",
             "TestCase",
+            "base",
             "emptyState",
             "es",
             "mkSignedAction",
@@ -37560,6 +38212,7 @@
             "State",
             "TestCase",
             "apply_admissible_with_budget",
+            "base",
             "emptyState",
             "es",
             "mkSignedAction",
@@ -37580,6 +38233,7 @@
             "NonceState.empty",
             "State",
             "TestCase",
+            "base",
             "emptyState",
             "es",
             "mkSignedAction",
@@ -37602,6 +38256,7 @@
             "State",
             "TestCase",
             "apply_admissible_with_budget",
+            "base",
             "depositWithFee",
             "emptyState",
             "es",
@@ -37622,6 +38277,7 @@
             "NonceState.empty",
             "State",
             "TestCase",
+            "base",
             "depositWithFee",
             "emptyState",
             "es",
@@ -37786,6 +38442,7 @@
             "NonceState.empty",
             "State",
             "TestCase",
+            "base",
             "emptyState",
             "es",
             "mkSignedAction",
@@ -37808,6 +38465,7 @@
             "State",
             "TestCase",
             "assertEq",
+            "base",
             "emptyState",
             "es",
             "mkSignedAction",
@@ -37847,6 +38505,7 @@
             "TestCase",
             "apply_admissible_with_budget",
             "assertEq",
+            "base",
             "depositWithFee",
             "emptyState",
             "es",
@@ -37911,6 +38570,7 @@
             "TestCase",
             "apply_admissible_with_budget",
             "assertEq",
+            "base",
             "depositWithFee",
             "emptyState",
             "es",
@@ -38048,6 +38708,7 @@
             "ExtendedState",
             "NonceState.empty",
             "State",
+            "base",
             "emptyState",
             "mockPubKey",
             "setBalance"
@@ -38689,6 +39350,7 @@
             "ammSwap_tag_not_mem_ammReserveDeniedTags",
             "assert",
             "assertEq",
+            "base",
             "bridgeActor",
             "bridgePolicy",
             "deposit",
@@ -38790,6 +39452,7 @@
             "assert",
             "assertEq",
             "assign_preserves_reserved_invariant",
+            "base",
             "bridgeActor",
             "bridgeAuthorizedAction",
             "bridgeAuthorizedAction_eq_true_iff",
@@ -38976,6 +39639,7 @@
             "ExtendedState",
             "KeyRegistry.empty",
             "NonceState.empty",
+            "base",
             "fundedPool",
             "ledger",
             "policy"
@@ -39002,6 +39666,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "claimant",
             "fundedPool",
             "ledger",
@@ -39054,6 +39719,7 @@
             "apply_bridge_admissible_with_budget_none_iff",
             "assert",
             "assertEq",
+            "base",
             "claimBudgetRefund",
             "claimBudgetRefund_gate",
             "claimant",
@@ -42843,6 +43509,7 @@
           "line": 520,
           "called": [
             "Trace",
+            "base",
             "challenger",
             "mkCommit",
             "mkInitialState",
@@ -42856,6 +43523,7 @@
           "called": [
             "GameTransition",
             "Trace",
+            "base",
             "challenger",
             "mkCommit",
             "mkInitialState",
@@ -43296,6 +43964,7 @@
             "Amount",
             "ExtendedState",
             "ResourceId",
+            "base",
             "baseState",
             "entries",
             "fixtureBase"
@@ -44053,6 +44722,7 @@
             "actionKindByte",
             "ammReserveActor",
             "ammSwap",
+            "base",
             "bundleToFixtureProofs",
             "commitExtendedState",
             "encodeActionFields",
@@ -45257,6 +45927,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "base",
             "bridgeActor",
             "cCap",
             "es",
@@ -45813,6 +46484,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "baseState",
             "gasPoolActor",
             "mockPubKey",
@@ -45883,6 +46555,7 @@
             "ExtendedState",
             "SignedAction",
             "apply_admissible_with",
+            "base",
             "es",
             "gasPoolActor",
             "getBalance",
@@ -45998,6 +46671,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "base",
             "boldReceiptReimbursement",
             "bridgeActor",
             "consumeReceipt",
@@ -46440,6 +47114,7 @@
             "KeyRegistry.empty",
             "NonceState.empty",
             "PendingWithdrawal",
+            "base",
             "genesisState"
           ]
         },
@@ -46517,6 +47192,7 @@
             "KeyRegistry.empty",
             "NonceState.empty",
             "PendingWithdrawal",
+            "base",
             "genesisState"
           ]
         },
@@ -46914,6 +47590,7 @@
           "line": 65,
           "called": [
             "ExtendedState",
+            "base",
             "exampleState",
             "gasPoolActor",
             "genesisState",
@@ -46926,6 +47603,7 @@
           "line": 71,
           "called": [
             "ExtendedState",
+            "base",
             "exampleState",
             "genesisState",
             "setBalance",
@@ -47218,6 +47896,7 @@
             "ExtendedState",
             "KeyRegistry.empty",
             "NonceState.empty",
+            "base",
             "challenger",
             "emptyState",
             "k1",
@@ -47713,6 +48392,7 @@
             "ExtendedState",
             "NonceState.empty",
             "actor1",
+            "base",
             "emptyState",
             "k1"
           ]
@@ -47936,6 +48616,7 @@
             "adjudicator1",
             "adjudicator2",
             "adjudicator3",
+            "base",
             "challenger",
             "emptyState",
             "sender",
@@ -48115,6 +48796,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "challenger",
             "extractEvents",
             "fundedGenesis",
@@ -48517,6 +49199,7 @@
             "ResourceId",
             "TestCase",
             "assertEq",
+            "base",
             "emptyState",
             "es",
             "getBalance",
@@ -48578,6 +49261,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "challenger1",
             "emptyState",
             "setBalance"
@@ -48590,6 +49274,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "challenger1",
             "emptyState",
             "setBalance"
@@ -48774,6 +49459,7 @@
             "ExtendedState",
             "NonceState.empty",
             "actor1",
+            "base",
             "emptyState",
             "k1"
           ]
@@ -49095,6 +49781,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "emptyState",
             "fixActor",
             "fixKey"
@@ -51365,6 +52052,7 @@
             "Bridge.DepositRecord.encodeAsBytes",
             "TestCase",
             "assert",
+            "base",
             "budgetGrant"
           ]
         },
@@ -51525,6 +52213,7 @@
             "ExtendedState.extEq",
             "State.Equiv",
             "TestCase",
+            "base",
             "es"
           ]
         },
@@ -51551,6 +52240,7 @@
             "Nonce",
             "ResourceId",
             "TestCase",
+            "base",
             "es"
           ]
         },
@@ -52108,6 +52798,7 @@
             "PublicKey",
             "TestCase",
             "assertEq",
+            "base",
             "es",
             "expectsNonce"
           ]
@@ -52209,6 +52900,7 @@
           "called": [
             "TestCase",
             "assertEq",
+            "base",
             "emptyState",
             "es"
           ]
@@ -52220,6 +52912,7 @@
           "called": [
             "TestCase",
             "assertEq",
+            "base",
             "emptyState",
             "es"
           ]
@@ -52230,6 +52923,7 @@
           "line": 344,
           "called": [
             "TestCase",
+            "base",
             "emptyState",
             "es"
           ]
@@ -52241,6 +52935,7 @@
           "called": [
             "TestCase",
             "assertEq",
+            "base",
             "emptyState",
             "es"
           ]
@@ -52258,6 +52953,7 @@
             "State.encode",
             "TestCase",
             "assert",
+            "base",
             "emptyState",
             "encodeSortedPairs",
             "es"
@@ -52275,6 +52971,7 @@
             "NonceState.encode",
             "State.encode",
             "TestCase",
+            "base",
             "emptyState",
             "encodeSortedPairs",
             "es"
@@ -52384,6 +53081,7 @@
           "called": [
             "TestCase",
             "assert",
+            "base",
             "emptyState"
           ]
         },
@@ -52543,6 +53241,7 @@
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
+            "base",
             "setBalance"
           ]
         },
@@ -52553,6 +53252,7 @@
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
+            "base",
             "setBalance"
           ]
         },
@@ -52657,6 +53357,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "dummySig",
             "extractEvents",
             "mint",
@@ -52674,6 +53375,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "burn",
             "dummySig",
             "extractEvents",
@@ -52691,6 +53393,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "dummySig",
             "extractEvents",
             "preStateOneHundred",
@@ -52708,6 +53411,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "dummySig",
             "extractEvents",
             "preStateOneHundred",
@@ -52725,6 +53429,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "dummySig",
             "extractEvents",
             "preStateOneHundred",
@@ -52794,6 +53499,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "deposit",
             "dummySig",
             "extractEvents",
@@ -52811,6 +53517,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "dummySig",
             "extractEvents",
             "preStateOneHundred",
@@ -53369,6 +54076,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "base",
             "bridgeStateEncodeAmmSuffix",
             "bridgeStateEncodeBase",
             "bridgeState_amm_genesis_suffix_const",
@@ -53442,6 +54150,90 @@
             "setCell",
             "smtCellKey",
             "transfer"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.FaultProof.CellWrites",
+      "path": "LegalKernel/Test/FaultProof/CellWrites.lean",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.CellWrites",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "base",
+          "line": 41,
+          "called": [
+            "ActorId",
+            "BalanceMap",
+            "EpochBudgetState",
+            "ExtendedState",
+            "KeyRegistry",
+            "Nonce",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "transferWrites",
+          "line": 53,
+          "called": [
+            "CellWrite",
+            "amountCellValue",
+            "natCellValue"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 59,
+          "called": [
+            "ActorId",
+            "BitsDistinctBelow",
+            "CellTag",
+            "CellWrite",
+            "CellWritesReady",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "LegalKernel.Test.FaultProof.CellWrites",
+            "SmtCellProof",
+            "TestCase",
+            "WriteSetComplete",
+            "amountCellValue",
+            "applyCellWrites",
+            "assert",
+            "assertEq",
+            "base",
+            "buildStateCellProof",
+            "canonicalAbsentValue",
+            "canonicalCellChain",
+            "chainLast",
+            "chainLast_canonicalCellChain",
+            "chainWrites",
+            "commitExtendedState",
+            "commitExtendedState_eq_of_cells_agree",
+            "es",
+            "foldStateCellWrites",
+            "fold_canonicalCellChain_eq_commit_applyCellWrites",
+            "fold_stepCellWrites_eq_commit_post",
+            "getCellValue",
+            "getCellValue_applyCellWrites_of_not_written",
+            "getCellValue_setCell_getCellValue",
+            "mint",
+            "natCellValue",
+            "setCell",
+            "smtCellKey",
+            "smtDepth",
+            "stateCellEntries",
+            "stepCellWrites",
+            "transfer",
+            "transferWrites"
           ]
         }
       ]
@@ -53527,6 +54319,7 @@
             "applyCellWrites_to_state_bridge",
             "assert",
             "assertEq",
+            "base",
             "budgetGrant",
             "commitExtendedState",
             "deposit",
@@ -53580,6 +54373,7 @@
             "advanceNonce",
             "assert",
             "assertEq",
+            "base",
             "commitBridgeState",
             "commitExtendedState",
             "commitKeyRegistry",
@@ -54282,6 +55076,7 @@
             "LocalPolicies",
             "Nonce",
             "ResourceId",
+            "base",
             "budgetGrant"
           ]
         },
@@ -54295,6 +55090,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "base",
             "commitExtendedState",
             "entries",
             "populated",
@@ -54328,6 +55124,7 @@
             "LocalPolicies",
             "Nonce",
             "ResourceId",
+            "base",
             "budgetGrant"
           ]
         },
@@ -54359,6 +55156,7 @@
             "absentTags",
             "assert",
             "assertEq",
+            "base",
             "bucketAt",
             "buildStateCellProof",
             "canonicalAbsentValue",
@@ -54501,6 +55299,7 @@
             "apply_bridge_admissible_with_eq_productionApply",
             "assert",
             "assertEq",
+            "base",
             "budgetGateAdmits",
             "burn",
             "claimBudgetRefund",
@@ -54625,6 +55424,7 @@
             "actionFieldsForL1",
             "assert",
             "assertEq",
+            "base",
             "buildTerminateBundle",
             "buildTerminateBundle_actionKind",
             "buildTerminateBundle_cellProofs_verify",
@@ -54830,6 +55630,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "base",
             "buildCellProof",
             "canonicalAbsentValue",
             "commitBridgeState",
@@ -55242,6 +56043,7 @@
             "SignedAction",
             "TestCase",
             "assertEq",
+            "base",
             "bootstrapWith",
             "deploymentId",
             "deploymentId1",
@@ -56362,6 +57164,7 @@
             "applyActionToBridgeState_preserves_amm_mirrors",
             "assert",
             "assertEq",
+            "base",
             "bridgeActor",
             "bridgeAuthorizedAction",
             "emptyState",
@@ -57399,6 +58202,7 @@
             "NonceState.empty",
             "PublicKey",
             "TestCase",
+            "base",
             "emptyState",
             "es",
             "forAll",
@@ -57419,6 +58223,7 @@
             "NonceState.empty",
             "PublicKey",
             "TestCase",
+            "base",
             "burn",
             "distributeOthers",
             "emptyState",
@@ -57901,6 +58706,7 @@
             "LocalPolicies.empty",
             "NonceState.empty",
             "State",
+            "base",
             "bridgePubKey",
             "emptyState",
             "mockPubKey",
@@ -58337,6 +59143,7 @@
             "LocalPolicies.empty",
             "NonceState.empty",
             "State",
+            "base",
             "emptyState",
             "mockPubKey",
             "setBalance"
@@ -59351,6 +60158,7 @@
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
+            "base",
             "setBalance"
           ]
         },
@@ -59686,6 +60494,7 @@
             "ExtendedState",
             "NonceState.empty",
             "State",
+            "base",
             "emptyState",
             "mockPubKey",
             "setBalance"
@@ -59848,6 +60657,7 @@
             "State",
             "TestCase",
             "assertEq",
+            "base",
             "deploymentId",
             "emptyState",
             "mkSignedAction",
@@ -59975,6 +60785,7 @@
           "called": [
             "ExtendedState",
             "NonceState.empty",
+            "base",
             "emptyState",
             "mockPubKey",
             "refundClaimant",
@@ -60278,6 +61089,7 @@
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
+            "base",
             "setBalance"
           ]
         },
@@ -60494,6 +61306,7 @@
           "called": [
             "ExtendedState",
             "KeyRegistry.empty",
+            "base",
             "setBalance"
           ]
         },
@@ -63504,6 +64317,7 @@
             "TestCase",
             "assert",
             "assertEq",
+            "base",
             "beginFenceMarker",
             "codegenInputsDir",
             "containsSubstr",
@@ -67526,6 +68340,7 @@
           "line": 183,
           "called": [
             "Violation",
+            "base",
             "basename",
             "findForbiddenToken"
           ]

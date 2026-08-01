@@ -771,6 +771,111 @@ structure ExtendedState.CanonicalBounds (es : ExtendedState) : Prop where
   bs_tvlCap : es.bridge.boldTvlCap < 256 ^ 16
   /-- GP.11.8: BOLD total locked value fits. -/
   bs_totalLocked : es.bridge.boldTotalLockedValue < 256 ^ 16
+  /-- The epoch-budget pair-list length fits. -/
+  eb_len : es.epochBudgets.toList.length < 256 ^ 8
+  /-- Each per-actor budget's epoch and balance fit. -/
+  eb_val : ∀ p ∈ es.epochBudgets.toList,
+           p.2.lastSeenEpoch < 256 ^ 8 ∧ p.2.budgetBalance < 256 ^ 8
+  /-- The budget policy's three scalars fit, and its per-action cost is
+      at least one.
+
+      The `1 ≤ actionCost` conjunct is not a width bound and is not
+      decoration: `BudgetPolicy.mkBounded` clamps the cost to that
+      floor and `BudgetPolicy.decode` rejects a zero, so a policy with
+      `actionCost = 0` is one no deployment can hold and no encoding
+      round-trips.  A zero-cost policy would also make the admission
+      budget gate vacuous, which is the reason the clamp exists. -/
+  bp_val : ∀ ft ac ce, es.budgetPolicy = .bounded ft ac ce →
+           ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 ∧ 1 ≤ ac
+
+/-! ### Reading the bounds off a cell
+
+`CanonicalBounds` is stated over the sub-state maps' pair lists,
+because that is the form the encoders consume.  A cell reader reaches
+a value through `getElem?` with a default, so every consumer would
+otherwise repeat the same membership translation — and the
+`none` branches, where the default supplies the bound, are easy to get
+subtly wrong.  These do it once. -/
+
+/-- A balance read through `getBalance` fits the amount head, absent
+    entries included: the default is `0`. -/
+theorem getBalance_lt_of_canonicalBounds (es : ExtendedState)
+    (r : ResourceId) (a : ActorId) (h : ExtendedState.CanonicalBounds es) :
+    LegalKernel.getBalance es.base r a < 256 ^ 16 := by
+  unfold LegalKernel.getBalance
+  match h_outer : es.base.balances[r]? with
+  | none    => exact Nat.pow_pos (by decide)
+  | some bm =>
+    show bm[a]?.getD 0 < 256 ^ 16
+    match h_inner : bm[a]? with
+    | none   => exact Nat.pow_pos (by decide)
+    | some v =>
+      simp only [Option.getD_some]
+      exact h.base_amt (r, bm) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_outer)
+        (a, v) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_inner)
+
+/-- A nonce read through `expectsNonce` fits the uint head. -/
+theorem expectsNonce_lt_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (h : ExtendedState.CanonicalBounds es) :
+    Authority.expectsNonce es a < 256 ^ 8 := by
+  unfold Authority.expectsNonce
+  match h_n : es.nonces.next[a]? with
+  | none   => exact Nat.pow_pos (by decide)
+  | some n =>
+    show (some n).getD 0 < 256 ^ 8
+    simp only [Option.getD_some]
+    exact h.nonces_val (a, n) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_n)
+
+/-- A live registry key's size fits. -/
+theorem registry_size_lt_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (pk : Authority.PublicKey) (h_r : es.registry[a]? = some pk)
+    (h : ExtendedState.CanonicalBounds es) : pk.size < 256 ^ 8 :=
+  h.registry_size (a, pk) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_r)
+
+/-- A live local policy's fields are bounded. -/
+theorem localPolicy_bounded_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (p : Authority.LocalPolicy) (h_p : es.localPolicies[a]? = some p)
+    (h : ExtendedState.CanonicalBounds es) : LocalPolicy.fieldsBounded p :=
+  h.lp_pol (a, p) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_p)
+
+/-- A live consumed-deposit record's fields are bounded. -/
+theorem depositRecord_bounded_of_canonicalBounds (es : ExtendedState)
+    (d : Bridge.DepositId) (rec : Bridge.DepositRecord)
+    (h_d : es.bridge.consumed[d]? = some rec)
+    (h : ExtendedState.CanonicalBounds es) :
+    rec.resource.toNat < 256 ^ 8 ∧ rec.userAmount < 256 ^ 16 ∧
+      rec.poolAmount < 256 ^ 16 ∧ rec.budgetGrant < 256 ^ 8 :=
+  h.bs_cons_rec (d, rec) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_d)
+
+/-- A live pending withdrawal's fields are bounded. -/
+theorem pendingWithdrawal_bounded_of_canonicalBounds (es : ExtendedState)
+    (w : Bridge.WithdrawalId) (pw : Bridge.PendingWithdrawal)
+    (h_w : es.bridge.pending[w]? = some pw)
+    (h : ExtendedState.CanonicalBounds es) :
+    pw.resource.toNat < 256 ^ 8 ∧ pw.amount < 256 ^ 16 ∧ pw.l2LogIndex < 256 ^ 8 :=
+  h.bs_pend_wd (w, pw) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_w)
+
+/-- An actor's epoch budget is bounded, absent entries included: the
+    default `ActorBudget.empty` is all zeros. -/
+theorem actorBudget_bounded_of_canonicalBounds (es : ExtendedState) (a : ActorId)
+    (h : ExtendedState.CanonicalBounds es) :
+    (es.epochBudgets[a]?.getD Authority.ActorBudget.empty).lastSeenEpoch < 256 ^ 8 ∧
+      (es.epochBudgets[a]?.getD Authority.ActorBudget.empty).budgetBalance < 256 ^ 8 := by
+  match h_b : es.epochBudgets[a]? with
+  | none   =>
+    exact ⟨Nat.pow_pos (by decide), Nat.pow_pos (by decide)⟩
+  | some b =>
+    simp only [Option.getD_some]
+    exact h.eb_val (a, b) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_b)
+
+/-- The budget policy's width bounds, with the anti-spam floor
+    separated out — a caller usually needs only one of the two. -/
+theorem budgetPolicy_bounded_of_canonicalBounds (es : ExtendedState)
+    (ft ac ce : Nat) (h_pol : es.budgetPolicy = .bounded ft ac ce)
+    (h : ExtendedState.CanonicalBounds es) :
+    ft < 256 ^ 8 ∧ ac < 256 ^ 8 ∧ ce < 256 ^ 8 :=
+  let ⟨h₁, h₂, h₃, _⟩ := h.bp_val ft ac ce h_pol
+  ⟨h₁, h₂, h₃⟩
 
 /-- EI.8.b — Composition theorem.  Under
     `CollisionFreeOn` plus the canonical-bounds invariants

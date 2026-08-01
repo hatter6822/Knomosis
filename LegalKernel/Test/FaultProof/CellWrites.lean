@@ -170,6 +170,61 @@ def tests : List TestCase :=
               "and the pre-state's path really is stale by then"
         | _ => throw <| IO.userError "canonicalCellChain lost a link"
     }
+  , { name := "stepCellWrites names exactly the declared cells"
+    , body := do
+        let action : Authority.Action := .transfer 1 7 8 30
+        let ws := stepCellWrites base action 7
+        assertEq (expected := (Authority.Action.writeCells action 7).map (fun t => repr t |>.pretty))
+          (actual := ws.map (fun w => repr w.1 |>.pretty))
+          "write list tags"
+        -- Each write carries the POST value, so the list is a
+        -- specification the L1 checks, not one it recomputes.
+        for (t, v) in ws do
+          assertEq (expected := (getCellValue base t).toList) (actual := v.toList)
+            s!"write value at {repr t} came from the state it was built against"
+    }
+  , { name := "a complete write set reproduces every cell of the post-state"
+    , body := do
+        -- `getCellValue_applyCellWrites_stepCellWrites` at the value
+        -- level, on a state pair that really differs: `post` is `base`
+        -- with the transfer's three cells moved.  Applying the write
+        -- list to `base` must reproduce `post` cell-for-cell — and the
+        -- root that follows must match.
+        let action : Authority.Action := .transfer 1 7 8 30
+        let post := applyCellWrites base
+          [ (.balance 1 7, amountCellValue 70)
+          , (.balance 1 8, amountCellValue 70)
+          , (.nonce 7,     natCellValue 4) ]
+        let rebuilt := applyCellWrites base (stepCellWrites post action 7)
+        let probes : List CellTag :=
+          [ .balance 1 7, .balance 1 8, .balance 1 9, .nonce 7, .nonce 8
+          , .registry 7, .localPolicy 7, .epochBudget 7, .bridgeNextWdId
+          , .budgetPolicy, .bridgeAmmDisabled ]
+        for t in probes do
+          assertEq (expected := (getCellValue post t).toList)
+            (actual := (getCellValue rebuilt t).toList)
+            s!"rebuilt state disagrees with post at {repr t}"
+        assertEq (expected := (commitExtendedState post).toList)
+          (actual := (commitExtendedState rebuilt).toList)
+          "and the two publish the same root"
+    }
+  , { name := "an INCOMPLETE write set does not reproduce the post-state"
+    , body := do
+        -- The negative control the theorem's `WriteSetComplete`
+        -- hypothesis exists for.  `mint` declares no cell for actor 8,
+        -- so a post-state that moved actor 8's balance is one its
+        -- write list cannot express — the rebuild misses it and the
+        -- roots differ.  Without this, "the write set is complete"
+        -- would be a hypothesis nothing ever exercised.
+        let action : Authority.Action := .mint 1 7 5
+        let post := applyCellWrites base [(.balance 1 8, amountCellValue 999)]
+        let rebuilt := applyCellWrites base (stepCellWrites post action 7)
+        assert ((getCellValue rebuilt (.balance 1 8)).toList
+                  != (getCellValue post (.balance 1 8)).toList)
+          "the undeclared cell is NOT reproduced"
+        assert ((commitExtendedState rebuilt).toList != (commitExtendedState post).toList)
+          "so the roots differ — which is what completeness rules out"
+    }
   , { name := "API stability: write-chain signatures"
     , body := do
         let _local : ∀ (ws : List CellWrite) (es : ExtendedState) (t : CellTag),
@@ -191,6 +246,29 @@ def tests : List TestCase :=
             (∀ t : CellTag, getCellValue es₁ t = getCellValue es₂ t) →
             commitExtendedState es₁ = commitExtendedState es₂ :=
           commitExtendedState_eq_of_cells_agree
+        let _roundtrip : ∀ (target source : ExtendedState) (t : CellTag),
+            ExtendedState.CanonicalBounds source →
+            (t.appendOnly = true →
+              getCellValue source t = canonicalAbsentValue t →
+              getCellValue target t = canonicalAbsentValue t) →
+            getCellValue (setCell target t (getCellValue source t)) t
+              = getCellValue source t :=
+          getCellValue_setCell_getCellValue
+        let _step : ∀ (pre post : ExtendedState) (action : Authority.Action)
+            (signer : ActorId),
+            CellWritesReady pre (stepCellWrites post action signer) →
+            WriteSetComplete pre post action signer →
+            (Authority.Action.writeCells action signer).Nodup →
+            ExtendedState.CanonicalBounds post →
+            BitsDistinctBelow smtDepth (stateCellEntries post) →
+            (∀ t : CellTag, t.appendOnly = true →
+              getCellValue post t = canonicalAbsentValue t →
+              getCellValue pre t = canonicalAbsentValue t) →
+            foldStateCellWrites (commitExtendedState pre)
+                (chainWrites pre
+                  (canonicalCellChain pre (stepCellWrites post action signer)))
+              = some (commitExtendedState post) :=
+          fold_stepCellWrites_eq_commit_post
         pure ()
     }
   ]
