@@ -639,6 +639,33 @@ def tests : List TestCase :=
             CellTag.bridgeNextWdId derived
         | none => throw <| IO.userError "the counter derivation refused an honest cell"
     }
+  , { name := "the adjudicable predicate is exactly the bulk exclusion"
+    , body := do
+        -- The deployment decision, made checkable.  A gate never
+        -- observed to fire is indistinguishable from an absent gate,
+        -- so both directions are exercised on real actions.
+        for a in [Authority.Action.transfer 1 7 8 30, .mint 1 8 5,
+                  .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero,
+                  .deposit 1 8 5 3, .ammSwap 1 2 5 4 9,
+                  .reclaimAmmReserves 1 25 9 8] do
+          assert (FaultProofAdjudicable a)
+            s!"{repr a} must be adjudicable"
+        for a in [Authority.Action.distributeOthers 1 7 30,
+                  .proportionalDilute 1 7 30] do
+          assert (!FaultProofAdjudicable a)
+            s!"{repr a} must NOT be adjudicable — its write set is not \
+               re-derivable from the pre-root"
+        -- And the write set of an adjudicable, non-withdraw action IS
+        -- the static one, which is what lets a verifier check a
+        -- bundle's shape before hashing anything.
+        let a : Authority.Action := .transfer 1 7 8 30
+        assertEq
+          (expected := (Authority.Action.writeCells a 7).map
+            (fun t => repr t |>.pretty))
+          (actual := (Authority.Action.writeCellsAt base a 7).map
+            (fun t => repr t |>.pretty))
+          "an adjudicable non-withdraw write set is static"
+    }
   , { name := "API stability: the verifier-side derivation"
     , body := do
         let _nonce : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),

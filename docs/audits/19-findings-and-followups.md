@@ -336,6 +336,21 @@ implementer meets them up front.
    is exactly the non-excluded set); or exclude the bulk laws from a
    deployment leaning on the fault proof.
 
+   **DECIDED: exclude them**, because it costs nothing and is
+   reversible — either alternative can be adopted later without
+   undoing it, whereas the actor-set cell widens nearly every variant's
+   write set and the explicit recipient list changes frozen `Action`
+   indices 6/7 and their encoders.  Recorded as
+   `FaultProof.FaultProofAdjudicable`, a decidable predicate rather
+   than a runbook sentence, pinned to exactly those two by
+   `faultProofAdjudicable_eq_false_iff` so it cannot quietly widen, and
+   with the positive property it buys proved:
+   `writeCellsAt_eq_writeCells_of_adjudicable` and
+   `writeCellsAt_withdraw_from_proven_counter` say an adjudicable
+   action's write set is a function of `(action, signer)` plus the
+   proven `.bridgeNextWdId`, so a verifier re-derives it and rejects a
+   mismatched bundle.
+
 2. **A revert is not a verdict.**  `step_impl` is `if pre then
    apply_impl else id`, so a failing precondition advances only the
    nonce and the budget, and `stepPostRoot` lands on that root.
@@ -355,6 +370,13 @@ implementer meets them up front.
    The flip owes one of: `executeStep` total over well-formed inputs,
    returning the pre-root on a failing precondition; or a terminal
    step either party may call.
+
+   **DECIDED: totality**, and the Lean derivation already implements
+   it — every `derive*Balances` evaluates its law's precondition and
+   returns the pre-values when it fails, so the Solidity mirror
+   inherits the behaviour.  A terminal step either party may call would
+   also be a game-model change, interacting with the turn-based timeout
+   accounting; totality is local to the step VM.
 
 Three obligations for that work were read from source during this
 pass and are pinned as tests (`faultproof-stepvm-coherence`, the

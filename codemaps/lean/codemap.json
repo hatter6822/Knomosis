@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "fd3b5271fa134dfff15201a19b8f176fff10f569742588fbc3101baee524ecb4"
+    "source_digest": "4bcf0d3fdde75c79bda0bf18f21514b9060408ab8a69fc96ac89e123cdf8e3ed"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5766
+    "declaration_count": 5770
   },
   "modules": [
     {
@@ -30938,7 +30938,7 @@
     {
       "module": "LegalKernel.FaultProof.VerifierWrites",
       "path": "LegalKernel/FaultProof/VerifierWrites.lean",
-      "declaration_count": 62,
+      "declaration_count": 66,
       "declarations": [
         {
           "kind": "namespace",
@@ -31816,9 +31816,58 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "FaultProofAdjudicable",
+          "line": 1577,
+          "called": [
+            "Action",
+            "distributeOthers",
+            "proportionalDilute"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "writeCellsAt_eq_writeCells_of_adjudicable",
+          "line": 1586,
+          "called": [
+            "Action",
+            "Action.writeCellsAt_eq_writeCells",
+            "ActorId",
+            "ExtendedState",
+            "FaultProofAdjudicable",
+            "es",
+            "sender",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "writeCellsAt_withdraw_from_proven_counter",
+          "line": 1602,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "faultProofAdjudicable_eq_false_iff",
+          "line": 1615,
+          "called": [
+            "Action",
+            "FaultProofAdjudicable",
+            "distributeOthers",
+            "proportionalDilute"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_malformed",
-          "line": 1546,
+          "line": 1634,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -31826,7 +31875,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_trailing",
-          "line": 1560,
+          "line": 1648,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -57522,6 +57571,7 @@
             "EpochBudgetState",
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
+            "FaultProofAdjudicable",
             "LegalKernel.Test.FaultProof.StepWriteSets",
             "ResourceId",
             "SignedAction",

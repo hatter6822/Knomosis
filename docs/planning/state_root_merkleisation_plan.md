@@ -528,6 +528,26 @@ space:
       exactly the non-excluded set); or exclude the two bulk laws from
       any deployment leaning on the fault proof.
 
+      **DECIDED: exclude them.**  A deployment leaning on the fault
+      proof must not authorise `distributeOthers` /
+      `proportionalDilute`, which its `AuthorityPolicy` already
+      expresses; the two laws stay available to deployments using the
+      adjudicator-quorum backstop.  Chosen because it costs nothing and
+      is REVERSIBLE — either alternative can be adopted later without
+      undoing it — whereas the actor-set cell widens nearly every
+      variant's write set and the explicit recipient list changes
+      frozen `Action` indices 6/7 and their encoders.
+
+      Recorded as `FaultProof.FaultProofAdjudicable`, a decidable
+      predicate rather than a sentence in a runbook, with
+      `faultProofAdjudicable_eq_false_iff` pinning it to exactly those
+      two so it cannot quietly widen, and
+      `writeCellsAt_eq_writeCells_of_adjudicable` /
+      `writeCellsAt_withdraw_from_proven_counter` giving the positive
+      property it buys: an adjudicable action's write set is a function
+      of `(action, signer)` plus the proven `.bridgeNextWdId`, so a
+      verifier re-derives it and rejects a mismatched bundle.
+
    b. **A revert is not a verdict.**  `step_impl` is `if pre then
       apply_impl else id`, so an action whose precondition fails
       advances nothing but the nonce and the budget, and `stepPostRoot`
@@ -548,8 +568,16 @@ space:
 
       The flip owes one of: `executeStep` total over well-formed
       inputs, returning the pre-root when the precondition fails; or a
-      terminal step either party may call.  The first is the closer
-      mirror of `step_impl` and is what the Lean side already does.
+      terminal step either party may call.
+
+      **DECIDED: totality.**  It is the closer mirror of `step_impl`,
+      and the Lean derivation already implements it — every
+      `derive*Balances` evaluates its law's precondition and returns
+      the pre-values when it fails, so the Solidity mirror inherits the
+      behaviour rather than having to be argued into it.  Making the
+      terminal step callable by either party would ALSO be a game-model
+      change, and one that interacts with the turn-based timeout
+      accounting; totality is local to the step VM.
 4. ~~Delete the per-entry SKIP in `test/CrossCheck/StepVM.t.sol` so
    the corpus pins the equality it was written to pin.~~ **DONE**, and
    it was three defects rather than one — see "The cross-stack corpus

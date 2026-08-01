@@ -1537,6 +1537,94 @@ theorem deriveNextWdIdCellValue_correct
   rw [productionApplyBudget_bridge, h_act]
   rfl
 
+/-! ## Which steps a fault proof can adjudicate
+
+Deriving each cell's VALUE is only half of what a verifier needs.  It
+must also derive the write SET — which cells the step touches — because
+a bundle that omits one folds successfully onto a root where that cell
+never moved.
+
+For twenty-three variants the set is a function of `(action, signer)`
+plus cells the bundle itself proves: `withdraw`'s pending cell is keyed
+by the proven `.bridgeNextWdId`, and everything else is static.  A
+verifier re-derives the list and rejects a bundle that does not match
+it.
+
+The two bulk variants are not.  Their write set is the actor set at a
+resource, `smtCellKey` is a HASH of the cell's identity, so balance
+cells at one resource share no key prefix and no subtree argument
+enumerates them — a verifier holding only the pre-root cannot tell a
+complete recipient list from one missing an entry.
+
+**The decision recorded here is to exclude them.**  A deployment
+leaning on the fault proof must not authorise `distributeOthers` /
+`proportionalDilute`, which its `AuthorityPolicy` already expresses —
+the two laws remain available to deployments using the
+adjudicator-quorum backstop.  Chosen over the two alternatives (a
+per-resource actor-set cell, which would widen nearly every variant's
+write set; or moving the recipient list into the action's fields, which
+would change frozen `Action` indices 6/7 and their encoders) because it
+costs nothing and is reversible: either alternative can be adopted
+later without undoing this.
+
+`FaultProofAdjudicable` makes that a checkable predicate rather than a
+sentence in a runbook.
+-/
+
+/-- Whether a fault proof can adjudicate a step over this action.
+
+    `false` exactly on the two bulk variants, whose write set a
+    verifier cannot re-derive from the pre-root. -/
+def FaultProofAdjudicable : Action → Bool
+  | .distributeOthers _ _ _   => false
+  | .proportionalDilute _ _ _ => false
+  | _                         => true
+
+/-- **An adjudicable, non-`withdraw` action's write set is static.**
+
+    So a verifier re-derives it from `(action, signer)` alone and
+    rejects any bundle naming a different set of cells. -/
+theorem writeCellsAt_eq_writeCells_of_adjudicable
+    (es : ExtendedState) (a : Action) (signer : ActorId)
+    (h_adj : FaultProofAdjudicable a = true)
+    (h_wd : ∀ r sender amount rcp, a ≠ .withdraw r sender amount rcp) :
+    a.writeCellsAt es signer = a.writeCells signer := by
+  refine Action.writeCellsAt_eq_writeCells es a signer h_wd ?_ ?_
+  · intro r excluded amount he
+    rw [he] at h_adj
+    exact absurd h_adj (by simp [FaultProofAdjudicable])
+  · intro r excluded amount he
+    rw [he] at h_adj
+    exact absurd h_adj (by simp [FaultProofAdjudicable])
+
+/-- ...and at `withdraw` it is the static set plus exactly the cell the
+    proven `.bridgeNextWdId` names, which is the one place a verifier
+    reads a cell to learn WHICH cell to write. -/
+theorem writeCellsAt_withdraw_from_proven_counter
+    (es : ExtendedState) (r : ResourceId) (sender : ActorId)
+    (amount : Amount) (rcp : LegalKernel.Bridge.EthAddress) (signer : ActorId) :
+    (Action.withdraw r sender amount rcp).writeCellsAt es signer =
+      (Action.withdraw r sender amount rcp).writeCells signer ++
+        [.bridgePending es.bridge.nextWdId] := rfl
+
+/-- The two bulk variants are the ONLY inadjudicable ones.
+
+    Stated as an iff so the predicate cannot quietly widen: adding a
+    variant to `FaultProofAdjudicable`'s `false` list without a reason
+    would break this, and so would a new `Action` constructor whose
+    write set is state-keyed in a way a verifier cannot re-derive. -/
+theorem faultProofAdjudicable_eq_false_iff (a : Action) :
+    FaultProofAdjudicable a = false ↔
+      ((∃ r e amt, a = .distributeOthers r e amt) ∨
+       (∃ r e amt, a = .proportionalDilute r e amt)) := by
+  constructor
+  · intro h
+    cases a with
+    | distributeOthers r e amt => exact Or.inl ⟨r, e, amt, rfl⟩
+    | proportionalDilute r e amt => exact Or.inr ⟨r, e, amt, rfl⟩
+    | _ => exact absurd h (by simp [FaultProofAdjudicable])
+  · rintro (⟨r, e, amt, rfl⟩ | ⟨r, e, amt, rfl⟩) <;> rfl
+
 /-- A malformed pre-value derives nothing.
 
     The fail-closed direction, and the reason `deriveNonceCellValue`

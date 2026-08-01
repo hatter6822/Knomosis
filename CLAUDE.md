@@ -1210,9 +1210,13 @@ tell a complete recipient set from one missing an entry, because the
 missing cell's opening is simply absent and `smtCellKey` hashes the
 cell identity so no subtree argument enumerates a resource's actors.
 Non-bulk variants re-derive their tag list and are immune.  Pinned as
-an `OBLIGATION:` case in `faultproof-write-sets`; the three ways out
-are in the plan's §4 step 3, and all three are deployment-level
-decisions rather than proofs.  `stepWriteBundle` / `stepPostRoot` are the honest
+an `OBLIGATION:` case in `faultproof-write-sets`.  **Resolved by
+exclusion**: `FaultProof.FaultProofAdjudicable` is a decidable
+predicate, false on exactly those two
+(`faultProofAdjudicable_eq_false_iff`), and a deployment leaning on
+the fault proof must not authorise them — its `AuthorityPolicy`
+already expresses that.  Chosen over a per-resource actor-set cell or
+an explicit recipient list because it costs nothing and is reversible.  `stepWriteBundle` / `stepPostRoot` are the honest
 sequencer's side, and
 `stepPostRoot_eq_commit_productionApplyBudget` says the fold of THAT
 bundle lands on the root the sequencer published.  On the L1 side
