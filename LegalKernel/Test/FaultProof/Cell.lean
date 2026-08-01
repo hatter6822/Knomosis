@@ -14,6 +14,8 @@ WUs H.3.1 + H.3.2).
 -/
 
 import LegalKernel.FaultProof.Cell
+import LegalKernel.FaultProof.CellValue
+import LegalKernel.FaultProof.StateCells
 import LegalKernel.FaultProof.KeyDerivation
 import LegalKernel.FaultProof.StepVariants
 import LegalKernel.Test.Framework
@@ -130,6 +132,46 @@ def tests : List TestCase :=
     , body := do
         let cells := Authority.Action.requiredCells (.deposit 1 2 3 4) 2
         assertEq (expected := 6) (actual := cells.length) "deposit cell count"
+    }
+  , { name := "setCell writes the nonce cell (was a no-op)"
+    , body := do
+        -- `setCell` is the L1 step VM's per-cell write primitive and
+        -- every one of the 25 actions writes `.nonce signer`.  Its
+        -- nonce arm used to return the state unchanged, so replaying
+        -- a step's proven writes produced a state carrying the
+        -- PRE-state's nonce — and therefore a different root from the
+        -- one the sequencer published, on every action.
+        let es := ExtendedState.empty
+        let t : CellTag := .nonce 7
+        let v := ByteArray.mk (Encoding.Encodable.encode (T := Nat) 9).toArray
+        let es' := setCell es t v
+        assertEq (expected := v.toList) (actual := (getCellValue es' t).toList)
+          "the written value reads back"
+        assert ((getCellValue es t).toList != (getCellValue es' t).toList)
+          "and the write is not inert"
+        assert ((commitExtendedState es).toList != (commitExtendedState es').toList)
+          "so it moves the published root"
+    }
+  , { name := "setCell round-trips every value-carrying cell kind"
+    , body := do
+        -- The round-trip the write primitive owes `getCellValue`.
+        -- Listed per kind so a future arm that silently no-ops is
+        -- caught here rather than at a post-root mismatch.
+        let es := ExtendedState.empty
+        let nat9 := ByteArray.mk (Encoding.Encodable.encode (T := Nat) 9).toArray
+        let amt9 := ByteArray.mk (Encoding.encodeAmount 9).toArray
+        let cases : List (CellTag × ByteArray) :=
+          [ (.balance 1 7, amt9)
+          , (.nonce 7, nat9)
+          , (.bridgeNextWdId, nat9)
+          , (.bridgeAmmReserveEth, amt9)
+          , (.bridgeAmmReserveBold, amt9)
+          , (.bridgeBoldTvlCap, amt9)
+          , (.bridgeBoldTotalLockedValue, amt9) ]
+        for (t, v) in cases do
+          assertEq (expected := v.toList)
+            (actual := (getCellValue (setCell es t v) t).toList)
+            s!"round-trip for {repr t}"
     }
   , -- ===== SMT cell-key derivation =====
     { name := "smtCellKey: every tag maps to a distinct 32-byte key"

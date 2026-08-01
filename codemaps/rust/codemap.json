@@ -15,7 +15,7 @@
       "**/*.rs"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2af4939283765f233cc5e4b145acf4533a8f9e7c924e88ca1c4e86180ece0ccc"
+    "source_digest": "15a59c99cfa49ab21897f054e4088c01f8f2aaa0c8f70ceb4b7a7c4c2d6a2cf8"
   },
   "summary": {
     "module_count": 192,
@@ -20077,7 +20077,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_deterministic",
-          "line": 243,
+          "line": 248,
           "called": [
             "build_synthetic_log_with_transfer",
             "locate_knomosis_binary",
@@ -20089,7 +20089,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_withdraw",
-          "line": 282,
+          "line": 287,
           "called": [
             "CellProof",
             "action",
@@ -20109,7 +20109,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_out_of_range_exits_2",
-          "line": 371,
+          "line": 382,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -20120,7 +20120,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_non_nat_idx_exits_2",
-          "line": 408,
+          "line": 419,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -20131,7 +20131,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_non_nat_signer_exits_2",
-          "line": 440,
+          "line": 451,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -20142,7 +20142,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_cell_proofs_signer_mismatch_exits_2",
-          "line": 477,
+          "line": 488,
           "called": [
             "build_synthetic_log_with_transfer",
             "locate_knomosis_binary",
@@ -20241,7 +20241,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_deterministic",
-          "line": 192,
+          "line": 195,
           "called": [
             "action",
             "amount",
@@ -20256,7 +20256,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_mint_variant",
-          "line": 221,
+          "line": 224,
           "called": [
             "action",
             "amount",
@@ -20274,7 +20274,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_withdraw_variant",
-          "line": 264,
+          "line": 267,
           "called": [
             "action",
             "amount",
@@ -20292,7 +20292,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_out_of_range_exits_2",
-          "line": 316,
+          "line": 319,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -20303,7 +20303,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_non_nat_idx_exits_2",
-          "line": 354,
+          "line": 357,
           "called": [
             "b",
             "locate_knomosis_binary",
@@ -20314,7 +20314,7 @@
         {
           "kind": "fn",
           "name": "real_knomosis_export_terminate_bundle_json_is_single_line_object",
-          "line": 386,
+          "line": 389,
           "called": [
             "action",
             "amount",

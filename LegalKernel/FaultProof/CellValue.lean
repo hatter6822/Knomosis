@@ -324,11 +324,27 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
     match Encoding.decodeAmount value.data.toList with
     | .ok (v, _) => { es with base := LegalKernel.setBalance es.base r a v }
     | .error _   => es
-  | .nonce _a =>
-    -- Nonces are bumped by `advanceNonce`, not arbitrarily set.
-    -- For verifier-driven write, treat as no-op (the kernel-side
-    -- `apply_admissible` is the canonical way to bump nonces).
-    es
+  | .nonce a =>
+    -- Inverse of `getCellValue`'s nonce arm, which reads
+    -- `Authority.expectsNonce` off `es.nonces.next`.
+    --
+    -- This used to be a no-op, on the reasoning that nonces are
+    -- bumped by `advanceNonce` and not arbitrarily set.  That is the
+    -- right rule for the KERNEL, and the wrong one here: this
+    -- function is the L1 step VM's per-cell write primitive, and
+    -- every one of the 25 actions writes `.nonce signer`.  A no-op on
+    -- the single most common write meant the primitive could not
+    -- express a step at all — a state reached by replaying a step's
+    -- proven writes would carry the PRE-state's nonce, and so a
+    -- different root from the one the sequencer published.
+    --
+    -- Arbitrariness is not a hazard the primitive has to defend
+    -- against: it writes the value the opening proved, and what
+    -- constrains that value to `old + 1` is the per-variant handler
+    -- that computes it, verified against the pre-state cell.
+    match Encodable.decode (T := Nat) value.data.toList with
+    | .ok (n, _) => { es with nonces := { es.nonces with next := es.nonces.next.insert a n } }
+    | .error _   => es
   | .registry a =>
     -- Inverse of `getCellValue`'s registry arm: the value is a CBE
     -- byte string wrapping the key, not the raw key.  Decoding it is

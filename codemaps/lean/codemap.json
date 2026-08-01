@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "809479640a9bf55027e5bffe631f5d2e7559829300d2a2ced6398701f5bb28d1"
+    "source_digest": "2b54814a866bc28be98f582ea005478da785326cefc93eb22f3636a5759356b3"
   },
   "summary": {
     "module_count": 324,
@@ -20650,7 +20650,7 @@
         {
           "kind": "theorem",
           "name": "setCell_deterministic",
-          "line": 430,
+          "line": 446,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -20661,7 +20661,7 @@
         {
           "kind": "def",
           "name": "buildCellProof",
-          "line": 442,
+          "line": 458,
           "called": [
             "CellProof",
             "CellTag",
@@ -53038,13 +53038,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.Cell",
-          "line": 25,
+          "line": 27,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 28,
+          "line": 30,
           "called": [
             "CellProof",
             "CellTag",
@@ -53055,9 +53055,13 @@
             "assertEq",
             "burn",
             "cellKeyPreimage",
+            "commitExtendedState",
             "deposit",
+            "es",
             "freezeResource",
+            "getCellValue",
             "mint",
+            "setCell",
             "smtCellKey",
             "transfer"
           ]
