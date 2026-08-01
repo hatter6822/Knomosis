@@ -43,6 +43,7 @@ import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.VerifierWrites
 import LegalKernel.Test.Bridge.CrossCheck.Framework
 import LegalKernel.Test.Framework
 
@@ -1641,6 +1642,98 @@ def uniformWriteGoldens : List Test.Bridge.CrossCheck.Json :=
               .str (hx (getCellValue (productionApplyBudget es st 0)
                 (.epochBudget target)))) ]))
 
+/-! ### Balance-derivation goldens
+
+The per-variant half.  Each probe carries the proven pre-balances, the
+action's amounts, and the post-values Lean's `VerifierWrites` derives —
+including the cases a happy-path corpus would never reach:
+
+  * a **self-transfer**, where the credit reads the DEBITED state and
+    the net change is zero;
+  * a **failing precondition**, where `step_impl` no-ops and both cells
+    keep their pre-values — the case the L1 currently REVERTS on, which
+    costs the responsible party the game by timeout rather than
+    settling it;
+  * a **same-actor chain**, where the payer IS the pool actor.
+-/
+
+/-- One balance-derivation probe as JSON.  `kind` selects which
+    `StepWrites` function the Solidity side calls; the two `post`
+    columns are Lean's derived values. -/
+private def balanceGolden (kind : String) (xPre yPre : Nat)
+    (x y : Nat) (amountA amountB : Nat) (xPost yPost : Nat) :
+    Test.Bridge.CrossCheck.Json :=
+  let h := fun (v : Nat) => Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)
+  .obj [ ("kind", .str kind)
+       , ("xPre", .str (h xPre)), ("yPre", .str (h yPre))
+       , ("x", .str (h x)), ("y", .str (h y))
+       , ("amountA", .str (h amountA)), ("amountB", .str (h amountB))
+       , ("xPost", .str (h xPost)), ("yPost", .str (h yPost)) ]
+
+/-- Balance-derivation goldens, computed by the production
+    `VerifierWrites` functions over the fixture base state. -/
+def balanceWriteGoldens : List Test.Bridge.CrossCheck.Json :=
+  -- A POPULATED state, on two resources.  `fixtureBase` holds no
+  -- balances, so every probe over it would start from zero — the
+  -- transfer would fail its precondition, the self-transfer and the
+  -- chained pair would be indistinguishable from the no-op, and the
+  -- goldens would agree with a Solidity mirror that did nothing at
+  -- all.  A vacuous golden is worse than none: it reads as coverage.
+  let es : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let r : ResourceId := 1
+  let read := stateBalanceReader es
+  let bal := fun (a : ActorId) => LegalKernel.getBalance es.base r a
+  -- Pull the derived pair out of the `Option (List …)` the derivations
+  -- return, defaulting to the pre-values on a shape the probe should
+  -- never produce (which would then fail the Solidity comparison
+  -- loudly rather than silently agreeing).
+  let pair := fun (o : Option (List ((ResourceId × ActorId) × Nat)))
+      (dx dy : Nat) =>
+    match o with
+    | some [(_, vx), (_, vy)] => (vx, vy)
+    | some [(_, vx)]          => (vx, dy)
+    | _                       => (dx, dy)
+  let transferOk := pair (deriveTransferBalances read r 7 8 30) (bal 7) (bal 8)
+  let transferSelf := pair (deriveTransferBalances read r 7 7 30) (bal 7) (bal 7)
+  let transferNoop :=
+    pair (deriveTransferBalances read r 7 8 999999) (bal 7) (bal 8)
+  let mintOk := pair (deriveCreditBalance read r 8 5) (bal 8) 0
+  let burnOk := pair (deriveBurnBalance read r 8 5) (bal 8) 0
+  let burnNoop := pair (deriveBurnBalance read r 8 999999) (bal 8) 0
+  let depositOk := pair (deriveDepositBalance read r 8 0) (bal 8) 0
+  let topUpOk := pair (deriveTopUpBalances read r 7 9 5) (bal 7) (bal 9)
+  let topUpSelf := pair (deriveTopUpBalances read r 7 7 5) (bal 7) (bal 7)
+  -- The cross-resource variant: reserve 9 credited at `r`, debited at
+  -- resource 2.  Its `toBal` is read at the OTHER resource, which is
+  -- why it does not go through the chained pair.
+  let swapOk := pair (deriveAmmSwapBalances read r 2 5 10 9)
+    (bal 9) (LegalKernel.getBalance es.base 2 9)
+  -- ...and the no-op case, where the reserve at `toResource` cannot
+  -- cover `amountOut`.  Without it the swap probe would only ever
+  -- exercise the succeeding branch.
+  let swapNoop := pair (deriveAmmSwapBalances read r 2 5 999999 9)
+    (bal 9) (LegalKernel.getBalance es.base 2 9)
+  [ balanceGolden "ammSwap" (bal 9) (LegalKernel.getBalance es.base 2 9)
+      1 2 5 10 swapOk.1 swapOk.2
+  , balanceGolden "ammSwap" (bal 9) (LegalKernel.getBalance es.base 2 9)
+      1 2 5 999999 swapNoop.1 swapNoop.2
+  , balanceGolden "transfer" (bal 7) (bal 8) 7 8 30 0 transferOk.1 transferOk.2
+  , balanceGolden "transfer" (bal 7) (bal 7) 7 7 30 0 transferSelf.1 transferSelf.2
+  , balanceGolden "transfer" (bal 7) (bal 8) 7 8 999999 0
+      transferNoop.1 transferNoop.2
+  , balanceGolden "credit" (bal 8) 0 8 0 5 0 mintOk.1 mintOk.2
+  , balanceGolden "debit" (bal 8) 0 8 0 5 0 burnOk.1 burnOk.2
+  , balanceGolden "debit" (bal 8) 0 8 0 999999 0 burnNoop.1 burnNoop.2
+  , balanceGolden "deposit" (bal 8) 0 8 0 0 0 depositOk.1 depositOk.2
+  , balanceGolden "topUp" (bal 7) (bal 9) 7 9 5 0 topUpOk.1 topUpOk.2
+  , balanceGolden "topUp" (bal 7) (bal 7) 7 7 5 0 topUpSelf.1 topUpSelf.2 ]
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -2133,6 +2226,8 @@ def tests : List Test.TestCase :=
           , ("cbeEncoderGoldensCount", .num cbeEncoderGoldens.length)
           , ("uniformWriteGoldens", .arr uniformWriteGoldens)
           , ("uniformWriteGoldensCount", .num uniformWriteGoldens.length)
+          , ("balanceWriteGoldens", .arr balanceWriteGoldens)
+          , ("balanceWriteGoldensCount", .num balanceWriteGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)

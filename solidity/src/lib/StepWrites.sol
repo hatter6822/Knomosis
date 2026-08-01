@@ -293,6 +293,166 @@ library StepWrites {
         );
     }
 
+    /* ---------------------------------------------------------- */
+    /* Balance cells                                              */
+    /* ---------------------------------------------------------- */
+
+    /// @dev Two things every balance derivation below does that the
+    ///      current `_step<Variant>` handlers do not.
+    ///
+    ///      **The precondition is EVALUATED, not asserted.**
+    ///      `step_impl` is `if pre then apply_impl else id`, so an
+    ///      action whose precondition fails advances no balance and its
+    ///      cells keep their pre-values.  The handlers REVERT
+    ///      (`InsufficientBalance`), and a revert is not a verdict: the
+    ///      terminal step is callable only by whoever's turn it is, so
+    ///      any reverting input costs the responsible party the game by
+    ///      timeout — and the turn can land on the challenger.
+    ///
+    ///      **The chained pair reads the already-written state.**  Five
+    ///      variants write `x` then write `y` reading the DEBITED
+    ///      state; when `x == y` the second read sees the first write,
+    ///      and that case is reachable in every one of them (a
+    ///      self-transfer, a signer who is the pool actor).
+
+    /// @notice `transfer`: debit the sender, credit the receiver.
+    /// @dev    Mirrors `VerifierWrites.deriveTransferBalances`.  The
+    ///         self-transfer branch is §4.11's read-after-debit: the
+    ///         law debits then reads the receiver from the debited
+    ///         state, so when the two coincide the net change is zero.
+    ///         Debiting and crediting independently would move the root
+    ///         on a self-transfer, which any actor can submit cheaply.
+    function deriveTransferBalances(
+        uint256 senderBal,
+        uint256 receiverBal,
+        uint64 sender,
+        uint64 receiver,
+        uint256 amount
+    ) internal pure returns (uint256 newSender, uint256 newReceiver) {
+        if (amount > 0 && amount <= senderBal) {
+            if (sender == receiver) return (senderBal, senderBal);
+            return (senderBal - amount, receiverBal + amount);
+        }
+        return (senderBal, receiverBal);
+    }
+
+    /// @notice `mint` / `reward`: credit under a positivity check.
+    /// @dev    One function for both because the two laws have the
+    ///         same cell effect; they differ in conservation
+    ///         classification, which is not an L1 concern.
+    function deriveCreditBalance(uint256 bal, uint256 amount)
+        internal
+        pure
+        returns (uint256)
+    {
+        return amount > 0 ? bal + amount : bal;
+    }
+
+    /// @notice `burn` / `withdraw`: debit under a sufficiency check.
+    function deriveDebitBalance(uint256 bal, uint256 amount)
+        internal
+        pure
+        returns (uint256)
+    {
+        return (amount > 0 && amount <= bal) ? bal - amount : bal;
+    }
+
+    /// @notice `deposit`: an UNCONDITIONAL credit.
+    /// @dev    `Laws.deposit.pre` is `True` — a bridge deposit's
+    ///         admissibility is settled by the bridge gate (the
+    ///         consumed-deposit cell, the attested receipt), not by the
+    ///         kernel transition.  Separate from `deriveCreditBalance`
+    ///         for exactly that reason: reusing the positivity-guarded
+    ///         one would silently no-op a legitimate zero deposit.
+    function deriveDepositBalance(uint256 bal, uint256 amount)
+        internal
+        pure
+        returns (uint256)
+    {
+        return bal + amount;
+    }
+
+    /// @notice The chained same-resource pair: write `x`, then write
+    ///         `y` reading the already-written state.
+    ///
+    /// @dev    Mirrors `VerifierWrites.deriveChainPair`.  `debit` is
+    ///         taken from `x` and `credit` given to `y`; when the two
+    ///         actors coincide the credit sees the debited value, so
+    ///         the pair nets out rather than double-counting.  Used by
+    ///         `topUpActionBudget`, `topUpActionBudgetFor`,
+    ///         `claimBudgetRefund` (the mirror) and — with `debit = 0`
+    ///         — `depositWithFee`.
+    function deriveChainPair(
+        uint256 xBal,
+        uint256 yBal,
+        uint64 x,
+        uint64 y,
+        uint256 debit,
+        uint256 credit
+    ) internal pure returns (uint256 newX, uint256 newY) {
+        uint256 nx = xBal - debit;
+        uint256 ny = (x == y ? nx : yBal) + credit;
+        return (x == y ? ny : nx, ny);
+    }
+
+    /// @notice `topUpActionBudget` / `topUpActionBudgetFor`: the payer
+    ///         is debited, the pool credited.
+    /// @dev    `sufficient` carries the whole precondition, which for
+    ///         the delegated form includes `recipient != payer` — a
+    ///         self-delegation is a no-op rather than a top-up, and a
+    ///         derivation blind to that would move balances the advance
+    ///         leaves alone.  There is NO positivity conjunct, so a
+    ///         zero top-up is an admissible no-op.
+    function deriveTopUpBalances(
+        uint256 payerBal,
+        uint256 poolBal,
+        uint64 payer,
+        uint64 poolActor,
+        uint256 gasAmount,
+        bool sufficient
+    ) internal pure returns (uint256 newPayer, uint256 newPool) {
+        if (!sufficient) return (payerBal, poolBal);
+        return deriveChainPair(payerBal, poolBal, payer, poolActor, gasAmount, gasAmount);
+    }
+
+    /// @notice `ammSwap`: credit the reserve at `fromResource`, debit
+    ///         it at `toResource`.
+    /// @dev    The one variant touching two DIFFERENT resources, so the
+    ///         cells are independent and `deriveChainPair` does not
+    ///         apply.  That is sound only because
+    ///         `fromResource != toResource` is a precondition conjunct
+    ///         rather than an assumption — it is checked here.
+    function deriveAmmSwapBalances(
+        uint256 fromBal,
+        uint256 toBal,
+        uint64 fromResource,
+        uint64 toResource,
+        uint256 amountIn,
+        uint256 amountOut
+    ) internal pure returns (uint256 newFrom, uint256 newTo) {
+        if (toBal >= amountOut && fromResource != toResource && amountIn > 0) {
+            return (fromBal + amountIn, toBal - amountOut);
+        }
+        return (fromBal, toBal);
+    }
+
+    /// @notice `reclaimAmmReserves`: the post-disable exact sweep.
+    /// @dev    The precondition is an EQUALITY (`balance == amount`),
+    ///         not a sufficiency, so a partial reclaim is a no-op.
+    function deriveReclaimBalances(
+        uint256 reserveBal,
+        uint256 poolBal,
+        uint64 reserveActor,
+        uint64 poolActor,
+        uint256 amount
+    ) internal pure returns (uint256 newReserve, uint256 newPool) {
+        if (reserveBal == amount && reserveActor != poolActor && amount > 0) {
+            return deriveChainPair(
+                reserveBal, poolBal, reserveActor, poolActor, amount, amount);
+        }
+        return (reserveBal, poolBal);
+    }
+
     /// @notice The epoch-budget cell's post-value, in canonical bytes.
     /// @dev    The byte-level counterpart, mirroring
     ///         `VerifierWrites.deriveEpochBudgetCellValue`.

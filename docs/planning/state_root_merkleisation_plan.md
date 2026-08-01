@@ -520,10 +520,21 @@ space:
    `topUpActionBudgetFor` is exercised at BOTH the signer and the
    recipient for exactly that reason.
 
-   What remains of §4 step 3 is the per-variant BALANCE derivation on
-   top of those primitives, plus the registry / local-policy / bridge
-   cells, and then `executeStep` verifying openings and returning the
-   fold's result.
+   **The per-variant balance derivations are mirrored too**, pinned by
+   `balanceWriteGoldens`.  Each golden carries the proven pre-balances
+   and Lean's derived post-values, including the three cases a
+   happy-path corpus never reaches: a self-transfer (the credit reads
+   the DEBITED state, so the net is zero), a failing precondition (both
+   cells keep their pre-values — the case the deployed step VM REVERTS
+   on), and a same-actor chain (the payer IS the pool actor).  The
+   golden base state is POPULATED on two resources; over an empty one
+   every probe would start from zero, the transfer would fail its
+   precondition, and the goldens would agree with a mirror that did
+   nothing — a vacuous golden reads as coverage.
+
+   What remains of §4 step 3 is the registry / local-policy / bridge
+   cells in Solidity, and then `executeStep` verifying openings and
+   returning the fold's result.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"

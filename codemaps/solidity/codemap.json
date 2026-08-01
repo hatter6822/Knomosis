@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5c5089357584d4666339ed3ffd8c3b91013d472a1ff50cf3697d0f22ac1899e4"
+    "source_digest": "a55c3044f30440c2128e030fae9e48c146338fb67819bbab24acef73b39eb287"
   },
   "summary": {
-    "module_count": 93,
-    "declaration_count": 2049
+    "module_count": 94,
+    "declaration_count": 2075
   },
   "modules": [
     {
@@ -3360,7 +3360,9 @@
           "kind": "enum",
           "name": "CellKind",
           "line": 93,
-          "called": []
+          "called": [
+            "BudgetPolicy"
+          ]
         },
         {
           "kind": "enum",
@@ -4879,6 +4881,197 @@
           "name": "cellLeafHash",
           "line": 185,
           "called": []
+        }
+      ]
+    },
+    {
+      "module": "StepWrites",
+      "path": "solidity/src/lib/StepWrites.sol",
+      "declaration_count": 24,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "StepWrites",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "ActorBudget",
+          "line": 41,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "BudgetPolicy",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MalformedCellValue",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_readUint",
+          "line": 73,
+          "called": [
+            "MalformedCellValue"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "decodeNonce",
+          "line": 91,
+          "called": [
+            "MalformedCellValue",
+            "_readUint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "decodeActorBudget",
+          "line": 97,
+          "called": [
+            "ActorBudget",
+            "MalformedCellValue",
+            "_readUint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "decodeBudgetPolicy",
+          "line": 116,
+          "called": [
+            "BudgetPolicy",
+            "MalformedCellValue",
+            "_readUint"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deriveNonce",
+          "line": 143,
+          "called": [
+            "decodeNonce"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_normalise",
+          "line": 157,
+          "called": [
+            "ActorBudget"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_topUp",
+          "line": 172,
+          "called": [
+            "ActorBudget",
+            "_normalise"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_consume",
+          "line": 188,
+          "called": [
+            "ActorBudget",
+            "_normalise"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "refundConsumeExtra",
+          "line": 211,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "applyGrantAt",
+          "line": 233,
+          "called": [
+            "ActorBudget",
+            "_topUp"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deriveEpochBudget",
+          "line": 267,
+          "called": [
+            "ActorBudget",
+            "BudgetPolicy",
+            "_consume",
+            "applyGrantAt"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deriveTransferBalances",
+          "line": 324,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveCreditBalance",
+          "line": 342,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveDebitBalance",
+          "line": 351,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveDepositBalance",
+          "line": 366,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveChainPair",
+          "line": 384,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveTopUpBalances",
+          "line": 405,
+          "called": [
+            "deriveChainPair"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deriveAmmSwapBalances",
+          "line": 424,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveReclaimBalances",
+          "line": 441,
+          "called": [
+            "deriveChainPair"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deriveEpochBudgetCellValue",
+          "line": 458,
+          "called": [
+            "ActorBudget",
+            "decodeActorBudget",
+            "decodeBudgetPolicy",
+            "deriveEpochBudget"
+          ]
         }
       ]
     },
@@ -12022,7 +12215,7 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 28,
+      "declaration_count": 30,
       "declarations": [
         {
           "kind": "contract",
@@ -12194,8 +12387,25 @@
         },
         {
           "kind": "function",
+          "name": "test_balanceWrites_match_lean",
+          "line": 649,
+          "called": [
+            "_assertBalanceWrite",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_assertBalanceWrite",
+          "line": 665,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 633,
+          "line": 707,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12206,7 +12416,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 661,
+          "line": 735,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12216,7 +12426,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 686,
+          "line": 760,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12226,13 +12436,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 729,
+          "line": 803,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 745,
+          "line": 819,
           "called": [
             "_parseCellProof"
           ]
@@ -12240,7 +12450,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 778,
+          "line": 852,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12250,7 +12460,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 825,
+          "line": 899,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12261,7 +12471,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 850,
+          "line": 924,
           "called": [
             "KnomosisStepVM"
           ]

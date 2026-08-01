@@ -631,6 +631,80 @@ contract StepVMCrossCheck is CrossCheckFramework {
         return StepWrites.deriveNonce(pre);
     }
 
+    /// @notice **The per-variant balance derivations agree.**
+    ///
+    ///         Each golden carries the proven pre-balances and the
+    ///         post-values Lean's `VerifierWrites` derives, including
+    ///         the three cases a happy-path corpus never reaches: a
+    ///         self-transfer (the credit reads the DEBITED state, so
+    ///         the net change is zero), a failing precondition (both
+    ///         cells keep their pre-values — the case the deployed
+    ///         step VM REVERTS on), and a same-actor chain (the payer
+    ///         IS the pool actor).
+    ///
+    ///         The base state is populated on two resources.  Over an
+    ///         empty one every probe would start from zero, the
+    ///         transfer would fail its precondition, and the goldens
+    ///         would agree with a mirror that did nothing at all — a
+    ///         vacuous golden reads as coverage.
+    function test_balanceWrites_match_lean() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".balanceWriteGoldensCount");
+        assertGt(n, 0, "the corpus must carry balance goldens");
+        for (uint256 i = 0; i < n; i++) {
+            _assertBalanceWrite(raw,
+                string.concat(".balanceWriteGoldens[", vm.toString(i), "]"));
+        }
+    }
+
+    /// @dev One balance golden.  Extracted to keep the driver's stack
+    ///      shallow under `via_ir`.
+    function _assertBalanceWrite(string memory raw, string memory base)
+        internal
+        pure
+    {
+        string memory kind = vm.parseJsonString(raw, string.concat(base, ".kind"));
+        uint256 xPre = vm.parseJsonUint(raw, string.concat(base, ".xPre"));
+        uint256 yPre = vm.parseJsonUint(raw, string.concat(base, ".yPre"));
+        uint64 x = uint64(vm.parseJsonUint(raw, string.concat(base, ".x")));
+        uint64 y = uint64(vm.parseJsonUint(raw, string.concat(base, ".y")));
+        uint256 amountA = vm.parseJsonUint(raw, string.concat(base, ".amountA"));
+        uint256 xPost = vm.parseJsonUint(raw, string.concat(base, ".xPost"));
+        uint256 yPost = vm.parseJsonUint(raw, string.concat(base, ".yPost"));
+
+        uint256 gotX;
+        uint256 gotY = yPre;
+        bytes32 k = keccak256(bytes(kind));
+        if (k == keccak256("transfer")) {
+            (gotX, gotY) =
+                StepWrites.deriveTransferBalances(xPre, yPre, x, y, amountA);
+        } else if (k == keccak256("credit")) {
+            gotX = StepWrites.deriveCreditBalance(xPre, amountA);
+        } else if (k == keccak256("debit")) {
+            gotX = StepWrites.deriveDebitBalance(xPre, amountA);
+        } else if (k == keccak256("deposit")) {
+            gotX = StepWrites.deriveDepositBalance(xPre, amountA);
+        } else if (k == keccak256("topUp")) {
+            (gotX, gotY) = StepWrites.deriveTopUpBalances(
+                xPre, yPre, x, y, amountA, amountA <= xPre);
+        } else if (k == keccak256("ammSwap")) {
+            // `x` / `y` are the two RESOURCES here, not actors: the
+            // swap is the only variant whose cells sit at different
+            // resources, which is what makes them independent.
+            (gotX, gotY) = StepWrites.deriveAmmSwapBalances(
+                xPre, yPre, x, y, amountA,
+                vm.parseJsonUint(raw, string.concat(base, ".amountB")));
+        } else {
+            revert(string.concat("unknown balance golden kind at ", base));
+        }
+        assertEq(gotX, xPost, string.concat("x post mismatch at ", base));
+        assertEq(gotY, yPost, string.concat("y post mismatch at ", base));
+    }
+
     function test_perEntry_cellProofs_witness_binding() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
