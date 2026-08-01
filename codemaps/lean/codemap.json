@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "1367e486a600d035f83810d37a227d2813e85a9897a68de464630044960bb193"
+    "source_digest": "1cd0dbe89d4324965be9270e330eb98d63ca80e6b7c3d96608fedada83c1ce67"
   },
   "summary": {
-    "module_count": 327,
-    "declaration_count": 5615
+    "module_count": 329,
+    "declaration_count": 5659
   },
   "modules": [
     {
@@ -21170,13 +21170,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 51,
+          "line": 69,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 52,
+          "line": 70,
           "called": [
             "LegalKernel.Bridge"
           ]
@@ -21184,7 +21184,7 @@
         {
           "kind": "abbrev",
           "name": "CellWrite",
-          "line": 61,
+          "line": 79,
           "called": [
             "CellTag"
           ]
@@ -21192,7 +21192,7 @@
         {
           "kind": "def",
           "name": "applyCellWrites",
-          "line": 65,
+          "line": 83,
           "called": [
             "CellWrite",
             "ExtendedState",
@@ -21203,7 +21203,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_applyCellWrites_of_not_written",
-          "line": 75,
+          "line": 93,
           "called": [
             "CellTag",
             "CellWrite",
@@ -21218,7 +21218,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_applyCellWrites_of_written",
-          "line": 98,
+          "line": 116,
           "called": [
             "CellTag",
             "CellWrite",
@@ -21233,7 +21233,7 @@
         {
           "kind": "def",
           "name": "canonicalCellChain",
-          "line": 119,
+          "line": 137,
           "called": [
             "CellWrite",
             "CellWriteChain",
@@ -21246,7 +21246,7 @@
         {
           "kind": "theorem",
           "name": "chainLast_canonicalCellChain",
-          "line": 126,
+          "line": 144,
           "called": [
             "CellWrite",
             "ExtendedState",
@@ -21260,7 +21260,7 @@
         {
           "kind": "structure",
           "name": "CellWriteReady",
-          "line": 160,
+          "line": 178,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -21281,7 +21281,7 @@
         {
           "kind": "def",
           "name": "CellWritesReady",
-          "line": 174,
+          "line": 192,
           "called": [
             "BitsDistinctBelow",
             "CellWrite",
@@ -21296,7 +21296,7 @@
         {
           "kind": "theorem",
           "name": "CellWritesReady.distinctHead",
-          "line": 183,
+          "line": 201,
           "called": [
             "BitsDistinctBelow",
             "CellWrite",
@@ -21310,7 +21310,7 @@
         {
           "kind": "theorem",
           "name": "CellWritesReady.distinctLast",
-          "line": 192,
+          "line": 210,
           "called": [
             "BitsDistinctBelow",
             "CellWrite",
@@ -21326,7 +21326,7 @@
         {
           "kind": "theorem",
           "name": "verifyStateCellProof_buildStateCellProof",
-          "line": 213,
+          "line": 231,
           "called": [
             "CellTag",
             "CellWriteReady",
@@ -21347,7 +21347,7 @@
         {
           "kind": "theorem",
           "name": "chainCoherent_canonicalCellChain",
-          "line": 236,
+          "line": 254,
           "called": [
             "CellWrite",
             "CellWritesReady",
@@ -21364,7 +21364,7 @@
         {
           "kind": "theorem",
           "name": "fold_canonicalCellChain_eq_commit_applyCellWrites",
-          "line": 261,
+          "line": 279,
           "called": [
             "CellWrite",
             "CellWritesReady",
@@ -21383,7 +21383,7 @@
         {
           "kind": "theorem",
           "name": "fold_canonicalCellChain_eq_commit_of_cells_agree",
-          "line": 279,
+          "line": 297,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -21407,7 +21407,7 @@
         {
           "kind": "def",
           "name": "CellTag.appendOnly",
-          "line": 314,
+          "line": 332,
           "called": [
             "CellTag"
           ]
@@ -21415,7 +21415,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_setCell_getCellValue",
-          "line": 341,
+          "line": 359,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -21467,7 +21467,7 @@
         {
           "kind": "def",
           "name": "stepCellWrites",
-          "line": 499,
+          "line": 517,
           "called": [
             "ActorId",
             "CellWrite",
@@ -21478,7 +21478,7 @@
         {
           "kind": "theorem",
           "name": "mem_stepCellWrites",
-          "line": 504,
+          "line": 522,
           "called": [
             "ActorId",
             "CellTag",
@@ -21490,7 +21490,7 @@
         {
           "kind": "theorem",
           "name": "stepCellWrites_tags",
-          "line": 510,
+          "line": 528,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21500,7 +21500,7 @@
         {
           "kind": "def",
           "name": "WriteSetComplete",
-          "line": 527,
+          "line": 545,
           "called": [
             "ActorId",
             "CellTag",
@@ -21511,7 +21511,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_applyCellWrites_stepCellWrites",
-          "line": 544,
+          "line": 562,
           "called": [
             "ActorId",
             "CellTag",
@@ -21530,7 +21530,7 @@
         {
           "kind": "theorem",
           "name": "writeSetComplete_of_field_footprints",
-          "line": 615,
+          "line": 633,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21550,7 +21550,7 @@
         {
           "kind": "theorem",
           "name": "writeSetComplete_of_identity_advance",
-          "line": 684,
+          "line": 702,
           "called": [
             "ActorId",
             "CellTag",
@@ -21571,7 +21571,7 @@
         {
           "kind": "theorem",
           "name": "fold_stepCellWrites_eq_commit_post",
-          "line": 747,
+          "line": 765,
           "called": [
             "ActorId",
             "BitsDistinctBelow",
@@ -29206,6 +29206,596 @@
             "ActorId",
             "Authority",
             "LegalKernel"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.FaultProof.StepWriteSets",
+      "path": "LegalKernel/FaultProof/StepWriteSets.lean",
+      "declaration_count": 36,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 45,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 46,
+          "called": [
+            "LegalKernel.Bridge",
+            "LegalKernel.Runtime"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelOnlyApply_base",
+          "line": 63,
+          "called": [
+            "Action.toTransition",
+            "ExtendedState",
+            "SignedAction",
+            "base",
+            "es",
+            "kernelOnlyApply",
+            "signedActionEntry",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelOnlyApply_nonces",
+          "line": 71,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelOnlyApply_epochBudgets",
+          "line": 82,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "kernelOnlyApply_budgetPolicy",
+          "line": 88,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_eq_productionApply_off_budget",
+          "line": 104,
+          "called": [
+            "EpochBudgetState",
+            "ExtendedState",
+            "SignedAction",
+            "actionCost",
+            "bridgeActor",
+            "budgetGrant",
+            "es",
+            "freeTier",
+            "productionApply",
+            "productionApplyBudget",
+            "refundConsumeExtra"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_base",
+          "line": 124,
+          "called": [
+            "Action.toTransition",
+            "ExtendedState",
+            "SignedAction",
+            "base",
+            "es",
+            "kernelOnlyApply_base",
+            "productionApply",
+            "productionApplyBudget",
+            "productionApplyBudget_eq_productionApply_off_budget",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_budgetPolicy",
+          "line": 136,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply_budgetPolicy",
+            "productionApply",
+            "productionApplyBudget",
+            "productionApplyBudget_eq_productionApply_off_budget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_expectsNonce_of_ne",
+          "line": 146,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply",
+            "kernelOnlyApply_nonces",
+            "productionApplyBudget",
+            "productionApplyBudget_eq_productionApply_off_budget",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "budgetGrant_getElem?_of_ne",
+          "line": 173,
+          "called": [
+            "Action",
+            "ActorId",
+            "EpochBudgetState",
+            "budgetGrant",
+            "depositWithFee",
+            "freeTier",
+            "poolActor",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_epochBudgets_of_ne",
+          "line": 201,
+          "called": [
+            "ActorId",
+            "EpochBudgetState",
+            "ExtendedState",
+            "SignedAction",
+            "actionCost",
+            "bridgeActor",
+            "budgetGrant",
+            "budgetGrant_getElem?_of_ne",
+            "consume",
+            "depositWithFee",
+            "es",
+            "freeTier",
+            "kernelOnlyApply",
+            "kernelOnlyApply_epochBudgets",
+            "poolActor",
+            "productionApply",
+            "productionApplyBudget",
+            "refundConsumeExtra",
+            "signedActionEntry",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_registry_of_ne",
+          "line": 257,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply",
+            "productionApplyBudget",
+            "productionApplyBudget_eq_productionApply_off_budget",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_localPolicies_of_ne",
+          "line": 277,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply",
+            "policy",
+            "productionApplyBudget",
+            "productionApplyBudget_eq_productionApply_off_budget",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "applyActionToBridgeState_scalars",
+          "line": 311,
+          "called": [
+            "Action",
+            "BridgeState",
+            "applyActionToBridgeState"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_bridgeConsumed_of_ne",
+          "line": 334,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "deposit",
+            "depositWithFee",
+            "es",
+            "poolActor",
+            "productionApplyBudget",
+            "productionApplyBudget_bridge"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_bridgePending_of_ne",
+          "line": 357,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "es",
+            "productionApplyBudget",
+            "productionApplyBudget_bridge",
+            "sender",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_bridgeNextWdId_of_ne",
+          "line": 373,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "applyActionToBridgeState",
+            "es",
+            "productionApplyBudget",
+            "productionApplyBudget_bridge",
+            "sender",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getBalance_step_impl_of_untouched",
+          "line": 394,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "Transition",
+            "getBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getBalance_setBalance_of_ne",
+          "line": 405,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_other",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "balance_pair_ne",
+          "line": 418,
+          "called": [
+            "ActorId",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_getBalance_of_not_written",
+          "line": 446,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.toTransition",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "ammSwap",
+            "balance_pair_ne",
+            "base",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "distributeOthers",
+            "es",
+            "freezeResource",
+            "getBalance_setBalance_of_ne",
+            "getBalance_step_impl_of_untouched",
+            "mint",
+            "poolActor",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "proportionalDilute",
+            "receiver",
+            "reclaimAmmReserves",
+            "reward",
+            "sender",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_nonce",
+          "line": 603,
+          "called": [
+            "Action",
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_epochBudget",
+          "line": 609,
+          "called": [
+            "Action",
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_registry_replaceKey",
+          "line": 616,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_registry_registerIdentity",
+          "line": 623,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_localPolicy_declare",
+          "line": 629,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_localPolicy_revoke",
+          "line": 636,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_consumed_deposit",
+          "line": 642,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_consumed_depositWithFee",
+          "line": 650,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_pending_withdraw",
+          "line": 660,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_nextWdId_withdraw",
+          "line": 668,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_epochBudget_depositWithFee",
+          "line": 677,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_writeCellsAt_epochBudget_topUpFor",
+          "line": 685,
+          "called": [
+            "Action.stateWriteCells",
+            "Action.writeCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "writeSetComplete_productionApplyBudget",
+          "line": 707,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "WriteSetComplete",
+            "applyActionToBridgeState_scalars",
+            "distributeOthers",
+            "es",
+            "mem_writeCellsAt_consumed_deposit",
+            "mem_writeCellsAt_consumed_depositWithFee",
+            "mem_writeCellsAt_epochBudget",
+            "mem_writeCellsAt_epochBudget_depositWithFee",
+            "mem_writeCellsAt_epochBudget_topUpFor",
+            "mem_writeCellsAt_localPolicy_declare",
+            "mem_writeCellsAt_localPolicy_revoke",
+            "mem_writeCellsAt_nextWdId_withdraw",
+            "mem_writeCellsAt_nonce",
+            "mem_writeCellsAt_pending_withdraw",
+            "mem_writeCellsAt_registry_registerIdentity",
+            "mem_writeCellsAt_registry_replaceKey",
+            "policy",
+            "poolActor",
+            "productionApplyBudget",
+            "productionApplyBudget_bridge",
+            "productionApplyBudget_bridgeConsumed_of_ne",
+            "productionApplyBudget_bridgeNextWdId_of_ne",
+            "productionApplyBudget_bridgePending_of_ne",
+            "productionApplyBudget_budgetPolicy",
+            "productionApplyBudget_epochBudgets_of_ne",
+            "productionApplyBudget_expectsNonce_of_ne",
+            "productionApplyBudget_getBalance_of_not_written",
+            "productionApplyBudget_localPolicies_of_ne",
+            "productionApplyBudget_registry_of_ne",
+            "proportionalDilute",
+            "sender",
+            "writeSetComplete_of_field_footprints"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "fold_stepWrites_eq_commit_productionApplyBudget",
+          "line": 796,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "CellWritesReady",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "FaultProof",
+            "LegalKernel",
+            "SignedAction",
+            "canonicalAbsentValue",
+            "canonicalCellChain",
+            "chainWrites",
+            "commitExtendedState",
+            "distributeOthers",
+            "es",
+            "foldStateCellWrites",
+            "fold_stepCellWrites_eq_commit_post",
+            "getCellValue",
+            "productionApplyBudget",
+            "proportionalDilute",
+            "smtDepth",
+            "stateCellEntries",
+            "stepCellWrites",
+            "writeSetComplete_productionApplyBudget"
           ]
         }
       ]
@@ -54289,6 +54879,8 @@
           "line": 59,
           "called": [
             "ActorId",
+            "Amount",
+            "BalanceMap",
             "BitsDistinctBelow",
             "CellTag",
             "CellWrite",
@@ -54296,6 +54888,7 @@
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
             "LegalKernel.Test.FaultProof.CellWrites",
+            "ResourceId",
             "SmtCellProof",
             "TestCase",
             "WriteSetComplete",
@@ -54322,8 +54915,10 @@
             "getCellValue",
             "getCellValue_applyCellWrites_of_not_written",
             "getCellValue_setCell_getCellValue",
+            "lookup",
             "mint",
             "natCellValue",
+            "probes",
             "setCell",
             "smtCellKey",
             "smtDepth",
@@ -55477,6 +56072,119 @@
             "transfer",
             "uint64BE",
             "withdraw"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.FaultProof.StepWriteSets",
+      "path": "LegalKernel/Test/FaultProof/StepWriteSets.lean",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.StepWriteSets",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "base",
+          "line": 44,
+          "called": [
+            "ActorId",
+            "BalanceMap",
+            "EpochBudgetState",
+            "ExtendedState",
+            "KeyRegistry",
+            "Nonce",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "probeDispute",
+          "line": 57,
+          "called": [
+            "challenger"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "probeVerdict",
+          "line": 62,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "sign",
+          "line": 67,
+          "called": [
+            "SignedAction"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "probes",
+          "line": 79,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "checkComplete",
+          "line": 89,
+          "called": [
+            "assertEq",
+            "base",
+            "getCellValue",
+            "probes",
+            "productionApplyBudget",
+            "sign"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 102,
+          "called": [
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "LegalKernel.Test.FaultProof.StepWriteSets",
+            "SignedAction",
+            "TestCase",
+            "WriteSetComplete",
+            "ammSwap",
+            "assert",
+            "assertEq",
+            "base",
+            "burn",
+            "checkComplete",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "distributeOthers",
+            "es",
+            "freezeResource",
+            "getCellValue",
+            "mem_writeCellsAt_epochBudget",
+            "mem_writeCellsAt_nonce",
+            "mint",
+            "probeDispute",
+            "probeVerdict",
+            "productionApplyBudget",
+            "productionApplyBudget_budgetPolicy",
+            "proportionalDilute",
+            "reclaimAmmReserves",
+            "reward",
+            "sign",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw",
+            "writeSetComplete_productionApplyBudget"
           ]
         }
       ]

@@ -140,11 +140,16 @@ needs.
 
 The enabling result is `commitExtendedState_eq_of_cells_agree` — two
 states whose every cell reads the same publish the same root.  Without
-it the per-variant proofs would need `ExtendedState` EQUALITY between
-the production advance and a `setCell` chain, which is not provable:
-`Std.TreeMap` is a balanced search tree, the two paths insert in
-different orders, and Lean core has no extensional equality for it.
-Cell agreement is both provable and exactly what the root observes.
+it the per-variant proofs would need agreement between the production
+advance and a `setCell` chain at the level of the STATE.
+`ExtendedState` equality is unreachable (core has no pointwise lemma
+concluding `=` on `Std.TreeMap`), and map-level equivalence — which
+core does supply, via `TreeMap.Equiv` — is the wrong target: it is
+strictly stronger than what the root observes, because
+`stateCellEntries` drops canonically-absent cells.  A balance swept to
+zero by `reclaimAmmReserves` and one never written are cell-identical
+and root-identical with pointwise-different maps, so a map-level proof
+would be assuming something false on a reachable state pair.
 
 Proving `WriteSetComplete` found a declaration gap.  `Action.writeCells`
 was incomplete for `withdraw`: `appendWithdrawal` inserts at

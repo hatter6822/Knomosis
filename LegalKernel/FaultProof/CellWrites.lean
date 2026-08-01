@@ -34,12 +34,30 @@ VALUES — no SMT, no openings, no entry lists:
            = getCellValue (productionApplyBudget es st idx) t
 
 and `commitExtendedState_eq_of_cells_agree` turns that into root
-equality.  That the target is cell agreement rather than state
-equality is not a convenience: the production advance and a `setCell`
-chain insert the same bindings in different orders, and `Std.TreeMap`
-is a balanced search tree with no extensional equality in Lean core,
-so the two `ExtendedState`s are genuinely not provably equal.  They
-do not need to be.
+equality.
+
+**Why cells and not states.**  Two reasons, and the second is the
+load-bearing one.
+
+`ExtendedState` EQUALITY is out of reach: `Std.TreeMap` is a balanced
+search tree, the production advance and a `setCell` chain insert the
+same bindings in different orders, and Lean core has no pointwise
+lemma concluding `=` on it.  It does have an extensional EQUIVALENCE —
+`TreeMap.Equiv` (`~m`), built from pointwise lookups by
+`Equiv.of_forall_constGet?_eq` and reduced to `toList` equality by
+`equiv_iff_toList_eq` — which would carry through `stateCellEntries`
+to the root.  So map-level agreement is reachable in principle.
+
+It is also the WRONG target, and that is the real reason.  Map
+agreement is strictly stronger than what the root observes:
+`stateCellEntries` drops canonically-absent cells, so a balance
+written to zero and a balance never written are cell-identical and
+root-identical while their maps differ pointwise.
+`reclaimAmmReserves` sweeps a balance to zero, so that pair is
+reachable — a per-variant proof phrased over maps would be attempting
+a hypothesis that is FALSE on a real action.  Pinned by
+`faultproof-cell-writes`'s "cell agreement is STRICTLY WEAKER than map
+agreement".
 
 `docs/planning/state_root_merkleisation_plan.md` §4.
 -/

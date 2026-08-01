@@ -585,13 +585,20 @@ Three enabling results, in the order they matter:
 
   * `commitExtendedState_eq_of_cells_agree` — two states whose every
     cell reads the same publish the same root.  This is load-bearing,
-    not a convenience.  A step's post-state is reached two ways —
-    by the production advance and by a `setCell` chain — and those two
-    `ExtendedState`s are **not** provably equal: `Std.TreeMap` is a
-    balanced search tree, the two paths insert the same bindings in
-    different orders, and Lean core supplies no extensional equality.
-    Targeting cell agreement instead is both provable and exactly what
-    the root observes.
+    not a convenience, and for a sharper reason than the first draft of
+    this plan gave.  `ExtendedState` EQUALITY is out of reach: the two
+    paths insert the same bindings in different orders into a balanced
+    search tree, and core has no pointwise lemma concluding `=`.  Core
+    does supply an extensional EQUIVALENCE (`TreeMap.Equiv`, built by
+    `Equiv.of_forall_constGet?_eq`, reduced to `toList` equality by
+    `equiv_iff_toList_eq`), which would carry to the root — so map
+    agreement is reachable in principle.  It is nonetheless the WRONG
+    target: `stateCellEntries` drops canonically-absent cells, so a
+    balance swept to zero and one never written are cell-identical and
+    root-identical while their maps differ pointwise.
+    `reclaimAmmReserves` reaches that pair, so a per-variant proof
+    phrased over maps would be assuming something FALSE on a real
+    action.  Pinned by `faultproof-cell-writes`.
   * `chainCoherent_canonicalCellChain` — the chain a write list induces
     is coherent, discharging all six `ChainCoherent` conjuncts once
     rather than per link per variant.  The off-cell conjunct comes from

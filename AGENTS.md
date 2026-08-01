@@ -1173,10 +1173,15 @@ the six `ChainCoherent` conjuncts and
 fifteen cell kinds — so the per-variant residue is
 `WriteSetComplete`: the advance changes no cell the declaration omits.
 `commitExtendedState_eq_of_cells_agree` is what makes that provable at
-all, since the production advance and a `setCell` chain build their
-`Std.TreeMap`s in different insertion orders and Lean core has no
-extensional equality to bridge them — the root observes cell values,
-not tree shape.  The reference apply has moved from `kernelOnlyApply`
+all.  `ExtendedState` equality is out of reach — the two paths build
+their `Std.TreeMap`s in different insertion orders and core has no
+pointwise lemma concluding `=` — but the deeper point is that map
+agreement is the WRONG target: it is strictly stronger than what the
+root observes, since `stateCellEntries` drops canonically-absent
+cells, so a balance swept to zero and one never written are
+cell-identical and root-identical with pointwise-different maps.
+`reclaimAmmReserves` reaches that pair, so a map-level proof would be
+assuming something false.  The reference apply has moved from `kernelOnlyApply`
 to `ProductionApply`'s `productionApplyBudget`, and
 `Action.writeCellsAt` fixes the one declaration that was genuinely
 incomplete (`withdraw` creates a cell keyed by the pre-state's

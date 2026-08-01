@@ -280,6 +280,49 @@ def tests : List TestCase :=
                   != (getCellValue base (.epochBudget 7)).toList)
           "the budget moved"
     }
+  , { name := "cell agreement is STRICTLY WEAKER than map agreement"
+    , body := do
+        -- Why the per-variant proofs target cells rather than states,
+        -- pinned rather than asserted.
+        --
+        -- Lean core DOES supply map extensionality — `Std.TreeMap` has
+        -- `Equiv` (`~m`), `Equiv.of_forall_constGet?_eq` builds one
+        -- from pointwise lookups, and `equiv_iff_toList_eq` turns it
+        -- into `toList` equality, which would carry through
+        -- `stateCellEntries` to the root.  (What core does NOT supply
+        -- is `Eq`: two balanced trees holding the same bindings need
+        -- not be equal, and no pointwise lemma concludes `=`.)
+        --
+        -- So targeting cells is not a way around a missing lemma.  It
+        -- is that map agreement is strictly STRONGER than what the
+        -- root observes: `stateCellEntries` drops canonically-absent
+        -- cells, so a balance written to zero and a balance never
+        -- written are cell-identical and root-identical while their
+        -- maps differ pointwise.  `reclaimAmmReserves` sweeps a balance
+        -- to zero, so this is a reachable pair — a per-variant proof
+        -- phrased over maps would be attempting a hypothesis that is
+        -- FALSE on a real action.
+        let zeroed := applyCellWrites base [(.balance 1 8, amountCellValue 0)]
+        let neverBase : LegalKernel.State :=
+          { balances := (∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+              ((∅ : BalanceMap).insert 7 100) }
+        let never : ExtendedState := { base with base := neverBase }
+        for t in [CellTag.balance 1 7, .balance 1 8, .balance 1 9] do
+          assertEq (expected := (getCellValue never t).toList)
+            (actual := (getCellValue zeroed t).toList)
+            s!"cells disagree at {repr t}"
+        assertEq (expected := (commitExtendedState never).toList)
+          (actual := (commitExtendedState zeroed).toList)
+          "and the published roots agree"
+        let lookup (es : ExtendedState) : Option Amount :=
+          (es.base.balances[(1 : ResourceId)]?.getD ∅)[(8 : ActorId)]?
+        assertEq (expected := some 0) (actual := lookup zeroed)
+          "the zeroed write leaves a LIVE zero entry"
+        assertEq (expected := (none : Option Amount)) (actual := lookup never)
+          "while the never-written map has no entry at all"
+        assert (lookup zeroed != lookup never)
+          "so the maps differ pointwise — map agreement is a FALSE hypothesis here"
+    }
   , { name := "API stability: write-chain signatures"
     , body := do
         let _local : ∀ (ws : List CellWrite) (es : ExtendedState) (t : CellTag),
