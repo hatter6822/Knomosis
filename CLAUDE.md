@@ -807,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 190 | ~158 | `lake test` |
 | Rust | ~2 350 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~928 passed | 61 forge suites | `cd solidity && forge test` |
+| Solidity | ~934 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **928 passed / 0 failed / 0 skipped** — the
+`forge test` runs **934 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 928 / 0 / 0.
+reports the same 934 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 

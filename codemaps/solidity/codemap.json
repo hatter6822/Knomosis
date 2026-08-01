@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2e7d1f3d922307e5ca81d9a2b8d7df21ed8035d410100c0de35b62e18afc9983"
+    "source_digest": "94538cac12c3561e9b649317fb2d82c9a5f13386b1a935adfc4869a2bdf28226"
   },
   "summary": {
     "module_count": 90,
-    "declaration_count": 1991
+    "declaration_count": 1992
   },
   "modules": [
     {
@@ -4554,7 +4554,7 @@
     {
       "module": "SmtCellVerifier",
       "path": "solidity/src/lib/SmtCellVerifier.sol",
-      "declaration_count": 12,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "library",
@@ -4596,6 +4596,14 @@
           "name": "recomputeRoot",
           "line": 260,
           "called": [
+            "recomputeRootFromLeaf"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRootFromLeaf",
+          "line": 292,
+          "called": [
             "SmtCellProofTooShort",
             "SmtCellSiblingsMisaligned",
             "_hashPair",
@@ -4606,8 +4614,14 @@
         },
         {
           "kind": "function",
+          "name": "emptyLeafHash",
+          "line": 355,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "verifyCellProof",
-          "line": 334,
+          "line": 376,
           "called": [
             "recomputeRoot"
           ]
@@ -4615,31 +4629,31 @@
         {
           "kind": "error",
           "name": "SmtCellProofTooShort",
-          "line": 359,
+          "line": 401,
           "called": []
         },
         {
           "kind": "error",
           "name": "SmtCellSiblingsMisaligned",
-          "line": 363,
+          "line": 405,
           "called": []
         },
         {
           "kind": "error",
           "name": "SmtCellDepthOutOfRange",
-          "line": 366,
+          "line": 408,
           "called": []
         },
         {
           "kind": "function",
           "name": "_hashPair",
-          "line": 381,
+          "line": 423,
           "called": []
         },
         {
           "kind": "function",
           "name": "_readSiblingAt",
-          "line": 400,
+          "line": 442,
           "called": []
         }
       ]
@@ -4711,42 +4725,36 @@
     {
       "module": "StepVMMerkle",
       "path": "solidity/src/lib/StepVMMerkle.sol",
-      "declaration_count": 6,
+      "declaration_count": 5,
       "declarations": [
         {
           "kind": "library",
           "name": "StepVMMerkle",
-          "line": 32,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "verifyCellProofWitness",
-          "line": 45,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "verifyCellMerkleProof",
-          "line": 59,
+          "line": 31,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveCellSmtKey",
-          "line": 105,
+          "line": 72,
           "called": []
         },
         {
           "kind": "function",
           "name": "verifyCellSmtProof",
-          "line": 149,
+          "line": 116,
           "called": []
         },
         {
           "kind": "function",
-          "name": "updateCommitment",
-          "line": 170,
+          "name": "updateCellRoot",
+          "line": 153,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "cellLeafHash",
+          "line": 185,
           "called": []
         }
       ]

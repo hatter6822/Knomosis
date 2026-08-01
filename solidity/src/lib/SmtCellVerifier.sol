@@ -263,6 +263,38 @@ library SmtCellVerifier {
         bytes calldata leafPreimage,
         bytes calldata proofData
     ) internal pure returns (bytes32 root) {
+        root = recomputeRootFromLeaf(smtKey, keccak256(leafPreimage), proofData);
+    }
+
+    /// @notice The same walk, started from a LEAF HASH rather than
+    ///         from a preimage.
+    ///
+    /// @dev    `recomputeRoot` above hashes its preimage
+    ///         unconditionally, which is correct for a verifier handed
+    ///         an opaque preimage and WRONG for a step VM: a cell the
+    ///         state does not hold has an empty sub-tree beneath its
+    ///         key, so its opening walks from the canonical empty leaf
+    ///         rather than from `keccak256(key || value)`.  Lean's
+    ///         `cellLeaf` makes that branch; the caller must too, and
+    ///         it needs an entry point that takes the leaf it decided
+    ///         on.
+    ///
+    ///         The preimage path is deliberately left as a wrapper
+    ///         rather than reworked: it is pinned byte-for-byte by
+    ///         `smt_cell_proof.json`, and routing it through this
+    ///         function keeps the two walks provably the same code
+    ///         rather than two implementations that must agree.
+    ///
+    /// @param  smtKey     the SMT key (MSB-first bit reads).
+    /// @param  leaf       the leaf node hash to start the walk from.
+    /// @param  proofData  the wire-encoded proof:
+    ///                    `bitmask(32) || siblings(N x 32)`.
+    /// @return root       the reconstructed root candidate.
+    function recomputeRootFromLeaf(
+        bytes calldata smtKey,
+        bytes32 leaf,
+        bytes calldata proofData
+    ) internal pure returns (bytes32 root) {
         if (proofData.length < BITMASK_BYTES) {
             revert SmtCellProofTooShort(proofData.length);
         }
@@ -278,7 +310,7 @@ library SmtCellVerifier {
         // Initial state: leaf hash + H_0 (the leaf-level canonical
         // empty subtree hash).  emptyAtD advances per-iteration to
         // remain in lockstep with the walk's depth.
-        bytes32 current = keccak256(leafPreimage);
+        bytes32 current = leaf;
         bytes32 emptyAtD = keccak256(EMPTY_LEAF_SEED);
 
         uint256 siblingsCursor = 0;
@@ -313,6 +345,16 @@ library SmtCellVerifier {
             }
         }
         root = current;
+    }
+
+    /// @notice The canonical empty-leaf hash — the value a cell with
+    ///         no entry walks from.  Mirrors Lean's `emptyRootAt 0`.
+    ///
+    /// @dev    Exposed because the absent branch belongs in the
+    ///         CALLER: this library takes a leaf, and only the caller
+    ///         knows whether the cell it is opening is present.
+    function emptyLeafHash() internal pure returns (bytes32) {
+        return keccak256(EMPTY_LEAF_SEED);
     }
 
     /// @notice Verify a cell proof against a claimed root.  Returns
