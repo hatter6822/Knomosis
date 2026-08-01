@@ -179,12 +179,15 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
         32,
         "expected_post_commit is 32 bytes"
     );
-    // Transfer's cell-proof bundle has 4 cells (registry,
-    // balance×2, nonce).
+    // Transfer's cell-proof bundle has 5 cells (registry,
+    // balance×2, nonce, epochBudget).  The epoch-budget cell joined
+    // `Action.writeCells` once it was established that the production
+    // advance rewrites the signer's budget entry on every admitted
+    // action.
     assert_eq!(
         bundle.cell_proofs.len(),
-        4,
-        "Transfer bundle has 4 cell proofs"
+        5,
+        "Transfer bundle has 5 cell proofs"
     );
 }
 
@@ -255,8 +258,8 @@ fn real_knomosis_export_terminate_bundle_mint_variant() {
     // amount occupies [16..32] (uint128BE), so its LSB is byte 31.
     assert_eq!(bundle.action_fields[31], 42, "amount=42 in BE last byte");
     assert_eq!(bundle.signer, 11, "Mint signer is 11");
-    // Mint bundle: 3 cells (registry, balance, nonce).
-    assert_eq!(bundle.cell_proofs.len(), 3, "Mint bundle has 3 cell proofs");
+    // Mint bundle: 4 cells (registry, balance, nonce, epochBudget).
+    assert_eq!(bundle.cell_proofs.len(), 4, "Mint bundle has 4 cell proofs");
 }
 
 /// Withdraw variant: `action_kind` = 14, fields include the

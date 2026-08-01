@@ -186,11 +186,16 @@ fn real_knomosis_export_cell_proofs_transfer_round_trip() {
     }
 
     // 5. Verify the expected cell-proof bundle for a Transfer:
-    //    [registry signer=1, balance r=1 sender=1, balance r=1 receiver=2, nonce signer=1]
+    //    [registry signer=1, balance r=1 sender=1, balance r=1 receiver=2,
+    //     nonce signer=1, epochBudget signer=1]
+    //
+    //    The epoch-budget cell (kind 13) joined `Action.writeCells` once
+    //    it was established that the production advance rewrites the
+    //    signer's budget entry on every admitted action.
     assert_eq!(
         parsed_proofs.len(),
-        4,
-        "Transfer bundle should have 4 cell proofs, got {}: {parsed_proofs:?}",
+        5,
+        "Transfer bundle should have 5 cell proofs, got {}: {parsed_proofs:?}",
         parsed_proofs.len()
     );
 
@@ -338,11 +343,12 @@ fn real_knomosis_export_cell_proofs_withdraw() {
 
     // Withdraw cell layout:
     //   readOnly: [registry signer]
-    //   write:    [balance r sender, nonce signer, bridgeNextWdId]
+    //   write:    [balance r sender, nonce signer, epochBudget signer,
+    //              bridgeNextWdId]
     assert_eq!(
         parsed_proofs.len(),
-        4,
-        "Withdraw bundle should have 4 cell proofs"
+        5,
+        "Withdraw bundle should have 5 cell proofs"
     );
 
     // Cell 0: registry signer=3.
@@ -360,10 +366,15 @@ fn real_knomosis_export_cell_proofs_withdraw() {
     assert_eq!(parsed_proofs[2].key_a, 3);
     assert_eq!(parsed_proofs[2].key_b, 0);
 
-    // Cell 3: bridgeNextWdId.  kind=6, key_a=0, key_b=0.
-    assert_eq!(parsed_proofs[3].cell_kind, 6);
-    assert_eq!(parsed_proofs[3].key_a, 0);
+    // Cell 3: epochBudget signer=3.  kind=13.
+    assert_eq!(parsed_proofs[3].cell_kind, 13);
+    assert_eq!(parsed_proofs[3].key_a, 3);
     assert_eq!(parsed_proofs[3].key_b, 0);
+
+    // Cell 4: bridgeNextWdId.  kind=6, key_a=0, key_b=0.
+    assert_eq!(parsed_proofs[4].cell_kind, 6);
+    assert_eq!(parsed_proofs[4].key_a, 0);
+    assert_eq!(parsed_proofs[4].key_b, 0);
 }
 
 /// Negative test: out-of-range idx should exit code 2 with the
