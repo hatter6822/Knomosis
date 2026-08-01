@@ -12,7 +12,8 @@
   {"name": "registry_preserving", "args": []}],
  "registry_effect": {"kind": "none"},
  "proof_overrides": [],
- "pre_expr": "fun s => amount > 0 ∧ BulkBounded s r excluded\n  ",
+ "pre_expr":
+ "fun s => amount > 0 ∧\n                                LegalKernel.Laws.BulkBounded s r excluded\n  ",
  "params":
  [{"type": "ResourceId", "name": "r", "kind": "explicit"},
   {"type": "ActorId", "name": "excluded", "kind": "explicit"},

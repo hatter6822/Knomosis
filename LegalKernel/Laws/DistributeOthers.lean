@@ -83,7 +83,8 @@ lexlaw legalkernel_distributeOthers where
   lex_signed_by       deployer
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (excluded : ActorId) (amount : Amount)
-  lex_pre             := fun s => amount > 0 ∧ BulkBounded s r excluded
+  lex_pre             := fun s => amount > 0 ∧
+                                LegalKernel.Laws.BulkBounded s r excluded
   lex_impl            :=
     fun s =>
       let bm := s.balances[r]?.getD ∅

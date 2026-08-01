@@ -37,6 +37,7 @@ it from here too.
 -/
 
 import LegalKernel.Kernel
+import Lex.DSL.PreGrammar
 
 namespace LegalKernel
 namespace Laws
@@ -60,9 +61,36 @@ def bulkRecipients (s : State) (r : ResourceId) (excluded : ActorId) :
     List (ActorId × Amount) :=
   (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)
 
-/-- The bulk-action recipient bound, as a state predicate. -/
+/-- The bulk-action recipient bound, as a state predicate.
+
+    `@[lex_pre]` because both bulk laws name it in their `lex_pre`
+    clause and the §7.2 grammar admits a user predicate only when it
+    is tagged.  The tag's contract is that the predicate is decidable
+    via `inferInstance` for in-grammar arguments, which
+    `BulkBounded.decidable` below supplies. -/
+@[lex_pre]
 def BulkBounded (s : State) (r : ResourceId) (excluded : ActorId) : Prop :=
   (bulkRecipients s r excluded).length ≤ maxRecipientsPerBulkAction
+
+/-! ### The `@[lex_pre]` tag really fires
+
+Checked at elaboration time rather than asserted, because the tag is
+easy to get silently wrong: it records FULLY-QUALIFIED names while the
+Lex walker runs on surface syntax before elaboration, so a `lex_pre`
+clause spelling the short form falls through to L003 with no error —
+just a warning someone would have to read the build log to notice.
+`BulkBounded` is the first declaration on this project to carry the
+tag, so nothing else would catch a regression here.
+
+A build failure is the right severity: an untagged predicate makes both
+bulk laws warn, and CI fails on any Lean warning. -/
+
+open Lean Elab Command in
+run_cmd do
+  unless LegalKernel.DSL.Lex.isLexPreTagged (← getEnv)
+      `LegalKernel.Laws.BulkBounded do
+    throwError "BulkBounded lost its @[lex_pre] tag: both bulk laws' \
+                `lex_pre` clauses will emit L003, and CI fails on warnings"
 
 /-- Decidable, so it composes into a `Transition.decPre` built by
     `inferInstance` like every other precondition on this project. -/
@@ -85,6 +113,31 @@ theorem bulkBounded_of_map_length_le (s : State) (r : ResourceId) (excluded : Ac
     (h : (s.balances[r]?.getD ∅).toList.length ≤ maxRecipientsPerBulkAction) :
     BulkBounded s r excluded :=
   Nat.le_trans (List.length_filter_le _ _) h
+
+/-- **The recipients are pairwise distinct.**
+
+    They come from a `Std.TreeMap`'s `toList`, so this is true; core
+    states it as `Pairwise (compare · · ≠ .eq)` over the pair list
+    rather than as a key disequality, hence the bridge.
+
+    It matters for the fault proof rather than for the law: the
+    decomposition's ordered fold opens one cell per recipient against
+    the root the previous write produced, so a repeated recipient
+    would make the second opening stale and the fold reject a step an
+    honest sequencer defended correctly. -/
+theorem bulkRecipients_keys_pairwise_ne (s : State) (r : ResourceId)
+    (excluded : ActorId) :
+    (bulkRecipients s r excluded).Pairwise (fun a b => a.1 ≠ b.1) := by
+  unfold bulkRecipients
+  refine List.Pairwise.sublist List.filter_sublist ?_
+  refine List.Pairwise.imp_of_mem ?_ Std.TreeMap.distinct_keys_toList
+  intro a b _ _ h h_eq
+  exact h (by rw [h_eq]; exact Std.compare_self)
+
+/-- ...so the cells the decomposition writes are distinct. -/
+theorem bulkRecipients_nodup_keys (s : State) (r : ResourceId) (excluded : ActorId) :
+    ((bulkRecipients s r excluded).map Prod.fst).Nodup :=
+  List.Pairwise.map _ (fun _ _ h => h) (bulkRecipients_keys_pairwise_ne s r excluded)
 
 end Laws
 end LegalKernel

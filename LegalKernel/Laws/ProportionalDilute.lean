@@ -108,7 +108,7 @@ lexlaw legalkernel_proportionalDilute where
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
   lex_pre             := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0 ∧
-                                  BulkBounded s r excluded
+                                  LegalKernel.Laws.BulkBounded s r excluded
   lex_impl            :=
     fun s =>
       let bm := s.balances[r]?.getD ∅

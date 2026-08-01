@@ -280,18 +280,34 @@ def SubStep.writeCells (r : ResourceId) (ss : SubStep) : List CellTag :=
   [.balance r ss.affectedActor]
 
 /-- A sub-step's write set is a singleton, so a bisection terminating
-    on one carries a single opening.
-
-    What still owes a proof before the ordered fold can consume these:
-    that distinct sub-steps write DISTINCT cells.  It is true — the
-    recipients are a `Std.TreeMap`'s keys, which are pairwise
-    distinct — but core states that as `Pairwise (compare · · ≠ .eq)`
-    over `keys` rather than as `Nodup` over `toList.map Prod.fst`, so
-    it needs the same bridge `stateCellTags_nodup` builds.  Without it
-    a duplicate recipient would make the second opening stale and the
-    fold reject. -/
+    on one carries a single opening. -/
 theorem SubStep.writeCells_length (r : ResourceId) (ss : SubStep) :
     (ss.writeCells r).length = 1 := rfl
+
+/-- **Distinct sub-steps write distinct cells.**  The ordered fold
+    opens each cell against the root the previous write produced, so a
+    repeated recipient would make the second opening stale and the fold
+    would reject a step an honest sequencer defended correctly.
+
+    `Laws.bulkRecipients_nodup_keys` is the substance; this is it in
+    the form the decomposition uses. -/
+theorem subSteps_affectedActors_nodup
+    (es : ExtendedState) (r : ResourceId) (excluded : ActorId) (amount : Amount) :
+    ((Action.distributeOthers_subSteps es r excluded amount).map
+      (fun ss => ss.affectedActor)).Nodup := by
+  -- The actor column of `zipIdx`-then-build is the original key
+  -- column: indexing adds a component the projection drops.
+  have h_col : ∀ {α β : Type} (f : α → β) (l : List α) (k : Nat),
+      ((l.zipIdx k).map (fun p => f p.1)) = l.map f := by
+    intro α β f l
+    induction l with
+    | nil => intro _; rfl
+    | cons a t ih => intro k; simp [List.zipIdx_cons, ih]
+  unfold Action.distributeOthers_subSteps
+  simp only [List.map_map, Function.comp_def]
+  rw [h_col Prod.fst]
+  exact List.Pairwise.sublist ((List.take_sublist _ _).map _)
+    (Laws.bulkRecipients_nodup_keys es.base r excluded)
 
 /-! ## Determinism (plan §18 #227)
 

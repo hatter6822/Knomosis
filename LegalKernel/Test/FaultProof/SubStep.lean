@@ -144,6 +144,23 @@ def tests : List TestCase :=
         assert (!decide (Laws.BulkBounded over.base 1 3))
           "one past it, it is not"
     }
+  , { name := "distinct sub-steps write distinct cells"
+    , body := do
+        -- `subSteps_affectedActors_nodup` at the value level.  The
+        -- ordered fold opens each cell against the root the previous
+        -- write produced, so a repeated recipient would make the
+        -- second opening stale and the fold would reject a step an
+        -- honest sequencer defended correctly.
+        let es := stateOf 12
+        let steps := LegalKernel.FaultProof.Action.subSteps es (.distributeOthers 1 3 7)
+        let actors := steps.map (fun ss => ss.affectedActor)
+        assertEq (expected := actors.length)
+          (actual := actors.eraseDups.length)
+          "no recipient appears twice"
+        let cells := steps.map (fun ss => repr (CellTag.balance 1 ss.affectedActor) |>.pretty)
+        assertEq (expected := cells.length) (actual := cells.eraseDups.length)
+          "and therefore no cell is written twice"
+    }
   , { name := "the cap has exactly one definition"
     , body := do
         -- `StepVMCoherence` used to carry a second copy of this
@@ -170,6 +187,22 @@ def tests : List TestCase :=
             (LegalKernel.FaultProof.Action.distributeOthers_subSteps es r excluded amount).length
               = (bulkRecipients es r excluded).length :=
           subSteps_length_eq_of_within_cap
+        let _fromPre : ∀ (es : ExtendedState) (r : ResourceId) (excluded : ActorId)
+            (amount : Amount),
+            (Laws.distributeOthers r excluded amount).pre es.base →
+            (LegalKernel.FaultProof.Action.distributeOthers_subSteps es r excluded amount).length
+              = (bulkRecipients es r excluded).length :=
+          subSteps_complete_of_pre
+        let _noop : ∀ (s : LegalKernel.State) (r : ResourceId) (excluded : ActorId)
+            (amount : Amount),
+            maxRecipientsPerBulkAction < (Laws.bulkRecipients s r excluded).length →
+            step_impl s (Laws.distributeOthers r excluded amount) = s :=
+          distributeOthers_noop_above_cap
+        let _nodup : ∀ (es : ExtendedState) (r : ResourceId) (excluded : ActorId)
+            (amount : Amount),
+            ((LegalKernel.FaultProof.Action.distributeOthers_subSteps es r excluded amount).map
+              (fun ss => ss.affectedActor)).Nodup :=
+          subSteps_affectedActors_nodup
         pure ()
     }
   ]
