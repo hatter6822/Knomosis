@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "8269b58578a7618b046d6505676f7fb7e31adf7ec9de2f073e643acdb3e43e18"
+    "source_digest": "2dc8da83a8ace6ff852c9030d3d9a2f4a9593d675cf82c7ef7f0bdf05cd43772"
   },
   "summary": {
     "module_count": 331,
-    "declaration_count": 5680
+    "declaration_count": 5684
   },
   "modules": [
     {
@@ -29207,7 +29207,7 @@
     {
       "module": "LegalKernel.FaultProof.StepWriteSets",
       "path": "LegalKernel/FaultProof/StepWriteSets.lean",
-      "declaration_count": 36,
+      "declaration_count": 40,
       "declarations": [
         {
           "kind": "namespace",
@@ -29772,8 +29772,6 @@
             "CellWritesReady",
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
-            "FaultProof",
-            "LegalKernel",
             "SignedAction",
             "canonicalAbsentValue",
             "canonicalCellChain",
@@ -29790,6 +29788,78 @@
             "stateCellEntries",
             "stepCellWrites",
             "writeSetComplete_productionApplyBudget"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stepWriteBundle",
+          "line": 841,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "StateCellWrite",
+            "canonicalCellChain",
+            "chainWrites",
+            "es",
+            "productionApplyBudget",
+            "stepCellWrites"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stepPostRoot",
+          "line": 853,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "StateCommit",
+            "commitExtendedState",
+            "es",
+            "foldStateCellWrites",
+            "stepWriteBundle"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "stepPostRoot_eq_commit_productionApplyBudget",
+          "line": 867,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "CellWritesReady",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "SignedAction",
+            "canonicalAbsentValue",
+            "commitExtendedState",
+            "distributeOthers",
+            "es",
+            "fold_stepWrites_eq_commit_productionApplyBudget",
+            "getCellValue",
+            "productionApplyBudget",
+            "proportionalDilute",
+            "smtDepth",
+            "stateCellEntries",
+            "stepCellWrites",
+            "stepPostRoot"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "stepWriteBundle_tags",
+          "line": 888,
+          "called": [
+            "CellWrite",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "SignedAction",
+            "canonicalCellChain",
+            "chainWrites",
+            "es",
+            "setCell",
+            "stepCellWrites_tags",
+            "stepWriteBundle"
           ]
         }
       ]
@@ -56358,23 +56428,30 @@
           "line": 102,
           "called": [
             "ActorId",
+            "BitsDistinctBelow",
             "CellTag",
+            "CellWritesReady",
             "ExtendedState",
+            "ExtendedState.CanonicalBounds",
             "LegalKernel.Test.FaultProof.StepWriteSets",
             "SignedAction",
             "TestCase",
             "WriteSetComplete",
             "ammSwap",
+            "amountCellValue",
             "assert",
             "assertEq",
             "base",
             "burn",
+            "canonicalAbsentValue",
             "checkComplete",
             "claimBudgetRefund",
+            "commitExtendedState",
             "deposit",
             "depositWithFee",
             "distributeOthers",
             "es",
+            "foldStateCellWrites",
             "freezeResource",
             "getCellValue",
             "mem_writeCellsAt_epochBudget",
@@ -56388,6 +56465,12 @@
             "reclaimAmmReserves",
             "reward",
             "sign",
+            "smtDepth",
+            "stateCellEntries",
+            "stepCellWrites",
+            "stepPostRoot",
+            "stepPostRoot_eq_commit_productionApplyBudget",
+            "stepWriteBundle",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "transfer",

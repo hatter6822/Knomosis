@@ -816,5 +816,95 @@ theorem fold_stepWrites_eq_commit_productionApplyBudget
     (writeSetComplete_productionApplyBudget es st idx h_bulk₁ h_bulk₂)
     h_nodup h_bounds h_wf h_append
 
+
+/-! ## The honest sequencer's bundle
+
+Everything above is stated over `stepCellWrites … (productionApplyBudget
+…)`, which is the shape the theorems need and the wrong shape for a
+caller: a defender building a terminate bundle should not have to
+re-derive the post-state to name its own writes.
+
+`stepWriteBundle` is that derivation, done once.  It is the list the L1
+folds — cell, proven pre-value, new value, opening — and `stepPostRoot`
+is the number the fold produces.  Both are functions of
+`(pre-state, signed action, log index)` alone, which is what lets the
+observer publish them and the game recompute them.
+
+Nothing here changes what any existing surface computes; the step VM
+still returns `stepVMHash` until the flip.  These are the honest side
+of that flip, available and proved ahead of it. -/
+
+/-- **The write bundle an honest sequencer publishes for a step.**
+
+    Ordered, and the order is load-bearing: openings go stale as soon
+    as a write lands, so proof `i` opens against the root write `i-1`
+    produced.  `canonicalCellChain` is what threads that. -/
+def stepWriteBundle (es : ExtendedState) (st : SignedAction) (idx : Nat) :
+    List StateCellWrite :=
+  chainWrites es (canonicalCellChain es
+    (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer))
+
+/-- **The post-state root, computed the way the L1 computes it** — by
+    folding proven writes into the pre-state's published root, with no
+    access to the post-state itself.
+
+    `Option` because the fold is fail-closed: a link whose opening does
+    not verify against the running root aborts rather than inventing a
+    root. -/
+def stepPostRoot (es : ExtendedState) (st : SignedAction) (idx : Nat) :
+    Option StateCommit :=
+  foldStateCellWrites (commitExtendedState es) (stepWriteBundle es st idx)
+
+/-- **The fold lands on the published root.**
+
+    The §4 statement in the form the game uses it: what the L1 computes
+    from a pre-root and a bundle of openings is exactly the root an
+    honest sequencer publishes for the post-state.
+
+    Every hypothesis is standing well-formedness, a bulk exclusion, or
+    the append-only restriction no `Action` violates — nothing about a
+    particular variant, because
+    `writeSetComplete_productionApplyBudget` discharged those. -/
+theorem stepPostRoot_eq_commit_productionApplyBudget
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (h_bulk₁ : ∀ x y z, st.action ≠ .distributeOthers x y z)
+    (h_bulk₂ : ∀ x y z, st.action ≠ .proportionalDilute x y z)
+    (h_ready : CellWritesReady es
+      (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer))
+    (h_nodup : (st.action.writeCellsAt es st.signer).Nodup)
+    (h_bounds : ExtendedState.CanonicalBounds (productionApplyBudget es st idx))
+    (h_wf : BitsDistinctBelow smtDepth
+      (stateCellEntries (productionApplyBudget es st idx)))
+    (h_append : ∀ t : CellTag, t.appendOnly = true →
+      getCellValue (productionApplyBudget es st idx) t = canonicalAbsentValue t →
+      getCellValue es t = canonicalAbsentValue t) :
+    stepPostRoot es st idx
+      = some (commitExtendedState (productionApplyBudget es st idx)) :=
+  fold_stepWrites_eq_commit_productionApplyBudget es st idx h_bulk₁ h_bulk₂
+    h_ready h_nodup h_bounds h_wf h_append
+
+/-- The bundle names exactly the cells the write set declares, in
+    declaration order — so a verifier can check the bundle's shape
+    against `writeCellsAt` before doing any hashing. -/
+theorem stepWriteBundle_tags (es : ExtendedState) (st : SignedAction) (idx : Nat) :
+    (stepWriteBundle es st idx).map Prod.fst = st.action.writeCellsAt es st.signer := by
+  unfold stepWriteBundle
+  -- `chainWrites` and `canonicalCellChain` both preserve the tag
+  -- column, so the bundle's tags are the write list's tags.
+  have h : ∀ (ws : List CellWrite) (e : ExtendedState),
+      (chainWrites e (canonicalCellChain e ws)).map Prod.fst = ws.map Prod.fst := by
+    intro ws
+    induction ws with
+    | nil => intro _; rfl
+    | cons w rest ih =>
+      obtain ⟨t, v⟩ := w
+      intro e
+      show t :: (chainWrites (setCell e t v)
+        (canonicalCellChain (setCell e t v) rest)).map Prod.fst = _
+      rw [ih (setCell e t v)]
+      rfl
+  rw [h]
+  exact stepCellWrites_tags es _ st.action st.signer
+
 end FaultProof
 end LegalKernel

@@ -186,6 +186,74 @@ def tests : List TestCase :=
             (actual := (getCellValue post .budgetPolicy).toList)
             s!"{repr a} moved the budget policy"
     }
+  , { name := "stepWriteBundle names the declared cells, in order"
+    , body := do
+        -- `stepWriteBundle_tags` at the value level.  A verifier can
+        -- check the bundle's shape against `writeCellsAt` before doing
+        -- any hashing, which is only sound if the two agree in ORDER
+        -- as well as membership.
+        let action : Authority.Action := .transfer 1 7 8 30
+        let bundle := stepWriteBundle base (sign action) 0
+        assertEq
+          (expected := (Authority.Action.writeCellsAt base action 7).map
+            (fun t => repr t |>.pretty))
+          (actual := bundle.map (fun w => repr w.1 |>.pretty))
+          "bundle tags = declared cells, same order"
+    }
+  , { name := "each bundle entry carries the pre-value and the post-value"
+    , body := do
+        -- The L1 is handed both: the pre-value to verify against the
+        -- running root, the post-value to re-walk from.  If the pre
+        -- column were the POST value the opening would not verify, and
+        -- if the post column were the PRE value the root would not
+        -- move — so both are checked against the two states.
+        let action : Authority.Action := .transfer 1 7 8 30
+        let post := productionApplyBudget base (sign action) 0
+        for (t, oldV, newV, _) in stepWriteBundle base (sign action) 0 do
+          assertEq (expected := (getCellValue base t).toList) (actual := oldV.toList)
+            s!"pre-value at {repr t} is not the pre-state's"
+          assertEq (expected := (getCellValue post t).toList) (actual := newV.toList)
+            s!"post-value at {repr t} is not the post-state's"
+    }
+  , { name := "the fold lands on the published post-state root"
+    , body := do
+        -- `stepPostRoot_eq_commit_productionApplyBudget` at the value
+        -- level, and the whole point of §4: what the L1 computes from
+        -- a pre-root plus openings — with no access to the post-state
+        -- — is the root an honest sequencer publishes.
+        for action in [ Authority.Action.transfer 1 7 8 30
+                      , .mint 1 8 5
+                      , .freezeResource 1
+                      , .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero ] do
+          let post := productionApplyBudget base (sign action) 0
+          match stepPostRoot base (sign action) 0 with
+          | some root =>
+            assertEq (expected := (commitExtendedState post).toList)
+              (actual := root.toList)
+              s!"folded root ≠ published root for {repr action}"
+          | none =>
+            throw <| IO.userError s!"the fold rejected an honest bundle for {repr action}"
+    }
+  , { name := "a FORGED post-value does not fold to the published root"
+    , body := do
+        -- The direction that makes the fold an adjudicator rather than
+        -- a calculator: substituting a value the advance did not
+        -- produce changes the number the L1 computes, so the responder
+        -- cannot claim a root of their choosing.
+        let action : Authority.Action := .transfer 1 7 8 30
+        let post := productionApplyBudget base (sign action) 0
+        let honest := stepWriteBundle base (sign action) 0
+        let forged := honest.map (fun w =>
+          if w.1 == CellTag.balance 1 8 then (w.1, w.2.1, amountCellValue 9999, w.2.2.2)
+          else w)
+        assert (forged.map (fun w => w.2.2.1.toList) != honest.map (fun w => w.2.2.1.toList))
+          "the forgery really changed a written value"
+        match foldStateCellWrites (commitExtendedState base) forged with
+        | some root =>
+          assert (root.toList != (commitExtendedState post).toList)
+            "a forged value must not fold to the honest root"
+        | none => pure ()   -- rejected outright is also fail-closed
+    }
   , { name := "API stability: WriteSetComplete signatures"
     , body := do
         let _complete : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
@@ -202,6 +270,21 @@ def tests : List TestCase :=
         let _policy : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
             (productionApplyBudget es st idx).budgetPolicy = es.budgetPolicy :=
           productionApplyBudget_budgetPolicy
+        let _root : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
+            (∀ x y z, st.action ≠ .distributeOthers x y z) →
+            (∀ x y z, st.action ≠ .proportionalDilute x y z) →
+            CellWritesReady es
+              (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer) →
+            (Authority.Action.writeCellsAt es st.action st.signer).Nodup →
+            ExtendedState.CanonicalBounds (productionApplyBudget es st idx) →
+            BitsDistinctBelow smtDepth
+              (stateCellEntries (productionApplyBudget es st idx)) →
+            (∀ t : CellTag, t.appendOnly = true →
+              getCellValue (productionApplyBudget es st idx) t = canonicalAbsentValue t →
+              getCellValue es t = canonicalAbsentValue t) →
+            stepPostRoot es st idx
+              = some (commitExtendedState (productionApplyBudget es st idx)) :=
+          stepPostRoot_eq_commit_productionApplyBudget
         pure ()
     }
   ]

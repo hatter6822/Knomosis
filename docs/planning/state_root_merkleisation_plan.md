@@ -645,16 +645,40 @@ pre-state, and a function of `(action, signer)` cannot name it.
 `Action.stateWriteCells` / `Action.writeCellsAt` close that;
 `writeCellsAt_eq_writeCells` proves the other twenty-four pay nothing.
 
-**What §4A still owes.**  `WriteSetComplete` per variant.  Eleven are
-done in one argument — `writeSetComplete_of_identity_advance` covers
-every action compiling to `Laws.freezeResource` (identity on the base
-state, no registry / policy / bridge / grant effect), which is
-`freezeResource`, the four dispute actions, `rollback`, the two
-fault-proof actions and their siblings.  The remaining fourteen each
-need their law's balance footprint: `Conservation.LocalTo` gives
-resource locality but not actor locality within a resource, so that
-part is genuinely new work.  Then `stepPostRoot` and the Solidity
-mirror (§4 steps 1–5 above).
+**§4A is complete on the Lean side.**
+`writeSetComplete_productionApplyBudget`
+(`FaultProof/StepWriteSets.lean`) proves it for all twenty-three
+non-bulk actions; the two bulk ones route through the decomposition,
+which the recipient bound now makes complete.
+
+The split turned out uneven, which is the useful part: six of the seven
+state fields have an action-INdependent footprint, so they are proved
+once (`productionApplyBudget_eq_productionApply_off_budget` is what
+makes that cheap — the budget leg's three branches differ in
+`epochBudgets` and nothing else).  Only the balance footprint is
+per-variant, and `Conservation.LocalTo` does not reach it: that class
+is RESOURCE locality while the cell space is keyed by
+`(resource, actor)`.  The footprints are stated UNCONDITIONALLY rather
+than under each law's precondition — unlike the
+`*_does_not_touch_other_resources` family they generalise — because
+`step_impl` is `if pre then apply_impl else id` and a fault proof
+adjudicates a step whose admissibility is not in evidence.
+
+`stepWriteBundle` and `stepPostRoot` are the honest sequencer's side,
+also landed: the ordered `(cell, pre-value, post-value, opening)` list
+the L1 folds, and the number the fold produces.
+`stepPostRoot_eq_commit_productionApplyBudget` is §4's statement — what
+the L1 computes from a pre-root and openings, with no access to the
+post-state, is the root an honest sequencer publishes.  Exercised on
+real actions including `withdraw` (the state-keyed `bridgePending`
+cell), with a forged-value case showing the fold does not reach the
+honest root.
+
+What is left is the OTHER stacks: the observer emitting these openings
+(S4), the `proofData` wire widening (S5), and `executeStep` returning
+the fold's result instead of `stepVMHash` (S6).  Nothing landed so far
+changes what any surface computes — the step VM still returns the
+bespoke hash — so the flip remains one atomic consensus change.
 
 **Lean and Rust move with it.**  `StepVMCoherence.stepVMHash`'s
 25-arm match currently ends each arm in a `stepCommit<Variant>` hash;
