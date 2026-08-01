@@ -807,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 210 | ~159 | `lake test` |
 | Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~950 passed | 62 forge suites | `cd solidity && forge test` |
+| Solidity | ~952 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **950 passed / 0 failed / 0 skipped** — the
+`forge test` runs **952 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 950 / 0 / 0.
+reports the same 952 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -1254,12 +1254,15 @@ value of the responder's choosing).
 decoder; `src/lib/StepWrites.sol` mirrors the two cells EVERY action
 writes — the nonce and the three-branch epoch budget — pinned by
 `uniformWriteGoldens`.  Those are precisely the cells `stepVMHash` is
-silent about.  `StepWrites` also mirrors the per-variant BALANCE derivations, pinned
-by `balanceWriteGoldens` over a populated two-resource base — including
+silent about.  `StepWrites` also mirrors the per-variant BALANCE derivations
+(`balanceWriteGoldens`, over a populated two-resource base — including
 the self-transfer, the failing precondition and the same-actor chain,
-which a happy-path corpus never reaches.  Left: the registry /
-local-policy / bridge cells in Solidity, then `executeStep` verifying
-openings and returning the fold's result instead of `stepVMHash`.  `stepWriteBundle es st idx`
+which a happy-path corpus never reaches) and the registry /
+local-policy / bridge cells (`recordWriteGoldens`).  **Every cell kind
+now agrees byte-for-byte across both stacks.**  Left: `executeStep`
+verifying each opening against the running root and returning the
+fold's result instead of `stepVMHash`, with the corpus's
+`expectedStepVMCommitHex` becoming a state root.  `stepWriteBundle es st idx`
 takes the pre-state and reads its `newValue` column off
 `productionApplyBudget es st idx` — that is the sequencer's
 computation.  A verifier holding only the pre-root and a submitted

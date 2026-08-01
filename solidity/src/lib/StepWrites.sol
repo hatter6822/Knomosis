@@ -453,6 +453,100 @@ library StepWrites {
         return (reserveBal, poolBal);
     }
 
+    /* ---------------------------------------------------------- */
+    /* Registry, local-policy and bridge cells                    */
+    /* ---------------------------------------------------------- */
+
+    /// @dev These are the cheap ones, and the reason is structural:
+    ///      their post-values come from the ACTION's own fields, so a
+    ///      verifier reads them off the calldata and needs no proven
+    ///      cell.  That also makes them the cells an L1 ignoring its
+    ///      declared writes is most obviously wrong about.
+
+    /// @notice `replaceKey` / `registerIdentity`'s registry write.
+    /// @dev    Routed through the CBE byte-string encoder, NOT emitted
+    ///         raw.  `PublicKey` is a bare byte array and
+    ///         `registerIdentity` accepts any value, so a registration
+    ///         with the EMPTY key would otherwise read exactly like an
+    ///         absent one — and registration is an admissibility gate,
+    ///         so those are different states.  The 9-byte head is
+    ///         present even for a zero-length payload.
+    function deriveRegistryCellValue(bytes memory key)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return CBEEncode.bytesValue(key);
+    }
+
+    /// @notice `revokeLocalPolicy`'s local-policy write: the canonical
+    ///         ABSENT value.
+    /// @dev    `revoke` ERASES the map entry rather than storing an
+    ///         empty policy, and the cell value keys off the map — so
+    ///         "declared a policy with no clauses" and "declared
+    ///         nothing" are different cell values.  Emitting an encoded
+    ///         empty policy here would move the root to a state the
+    ///         advance never reaches.
+    function deriveRevokedPolicyCellValue()
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return "";
+    }
+
+    /// @notice `deposit` / `depositWithFee`'s consumed-deposit write.
+    /// @dev    Mirrors `Encoding.Bridge.DepositRecord.encode`:
+    ///         `uint resource || amount userAmount || amount poolAmount
+    ///         || uint budgetGrant`.  `deposit` is the degenerate case
+    ///         with `poolAmount = budgetGrant = 0`.
+    function deriveConsumedCellValue(
+        uint256 resource,
+        uint256 userAmount,
+        uint256 poolAmount,
+        uint256 budgetGrant
+    ) internal pure returns (bytes memory) {
+        return bytes.concat(
+            CBEEncode.uintValue(resource),
+            CBEEncode.amountValue(userAmount),
+            CBEEncode.amountValue(poolAmount),
+            CBEEncode.uintValue(budgetGrant)
+        );
+    }
+
+    /// @notice `withdraw`'s pending-withdrawal write.
+    /// @dev    Mirrors `Encoding.Bridge.PendingWithdrawal.encode`:
+    ///         `uint resource || bytes recipient || amount amount ||
+    ///         uint l2LogIndex`.  The recipient rides the byte-string
+    ///         encoder, not a raw 20-byte splat.
+    function derivePendingCellValue(
+        uint256 resource,
+        bytes memory recipientL1,
+        uint256 amount,
+        uint256 l2LogIndex
+    ) internal pure returns (bytes memory) {
+        return bytes.concat(
+            CBEEncode.uintValue(resource),
+            CBEEncode.bytesValue(recipientL1),
+            CBEEncode.amountValue(amount),
+            CBEEncode.uintValue(l2LogIndex)
+        );
+    }
+
+    /// @notice `withdraw`'s counter write: `pre + 1`.
+    /// @dev    The nonce's shape, and for the same class of reason — a
+    ///         reset counter would let a later withdrawal overwrite an
+    ///         earlier one's pending cell.  The pending cell is keyed
+    ///         by this counter's PRE-value, which is the one place a
+    ///         verifier reads a cell to learn WHICH cell to write.
+    function deriveNextWdIdCellValue(bytes memory preValue)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return CBEEncode.uintValue(decodeNonce(preValue) + 1);
+    }
+
     /// @notice The epoch-budget cell's post-value, in canonical bytes.
     /// @dev    The byte-level counterpart, mirroring
     ///         `VerifierWrites.deriveEpochBudgetCellValue`.

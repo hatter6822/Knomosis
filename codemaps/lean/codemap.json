@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6efec4b2122f2164b3e19e43ed7b61cd0e5aec092a147510f9d711277c23c58f"
+    "source_digest": "bf3f52e190f3a7017b360adc80e163c39e843b3389a06588755469f2cead847c"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5778
+    "declaration_count": 5779
   },
   "modules": [
     {
@@ -45983,7 +45983,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 79,
+      "declaration_count": 80,
       "declarations": [
         {
           "kind": "namespace",
@@ -47086,8 +47086,21 @@
         },
         {
           "kind": "def",
+          "name": "recordWriteGoldens",
+          "line": 1747,
+          "called": [
+            "budgetGrant",
+            "deriveConsumedCellValue",
+            "derivePendingCellValue",
+            "deriveRegistryCellValue",
+            "deriveRevokedPolicyCellValue",
+            "uint256BE"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1743,
+          "line": 1794,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47096,7 +47109,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1760,
+          "line": 1811,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "actionCommitHexOf",
@@ -47107,6 +47120,7 @@
             "fixtureToJson",
             "packedLayoutGoldens",
             "readUint64BE",
+            "recordWriteGoldens",
             "uint256BE",
             "uint64BE",
             "uniformWriteGoldens",

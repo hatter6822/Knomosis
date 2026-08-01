@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "a55c3044f30440c2128e030fae9e48c146338fb67819bbab24acef73b39eb287"
+    "source_digest": "ae8d96d8cd5682d1e21db454cb25554abd3cb4cdf1a196e566b07f53efb8966a"
   },
   "summary": {
     "module_count": 94,
-    "declaration_count": 2075
+    "declaration_count": 2083
   },
   "modules": [
     {
@@ -4887,7 +4887,7 @@
     {
       "module": "StepWrites",
       "path": "solidity/src/lib/StepWrites.sol",
-      "declaration_count": 24,
+      "declaration_count": 29,
       "declarations": [
         {
           "kind": "library",
@@ -5064,8 +5064,40 @@
         },
         {
           "kind": "function",
+          "name": "deriveRegistryCellValue",
+          "line": 473,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveRevokedPolicyCellValue",
+          "line": 489,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveConsumedCellValue",
+          "line": 502,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "derivePendingCellValue",
+          "line": 521,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveNextWdIdCellValue",
+          "line": 541,
+          "called": [
+            "decodeNonce"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "deriveEpochBudgetCellValue",
-          "line": 458,
+          "line": 552,
           "called": [
             "ActorBudget",
             "decodeActorBudget",
@@ -12215,7 +12247,7 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 30,
+      "declaration_count": 33,
       "declarations": [
         {
           "kind": "contract",
@@ -12404,8 +12436,31 @@
         },
         {
           "kind": "function",
+          "name": "test_recordWrites_match_lean",
+          "line": 720,
+          "called": [
+            "_assertRecordWrite",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_assertRecordWrite",
+          "line": 736,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_nextWdIdWrite_advances_by_one",
+          "line": 770,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 707,
+          "line": 778,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12416,7 +12471,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 735,
+          "line": 806,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12426,7 +12481,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 760,
+          "line": 831,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12436,13 +12491,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 803,
+          "line": 874,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 819,
+          "line": 890,
           "called": [
             "_parseCellProof"
           ]
@@ -12450,7 +12505,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 852,
+          "line": 923,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12460,7 +12515,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 899,
+          "line": 970,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12471,7 +12526,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 924,
+          "line": 995,
           "called": [
             "KnomosisStepVM"
           ]

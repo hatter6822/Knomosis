@@ -532,9 +532,22 @@ space:
    precondition, and the goldens would agree with a mirror that did
    nothing — a vacuous golden reads as coverage.
 
-   What remains of §4 step 3 is the registry / local-policy / bridge
-   cells in Solidity, and then `executeStep` verifying openings and
-   returning the fold's result.
+   **The registry / local-policy / bridge cells are mirrored too**
+   (`recordWriteGoldens`), so **every cell kind now agrees byte-for-byte
+   across both stacks**.  Three details the goldens pin that inspection
+   would not: the registry value rides the CBE byte-string encoder, so
+   a present-EMPTY key stays distinguishable from an absent one (and
+   registration is an admissibility gate, so those are different
+   states); a revoke emits the ABSENT marker rather than an encoded
+   empty policy; and the two bridge records are concatenations whose
+   components use DIFFERENT heads — uint, amount and byte-string — so a
+   uniform encoder would produce plausible bytes for the wrong leaf.
+
+   §4 step 3 is therefore complete on both stacks.  What remains of §4
+   is step 1 and step 3's consumer: `executeStep` verifying each
+   opening against the running root and returning the fold's result
+   instead of `stepVMHash`, with the corpus's
+   `expectedStepVMCommitHex` becoming a state root.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"

@@ -705,6 +705,77 @@ contract StepVMCrossCheck is CrossCheckFramework {
         assertEq(gotY, yPost, string.concat("y post mismatch at ", base));
     }
 
+    /// @notice **The action-field-derived cells agree.**
+    ///
+    ///         Registry, revoked policy, and the two bridge records —
+    ///         cells whose post-values come from the action's own
+    ///         fields.  Cheap to derive and easy to get subtly wrong:
+    ///         the registry value rides the CBE byte-string encoder (so
+    ///         a present-EMPTY key stays distinguishable from an absent
+    ///         one, and registration is an admissibility gate), a
+    ///         revoke emits the ABSENT marker rather than an encoded
+    ///         empty policy, and the two records are concatenations
+    ///         whose components use DIFFERENT heads — uint, amount and
+    ///         byte-string — so a uniform encoder would produce
+    ///         plausible bytes for the wrong leaf.
+    function test_recordWrites_match_lean() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".recordWriteGoldensCount");
+        assertGt(n, 0, "the corpus must carry record goldens");
+        for (uint256 i = 0; i < n; i++) {
+            _assertRecordWrite(raw,
+                string.concat(".recordWriteGoldens[", vm.toString(i), "]"));
+        }
+    }
+
+    /// @dev One record golden.  Extracted for stack depth under
+    ///      `via_ir`.
+    function _assertRecordWrite(string memory raw, string memory base)
+        internal
+        pure
+    {
+        string memory kind = vm.parseJsonString(raw, string.concat(base, ".kind"));
+        bytes memory payload =
+            vm.parseJsonBytes(raw, string.concat(base, ".payloadHex"));
+        bytes memory expected =
+            vm.parseJsonBytes(raw, string.concat(base, ".encodedHex"));
+        uint256 a = vm.parseJsonUint(raw, string.concat(base, ".a"));
+        uint256 b = vm.parseJsonUint(raw, string.concat(base, ".b"));
+        uint256 c = vm.parseJsonUint(raw, string.concat(base, ".c"));
+        uint256 d = vm.parseJsonUint(raw, string.concat(base, ".d"));
+
+        bytes32 k = keccak256(bytes(kind));
+        bytes memory got;
+        if (k == keccak256("registry")) {
+            got = StepWrites.deriveRegistryCellValue(payload);
+        } else if (k == keccak256("revokedPolicy")) {
+            got = StepWrites.deriveRevokedPolicyCellValue();
+        } else if (k == keccak256("consumed")) {
+            got = StepWrites.deriveConsumedCellValue(a, b, c, d);
+        } else if (k == keccak256("pending")) {
+            got = StepWrites.derivePendingCellValue(a, payload, b, c);
+        } else {
+            revert(string.concat("unknown record golden kind at ", base));
+        }
+        assertEq(got, expected, string.concat("record mismatch at ", base));
+    }
+
+    /// @notice The withdrawal counter advances by one, like the nonce.
+    /// @dev    Its PRE-value is what names the pending cell, so a reset
+    ///         counter would let a later withdrawal overwrite an
+    ///         earlier one's entry.
+    function test_nextWdIdWrite_advances_by_one() public view {
+        assertEq(
+            StepWrites.deriveNextWdIdCellValue(CBEEncode.uintValue(4)),
+            CBEEncode.uintValue(5),
+            "the withdrawal counter must advance by one"
+        );
+    }
+
     function test_perEntry_cellProofs_witness_binding() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");

@@ -1734,6 +1734,57 @@ def balanceWriteGoldens : List Test.Bridge.CrossCheck.Json :=
   , balanceGolden "topUp" (bal 7) (bal 9) 7 9 5 0 topUpOk.1 topUpOk.2
   , balanceGolden "topUp" (bal 7) (bal 7) 7 7 5 0 topUpSelf.1 topUpSelf.2 ]
 
+/-! ### Registry / policy / bridge cell goldens
+
+The cells whose post-values come from the ACTION's own fields.  Cheap
+to derive and easy to get subtly wrong: the registry value rides the
+CBE byte-string encoder (so a present-EMPTY key is distinguishable from
+an absent one), a revoke emits the ABSENT marker rather than an encoded
+empty policy, and the two bridge records are field concatenations whose
+component encoders differ (uint head vs amount head vs byte-string).
+-/
+
+/-- Per-cell goldens for the action-field-derived cells. -/
+def recordWriteGoldens : List Test.Bridge.CrossCheck.Json :=
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let h256 := fun (v : Nat) => hx (uint256BE v)
+  let key := ByteArray.mk #[0xAA, 0xBB, 0xCC]
+  let rcp := LegalKernel.Bridge.EthAddress.zero
+  [ .obj [ ("kind", .str "registry"), ("payloadHex", .str (hx key))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveRegistryCellValue key))) ]
+    -- The EMPTY key: its 9-byte head is what makes a present-empty
+    -- registration distinguishable from an absent one, and
+    -- registration is an admissibility gate.
+  , .obj [ ("kind", .str "registry"), ("payloadHex", .str (hx ByteArray.empty))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveRegistryCellValue ByteArray.empty))) ]
+  , .obj [ ("kind", .str "revokedPolicy"), ("payloadHex", .str "0x")
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx deriveRevokedPolicyCellValue)) ]
+  , .obj [ ("kind", .str "consumed"), ("payloadHex", .str "0x")
+         , ("a", .str (h256 1)), ("b", .str (h256 5))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveConsumedCellValue
+             { resource := 1, userAmount := 5
+             , poolAmount := 0, budgetGrant := 0 }))) ]
+  , .obj [ ("kind", .str "consumed"), ("payloadHex", .str "0x")
+         , ("a", .str (h256 1)), ("b", .str (h256 5))
+         , ("c", .str (h256 2)), ("d", .str (h256 3))
+         , ("encodedHex", .str (hx (deriveConsumedCellValue
+             { resource := 1, userAmount := 5
+             , poolAmount := 2, budgetGrant := 3 }))) ]
+  , .obj [ ("kind", .str "pending")
+         , ("payloadHex", .str (hx (LegalKernel.Bridge.EthAddress.toBytes rcp)))
+         , ("a", .str (h256 1)), ("b", .str (h256 5))
+         , ("c", .str (h256 7)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (derivePendingCellValue
+             { resource := 1, recipient := rcp
+             , amount := 5, l2LogIndex := 7 }))) ] ]
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -2228,6 +2279,8 @@ def tests : List Test.TestCase :=
           , ("uniformWriteGoldensCount", .num uniformWriteGoldens.length)
           , ("balanceWriteGoldens", .arr balanceWriteGoldens)
           , ("balanceWriteGoldensCount", .num balanceWriteGoldens.length)
+          , ("recordWriteGoldens", .arr recordWriteGoldens)
+          , ("recordWriteGoldensCount", .num recordWriteGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)
