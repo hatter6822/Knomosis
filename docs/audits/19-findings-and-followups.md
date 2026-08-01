@@ -246,14 +246,29 @@ PRE-values alone, in canonical CBE byte form, on both stacks, plus the
 Lean theorem that it agrees with `stepCellWrites es
 (productionApplyBudget es st idx) …` — is the largest remaining piece
 and the one the plan understated as "the root update becomes shared".
-It has started: `FaultProof/VerifierWrites.lean` holds the nonce cell
-(`deriveNonceCellValue` + `deriveNonceCellValue_correct`, with
-`productionApplyBudget_expectsNonce_signer` as the missing half of the
-nonce ledger's footprint), which is the cheapest of the set because
-`kernelOnlyApply` advances the signer's nonce before dispatching on
-the action at all — one proof, not twenty-five.  It is also the cell
-the L1 gets most conspicuously wrong today, which the step-VM
-coherence suite already pins.
+**It is now complete on the Lean side.**
+`FaultProof/VerifierWrites.lean` derives every cell kind a step can
+write, each with a `*_correct` theorem against
+`getCellValue (productionApplyBudget es st idx)`:
+
+  * the **nonce** and **epoch-budget** cells, uniform across all
+    twenty-five variants — the nonce because `kernelOnlyApply` advances
+    it before dispatching on the action at all, the budget because its
+    three branches are selected by the `.budgetPolicy` cell rather than
+    by the variant;
+  * the **balances** of all twelve variants that write one, five of
+    them sharing `deriveChainPair` (write `x`, then write `y` reading
+    the already-written state — the `x = y` case is reachable in every
+    one), with `ammSwap` the single cross-resource case;
+  * the **registry / local-policy / bridge** cells of the eight
+    variants that write those.
+
+Two properties run through all of it, and they are what turn a
+calculator into an adjudicator.  The precondition is EVALUATED rather
+than asserted, so a failing one yields the pre-values — which is the
+fix for the "a revert is not a verdict" defect below.  And the reader
+is PARTIAL: a cell the bundle does not open derives `none`, so a
+responder cannot omit an opening and obtain a value of their choosing.
 Every input is available (the cell space covers all seven state
 fields, so the signer's nonce, the budget policy and the signer's
 epoch budget are all openable cells), but it amounts to

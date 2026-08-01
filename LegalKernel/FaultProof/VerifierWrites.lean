@@ -84,9 +84,26 @@ it is the largest remaining piece of the state-root swap.
     because `fromResource ≠ toResource` is a precondition conjunct
     rather than an assumption.
 
-Remaining, in the same shape — a `derive*CellValue` over proven
-pre-values plus a `*_correct` theorem: the registry / local-policy /
-bridge cells of the eight variants that write them.
+  * **The registry, local-policy and bridge cells** of the eight
+    variants that write them.  These are the cheap ones, and for a
+    reason worth naming: their post-values come from the ACTION's own
+    fields, so a verifier reads them off the logged action and needs no
+    proven cell — which also makes them the cells an L1 ignoring its
+    declared writes is most obviously wrong about, since the value is
+    right there in the calldata.
+
+    Two exceptions.  `revokeLocalPolicy`'s value is the canonical
+    ABSENT marker, not an encoded empty policy: `revoke` ERASES the
+    entry and `getCellValue` keys off the map, so "declared a policy
+    with no clauses" and "declared nothing" are different cell values.
+    And `withdraw`'s counter is `pre + 1` from the proven
+    `.bridgeNextWdId` cell — the same fail-closed shape as the nonce,
+    for the same reason: a reset counter would let a later withdrawal
+    overwrite an earlier one's pending cell.
+
+**Every cell kind a step can write is covered.**  What remains is the
+Solidity mirror of these functions and the corpus column that pins the
+two stacks against each other.
 
 **Which decoder.**  This module decodes with `Encodable.decode`, whose
 round-trip is `Encoding.nat_roundtrip`.  The L1 mirrors it with
@@ -1199,6 +1216,326 @@ theorem deriveAmmSwapBalances_correct
     rw [getBalance_setBalance_other _ fromResource toResource ammReserveActor
       ammReserveActor _ (Or.inl h.2.1)]
   · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
+
+/-! ## Registry and local-policy cells
+
+Four variants, and they are the easiest of the set for a reason worth
+naming: their post-values are functions of the ACTION's own fields
+alone.  A verifier reads them off the logged action and needs no proven
+cell at all — no `BalanceReader`, no precondition branch (all four
+compile to kernel-inert transitions, so `step_impl` cannot no-op them
+away).
+
+That also makes them the cells where an L1 that simply ignored its
+declared writes would be most obviously wrong: the value is right
+there in the calldata.
+-/
+
+/-- **`replaceKey` / `registerIdentity`'s registry write.**
+
+    Both are `registry.insert actor key`, so both derive the same way.
+    The value goes through the CBE byte-string encoder rather than
+    being emitted raw: `PublicKey` is a bare `ByteArray` and
+    `registerIdentity` accepts any value, so a registration with the
+    EMPTY key would otherwise read exactly like an absent one — and
+    registration is an admissibility gate, so those are different
+    states. -/
+def deriveRegistryCellValue (key : Authority.PublicKey) : ByteArray :=
+  ByteArray.mk (Encodable.encode (T := ByteArray) key).toArray
+
+/-- **`declareLocalPolicy`'s local-policy write.** -/
+def deriveDeclaredPolicyCellValue (policy : Authority.LocalPolicy) : ByteArray :=
+  ByteArray.mk (Encodable.encode (T := Authority.LocalPolicy) policy).toArray
+
+/-- **`revokeLocalPolicy`'s local-policy write** — the canonical ABSENT
+    value, because `revoke` erases the entry rather than storing an
+    empty policy.
+
+    The distinction is load-bearing: `getCellValue` keys off the MAP,
+    not `lookup`, so "declared a policy with no clauses" and "declared
+    nothing" are different cell values.  A derivation that emitted an
+    encoded empty policy here would move the root to a state the
+    advance never reaches. -/
+def deriveRevokedPolicyCellValue : ByteArray := ByteArray.empty
+
+/-- The verifier's `replaceKey` registry write is the sequencer's. -/
+theorem deriveRegistryCellValue_correct_replaceKey
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (actor : ActorId) (newKey : Authority.PublicKey)
+    (h_act : st.action = .replaceKey actor newKey) :
+    deriveRegistryCellValue newKey
+      = getCellValue (productionApplyBudget es st idx) (.registry actor) := by
+  obtain ⟨_, h⟩ := productionApplyBudget_eq_productionApply_off_budget es st idx
+  have h_reg : (productionApplyBudget es st idx).registry
+      = (Disputes.kernelOnlyApply es (signedActionEntry st)).registry := by
+    rw [h]; rfl
+  show _ = (match (productionApplyBudget es st idx).registry[actor]? with
+            | some pk => ByteArray.mk (Encodable.encode (T := ByteArray) pk).toArray
+            | none    => ByteArray.empty)
+  rw [h_reg]
+  unfold Disputes.kernelOnlyApply signedActionEntry
+  rw [h_act]
+  show _ = (match ((Authority.advanceNonce _ st.signer).registry.insert
+              actor newKey)[actor]? with
+            | some pk => ByteArray.mk (Encodable.encode (T := ByteArray) pk).toArray
+            | none    => ByteArray.empty)
+  rw [LegalKernel.RBMap.find?_insert_self _ actor newKey]
+  rfl
+
+/-- ...and the `registerIdentity` one likewise. -/
+theorem deriveRegistryCellValue_correct_registerIdentity
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (actor : ActorId) (pk : Authority.PublicKey)
+    (h_act : st.action = .registerIdentity actor pk) :
+    deriveRegistryCellValue pk
+      = getCellValue (productionApplyBudget es st idx) (.registry actor) := by
+  obtain ⟨_, h⟩ := productionApplyBudget_eq_productionApply_off_budget es st idx
+  have h_reg : (productionApplyBudget es st idx).registry
+      = (Disputes.kernelOnlyApply es (signedActionEntry st)).registry := by
+    rw [h]; rfl
+  show _ = (match (productionApplyBudget es st idx).registry[actor]? with
+            | some k => ByteArray.mk (Encodable.encode (T := ByteArray) k).toArray
+            | none    => ByteArray.empty)
+  rw [h_reg]
+  unfold Disputes.kernelOnlyApply signedActionEntry
+  rw [h_act]
+  show _ = (match ((Authority.advanceNonce _ st.signer).registry.insert
+              actor pk)[actor]? with
+            | some k => ByteArray.mk (Encodable.encode (T := ByteArray) k).toArray
+            | none   => ByteArray.empty)
+  rw [LegalKernel.RBMap.find?_insert_self _ actor pk]
+  rfl
+
+/-- The verifier's `declareLocalPolicy` write is the sequencer's. -/
+theorem deriveDeclaredPolicyCellValue_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (policy : Authority.LocalPolicy)
+    (h_act : st.action = .declareLocalPolicy policy) :
+    deriveDeclaredPolicyCellValue policy
+      = getCellValue (productionApplyBudget es st idx) (.localPolicy st.signer) := by
+  obtain ⟨_, h⟩ := productionApplyBudget_eq_productionApply_off_budget es st idx
+  have h_lp : (productionApplyBudget es st idx).localPolicies
+      = (Disputes.kernelOnlyApply es (signedActionEntry st)).localPolicies := by
+    rw [h]; rfl
+  show _ = (match (productionApplyBudget es st idx).localPolicies[st.signer]? with
+            | some p => ByteArray.mk
+                          (Encodable.encode (T := Authority.LocalPolicy) p).toArray
+            | none   => ByteArray.empty)
+  rw [h_lp]
+  unfold Disputes.kernelOnlyApply signedActionEntry
+  rw [h_act]
+  show _ = (match ((Authority.advanceNonce _ st.signer).localPolicies.declare
+              st.signer policy)[st.signer]? with
+            | some p => ByteArray.mk
+                          (Encodable.encode (T := Authority.LocalPolicy) p).toArray
+            | none   => ByteArray.empty)
+  unfold Authority.LocalPolicies.declare
+  rw [LegalKernel.RBMap.find?_insert_self _ st.signer policy]
+  rfl
+
+/-- The verifier's `revokeLocalPolicy` write is the sequencer's.
+
+    The one of the four whose derived value is the ABSENT marker rather
+    than an encoding, because `revoke` erases the map entry.  Proved
+    through `TreeMap.getElem?_erase_self` rather than through
+    `lookup_revoke_self`: `lookup` DEFAULTS an absent actor to
+    `LocalPolicy.empty`, so it cannot distinguish the two states the
+    cell must, and a proof routed through it would be proving the wrong
+    thing. -/
+theorem deriveRevokedPolicyCellValue_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (h_act : st.action = .revokeLocalPolicy) :
+    deriveRevokedPolicyCellValue
+      = getCellValue (productionApplyBudget es st idx) (.localPolicy st.signer) := by
+  obtain ⟨_, h⟩ := productionApplyBudget_eq_productionApply_off_budget es st idx
+  have h_lp : (productionApplyBudget es st idx).localPolicies
+      = (Disputes.kernelOnlyApply es (signedActionEntry st)).localPolicies := by
+    rw [h]; rfl
+  show _ = (match (productionApplyBudget es st idx).localPolicies[st.signer]? with
+            | some p => ByteArray.mk
+                          (Encodable.encode (T := Authority.LocalPolicy) p).toArray
+            | none   => ByteArray.empty)
+  rw [h_lp]
+  unfold Disputes.kernelOnlyApply signedActionEntry
+  rw [h_act]
+  show _ = (match ((Authority.advanceNonce _ st.signer).localPolicies.revoke
+              st.signer)[st.signer]? with
+            | some p => ByteArray.mk
+                          (Encodable.encode (T := Authority.LocalPolicy) p).toArray
+            | none   => ByteArray.empty)
+  unfold Authority.LocalPolicies.revoke
+  rw [Std.TreeMap.getElem?_erase_self]
+  rfl
+
+/-! ## Bridge cells
+
+Three variants write them: `deposit` and `depositWithFee` mark a
+deposit consumed; `withdraw` appends a pending withdrawal and bumps the
+counter.
+
+`withdraw` is the one whose write set is not a function of
+`(action, signer)`: the pending cell is keyed by the pre-state's
+`nextWdId`, which is itself a cell.  A verifier reads that cell to
+learn WHICH cell to write, which is exactly why `Action.stateWriteCells`
+exists and why `bridgeNextWdId` is in the write set alongside the
+pending entry rather than being an implementation detail.
+-/
+
+/-- **`deposit` / `depositWithFee`'s consumed-deposit write.**
+
+    The record is built entirely from the action's own fields — a
+    verifier needs no proven cell.  `deposit` is the degenerate case
+    with no fee split, and writing it as `poolAmount := 0,
+    budgetGrant := 0` rather than sharing `depositWithFee`'s builder
+    keeps the two encodings visibly distinct at the call site. -/
+def deriveConsumedCellValue (rec : LegalKernel.Bridge.DepositRecord) : ByteArray :=
+  ByteArray.mk (Encoding.Bridge.DepositRecord.encode rec).toArray
+
+/-- **`withdraw`'s pending-withdrawal write.** -/
+def derivePendingCellValue (wd : LegalKernel.Bridge.PendingWithdrawal) : ByteArray :=
+  ByteArray.mk (Encoding.Bridge.PendingWithdrawal.encode wd).toArray
+
+/-- **`withdraw`'s counter write** — `pre + 1`, from the proven
+    `.bridgeNextWdId` cell.  The same fail-closed shape as the nonce:
+    a malformed pre-value derives nothing rather than resetting the
+    counter, and a reset counter would let a later withdrawal overwrite
+    an earlier one's pending cell. -/
+def deriveNextWdIdCellValue (preValue : ByteArray) : Option ByteArray :=
+  match Encodable.decode (T := Nat) preValue.data.toList with
+  | .ok (n, []) => some (ByteArray.mk (Encodable.encode (T := Nat) (n + 1)).toArray)
+  | _           => none
+
+/-- The verifier's `deposit` consumed-cell write is the sequencer's. -/
+theorem deriveConsumedCellValue_correct_deposit
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (d : LegalKernel.Bridge.DepositId)
+    (h_act : st.action = .deposit r recipient amount d) :
+    deriveConsumedCellValue
+        { resource := r, userAmount := amount, poolAmount := 0, budgetGrant := 0 }
+      = getCellValue (productionApplyBudget es st idx) (.bridgeConsumed d) := by
+  show _ = (if (productionApplyBudget es st idx).bridge.consumed.contains d then
+              match (productionApplyBudget es st idx).bridge.consumed[d]? with
+              | some rec => ByteArray.mk (Encoding.Bridge.DepositRecord.encode rec).toArray
+              | none     => ByteArray.empty
+            else ByteArray.empty)
+  rw [productionApplyBudget_bridge, h_act]
+  show _ = (if (LegalKernel.Bridge.BridgeState.markConsumed es.bridge d
+                 { resource := r, userAmount := amount,
+                   poolAmount := 0, budgetGrant := 0 }).consumed.contains d then
+              match (LegalKernel.Bridge.BridgeState.markConsumed es.bridge d
+                 { resource := r, userAmount := amount,
+                   poolAmount := 0, budgetGrant := 0 }).consumed[d]? with
+              | some rec => ByteArray.mk (Encoding.Bridge.DepositRecord.encode rec).toArray
+              | none     => ByteArray.empty
+            else ByteArray.empty)
+  unfold LegalKernel.Bridge.BridgeState.markConsumed
+  show _ = (if (es.bridge.consumed.insert d _).contains d then
+              match (es.bridge.consumed.insert d _)[d]? with
+              | some rec => ByteArray.mk (Encoding.Bridge.DepositRecord.encode rec).toArray
+              | none     => ByteArray.empty
+            else ByteArray.empty)
+  rw [Std.TreeMap.contains_insert_self, if_pos rfl,
+    LegalKernel.RBMap.find?_insert_self _ d _]
+  rfl
+
+/-- ...and the `depositWithFee` one, which carries the fee split. -/
+theorem deriveConsumedCellValue_correct_depositWithFee
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (bg : Nat)
+    (d : LegalKernel.Bridge.DepositId)
+    (h_act : st.action = .depositWithFee r recipient poolActor
+      userAmount poolAmount bg d) :
+    deriveConsumedCellValue
+        { resource := r, userAmount := userAmount,
+          poolAmount := poolAmount, budgetGrant := bg }
+      = getCellValue (productionApplyBudget es st idx) (.bridgeConsumed d) := by
+  show _ = (if (productionApplyBudget es st idx).bridge.consumed.contains d then
+              match (productionApplyBudget es st idx).bridge.consumed[d]? with
+              | some rec => ByteArray.mk (Encoding.Bridge.DepositRecord.encode rec).toArray
+              | none     => ByteArray.empty
+            else ByteArray.empty)
+  rw [productionApplyBudget_bridge, h_act]
+  show _ = (if (LegalKernel.Bridge.BridgeState.markConsumed es.bridge d
+                 { resource := r, userAmount := userAmount,
+                   poolAmount := poolAmount, budgetGrant := bg }).consumed.contains d then
+              match (LegalKernel.Bridge.BridgeState.markConsumed es.bridge d
+                 { resource := r, userAmount := userAmount,
+                   poolAmount := poolAmount, budgetGrant := bg }).consumed[d]? with
+              | some rec => ByteArray.mk (Encoding.Bridge.DepositRecord.encode rec).toArray
+              | none     => ByteArray.empty
+            else ByteArray.empty)
+  unfold LegalKernel.Bridge.BridgeState.markConsumed
+  show _ = (if (es.bridge.consumed.insert d _).contains d then
+              match (es.bridge.consumed.insert d _)[d]? with
+              | some rec => ByteArray.mk (Encoding.Bridge.DepositRecord.encode rec).toArray
+              | none     => ByteArray.empty
+            else ByteArray.empty)
+  rw [Std.TreeMap.contains_insert_self, if_pos rfl,
+    LegalKernel.RBMap.find?_insert_self _ d _]
+  rfl
+
+/-- The verifier's `withdraw` pending-cell write is the sequencer's —
+    at the cell the PRE-state's counter names. -/
+theorem derivePendingCellValue_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (rcp : LegalKernel.Bridge.EthAddress)
+    (h_act : st.action = .withdraw r sender amount rcp) :
+    derivePendingCellValue
+        { resource := r, recipient := rcp, amount := amount, l2LogIndex := idx }
+      = getCellValue (productionApplyBudget es st idx)
+          (.bridgePending es.bridge.nextWdId) := by
+  show _ = (match (productionApplyBudget es st idx).bridge.pending[es.bridge.nextWdId]? with
+            | some pw => ByteArray.mk
+                           (Encoding.Bridge.PendingWithdrawal.encode pw).toArray
+            | none    => ByteArray.empty)
+  rw [productionApplyBudget_bridge, h_act]
+  show _ = (match (LegalKernel.Bridge.BridgeState.appendWithdrawal es.bridge
+              { resource := r, recipient := rcp, amount := amount,
+                l2LogIndex := idx }).pending[es.bridge.nextWdId]? with
+            | some pw => ByteArray.mk
+                           (Encoding.Bridge.PendingWithdrawal.encode pw).toArray
+            | none    => ByteArray.empty)
+  unfold LegalKernel.Bridge.BridgeState.appendWithdrawal
+  show _ = (match (es.bridge.pending.insert es.bridge.nextWdId _)[es.bridge.nextWdId]? with
+            | some pw => ByteArray.mk
+                           (Encoding.Bridge.PendingWithdrawal.encode pw).toArray
+            | none    => ByteArray.empty)
+  rw [LegalKernel.RBMap.find?_insert_self _ es.bridge.nextWdId _]
+  rfl
+
+/-- The verifier's `withdraw` counter write is the sequencer's. -/
+theorem deriveNextWdIdCellValue_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (rcp : LegalKernel.Bridge.EthAddress)
+    (h_act : st.action = .withdraw r sender amount rcp)
+    (h_bound : es.bridge.nextWdId < 256 ^ 8) :
+    deriveNextWdIdCellValue (getCellValue es .bridgeNextWdId)
+      = some (getCellValue (productionApplyBudget es st idx) .bridgeNextWdId) := by
+  unfold deriveNextWdIdCellValue
+  have h_dec : Encodable.decode (T := Nat)
+      (getCellValue es (.bridgeNextWdId)).data.toList
+      = .ok (es.bridge.nextWdId, []) := by
+    show Encodable.decode (T := Nat)
+      (ByteArray.mk (Encodable.encode
+        (T := Nat) es.bridge.nextWdId).toArray).data.toList = _
+    have h_list : (ByteArray.mk (Encodable.encode
+        (T := Nat) es.bridge.nextWdId).toArray).data.toList
+        = Encodable.encode (T := Nat) es.bridge.nextWdId := by simp
+    rw [h_list, show Encodable.encode (T := Nat) es.bridge.nextWdId
+      = Encodable.encode (T := Nat) es.bridge.nextWdId ++ [] from
+      (List.append_nil _).symm]
+    exact Encoding.nat_roundtrip _ [] h_bound
+  rw [h_dec]
+  show some (ByteArray.mk (Encodable.encode
+    (T := Nat) (es.bridge.nextWdId + 1)).toArray) = _
+  show _ = some (ByteArray.mk (Encodable.encode
+    (T := Nat) (productionApplyBudget es st idx).bridge.nextWdId).toArray)
+  rw [productionApplyBudget_bridge, h_act]
+  rfl
 
 /-- A malformed pre-value derives nothing.
 

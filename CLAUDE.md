@@ -1231,11 +1231,22 @@ log-entry chain now folds in an `actionCommit`
 authenticates the `(actionKind, actionFields, signer)` triple it is
 handed instead of executing whatever it is given.
 
-**What remains, and it is the largest piece:** the verifier-side
-derivation of a step's written VALUES.  `FaultProof/VerifierWrites.lean`
-has the nonce and epoch-budget cells (uniform across all twenty-five)
-and the balances of all twelve variants that write one; the registry /
-local-policy / bridge cells of eight variants are left.  `stepWriteBundle es st idx`
+**The verifier-side derivation is complete on the Lean side.**
+`FaultProof/VerifierWrites.lean` derives EVERY cell kind a step can
+write from proven pre-values alone, each with a `*_correct` theorem
+against `getCellValue (productionApplyBudget es st idx)`: the nonce and
+epoch-budget cells (uniform across all twenty-five variants), the
+balances of all twelve variants that write one, and the registry /
+local-policy / bridge cells of the eight that write those.  Two
+properties run through all of it — the precondition is EVALUATED rather
+than asserted (so a failing one is a no-op, not a revert), and the
+reader is PARTIAL (so an omitted opening derives nothing rather than a
+value of the responder's choosing).
+
+**What remains** is the Solidity mirror of those functions — including
+the on-chain canonical CBE value encoders — the corpus column pinning
+the two stacks, and `executeStep` returning the fold's result instead
+of `stepVMHash`.  `stepWriteBundle es st idx`
 takes the pre-state and reads its `newValue` column off
 `productionApplyBudget es st idx` — that is the sequencer's
 computation.  A verifier holding only the pre-root and a submitted

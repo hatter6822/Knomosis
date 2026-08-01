@@ -593,6 +593,52 @@ def tests : List TestCase :=
         assert (deriveTransferBalances partial_ 1 7 8 30 |>.isNone)
           "one missing opening must be enough to refuse"
     }
+  , { name := "the verifier derives the registry, policy and bridge cells"
+    , body := do
+        -- The cells whose post-values come from the ACTION's own
+        -- fields rather than from any proven cell — the ones an L1
+        -- that ignored its declared writes would be most obviously
+        -- wrong about, since the value is right there in the calldata.
+        let check (action : Authority.Action) (tag : CellTag)
+            (derived : ByteArray) : IO Unit := do
+          let post := productionApplyBudget base (sign action) 0
+          assertEq (expected := (getCellValue post tag).toList)
+            (actual := derived.toList)
+            s!"derived {repr tag} ≠ the advance's for {repr action}"
+        let k := ByteArray.mk #[9, 9, 9]
+        check (.replaceKey 7 k) (CellTag.registry 7) (deriveRegistryCellValue k)
+        check (.registerIdentity 8 k) (CellTag.registry 8) (deriveRegistryCellValue k)
+        check (.declareLocalPolicy Authority.LocalPolicy.empty)
+          (CellTag.localPolicy 7)
+          (deriveDeclaredPolicyCellValue Authority.LocalPolicy.empty)
+        -- Revoke's derived value is the ABSENT marker, not an encoded
+        -- empty policy: `revoke` erases the entry, and `getCellValue`
+        -- keys off the map, so the two are different cell values.
+        check .revokeLocalPolicy (CellTag.localPolicy 7)
+          deriveRevokedPolicyCellValue
+        assert (deriveRevokedPolicyCellValue.toList
+                  != (deriveDeclaredPolicyCellValue
+                       Authority.LocalPolicy.empty).toList)
+          "revoked and declared-empty must not be the same cell value"
+        check (.deposit 1 8 5 3) (CellTag.bridgeConsumed 3)
+          (deriveConsumedCellValue
+            { resource := 1, userAmount := 5, poolAmount := 0, budgetGrant := 0 })
+        check (.depositWithFee 1 8 9 5 1 1 4) (CellTag.bridgeConsumed 4)
+          (deriveConsumedCellValue
+            { resource := 1, userAmount := 5, poolAmount := 1, budgetGrant := 1 })
+        -- `withdraw`'s pending cell is keyed by the PRE-state's
+        -- counter, which is itself a cell the verifier reads.
+        check (.withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)
+          (CellTag.bridgePending base.bridge.nextWdId)
+          (derivePendingCellValue
+            { resource := 1, recipient := LegalKernel.Bridge.EthAddress.zero
+            , amount := 5, l2LogIndex := 0 })
+        match deriveNextWdIdCellValue (getCellValue base CellTag.bridgeNextWdId) with
+        | some derived =>
+          check (.withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)
+            CellTag.bridgeNextWdId derived
+        | none => throw <| IO.userError "the counter derivation refused an honest cell"
+    }
   , { name := "API stability: the verifier-side derivation"
     , body := do
         let _nonce : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),

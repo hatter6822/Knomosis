@@ -474,9 +474,22 @@ space:
    only because `fromResource ≠ toResource` is a precondition conjunct
    rather than an assumption, and the proof uses it as one.
 
-   Remaining: the registry / local-policy / bridge cells of the eight
-   variants that write them.  Then the Solidity mirror and a corpus
-   column.
+   **The registry, local-policy and bridge cells are done too**, for
+   the eight variants that write them — so **every cell kind a step can
+   write is now derived and proved on the Lean side**.  These were the
+   cheap ones because their post-values come from the ACTION's own
+   fields; two are not, and both matter.  `revokeLocalPolicy`'s value
+   is the canonical ABSENT marker rather than an encoded empty policy
+   (`revoke` erases the entry and `getCellValue` keys off the map, so
+   the two are different cell values, and the test asserts they
+   differ).  `withdraw`'s counter is `pre + 1` from the proven
+   `.bridgeNextWdId` cell — the same fail-closed shape as the nonce,
+   because a reset counter would let a later withdrawal overwrite an
+   earlier one's pending cell.
+
+   What remains of §4 step 3 is the SOLIDITY mirror of these functions
+   — including the on-chain canonical CBE value encoders — and the
+   corpus column that pins the two stacks against each other.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"
