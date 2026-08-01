@@ -12,9 +12,6 @@ LegalKernel.FaultProof.Transcript — auxiliary infrastructure for
 the fault-proof game's per-transcript reasoning.
 
 Adds the following declarations:
-  * `applyCellWrites` — the canonical cell-write function (alias
-    of `applyCellWrites_to_state` from `Coherence.lean` for the
-    per-cell write semantic).
   * `extractRequiredCells` — extract the per-action `requiredCells`
     from a SignedAction.
   * `Action.requiredCellProofs` — build the canonical cell-proof
@@ -39,25 +36,16 @@ open LegalKernel.Authority
 open LegalKernel.Disputes
 open LegalKernel.Runtime
 
-/-! ## `applyCellWrites` — alias
+/-! ## The retired `applyCellWrites` alias
 
-`applyCellWrites_to_state` from `Coherence.lean` is the
-canonical cell-write function.  Per the plan §5.2 naming, we
-expose it under `applyCellWrites`. -/
-
-/-- The canonical per-step cell-write function: takes a pre-state
-    and a SignedAction, returns the post-state.  Alias for
-    `applyCellWrites_to_state` in `Coherence.lean`. -/
-def applyCellWrites (es : ExtendedState) (st : SignedAction)
-    (l2LogIndex : Nat) : ExtendedState :=
-  applyCellWrites_to_state es st l2LogIndex
-
-/-- `applyCellWrites` is deterministic. -/
-theorem applyCellWrites_deterministic
-    (es₁ es₂ : ExtendedState) (st₁ st₂ : SignedAction) (i₁ i₂ : Nat)
-    (h_es : es₁ = es₂) (h_st : st₁ = st₂) (h_i : i₁ = i₂) :
-    applyCellWrites es₁ st₁ i₁ = applyCellWrites es₂ st₂ i₂ := by
-  rw [h_es, h_st, h_i]
+This module used to re-export `applyCellWrites_to_state`
+(`Coherence.lean`) under the name `applyCellWrites`, together with a
+determinism lemma `Coherence.lean` already proved.  Both are gone.
+The alias described a per-cell write primitive it was not — the whole-
+step advance takes a signed action, not a cell and a value — and the
+genuine per-cell primitive now exists as `CellWrites.applyCellWrites`,
+which folds a `(cell, value)` list.  A second name for the same
+function bought nothing, and the one it bought was wrong. -/
 
 /-! ## `extractRequiredCells` — projection helper -/
 

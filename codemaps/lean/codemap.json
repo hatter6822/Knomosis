@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "76547cba770f46ed4eae82c46dcec1944d0a16091dd774ccdb24cd42bfd79e9d"
+    "source_digest": "aeaa55848a78c4f875d5c19b384dbbc621e4fd03e98459fa53bf212133c99ba5"
   },
   "summary": {
     "module_count": 325,
-    "declaration_count": 5565
+    "declaration_count": 5566
   },
   "modules": [
     {
@@ -543,13 +543,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 324,
+          "line": 325,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 340,
+          "line": 341,
           "called": [
             "LegalKernel"
           ]
@@ -26684,7 +26684,7 @@
     {
       "module": "LegalKernel.FaultProof.StateCellsInjective",
       "path": "LegalKernel/FaultProof/StateCellsInjective.lean",
-      "declaration_count": 43,
+      "declaration_count": 46,
       "declarations": [
         {
           "kind": "namespace",
@@ -27215,8 +27215,60 @@
         },
         {
           "kind": "theorem",
+          "name": "mem_stateCellEntries_iff",
+          "line": 796,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "canonicalAbsentValue",
+            "es",
+            "getCellValue",
+            "getCellValue_of_not_mem",
+            "mem_stateCellEntries_of_ne_absent",
+            "smtCellKey",
+            "stateCellEntries",
+            "stateCellEntries_spec",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "stateCellEntries_perm_of_cells_agree",
+          "line": 812,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "mem_stateCellEntries_iff",
+            "nodup_of_bitsDistinct",
+            "perm_of_nodup_of_mem_iff",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "commitExtendedState_eq_of_cells_agree",
+          "line": 846,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "commitExtendedState",
+            "es",
+            "getCellValue",
+            "smtDepth",
+            "smtRootListAux_perm",
+            "stateCellEntries",
+            "stateCellEntries_perm_of_cells_agree"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "dropKey_stateCellEntries_perm_of_agree_off",
-          "line": 799,
+          "line": 863,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -27235,7 +27287,7 @@
         {
           "kind": "def",
           "name": "applyStateCellWrite",
-          "line": 829,
+          "line": 893,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -27247,7 +27299,7 @@
         {
           "kind": "abbrev",
           "name": "StateCellWrite",
-          "line": 837,
+          "line": 901,
           "called": [
             "CellTag",
             "SmtCellProof"
@@ -27256,7 +27308,7 @@
         {
           "kind": "def",
           "name": "foldStateCellWrites",
-          "line": 840,
+          "line": 904,
           "called": [
             "StateCellWrite",
             "StateCommit",
@@ -27266,7 +27318,7 @@
         {
           "kind": "abbrev",
           "name": "CellWriteChain",
-          "line": 849,
+          "line": 913,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27276,7 +27328,7 @@
         {
           "kind": "def",
           "name": "chainWrites",
-          "line": 854,
+          "line": 918,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -27288,7 +27340,7 @@
         {
           "kind": "def",
           "name": "chainLast",
-          "line": 860,
+          "line": 924,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -27298,7 +27350,7 @@
         {
           "kind": "def",
           "name": "ChainCoherent",
-          "line": 868,
+          "line": 932,
           "called": [
             "BitsDistinctBelow",
             "CellWriteChain",
@@ -27320,7 +27372,7 @@
         {
           "kind": "theorem",
           "name": "foldStateCellWrites_eq_commit_of_coherent",
-          "line": 889,
+          "line": 953,
           "called": [
             "CellWriteChain",
             "ChainCoherent",
@@ -28842,48 +28894,26 @@
     {
       "module": "LegalKernel.FaultProof.Transcript",
       "path": "LegalKernel/FaultProof/Transcript.lean",
-      "declaration_count": 20,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 34,
+          "line": 31,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 35,
+          "line": 32,
           "called": [
             "LegalKernel.Runtime"
           ]
         },
         {
           "kind": "def",
-          "name": "applyCellWrites",
-          "line": 50,
-          "called": [
-            "ExtendedState",
-            "SignedAction",
-            "applyCellWrites_to_state",
-            "es"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "applyCellWrites_deterministic",
-          "line": 55,
-          "called": [
-            "ExtendedState",
-            "SignedAction",
-            "applyCellWrites",
-            "es"
-          ]
-        },
-        {
-          "kind": "def",
           "name": "extractRequiredCells",
-          "line": 66,
+          "line": 54,
           "called": [
             "Action.requiredCells",
             "CellTag",
@@ -28893,7 +28923,7 @@
         {
           "kind": "theorem",
           "name": "extractRequiredCells_deterministic",
-          "line": 70,
+          "line": 58,
           "called": [
             "SignedAction",
             "extractRequiredCells"
@@ -28902,7 +28932,7 @@
         {
           "kind": "def",
           "name": "Action.requiredCellProofs",
-          "line": 80,
+          "line": 68,
           "called": [
             "CellProofBundle",
             "ExtendedState",
@@ -28914,7 +28944,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCellProofs_size",
-          "line": 86,
+          "line": 74,
           "called": [
             "Action.requiredCellProofs",
             "ExtendedState",
@@ -28927,7 +28957,7 @@
         {
           "kind": "structure",
           "name": "NonMembershipProof",
-          "line": 99,
+          "line": 87,
           "called": [
             "CellTag",
             "ExtendedState"
@@ -28936,7 +28966,7 @@
         {
           "kind": "def",
           "name": "NonMembershipProof.build",
-          "line": 112,
+          "line": 100,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -28948,7 +28978,7 @@
         {
           "kind": "theorem",
           "name": "NonMembershipProof.build_deterministic",
-          "line": 119,
+          "line": 107,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -28959,7 +28989,7 @@
         {
           "kind": "def",
           "name": "isLegalTranscript",
-          "line": 131,
+          "line": 119,
           "called": [
             "KernelStep",
             "StateCommit"
@@ -28968,7 +28998,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsLegalTranscript",
-          "line": 140,
+          "line": 128,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28978,7 +29008,7 @@
         {
           "kind": "theorem",
           "name": "isLegalTranscript_nil",
-          "line": 154,
+          "line": 142,
           "called": [
             "StateCommit",
             "isLegalTranscript"
@@ -28987,7 +29017,7 @@
         {
           "kind": "theorem",
           "name": "isLegalTranscript_singleton",
-          "line": 159,
+          "line": 147,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28997,7 +29027,7 @@
         {
           "kind": "def",
           "name": "chainKernelStepApplyFromLog",
-          "line": 178,
+          "line": 166,
           "called": [
             "ExtendedState",
             "KernelStep",
@@ -29011,7 +29041,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_empty",
-          "line": 188,
+          "line": 176,
           "called": [
             "ExtendedState",
             "chainKernelStepApplyFromLog",
@@ -29021,7 +29051,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_length",
-          "line": 192,
+          "line": 180,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -29033,7 +29063,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_first_preCommit",
-          "line": 203,
+          "line": 191,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -29045,7 +29075,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_isLegalTranscript",
-          "line": 213,
+          "line": 201,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -54650,16 +54680,21 @@
           "line": 39,
           "called": [
             "Action.requiredCellProofs_size",
+            "ExtendedState",
             "LegalKernel.Test.FaultProof.Transcript",
             "NonMembershipProof.build",
+            "SignedAction",
             "TestCase",
-            "applyCellWrites_deterministic",
+            "applyCellWrites_to_state",
+            "applyCellWrites_to_state_deterministic",
             "assert",
             "assertEq",
             "chainKernelStepApplyFromLog",
             "chainKernelStepApplyFromLog_isLegalTranscript",
             "chainKernelStepApplyFromLog_length",
+            "commitExtendedState",
             "emptyES",
+            "es",
             "extractRequiredCells_deterministic",
             "isLegalTranscript",
             "isLegalTranscript_nil",
@@ -66885,7 +66920,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 219,
+          "line": 220,
           "called": [
             "runAll"
           ]

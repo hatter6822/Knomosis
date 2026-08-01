@@ -789,6 +789,70 @@ theorem mem_dropKey_stateCellEntries_iff
     · exact hm
     · exact absurd (getCellValue_of_not_mem es t hm) h_abs
 
+/-- Membership in the full entry list, stated over `getCellValue`
+    alone.  The undropped counterpart of
+    `mem_dropKey_stateCellEntries_iff`, and the same argument: a tag
+    the enumeration omits reads the canonical absent value, which the
+    canonicalising filter discards anyway. -/
+theorem mem_stateCellEntries_iff
+    (es : ExtendedState) (p : ByteArray × ByteArray) :
+    p ∈ stateCellEntries es ↔
+      ∃ t : CellTag, getCellValue es t ≠ canonicalAbsentValue t ∧
+        p = (smtCellKey t, getCellValue es t) := by
+  constructor
+  · intro hp
+    obtain ⟨t, _, rfl, h_abs⟩ := stateCellEntries_spec es p hp
+    exact ⟨t, h_abs, rfl⟩
+  · rintro ⟨t, h_abs, rfl⟩
+    refine mem_stateCellEntries_of_ne_absent es t ?_ h_abs
+    by_cases hm : t ∈ stateCellTags es
+    · exact hm
+    · exact absurd (getCellValue_of_not_mem es t hm) h_abs
+
+/-- Two states agreeing at every cell have permuted entry lists. -/
+theorem stateCellEntries_perm_of_cells_agree
+    (es₁ es₂ : ExtendedState)
+    (h_wf₁ : BitsDistinctBelow smtDepth (stateCellEntries es₁))
+    (h_wf₂ : BitsDistinctBelow smtDepth (stateCellEntries es₂))
+    (h : ∀ t : CellTag, getCellValue es₁ t = getCellValue es₂ t) :
+    (stateCellEntries es₁).Perm (stateCellEntries es₂) := by
+  refine perm_of_nodup_of_mem_iff _ _ (nodup_of_bitsDistinct h_wf₁)
+    (nodup_of_bitsDistinct h_wf₂) (fun p => ?_)
+  rw [mem_stateCellEntries_iff, mem_stateCellEntries_iff]
+  constructor
+  · rintro ⟨t, h_abs, rfl⟩
+    exact ⟨t, by rw [← h t]; exact h_abs, by rw [h t]⟩
+  · rintro ⟨t, h_abs, rfl⟩
+    exact ⟨t, by rw [h t]; exact h_abs, by rw [h t]⟩
+
+/-- **The published root observes exactly the cells.**  Two states
+    whose every cell reads the same publish the same root.
+
+    This is the converse of `commitExtendedState_determines_cells`,
+    and it is what makes the per-variant step-VM obligations provable
+    at all.  A step's post-state is reached two ways — by the
+    production advance, and by a chain of `setCell` writes — and those
+    two `ExtendedState`s need NOT be equal: `Std.TreeMap` is a
+    balanced search tree, so inserting the same bindings in a
+    different order can yield a structurally different tree
+    representing the same map, and Lean core supplies no extensional
+    equality to bridge them.  Nothing needs to: the root is a function
+    of what `getCellValue` reads, and that is settled by the map
+    lookup lemmas alone.
+
+    Both well-formedness side conditions are real rather than
+    decorative — the depth-0 leaf case of `smtRootListAux` collapses a
+    bucket holding two entries, so a root over indistinguishable
+    entries is not determined by the entries at all. -/
+theorem commitExtendedState_eq_of_cells_agree
+    (es₁ es₂ : ExtendedState)
+    (h_wf₁ : BitsDistinctBelow smtDepth (stateCellEntries es₁))
+    (h_wf₂ : BitsDistinctBelow smtDepth (stateCellEntries es₂))
+    (h : ∀ t : CellTag, getCellValue es₁ t = getCellValue es₂ t) :
+    commitExtendedState es₁ = commitExtendedState es₂ :=
+  smtRootListAux_perm smtDepth _ _
+    (stateCellEntries_perm_of_cells_agree es₁ es₂ h_wf₁ h_wf₂ h) h_wf₁
+
 /-- **The discharge lemma.**  Two states that agree at every cell
     except the one being written have `dropKey`-permuted entry lists
     at that cell's key.
