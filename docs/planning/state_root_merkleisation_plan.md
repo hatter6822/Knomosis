@@ -403,6 +403,62 @@ space:
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"
    understated it: sharing the update is the easy half.
+
+   **Two things the derivation must settle that are design decisions,
+   not proofs.**  Both are pinned as `OBLIGATION:` cases in
+   `faultproof-write-sets` so they are met up front.
+
+   a. **A bulk write set is complete but not VERIFIABLE.**
+      `writeSetComplete_productionApplyBudget` covers both bulk
+      variants, and that is a statement about the honest bundle.  A
+      verifier holding only the pre-root checks each opening — and
+      every opening in a bundle that DROPS a recipient is valid,
+      because the dropped cell is simply not mentioned.  The short
+      bundle folds successfully, to a root for a state where that
+      recipient was never credited; a sequencer that PUBLISHES that
+      root then defends it and wins, on a state the L2 never reached.
+      The obligation test exhibits exactly this: drop the last write,
+      the fold accepts, the root differs.
+
+      Non-bulk variants are immune — their tag lists are functions of
+      `(action, signer)` plus cells the bundle itself proves
+      (`withdraw`'s pending key comes from the proven
+      `.bridgeNextWdId`), so a verifier re-derives the list and
+      rejects a bundle that does not match.  A bulk tag list is the
+      actor set at a resource, and `smtCellKey` is a HASH of the
+      cell's identity, so balance cells at one resource share no key
+      prefix and no subtree argument enumerates them.
+
+      Three ways out, and the choice is a deployment-level one:
+      commit to the per-resource actor set in its own cell (every
+      balance write then also updates it); put the recipient list in
+      the action's own fields (the tag list becomes static, and the
+      L2's admission gate — which holds the state — checks the list is
+      exactly the non-excluded set); or exclude the two bulk laws from
+      any deployment leaning on the fault proof.
+
+   b. **A revert is not a verdict.**  `step_impl` is `if pre then
+      apply_impl else id`, so an action whose precondition fails
+      advances nothing but the nonce and the budget, and `stepPostRoot`
+      lands on that root correctly.  Solidity's `_stepTransfer`
+      REVERTS (`InsufficientBalance`) on the same input.
+
+      Invisible today: `Runtime.processSignedAction` appends an entry
+      only when `AdmissibleWith` holds, and conjunct 5 of that
+      predicate IS the transition's precondition, so no honestly
+      produced log entry has a failing `pre`.  It stops being
+      invisible at the flip, because a dishonest sequencer can bind an
+      inadmissible action into the log-entry chain, and
+      `terminateOnSingleStep` may be reached on the CHALLENGER's turn
+      (the turn alternates through `respondToMidpoint`, and both
+      parties influence the parity).  The responsible party then
+      cannot call at all and loses by timeout.  Any input on which
+      `executeStep` reverts is a weapon against whoever's turn it is.
+
+      The flip owes one of: `executeStep` total over well-formed
+      inputs, returning the pre-root when the precondition fails; or a
+      terminal step either party may call.  The first is the closer
+      mirror of `step_impl` and is what the Lean side already does.
 4. ~~Delete the per-entry SKIP in `test/CrossCheck/StepVM.t.sol` so
    the corpus pins the equality it was written to pin.~~ **DONE**, and
    it was three defects rather than one — see "The cross-stack corpus

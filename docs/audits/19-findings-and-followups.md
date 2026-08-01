@@ -284,6 +284,55 @@ finding; the swap was their precondition, since a post-root is not
 computable from a concatenation hash at all.  §0 of
 `docs/fault_proof_runbook.md` stands until they land.
 
+**Two design decisions the derivation has to settle**, both found by
+reading the write sets against what a verifier actually holds, and
+both pinned as `OBLIGATION:` cases in `faultproof-write-sets` so the
+implementer meets them up front.
+
+1. **A bulk write set is complete but not verifiable.**
+   `writeSetComplete_productionApplyBudget` covers both bulk variants
+   — a statement about the HONEST bundle.  A verifier holding only the
+   pre-root checks each opening, and every opening in a bundle that
+   drops a recipient is valid, because the dropped cell is simply not
+   mentioned.  The short bundle folds successfully, onto a root for a
+   state where that recipient was never credited; a sequencer that
+   publishes that root defends it and wins.  The obligation test
+   exhibits it: drop the last write, the fold accepts, the root
+   differs.
+
+   Non-bulk variants are immune — their tag lists are functions of
+   `(action, signer)` plus cells the bundle itself proves, so a
+   verifier re-derives the list and rejects a mismatched bundle.  A
+   bulk tag list is the actor set at a resource, and `smtCellKey` is a
+   HASH of the cell identity, so balance cells at one resource share
+   no key prefix and no subtree argument enumerates them.
+
+   Three ways out, all deployment-level: commit to the per-resource
+   actor set in its own cell; put the recipient list in the action's
+   fields (the L2's admission gate, which holds the state, checks it
+   is exactly the non-excluded set); or exclude the bulk laws from a
+   deployment leaning on the fault proof.
+
+2. **A revert is not a verdict.**  `step_impl` is `if pre then
+   apply_impl else id`, so a failing precondition advances only the
+   nonce and the budget, and `stepPostRoot` lands on that root.
+   Solidity's `_stepTransfer` REVERTS (`InsufficientBalance`).
+
+   Invisible today, because `Runtime.processSignedAction` appends an
+   entry only when `AdmissibleWith` holds and conjunct 5 of that
+   predicate IS the transition's precondition — no honestly produced
+   log entry has a failing `pre`.  Not invisible after the flip: a
+   dishonest sequencer can bind an inadmissible action into the
+   log-entry chain, and `terminateOnSingleStep` may be reached on the
+   CHALLENGER's turn (the turn alternates through
+   `respondToMidpoint`).  The responsible party then cannot call at
+   all and loses by timeout, so any input on which `executeStep`
+   reverts is a weapon against whoever's turn it is.
+
+   The flip owes one of: `executeStep` total over well-formed inputs,
+   returning the pre-root on a failing precondition; or a terminal
+   step either party may call.
+
 Three obligations for that work were read from source during this
 pass and are pinned as tests (`faultproof-stepvm-coherence`, the
 `OBLIGATION:` cases) rather than left as prose, because each would

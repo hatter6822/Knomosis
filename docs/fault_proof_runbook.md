@@ -83,7 +83,7 @@ and `terminateOnSingleStep` now authenticates the
 `(actionKind, actionFields, signer)` triple it is handed against the
 log-entry chain, which the state-roots-only chain could not do.
 
-**§0 still applies in full**, for two reasons rather than one:
+**§0 still applies in full**, for four reasons rather than one:
 
   1. `executeStep` still returns the bespoke hash.
   2. Even folding proven writes would not be enough on its own.  The
@@ -92,6 +92,18 @@ log-entry chain, which the state-roots-only chain could not do.
      supplies lets them choose the resulting root.  That derivation —
      `productionApplyBudget` re-expressed cell-locally, on both
      stacks — is the largest remaining piece.
+  3. **The two bulk laws are not fault-provable as written.**  A
+     verifier cannot tell a complete recipient set from one missing an
+     entry: the missing cell's opening is simply absent, the short
+     bundle folds, and the resulting root is one where that recipient
+     was never credited.  A deployment leaning on the fault proof
+     should not admit `distributeOthers` / `proportionalDilute` until
+     one of the three fixes in the plan lands.
+  4. **A revert is not a verdict.**  `executeStep` reverts where
+     `step_impl` no-ops, and the terminal step is callable only by
+     whoever's turn it is, so any reverting input costs the
+     responsible party the game by timeout.  Reachable by a sequencer
+     that binds an inadmissible action into the log-entry chain.
 
 The remaining work is `docs/planning/state_root_merkleisation_plan.md`
 §4 step 3.  `docs/audits/19-findings-and-followups.md` ("Open

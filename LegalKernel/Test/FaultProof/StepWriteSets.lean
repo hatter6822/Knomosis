@@ -289,6 +289,105 @@ def tests : List TestCase :=
             "a forged value must not fold to the honest root"
         | none => pure ()   -- rejected outright is also fail-closed
     }
+  , { name := "OBLIGATION: a bulk write set is not verifiable from the root"
+    , body := do
+        -- **The write set is complete; a VERIFIER cannot check that.**
+        --
+        -- `writeSetComplete_productionApplyBudget` says the advance
+        -- moves no cell `writeCellsAt` omits.  That is a statement
+        -- about the honest bundle.  An L1 holding only the pre-root
+        -- and a submitted bundle checks each opening — and every
+        -- opening in a bundle that DROPS a recipient is perfectly
+        -- valid, because the dropped cell is simply not mentioned.
+        --
+        -- So the fold of a short bundle succeeds and lands on a root
+        -- for a state where that recipient was never credited.  A
+        -- sequencer that PUBLISHES that root can then defend it: the
+        -- fold reproduces it exactly, and `terminateOnSingleStep`
+        -- settles in the sequencer's favour on a state the L2 never
+        -- reached.
+        --
+        -- Non-bulk variants are immune: their write sets are
+        -- functions of `(action, signer)` plus cells the bundle
+        -- itself proves (`withdraw`'s key comes from the proven
+        -- `.bridgeNextWdId`), so a verifier re-derives the tag list
+        -- and rejects a bundle that does not match it.  A bulk write
+        -- set is the actor set at a resource, and `smtCellKey` is a
+        -- HASH of the cell's identity — balance cells at one resource
+        -- share no key prefix, so no subtree argument enumerates
+        -- them.
+        --
+        -- What closes it is a design decision, not a proof: commit to
+        -- the per-resource actor set in its own cell, put the
+        -- recipient list in the action's own fields, or exclude the
+        -- bulk laws from a deployment that leans on the fault proof.
+        -- `docs/planning/state_root_merkleisation_plan.md` §4 step 3.
+        let bulk : Authority.Action := .distributeOthers 1 7 30
+        let honest := stepWriteBundle base (sign bulk) 0
+        -- Drop the LAST recipient's write.  Every remaining opening
+        -- is untouched, so the short bundle is chain-coherent.
+        let short := honest.take (honest.length - 1)
+        assert (short.length + 1 == honest.length) "the probe dropped exactly one write"
+        match foldStateCellWrites (commitExtendedState base) short,
+              stepPostRoot base (sign bulk) 0 with
+        | some shortRoot, some honestRoot =>
+          assert (shortRoot.toList != honestRoot.toList)
+            "an incomplete bulk bundle must reach a DIFFERENT root"
+          -- ...and that is the whole problem: the fold ACCEPTED it.
+          -- A verifier with only the pre-root has seen nothing wrong.
+          assert true "the short bundle folded successfully"
+        | none, _ =>
+          throw <| IO.userError
+            "the fold rejected the short bundle — if this ever becomes \
+             true the obligation is discharged and this test should be \
+             rewritten as the positive property"
+        | _, none =>
+          throw <| IO.userError "the honest bundle failed to fold"
+    }
+  , { name := "OBLIGATION: a no-op step must fold to the pre-root, not revert"
+    , body := do
+        -- `step_impl` is `if pre then apply_impl else id`, so an
+        -- action whose precondition fails advances nothing and its
+        -- post-root IS the pre-root.  `stepPostRoot` gets this right:
+        -- every declared cell is written back with its own value.
+        --
+        -- Solidity's `_stepTransfer` REVERTS (`InsufficientBalance`)
+        -- on the same input.  Today that is invisible, because
+        -- `Runtime.processSignedAction` only appends an entry when
+        -- `AdmissibleWith` holds — and conjunct 5 of that predicate
+        -- IS the transition's precondition, so no honestly-produced
+        -- log entry has a failing `pre`.
+        --
+        -- It stops being invisible at the flip.  A DISHONEST
+        -- sequencer can bind an inadmissible action into the
+        -- log-entry chain, and `terminateOnSingleStep` may then be
+        -- reached on the CHALLENGER's turn (the turn alternates
+        -- through `respondToMidpoint`).  A revert is not a verdict:
+        -- the responsible party simply cannot call, and loses by
+        -- timeout.  Any input on which `executeStep` reverts is a
+        -- weapon against whoever's turn it is.
+        --
+        -- So the flip owes one of two things: `executeStep` total
+        -- over well-formed inputs, returning the pre-root when the
+        -- precondition fails; or a terminal step either party may
+        -- call.  Pinned here as the Lean-side expectation the L1 must
+        -- match.
+        let noop : Authority.Action := .transfer 1 7 8 999999999
+        let post := productionApplyBudget base (sign noop) 0
+        -- The base state is untouched: no balance moved.
+        assertEq (expected := (getCellValue base (CellTag.balance 1 7)).toList)
+          (actual := (getCellValue post (CellTag.balance 1 7)).toList)
+          "a failing precondition must not move the sender's balance"
+        -- ...but the nonce and budget still advance, so the post-root
+        -- is NOT simply the pre-root, and the fold must produce it.
+        match stepPostRoot base (sign noop) 0 with
+        | some root =>
+          assertEq (expected := (commitExtendedState post).toList)
+            (actual := root.toList)
+            "the fold must land on the no-op advance's root"
+        | none =>
+          throw <| IO.userError "the fold rejected a no-op step"
+    }
   , { name := "API stability: WriteSetComplete signatures"
     , body := do
         -- No bulk exclusions: the write set is state-keyed, so all

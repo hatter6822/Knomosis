@@ -1202,7 +1202,17 @@ both laws' preconditions, and the real obstacle was the ARITY of
 function of the state, so it belongs in `Action.stateWriteCells`
 alongside `withdraw`'s `nextWdId`-keyed pending cell.  A bulk step
 stays a single `executeStep`, with no sub-step index in the game's
-addressing.  `stepWriteBundle` / `stepPostRoot` are the honest
+addressing.
+
+That is completeness of the HONEST bundle, and for the bulk pair it is
+not the same as verifiability: an L1 holding only the pre-root cannot
+tell a complete recipient set from one missing an entry, because the
+missing cell's opening is simply absent and `smtCellKey` hashes the
+cell identity so no subtree argument enumerates a resource's actors.
+Non-bulk variants re-derive their tag list and are immune.  Pinned as
+an `OBLIGATION:` case in `faultproof-write-sets`; the three ways out
+are in the plan's §4 step 3, and all three are deployment-level
+decisions rather than proofs.  `stepWriteBundle` / `stepPostRoot` are the honest
 sequencer's side, and
 `stepPostRoot_eq_commit_productionApplyBudget` says the fold of THAT
 bundle lands on the root the sequencer published.  On the L1 side
