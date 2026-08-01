@@ -800,18 +800,30 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 190 | ~158 | `lake test` |
 | Rust | ~2 350 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~894 passed | 59 forge suites | `cd solidity && forge test` |
+| Solidity | ~925 passed | 61 forge suites | `cd solidity && forge test` |
 
-A bare `forge test` additionally reports ~12 **skipped** cross-stack
-entries.  Those are the Lean<->EVM byte-equivalence checks under
-`solidity/test/CrossCheck/`, which gate themselves on the fixture
-header's `isKeccak256Linked` flag; the committed fixtures carry the
-FNV-1a-64 fallback, so they skip unless the fixtures are regenerated
-against a keccak-linked build.  `./scripts/verify_keccak_crossstack.sh`
-(the `ci-keccak-crossstack.yml` lane) does exactly that and runs them
-for real (906 passed / 0 skipped, verified in this configuration) — a
-bare `forge test` reporting 0 failures does NOT mean the
-byte-equivalence corpus ran.
+`forge test` runs **925 passed / 0 failed / 0 skipped** — the
+Lean<->EVM byte-equivalence corpus included.  It did not always: the
+`solidity/test/CrossCheck/` suites gated themselves on the fixture
+header's `isKeccak256Linked` flag and the committed fixtures carried
+the FNV-1a-64 fallback, so a bare `forge test` reported green having
+compared nothing.  Two changes closed that, and both are enforced
+rather than conventional:
+
+  * the hash-dependent corpora are keccak artifacts by construction —
+    `writeHashDependentFixture` /`writeHashDependentGoldens`
+    (`LegalKernel/Test/Bridge/CrossCheck/Framework.lean`, `Goldens.lean`)
+    refuse to author one on a fallback-hash build, and the consuming
+    suites call `_requireKeccakLinked` instead of skipping;
+  * `gas_limit` is set in `[profile.default]`
+    (`solidity/foundry.toml`).  `StepVM.t.sol`'s 278-entry replay needs
+    well past foundry's ~1.07e9 default and failed `EvmError: OutOfGas`
+    under it, so only `verify_keccak_crossstack.sh` — which passes
+    `--gas-limit` — could ever run it.
+
+`./scripts/verify_keccak_crossstack.sh` (the
+`ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
+reports the same 925 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 

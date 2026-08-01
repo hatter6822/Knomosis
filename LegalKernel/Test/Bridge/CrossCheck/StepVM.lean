@@ -184,15 +184,10 @@ def buildTransferHappy
   -- * self: newSender = newReceiver = preBalance (no debit).
   -- * non-self: newSender = preBalance - amount;
   --             newReceiver = receiverPreBalance + amount.
-  let senderPreBal := LegalKernel.getBalance es.base r sender
-  let receiverPreBal := LegalKernel.getBalance es.base r receiver
-  let newSenderBal : Nat :=
-    if isSelf then senderPreBal else senderPreBal - amount
-  let newReceiverBal : Nat :=
-    if isSelf then senderPreBal else receiverPreBal + amount
   let stepVMCommit :=
-    stepCommitTransfer preCommit r.toNat sender.toNat receiver.toNat
-      sender.toNat newSenderBal newReceiverBal
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action sender
@@ -220,9 +215,10 @@ def buildMintHappy
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let newToBal := amount
   let stepVMCommit :=
-    stepCommitMint preCommit r.toNat to.toNat signer.toNat newToBal
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -251,10 +247,10 @@ def buildBurnHappy
   let es := stateWithBalances r [(fromActor, fromInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let fromPreBal := LegalKernel.getBalance es.base r fromActor
-  let newFromBal : Nat := fromPreBal - amount
   let stepVMCommit :=
-    stepCommitBurn preCommit r.toNat fromActor.toNat fromActor.toNat newFromBal
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action fromActor
@@ -281,7 +277,10 @@ def buildFreezeResourceHappy
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let stepVMCommit := stepCommitFreezeResource preCommit r.toNat signer.toNat
+  let stepVMCommit :=
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -309,7 +308,9 @@ def buildReplaceKeyHappy
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
   let stepVMCommit :=
-    stepCommitReplaceKey preCommit actor.toNat signer.toNat newKey
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -338,10 +339,10 @@ def buildRewardHappy
   let es := stateWithBalances r [(to, toInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let toPreBal := LegalKernel.getBalance es.base r to
-  let newToBal := toPreBal + amount
   let stepVMCommit :=
-    stepCommitReward preCommit r.toNat to.toNat signer.toNat newToBal
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -399,20 +400,9 @@ def buildDistributeOthersHappy
   let bundleProofs := observerBundle.proofs ++ recipientProofs
   -- Compute the expected step-VM commit by walking the bundle in
   -- ITERATION order, mirroring Solidity byte-for-byte.
-  let head :=
-    stepCommitDistributeOthersHead preCommit r.toNat excluded.toNat
-      signer.toNat amount
-  let stepVMCommit := bundleProofs.foldl
-    (fun acc p =>
-      match p.cellTag with
-      | .balance pr pa =>
-        if decide (pr = r) ∧ decide (pa ≠ excluded) then
-          let preBal := LegalKernel.getBalance es.base r pa
-          let newBal := preBal + amount
-          stepCommitDistributeOthersFold acc pa.toNat newBal
-        else acc
-      | _ => acc)
-    head
+  let stepVMCommit :=
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat { proofs := bundleProofs }
   { fixtureId := s!"distributeOthers-happy-{idx}",
     actionVariant := "distributeOthers",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -437,7 +427,9 @@ def buildRegisterIdentityHappy
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
   let stepVMCommit :=
-    stepCommitRegisterIdentity preCommit actor.toNat signer.toNat pk
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -468,11 +460,10 @@ def buildDepositHappy
   let es := stateWithBalances r [(recipient, recipientInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let recipientPreBal := LegalKernel.getBalance es.base r recipient
-  let newRecipientBal := recipientPreBal + amount
   let stepVMCommit :=
-    stepCommitDeposit preCommit r.toNat recipient.toNat signer.toNat
-      newRecipientBal depositId
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -501,12 +492,10 @@ def buildWithdrawHappy
   let es := stateWithBalances r [(sender, senderInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let senderPreBal := LegalKernel.getBalance es.base r sender
-  let newSenderBal : Nat := senderPreBal - amount
-  let recipientBytes := Bridge.EthAddress.toBytes recipientL1
   let stepVMCommit :=
-    stepCommitWithdraw preCommit r.toNat sender.toNat sender.toNat
-      newSenderBal recipientBytes
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action sender
@@ -564,19 +553,10 @@ def buildDepositWithFeeHappy
   --   recipient += userAmount; then poolActor += poolAmount.
   -- Self-credit case: both writes target the same cell, so the
   -- new balance is `pre + userAmount + poolAmount`.
-  let recipientPreBal := LegalKernel.getBalance es.base r recipient
-  let newRecipientBal : Nat :=
-    if isSelf then recipientPreBal + userAmount + poolAmount
-    else recipientPreBal + userAmount
-  let newPoolBal : Nat :=
-    if isSelf then recipientPreBal + userAmount + poolAmount
-    else
-      let poolPreBal := LegalKernel.getBalance es.base r poolActor
-      poolPreBal + poolAmount
   let stepVMCommit :=
-    stepCommitDepositWithFee preCommit r.toNat recipient.toNat
-      poolActor.toNat signer.toNat
-      newRecipientBal newPoolBal depositId
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -626,13 +606,10 @@ def buildTopUpActionBudgetHappy
   let postCommit := recomputeCommitment es st
   -- Per Laws.topUpActionBudget.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
-  let signerPreBal := LegalKernel.getBalance es.base gasResource signer
-  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
-  let newSignerBal : Nat := signerPreBal - gasAmount
-  let newPoolBal : Nat := poolPreBal + gasAmount
   let stepVMCommit :=
-    stepCommitTopUpActionBudget preCommit gasResource.toNat
-      signer.toNat poolActor.toNat newSignerBal newPoolBal
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -687,13 +664,10 @@ def buildTopUpActionBudgetForHappy
   let postCommit := recomputeCommitment es st
   -- Per Laws.topUpActionBudgetFor.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
-  let signerPreBal := LegalKernel.getBalance es.base gasResource signer
-  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
-  let newSignerBal : Nat := signerPreBal - gasAmount
-  let newPoolBal : Nat := poolPreBal + gasAmount
   let stepVMCommit :=
-    stepCommitTopUpActionBudgetFor preCommit gasResource.toNat
-      signer.toNat poolActor.toNat newSignerBal newPoolBal
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -730,14 +704,10 @@ def buildClaimBudgetRefundHappy
   let postCommit := recomputeCommitment es st
   -- Per Laws.claimBudgetRefund.apply_impl: poolActor -= refundAmount;
   -- claimant (signer) += refundAmount.
-  let refundAmount : Nat := budgetUnits * weiPerBudgetUnit
-  let claimantPreBal := LegalKernel.getBalance es.base gasResource signer
-  let poolPreBal := LegalKernel.getBalance es.base gasResource poolActor
-  let newSignerBal : Nat := claimantPreBal + refundAmount
-  let newPoolBal : Nat := poolPreBal - refundAmount
   let stepVMCommit :=
-    stepCommitClaimBudgetRefund preCommit gasResource.toNat
-      signer.toNat poolActor.toNat newSignerBal newPoolBal
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -768,15 +738,16 @@ state for any input. -/
     Lean-side step-commit function. -/
 private def buildOpaqueHappy
     (variant : String) (idx : Nat) (action : Action)
-    (signer : ActorId) (nonce : Nonce) (sig : ByteArray)
-    (stepCommitFn : ByteArray → ByteArray → Nat → ByteArray) :
+    (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
     StepVMFixture :=
   let st : SignedAction := { action, signer, nonce, sig }
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let actionFields := actionFieldsForL1 action
-  let stepVMCommit := stepCommitFn preCommit actionFields signer.toNat
+  let stepVMCommit :=
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -797,21 +768,21 @@ def buildDisputeWithdrawHappy
     (idx : Nat) (targetIdx : Disputes.LogIndex) (signer : ActorId)
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "disputeWithdraw" idx (.disputeWithdraw targetIdx)
-    signer nonce sig stepCommitDisputeWithdraw
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.rollback`. -/
 def buildRollbackHappy
     (idx : Nat) (targetIdx : Disputes.LogIndex) (signer : ActorId)
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "rollback" idx (.rollback targetIdx)
-    signer nonce sig stepCommitRollback
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.revokeLocalPolicy`. -/
 def buildRevokeLocalPolicyHappy
     (idx : Nat) (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
     StepVMFixture :=
   buildOpaqueHappy "revokeLocalPolicy" idx .revokeLocalPolicy
-    signer nonce sig stepCommitRevokeLocalPolicy
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.faultProofChallenge`. -/
 def buildFaultProofChallengeHappy
@@ -820,7 +791,7 @@ def buildFaultProofChallengeHappy
     (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "faultProofChallenge" idx
     (.faultProofChallenge bindingHash startIdx endIdx challengerCommit)
-    signer nonce sig stepCommitFaultProofChallenge
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.faultProofResolution`. -/
 def buildFaultProofResolutionHappy
@@ -829,7 +800,7 @@ def buildFaultProofResolutionHappy
     (sig : ByteArray) : StepVMFixture :=
   buildOpaqueHappy "faultProofResolution" idx
     (.faultProofResolution bindingHash gameId winner revertFromIdx)
-    signer nonce sig stepCommitFaultProofResolution
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.proportionalDilute`.
 
@@ -866,32 +837,10 @@ def buildProportionalDiluteHappy
   let bundleProofs := observerBundle.proofs ++ recipientProofs
   -- Pass 1: compute sumOthers by walking the bundle in iteration
   -- order, applying Solidity's exact filter.
-  let sumOthers := bundleProofs.foldl
-    (fun (acc : Nat) p =>
-      match p.cellTag with
-      | .balance pr pa =>
-        if decide (pr = r) ∧ decide (pa ≠ excluded) then
-          acc + LegalKernel.getBalance es.base r pa
-        else acc
-      | _ => acc)
-    0
-  let head :=
-    stepCommitProportionalDiluteHead preCommit r.toNat excluded.toNat
-      signer.toNat totalReward sumOthers
   -- Pass 2: per-recipient credit + fold.
-  let stepVMCommit := bundleProofs.foldl
-    (fun acc p =>
-      match p.cellTag with
-      | .balance pr pa =>
-        if decide (pr = r) ∧ decide (pa ≠ excluded) then
-          let preBal := LegalKernel.getBalance es.base r pa
-          let credit := if sumOthers = 0 then 0
-                        else totalReward * preBal / sumOthers
-          let newBal := preBal + credit
-          stepCommitProportionalDiluteFold acc pa.toNat newBal
-        else acc
-      | _ => acc)
-    head
+  let stepVMCommit :=
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat { proofs := bundleProofs }
   { fixtureId := s!"proportionalDilute-happy-{idx}",
     actionVariant := "proportionalDilute",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
@@ -926,7 +875,7 @@ def buildDisputeHappy
     StepVMFixture :=
   buildOpaqueHappy "dispute" idx
     (.dispute (minimalDispute signer nonce))
-    signer nonce sig stepCommitDispute
+    signer nonce sig
 
 /-- Build a happy-path fixture for `Action.verdict`.  Uses a
     minimal canonical empty-quorum verdict. -/
@@ -939,7 +888,7 @@ def buildVerdictHappy
     rationale := ByteArray.empty,
     signatures := []
   }
-  buildOpaqueHappy "verdict" idx (.verdict v) signer nonce sig stepCommitVerdict
+  buildOpaqueHappy "verdict" idx (.verdict v) signer nonce sig
 
 /-- Build a happy-path fixture for `Action.declareLocalPolicy`. -/
 def buildDeclareLocalPolicyHappy
@@ -947,7 +896,7 @@ def buildDeclareLocalPolicyHappy
     StepVMFixture :=
   let p : LocalPolicy := LocalPolicy.empty
   buildOpaqueHappy "declareLocalPolicy" idx (.declareLocalPolicy p)
-    signer nonce sig stepCommitDeclareLocalPolicy
+    signer nonce sig
 
 /-! ## Adversarial fixtures (generic) -/
 
@@ -1275,13 +1224,10 @@ def buildAmmSwapHappy
                 LegalKernel.setBalance es.base toResource ammReserveActor toInitBal })
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let fromBalance := LegalKernel.getBalance es.base fromResource ammReserveActor
-  let toBalance := LegalKernel.getBalance es.base toResource ammReserveActor
-  let newFromBalance : Nat := fromBalance + amountIn
-  let newToBalance : Nat := toBalance - amountOut
   let stepVMCommit :=
-    stepCommitAmmSwap preCommit fromResource.toNat toResource.toNat
-      ammReserveActor.toNat signer.toNat newFromBalance newToBalance
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -1336,13 +1282,10 @@ def buildReclaimAmmReservesHappy
               [(reserveActor, amount), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st
-  let reserveBalance := LegalKernel.getBalance es.base r reserveActor
-  let poolBalance := LegalKernel.getBalance es.base r poolActor
-  let newReserveBalance : Nat := reserveBalance - amount
-  let newPoolBalance : Nat := poolBalance + amount
   let stepVMCommit :=
-    stepCommitReclaimAmmReserves preCommit r.toNat reserveActor.toNat
-      poolActor.toNat signer.toNat newReserveBalance newPoolBalance
+    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
+      st.signer.toNat
+      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer

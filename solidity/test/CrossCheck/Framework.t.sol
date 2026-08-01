@@ -50,6 +50,36 @@ abstract contract CrossCheckFramework is Test {
         vm.skip(true);
     }
 
+    /// @notice Assert a fixture was generated with the production
+    ///         keccak256 binding linked.
+    ///
+    /// @dev    Every hash-dependent corpus exists to pin Lean's bytes
+    ///         against the EVM's, which is only meaningful when both
+    ///         compute the same hash.  These suites used to SKIP when
+    ///         the flag was false, and the committed corpora carried
+    ///         `false` — so a bare `forge test` reported green having
+    ///         compared nothing.  That is coverage which is not
+    ///         coverage, and it is exactly how the fault-proof
+    ///         commit-recipe split survived a passing suite.
+    ///
+    ///         The corpora are now keccak artifacts by construction:
+    ///         `writeHashDependentFixture` in
+    ///         `LegalKernel/Test/Bridge/CrossCheck/Framework.lean`
+    ///         refuses to author one on a fallback-hash build.  This
+    ///         assertion is the consuming half of that invariant —
+    ///         a fallback corpus must fail loudly here rather than
+    ///         silently disable its own suite.
+    ///
+    /// @param raw      the fixture's raw JSON.
+    /// @param jsonPath the flag's path, e.g. `".header.isKeccak256Linked"`.
+    function _requireKeccakLinked(string memory raw, string memory jsonPath) internal pure {
+        require(
+            vm.parseJsonBool(raw, jsonPath),
+            "cross-stack fixture was generated on a fallback-hash build; "
+            "regenerate via ./scripts/verify_keccak_crossstack.sh"
+        );
+    }
+
     /// @notice Convert a hex-string (`"0x..."`) to its raw bytes.
     ///         Wraps `vm.parseBytes`.
     function hexToBytes(string memory hexStr) internal pure returns (bytes memory) {

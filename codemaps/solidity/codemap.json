@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d4513b963bd94b00ab1cd009226ea43920f2a2b7925c8f3b71a1372dba90870d"
+    "source_digest": "7779e0adcdf88e4cd0e75c1637a810b07ee5797ef99175f3ec0b59262f29d51f"
   },
   "summary": {
     "module_count": 90,
-    "declaration_count": 1984
+    "declaration_count": 1985
   },
   "modules": [
     {
@@ -10869,19 +10869,21 @@
         {
           "kind": "contract",
           "name": "CellKeyCrossCheck",
-          "line": 31,
-          "called": []
+          "line": 32,
+          "called": [
+            "CrossCheckFramework"
+          ]
         },
         {
           "kind": "function",
           "name": "_fixture",
-          "line": 34,
+          "line": 35,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_preimage_layout_matches_lean",
-          "line": 41,
+          "line": 42,
           "called": [
             "_fixture",
             "_parseDecimalString"
@@ -10890,22 +10892,23 @@
         {
           "kind": "function",
           "name": "test_derived_key_matches_lean",
-          "line": 79,
+          "line": 80,
           "called": [
             "_fixture",
-            "_parseDecimalString"
+            "_parseDecimalString",
+            "_requireKeccakLinked"
           ]
         },
         {
           "kind": "function",
           "name": "test_distinct_cells_derive_distinct_keys",
-          "line": 108,
+          "line": 105,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseDecimalString",
-          "line": 134,
+          "line": 131,
           "called": []
         }
       ]
@@ -10972,6 +10975,7 @@
           "name": "test_perEntry_receiptHash_matches",
           "line": 169,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -10980,7 +10984,7 @@
         {
           "kind": "function",
           "name": "test_clamp_corners",
-          "line": 222,
+          "line": 219,
           "called": [
             "_assertClampCorner",
             "fixtureExists",
@@ -10990,13 +10994,13 @@
         {
           "kind": "function",
           "name": "_assertClampCorner",
-          "line": 230,
+          "line": 227,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_zeroFee_corner",
-          "line": 249,
+          "line": 246,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11005,7 +11009,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_receiptTail_layout",
-          "line": 273,
+          "line": 270,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11014,7 +11018,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_liveContract_split_matches",
-          "line": 311,
+          "line": 308,
           "called": [
             "KnomosisBridge",
             "_decodeDepositWithFee",
@@ -11028,7 +11032,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 370,
+          "line": 367,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -11041,7 +11045,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 407,
+          "line": 404,
           "called": [
             "receiptHash"
           ]
@@ -11122,6 +11126,7 @@
           "name": "test_perEntry_receiptHash_matches",
           "line": 199,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -11130,7 +11135,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_receiptTail_layout",
-          "line": 249,
+          "line": 246,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11139,7 +11144,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_liveContract_split_matches",
-          "line": 284,
+          "line": 281,
           "called": [
             "KnomosisBridge",
             "MockBold",
@@ -11156,7 +11161,7 @@
         {
           "kind": "function",
           "name": "test_clamp_corners",
-          "line": 341,
+          "line": 338,
           "called": [
             "_assertClampCorner",
             "fixtureExists",
@@ -11166,13 +11171,13 @@
         {
           "kind": "function",
           "name": "_assertClampCorner",
-          "line": 349,
+          "line": 346,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_zeroFee_corner",
-          "line": 368,
+          "line": 365,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11181,7 +11186,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 392,
+          "line": 389,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -11194,7 +11199,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 429,
+          "line": 426,
           "called": [
             "receiptHash"
           ]
@@ -11228,6 +11233,7 @@
           "name": "test_perEntry_receiptHash_matches",
           "line": 37,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -11236,7 +11242,7 @@
         {
           "kind": "function",
           "name": "test_replay_resistance_distinct",
-          "line": 98,
+          "line": 94,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11245,7 +11251,7 @@
         {
           "kind": "function",
           "name": "test_deployment_replay_distinct",
-          "line": 120,
+          "line": 116,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11307,6 +11313,7 @@
           "name": "test_perEntry_outcome_assertion",
           "line": 121,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -11402,7 +11409,7 @@
     {
       "module": "Framework.t",
       "path": "solidity/test/CrossCheck/Framework.t.sol",
-      "declaration_count": 11,
+      "declaration_count": 12,
       "declarations": [
         {
           "kind": "abstract_contract",
@@ -11444,14 +11451,20 @@
         },
         {
           "kind": "function",
+          "name": "_requireKeccakLinked",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "hexToBytes",
-          "line": 54,
+          "line": 84,
           "called": []
         },
         {
           "kind": "contract",
           "name": "FrameworkSmokeTest",
-          "line": 63,
+          "line": 93,
           "called": [
             "CrossCheckFramework"
           ]
@@ -11459,19 +11472,19 @@
         {
           "kind": "function",
           "name": "test_emptyArrayFixtureParses",
-          "line": 71,
+          "line": 101,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_fixturePathFormat",
-          "line": 77,
+          "line": 107,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_fixtureExistsFalseOnAbsent",
-          "line": 88,
+          "line": 118,
           "called": [
             "fixtureExists"
           ]
@@ -11479,7 +11492,7 @@
         {
           "kind": "function",
           "name": "test_hexToBytesDecodesLiteral",
-          "line": 93,
+          "line": 123,
           "called": [
             "hexToBytes"
           ]
@@ -11576,6 +11589,7 @@
           "name": "test_perEntry_keccak256_matches",
           "line": 54,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -11584,7 +11598,7 @@
         {
           "kind": "function",
           "name": "test_kat_labels_at_known_indices",
-          "line": 82,
+          "line": 78,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11619,6 +11633,7 @@
           "name": "test_perEntry_digest_matches",
           "line": 66,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -11627,7 +11642,7 @@
         {
           "kind": "function",
           "name": "test_typeString_matches_solidity_constant",
-          "line": 146,
+          "line": 142,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11636,7 +11651,7 @@
         {
           "kind": "function",
           "name": "test_domainTypeString_matches_solidity_constant",
-          "line": 165,
+          "line": 161,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11645,7 +11660,7 @@
         {
           "kind": "function",
           "name": "test_cross_replay_distinct",
-          "line": 182,
+          "line": 178,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11654,7 +11669,7 @@
         {
           "kind": "function",
           "name": "test_audit3_direction_coverage",
-          "line": 202,
+          "line": 198,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11767,6 +11782,7 @@
           "name": "test_per_entry_verifyCellProof_matches_shouldVerify",
           "line": 213,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "_verify",
             "fixtureExists",
@@ -11776,8 +11792,9 @@
         {
           "kind": "function",
           "name": "test_per_honest_entry_recomputed_root_byte_matches",
-          "line": 248,
+          "line": 244,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -11786,7 +11803,7 @@
         {
           "kind": "function",
           "name": "test_entry_zero_is_lowest_singleton",
-          "line": 280,
+          "line": 272,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11795,7 +11812,7 @@
         {
           "kind": "function",
           "name": "test_entry_50_is_first_adversarial_value_subst",
-          "line": 291,
+          "line": 283,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11804,7 +11821,7 @@
         {
           "kind": "function",
           "name": "test_per_entry_tamper_string_in_valid_set",
-          "line": 309,
+          "line": 301,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11813,7 +11830,7 @@
         {
           "kind": "function",
           "name": "test_per_entry_category_consistent_with_tamper",
-          "line": 342,
+          "line": 334,
           "called": [
             "_containsSubstring",
             "fixtureExists",
@@ -11823,7 +11840,7 @@
         {
           "kind": "function",
           "name": "_containsSubstring",
-          "line": 376,
+          "line": 368,
           "called": []
         }
       ]
@@ -11836,7 +11853,7 @@
         {
           "kind": "contract",
           "name": "StepVMCrossCheck",
-          "line": 43,
+          "line": 68,
           "called": [
             "CrossCheckFramework"
           ]
@@ -11844,7 +11861,7 @@
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
-          "line": 49,
+          "line": 74,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11853,7 +11870,7 @@
         {
           "kind": "function",
           "name": "test_perVariant_counts",
-          "line": 70,
+          "line": 95,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11862,7 +11879,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
-          "line": 113,
+          "line": 138,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11872,7 +11889,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
-          "line": 135,
+          "line": 160,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11882,7 +11899,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
-          "line": 165,
+          "line": 190,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11892,7 +11909,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_stepVMCommit_present_and_well_formed",
-          "line": 207,
+          "line": 232,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11902,7 +11919,7 @@
         {
           "kind": "function",
           "name": "_executeStepFromFixture",
-          "line": 261,
+          "line": 286,
           "called": [
             "_parseCellProofs"
           ]
@@ -11910,7 +11927,7 @@
         {
           "kind": "function",
           "name": "_checkEntryAtIndex",
-          "line": 280,
+          "line": 305,
           "called": [
             "_executeStepFromFixture"
           ]
@@ -11918,9 +11935,10 @@
         {
           "kind": "function",
           "name": "test_perEntry_byte_equivalence_all_happy",
-          "line": 295,
+          "line": 320,
           "called": [
             "_checkEntryAtIndex",
+            "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -11929,13 +11947,13 @@
         {
           "kind": "function",
           "name": "_assertWitnessBinding",
-          "line": 350,
+          "line": 371,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 364,
+          "line": 385,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -11946,7 +11964,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 392,
+          "line": 413,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11956,7 +11974,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 417,
+          "line": 438,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11966,13 +11984,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 453,
+          "line": 474,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 468,
+          "line": 489,
           "called": [
             "_parseCellProof"
           ]
@@ -11980,7 +11998,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 501,
+          "line": 522,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11990,7 +12008,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 548,
+          "line": 569,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12001,7 +12019,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 573,
+          "line": 594,
           "called": [
             "KnomosisStepVM"
           ]
@@ -12041,6 +12059,7 @@
           "name": "test_perEntry_verifyProof",
           "line": 49,
           "called": [
+            "_requireKeccakLinked",
             "_skipWithReason",
             "_verify",
             "fixtureExists",
@@ -12050,7 +12069,7 @@
         {
           "kind": "function",
           "name": "test_all_proofs_have_64_siblings",
-          "line": 85,
+          "line": 81,
           "called": [
             "fixtureExists",
             "readFixture"

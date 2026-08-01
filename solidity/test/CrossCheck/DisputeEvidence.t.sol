@@ -125,11 +125,7 @@ contract DisputeEvidenceCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".header.isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("keccak256 fallback; per-entry verifier cross-check skipped");
-            return;
-        }
+        _requireKeccakLinked(raw, ".header.isKeccak256Linked");
         // With the production binding linked, this test would deploy
         // `KnomosisDisputeVerifier` + mock peers and per-entry call the
         // appropriate claim-verifier with the fixture inputs, asserting

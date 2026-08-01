@@ -23,15 +23,40 @@ import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 ///             exactly.  Lean-side mirror at
 ///             `LegalKernel.FaultProof.SolidityStepVMCommit`.
 ///
-///         Under `isKeccak256Linked = true`, the Lean-side
-///         `expectedStepVMCommitHex` byte-equals
-///         `KnomosisStepVM.executeStep`'s output on the same inputs;
-///         this is the cross-stack byte-equivalence claim verified
-///         in `test_perEntry_stepVMCommit_present_and_well_formed`
-///         below.  Without the binding (FNV-1a-64 fallback), Lean
-///         emits 8-byte FNV outputs while Solidity emits 32-byte
-///         keccak256 outputs — outputs cannot match by construction,
-///         and the byte-equivalence test correctly skips.
+///         The Lean-side `expectedStepVMCommitHex` byte-equals
+///         `KnomosisStepVM.executeStep`'s output on the same inputs.
+///         That claim is verified by
+///         `test_perEntry_byte_equivalence_all_happy` — NOT by
+///         `test_perEntry_stepVMCommit_present_and_well_formed`,
+///         which only checks the hex string's shape.  An earlier
+///         version of this header credited the shape check with the
+///         equivalence claim, which is how the corpus read as
+///         stronger than it was.
+///
+///         Two further corrections to what this corpus used to be
+///         worth, both closed:
+///
+///           * `expectedStepVMCommitHex` is now produced by Lean's
+///             `stepVMHash` — the production dispatcher — rather than
+///             by per-variant re-derivation in the fixture builder.
+///             Before that, an offset bug in a `stepVMHash` arm would
+///             not have been caught: the fixture carried the test's
+///             own arithmetic, so the corpus compared a test
+///             reimplementation against Solidity rather than Lean
+///             against Solidity.
+///           * The fixture is a keccak artifact by construction (the
+///             Lean writer refuses to author one on a fallback-hash
+///             build), so this suite ASSERTS the binding rather than
+///             skipping on it.  It previously skipped, and the
+///             committed corpus carried `false`, so a bare
+///             `forge test` compared nothing at all.
+///
+///         **Still outstanding.**  Both sides compute the same
+///         *bespoke* recipe, which lives outside state-root space.
+///         Agreement here does not yet mean either side equals a
+///         published `commitExtendedState`, which is the property the
+///         bisection game actually needs — see
+///         `docs/planning/state_root_merkleisation_plan.md` §4.
 ///
 ///         **Active checks** (independent of binding status):
 ///           * Fixture file exists + header shape.
@@ -299,11 +324,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        bool linked = vm.parseJsonBool(raw, ".isKeccak256Linked");
-        if (!linked) {
-            _skipWithReason("byte-equivalence requires keccak256 binding");
-            return;
-        }
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".count");
         uint256 happyChecked = 0;
         for (uint256 i = 0; i < n; i++) {

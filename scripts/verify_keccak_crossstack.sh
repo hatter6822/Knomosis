@@ -99,9 +99,16 @@ fi
 log "staticlib exports the three knomosis_hash_* Lean-ABI symbols."
 
 # ------------------------------------------------------------------
-# Restore the regenerated corpora on exit so the committed tree stays on
-# the FNV default.  (The keccak run overwrites both the cross-stack
-# fixtures and the hash-bound goldens.)
+# Restore the tracked corpora on exit.
+#
+# This used to exist because the committed corpora were the FNV default
+# and this run overwrote them.  That is no longer the policy: the
+# hash-dependent fixtures and goldens are keccak artifacts by
+# construction (the Lean writer refuses to author one on a fallback-hash
+# build), so the regeneration below reproduces exactly what is already
+# committed and this restore is a no-op diff.  It stays as a guard --
+# it costs nothing and keeps an interrupted or seed-overridden run from
+# leaving the tree dirty.
 # ------------------------------------------------------------------
 restore_corpora() {
     git checkout -- solidity/test/CrossCheck/fixtures solidity/test/goldens 2>/dev/null || true

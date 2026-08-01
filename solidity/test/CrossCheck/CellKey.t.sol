@@ -6,6 +6,7 @@ pragma solidity 0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
+import {CrossCheckFramework} from "./Framework.t.sol";
 
 /// @title CellKeyCrossCheck
 /// @notice Pins `StepVMMerkle.deriveCellSmtKey` against the Lean
@@ -29,7 +30,7 @@ import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
 ///             only when the fixture was generated against a
 ///             keccak-linked build — the same gate the other
 ///             cross-stack suites use.
-contract CellKeyCrossCheck is Test {
+contract CellKeyCrossCheck is CrossCheckFramework {
     string internal constant FIXTURE = "test/CrossCheck/fixtures/cell_key.json";
 
     function _fixture() internal view returns (string memory) {
@@ -79,11 +80,7 @@ contract CellKeyCrossCheck is Test {
     /// meaningless rather than informative.
     function test_derived_key_matches_lean() public view {
         string memory json = _fixture();
-        if (!vm.parseJsonBool(json, ".isKeccak256Linked")) {
-            // Deliberately not `vm.skip`: this is a view function and
-            // the pre-image test above still constrains the layout.
-            return;
-        }
+        _requireKeccakLinked(json, ".isKeccak256Linked");
         uint256 count = vm.parseJsonUint(json, ".count");
         for (uint256 i = 0; i < count; ++i) {
             string memory base = string.concat(".entries[", vm.toString(i), "]");
