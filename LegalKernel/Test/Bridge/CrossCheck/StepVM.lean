@@ -1569,6 +1569,78 @@ def cbeEncoderGoldens : List Test.Bridge.CrossCheck.Json :=
          , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes
              (ByteArray.mk (Encoding.Encodable.encode (T := ByteArray) bs).toArray))) ])
 
+/-! ### Uniform-cell derivation goldens
+
+The two cells EVERY action writes, derived from proven pre-values —
+what `solidity/src/lib/StepWrites.sol` must reproduce.  They are the
+cells `stepVMHash` is silent about (it reads and emits balance cells
+only), so they are also the ones its output would be wrong about for
+every action the moment it is compared against a state root.
+
+The grant triple is emitted rather than re-derived on the Solidity
+side: `budgetGrant`'s recipient differs per variant — the deposit's
+recipient, the SIGNER, or a named recipient — so a mirror that assumed
+"top up the signer" would agree on twenty-two variants and diverge on
+two.  Emitting it makes the disagreement visible in the corpus instead
+of in a game.
+-/
+
+/-- The `(recipient, amount)` an action grants, and the extra units a
+    refund claim consumes.  Mirrors `budgetGrant`'s per-variant arms
+    and `refundConsumeExtra`. -/
+private def grantTripleOf (action : Action) (signer : ActorId) :
+    ActorId × Nat × Nat :=
+  match action with
+  | .depositWithFee _ recipient _ _ _ g _ => (recipient, g, 0)
+  | .topUpActionBudget _ _ inc _          => (signer, inc, 0)
+  | .topUpActionBudgetFor recipient _ _ inc _ => (recipient, inc, 0)
+  | .claimBudgetRefund _ budgetUnits _ _  => (signer, 0, budgetUnits)
+  | _                                     => (signer, 0, 0)
+
+/-- Per-entry goldens for the nonce and epoch-budget derivations, over
+    the fixture base state — the pre-values, the grant triple, and the
+    derived post-values Lean's `VerifierWrites` produces. -/
+def uniformWriteGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es := fixtureBase
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let h256 := fun (v : Nat) => hx (uint256BE v)
+  let probes : List (String × Action) :=
+    [ ("transfer",            .transfer 1 signer 8 5)
+    , ("mint",                .mint 1 8 5)
+    , ("withdraw",            .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
+    , ("depositWithFee",      .depositWithFee 1 8 9 5 1 3 3)
+    , ("topUpActionBudget",   .topUpActionBudget 1 5 2 9)
+    , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 5 2 9)
+    , ("claimBudgetRefund",   .claimBudgetRefund 1 2 3 9) ]
+  probes.flatMap (fun (name, action) =>
+    let st : SignedAction :=
+      { action, signer, nonce := 0, sig := ByteArray.empty }
+    let (grantRecipient, grantAmount, refundExtra) := grantTripleOf action signer
+    -- The signer's own cell and, where they differ, the grant
+    -- recipient's: the branch that credits a recipient on a step the
+    -- signer could afford is only exercised when the two are distinct.
+    let targets : List ActorId :=
+      if grantRecipient = signer then [signer] else [signer, grantRecipient]
+    targets.map (fun target =>
+      .obj [ ("variant",        .str name)
+           , ("signer",         .str (h256 signer.toNat))
+           , ("target",         .str (h256 target.toNat))
+           , ("grantRecipient", .str (h256 grantRecipient.toNat))
+           , ("grantAmount",    .str (h256 grantAmount))
+           , ("refundExtra",    .str (h256 refundExtra))
+           , ("noncePreHex",    .str (hx (getCellValue es (.nonce signer))))
+           , ("noncePostHex",   .str (hx (getCellValue
+               (productionApplyBudget es st 0) (.nonce signer))))
+           , ("policyHex",      .str (hx (getCellValue es .budgetPolicy)))
+           , ("signerBudgetPreHex",
+              .str (hx (getCellValue es (.epochBudget signer))))
+           , ("targetBudgetPreHex",
+              .str (hx (getCellValue es (.epochBudget target))))
+           , ("targetBudgetPostHex",
+              .str (hx (getCellValue (productionApplyBudget es st 0)
+                (.epochBudget target)))) ]))
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -2059,6 +2131,8 @@ def tests : List Test.TestCase :=
           , ("packedLayoutGoldensCount", .num packedLayoutGoldens.length)
           , ("cbeEncoderGoldens", .arr cbeEncoderGoldens)
           , ("cbeEncoderGoldensCount", .num cbeEncoderGoldens.length)
+          , ("uniformWriteGoldens", .arr uniformWriteGoldens)
+          , ("uniformWriteGoldensCount", .num uniformWriteGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)

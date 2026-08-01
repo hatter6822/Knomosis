@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d9c83b898a1a64b477ea98a50bf45960ea58167b34f3888c076ce2b8c38905d5"
+    "source_digest": "7fea2779c570402fcff5398a5e2ba7c83c0aa6ffa72e33acbc53c98e1e97819f"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5774
+    "declaration_count": 5776
   },
   "modules": [
     {
@@ -45983,7 +45983,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 75,
+      "declaration_count": 77,
       "declarations": [
         {
           "kind": "namespace",
@@ -47019,8 +47019,45 @@
         },
         {
           "kind": "def",
+          "name": "grantTripleOf",
+          "line": 1590,
+          "called": [
+            "Action",
+            "ActorId",
+            "claimBudgetRefund",
+            "depositWithFee",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "uniformWriteGoldens",
+          "line": 1602,
+          "called": [
+            "Action",
+            "ActorId",
+            "SignedAction",
+            "claimBudgetRefund",
+            "depositWithFee",
+            "es",
+            "fixtureBase",
+            "getCellValue",
+            "grantTripleOf",
+            "mint",
+            "probes",
+            "productionApplyBudget",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "uint256BE",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1578,
+          "line": 1650,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47029,7 +47066,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1595,
+          "line": 1667,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "actionCommitHexOf",
@@ -47041,6 +47078,7 @@
             "readUint64BE",
             "uint256BE",
             "uint64BE",
+            "uniformWriteGoldens",
             "variant21TailGolden"
           ]
         }

@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "be342c94fe12b5f434f4bdc437290cd8d12e51fec4471f8c764c2f9226c85e2f"
+    "source_digest": "5c5089357584d4666339ed3ffd8c3b91013d472a1ff50cf3697d0f22ac1899e4"
   },
   "summary": {
-    "module_count": 92,
-    "declaration_count": 2038
+    "module_count": 93,
+    "declaration_count": 2049
   },
   "modules": [
     {
@@ -4455,6 +4455,65 @@
           "line": 304,
           "called": [
             "CBEInvalidLength"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "CBEEncode",
+      "path": "solidity/src/lib/CBEEncode.sol",
+      "declaration_count": 7,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "CBEEncode",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "CBEValueTooWide",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_leBytes",
+          "line": 63,
+          "called": [
+            "CBEValueTooWide"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "uintValue",
+          "line": 87,
+          "called": [
+            "_leBytes"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "amountValue",
+          "line": 100,
+          "called": [
+            "_leBytes"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "bytesValue",
+          "line": 114,
+          "called": [
+            "_leBytes"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "epochBudgetValue",
+          "line": 134,
+          "called": [
+            "uintValue"
           ]
         }
       ]
@@ -11963,12 +12022,12 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 24,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "contract",
           "name": "StepVMCrossCheck",
-          "line": 70,
+          "line": 71,
           "called": [
             "CrossCheckFramework"
           ]
@@ -11976,7 +12035,7 @@
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
-          "line": 76,
+          "line": 77,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11985,7 +12044,7 @@
         {
           "kind": "function",
           "name": "test_perVariant_counts",
-          "line": 97,
+          "line": 98,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11994,7 +12053,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
-          "line": 140,
+          "line": 141,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12004,7 +12063,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
-          "line": 162,
+          "line": 163,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12014,7 +12073,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
-          "line": 192,
+          "line": 193,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12024,7 +12083,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_stepVMCommit_present_and_well_formed",
-          "line": 234,
+          "line": 235,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12034,7 +12093,7 @@
         {
           "kind": "function",
           "name": "_executeStepFromFixture",
-          "line": 288,
+          "line": 289,
           "called": [
             "_parseCellProofs"
           ]
@@ -12042,7 +12101,7 @@
         {
           "kind": "function",
           "name": "_checkEntryAtIndex",
-          "line": 307,
+          "line": 308,
           "called": [
             "_executeStepFromFixture"
           ]
@@ -12050,7 +12109,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_byte_equivalence_all_happy",
-          "line": 322,
+          "line": 323,
           "called": [
             "_checkEntryAtIndex",
             "_requireKeccakLinked",
@@ -12062,13 +12121,13 @@
         {
           "kind": "function",
           "name": "_assertWitnessBinding",
-          "line": 373,
+          "line": 374,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_actionCommit_matches_lean",
-          "line": 411,
+          "line": 412,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12079,7 +12138,7 @@
         {
           "kind": "function",
           "name": "test_cbeEncoders_match_lean",
-          "line": 456,
+          "line": 457,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12089,25 +12148,54 @@
         {
           "kind": "function",
           "name": "test_cbeEncoders_reject_overwide_and_roundtrip",
-          "line": 500,
+          "line": 501,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeUintExternal",
-          "line": 526,
+          "line": 527,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeAmountExternal",
-          "line": 531,
+          "line": 532,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_uniformWrites_match_lean",
+          "line": 556,
+          "called": [
+            "_assertUniformWrite",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_assertUniformWrite",
+          "line": 572,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_uniformWrites_are_fail_closed",
+          "line": 608,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveNonceExternal",
+          "line": 625,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 535,
+          "line": 633,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12118,7 +12206,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 563,
+          "line": 661,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12128,7 +12216,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 588,
+          "line": 686,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12138,13 +12226,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 631,
+          "line": 729,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 647,
+          "line": 745,
           "called": [
             "_parseCellProof"
           ]
@@ -12152,7 +12240,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 680,
+          "line": 778,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12162,7 +12250,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 727,
+          "line": 825,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12173,7 +12261,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 752,
+          "line": 850,
           "called": [
             "KnomosisStepVM"
           ]

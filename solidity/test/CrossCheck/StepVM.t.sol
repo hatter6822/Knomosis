@@ -5,6 +5,7 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
+import {StepWrites} from "src/lib/StepWrites.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
@@ -531,6 +532,103 @@ contract StepVMCrossCheck is CrossCheckFramework {
     /// @dev ...and likewise for the amount head.
     function encodeAmountExternal(uint256 n) external pure returns (bytes memory) {
         return CBEEncode.amountValue(n);
+    }
+
+    /// @notice **The two cells every action writes are derived
+    ///         identically on both stacks.**
+    ///
+    ///         `stepVMHash` reads and emits BALANCE cells only, while
+    ///         `Action.writeCells` declares `.nonce signer` and
+    ///         `.epochBudget signer` on all twenty-five variants — so
+    ///         these are exactly the cells the current step VM is
+    ///         silent about, and the ones its output would be wrong
+    ///         about for EVERY action once it is compared against a
+    ///         state root.
+    ///
+    ///         The epoch-budget half is where a mirror is most likely
+    ///         to diverge, because the branch is not local to the
+    ///         target: the consume is checked against the SIGNER's
+    ///         budget but gates the write to every actor, and the
+    ///         grant recipient differs per variant.  Both are
+    ///         exercised — `topUpActionBudgetFor` at the signer AND at
+    ///         the recipient, since that is the variant where the two
+    ///         differ and a "top up the signer" shortcut would agree
+    ///         everywhere else.
+    function test_uniformWrites_match_lean() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".uniformWriteGoldensCount");
+        assertGt(n, 0, "the corpus must carry uniform-write goldens");
+        for (uint256 i = 0; i < n; i++) {
+            _assertUniformWrite(raw,
+                string.concat(".uniformWriteGoldens[", vm.toString(i), "]"));
+        }
+    }
+
+    /// @dev One golden.  Extracted to keep the driver's stack shallow
+    ///      under `via_ir`.
+    function _assertUniformWrite(string memory raw, string memory base)
+        internal
+        pure
+    {
+        // The nonce: `pre + 1`, on every variant.
+        assertEq(
+            StepWrites.deriveNonce(
+                vm.parseJsonBytes(raw, string.concat(base, ".noncePreHex"))),
+            vm.parseJsonBytes(raw, string.concat(base, ".noncePostHex")),
+            string.concat("nonce derivation mismatch at ", base)
+        );
+        // The epoch budget: policy + signer's budget + target's budget.
+        assertEq(
+            StepWrites.deriveEpochBudgetCellValue(
+                vm.parseJsonBytes(raw, string.concat(base, ".policyHex")),
+                vm.parseJsonBytes(raw, string.concat(base, ".signerBudgetPreHex")),
+                vm.parseJsonBytes(raw, string.concat(base, ".targetBudgetPreHex")),
+                uint64(vm.parseJsonUint(raw, string.concat(base, ".signer"))),
+                uint64(vm.parseJsonUint(raw, string.concat(base, ".target"))),
+                uint64(vm.parseJsonUint(raw, string.concat(base, ".grantRecipient"))),
+                vm.parseJsonUint(raw, string.concat(base, ".grantAmount")),
+                vm.parseJsonUint(raw, string.concat(base, ".refundExtra"))
+            ),
+            vm.parseJsonBytes(raw, string.concat(base, ".targetBudgetPostHex")),
+            string.concat("epoch-budget derivation mismatch at ", base)
+        );
+    }
+
+    /// @notice The derivations are fail-closed on a malformed cell.
+    ///
+    /// @dev    Not a default, and the distinction is the point: a nonce
+    ///         defaulting to zero is a replay, and a budget defaulting
+    ///         to a fresh free tier is minting.  A trailing byte is
+    ///         rejected too — a cell holds exactly one encoded value,
+    ///         and accepting padding would let two distinct bundles
+    ///         derive the same write.
+    function test_uniformWrites_are_fail_closed() public {
+        vm.expectRevert(StepWrites.MalformedCellValue.selector);
+        this.deriveNonceExternal(hex"");
+        vm.expectRevert(StepWrites.MalformedCellValue.selector);
+        this.deriveNonceExternal(hex"FF0000000000000000");   // wrong tag
+        vm.expectRevert(StepWrites.MalformedCellValue.selector);
+        this.deriveNonceExternal(hex"000000000000000000" hex"00"); // trailing byte
+        // ...and the well-formed value still derives, so the checks
+        // above are rejecting what they name rather than everything.
+        assertEq(
+            this.deriveNonceExternal(CBEEncode.uintValue(41)),
+            CBEEncode.uintValue(42),
+            "a well-formed nonce cell must still derive"
+        );
+    }
+
+    /// @dev `expectRevert` needs an external call boundary.
+    function deriveNonceExternal(bytes memory pre)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return StepWrites.deriveNonce(pre);
     }
 
     function test_perEntry_cellProofs_witness_binding() public {

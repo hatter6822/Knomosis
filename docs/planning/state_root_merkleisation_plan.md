@@ -507,9 +507,23 @@ space:
    corpus pins Lean-vs-Solidity, and an encoder/decoder pair wrong the
    same way would agree with each other but not with Lean.
 
-   What remains of §4 step 3 is the per-variant Solidity derivation on
-   top of those encoders, and `executeStep` verifying openings and
-   returning the fold's result.
+   **The two uniform cells are mirrored** (`src/lib/StepWrites.sol`),
+   pinned per-variant by the corpus's `uniformWriteGoldens` column.
+   The nonce is `pre + 1`; the epoch budget is the three-branch
+   consume-then-grant, and it is where a mirror is most likely to
+   diverge because the branch is not local to the target — the consume
+   is checked against the SIGNER's budget but gates the write to every
+   actor, and the grant recipient differs per variant.  The corpus
+   emits the grant triple rather than letting Solidity re-derive it,
+   so a "top up the signer" shortcut (correct on twenty-two variants)
+   fails in the corpus instead of in a game;
+   `topUpActionBudgetFor` is exercised at BOTH the signer and the
+   recipient for exactly that reason.
+
+   What remains of §4 step 3 is the per-variant BALANCE derivation on
+   top of those primitives, plus the registry / local-policy / bridge
+   cells, and then `executeStep` verifying openings and returning the
+   fold's result.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"
