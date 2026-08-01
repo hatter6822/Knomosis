@@ -79,9 +79,9 @@ def canonicalAbsentValue : CellTag → ByteArray
   | .epochBudget _              =>
     ByteArray.mk
       ((Encodable.encode (T := Nat) 0) ++ (Encodable.encode (T := Nat) 0)).toArray
-  | .budgetPolicyFreeTier       => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
-  | .budgetPolicyActionCost     => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
-  | .budgetPolicyCurrentEpoch   => ByteArray.mk (Encodable.encode (T := Nat) 0).toArray
+  | .budgetPolicy               =>
+    ByteArray.mk (Encodable.encode (T := Authority.BudgetPolicy)
+      (.bounded 0 0 0)).toArray
 
 /-! ## `getCellValue` (§12.1.2 helper) -/
 
@@ -175,18 +175,8 @@ def getCellValue (es : ExtendedState) (tag : CellTag) : ByteArray :=
   -- Budget-policy scalars, one cell each: a dispute normally turns on
   -- exactly one of them, and a single packed cell would force the
   -- responder to open all three.
-  | .budgetPolicyFreeTier =>
-    match es.budgetPolicy with
-    | .bounded freeTier _ _ =>
-      ByteArray.mk (Encodable.encode (T := Nat) freeTier).toArray
-  | .budgetPolicyActionCost =>
-    match es.budgetPolicy with
-    | .bounded _ actionCost _ =>
-      ByteArray.mk (Encodable.encode (T := Nat) actionCost).toArray
-  | .budgetPolicyCurrentEpoch =>
-    match es.budgetPolicy with
-    | .bounded _ _ currentEpoch =>
-      ByteArray.mk (Encodable.encode (T := Nat) currentEpoch).toArray
+  | .budgetPolicy =>
+    ByteArray.mk (Encodable.encode (T := Authority.BudgetPolicy) es.budgetPolicy).toArray
 
 /-- Determinism of `getCellValue`: equal states + equal tags
     produce equal cell values.  Mechanical via `rfl`. -/
@@ -274,18 +264,12 @@ theorem getCellValue_epochBudget (es : ExtendedState) (a : ActorId) :
          ((Encodable.encode (T := Nat) b.lastSeenEpoch) ++
           (Encodable.encode (T := Nat) b.budgetBalance)).toArray) := rfl
 
-/-- The budget policy's three scalars are readable through their
-    cells. -/
-theorem getCellValue_budgetPolicy_scalars
-    (es : ExtendedState) (freeTier actionCost currentEpoch : Nat)
-    (h : es.budgetPolicy = .bounded freeTier actionCost currentEpoch) :
-    getCellValue es .budgetPolicyFreeTier =
-        ByteArray.mk (Encodable.encode (T := Nat) freeTier).toArray ∧
-    getCellValue es .budgetPolicyActionCost =
-        ByteArray.mk (Encodable.encode (T := Nat) actionCost).toArray ∧
-    getCellValue es .budgetPolicyCurrentEpoch =
-        ByteArray.mk (Encodable.encode (T := Nat) currentEpoch).toArray := by
-  refine ⟨?_, ?_, ?_⟩ <;> simp [getCellValue, h]
+/-- The budget-policy cell reads the whole policy. -/
+theorem getCellValue_budgetPolicy_eq
+    (es : ExtendedState) :
+    getCellValue es .budgetPolicy =
+      ByteArray.mk (Encodable.encode (T := Authority.BudgetPolicy)
+        es.budgetPolicy).toArray := rfl
 
 /-! ## `isCellAbsent` (§12.3.4 helper) -/
 
@@ -443,21 +427,14 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
     | .error _ => es
   -- The policy is a single `bounded` constructor, so each scalar
   -- write rebuilds it with the other two preserved.
-  | .budgetPolicyFreeTier =>
-    match Encodable.decode (T := Nat) value.data.toList, es.budgetPolicy with
-    | .ok (v, _), .bounded _ actionCost currentEpoch =>
-      { es with budgetPolicy := .bounded v actionCost currentEpoch }
-    | .error _, _ => es
-  | .budgetPolicyActionCost =>
-    match Encodable.decode (T := Nat) value.data.toList, es.budgetPolicy with
-    | .ok (v, _), .bounded freeTier _ currentEpoch =>
-      { es with budgetPolicy := .bounded freeTier v currentEpoch }
-    | .error _, _ => es
-  | .budgetPolicyCurrentEpoch =>
-    match Encodable.decode (T := Nat) value.data.toList, es.budgetPolicy with
-    | .ok (v, _), .bounded freeTier actionCost _ =>
-      { es with budgetPolicy := .bounded freeTier actionCost v }
-    | .error _, _ => es
+  | .budgetPolicy =>
+    -- A genuine point write.  The three-cell form had to read the
+    -- other two components back out of `es` and rebuild, so a
+    -- "single-cell write" silently depended on two cells it did not
+    -- name.
+    match Encodable.decode (T := Authority.BudgetPolicy) value.data.toList with
+    | .ok (p, _) => { es with budgetPolicy := p }
+    | .error _   => es
 
 /-- Determinism of `setCell`. -/
 theorem setCell_deterministic

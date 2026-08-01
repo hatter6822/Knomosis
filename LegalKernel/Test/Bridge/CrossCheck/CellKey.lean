@@ -71,9 +71,7 @@ def corpusTags : List CellTag :=
   , .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue
   , .bridgeAmmDisabled
-  , .budgetPolicyFreeTier
-  , .budgetPolicyActionCost
-  , .budgetPolicyCurrentEpoch
+  , .budgetPolicy
   ]
 
 /-- One corpus entry. -/
@@ -90,7 +88,7 @@ def entryJson (t : CellTag) : Json :=
 /-- The full fixture. -/
 def encodeFixture : Json :=
   .obj
-    [ ("identifier",        .str "knomosis/cell-key/v1")
+    [ ("identifier",        .str "knomosis/cell-key/v2")
     , ("isKeccak256Linked", .bool isKeccak256Linked)
     , ("hashIdentifier",    .str (hashImplementationIdentifier ()))
     , ("count",             .num corpusTags.length)

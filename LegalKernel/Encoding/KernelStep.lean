@@ -93,9 +93,7 @@ def CellTag.encode : FaultProof.CellTag → Stream
   | .epochBudget a =>
     Encodable.encode (T := Nat) 13 ++
     Encodable.encode (T := Nat) a.toNat
-  | .budgetPolicyFreeTier       => Encodable.encode (T := Nat) 14
-  | .budgetPolicyActionCost     => Encodable.encode (T := Nat) 15
-  | .budgetPolicyCurrentEpoch   => Encodable.encode (T := Nat) 16
+  | .budgetPolicy               => Encodable.encode (T := Nat) 14
 
 /-- Decode a `CellTag` from a stream.  Returns the tag and
     residual stream.  Rejects unknown variant indices. -/

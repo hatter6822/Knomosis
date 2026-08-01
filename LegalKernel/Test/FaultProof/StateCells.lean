@@ -71,7 +71,7 @@ def tests : List TestCase :=
         -- layer up, reappearing at the enumeration.
         let tags := stateCellTags populated
         let kinds := tags.map (fun t => t.kindIndex)
-        for k in List.range 17 do
+        for k in List.range 15 do
           if !(kinds.contains k) then
             throw <| IO.userError
               s!"cell kind {k} is NOT enumerated by stateCellTags — the SMT \

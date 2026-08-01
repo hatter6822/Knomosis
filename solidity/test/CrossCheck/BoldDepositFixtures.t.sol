@@ -120,6 +120,10 @@ contract BoldDepositFixturesCrossCheck is CrossCheckFramework {
     function test_fixture_header_shape() public view {
         if (!fixtureExists(FIXTURE_NAME)) return;
         string memory raw = readFixture(FIXTURE_NAME);
+        // The schema version, read rather than merely emitted: every
+        // other assertion below would still pass against a superseded
+        // corpus, since a stale fixture parses fine.
+        _requireIdentifier(raw, ".header.identifier", "knomosis/bold-deposit-crossstack/v2");
         assertGt(_count(raw), 0, "count > 0");
         assertEq(
             vm.parseJsonUint(raw, ".header.maxBudgetPerDeposit"),

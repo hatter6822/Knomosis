@@ -80,6 +80,38 @@ abstract contract CrossCheckFramework is Test {
         );
     }
 
+    /// @notice Assert a fixture carries the schema identifier the
+    ///         consuming suite was written against.
+    ///
+    /// @dev    A fixture's `identifier` is a schema version, and it is
+    ///         the only thing that distinguishes a stale corpus from a
+    ///         current one.  Entry counts, key layouts and cell-tag
+    ///         indices all change without the JSON becoming
+    ///         unparseable, so a suite reading a superseded corpus
+    ///         compares real values and passes — against the wrong
+    ///         contract.  Bumping the Lean-side identifier can only
+    ///         fail the consuming suite if the suite reads it, so the
+    ///         field is wired here rather than merely emitted.
+    ///
+    /// @param raw      the fixture's raw JSON.
+    /// @param jsonPath the field's path — the corpora disagree on
+    ///                 whether it sits at the root or under `.header`,
+    ///                 so it is named by the caller rather than
+    ///                 guessed.
+    /// @param expected the identifier this suite pins.
+    function _requireIdentifier(
+        string memory raw,
+        string memory jsonPath,
+        string memory expected
+    ) internal pure {
+        require(
+            keccak256(bytes(vm.parseJsonString(raw, jsonPath)))
+                == keccak256(bytes(expected)),
+            "cross-stack fixture schema identifier mismatch; the Lean-side "
+            "corpus was bumped, so regenerate the fixture and update the suite"
+        );
+    }
+
     /// @notice Convert a hex-string (`"0x..."`) to its raw bytes.
     ///         Wraps `vm.parseBytes`.
     function hexToBytes(string memory hexStr) internal pure returns (bytes memory) {
@@ -128,5 +160,62 @@ contract FrameworkSmokeTest is CrossCheckFramework {
         assertEq(uint8(b[1]), 0xad, "byte 1");
         assertEq(uint8(b[2]), 0xbe, "byte 2");
         assertEq(uint8(b[3]), 0xef, "byte 3");
+    }
+
+    /// External wrappers so the two fail-loudly gates can be driven
+    /// through `vm.expectRevert`, which needs a real call frame.
+    function callRequireKeccakLinked(string memory raw, string memory path) public pure {
+        _requireKeccakLinked(raw, path);
+    }
+
+    /// See `callRequireKeccakLinked`.
+    function callRequireIdentifier(
+        string memory raw,
+        string memory jsonPath,
+        string memory expected
+    ) public pure {
+        _requireIdentifier(raw, jsonPath, expected);
+    }
+
+    /// @notice Self-test: the keccak gate passes on a linked fixture
+    ///         and REVERTS on a fallback one.  A gate that is never
+    ///         observed to fire is indistinguishable from an absent
+    ///         gate, which is the failure mode it exists to prevent.
+    function test_requireKeccakLinkedFiresOnFallback() public {
+        this.callRequireKeccakLinked('{"isKeccak256Linked":true}', ".isKeccak256Linked");
+        vm.expectRevert();
+        this.callRequireKeccakLinked('{"isKeccak256Linked":false}', ".isKeccak256Linked");
+    }
+
+    /// @notice Self-test: the identifier gate passes on a match and
+    ///         REVERTS on a stale schema version.
+    function test_requireIdentifierFiresOnMismatch() public {
+        this.callRequireIdentifier(
+            '{"identifier":"knomosis/x/v2"}', ".identifier", "knomosis/x/v2"
+        );
+        vm.expectRevert();
+        this.callRequireIdentifier(
+            '{"identifier":"knomosis/x/v1"}', ".identifier", "knomosis/x/v2"
+        );
+    }
+
+    /// @notice Self-test: the identifier gate reads the path it is
+    ///         given.  The corpora put the field in two places, so a
+    ///         gate hardwired to the root would pass vacuously on
+    ///         half of them — it would revert on the parse, which
+    ///         reads as a failure, but a `try`-guarded caller would
+    ///         see no difference between "absent" and "matching".
+    function test_requireIdentifierReadsNestedPath() public {
+        this.callRequireIdentifier(
+            '{"header":{"identifier":"knomosis/y/v3"}}',
+            ".header.identifier",
+            "knomosis/y/v3"
+        );
+        vm.expectRevert();
+        this.callRequireIdentifier(
+            '{"header":{"identifier":"knomosis/y/v3"}}',
+            ".header.identifier",
+            "knomosis/y/v4"
+        );
     }
 }

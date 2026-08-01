@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7779e0adcdf88e4cd0e75c1637a810b07ee5797ef99175f3ec0b59262f29d51f"
+    "source_digest": "2e7d1f3d922307e5ca81d9a2b8d7df21ed8035d410100c0de35b62e18afc9983"
   },
   "summary": {
     "module_count": 90,
-    "declaration_count": 1985
+    "declaration_count": 1991
   },
   "modules": [
     {
@@ -3341,103 +3341,103 @@
         {
           "kind": "enum",
           "name": "CellKind",
-          "line": 85,
+          "line": 93,
           "called": []
         },
         {
           "kind": "enum",
           "name": "ActionKind",
-          "line": 127,
+          "line": 133,
           "called": []
         },
         {
           "kind": "struct",
           "name": "CellProof",
-          "line": 162,
+          "line": 168,
           "called": []
         },
         {
           "kind": "error",
           "name": "BadCellProof",
-          "line": 195,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "InadmissibleAction",
-          "line": 196,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "PostStateMismatch",
-          "line": 197,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "UnknownActionKind",
-          "line": 198,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "MissingCellProof",
-          "line": 199,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "InsufficientBalance",
-          "line": 200,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmountMustBePositive",
           "line": 201,
           "called": []
         },
         {
           "kind": "error",
-          "name": "SameResourceSwap",
+          "name": "InadmissibleAction",
           "line": 202,
           "called": []
         },
         {
           "kind": "error",
-          "name": "SameActorSweep",
+          "name": "PostStateMismatch",
+          "line": 203,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "UnknownActionKind",
+          "line": 204,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MissingCellProof",
+          "line": 205,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InsufficientBalance",
+          "line": 206,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmountMustBePositive",
+          "line": 207,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SameResourceSwap",
           "line": 208,
           "called": []
         },
         {
           "kind": "error",
-          "name": "SweepAmountMismatch",
+          "name": "SameActorSweep",
           "line": 214,
           "called": []
         },
         {
           "kind": "error",
+          "name": "SweepAmountMismatch",
+          "line": 220,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "UnauthorizedSigner",
-          "line": 215,
+          "line": 221,
           "called": []
         },
         {
           "kind": "error",
           "name": "TooManyCellProofs",
-          "line": 216,
+          "line": 222,
           "called": []
         },
         {
           "kind": "error",
           "name": "MalformedCellValue",
-          "line": 217,
+          "line": 223,
           "called": []
         },
         {
           "kind": "function",
           "name": "executeStep",
-          "line": 282,
+          "line": 288,
           "called": [
             "ActionKind",
             "BadCellProof",
@@ -3475,7 +3475,7 @@
         {
           "kind": "function",
           "name": "_toActionKind",
-          "line": 393,
+          "line": 399,
           "called": [
             "ActionKind",
             "UnknownActionKind"
@@ -3484,7 +3484,7 @@
         {
           "kind": "function",
           "name": "_findCellProof",
-          "line": 412,
+          "line": 418,
           "called": [
             "CellKind",
             "CellProof",
@@ -3494,7 +3494,7 @@
         {
           "kind": "function",
           "name": "_findBalanceCellProof",
-          "line": 427,
+          "line": 433,
           "called": [
             "CellProof",
             "MissingCellProof"
@@ -3503,7 +3503,7 @@
         {
           "kind": "function",
           "name": "_decodeNat",
-          "line": 468,
+          "line": 474,
           "called": [
             "MalformedCellValue"
           ]
@@ -3511,25 +3511,25 @@
         {
           "kind": "function",
           "name": "_decodeUint64BE",
-          "line": 492,
+          "line": 498,
           "called": []
         },
         {
           "kind": "function",
           "name": "_decodeUint128BE",
-          "line": 514,
+          "line": 520,
           "called": []
         },
         {
           "kind": "function",
           "name": "_decodeUint256BE",
-          "line": 527,
+          "line": 533,
           "called": []
         },
         {
           "kind": "function",
           "name": "_stepTransfer",
-          "line": 546,
+          "line": 552,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3543,7 +3543,7 @@
         {
           "kind": "function",
           "name": "_stepMint",
-          "line": 606,
+          "line": 612,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3556,7 +3556,7 @@
         {
           "kind": "function",
           "name": "_stepBurn",
-          "line": 629,
+          "line": 635,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3570,7 +3570,7 @@
         {
           "kind": "function",
           "name": "_stepFreezeResource",
-          "line": 658,
+          "line": 664,
           "called": [
             "CellProof",
             "_decodeUint64BE"
@@ -3579,7 +3579,7 @@
         {
           "kind": "function",
           "name": "_stepReplaceKey",
-          "line": 676,
+          "line": 682,
           "called": [
             "CellProof",
             "_decodeUint64BE"
@@ -3588,7 +3588,7 @@
         {
           "kind": "function",
           "name": "_stepReward",
-          "line": 698,
+          "line": 704,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3601,7 +3601,7 @@
         {
           "kind": "function",
           "name": "_stepDistributeOthers",
-          "line": 725,
+          "line": 731,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3613,7 +3613,7 @@
         {
           "kind": "function",
           "name": "_stepProportionalDilute",
-          "line": 763,
+          "line": 769,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3625,7 +3625,7 @@
         {
           "kind": "function",
           "name": "_stepDispute",
-          "line": 827,
+          "line": 833,
           "called": [
             "CellProof"
           ]
@@ -3633,7 +3633,7 @@
         {
           "kind": "function",
           "name": "_stepDisputeWithdraw",
-          "line": 839,
+          "line": 845,
           "called": [
             "CellProof"
           ]
@@ -3641,7 +3641,7 @@
         {
           "kind": "function",
           "name": "_stepVerdict",
-          "line": 851,
+          "line": 857,
           "called": [
             "CellProof"
           ]
@@ -3649,7 +3649,7 @@
         {
           "kind": "function",
           "name": "_stepRollback",
-          "line": 862,
+          "line": 868,
           "called": [
             "CellProof"
           ]
@@ -3657,7 +3657,7 @@
         {
           "kind": "function",
           "name": "_stepRegisterIdentity",
-          "line": 877,
+          "line": 883,
           "called": [
             "CellProof",
             "_decodeUint64BE"
@@ -3666,7 +3666,7 @@
         {
           "kind": "function",
           "name": "_stepDeposit",
-          "line": 897,
+          "line": 903,
           "called": [
             "CellProof",
             "_decodeNat",
@@ -3678,7 +3678,7 @@
         {
           "kind": "function",
           "name": "_stepWithdraw",
-          "line": 922,
+          "line": 928,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3691,7 +3691,7 @@
         {
           "kind": "function",
           "name": "_stepDeclareLocalPolicy",
-          "line": 948,
+          "line": 954,
           "called": [
             "CellProof"
           ]
@@ -3699,7 +3699,7 @@
         {
           "kind": "function",
           "name": "_stepRevokeLocalPolicy",
-          "line": 960,
+          "line": 966,
           "called": [
             "CellProof"
           ]
@@ -3707,7 +3707,7 @@
         {
           "kind": "function",
           "name": "_stepFaultProofChallenge",
-          "line": 976,
+          "line": 982,
           "called": [
             "CellProof"
           ]
@@ -3715,7 +3715,7 @@
         {
           "kind": "function",
           "name": "_stepFaultProofResolution",
-          "line": 988,
+          "line": 994,
           "called": [
             "CellProof"
           ]
@@ -3723,7 +3723,7 @@
         {
           "kind": "function",
           "name": "_stepDepositWithFee",
-          "line": 1023,
+          "line": 1029,
           "called": [
             "CellProof",
             "_decodeNat",
@@ -3735,7 +3735,7 @@
         {
           "kind": "function",
           "name": "_stepTopUpActionBudget",
-          "line": 1090,
+          "line": 1096,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3748,7 +3748,7 @@
         {
           "kind": "function",
           "name": "_stepTopUpActionBudgetFor",
-          "line": 1162,
+          "line": 1168,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3761,7 +3761,7 @@
         {
           "kind": "function",
           "name": "_stepClaimBudgetRefund",
-          "line": 1225,
+          "line": 1231,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3774,7 +3774,7 @@
         {
           "kind": "function",
           "name": "_stepAmmSwap",
-          "line": 1284,
+          "line": 1290,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3789,7 +3789,7 @@
         {
           "kind": "function",
           "name": "_stepReclaimAmmReserves",
-          "line": 1338,
+          "line": 1344,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3804,7 +3804,7 @@
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 1375,
+          "line": 1381,
           "called": []
         }
       ]
@@ -10709,6 +10709,7 @@
           "line": 119,
           "called": [
             "_count",
+            "_requireIdentifier",
             "fixtureExists",
             "readFixture"
           ]
@@ -10716,7 +10717,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_split_matches",
-          "line": 146,
+          "line": 150,
           "called": [
             "Entry",
             "_count",
@@ -10728,7 +10729,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_budgetGrant_equals_recipientBudgetAfter",
-          "line": 170,
+          "line": 174,
           "called": [
             "Entry",
             "_count",
@@ -10740,7 +10741,7 @@
         {
           "kind": "function",
           "name": "test_clamp_corners",
-          "line": 195,
+          "line": 199,
           "called": [
             "Entry",
             "_count",
@@ -10752,7 +10753,7 @@
         {
           "kind": "function",
           "name": "test_grid_resource_agnosticism",
-          "line": 221,
+          "line": 225,
           "called": [
             "Entry",
             "_count",
@@ -10764,7 +10765,7 @@
         {
           "kind": "function",
           "name": "test_usd_calibration_parity",
-          "line": 266,
+          "line": 270,
           "called": [
             "Entry",
             "_count",
@@ -10776,7 +10777,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_liveContract_bold_split_matches",
-          "line": 317,
+          "line": 321,
           "called": [
             "Entry",
             "KnomosisBridge",
@@ -10795,7 +10796,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_liveContract_eth_split_matches",
-          "line": 348,
+          "line": 352,
           "called": [
             "Entry",
             "KnomosisBridge",
@@ -10811,7 +10812,7 @@
         {
           "kind": "function",
           "name": "test_actionCbe_wellformed",
-          "line": 382,
+          "line": 386,
           "called": [
             "_count",
             "fixtureExists",
@@ -10821,7 +10822,7 @@
         {
           "kind": "function",
           "name": "test_recipientBudgetCbe_decodes_to_budgetGrant",
-          "line": 422,
+          "line": 426,
           "called": [
             "Entry",
             "_count",
@@ -10834,7 +10835,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 470,
+          "line": 474,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -10847,7 +10848,7 @@
         {
           "kind": "function",
           "name": "_deployBoldBridge",
-          "line": 507,
+          "line": 511,
           "called": [
             "KnomosisBridge",
             "_deployBridge"
@@ -10856,7 +10857,7 @@
         {
           "kind": "function",
           "name": "_decodeDepositWithFee",
-          "line": 513,
+          "line": 517,
           "called": []
         }
       ]
@@ -10869,7 +10870,7 @@
         {
           "kind": "contract",
           "name": "CellKeyCrossCheck",
-          "line": 32,
+          "line": 33,
           "called": [
             "CrossCheckFramework"
           ]
@@ -10877,38 +10878,40 @@
         {
           "kind": "function",
           "name": "_fixture",
-          "line": 35,
+          "line": 42,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_preimage_layout_matches_lean",
-          "line": 42,
+          "line": 49,
           "called": [
             "_fixture",
-            "_parseDecimalString"
+            "_parseDecimalString",
+            "_requireIdentifier"
           ]
         },
         {
           "kind": "function",
           "name": "test_derived_key_matches_lean",
-          "line": 80,
+          "line": 88,
           "called": [
             "_fixture",
             "_parseDecimalString",
+            "_requireIdentifier",
             "_requireKeccakLinked"
           ]
         },
         {
           "kind": "function",
           "name": "test_distinct_cells_derive_distinct_keys",
-          "line": 105,
+          "line": 114,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseDecimalString",
-          "line": 131,
+          "line": 140,
           "called": []
         }
       ]
@@ -11409,7 +11412,7 @@
     {
       "module": "Framework.t",
       "path": "solidity/test/CrossCheck/Framework.t.sol",
-      "declaration_count": 12,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "abstract_contract",
@@ -11457,14 +11460,20 @@
         },
         {
           "kind": "function",
+          "name": "_requireIdentifier",
+          "line": 101,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "hexToBytes",
-          "line": 84,
+          "line": 116,
           "called": []
         },
         {
           "kind": "contract",
           "name": "FrameworkSmokeTest",
-          "line": 93,
+          "line": 125,
           "called": [
             "CrossCheckFramework"
           ]
@@ -11472,19 +11481,19 @@
         {
           "kind": "function",
           "name": "test_emptyArrayFixtureParses",
-          "line": 101,
+          "line": 133,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_fixturePathFormat",
-          "line": 107,
+          "line": 139,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_fixtureExistsFalseOnAbsent",
-          "line": 118,
+          "line": 150,
           "called": [
             "fixtureExists"
           ]
@@ -11492,10 +11501,44 @@
         {
           "kind": "function",
           "name": "test_hexToBytesDecodesLiteral",
-          "line": 123,
+          "line": 155,
           "called": [
             "hexToBytes"
           ]
+        },
+        {
+          "kind": "function",
+          "name": "callRequireKeccakLinked",
+          "line": 166,
+          "called": [
+            "_requireKeccakLinked"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "callRequireIdentifier",
+          "line": 171,
+          "called": [
+            "_requireIdentifier"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_requireKeccakLinkedFiresOnFallback",
+          "line": 183,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_requireIdentifierFiresOnMismatch",
+          "line": 191,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_requireIdentifierReadsNestedPath",
+          "line": 207,
+          "called": []
         }
       ]
     },

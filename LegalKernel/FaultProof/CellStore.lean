@@ -74,8 +74,7 @@ def amountCellValue (n : Nat) : ByteArray :=
   ByteArray.mk (Encoding.encodeAmount n).toArray
 
 /-- The byte form of a counter or flag cell: the 9-byte CBE uint
-    head.  Nonces, the next-withdrawal id, the two bridge flags and
-    the budget-policy scalars. -/
+    head.  Nonces, the next-withdrawal id and the two bridge flags. -/
 def natCellValue (n : Nat) : ByteArray :=
   ByteArray.mk (Encodable.encode (T := Nat) n).toArray
 
@@ -89,6 +88,13 @@ def keyCellValue (pk : Authority.PublicKey) : ByteArray :=
 /-- The byte form of a local-policy cell. -/
 def policyCellValue (p : Authority.LocalPolicy) : ByteArray :=
   ByteArray.mk (Encodable.encode (T := Authority.LocalPolicy) p).toArray
+
+/-- The byte form of the budget-policy cell: the whole policy value
+    under its own encoder, not one scalar of it.  `BudgetPolicy` is a
+    single value, so a cell that carried a component would make every
+    write a read-modify-write of the other two. -/
+def budgetPolicyCellValue (p : Authority.BudgetPolicy) : ByteArray :=
+  ByteArray.mk (Encodable.encode (T := Authority.BudgetPolicy) p).toArray
 
 /-- The byte form of a consumed-deposit cell. -/
 def depositCellValue (rec : Bridge.DepositRecord) : ByteArray :=
@@ -109,7 +115,7 @@ def budgetCellValue (b : Authority.ActorBudget) : ByteArray :=
 
 One equation per cell kind, naming the constructor the reader emits.
 All `rfl`; they exist so downstream proofs rewrite by kind instead of
-unfolding the seventeen-arm match. -/
+unfolding the fifteen-arm match. -/
 
 /-- A balance cell reads the amount head over `getBalance`. -/
 theorem getCellValue_balance (es : ExtendedState) (r : ResourceId) (a : ActorId) :
@@ -157,25 +163,14 @@ theorem getCellValue_bridgeConsumed (es : ExtendedState) (d : DepositId) :
   rw [Std.TreeMap.contains_eq_isSome_getElem?]
   cases h : es.bridge.consumed[d]? <;> simp [depositCellValue]
 
-/-- The budget policy's free-tier cell, with the scrutinee exposed.
+/-- The budget-policy cell reads the whole policy value.
 
-    The three policy scalars share one `BudgetPolicy` value, so a write
-    to any of them rebuilds the whole `bounded` triple.  Locality
-    between them is therefore not structural, and these reductions are
-    what let the proof see that the other two components survive. -/
-theorem getCellValue_budgetPolicyFreeTier (es : ExtendedState) :
-    getCellValue es .budgetPolicyFreeTier =
-      (match es.budgetPolicy with | .bounded ft _ _ => natCellValue ft) := rfl
-
-/-- The budget policy's per-action-cost cell, scrutinee exposed. -/
-theorem getCellValue_budgetPolicyActionCost (es : ExtendedState) :
-    getCellValue es .budgetPolicyActionCost =
-      (match es.budgetPolicy with | .bounded _ ac _ => natCellValue ac) := rfl
-
-/-- The budget policy's current-epoch cell, scrutinee exposed. -/
-theorem getCellValue_budgetPolicyCurrentEpoch (es : ExtendedState) :
-    getCellValue es .budgetPolicyCurrentEpoch =
-      (match es.budgetPolicy with | .bounded _ _ ce => natCellValue ce) := rfl
+    One cell, so the reduction is a projection rather than a
+    scrutinee-exposing match: nothing downstream has to reason about
+    which components of a `bounded` triple survive a write to a
+    sibling, because there are no siblings. -/
+theorem getCellValue_budgetPolicy' (es : ExtendedState) :
+    getCellValue es .budgetPolicy = budgetPolicyCellValue es.budgetPolicy := rfl
 
 /-- A pending-withdrawal cell reads the encoded payload, or the
     absent marker. -/
@@ -199,16 +194,14 @@ set_option linter.unusedSimpArgs false in
     does not look at; along it, the underlying map's
     write-at-another-key equation does the work.
 
-    The two bridge-shaped and three budget-policy-shaped kinds are why
-    this is not a statement about `ExtendedState` FIELDS: nine cell
-    kinds read `es.bridge` and three read `es.budgetPolicy`, so
-    "different field" is too coarse and the case analysis has to run at
-    the granularity of the cell.
+    The nine bridge-shaped kinds are why this is not a statement about
+    `ExtendedState` FIELDS: they all read `es.bridge`, so "different
+    field" is too coarse and the case analysis has to run at the
+    granularity of the cell.
 
     The linter option is scoped to this proof and is about the shared
-    automation, not the statement: one `simp_all` argument list serves
-    289 tag pairs, so some argument is necessarily idle in some of
-    them. -/
+    automation, not the statement: one argument list serves 225 tag
+    pairs, so some argument is necessarily idle in some of them. -/
 theorem getCellValue_setCell_ne (es : ExtendedState) (t t₀ : CellTag) (v : ByteArray)
     (h : t ≠ t₀) :
     getCellValue (setCell es t₀ v) t = getCellValue es t := by
@@ -313,12 +306,7 @@ theorem getCellValue_setCell_ne (es : ExtendedState) (t t₀ : CellTag) (v : Byt
         | rfl
         | (simp only [setCell]; split <;> first | rfl | (split <;> rfl))
         | ((simp only [setCell]; split <;>
-              first
-                | rfl
-                | simp_all [getCellValue_budgetPolicyFreeTier,
-                            getCellValue_budgetPolicyActionCost,
-                            getCellValue_budgetPolicyCurrentEpoch]
-                | (split <;> simp_all)); done)
+              first | rfl | simp_all | (split <;> simp_all)); done)
 
 /-! ## Read-back
 
@@ -330,8 +318,8 @@ encoder's bounded range.  The bounds are the same
 carries; they are taken as hypotheses here rather than assumed.
 
 Eight kinds, because eight are all an action ever writes: the bridge
-scalars and the budget-policy scalars are genesis parameters, mutated
-by no `Action` constructor. -/
+scalars and the budget policy are genesis parameters, mutated by no
+`Action` constructor. -/
 
 /-- A balance write reads back. -/
 theorem getCellValue_setCell_balance (es : ExtendedState) (r : ResourceId) (a : ActorId)

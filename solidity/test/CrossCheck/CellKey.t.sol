@@ -26,12 +26,19 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 ///           * the PRE-IMAGE layout is hash-independent, so it is
 ///             checked unconditionally and catches any width, order
 ///             or padding drift even under the fallback hash;
-///           * the KEY is `keccak256(preimage)`, so it is checked
-///             only when the fixture was generated against a
-///             keccak-linked build — the same gate the other
-///             cross-stack suites use.
+///           * the KEY is `keccak256(preimage)`, so it requires a
+///             keccak-linked fixture — `_requireKeccakLinked` fails
+///             the suite on a fallback-hash corpus rather than
+///             skipping it, the same gate the other cross-stack
+///             suites use.
 contract CellKeyCrossCheck is CrossCheckFramework {
     string internal constant FIXTURE = "test/CrossCheck/fixtures/cell_key.json";
+
+    /// The corpus schema this suite is written against.  Bumped to
+    /// `/v2` when the three budget-policy scalar cells collapsed into
+    /// the single `BudgetPolicy` cell (kind 14): the tag set and the
+    /// entry count both changed, and a stale corpus would still parse.
+    string internal constant IDENTIFIER = "knomosis/cell-key/v2";
 
     function _fixture() internal view returns (string memory) {
         return vm.readFile(FIXTURE);
@@ -42,6 +49,7 @@ contract CellKeyCrossCheck is CrossCheckFramework {
     /// runs regardless of which hash the fixture was built with.
     function test_preimage_layout_matches_lean() public view {
         string memory json = _fixture();
+        _requireIdentifier(json, ".identifier", IDENTIFIER);
         uint256 count = vm.parseJsonUint(json, ".count");
         assertGt(count, 0, "empty corpus");
 
@@ -74,12 +82,13 @@ contract CellKeyCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// The derived key, checked only against a keccak-linked
-    /// fixture.  Under the FNV-1a-64 fallback the Lean `keyHex`
-    /// column is not a keccak hash, so comparing would be
-    /// meaningless rather than informative.
+    /// The derived key, which requires a keccak-linked fixture.
+    /// Under the FNV-1a-64 fallback the Lean `keyHex` column is not
+    /// a keccak hash, so this fails loudly rather than comparing
+    /// something meaningless.
     function test_derived_key_matches_lean() public view {
         string memory json = _fixture();
+        _requireIdentifier(json, ".identifier", IDENTIFIER);
         _requireKeccakLinked(json, ".isKeccak256Linked");
         uint256 count = vm.parseJsonUint(json, ".count");
         for (uint256 i = 0; i < count; ++i) {

@@ -355,10 +355,7 @@ theorem getCellValue_of_not_mem (es : ExtendedState) (t : CellTag)
   | bridgeBoldTotalLockedValue =>
     exact absurd (singleton_tags_enumerated es _ (by decide)) h
   | bridgeAmmDisabled => exact absurd (singleton_tags_enumerated es _ (by decide)) h
-  | budgetPolicyFreeTier => exact absurd (singleton_tags_enumerated es _ (by decide)) h
-  | budgetPolicyActionCost => exact absurd (singleton_tags_enumerated es _ (by decide)) h
-  | budgetPolicyCurrentEpoch =>
-    exact absurd (singleton_tags_enumerated es _ (by decide)) h
+  | budgetPolicy => exact absurd (singleton_tags_enumerated es _ (by decide)) h
 
 /-! ## Well-formedness and the pre-image set
 

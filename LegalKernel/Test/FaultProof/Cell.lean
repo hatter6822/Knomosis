@@ -30,11 +30,11 @@ namespace LegalKernel.Test.FaultProof.Cell
 
 /-- Tests for the cell-proof shape primitives. -/
 def tests : List TestCase :=
-  [ { name := "CellTag.kindIndex pins every tag index in [0, 16]"
+  [ { name := "CellTag.kindIndex pins every tag index in [0, 14]"
     , body := do
         -- 0–6 are FROZEN: they are mirrored in the Solidity `CellKind`
         -- enum and pinned by the cross-stack corpus, so a reorder here
-        -- is a consensus split.  7–16 append to them.  Every
+        -- is a consensus split.  7–14 append to them.  Every
         -- constructor is listed, so a new tag added without a decision
         -- about its index fails this test rather than drifting.
         assertEq (expected := 0) (actual := (CellTag.balance 1 2).kindIndex) "balance"
@@ -59,12 +59,8 @@ def tests : List TestCase :=
           "bridgeAmmDisabled"
         assertEq (expected := 13) (actual := (CellTag.epochBudget 5).kindIndex)
           "epochBudget"
-        assertEq (expected := 14) (actual := CellTag.budgetPolicyFreeTier.kindIndex)
-          "budgetPolicyFreeTier"
-        assertEq (expected := 15) (actual := CellTag.budgetPolicyActionCost.kindIndex)
-          "budgetPolicyActionCost"
-        assertEq (expected := 16) (actual := CellTag.budgetPolicyCurrentEpoch.kindIndex)
-          "budgetPolicyCurrentEpoch"
+        assertEq (expected := 14) (actual := CellTag.budgetPolicy.kindIndex)
+          "budgetPolicy"
     }
   , { name := "CellTag DecidableEq distinguishes balance keys"
     , body := do
@@ -206,8 +202,7 @@ def tests : List TestCase :=
           [ .balance 1 8, .balance 2 7, .nonce 7, .registry 7, .localPolicy 7
           , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
           , .bridgeAmmReserveEth, .bridgeAmmDisabled, .epochBudget 7
-          , .budgetPolicyFreeTier, .budgetPolicyActionCost
-          , .budgetPolicyCurrentEpoch ]
+          , .budgetPolicy ]
         for t in others do
           assertEq (expected := (getCellValue es t).toList)
             (actual := (getCellValue es' t).toList)
@@ -247,8 +242,7 @@ def tests : List TestCase :=
           , .bridgeAmmReserveEth, .bridgeAmmReserveBold
           , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
           , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
-          , .budgetPolicyFreeTier, .budgetPolicyActionCost
-          , .budgetPolicyCurrentEpoch ]
+          , .budgetPolicy ]
         for t in tags do
           assertEq (expected := 32) (actual := (smtCellKey t).size)
             s!"key width for {repr t}"
@@ -298,7 +292,7 @@ def tests : List TestCase :=
         -- and the fixture writer both consume; this pins that it
         -- really is the composition of the two projections.
         for t in [CellTag.balance 3 4, .epochBudget 9, .bridgeAmmDisabled,
-                  .bridgeConsumed 77, .budgetPolicyActionCost] do
+                  .bridgeConsumed 77, .budgetPolicy] do
           let (k, a, b) := t.flatKey
           assertEq (expected := t.kindIndex) (actual := k) "kind agrees"
           assertEq (expected := t.keyParts.1) (actual := a) "keyA agrees"

@@ -134,12 +134,17 @@ inductive CellTag
   /-- An actor's epoch-budget cell (`lastSeenEpoch`,
       `budgetBalance`).  Tag 13. -/
   | epochBudget (actor : ActorId)
-  /-- The budget policy's free-tier floor.  Tag 14. -/
-  | budgetPolicyFreeTier
-  /-- The budget policy's per-action cost.  Tag 15. -/
-  | budgetPolicyActionCost
-  /-- The budget policy's current epoch index.  Tag 16. -/
-  | budgetPolicyCurrentEpoch
+  /-- The deployment's budget policy, whole.  Tag 14.
+
+      One cell, not three.  `BudgetPolicy` is a single value —
+      `.bounded freeTier actionCost currentEpoch` — and splitting it
+      across three tags made a cell write a read-modify-write (the
+      arm had to reconstruct the other two components out of the
+      state), cost three SMT leaves and three sibling paths where
+      every reader wants all three at once, and left an inconsistent
+      triple representable in the proof obligations even though it
+      was unreachable in practice. -/
+  | budgetPolicy
   deriving Repr, DecidableEq
 
 /-- Project a `CellTag` to its discriminator index, for canonical
@@ -150,11 +155,10 @@ inductive CellTag
     7 = bridgeAmmReserveEth, 8 = bridgeAmmReserveBold,
     9 = bridgeBoldCircuitClosed, 10 = bridgeBoldTvlCap,
     11 = bridgeBoldTotalLockedValue, 12 = bridgeAmmDisabled,
-    13 = epochBudget, 14 = budgetPolicyFreeTier,
-    15 = budgetPolicyActionCost, 16 = budgetPolicyCurrentEpoch.
+    13 = epochBudget, 14 = budgetPolicy.
 
     **0–6 are frozen** (they are mirrored in the Solidity `CellKind`
-    enum and pinned by the cross-stack corpus); 7–16 append to them.
+    enum and pinned by the cross-stack corpus); 7–14 append to them.
     Indices are never reused or reordered. -/
 def CellTag.kindIndex : CellTag → Nat
   | .balance _ _                => 0
@@ -171,12 +175,10 @@ def CellTag.kindIndex : CellTag → Nat
   | .bridgeBoldTotalLockedValue => 11
   | .bridgeAmmDisabled          => 12
   | .epochBudget _              => 13
-  | .budgetPolicyFreeTier       => 14
-  | .budgetPolicyActionCost     => 15
-  | .budgetPolicyCurrentEpoch   => 16
+  | .budgetPolicy               => 14
 
 /-- The two key components of a `CellTag`.  Singleton cells (the
-    bridge scalars, the budget-policy scalars) carry `(0, 0)`; the
+    bridge scalars, the budget policy) carry `(0, 0)`; the
     kind index is what distinguishes them. -/
 def CellTag.keyParts : CellTag → Nat × Nat
   | .balance r a                => (r.toNat, a.toNat)
@@ -194,9 +196,7 @@ def CellTag.keyParts : CellTag → Nat × Nat
   | .bridgeBoldTotalLockedValue => (0, 0)
   | .bridgeAmmDisabled          => (0, 0)
   | .epochBudget a              => (a.toNat, 0)
-  | .budgetPolicyFreeTier       => (0, 0)
-  | .budgetPolicyActionCost     => (0, 0)
-  | .budgetPolicyCurrentEpoch   => (0, 0)
+  | .budgetPolicy               => (0, 0)
 
 /-- `(kindIndex, keyA, keyB)` — the canonical flat projection of a
     cell tag.

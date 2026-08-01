@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "946d380924902ccfcb28679d44b86fd8ce757364b40e151b6b6eae699ad52e31"
+    "source_digest": "76547cba770f46ed4eae82c46dcec1944d0a16091dd774ccdb24cd42bfd79e9d"
   },
   "summary": {
-    "module_count": 324,
-    "declaration_count": 5535
+    "module_count": 325,
+    "declaration_count": 5565
   },
   "modules": [
     {
@@ -18075,7 +18075,7 @@
         {
           "kind": "def",
           "name": "CellTag.decode",
-          "line": 101,
+          "line": 99,
           "called": [
             "CellTag.encode",
             "DecodeError",
@@ -18089,7 +18089,7 @@
         {
           "kind": "def",
           "name": "CellProof.encode",
-          "line": 172,
+          "line": 170,
           "called": [
             "ExtendedState",
             "Stream"
@@ -18098,7 +18098,7 @@
         {
           "kind": "def",
           "name": "CellProof.decode",
-          "line": 178,
+          "line": 176,
           "called": [
             "CellProof.encode",
             "DecodeError",
@@ -18113,7 +18113,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.encode",
-          "line": 199,
+          "line": 197,
           "called": [
             "Stream"
           ]
@@ -18121,7 +18121,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.decode",
-          "line": 203,
+          "line": 201,
           "called": [
             "CellProofBundle.encode",
             "DecodeError",
@@ -18134,7 +18134,7 @@
         {
           "kind": "def",
           "name": "KernelStep.encode",
-          "line": 218,
+          "line": 216,
           "called": [
             "SignedAction",
             "Stream",
@@ -18144,7 +18144,7 @@
         {
           "kind": "def",
           "name": "KernelStep.decode",
-          "line": 225,
+          "line": 223,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18158,7 +18158,7 @@
         {
           "kind": "theorem",
           "name": "kernelStep_encode_deterministic",
-          "line": 252,
+          "line": 250,
           "called": [
             "KernelStep.encode"
           ]
@@ -18166,7 +18166,7 @@
         {
           "kind": "theorem",
           "name": "cellProof_encode_deterministic",
-          "line": 257,
+          "line": 255,
           "called": [
             "CellProof.encode"
           ]
@@ -18174,7 +18174,7 @@
         {
           "kind": "theorem",
           "name": "cellTag_encode_deterministic",
-          "line": 262,
+          "line": 260,
           "called": [
             "CellTag.encode",
             "Encoding",
@@ -20364,7 +20364,7 @@
         {
           "kind": "def",
           "name": "CellTag.kindIndex",
-          "line": 158,
+          "line": 162,
           "called": [
             "CellTag"
           ]
@@ -20372,7 +20372,7 @@
         {
           "kind": "def",
           "name": "CellTag.keyParts",
-          "line": 180,
+          "line": 182,
           "called": [
             "CellTag"
           ]
@@ -20467,6 +20467,351 @@
       ]
     },
     {
+      "module": "LegalKernel.FaultProof.CellStore",
+      "path": "LegalKernel/FaultProof/CellStore.lean",
+      "declaration_count": 30,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 45,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 46,
+          "called": [
+            "LegalKernel.Bridge"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "byteArray_mk_size_ne_zero",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "amountCellValue",
+          "line": 72,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "natCellValue",
+          "line": 77,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "keyCellValue",
+          "line": 84,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "policyCellValue",
+          "line": 88,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "budgetPolicyCellValue",
+          "line": 95,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "depositCellValue",
+          "line": 99,
+          "called": [
+            "Bridge.DepositRecord.encode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "withdrawalCellValue",
+          "line": 103,
+          "called": [
+            "Bridge.PendingWithdrawal.encode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "budgetCellValue",
+          "line": 108,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_balance",
+          "line": 120,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "amountCellValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_nonce",
+          "line": 124,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "natCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_registry",
+          "line": 128,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "keyCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_localPolicy",
+          "line": 136,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "policyCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_bridgeNextWdId",
+          "line": 144,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "natCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_epochBudget'",
+          "line": 148,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "budgetCellValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_bridgeConsumed",
+          "line": 156,
+          "called": [
+            "DepositId",
+            "ExtendedState",
+            "depositCellValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_budgetPolicy'",
+          "line": 171,
+          "called": [
+            "ExtendedState",
+            "budgetPolicyCellValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_bridgePending",
+          "line": 176,
+          "called": [
+            "ExtendedState",
+            "WithdrawalId",
+            "es",
+            "getCellValue",
+            "withdrawalCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_ne",
+          "line": 204,
+          "called": [
+            "CellTag",
+            "CellTag.kindIndex",
+            "ExtendedState",
+            "amountCellValue",
+            "depositCellValue",
+            "es",
+            "getCellValue",
+            "getCellValue_balance",
+            "getCellValue_bridgeConsumed",
+            "getCellValue_bridgePending",
+            "getCellValue_epochBudget'",
+            "getCellValue_localPolicy",
+            "getCellValue_nonce",
+            "getCellValue_registry",
+            "natCellValue",
+            "policyCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_balance",
+          "line": 324,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "amountCellValue",
+            "es",
+            "getCellValue",
+            "getCellValue_balance",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_nonce",
+          "line": 333,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "getCellValue_nonce",
+            "natCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_registry",
+          "line": 344,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "byteArray_mk_size_ne_zero",
+            "es",
+            "getCellValue",
+            "getCellValue_registry",
+            "keyCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_localPolicy",
+          "line": 358,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "byteArray_mk_size_ne_zero",
+            "es",
+            "getCellValue",
+            "getCellValue_localPolicy",
+            "policyCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_localPolicy_absent",
+          "line": 376,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "getCellValue_localPolicy",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeConsumed",
+          "line": 384,
+          "called": [
+            "Bridge.DepositRecord.decode",
+            "Bridge.DepositRecord.encode",
+            "DepositId",
+            "ExtendedState",
+            "byteArray_mk_size_ne_zero",
+            "depositCellValue",
+            "es",
+            "getCellValue",
+            "getCellValue_bridgeConsumed",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgePending",
+          "line": 401,
+          "called": [
+            "Bridge.PendingWithdrawal.decode",
+            "Bridge.PendingWithdrawal.encode",
+            "ExtendedState",
+            "WithdrawalId",
+            "byteArray_mk_size_ne_zero",
+            "es",
+            "getCellValue",
+            "getCellValue_bridgePending",
+            "setCell",
+            "withdrawalCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_bridgeNextWdId",
+          "line": 419,
+          "called": [
+            "ExtendedState",
+            "es",
+            "getCellValue",
+            "getCellValue_bridgeNextWdId",
+            "natCellValue",
+            "setCell"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getCellValue_setCell_epochBudget",
+          "line": 432,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "budgetCellValue",
+            "es",
+            "getCellValue",
+            "getCellValue_epochBudget'",
+            "setCell"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.FaultProof.CellValue",
       "path": "LegalKernel/FaultProof/CellValue.lean",
       "declaration_count": 19,
@@ -20502,15 +20847,13 @@
             "Bridge.PendingWithdrawal.encode",
             "CellTag",
             "ExtendedState",
-            "actionCost",
-            "es",
-            "freeTier"
+            "es"
           ]
         },
         {
           "kind": "theorem",
           "name": "getCellValue_deterministic",
-          "line": 192,
+          "line": 182,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -20521,7 +20864,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_ammReserveEth",
-          "line": 216,
+          "line": 206,
           "called": [
             "ExtendedState",
             "es",
@@ -20531,7 +20874,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_ammReserveBold",
-          "line": 221,
+          "line": 211,
           "called": [
             "ExtendedState",
             "es",
@@ -20541,7 +20884,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_boldCircuitClosed",
-          "line": 226,
+          "line": 216,
           "called": [
             "ExtendedState",
             "es",
@@ -20551,7 +20894,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_boldTvlCap",
-          "line": 233,
+          "line": 223,
           "called": [
             "ExtendedState",
             "es",
@@ -20561,7 +20904,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_boldTotalLockedValue",
-          "line": 239,
+          "line": 229,
           "called": [
             "ExtendedState",
             "es",
@@ -20571,7 +20914,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_ammDisabled",
-          "line": 250,
+          "line": 240,
           "called": [
             "ExtendedState",
             "es",
@@ -20581,7 +20924,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_ammDisabled_distinguishes",
-          "line": 259,
+          "line": 249,
           "called": [
             "ExtendedState",
             "es",
@@ -20591,7 +20934,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_epochBudget",
-          "line": 269,
+          "line": 259,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20601,20 +20944,18 @@
         },
         {
           "kind": "theorem",
-          "name": "getCellValue_budgetPolicy_scalars",
-          "line": 278,
+          "name": "getCellValue_budgetPolicy_eq",
+          "line": 267,
           "called": [
             "ExtendedState",
-            "actionCost",
             "es",
-            "freeTier",
             "getCellValue"
           ]
         },
         {
           "kind": "def",
           "name": "isCellAbsent",
-          "line": 293,
+          "line": 277,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -20626,7 +20967,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsCellAbsent",
-          "line": 298,
+          "line": 282,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -20637,21 +20978,19 @@
         {
           "kind": "def",
           "name": "setCell",
-          "line": 315,
+          "line": 299,
           "called": [
             "Bridge.DepositRecord.decode",
             "Bridge.PendingWithdrawal.decode",
             "CellTag",
             "ExtendedState",
-            "actionCost",
-            "es",
-            "freeTier"
+            "es"
           ]
         },
         {
           "kind": "theorem",
           "name": "setCell_deterministic",
-          "line": 462,
+          "line": 439,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -20662,7 +21001,7 @@
         {
           "kind": "def",
           "name": "buildCellProof",
-          "line": 474,
+          "line": 451,
           "called": [
             "CellProof",
             "CellTag",
@@ -26215,7 +26554,7 @@
         {
           "kind": "def",
           "name": "stateCellTags",
-          "line": 84,
+          "line": 82,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26226,7 +26565,7 @@
         {
           "kind": "def",
           "name": "stateCellEntries",
-          "line": 114,
+          "line": 112,
           "called": [
             "ExtendedState",
             "canonicalAbsentValue",
@@ -26239,7 +26578,7 @@
         {
           "kind": "theorem",
           "name": "mem_stateCellEntries_of_ne_absent",
-          "line": 120,
+          "line": 118,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26254,7 +26593,7 @@
         {
           "kind": "theorem",
           "name": "stateCellEntries_spec",
-          "line": 133,
+          "line": 131,
           "called": [
             "ExtendedState",
             "canonicalAbsentValue",
@@ -26268,7 +26607,7 @@
         {
           "kind": "def",
           "name": "commitExtendedState",
-          "line": 159,
+          "line": 157,
           "called": [
             "ExtendedState",
             "StateCommit",
@@ -26281,7 +26620,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_size",
-          "line": 164,
+          "line": 162,
           "called": [
             "ExtendedState",
             "commitExtendedState",
@@ -26293,7 +26632,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_deterministic",
-          "line": 169,
+          "line": 167,
           "called": [
             "ExtendedState",
             "commitExtendedState",
@@ -26303,7 +26642,7 @@
         {
           "kind": "theorem",
           "name": "singleton_tags_enumerated",
-          "line": 181,
+          "line": 179,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26315,7 +26654,7 @@
         {
           "kind": "theorem",
           "name": "balance_tag_enumerated",
-          "line": 188,
+          "line": 186,
           "called": [
             "ActorId",
             "Amount",
@@ -26329,7 +26668,7 @@
         {
           "kind": "theorem",
           "name": "epochBudget_tag_enumerated",
-          "line": 204,
+          "line": 202,
           "called": [
             "ActorBudget",
             "ActorId",
@@ -26499,7 +26838,7 @@
         {
           "kind": "def",
           "name": "StateCellsWellFormed",
-          "line": 372,
+          "line": 369,
           "called": [
             "ExtendedState",
             "es",
@@ -26510,7 +26849,7 @@
         {
           "kind": "def",
           "name": "stateCellKeyPreimages",
-          "line": 377,
+          "line": 374,
           "called": [
             "ExtendedState",
             "cellKeyPreimage",
@@ -26521,7 +26860,7 @@
         {
           "kind": "def",
           "name": "stateCommitSmtPreimages",
-          "line": 384,
+          "line": 381,
           "called": [
             "ExtendedState",
             "emptyRootPreimages",
@@ -26535,7 +26874,7 @@
         {
           "kind": "theorem",
           "name": "entries_key_size",
-          "line": 392,
+          "line": 389,
           "called": [
             "ExtendedState",
             "es",
@@ -26547,7 +26886,7 @@
         {
           "kind": "theorem",
           "name": "stateCellEntries_keys_pairwise_ne",
-          "line": 399,
+          "line": 396,
           "called": [
             "CellTag",
             "CollisionFreeOn",
@@ -26565,7 +26904,7 @@
         {
           "kind": "theorem",
           "name": "stateCellEntries_bitsDistinct",
-          "line": 424,
+          "line": 421,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26590,7 +26929,7 @@
         {
           "kind": "theorem",
           "name": "stateCellEntries_encodable",
-          "line": 456,
+          "line": 453,
           "called": [
             "EntriesEncodable",
             "ExtendedState",
@@ -26604,7 +26943,7 @@
         {
           "kind": "theorem",
           "name": "stateCellEntries_perm_of_commitSmt_eq",
-          "line": 468,
+          "line": 465,
           "called": [
             "CollisionFreeOn",
             "ExtendedState",
@@ -26624,7 +26963,7 @@
         {
           "kind": "theorem",
           "name": "cell_transfer",
-          "line": 489,
+          "line": 486,
           "called": [
             "CellTag",
             "CollisionFreeOn",
@@ -26646,7 +26985,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_determines_cells",
-          "line": 520,
+          "line": 517,
           "called": [
             "CellTag",
             "CollisionFreeOn",
@@ -26668,7 +27007,7 @@
         {
           "kind": "def",
           "name": "cellLeaf",
-          "line": 573,
+          "line": 570,
           "called": [
             "CellTag",
             "canonicalAbsentValue",
@@ -26680,7 +27019,7 @@
         {
           "kind": "def",
           "name": "verifyStateCellProof",
-          "line": 578,
+          "line": 575,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -26693,7 +27032,7 @@
         {
           "kind": "def",
           "name": "buildStateCellProof",
-          "line": 584,
+          "line": 581,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26709,7 +27048,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_verifies_present",
-          "line": 593,
+          "line": 590,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26733,7 +27072,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_verifies_absent",
-          "line": 619,
+          "line": 616,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26758,7 +27097,7 @@
         {
           "kind": "theorem",
           "name": "cellLeaf_size",
-          "line": 650,
+          "line": 647,
           "called": [
             "CellTag",
             "canonicalAbsentValue",
@@ -26770,7 +27109,7 @@
         {
           "kind": "def",
           "name": "updateStateCellRoot",
-          "line": 660,
+          "line": 657,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -26783,7 +27122,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_updates_root",
-          "line": 671,
+          "line": 668,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26813,7 +27152,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_eq_commit_of_canonical",
-          "line": 710,
+          "line": 707,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26838,7 +27177,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_proof_independent",
-          "line": 735,
+          "line": 732,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26858,7 +27197,7 @@
         {
           "kind": "theorem",
           "name": "mem_dropKey_stateCellEntries_iff",
-          "line": 776,
+          "line": 773,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26877,7 +27216,7 @@
         {
           "kind": "theorem",
           "name": "dropKey_stateCellEntries_perm_of_agree_off",
-          "line": 802,
+          "line": 799,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26896,7 +27235,7 @@
         {
           "kind": "def",
           "name": "applyStateCellWrite",
-          "line": 832,
+          "line": 829,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -26908,7 +27247,7 @@
         {
           "kind": "abbrev",
           "name": "StateCellWrite",
-          "line": 840,
+          "line": 837,
           "called": [
             "CellTag",
             "SmtCellProof"
@@ -26917,7 +27256,7 @@
         {
           "kind": "def",
           "name": "foldStateCellWrites",
-          "line": 843,
+          "line": 840,
           "called": [
             "StateCellWrite",
             "StateCommit",
@@ -26927,7 +27266,7 @@
         {
           "kind": "abbrev",
           "name": "CellWriteChain",
-          "line": 852,
+          "line": 849,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26937,7 +27276,7 @@
         {
           "kind": "def",
           "name": "chainWrites",
-          "line": 857,
+          "line": 854,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -26949,7 +27288,7 @@
         {
           "kind": "def",
           "name": "chainLast",
-          "line": 863,
+          "line": 860,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -26959,7 +27298,7 @@
         {
           "kind": "def",
           "name": "ChainCoherent",
-          "line": 871,
+          "line": 868,
           "called": [
             "BitsDistinctBelow",
             "CellWriteChain",
@@ -26981,7 +27320,7 @@
         {
           "kind": "theorem",
           "name": "foldStateCellWrites_eq_commit_of_coherent",
-          "line": 892,
+          "line": 889,
           "called": [
             "CellWriteChain",
             "ChainCoherent",
@@ -39725,7 +40064,7 @@
         {
           "kind": "def",
           "name": "entryJson",
-          "line": 79,
+          "line": 77,
           "called": [
             "CellTag",
             "Json",
@@ -39737,7 +40076,7 @@
         {
           "kind": "def",
           "name": "encodeFixture",
-          "line": 90,
+          "line": 88,
           "called": [
             "Json",
             "entryJson",
@@ -39748,13 +40087,13 @@
         {
           "kind": "def",
           "name": "fixtureName",
-          "line": 100,
+          "line": 98,
           "called": []
         },
         {
           "kind": "def",
           "name": "writeCorpus",
-          "line": 103,
+          "line": 101,
           "called": [
             "fixtureName",
             "writeHashDependentFixture"
@@ -39763,7 +40102,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 107,
+          "line": 105,
           "called": [
             "CellKey",
             "CellTag",
@@ -53055,6 +53394,7 @@
             "LegalKernel.Test.FaultProof.Cell",
             "ResourceId",
             "TestCase",
+            "amountCellValue",
             "assert",
             "assertEq",
             "burn",
@@ -53064,7 +53404,11 @@
             "es",
             "freezeResource",
             "getCellValue",
+            "getCellValue_setCell_balance",
+            "getCellValue_setCell_ne",
+            "getCellValue_setCell_nonce",
             "mint",
+            "natCellValue",
             "setCell",
             "smtCellKey",
             "transfer"

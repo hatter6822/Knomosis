@@ -70,9 +70,7 @@ def singletonCellTags : List CellTag :=
   , .bridgeBoldTvlCap
   , .bridgeBoldTotalLockedValue
   , .bridgeAmmDisabled
-  , .budgetPolicyFreeTier
-  , .budgetPolicyActionCost
-  , .budgetPolicyCurrentEpoch
+  , .budgetPolicy
   ]
 
 /-- Every cell tag of a state: one per live map entry, plus the

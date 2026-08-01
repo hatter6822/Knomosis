@@ -73,9 +73,9 @@ contract KnomosisStepVM {
     ///         Lean-side `CellTag.kindIndex`.
     /// @dev Mirrors `LegalKernel.FaultProof.CellTag.kindIndex`.
     ///      Indices 0–6 are frozen (pinned by the cross-stack
-    ///      corpus); 7–16 append to them and are never reordered.
+    ///      corpus); 7–14 append to them and are never reordered.
     ///
-    ///      7–16 exist because `commitExtendedState` binds all seven
+    ///      7–14 exist because `commitExtendedState` binds all seven
     ///      `ExtendedState` fields while the cell space covered only
     ///      part of them: the GP.11.8 AMM mirror, the GP.11.10 kill
     ///      switch, the per-actor epoch budgets and the budget policy
@@ -83,6 +83,14 @@ contract KnomosisStepVM {
     ///      a fault proof could not open them.  A dispute turning on
     ///      a forged `ammDisabled` or an inflated actor budget had
     ///      nothing to prove against.
+    ///
+    ///      `BudgetPolicy` is ONE cell holding the whole policy value,
+    ///      not three holding its scalars.  A cell is the unit an SMT
+    ///      opening addresses and the unit a write updates; splitting a
+    ///      single `BudgetPolicy` across three of them would make each
+    ///      write a read-modify-write of the other two, so a step
+    ///      changing one scalar could not be proved without opening
+    ///      cells it never touched.
     enum CellKind {
         Balance,                    // 0
         Nonce,                      // 1
@@ -98,9 +106,7 @@ contract KnomosisStepVM {
         BridgeBoldTotalLockedValue, // 11
         BridgeAmmDisabled,          // 12
         EpochBudget,                // 13
-        BudgetPolicyFreeTier,       // 14
-        BudgetPolicyActionCost,     // 15
-        BudgetPolicyCurrentEpoch    // 16
+        BudgetPolicy                // 14
     }
 
     /* ---------------------------------------------------------- */
