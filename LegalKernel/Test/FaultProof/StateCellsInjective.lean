@@ -323,13 +323,55 @@ def tests : List TestCase :=
                        (getCellValue zeroed t) (buildStateCellProof zeroed t))
           "the zeroed cell opens as absent"
     }
+  , { name := "off-cell entry lists agree after a fresh-actor insert"
+    , body := do
+        -- The discharge lemma's conclusion, checked at the value level
+        -- on the shape it is actually applied to: a write that INSERTS
+        -- a cell (fresh actor, sorting before an existing one, so the
+        -- new entry lands mid-list rather than at the end).
+        let t : CellTag := .balance 1 3
+        let post : ExtendedState :=
+          { populated with base := LegalKernel.setBalance populated.base 1 3 42 }
+        assert (!((stateCellTags populated).contains t)) "the cell starts absent"
+        assert ((stateCellTags post).contains t) "and is live afterwards"
+        let k := smtCellKey t
+        let a := (dropKey (stateCellEntries populated) k).map (fun p => p.1.toList)
+        let b := (dropKey (stateCellEntries post) k).map (fun p => p.1.toList)
+        assertEq (expected := a.length) (actual := b.length)
+          "the off-cell lists have the same length"
+        assert (a.all (fun x => b.contains x) && b.all (fun x => a.contains x))
+          "and the same members — which is what the Perm hypothesis needs"
+        -- Recorded rather than assumed: on this shape the lists are
+        -- literally equal too.  The theorems take a Perm anyway,
+        -- because establishing the equality means proving a TreeMap
+        -- insertion-ordering fact per sub-state, while the Perm
+        -- follows from membership alone.
+        assertEq (expected := a) (actual := b)
+          "list equality happens to hold here too"
+    }
+  , { name := "a permuted entry list yields the same root"
+    , body := do
+        -- `smtRootListAux_perm` at the value level.  The recursion
+        -- reads `isEmpty` and partitions by a key bit, so order cannot
+        -- matter — but the depth-0 leaf case is where distinctness is
+        -- load-bearing, so this is worth pinning.
+        let e : List (ByteArray × ByteArray) :=
+          [ (smtCellKey (.nonce 7), ByteArray.mk #[1])
+          , (smtCellKey (.registry 7), ByteArray.mk #[2])
+          , (smtCellKey (.balance 1 7), ByteArray.mk #[3]) ]
+        let e' := [e[2]!, e[0]!, e[1]!]
+        assertEq (expected := (smtRootListAux smtDepth e).toList)
+          (actual := (smtRootListAux smtDepth e').toList)
+          "a reordered entry list has the same root"
+    }
   , { name := "API stability: cell-update theorem signatures"
     , body := do
         let _upd : ∀ (es es' : ExtendedState) (t : CellTag) (canon : SmtCellProof),
             expandSiblings canon
               = canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t) →
-            dropKey (stateCellEntries es) (smtCellKey t)
-              = dropKey (stateCellEntries es') (smtCellKey t) →
+            (dropKey (stateCellEntries es) (smtCellKey t)).Perm
+              (dropKey (stateCellEntries es') (smtCellKey t)) →
+            BitsDistinctBelow smtDepth (stateCellEntries es) →
             BitsDistinctBelow smtDepth (stateCellEntries es') →
             (∀ t' ∈ stateCellTags es', getCellValue es' t' ≠ canonicalAbsentValue t' →
                smtCellKey t' ≠ smtCellKey t) →
@@ -350,12 +392,24 @@ def tests : List TestCase :=
               = some (commitExtendedState (chainLast es chain)) :=
           foldStateCellWrites_eq_commit_of_coherent
         let _single : ∀ (e e' : SmtEntries) (key : ByteArray),
-            dropKey e key = dropKey e' key →
+            (dropKey e key).Perm (dropKey e' key) →
+            BitsDistinctBelow smtDepth e →
             ((canonicalSiblings smtDepth e key).zip
                 (keyBitsUpTo smtDepth key)).foldl stepPair
               (smtRootListAux 0 (bucketAt smtDepth e' key))
               = smtRootListAux smtDepth e' :=
           smtRootListAux_update_single
+        let _discharge : ∀ (es es' : ExtendedState) (t₀ : CellTag),
+            BitsDistinctBelow smtDepth (stateCellEntries es) →
+            BitsDistinctBelow smtDepth (stateCellEntries es') →
+            (∀ t : CellTag, smtCellKey t ≠ smtCellKey t₀ →
+               getCellValue es t = getCellValue es' t) →
+            (dropKey (stateCellEntries es) (smtCellKey t₀)).Perm
+              (dropKey (stateCellEntries es') (smtCellKey t₀)) :=
+          dropKey_stateCellEntries_perm_of_agree_off
+        let _permroot : ∀ (d : Nat) (e e' : SmtEntries), e.Perm e' →
+            BitsDistinctBelow d e → smtRootListAux d e = smtRootListAux d e' :=
+          smtRootListAux_perm
         pure ()
     }
   , { name := "API stability: cell-determination theorem signatures"

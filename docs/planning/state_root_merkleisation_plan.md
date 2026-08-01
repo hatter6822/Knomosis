@@ -422,65 +422,30 @@ front rather than halfway through the rewrite:
      restating the ~33 `PerVariantCoherence.lean` theorems against
      it.
 
-  3. **The fold's off-cell hypothesis needs a discharge lemma, and
-     it is not free.**  `foldStateCellWrites_eq_commit_of_coherent`
-     (§3B) asks each link for
-     `dropKey (stateCellEntries es) k = dropKey (stateCellEntries es') k`
-     — "the two states' entry lists agree away from this cell".  That
-     is the right hypothesis and it does hold for a single-cell write,
-     but discharging it is a real proof rather than a `rfl`, and
-     nothing in the tree currently does it.
+  3. **The fold's off-cell hypothesis — DISCHARGED (§3C).**
+     `foldStateCellWrites_eq_commit_of_coherent` asks each link
+     whether the two states' entry lists agree away from the written
+     cell.  Nothing discharged that, and every per-variant coherence
+     proof consumes it, so it was the one obligation that had to land
+     before any handler work.  It has:
+     `dropKey_stateCellEntries_perm_of_agree_off` takes the statement
+     a caller can actually establish — the two states agree at every
+     cell *value* except one — and produces the entry-list fact.
 
-     Two reasons.  First, `dropKey` filters by SMT *key*, and
-     `smtCellKey` is a hash, so turning "drop the entry at this key"
-     into "drop this tag" needs `cellKeyPreimage_injective` and
-     therefore a `CollisionFreeOn` hypothesis over the cell-key
-     pre-images — the same one `stateCellEntries_keys_pairwise_ne`
-     already takes, so it should be threaded rather than invented.
-     Second, `stateCellEntries` is a `filterMap` over
-     `stateCellTags`, whose keyed blocks come from `TreeMap.toList`.
-     Two routes, and the second is the recommended one:
+     The route is by permutation, which sidesteps `Std.TreeMap`
+     ordering entirely: composing `stateCellEntries_spec` with
+     `getCellValue_of_not_mem` characterises membership without
+     mentioning the tag enumeration at all, and duplicate-freedom
+     comes free from `BitsDistinctBelow`.  The update theorems were
+     weakened from list equality to `Perm` to consume it, which cost
+     `smtRootListAux_perm` and `canonicalSiblings_perm` (both
+     straightforward) plus `perm_of_nodup_of_mem_iff`, absent from
+     core.
 
-       * **By list equality.**  A write inserts at most one key into
-         one block, so the surviving entries are unchanged *in order*.
-         Proving that needs `Std.TreeMap` insertion/ordering lemmas,
-         one per sub-state (balances, nonces, registry, local
-         policies, bridge consumed, bridge pending, epoch budgets).
-         Balances are the awkward one: the enumeration is a `flatMap`
-         over the outer resource map, so a write to a fresh resource
-         inserts at both levels.
-
-       * **By permutation** — sidesteps `TreeMap` entirely.  Combining
-         `stateCellEntries_spec` with `getCellValue_of_not_mem` gives
-         a membership characterisation that mentions no tag list at
-         all: `p ∈ dropKey (stateCellEntries es) k` iff some `t` has a
-         non-absent value, `smtCellKey t ≠ k`, and
-         `p = (smtCellKey t, getCellValue es t)`.  Two states agreeing
-         off one cell therefore have the same membership set, and both
-         lists are duplicate-free, so they are permutations.  What
-         this costs instead is Perm-invariance of the recursion:
-         `smtRootListAux` and `canonicalSiblings` must be shown
-         Perm-stable under `BitsDistinctBelow` (both are
-         straightforward — `List.Perm.filter` and `List.Perm.length_eq`
-         carry the induction, and the depth-0 singleton case is where
-         distinctness is used), and §3B's theorems restated over Perm.
-
-         Library survey, done against 4.29.1 rather than assumed.
-         Present: `List.Perm.filter`, `List.Perm.mem_iff`,
-         `List.Perm.length_eq`, `List.perm_cons_erase`,
-         `List.mem_erase_of_ne` (an iff), `List.mem_of_mem_erase`,
-         `List.Nodup.erase`.  Absent: `List.perm_ext_iff_of_nodup` and
-         `List.Subperm` entirely — so the assembled "Nodup both sides
-         plus equal membership gives Perm" has to be stated locally.
-         With `perm_cons_erase` available its proof is a short
-         structural induction on the first list rather than anything
-         deep; `List.ne_of_mem_erase` is also absent, so the
-         `x ≠ a` step in the backward direction comes from the
-         `Nodup` hypothesis instead.
-
-     Expect this to be the single largest proof obligation in §4, and
-     schedule it before the per-variant handler work rather than
-     after — every handler's coherence theorem consumes it.
+     Worth recording: the off-cell lists are in fact literally
+     *equal* on the shapes this is applied to — pinned as a test, not
+     assumed.  The permutation is what can be proved cheaply, not a
+     weaker fact that had to be settled for.
 
   4. **Bulk actions need the sub-step machinery.**
      `distributeOthers` and `proportionalDilute` touch every

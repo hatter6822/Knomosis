@@ -1186,6 +1186,125 @@ theorem canonicalSiblings_walks_to_root_absent
   rw [h_b] at this
   exact this
 
+/-! ## Permutation invariance
+
+The entry list is a list, but nothing the recursion does depends on
+its order: `smtRootListAux` reads `isEmpty` and partitions by a key
+bit, and at depth 0 distinctness leaves at most one entry.  Making
+that explicit is what lets a caller discharge the update theorems'
+hypothesis from cell-level facts, rather than having to reason about
+`Std.TreeMap`'s enumeration order — two states that agree away from a
+written cell have entry lists that are *permutations* off that cell,
+not literally equal lists. -/
+
+/-- Duplicate-free lists with the same members are permutations.
+
+    Lean core has the pieces (`List.perm_cons_erase`,
+    `List.mem_erase_of_ne`, `List.Nodup.erase`) but not this assembly,
+    and no `List.Subperm` to route through — so it is proved here. -/
+theorem perm_of_nodup_of_mem_iff {α : Type} [DecidableEq α] :
+    ∀ (l₁ l₂ : List α), l₁.Nodup → l₂.Nodup → (∀ a, a ∈ l₁ ↔ a ∈ l₂) →
+      l₁.Perm l₂
+  | [],     l₂, _,  _,  h => by
+    cases l₂ with
+    | nil        => exact List.Perm.refl _
+    | cons b _   => exact absurd ((h b).mpr List.mem_cons_self) (by simp)
+  | a :: t, l₂, h₁, h₂, h => by
+    have ha   : a ∈ l₂  := (h a).mp List.mem_cons_self
+    have h_at : a ∉ t   := (List.nodup_cons.mp h₁).1
+    have h_t  : t.Nodup := (List.nodup_cons.mp h₁).2
+    -- `a` occurs once in `l₂`, so it is absent from `l₂.erase a`.
+    have h_ae : a ∉ l₂.erase a :=
+      (List.nodup_cons.mp (((List.perm_cons_erase ha).nodup_iff).mp h₂)).1
+    refine List.Perm.trans (List.Perm.cons a ?_) (List.perm_cons_erase ha).symm
+    refine perm_of_nodup_of_mem_iff t (l₂.erase a) h_t (h₂.erase a) (fun x => ?_)
+    constructor
+    · intro hx
+      have hne : x ≠ a := fun heq => h_at (heq ▸ hx)
+      exact (List.mem_erase_of_ne hne).mpr ((h x).mp (List.mem_cons_of_mem _ hx))
+    · intro hx
+      have hne : x ≠ a := fun heq => h_ae (heq ▸ hx)
+      rcases List.mem_cons.mp ((h x).mpr (List.mem_of_mem_erase hx)) with rfl | hxt
+      · exact absurd rfl hne
+      · exact hxt
+
+/-- **The root is order-independent.**  Permuted entry lists produce
+    the same root, given the distinctness the depth-0 leaf case needs. -/
+theorem smtRootListAux_perm :
+    ∀ (d : Nat) (e e' : SmtEntries), e.Perm e' → BitsDistinctBelow d e →
+      smtRootListAux d e = smtRootListAux d e' := by
+  intro d
+  induction d with
+  | zero =>
+    intro e e' hp hwf
+    have h_len := length_le_one_of_bitsDistinctBelow_zero hwf
+    cases e with
+    | nil => rw [hp.symm.eq_nil]
+    | cons x t =>
+      have ht : t = [] := by
+        cases t with
+        | nil        => rfl
+        | cons _ _   => simp at h_len
+      subst ht
+      rw [List.perm_singleton.mp hp.symm]
+  | succ k ih =>
+    intro e e' hp hwf
+    have h_len := hp.length_eq
+    by_cases h : e.isEmpty
+    · have he : e = [] := by
+        cases e with
+        | nil      => rfl
+        | cons _ _ => exact absurd h (by simp)
+      subst he
+      rw [hp.symm.eq_nil]
+    · have he' : ¬ e'.isEmpty = true := by
+        intro h'
+        have : e' = [] := by
+          cases e' with
+          | nil      => rfl
+          | cons _ _ => exact absurd h' (by simp)
+        subst this
+        exact h (by rw [hp.eq_nil]; rfl)
+      have h_root : ∀ (l : SmtEntries), ¬ l.isEmpty = true →
+          smtRootListAux (k + 1) l
+            = hashBytes (smtRootListAux k (l.filter (fun p => ! BitsKey.keyBit p.1 k)) ++
+                          smtRootListAux k (l.filter (fun p => BitsKey.keyBit p.1 k))) := by
+        intro l hl
+        show (if l.isEmpty then _ else _) = _
+        rw [if_neg hl]
+      rw [h_root e h, h_root e' he',
+        ih _ _ (hp.filter _) (BitsDistinctBelow.filter_low hwf),
+        ih _ _ (hp.filter _) (BitsDistinctBelow.filter_high hwf)]
+
+/-- The canonical path is order-independent too: each level's sibling
+    is a root of the other half, and the recursion descends into a
+    filter of a permuted list. -/
+theorem canonicalSiblings_perm :
+    ∀ (d : Nat) (e e' : SmtEntries) (key : ByteArray),
+      e.Perm e' → BitsDistinctBelow d e →
+      canonicalSiblings d e key = canonicalSiblings d e' key := by
+  intro d
+  induction d with
+  | zero => intro _ _ _ _ _; rfl
+  | succ k ih =>
+    intro e e' key hp hwf
+    have h_path : ∀ (l : SmtEntries), canonicalSiblings (k + 1) l key
+        = (if BitsKey.keyBit key k then
+             canonicalSiblings k (l.filter (fun p => BitsKey.keyBit p.1 k)) key ++
+               [smtRootListAux k (l.filter (fun p => ! BitsKey.keyBit p.1 k))]
+           else
+             canonicalSiblings k (l.filter (fun p => ! BitsKey.keyBit p.1 k)) key ++
+               [smtRootListAux k (l.filter (fun p => BitsKey.keyBit p.1 k))]) :=
+      fun _ => rfl
+    rw [h_path e, h_path e']
+    by_cases h_bit : BitsKey.keyBit key k
+    · rw [if_pos h_bit, if_pos h_bit,
+        ih _ _ key (hp.filter _) (BitsDistinctBelow.filter_high hwf),
+        smtRootListAux_perm k _ _ (hp.filter _) (BitsDistinctBelow.filter_low hwf)]
+    · rw [if_neg h_bit, if_neg h_bit,
+        ih _ _ key (hp.filter _) (BitsDistinctBelow.filter_low hwf),
+        smtRootListAux_perm k _ _ (hp.filter _) (BitsDistinctBelow.filter_high hwf)]
+
 /-! ## Writing one cell
 
 §2B's `smtUpdateRoot` computes *a* root from an opening and a new
@@ -1220,6 +1339,19 @@ theorem dropKey_filter (entries : SmtEntries) (key : ByteArray)
   funext p
   exact Bool.and_comm _ _
 
+/-- Distinguishable entries are duplicate-free: two equal entries
+    would agree on every key bit, so no index could separate them. -/
+theorem nodup_of_bitsDistinct {d : Nat} {e : SmtEntries}
+    (h : BitsDistinctBelow d e) : e.Nodup :=
+  h.imp (fun {a b} hab h_eq => by
+    obtain ⟨i, _, h_ne⟩ := hab
+    exact h_ne (by rw [h_eq]))
+
+/-- `dropKey` is a filter, so it keeps duplicate-freedom. -/
+theorem nodup_dropKey {d : Nat} {e : SmtEntries} (key : ByteArray)
+    (h : BitsDistinctBelow d e) : (dropKey e key).Nodup :=
+  List.Pairwise.sublist List.filter_sublist (nodup_of_bitsDistinct h)
+
 /-- A list none of whose entries carry the key is its own
     `dropKey`. -/
 theorem dropKey_eq_self (entries : SmtEntries) (key : ByteArray)
@@ -1229,20 +1361,35 @@ theorem dropKey_eq_self (entries : SmtEntries) (key : ByteArray)
 
 /-- **The canonical path ignores the key's own entry.**  Two entry
     lists that agree off `key` produce the same sibling path for
-    `key`. -/
-theorem canonicalSiblings_eq_of_dropKey_eq :
+    `key`.
+
+    Stated over a PERMUTATION rather than list equality, and the
+    reason is proof engineering rather than strength.  For the writes
+    this is applied to, the off-cell lists are in fact literally equal
+    — `stateCellEntries` is a `filterMap` over a sorted `TreeMap`
+    enumeration, and a single-cell write inserts or removes exactly
+    one entry, leaving the survivors in order (pinned as a test).  But
+    *establishing* that equality means proving a `Std.TreeMap`
+    insertion-ordering fact for each of the seven keyed sub-states,
+    with balances awkward because their enumeration is a `flatMap`
+    over the outer resource map.  The permutation follows from
+    membership alone, and membership is characterisable without
+    mentioning the enumeration at all — so every caller is spared a
+    proof that would buy nothing. -/
+theorem canonicalSiblings_eq_of_dropKey_perm :
     ∀ (d : Nat) (e e' : SmtEntries) (key : ByteArray),
-      dropKey e key = dropKey e' key →
+      (dropKey e key).Perm (dropKey e' key) → BitsDistinctBelow d e →
       canonicalSiblings d e key = canonicalSiblings d e' key := by
   intro d
   induction d with
-  | zero => intro _ _ _ _; rfl
+  | zero => intro _ _ _ _ _; rfl
   | succ k ih =>
-    intro e e' key h
+    intro e e' key h hwf
     have h_half : ∀ (f : ByteArray × ByteArray → Bool),
-        dropKey (e.filter f) key = dropKey (e'.filter f) key := by
+        (dropKey (e.filter f) key).Perm (dropKey (e'.filter f) key) := by
       intro f
-      rw [dropKey_filter, dropKey_filter, h]
+      rw [dropKey_filter, dropKey_filter]
+      exact h.filter f
     -- The half the key does NOT descend into holds no entry for the
     -- key, so there `dropKey` is the identity and the two lists are
     -- equal outright — which is what the sibling root reads.
@@ -1259,7 +1406,8 @@ theorem canonicalSiblings_eq_of_dropKey_eq :
       fun _ => rfl
     rw [h_path e, h_path e']
     by_cases h_bit : BitsKey.keyBit key k
-    · rw [if_pos h_bit, if_pos h_bit, ih _ _ _ (h_half _)]
+    · rw [if_pos h_bit, if_pos h_bit,
+        ih _ _ _ (h_half _) (BitsDistinctBelow.filter_high hwf)]
       have h_ne : ∀ (l : SmtEntries),
           ∀ p ∈ l.filter (fun p => ! BitsKey.keyBit p.1 k), p.1 ≠ key := by
         intro l p hp h_eq
@@ -1267,15 +1415,24 @@ theorem canonicalSiblings_eq_of_dropKey_eq :
           simpa using (List.mem_filter.mp hp).2
         rw [h_eq, h_bit] at hb
         exact Bool.noConfusion hb
-      rw [← h_off e _ (h_ne e), ← h_off e' _ (h_ne e'), h_half]
-    · rw [if_neg h_bit, if_neg h_bit, ih _ _ _ (h_half _)]
+      have h_lo : (e.filter (fun p => ! BitsKey.keyBit p.1 k)).Perm
+                  (e'.filter (fun p => ! BitsKey.keyBit p.1 k)) := by
+        rw [← h_off e _ (h_ne e), ← h_off e' _ (h_ne e')]
+        exact h_half _
+      rw [smtRootListAux_perm k _ _ h_lo (BitsDistinctBelow.filter_low hwf)]
+    · rw [if_neg h_bit, if_neg h_bit,
+        ih _ _ _ (h_half _) (BitsDistinctBelow.filter_low hwf)]
       have h_ne : ∀ (l : SmtEntries),
           ∀ p ∈ l.filter (fun p => BitsKey.keyBit p.1 k), p.1 ≠ key := by
         intro l p hp h_eq
         have hb : BitsKey.keyBit p.1 k = true := (List.mem_filter.mp hp).2
         rw [h_eq] at hb
         exact absurd hb h_bit
-      rw [← h_off e _ (h_ne e), ← h_off e' _ (h_ne e'), h_half]
+      have h_hi : (e.filter (fun p => BitsKey.keyBit p.1 k)).Perm
+                  (e'.filter (fun p => BitsKey.keyBit p.1 k)) := by
+        rw [← h_off e _ (h_ne e), ← h_off e' _ (h_ne e')]
+        exact h_half _
+      rw [smtRootListAux_perm k _ _ h_hi (BitsDistinctBelow.filter_high hwf)]
 
 /-- The bucket is a sub-list of the entries it was descended from. -/
 theorem bucketAt_sublist :
@@ -1363,24 +1520,26 @@ theorem bucketAt_eq_singleton_of_mem (d : Nat) (entries : SmtEntries)
     supplies the path, the write supplies the leaf. -/
 theorem smtRootListAux_update_single
     (e e' : SmtEntries) (key : ByteArray)
-    (h : dropKey e key = dropKey e' key) :
+    (h : (dropKey e key).Perm (dropKey e' key))
+    (hwf : BitsDistinctBelow smtDepth e) :
     ((canonicalSiblings smtDepth e key).zip (keyBitsUpTo smtDepth key)).foldl stepPair
         (smtRootListAux 0 (bucketAt smtDepth e' key))
       = smtRootListAux smtDepth e' := by
-  rw [canonicalSiblings_eq_of_dropKey_eq smtDepth e e' key h]
+  rw [canonicalSiblings_eq_of_dropKey_perm smtDepth e e' key h hwf]
   exact canonicalSiblings_walks_from_bucket smtDepth (by unfold smtDepth; omega) e' key
 
 /-- Writing a value the tree keeps: the walk starts from that key's
     leaf. -/
 theorem smtRootListAux_update_to_present
     (e e' : SmtEntries) (key newValue : ByteArray)
-    (h : dropKey e key = dropKey e' key)
+    (h : (dropKey e key).Perm (dropKey e' key))
+    (h_wf : BitsDistinctBelow smtDepth e)
     (h_wf' : BitsDistinctBelow smtDepth e')
     (h_mem' : (key, newValue) ∈ e') :
     ((canonicalSiblings smtDepth e key).zip (keyBitsUpTo smtDepth key)).foldl stepPair
         (leafHash key newValue)
       = smtRootListAux smtDepth e' := by
-  rw [← smtRootListAux_update_single e e' key h,
+  rw [← smtRootListAux_update_single e e' key h h_wf,
     bucketAt_eq_singleton_of_mem smtDepth e' key newValue h_wf' h_mem']
   rfl
 
@@ -1389,13 +1548,14 @@ theorem smtRootListAux_update_to_present
     the canonicalised entry list no longer holds the key. -/
 theorem smtRootListAux_update_to_absent
     (e e' : SmtEntries) (key : ByteArray)
-    (h : dropKey e key = dropKey e' key)
+    (h : (dropKey e key).Perm (dropKey e' key))
+    (h_wf : BitsDistinctBelow smtDepth e)
     (h_size : ∀ p ∈ e', p.1.size = 32) (h_key : key.size = 32)
     (h_abs : ∀ p ∈ e', p.1 ≠ key) :
     ((canonicalSiblings smtDepth e key).zip (keyBitsUpTo smtDepth key)).foldl stepPair
         (emptyRootAt 0)
       = smtRootListAux smtDepth e' := by
-  rw [← smtRootListAux_update_single e e' key h,
+  rw [← smtRootListAux_update_single e e' key h h_wf,
     bucketAt_eq_nil_of_not_mem e' key h_size h_key h_abs, smtRootListAux_nil 0 (by omega)]
 
 /-! ### Proof-independence at an arbitrary leaf

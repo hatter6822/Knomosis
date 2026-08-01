@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "191098d07059eeeaf458acef77767a7c661e95edb65c8a9812d1f07d30e59a8a"
+    "source_digest": "4b34690385e59d2a76d567b5bdbdfc6839eb07294c5b83438b7f54ac144ed75d"
   },
   "summary": {
     "module_count": 324,
-    "declaration_count": 5521
+    "declaration_count": 5528
   },
   "modules": [
     {
@@ -24796,7 +24796,7 @@
     {
       "module": "LegalKernel.FaultProof.SmtInjective",
       "path": "LegalKernel/FaultProof/SmtInjective.lean",
-      "declaration_count": 62,
+      "declaration_count": 67,
       "declarations": [
         {
           "kind": "namespace",
@@ -25371,9 +25371,43 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "perm_of_nodup_of_mem_iff",
+          "line": 1204,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_perm",
+          "line": 1232,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.filter_high",
+            "BitsDistinctBelow.filter_low",
+            "SmtEntries",
+            "hashBytes",
+            "length_le_one_of_bitsDistinctBelow_zero",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "canonicalSiblings_perm",
+          "line": 1281,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.filter_high",
+            "BitsDistinctBelow.filter_low",
+            "SmtEntries",
+            "canonicalSiblings",
+            "smtRootListAux",
+            "smtRootListAux_perm"
+          ]
+        },
+        {
           "kind": "def",
           "name": "dropKey",
-          "line": 1208,
+          "line": 1327,
           "called": [
             "SmtEntries",
             "entries"
@@ -25382,17 +25416,37 @@
         {
           "kind": "theorem",
           "name": "dropKey_filter",
-          "line": 1213,
+          "line": 1332,
           "called": [
             "SmtEntries",
             "dropKey",
             "entries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "nodup_of_bitsDistinct",
+          "line": 1343,
+          "called": [
+            "BitsDistinctBelow",
+            "SmtEntries"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "nodup_dropKey",
+          "line": 1350,
+          "called": [
+            "BitsDistinctBelow",
+            "SmtEntries",
+            "dropKey",
+            "nodup_of_bitsDistinct"
           ]
         },
         {
           "kind": "theorem",
           "name": "dropKey_eq_self",
-          "line": 1224,
+          "line": 1356,
           "called": [
             "SmtEntries",
             "dropKey",
@@ -25401,21 +25455,25 @@
         },
         {
           "kind": "theorem",
-          "name": "canonicalSiblings_eq_of_dropKey_eq",
-          "line": 1232,
+          "name": "canonicalSiblings_eq_of_dropKey_perm",
+          "line": 1378,
           "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.filter_high",
+            "BitsDistinctBelow.filter_low",
             "SmtEntries",
             "canonicalSiblings",
             "dropKey",
             "dropKey_eq_self",
             "dropKey_filter",
-            "smtRootListAux"
+            "smtRootListAux",
+            "smtRootListAux_perm"
           ]
         },
         {
           "kind": "theorem",
           "name": "bucketAt_sublist",
-          "line": 1280,
+          "line": 1437,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -25425,7 +25483,7 @@
         {
           "kind": "theorem",
           "name": "length_bucketAt_le_one",
-          "line": 1299,
+          "line": 1456,
           "called": [
             "BitsDistinctBelow",
             "BitsDistinctBelow.sublist",
@@ -25439,7 +25497,7 @@
         {
           "kind": "theorem",
           "name": "mem_bucketAt_of_mem",
-          "line": 1319,
+          "line": 1476,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -25449,7 +25507,7 @@
         {
           "kind": "theorem",
           "name": "bucketAt_eq_singleton_of_mem",
-          "line": 1338,
+          "line": 1495,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries",
@@ -25462,12 +25520,13 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_update_single",
-          "line": 1363,
+          "line": 1520,
           "called": [
+            "BitsDistinctBelow",
             "SmtEntries",
             "bucketAt",
             "canonicalSiblings",
-            "canonicalSiblings_eq_of_dropKey_eq",
+            "canonicalSiblings_eq_of_dropKey_perm",
             "canonicalSiblings_walks_from_bucket",
             "dropKey",
             "keyBitsUpTo",
@@ -25479,7 +25538,7 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_update_to_present",
-          "line": 1374,
+          "line": 1532,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries",
@@ -25497,8 +25556,9 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_update_to_absent",
-          "line": 1389,
+          "line": 1548,
           "called": [
+            "BitsDistinctBelow",
             "SmtEntries",
             "bucketAt_eq_nil_of_not_mem",
             "canonicalSiblings",
@@ -25515,7 +25575,7 @@
         {
           "kind": "def",
           "name": "smtWalkPairPreimages",
-          "line": 1411,
+          "line": 1571,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -25526,7 +25586,7 @@
         {
           "kind": "theorem",
           "name": "smtWalkFrom_proof_independent",
-          "line": 1421,
+          "line": 1581,
           "called": [
             "CollisionFreeOn",
             "FaultProof",
@@ -26292,7 +26352,7 @@
     {
       "module": "LegalKernel.FaultProof.StateCellsInjective",
       "path": "LegalKernel/FaultProof/StateCellsInjective.lean",
-      "declaration_count": 41,
+      "declaration_count": 43,
       "declarations": [
         {
           "kind": "namespace",
@@ -26760,7 +26820,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_eq_commit_of_canonical",
-          "line": 709,
+          "line": 710,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -26785,7 +26845,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_proof_independent",
-          "line": 733,
+          "line": 735,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26803,9 +26863,47 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "mem_dropKey_stateCellEntries_iff",
+          "line": 776,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "canonicalAbsentValue",
+            "dropKey",
+            "es",
+            "getCellValue",
+            "getCellValue_of_not_mem",
+            "mem_stateCellEntries_of_ne_absent",
+            "smtCellKey",
+            "stateCellEntries",
+            "stateCellEntries_spec",
+            "stateCellTags"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "dropKey_stateCellEntries_perm_of_agree_off",
+          "line": 802,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "ExtendedState",
+            "dropKey",
+            "es",
+            "getCellValue",
+            "mem_dropKey_stateCellEntries_iff",
+            "nodup_dropKey",
+            "perm_of_nodup_of_mem_iff",
+            "smtCellKey",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
           "kind": "def",
           "name": "applyStateCellWrite",
-          "line": 762,
+          "line": 832,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -26817,7 +26915,7 @@
         {
           "kind": "abbrev",
           "name": "StateCellWrite",
-          "line": 770,
+          "line": 840,
           "called": [
             "CellTag",
             "SmtCellProof"
@@ -26826,7 +26924,7 @@
         {
           "kind": "def",
           "name": "foldStateCellWrites",
-          "line": 773,
+          "line": 843,
           "called": [
             "StateCellWrite",
             "StateCommit",
@@ -26836,7 +26934,7 @@
         {
           "kind": "abbrev",
           "name": "CellWriteChain",
-          "line": 782,
+          "line": 852,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -26846,7 +26944,7 @@
         {
           "kind": "def",
           "name": "chainWrites",
-          "line": 787,
+          "line": 857,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -26858,7 +26956,7 @@
         {
           "kind": "def",
           "name": "chainLast",
-          "line": 793,
+          "line": 863,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -26868,7 +26966,7 @@
         {
           "kind": "def",
           "name": "ChainCoherent",
-          "line": 801,
+          "line": 871,
           "called": [
             "BitsDistinctBelow",
             "CellWriteChain",
@@ -26890,7 +26988,7 @@
         {
           "kind": "theorem",
           "name": "foldStateCellWrites_eq_commit_of_coherent",
-          "line": 821,
+          "line": 892,
           "called": [
             "CellWriteChain",
             "ChainCoherent",
@@ -53864,6 +53962,7 @@
             "commitExtendedState",
             "commitExtendedState_determines_cells",
             "dropKey",
+            "dropKey_stateCellEntries_perm_of_agree_off",
             "es",
             "expandSiblings",
             "foldStateCellWrites",
@@ -53876,6 +53975,7 @@
             "smtCellKey",
             "smtDepth",
             "smtRootListAux",
+            "smtRootListAux_perm",
             "smtRootListAux_update_single",
             "smtWalkFrom",
             "smtWalkPairPreimages",

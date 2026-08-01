@@ -671,8 +671,9 @@ def updateStateCellRoot (t : CellTag) (newValue : ByteArray)
     licenses reusing the pre-state's path. -/
 theorem canonicalSiblings_updates_root
     (es es' : ExtendedState) (t : CellTag)
-    (h_off : dropKey (stateCellEntries es) (smtCellKey t)
-           = dropKey (stateCellEntries es') (smtCellKey t))
+    (h_off : (dropKey (stateCellEntries es) (smtCellKey t)).Perm
+               (dropKey (stateCellEntries es') (smtCellKey t)))
+    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries es))
     (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
     (h_keys' : ∀ t' ∈ stateCellTags es',
                  getCellValue es' t' ≠ canonicalAbsentValue t' →
@@ -683,7 +684,7 @@ theorem canonicalSiblings_updates_root
   unfold cellLeaf
   by_cases h_abs : getCellValue es' t = canonicalAbsentValue t
   · rw [if_pos h_abs]
-    refine smtRootListAux_update_to_absent _ _ _ h_off (entries_key_size es')
+    refine smtRootListAux_update_to_absent _ _ _ h_off h_wf (entries_key_size es')
       (smtCellKey_size t) (fun p hp => ?_)
     obtain ⟨t', ht', rfl, h_ne'⟩ := stateCellEntries_spec es' p hp
     exact h_keys' t' ht' h_ne'
@@ -692,7 +693,7 @@ theorem canonicalSiblings_updates_root
     -- other than the canonical absent value is enumerated, because
     -- `getCellValue_of_not_mem` says an unenumerated one reads exactly
     -- that value.
-    refine smtRootListAux_update_to_present _ _ _ _ h_off h_wf'
+    refine smtRootListAux_update_to_present _ _ _ _ h_off h_wf h_wf'
       (mem_stateCellEntries_of_ne_absent es' t ?_ h_abs)
     by_cases hm : t ∈ stateCellTags es'
     · exact hm
@@ -711,8 +712,9 @@ theorem updateStateCellRoot_eq_commit_of_canonical
     (es es' : ExtendedState) (t : CellTag) (canon : SmtCellProof)
     (h_expand : expandSiblings canon
         = canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t))
-    (h_off : dropKey (stateCellEntries es) (smtCellKey t)
-           = dropKey (stateCellEntries es') (smtCellKey t))
+    (h_off : (dropKey (stateCellEntries es) (smtCellKey t)).Perm
+               (dropKey (stateCellEntries es') (smtCellKey t)))
+    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries es))
     (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
     (h_keys' : ∀ t' ∈ stateCellTags es',
                  getCellValue es' t' ≠ canonicalAbsentValue t' →
@@ -720,7 +722,7 @@ theorem updateStateCellRoot_eq_commit_of_canonical
     updateStateCellRoot t (getCellValue es' t) canon = commitExtendedState es' := by
   unfold updateStateCellRoot smtWalkFrom
   rw [h_expand]
-  exact canonicalSiblings_updates_root es es' t h_off h_wf' h_keys'
+  exact canonicalSiblings_updates_root es es' t h_off h_wf h_wf' h_keys'
 
 /-- **A responder cannot steer the post-root.**  Two openings that
     both verify the same cell against the same published root compute
@@ -748,6 +750,74 @@ theorem updateStateCellRoot_proof_independent
     (cellLeaf t (getCellValue es t)) (cellLeaf t newValue) proof₁ proof₂
     h_cf (cellLeaf_size t _) h_wf₁ h_wf₂
     (decide_eq_true_eq.mp h_walk₁) (decide_eq_true_eq.mp h_walk₂)
+
+/-! ## Discharging the off-cell hypothesis
+
+The update theorems ask whether two states' entry lists agree away
+from the written cell.  A caller holds something else — that the two
+states agree at every cell *value* except one — and bridging the two
+is the step every per-variant coherence proof needs.
+
+The bridge works because membership in `dropKey (stateCellEntries es) k`
+is characterisable without mentioning `stateCellTags` at all.  Composing
+`stateCellEntries_spec` with `getCellValue_of_not_mem` gives "an entry
+is present iff some tag reads a non-absent value at a key other than
+`k`" — a statement purely about `getCellValue`.  Equal membership plus
+duplicate-freedom then gives the permutation, and no `Std.TreeMap`
+enumeration order is ever mentioned.
+
+The lists happen to be literally equal on the shapes this is applied
+to; the permutation is what can be proved cheaply, not a weaker fact
+that had to be settled for. -/
+
+/-- Membership in the off-cell entry list, stated over `getCellValue`
+    alone.  The tag enumeration drops out: a tag it omits reads the
+    canonical absent value (`getCellValue_of_not_mem`), which the
+    canonicalising filter would have discarded anyway. -/
+theorem mem_dropKey_stateCellEntries_iff
+    (es : ExtendedState) (k : ByteArray) (p : ByteArray × ByteArray) :
+    p ∈ dropKey (stateCellEntries es) k ↔
+      ∃ t : CellTag, getCellValue es t ≠ canonicalAbsentValue t ∧
+        smtCellKey t ≠ k ∧ p = (smtCellKey t, getCellValue es t) := by
+  unfold dropKey
+  constructor
+  · intro hp
+    obtain ⟨hp_mem, hp_ne⟩ := List.mem_filter.mp hp
+    obtain ⟨t, _, rfl, h_abs⟩ := stateCellEntries_spec es p hp_mem
+    exact ⟨t, h_abs, by simpa using hp_ne, rfl⟩
+  · rintro ⟨t, h_abs, h_key, rfl⟩
+    refine List.mem_filter.mpr ⟨?_, by simpa using h_key⟩
+    refine mem_stateCellEntries_of_ne_absent es t ?_ h_abs
+    by_cases hm : t ∈ stateCellTags es
+    · exact hm
+    · exact absurd (getCellValue_of_not_mem es t hm) h_abs
+
+/-- **The discharge lemma.**  Two states that agree at every cell
+    except the one being written have `dropKey`-permuted entry lists
+    at that cell's key.
+
+    This is what every per-variant coherence proof hands to
+    `updateStateCellRoot_eq_commit_of_canonical`, and it is stated at
+    the level a caller can actually establish — cell values, not
+    entry-list layout. -/
+theorem dropKey_stateCellEntries_perm_of_agree_off
+    (es es' : ExtendedState) (t₀ : CellTag)
+    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries es))
+    (h_wf' : BitsDistinctBelow smtDepth (stateCellEntries es'))
+    (h_agree : ∀ t : CellTag, smtCellKey t ≠ smtCellKey t₀ →
+                 getCellValue es t = getCellValue es' t) :
+    (dropKey (stateCellEntries es) (smtCellKey t₀)).Perm
+      (dropKey (stateCellEntries es') (smtCellKey t₀)) := by
+  refine perm_of_nodup_of_mem_iff _ _ (nodup_dropKey _ h_wf) (nodup_dropKey _ h_wf')
+    (fun p => ?_)
+  rw [mem_dropKey_stateCellEntries_iff, mem_dropKey_stateCellEntries_iff]
+  constructor
+  · rintro ⟨t, h_abs, h_key, rfl⟩
+    have h_v := h_agree t h_key
+    exact ⟨t, by rw [← h_v]; exact h_abs, h_key, by rw [h_v]⟩
+  · rintro ⟨t, h_abs, h_key, rfl⟩
+    have h_v := h_agree t h_key
+    exact ⟨t, by rw [h_v]; exact h_abs, h_key, by rw [h_v]⟩
 
 /-! ## Folding a step's writes
 
@@ -803,8 +873,9 @@ def ChainCoherent (es : ExtendedState) : CellWriteChain → Prop
   | [] => True
   | (es', t, p) :: rest =>
       expandSiblings p = canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)
-      ∧ dropKey (stateCellEntries es) (smtCellKey t)
-          = dropKey (stateCellEntries es') (smtCellKey t)
+      ∧ (dropKey (stateCellEntries es) (smtCellKey t)).Perm
+          (dropKey (stateCellEntries es') (smtCellKey t))
+      ∧ BitsDistinctBelow smtDepth (stateCellEntries es)
       ∧ BitsDistinctBelow smtDepth (stateCellEntries es')
       ∧ (∀ t' ∈ stateCellTags es', getCellValue es' t' ≠ canonicalAbsentValue t' →
            smtCellKey t' ≠ smtCellKey t)
@@ -829,7 +900,7 @@ theorem foldStateCellWrites_eq_commit_of_coherent :
   | cons hd rest ih =>
     obtain ⟨es', t, p⟩ := hd
     intro es hc
-    obtain ⟨h_exp, h_off, h_wf', h_keys', h_ver, h_rest⟩ := hc
+    obtain ⟨h_exp, h_off, h_wf, h_wf', h_keys', h_ver, h_rest⟩ := hc
     show (match applyStateCellWrite (commitExtendedState es) t (getCellValue es t)
                   (getCellValue es' t) p with
           | none    => none
@@ -839,8 +910,8 @@ theorem foldStateCellWrites_eq_commit_of_coherent :
               (getCellValue es' t) p = some (commitExtendedState es') from by
           unfold applyStateCellWrite
           rw [if_pos h_ver,
-            updateStateCellRoot_eq_commit_of_canonical es es' t p h_exp h_off h_wf'
-              h_keys']]
+            updateStateCellRoot_eq_commit_of_canonical es es' t p h_exp h_off h_wf
+              h_wf' h_keys']]
     exact ih es' h_rest
 
 end FaultProof

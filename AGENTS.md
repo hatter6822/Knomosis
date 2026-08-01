@@ -656,6 +656,8 @@ The Genesis Plan promises a small set of type-level guarantees
 | B-3 | Absent cells open against the root | `canonicalSiblings_verifies_absent` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | One write lands on the post-state root | `updateStateCellRoot_eq_commit_of_canonical` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | Ordered write fold lands on the post root | `foldStateCellWrites_eq_commit_of_coherent` | `FaultProof/StateCellsInjective.lean` |
+| B-3 | Off-cell agreement discharges the fold | `dropKey_stateCellEntries_perm_of_agree_off` | `FaultProof/StateCellsInjective.lean` |
+| B-3 | The root is order-independent | `smtRootListAux_perm` | `FaultProof/SmtInjective.lean` |
 | B-3 | Production-faithful semantic core | `apply_bridge_admissible_with_budget_eq` | `FaultProof/ProductionApply.lean` |
 | Phase 6 | Dispute filing rejects malformed | `fileDispute_rejects_*` | `Disputes/Filing.lean` |
 | Phase 6 | Evidence verifiers deterministic | `checkEvidence_deterministic` | `Disputes/Evidence.lean` |
