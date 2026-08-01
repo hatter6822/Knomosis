@@ -477,6 +477,65 @@ def tests : List TestCase :=
             ActorBudget.empty).budgetBalance)
           "a refused consume must leave the budgets entirely alone"
     }
+  , { name := "the verifier derives the epoch-budget write from proven cells"
+    , body := do
+        -- The second cell every action writes, byte-for-byte, and over
+        -- BOTH targets that can move: the signer (the consume) and a
+        -- grant recipient.  `topUpActionBudgetFor` is the case where
+        -- those differ, which is what would break a derivation that
+        -- assumed the grant always lands on the signer.
+        let cases : List (Authority.Action × ActorId) :=
+          [ (.transfer 1 7 8 30, 7)
+          , (.mint 1 8 5, 7)
+          , (.topUpActionBudget 1 5 2 9, 7)
+          , (.topUpActionBudgetFor 8 1 5 2 9, 8)
+          , (.topUpActionBudgetFor 8 1 5 2 9, 7) ]
+        for (action, target) in cases do
+          let st := sign action
+          let post := productionApplyBudget base st 0
+          match deriveEpochBudgetCellValue
+                  (getCellValue base CellTag.budgetPolicy)
+                  (getCellValue base (CellTag.epochBudget st.signer))
+                  (getCellValue base (CellTag.epochBudget target))
+                  st.action st.signer target with
+          | some derived =>
+            assertEq
+              (expected := (getCellValue post (CellTag.epochBudget target)).toList)
+              (actual := derived.toList)
+              s!"derived budget write ≠ the advance's, {repr action} at {target}"
+          | none =>
+            throw <| IO.userError
+              s!"the derivation refused honest cells for {repr action}"
+    }
+  , { name := "a refused consume freezes every actor's budget"
+    , body := do
+        -- The branch a happy-path loop never reaches, and the one a
+        -- flattened derivation gets wrong: the consume is checked
+        -- against the SIGNER's budget but gates the write to EVERY
+        -- actor, so a grant recipient must NOT be credited on a step
+        -- the signer could not afford.
+        let starved : ExtendedState := { base with budgetPolicy := .bounded 0 9999 3 }
+        let action : Authority.Action := .topUpActionBudgetFor 8 1 5 2 9
+        let st := sign action
+        let post := productionApplyBudget starved st 0
+        for target in [(7 : ActorId), 8] do
+          match deriveEpochBudgetCellValue
+                  (getCellValue starved CellTag.budgetPolicy)
+                  (getCellValue starved (CellTag.epochBudget st.signer))
+                  (getCellValue starved (CellTag.epochBudget target))
+                  st.action st.signer target with
+          | some derived =>
+            assertEq
+              (expected := (getCellValue starved (CellTag.epochBudget target)).toList)
+              (actual := derived.toList)
+              s!"a refused consume must leave actor {target} alone"
+            assertEq
+              (expected := (getCellValue post (CellTag.epochBudget target)).toList)
+              (actual := derived.toList)
+              s!"...and must agree with the advance at actor {target}"
+          | none =>
+            throw <| IO.userError "the derivation refused honest cells"
+    }
   , { name := "API stability: the verifier-side derivation"
     , body := do
         let _nonce : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
@@ -489,6 +548,19 @@ def tests : List TestCase :=
             Authority.expectsNonce (productionApplyBudget es st idx) st.signer =
               Authority.expectsNonce es st.signer + 1 :=
           productionApplyBudget_expectsNonce_signer
+        -- The epoch-budget derivation is stated for EVERY actor, not
+        -- just the signer or the grant recipient.  A regression that
+        -- narrowed it to one of those would fail here rather than
+        -- quietly leaving the other unadjudicable.
+        let _budget : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat)
+            (a : ActorId),
+            deriveEpochBudget es.budgetPolicy
+                (es.epochBudgets[st.signer]?.getD ActorBudget.empty)
+                (es.epochBudgets[a]?.getD ActorBudget.empty)
+                st.action st.signer a
+              = (productionApplyBudget es st idx).epochBudgets[a]?.getD
+                  ActorBudget.empty :=
+          deriveEpochBudget_correct
         pure ()
     }
   , { name := "API stability: WriteSetComplete signatures"

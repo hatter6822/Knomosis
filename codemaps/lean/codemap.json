@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "7757b812e2729af0d6e43cc8c40c546c01b07e8bd4596322df566f7cf334f680"
+    "source_digest": "d8eaadaf3b97b7799db2ca994bffb987794e8cf92ec918b2744444ac8f4daa16"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5713
+    "declaration_count": 5723
   },
   "modules": [
     {
@@ -30938,18 +30938,18 @@
     {
       "module": "LegalKernel.FaultProof.VerifierWrites",
       "path": "LegalKernel/FaultProof/VerifierWrites.lean",
-      "declaration_count": 9,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 69,
+          "line": 78,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 70,
+          "line": 79,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -30957,13 +30957,13 @@
         {
           "kind": "def",
           "name": "deriveNonceCellValue",
-          "line": 91,
+          "line": 100,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "productionApplyBudget_expectsNonce_signer",
-          "line": 104,
+          "line": 113,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -30977,7 +30977,7 @@
         {
           "kind": "theorem",
           "name": "decode_nonceCell",
-          "line": 129,
+          "line": 138,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30988,7 +30988,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_correct",
-          "line": 157,
+          "line": 166,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -31003,7 +31003,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_epochBudgets_eq",
-          "line": 197,
+          "line": 206,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -31019,9 +31019,149 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "applyGrantAt",
+          "line": 245,
+          "called": [
+            "Action",
+            "ActorBudget",
+            "ActorId",
+            "depositWithFee",
+            "freeTier",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "budgetGrant_getD_eq_applyGrantAt",
+          "line": 258,
+          "called": [
+            "Action",
+            "ActorId",
+            "EpochBudgetState",
+            "applyGrantAt",
+            "budgetGrant",
+            "depositWithFee",
+            "freeTier",
+            "poolActor",
+            "topUpActionBudget",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveEpochBudget",
+          "line": 299,
+          "called": [
+            "Action",
+            "ActorBudget",
+            "ActorId",
+            "actionCost",
+            "applyGrantAt",
+            "freeTier",
+            "policy",
+            "refundConsumeExtra"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveEpochBudget_correct",
+          "line": 326,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "actionCost",
+            "budgetGrant_getD_eq_applyGrantAt",
+            "consume",
+            "deriveEpochBudget",
+            "es",
+            "freeTier",
+            "productionApplyBudget",
+            "productionApplyBudget_epochBudgets_eq",
+            "refundConsumeExtra"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "decodeEpochBudgetCellValue",
+          "line": 379,
+          "called": [
+            "ActorBudget"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "encodeEpochBudgetCellValue",
+          "line": 388,
+          "called": [
+            "ActorBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "decode_epochBudgetCell",
+          "line": 399,
+          "called": [
+            "ActorBudget",
+            "ActorId",
+            "ExtendedState",
+            "decodeEpochBudgetCellValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveEpochBudgetCellValue",
+          "line": 450,
+          "called": [
+            "Action",
+            "ActorId",
+            "decodeEpochBudgetCellValue",
+            "deriveEpochBudget",
+            "encodeEpochBudgetCellValue",
+            "policy"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "decode_budgetPolicyCell",
+          "line": 469,
+          "called": [
+            "ExtendedState",
+            "actionCost",
+            "es",
+            "freeTier",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveEpochBudgetCellValue_correct",
+          "line": 504,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "SignedAction",
+            "actionCost",
+            "decode_budgetPolicyCell",
+            "decode_epochBudgetCell",
+            "deriveEpochBudget",
+            "deriveEpochBudgetCellValue",
+            "deriveEpochBudget_correct",
+            "encodeEpochBudgetCellValue",
+            "es",
+            "freeTier",
+            "getCellValue",
+            "productionApplyBudget"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_malformed",
-          "line": 232,
+          "line": 539,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -31029,7 +31169,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_trailing",
-          "line": 246,
+          "line": 553,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -56742,6 +56882,9 @@
             "commitExtendedState",
             "deposit",
             "depositWithFee",
+            "deriveEpochBudget",
+            "deriveEpochBudgetCellValue",
+            "deriveEpochBudget_correct",
             "deriveNonceCellValue",
             "deriveNonceCellValue_correct",
             "distributeOthers",

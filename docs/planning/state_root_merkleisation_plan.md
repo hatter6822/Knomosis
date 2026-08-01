@@ -437,10 +437,24 @@ space:
    all three, the refused branch via a policy whose free tier cannot
    cover the cost, because the happy loop alone never reaches it.
 
-   Remaining: the epoch-budget cell's byte derivation on top of that
-   equation; `.balance` (per-variant — the part the Solidity handlers
+   **The epoch-budget cell is done too**, spec and bytes, for every
+   actor: `deriveEpochBudget` reads the equation pointwise,
+   `deriveEpochBudgetCellValue` wraps it in the three cells' codecs,
+   and `deriveEpochBudgetCellValue_correct` composes them.  It takes
+   THREE cells — the deployment's `.budgetPolicy` selects the branch,
+   the SIGNER's budget decides whether the consume succeeds, and the
+   target's own supplies the value — which is what a derivation
+   looking only at the target's cell would get wrong: it would credit
+   a grant recipient on a step the signer could not afford.  The
+   `topUpActionBudgetFor` case, where the grant recipient and the
+   signer differ, is exercised at both targets, and the refused-consume
+   branch is exercised through a policy whose free tier cannot cover
+   the cost.
+
+   Remaining: `.balance` (per-variant — the part the Solidity handlers
    already compute); and the registry / local-policy / bridge cells of
-   eight variants.  Then the Solidity mirror and a corpus column.
+   the eight variants that write them.  Then the Solidity mirror and a
+   corpus column.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"
