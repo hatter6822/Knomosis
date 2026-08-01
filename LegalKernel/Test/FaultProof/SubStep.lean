@@ -11,12 +11,14 @@
 LegalKernel.Test.FaultProof.SubStep — the bulk-action decomposition on
 real states.
 
-The load-bearing case is the last one.  `maxRecipientsPerBulkAction`
-truncates the decomposition; `Laws.distributeOthers`'s precondition is
-`amount > 0` alone, so the LAW truncates nothing.  Above the cap the
-two disagree, and a bulk action the game cannot decompose is one it
-cannot adjudicate.  That divergence is exhibited here rather than
-described, so it cannot quietly stop being true — in either direction.
+The load-bearing cases are the three about the recipient bound.
+`maxRecipientsPerBulkAction` truncates the decomposition, because the
+L1 cannot carry an unbounded bisection.  The LAW used to truncate
+nothing, so above the cap a bulk action had a post-state the game could
+not reach.  `Laws.BulkBounded` is now a conjunct of both bulk
+preconditions, which makes the step a no-op above the bound — and the
+tests check BOTH directions plus the gate itself, so the bound cannot
+become vacuous in either direction without one of them failing.
 -/
 
 import LegalKernel.FaultProof.SubStep
@@ -89,38 +91,58 @@ def tests : List TestCase :=
           (actual := LegalKernel.getBalance post 1 3)
           "the excluded actor is untouched"
     }
-  , { name := "ABOVE the cap the decomposition is a PROPER PREFIX of the law"
+  , { name := "ABOVE the cap the law is a NO-OP, so nothing escapes"
     , body := do
-        -- The gap, exhibited.  `maxRecipientsPerBulkAction` truncates
-        -- the sub-steps; `Laws.distributeOthers`'s precondition is
-        -- `amount > 0` alone, so the law credits everyone.  A bulk
-        -- action with more recipients than the cap therefore has a
-        -- post-state the game cannot reach — it would settle on a root
-        -- the L2 never published.
+        -- This case used to exhibit a gap: the decomposition stopped
+        -- at `maxRecipientsPerBulkAction` while
+        -- `Laws.distributeOthers`'s precondition was `amount > 0`
+        -- alone, so the law credited every recipient.  A terminal step
+        -- over such an action would have settled on a root the L2
+        -- never published.
         --
-        -- The fix belongs in the ACTION layer (a recipient bound in
-        -- admission, or in the law's precondition), not here: an
-        -- action the L1 cannot adjudicate should not be admissible on
-        -- L2.  Recorded in docs/audits/19-findings-and-followups.md.
+        -- `Laws.BulkBounded` is now a conjunct of the precondition, and
+        -- `step_impl` is `if pre then apply_impl else id`, so above the
+        -- bound the step is a no-op.  Fail-closed: the step VM is never
+        -- asked to adjudicate an advance it cannot decompose, because
+        -- there is no advance.
         let n := maxRecipientsPerBulkAction + 4
         let es := stateOf n
         let action : Authority.Action := .distributeOthers 1 3 7
-        let steps := LegalKernel.FaultProof.Action.subSteps es action
-        assertEq (expected := maxRecipientsPerBulkAction) (actual := steps.length)
-          "the decomposition stops at the cap"
-        assertEq (expected := n - 1) (actual := (bulkRecipients es 1 3).length)
-          "while the law's own list does not"
-        -- And the law really does credit an actor past the cap that no
-        -- sub-step names.
+        assert (maxRecipientsPerBulkAction < (bulkRecipients es 1 3).length)
+          "the fixture really is over the bound"
         let post := step_impl es.base (Authority.Action.compileTransition action)
+        -- Every recipient — including the ones past the cap — is
+        -- untouched, which is what makes the truncation harmless.
+        for p in bulkRecipients es 1 3 do
+          assertEq (expected := LegalKernel.getBalance es.base 1 p.1)
+            (actual := LegalKernel.getBalance post 1 p.1)
+            s!"over-cap action moved actor {p.1}"
+    }
+  , { name := "BELOW the bound the decomposition covers every recipient"
+    , body := do
+        -- The other direction, and the one the precondition buys:
+        -- an admissible bulk action has a sub-step per recipient, with
+        -- none truncated away.
+        let es := stateOf 10
+        let steps := LegalKernel.FaultProof.Action.subSteps es (.distributeOthers 1 3 7)
+        assertEq (expected := (bulkRecipients es 1 3).length) (actual := steps.length)
+          "one sub-step per recipient, none dropped"
         let named := steps.map (fun ss => ss.affectedActor)
-        let missed := (bulkRecipients es 1 3).filter (fun p => !named.contains p.1)
-        assert (!missed.isEmpty) "some recipient is named by no sub-step"
-        match missed.head? with
-        | some p =>
-          assert (LegalKernel.getBalance post 1 p.1 != LegalKernel.getBalance es.base 1 p.1)
-            "and the law moved that recipient's balance anyway"
-        | none => throw <| IO.userError "unreachable: missed is non-empty"
+        for p in bulkRecipients es 1 3 do
+          assert (named.contains p.1) s!"recipient {p.1} is named by no sub-step"
+    }
+  , { name := "the bound is a real gate, not a formality"
+    , body := do
+        -- A state one recipient over the bound is inadmissible; one
+        -- recipient under it is admissible.  Without both halves the
+        -- precondition could be vacuously true or vacuously false and
+        -- the tests above would not notice.
+        let under := stateOf maxRecipientsPerBulkAction        -- 255 after excluding
+        let over  := stateOf (maxRecipientsPerBulkAction + 2)  -- 257 after excluding
+        assert (decide (Laws.BulkBounded under.base 1 3))
+          "at the bound the action is admissible"
+        assert (!decide (Laws.BulkBounded over.base 1 3))
+          "one past it, it is not"
     }
   , { name := "the cap has exactly one definition"
     , body := do

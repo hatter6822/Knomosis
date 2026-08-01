@@ -37,6 +37,7 @@ This module is **not** part of the trusted computing base.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.BulkBound
 import Lex.DSL.Law
 
 open Std
@@ -62,7 +63,7 @@ namespace Laws
     arithmetic comparison over `Nat`. -/
 def distributeOthers
     (r : ResourceId) (excluded : ActorId) (amount : Amount) : Transition where
-  pre        := fun _ => amount > 0
+  pre        := fun s => amount > 0 ∧ BulkBounded s r excluded
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     let bm := s.balances[r]?.getD ∅
@@ -82,7 +83,7 @@ lexlaw legalkernel_distributeOthers where
   lex_signed_by       deployer
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (excluded : ActorId) (amount : Amount)
-  lex_pre             := fun _ => amount > 0
+  lex_pre             := fun s => amount > 0 ∧ BulkBounded s r excluded
   lex_impl            :=
     fun s =>
       let bm := s.balances[r]?.getD ∅
@@ -329,7 +330,22 @@ theorem distributeOthers_not_conservative
     · rw [if_pos h, h]; decide
     · rw [if_neg h]; exact Ne.symm h
   let s : State := setBalance genesisState r non_excluded amount
-  have hpre : (distributeOthers r excluded amount).pre s := hpos
+  -- The fixture state holds exactly one entry at `r`, so the
+  -- recipient bound is satisfied with room to spare.
+  have h_map : s.balances[r]?.getD ∅ = (∅ : BalanceMap).insert non_excluded amount := by
+    show (((∅ : Std.TreeMap ResourceId BalanceMap _).insert r
+            (((∅ : Std.TreeMap ResourceId BalanceMap _)[r]?.getD ∅).insert
+              non_excluded amount)))[r]?.getD ∅ = _
+    rw [RBMap.find?_insert_self]
+    simp only [Option.getD_some]
+    rfl
+  have hbound : BulkBounded s r excluded := by
+    refine bulkBounded_of_map_length_le s r excluded ?_
+    rw [h_map]
+    -- One insert into the empty map, so `size ≤ 1 ≤ 256`.
+    simp only [Std.TreeMap.length_toList, maxRecipientsPerBulkAction]
+    exact Nat.le_trans (Std.TreeMap.size_insert_le) (by simp)
+  have hpre : (distributeOthers r excluded amount).pre s := ⟨hpos, hbound⟩
   have hcons_r := hcons.conserves r s hpre
   have hpost := totalSupply_after_distributeOthers r excluded amount s hpre
   -- Show the filtered-toList length is ≥ 1 by exhibiting an element.

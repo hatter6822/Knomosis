@@ -38,6 +38,7 @@ This module is **not** part of the trusted computing base.
 
 import LegalKernel.Kernel
 import LegalKernel.Conservation
+import LegalKernel.Laws.BulkBound
 import Lex.DSL.Law
 
 open Std
@@ -63,7 +64,8 @@ namespace Laws
     individual balances change. -/
 def proportionalDilute
     (r : ResourceId) (excluded : ActorId) (totalReward : Amount) : Transition where
-  pre        := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0
+  pre        := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0 ∧
+                        BulkBounded s r excluded
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
     let bm := s.balances[r]?.getD ∅
@@ -105,7 +107,8 @@ lexlaw legalkernel_proportionalDilute where
   lex_signed_by       deployer
   lex_authorized_by   (fun _ _ => True)
   lex_params          (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
-  lex_pre             := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0
+  lex_pre             := fun s => totalReward > 0 ∧ sumOthers s r excluded > 0 ∧
+                                  BulkBounded s r excluded
   lex_impl            :=
     fun s =>
       let bm := s.balances[r]?.getD ∅
@@ -360,7 +363,7 @@ theorem proportionalDilute_distributed_le_totalReward
   rw [totalSupply_after_proportionalDilute r excluded totalReward s hpre]
   apply Nat.add_le_add_left
   -- Goal: sum_{kv ∈ filter} (totalReward * kv.2 / sumOthers) ≤ totalReward
-  have hS : sumOthers s r excluded > 0 := hpre.2
+  have hS : sumOthers s r excluded > 0 := hpre.2.1
   have h_filter_sum := state_filter_sum_eq_sumOthers s r excluded
   have h_chain_bound :=
     list_div_sum_mul_le
@@ -434,9 +437,22 @@ theorem proportionalDilute_not_conservative
     rw [hT0, h_get_excluded]
     simp
   have hpre : (proportionalDilute r excluded totalReward).pre s := by
-    refine ⟨hpos, ?_⟩
-    rw [h_sumOthers]
-    exact hpos
+    refine ⟨hpos, ?_, ?_⟩
+    · rw [h_sumOthers]; exact hpos
+    -- The fixture state holds one entry at `r`, so the recipient
+    -- bound is satisfied with room to spare.
+    · refine bulkBounded_of_map_length_le s r excluded ?_
+      have h_bm : s.balances[r]?.getD ∅
+          = (∅ : BalanceMap).insert non_excluded totalReward := by
+        show (((∅ : Std.TreeMap ResourceId BalanceMap _).insert r
+                (((∅ : Std.TreeMap ResourceId BalanceMap _)[r]?.getD ∅).insert
+                  non_excluded totalReward)))[r]?.getD ∅ = _
+        rw [RBMap.find?_insert_self]
+        simp only [Option.getD_some]
+        rfl
+      rw [h_bm]
+      simp only [Std.TreeMap.length_toList, maxRecipientsPerBulkAction]
+      exact Nat.le_trans (Std.TreeMap.size_insert_le) (by simp)
   have hcons_r := hcons.conserves r s hpre
   have hpost := totalSupply_after_proportionalDilute r excluded totalReward s hpre
   -- Compute the filter explicitly: bm.toList = [(non_excluded, totalReward)],

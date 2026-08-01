@@ -158,45 +158,46 @@ pre-state and a function of `(action, signer)` cannot name it — a
 bundle carrying the declared cells could not reproduce a withdrawal's
 post-root.  `Action.writeCellsAt` is the complete set.
 
-### Open: a bulk action can exceed what the game can decompose
+### Closed: a bulk action could exceed what the game can decompose
 
-Found while wiring the bulk path, and verified rather than inferred
-(`faultproof-substep`, "ABOVE the cap the decomposition is a PROPER
-PREFIX of the law").
-
-`FaultProof/SubStep.lean` caps the sub-step decomposition at
+`FaultProof/SubStep.lean` caps the decomposition at
 `maxRecipientsPerBulkAction = 256` — the L1 gas bound.
-`Laws.distributeOthers`'s precondition is `amount > 0` **alone**, so
-the law credits every non-excluded actor however many there are.  The
-same holds for `proportionalDilute`.
+`Laws.distributeOthers`'s precondition was `amount > 0` **alone**, so
+the law credited every non-excluded actor however many there were; the
+same held for `proportionalDilute`.  Above the cap the two disagreed,
+and a terminal step over such an action would have settled on a root
+the L2 never published.  With 256 actors an ordinary deployment size,
+that was reachable rather than theoretical.
 
-Above the cap the two disagree: the decomposition covers a proper
-prefix of the recipients while the law moves all of them.  A bulk
-action with more than 256 non-excluded recipients therefore has a
-post-state the bisection game cannot reach, and a terminal step over it
-would settle on a root the L2 never published.  With 256 actors being
-an ordinary deployment size, this is reachable rather than theoretical.
+The truncation was not the defect — an L1 that cannot iterate 257 cells
+in one transaction is a fact.  The defect was that the ACTION layer
+admitted a step the L1 could not adjudicate.
 
-The truncation is not the defect — an L1 that cannot iterate 257 cells
-in one transaction is a fact.  The defect is that the ACTION layer
-admits a step the L1 cannot adjudicate.  Two remediations, both
-consensus changes:
+**Closed in the precondition** (`LegalKernel/Laws/BulkBound.lean`).
+`BulkBounded s r excluded` is now a conjunct of both bulk laws' `pre`,
+so `step_impl`'s `if pre then apply_impl else id` makes the step a
+no-op above the bound.  Fail-closed in the direction that matters: an
+action the L1 cannot adjudicate is one the L2 does not admit, and the
+decomposition covers the law's effect in every admissible case by
+construction rather than by convention.
 
-  1. **A recipient bound in the law's precondition.**  Fail-closed:
-     `step_impl` no-ops above the cap, so the decomposition is complete
-     by construction.  Ripples into the `IsMonotonic` /
-     `FreezePreserving` instances (all take `pre` as a hypothesis, so a
-     stronger `pre` only helps), the Lex codegen sidecar
-     `Lex/Inputs/legalkernel_distributeOthers.json` (byte-pinned, so it
-     must be regenerated in the same PR), and the Solidity mirror.
-  2. **A recipient bound in the admission gate**, alongside the budget
-     gate.  Leaves the kernel law and its sidecar untouched, at the
-     cost of putting a consensus-critical bound outside the law it
-     bounds.
+Chosen over an admission-gate bound because the bound is a property of
+the transition, not of who submits it — and because a consensus-critical
+bound living outside the law it bounds is exactly the shape that drifts.
+`step_impl` called directly (the dispute pipeline's replay does) now
+honours it too, which an admission-layer bound would not have given.
 
-(1) is the better shape — the bound is a property of the transition,
-not of who submits it — but it is the larger change.  Landing either
-requires the two-reviewer pass, since it changes what the L2 admits.
+Both directions are theorems, not just tests:
+`subSteps_complete_of_pre` (an admitted step is fully decomposed, with
+the bound supplied by the law rather than by the caller) and
+`distributeOthers_noop_above_cap` (above the bound there is no advance
+to decompose).  `faultproof-substep` checks both plus the gate itself,
+so the bound cannot become vacuous in either direction without a
+failure.
+
+The cap now has ONE definition, in the law.  `SubStep` and
+`StepVMCoherence` each used to hold their own copy of the same number,
+checked by nothing.
 
 **`WriteSetComplete` is proved for all twenty-three non-bulk
 actions** (`FaultProof/StepWriteSets.lean`,

@@ -556,13 +556,16 @@ front rather than halfway through the rewrite:
      write set is the singleton `[.balance r recipient]` — the parent
      step owns the nonce and the budget.
 
-     **A gap this surfaced.**  The cap truncates the decomposition;
-     `Laws.distributeOthers`'s precondition is `amount > 0` alone, so
-     the LAW truncates nothing.  Above 256 recipients the game cannot
-     reach the L2's post-state at all.  The remedy is a recipient bound
-     in the action layer, which is a consensus change — recorded in
-     `docs/audits/19-findings-and-followups.md` and exhibited by
-     `faultproof-substep` rather than left as prose.
+     **A gap this surfaced, now closed.**  The cap truncates the
+     decomposition; `Laws.distributeOthers`'s precondition was
+     `amount > 0` alone, so the LAW truncated nothing, and above 256
+     recipients the game could not reach the L2's post-state at all.
+     `Laws.BulkBound` puts the bound in both bulk preconditions, so
+     `step_impl` no-ops above it and the decomposition is complete by
+     construction.  `subSteps_complete_of_pre` and
+     `distributeOthers_noop_above_cap` are the two directions;
+     `faultproof-substep` checks both plus the gate itself, so the
+     bound cannot go vacuous unnoticed.
 
      Still owed: `Nodup` on the recipient list (true, since they are a
      `Std.TreeMap`'s keys, but core states that as

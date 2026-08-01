@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0eddbba33f8a8310b4ba76add5ef800def995ec4f4aeb254271b4e835a4e0ece"
+    "source_digest": "bde327115df9759e031a66feb707c0a0382a8113b911beb90625ffbb4134103f"
   },
   "summary": {
-    "module_count": 329,
-    "declaration_count": 5663
+    "module_count": 330,
+    "declaration_count": 5669
   },
   "modules": [
     {
@@ -29920,7 +29920,7 @@
     {
       "module": "LegalKernel.FaultProof.SubStep",
       "path": "LegalKernel/FaultProof/SubStep.lean",
-      "declaration_count": 14,
+      "declaration_count": 16,
       "declarations": [
         {
           "kind": "namespace",
@@ -29935,15 +29935,15 @@
           "called": []
         },
         {
-          "kind": "def",
+          "kind": "abbrev",
           "name": "maxRecipientsPerBulkAction",
-          "line": 45,
+          "line": 48,
           "called": []
         },
         {
           "kind": "structure",
           "name": "SubStep",
-          "line": 56,
+          "line": 59,
           "called": [
             "Action",
             "ActorId",
@@ -29954,7 +29954,7 @@
         {
           "kind": "def",
           "name": "bulkRecipients",
-          "line": 88,
+          "line": 95,
           "called": [
             "ActorId",
             "Amount",
@@ -29966,7 +29966,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_eq_law_list",
-          "line": 100,
+          "line": 105,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -29978,7 +29978,7 @@
         {
           "kind": "def",
           "name": "Action.distributeOthers_subSteps",
-          "line": 133,
+          "line": 130,
           "called": [
             "ActorId",
             "Amount",
@@ -29994,7 +29994,7 @@
         {
           "kind": "def",
           "name": "Action.proportionalDilute_subSteps",
-          "line": 164,
+          "line": 161,
           "called": [
             "ActorId",
             "Amount",
@@ -30011,7 +30011,7 @@
         {
           "kind": "def",
           "name": "Action.subSteps",
-          "line": 188,
+          "line": 185,
           "called": [
             "Action",
             "ExtendedState",
@@ -30024,7 +30024,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_bound",
-          "line": 200,
+          "line": 197,
           "called": [
             "Action",
             "Action.distributeOthers_subSteps",
@@ -30040,7 +30040,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_eq_of_within_cap",
-          "line": 240,
+          "line": 233,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30053,9 +30053,37 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "subSteps_complete_of_pre",
+          "line": 247,
+          "called": [
+            "Action.distributeOthers_subSteps",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "bulkRecipients",
+            "es",
+            "subSteps_length_eq_of_within_cap"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "distributeOthers_noop_above_cap",
+          "line": 262,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "maxRecipientsPerBulkAction",
+            "step_impl"
+          ]
+        },
+        {
           "kind": "def",
           "name": "SubStep.writeCells",
-          "line": 259,
+          "line": 278,
           "called": [
             "CellTag",
             "ResourceId",
@@ -30065,7 +30093,7 @@
         {
           "kind": "theorem",
           "name": "SubStep.writeCells_length",
-          "line": 273,
+          "line": 292,
           "called": [
             "ResourceId",
             "SubStep"
@@ -30074,7 +30102,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_deterministic",
-          "line": 285,
+          "line": 304,
           "called": [
             "Action",
             "Action.subSteps",
@@ -32345,19 +32373,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 44,
+          "line": 45,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 45,
+          "line": 46,
           "called": []
         },
         {
           "kind": "def",
           "name": "distributeOthers",
-          "line": 62,
+          "line": 63,
           "called": [
             "ActorId",
             "Amount",
@@ -32371,7 +32399,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_other_resource_untouched",
-          "line": 127,
+          "line": 128,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32383,7 +32411,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_excluded_untouched",
-          "line": 149,
+          "line": 150,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32395,7 +32423,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_other_resource_untouched",
-          "line": 182,
+          "line": 183,
           "called": [
             "ActorId",
             "Amount",
@@ -32409,7 +32437,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_does_not_touch_other_resources",
-          "line": 197,
+          "line": 198,
           "called": [
             "ActorId",
             "Amount",
@@ -32424,7 +32452,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_conserves_other_resource",
-          "line": 207,
+          "line": 208,
           "called": [
             "ActorId",
             "Amount",
@@ -32439,7 +32467,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_excluded_unchanged",
-          "line": 220,
+          "line": 221,
           "called": [
             "ActorId",
             "Amount",
@@ -32454,7 +32482,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_totalSupply",
-          "line": 246,
+          "line": 247,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32468,7 +32496,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_distributeOthers",
-          "line": 275,
+          "line": 276,
           "called": [
             "ActorId",
             "Amount",
@@ -32483,7 +32511,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_isMonotonic",
-          "line": 293,
+          "line": 294,
           "called": [
             "ActorId",
             "Amount",
@@ -32497,7 +32525,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_not_conservative",
-          "line": 315,
+          "line": 316,
           "called": [
             "ActorId",
             "Amount",
@@ -32508,6 +32536,7 @@
             "TotalSupply",
             "distributeOthers",
             "genesisState",
+            "maxRecipientsPerBulkAction",
             "setBalance",
             "totalSupply_after_distributeOthers"
           ]
@@ -32515,7 +32544,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_localTo",
-          "line": 386,
+          "line": 402,
           "called": [
             "ActorId",
             "Amount",
@@ -32528,7 +32557,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_freezePreserving",
-          "line": 400,
+          "line": 416,
           "called": [
             "ActorId",
             "Amount",
@@ -32541,7 +32570,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_freezePreserving_empty",
-          "line": 416,
+          "line": 432,
           "called": [
             "ActorId",
             "Amount",
@@ -32908,19 +32937,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 45,
+          "line": 46,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 46,
+          "line": 47,
           "called": []
         },
         {
           "kind": "def",
           "name": "proportionalDilute",
-          "line": 63,
+          "line": 64,
           "called": [
             "ActorId",
             "Amount",
@@ -32935,7 +32964,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_other_resource_untouched",
-          "line": 150,
+          "line": 153,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32946,7 +32975,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_excluded_untouched",
-          "line": 167,
+          "line": 170,
           "called": [
             "ActorId",
             "ResourceId",
@@ -32958,7 +32987,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_other_resource_untouched",
-          "line": 192,
+          "line": 195,
           "called": [
             "ActorId",
             "Amount",
@@ -32972,7 +33001,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_does_not_touch_other_resources",
-          "line": 207,
+          "line": 210,
           "called": [
             "ActorId",
             "Amount",
@@ -32987,7 +33016,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_conserves_other_resource",
-          "line": 216,
+          "line": 219,
           "called": [
             "ActorId",
             "Amount",
@@ -33002,7 +33031,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_excluded_unchanged",
-          "line": 227,
+          "line": 230,
           "called": [
             "ActorId",
             "Amount",
@@ -33017,7 +33046,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_proportional_totalSupply",
-          "line": 251,
+          "line": 254,
           "called": [
             "ActorId",
             "ResourceId",
@@ -33031,7 +33060,7 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_proportionalDilute",
-          "line": 277,
+          "line": 280,
           "called": [
             "ActorId",
             "Amount",
@@ -33047,7 +33076,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_supply_nondecreasing",
-          "line": 300,
+          "line": 303,
           "called": [
             "ActorId",
             "Amount",
@@ -33062,7 +33091,7 @@
         {
           "kind": "theorem",
           "name": "list_div_sum_mul_le",
-          "line": 318,
+          "line": 321,
           "called": [
             "ActorId"
           ]
@@ -33070,7 +33099,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_distributed_le_totalReward",
-          "line": 354,
+          "line": 357,
           "called": [
             "ActorId",
             "Amount",
@@ -33088,7 +33117,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_isMonotonic",
-          "line": 379,
+          "line": 382,
           "called": [
             "ActorId",
             "Amount",
@@ -33102,7 +33131,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_not_conservative",
-          "line": 403,
+          "line": 406,
           "called": [
             "ActorId",
             "Amount",
@@ -33114,6 +33143,7 @@
             "genesisState",
             "getBalance",
             "getBalance_setBalance_other",
+            "maxRecipientsPerBulkAction",
             "proportionalDilute",
             "setBalance",
             "sumOthers",
@@ -33125,7 +33155,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_localTo",
-          "line": 500,
+          "line": 516,
           "called": [
             "ActorId",
             "Amount",
@@ -33138,7 +33168,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_freezePreserving",
-          "line": 515,
+          "line": 531,
           "called": [
             "ActorId",
             "Amount",
@@ -33151,7 +33181,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_freezePreserving_empty",
-          "line": 532,
+          "line": 548,
           "called": [
             "ActorId",
             "Amount",
@@ -56237,6 +56267,65 @@
             "transfer",
             "withdraw",
             "writeSetComplete_productionApplyBudget"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.FaultProof.SubStep",
+      "path": "LegalKernel/Test/FaultProof/SubStep.lean",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.SubStep",
+          "line": 32,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "mapOf",
+          "line": 36,
+          "called": [
+            "BalanceMap"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stateOf",
+          "line": 40,
+          "called": [
+            "BalanceMap",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "ResourceId",
+            "base",
+            "mapOf"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 46,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "LegalKernel.Test.FaultProof.SubStep",
+            "ResourceId",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "bulkRecipients",
+            "bulkRecipients_eq_law_list",
+            "distributeOthers",
+            "es",
+            "maxRecipientsPerBulkAction",
+            "other",
+            "stateOf",
+            "step_impl",
+            "subSteps_length_bound",
+            "subSteps_length_eq_of_within_cap"
           ]
         }
       ]

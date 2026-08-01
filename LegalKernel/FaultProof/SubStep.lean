@@ -39,11 +39,14 @@ open LegalKernel.Encoding
 
 /-- Maximum recipients per bulk action (Workstream H §2).
 
-    **The single definition.**  `StepVMCoherence` used to carry a
-    second copy holding the same number; two caps that must agree with
-    nothing checking them is how a DoS bound drifts, so the dispatcher
-    now reads this one. -/
-def maxRecipientsPerBulkAction : Nat := 256
+    **One definition, and it lives in the LAW.**  `Laws.BulkBound`
+    owns it because the bulk laws' preconditions enforce it: above the
+    bound `step_impl` is a no-op, so the decomposition covers the
+    law's effect by construction rather than by convention.  Two other
+    modules used to hold their own copy of the number — this one and
+    `StepVMCoherence` — and a cap that must agree with two others,
+    checked by nothing, is how a DoS bound drifts. -/
+abbrev maxRecipientsPerBulkAction : Nat := Laws.maxRecipientsPerBulkAction
 
 /-! ## `SubStep` data type -/
 
@@ -84,13 +87,15 @@ and `distributeOthers_recipients_eq_law_fold_order` pins it against the
 law's own list so the two cannot drift. -/
 
 /-- The recipients a bulk action credits, in the order both the law
-    and the decomposition traverse: the resource's balance-map order,
-    minus the excluded actor. -/
+    and the decomposition traverse.
+
+    A thin lift of `Laws.bulkRecipients` to `ExtendedState`, not a
+    parallel definition: the order is consensus, so the fault proof
+    must read the law's list rather than rebuild something that
+    happens to agree today. -/
 def bulkRecipients (es : ExtendedState) (r : ResourceId) (excluded : ActorId) :
     List (ActorId × Amount) :=
-  (match es.base.balances[r]? with
-   | none    => []
-   | some bm => bm.toList).filter (fun p => p.1 ≠ excluded)
+  Laws.bulkRecipients es.base r excluded
 
 /-- **The decomposition traverses exactly the law's list, in the law's
     order.**  `Laws.distributeOthers` folds over
@@ -101,15 +106,7 @@ def bulkRecipients (es : ExtendedState) (r : ResourceId) (excluded : ActorId) :
 theorem bulkRecipients_eq_law_list
     (es : ExtendedState) (r : ResourceId) (excluded : ActorId) :
     bulkRecipients es r excluded
-      = (es.base.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) := by
-  unfold bulkRecipients
-  -- `cases h : e` already substitutes `e` in the goal, so `h` itself
-  -- is not needed in either arm's rewrite.
-  cases h : es.base.balances[r]? with
-  | none   => simp
-  | some bm =>
-    simp only [Option.getD_some]
-    exact List.filter_congr (fun p _ => by by_cases hp : p.1 = excluded <;> simp [hp])
+      = (es.base.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) := rfl
 
 /-! ## Per-bulk-action sub-step decomposition
 
@@ -215,29 +212,25 @@ theorem subSteps_length_bound (es : ExtendedState) (action : Action) :
   | _ => simp [List.length_nil, Nat.zero_le]
 
 
-/-! ## The DoS cap versus the law
+/-! ## The cap and the law agree
 
-`maxRecipientsPerBulkAction` truncates the decomposition.  The law it
-decomposes does NOT truncate: `Laws.distributeOthers`'s precondition is
-`amount > 0` alone, so it credits every non-excluded actor however many
-there are.
+`maxRecipientsPerBulkAction` truncates the decomposition, because the
+L1 cannot carry an unbounded bisection.  The LAW used to truncate
+nothing — `Laws.distributeOthers`'s precondition was `amount > 0`
+alone — so a bulk action with more recipients than the cap had a
+post-state the game could not reach: a terminal step over it would
+settle on a root the L2 never published.
 
-The two therefore agree exactly when the recipient list fits the cap,
-and the theorems below carry that as a hypothesis rather than hiding
-it.  Above the cap the decomposition is a proper prefix of the law's
-effect, which means a bulk action with more than
-`maxRecipientsPerBulkAction` recipients **cannot be adjudicated** —
-the game would settle on a post-state the L2 never produced.
+That is closed at the source.  `Laws.BulkBounded` is now a conjunct of
+both bulk preconditions, and `step_impl` is
+`if pre then apply_impl else id`, so above the bound the step is a
+no-op on both sides.  The decomposition therefore covers the law's
+effect in every admissible case, and in every inadmissible one there
+is no effect to cover — which is what
+`subSteps_complete_of_pre` and `distributeOthers_noop_above_cap` say
+from the two directions. -/
 
-That is a gap in the ACTION layer, not in this module: an action the
-L1 cannot adjudicate should not be admissible on L2.  Closing it means
-a recipient bound in the admission gate (or the law's precondition),
-which is a consensus change; `docs/audits/19-findings-and-followups.md`
-carries it.  `faultproof-substep`'s cap test exhibits the divergence so
-it cannot be forgotten. -/
-
-/-- The decomposition covers every recipient exactly when the list
-    fits the cap. -/
+/-- **Below the bound the decomposition covers every recipient.** -/
 theorem subSteps_length_eq_of_within_cap
     (es : ExtendedState) (r : ResourceId) (excluded : ActorId) (amount : Amount)
     (h : (bulkRecipients es r excluded).length ≤ maxRecipientsPerBulkAction) :
@@ -247,6 +240,32 @@ theorem subSteps_length_eq_of_within_cap
   simp only [List.length_map, List.length_zipIdx]
   rw [List.length_take]
   exact Nat.min_eq_right h
+
+/-- **The law's own precondition supplies the bound.**  A step the
+    runtime admits is one the decomposition covers completely — no
+    side condition for a caller to discharge, because the law already
+    did. -/
+theorem subSteps_complete_of_pre
+    (es : ExtendedState) (r : ResourceId) (excluded : ActorId) (amount : Amount)
+    (h : (Laws.distributeOthers r excluded amount).pre es.base) :
+    (Action.distributeOthers_subSteps es r excluded amount).length
+      = (bulkRecipients es r excluded).length :=
+  subSteps_length_eq_of_within_cap es r excluded amount h.2
+
+/-- **And above the bound the law does nothing.**  Fail-closed: the
+    step VM is never asked to adjudicate an advance it cannot
+    decompose, because there is no advance.
+
+    This is the direction that used to be false, and the one a test
+    would have caught only by looking for it: before the bound, the
+    law credited every recipient while the decomposition stopped at
+    256. -/
+theorem distributeOthers_noop_above_cap
+    (s : State) (r : ResourceId) (excluded : ActorId) (amount : Amount)
+    (h : maxRecipientsPerBulkAction < (Laws.bulkRecipients s r excluded).length) :
+    step_impl s (Laws.distributeOthers r excluded amount) = s := by
+  unfold step_impl
+  rw [if_neg (fun hpre => absurd hpre.2 (Nat.not_le.mpr h))]
 
 /-! ## The sub-step write set
 
