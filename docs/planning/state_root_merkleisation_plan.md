@@ -365,7 +365,8 @@ front rather than halfway through the rewrite:
      wrong for *every* action, not for exotic ones: the nonce moves
      on all 25.  So each handler must become semantically complete
      against its own declaration, not merely restructured.
-     **And the declaration layer is itself incomplete.**  Read from
+     **The declaration layer was itself incomplete — now fixed.**
+     Read from
      `EpochBudgetState.consume`, which ends in `ebs.insert a b'`
      unconditionally: under a `.bounded` policy every ADMITTED action
      from a non-bridge signer rewrites the signer's `.epochBudget`
@@ -378,6 +379,16 @@ front rather than halfway through the rewrite:
      including the detail that the cell moves exactly when the consume
      succeeds (which is what admission requires, so on the
      adjudication path it always moves).
+
+     `Action.writeCells` now declares `.epochBudget signer` on all 25,
+     plus `.epochBudget recipient` on `depositWithFee` and
+     `topUpActionBudgetFor`, whose grants land on a recipient rather
+     than the signer.  Declaring a cell a particular step leaves
+     unchanged is harmless — a read-only entry carries
+     `newValue = oldValue` and does not move the root — so the
+     declaration is the superset it needs to be.  The obligation test
+     inverted accordingly: it now asserts the cell IS declared, on
+     every variant.
 
      The declaration layer is otherwise the good news — `Action.writeCells`
      already says which cells, so the work is per-variant value

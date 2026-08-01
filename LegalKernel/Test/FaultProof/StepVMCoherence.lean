@@ -1769,7 +1769,7 @@ def tests : List TestCase :=
                        (productionApply es entry.signedAction 0)).toList)
           "productionApply reproduces the runtime's post-state"
     }
-  , { name := "OBLIGATION: every action writes the signer's epoch-budget cell"
+  , { name := "every action DECLARES the signer's epoch-budget cell"
     , body := do
         -- Read from `EpochBudgetState.consume`, which ends in
         -- `ebs.insert a b'` unconditionally: under a `.bounded`
@@ -1787,8 +1787,32 @@ def tests : List TestCase :=
         let signer : ActorId := 7
         let action : Action := .transfer 1 signer 8 5
         let st : SignedAction := { action, signer, nonce := 0, sig := ByteArray.empty }
-        assert (!((Action.writeCells action signer).contains (.epochBudget signer)))
-          "writeCells declares no epoch-budget write"
+        assert ((Action.writeCells action signer).contains (.epochBudget signer))
+          "writeCells declares the epoch-budget write"
+        -- Declared on every variant, not just this one: the consume
+        -- is signer-keyed and fires regardless of the action.
+        let actions : List Action :=
+          [ .transfer 1 7 8 5, .mint 1 8 5, .burn 1 8 5, .freezeResource 1
+          , .replaceKey 7 (ByteArray.mk #[1]), .reward 1 8 5
+          , .distributeOthers 1 2 5, .proportionalDilute 1 2 5
+          , .registerIdentity 7 (ByteArray.mk #[1])
+          , .deposit 1 8 5 3, .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero
+          , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
+          , .depositWithFee 1 8 9 5 1 1 3, .topUpActionBudget 1 5 1 9
+          , .topUpActionBudgetFor 8 1 5 1 9, .claimBudgetRefund 1 1 5 9
+          , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 5 9 8 ]
+        for a in actions do
+          if !((Action.writeCells a signer).contains (.epochBudget signer)) then
+            throw <| IO.userError
+              s!"writeCells omits the epoch budget for kind {actionKindByte a}"
+        -- And the two delegated variants additionally declare the
+        -- RECIPIENT's cell, because that is where their grant lands.
+        assert ((Action.writeCells (.depositWithFee 1 8 9 5 1 1 3) signer).contains
+                  (.epochBudget 8))
+          "depositWithFee declares the recipient's budget cell"
+        assert ((Action.writeCells (.topUpActionBudgetFor 8 1 5 1 9) signer).contains
+                  (.epochBudget 8))
+          "topUpActionBudgetFor declares the recipient's budget cell"
         -- A state with a bounded budget policy and the signer funded.
         let es : ExtendedState :=
           { ExtendedState.empty with

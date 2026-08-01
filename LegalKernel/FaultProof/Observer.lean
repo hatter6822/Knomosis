@@ -104,10 +104,13 @@ qualified name does not move. -/
 
 /-! ## Smoke checks -/
 
-/-- The observer's cell-proof bundle has the expected size for
-    a transfer action (4 cells: registry, balance×2, nonce). -/
+/-- The observer's cell-proof bundle has the expected size for a
+    transfer action (5 cells: registry, balance×2, nonce, epoch
+    budget).  The epoch-budget cell joined `Action.writeCells` once it
+    was established that the production advance rewrites it on every
+    admitted action. -/
 example (es : ExtendedState) (s rcv : ActorId) (a : Amount) :
-    (buildObserverCellProofs es (.transfer 1 s rcv a) s).proofs.length = 4 := by
+    (buildObserverCellProofs es (.transfer 1 s rcv a) s).proofs.length = 5 := by
   unfold buildObserverCellProofs
   simp [Action.requiredCells, Action.readOnlyCells, Action.writeCells]
 

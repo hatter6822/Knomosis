@@ -135,32 +135,32 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
     reads to derive the pending-id). -/
 def Action.writeCells : Action → ActorId → List CellTag
   | .transfer r sender receiver _, signer =>
-      [.balance r sender, .balance r receiver, .nonce signer]
+      [.balance r sender, .balance r receiver, .nonce signer, .epochBudget signer]
   | .mint r to _,                  signer =>
-      [.balance r to, .nonce signer]
+      [.balance r to, .nonce signer, .epochBudget signer]
   | .burn r fromActor _,           signer =>
-      [.balance r fromActor, .nonce signer]
+      [.balance r fromActor, .nonce signer, .epochBudget signer]
   | .freezeResource _,             signer =>
-      [.nonce signer]
+      [.nonce signer, .epochBudget signer]
   | .replaceKey actor _,           signer =>
-      [.registry actor, .nonce signer]
+      [.registry actor, .nonce signer, .epochBudget signer]
   | .reward r to _,                signer =>
-      [.balance r to, .nonce signer]
+      [.balance r to, .nonce signer, .epochBudget signer]
   -- Bulk actions: action-level writes are nonce + bridge-state-
   -- independent cells.  Per-recipient writes are emitted by
   -- the sub-step machinery (`Action.subSteps`) at game-play time.
   | .distributeOthers _ _ _,       signer =>
-      [.nonce signer]
+      [.nonce signer, .epochBudget signer]
   | .proportionalDilute _ _ _,     signer =>
-      [.nonce signer]
-  | .dispute _,                    signer => [.nonce signer]
-  | .disputeWithdraw _,            signer => [.nonce signer]
-  | .verdict _,                    signer => [.nonce signer]
-  | .rollback _,                   signer => [.nonce signer]
+      [.nonce signer, .epochBudget signer]
+  | .dispute _,                    signer => [.nonce signer, .epochBudget signer]
+  | .disputeWithdraw _,            signer => [.nonce signer, .epochBudget signer]
+  | .verdict _,                    signer => [.nonce signer, .epochBudget signer]
+  | .rollback _,                   signer => [.nonce signer, .epochBudget signer]
   | .registerIdentity actor _,     signer =>
-      [.registry actor, .nonce signer]
+      [.registry actor, .nonce signer, .epochBudget signer]
   | .deposit r recipient _ d,      signer =>
-      [.balance r recipient, .nonce signer, .bridgeConsumed d]
+      [.balance r recipient, .nonce signer, .epochBudget signer, .bridgeConsumed d]
   -- Withdraw: action-level writes are the signer's balance, the
   -- signer's nonce, and the `bridgeNextWdId` counter.  The newly-
   -- allocated `bridgePending <nextWdId>` cell is emitted by the
@@ -169,35 +169,37 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- value); it doesn't appear in this STATIC action-level
   -- declaration.
   | .withdraw r sender _ _,        signer =>
-      [.balance r sender, .nonce signer, .bridgeNextWdId]
+      [.balance r sender, .nonce signer, .epochBudget signer, .bridgeNextWdId]
   | .declareLocalPolicy _,         signer =>
-      [.localPolicy signer, .nonce signer]
+      [.localPolicy signer, .nonce signer, .epochBudget signer]
   | .revokeLocalPolicy,            signer =>
-      [.localPolicy signer, .nonce signer]
+      [.localPolicy signer, .nonce signer, .epochBudget signer]
   -- Fault-proof actions: only mutate the signer's nonce (the L1
   -- contract is authoritative for game state).
-  | .faultProofChallenge _ _ _ _,  signer => [.nonce signer]
-  | .faultProofResolution _ _ _ _, signer => [.nonce signer]
+  | .faultProofChallenge _ _ _ _,  signer => [.nonce signer, .epochBudget signer]
+  | .faultProofResolution _ _ _ _, signer => [.nonce signer, .epochBudget signer]
   -- Workstream GP (v1.0): depositWithFee writes the recipient's
   -- balance, the poolActor's balance, the bridge-consumed cell,
   -- and the signer's nonce.  The recipient's epoch-budget
   -- update (budget grant) is an admission-layer effect; at the
   -- L1 step-VM action-level we only declare kernel-state writes.
   | .depositWithFee r recipient poolActor _ _ _ d, signer =>
-      [.balance r recipient, .balance r poolActor, .bridgeConsumed d, .nonce signer]
+      [.balance r recipient, .balance r poolActor, .bridgeConsumed d,
+       .nonce signer, .epochBudget signer, .epochBudget recipient]
   -- topUpActionBudget writes the signer's gas balance, the
   -- poolActor's gas balance, and the signer's nonce.  The
   -- signer's epoch-budget increment is an admission-layer effect
   -- (out of scope for the L1 step VM's static cell declaration).
   | .topUpActionBudget gr _ _ pa,  signer =>
-      [.balance gr signer, .balance gr pa, .nonce signer]
+      [.balance gr signer, .balance gr pa, .nonce signer, .epochBudget signer]
   -- GP.3.4: delegated top-up writes the signer's (payer's) gas
   -- balance, the poolActor's gas balance, and the signer's nonce.
   -- The recipient's epoch-budget increment is an admission-layer
   -- effect (out of scope for the L1 step VM's static cell
   -- declaration), so it is not a kernel-state cell write.
-  | .topUpActionBudgetFor _ gr _ _ pa, signer =>
-      [.balance gr signer, .balance gr pa, .nonce signer]
+  | .topUpActionBudgetFor recipient gr _ _ pa, signer =>
+      [.balance gr signer, .balance gr pa,
+       .nonce signer, .epochBudget signer, .epochBudget recipient]
   -- GP.9.1: refund-on-exit writes the claimant's (signer's) gas
   -- balance (CREDITED from the pool), the poolActor's gas balance
   -- (DEBITED), and the signer's nonce.  The MIRROR of
@@ -206,17 +208,17 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- DEBIT is an admission-layer effect, out of scope for the L1
   -- step-VM's static cell declaration.
   | .claimBudgetRefund gr _ _ pa,  signer =>
-      [.balance gr signer, .balance gr pa, .nonce signer]
+      [.balance gr signer, .balance gr pa, .nonce signer, .epochBudget signer]
   -- GP.11.4: L2 AMM swap writes the ammReserveActor's balances at
   -- BOTH resources (credit at fromResource, debit at toResource) plus
   -- the signer's nonce.
   | .ammSwap fr tr _ _ ra,         signer =>
-      [.balance fr ra, .balance tr ra, .nonce signer]
+      [.balance fr ra, .balance tr ra, .nonce signer, .epochBudget signer]
   -- GP.11.10: post-disable reserve sweep writes BOTH actors' balances
   -- at the single swept resource (debit the reserve actor to zero,
   -- credit the pool actor) plus the signer's nonce.
   | .reclaimAmmReserves r _ ra pa, signer =>
-      [.balance r ra, .balance r pa, .nonce signer]
+      [.balance r ra, .balance r pa, .nonce signer, .epochBudget signer]
 
 /-- The complete cell set an action touches: read-only ++ writes.
     The L1 step VM expects a `CellProofBundle` of exactly this
@@ -248,26 +250,27 @@ instance Action.decWriteCellsMem (a : Action) (signer : ActorId)
 example (r : ResourceId) (s rcv : ActorId) (a : Amount) :
     Action.requiredCells (.transfer r s rcv a) s =
       [CellTag.registry s, CellTag.balance r s, CellTag.balance r rcv,
-       CellTag.nonce s] := rfl
+       CellTag.nonce s, CellTag.epochBudget s] := rfl
 
 /-- A `mint` requires three cells: registry-of-signer,
     balance-of-recipient, nonce-of-signer. -/
 example (r : ResourceId) (to : ActorId) (a : Amount) (s : ActorId) :
     Action.requiredCells (.mint r to a) s =
-      [CellTag.registry s, CellTag.balance r to, CellTag.nonce s] := rfl
+      [CellTag.registry s, CellTag.balance r to, CellTag.nonce s,
+       CellTag.epochBudget s] := rfl
 
 /-- A `freezeResource` requires two cells: registry-of-signer,
     nonce-of-signer. -/
 example (r : ResourceId) (s : ActorId) :
     Action.requiredCells (.freezeResource r) s =
-      [CellTag.registry s, CellTag.nonce s] := rfl
+      [CellTag.registry s, CellTag.nonce s, CellTag.epochBudget s] := rfl
 
 /-- A `faultProofChallenge` requires two cells (signer
     registry + signer nonce). -/
 example (bh : ByteArray) (sIdx eIdx : LegalKernel.Disputes.LogIndex)
     (cc : ByteArray) (s : ActorId) :
     Action.requiredCells (.faultProofChallenge bh sIdx eIdx cc) s =
-      [CellTag.registry s, CellTag.nonce s] := rfl
+      [CellTag.registry s, CellTag.nonce s, CellTag.epochBudget s] := rfl
 
 /-! ## Required-cells partition (plan §18 #263)
 

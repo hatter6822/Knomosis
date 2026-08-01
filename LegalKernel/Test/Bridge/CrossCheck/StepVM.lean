@@ -1738,14 +1738,19 @@ def tests : List Test.TestCase :=
             p.witnessCommitHex = f.preStateCommitHex)))
           "witness commit binding"
     }
-  , { name := "SVC.5.e+: every happy fixture's cellProofs has cellKind ≤ 6"
+  , { name := "SVC.5.e+: every happy fixture's cellProofs has a known cellKind"
     , body := do
+        -- The bound was 6 when the cell space stopped there.  It now
+        -- runs to 16 (the AMM mirror, the kill switch, the epoch
+        -- budgets and the budget policy each got a tag), and
+        -- `Action.writeCells` declares `.epochBudget` — kind 13 — on
+        -- every variant.  The bound tracks `CellKind`'s last index.
         let happy := allFixtures.filter
                        (fun f => f.expectedRevertReason = "null")
         Test.assert (happy.all (fun f =>
           f.cellProofsForFixture.all (fun p =>
-            p.cellKindNat ≤ 6)))
-          "cellKind in 0..6"
+            p.cellKindNat ≤ 16)))
+          "cellKind in 0..16"
     }
   , { name := "SVC.5.e+: bulk variants (distributeOthers / proportionalDilute) have ≥ 5 cellProofs"
     , body := do

@@ -94,42 +94,42 @@ def tests : List TestCase :=
         let b2 := b.push p
         assertEq (expected := 2) (actual := b2.size) "after two pushes"
     }
-  , { name := "Action.requiredCells transfer covers 4 cells"
+  , { name := "Action.requiredCells transfer covers 5 cells"
     , body := do
         let cells := Authority.Action.requiredCells (.transfer 1 2 3 4) 2
-        assertEq (expected := 4) (actual := cells.length) "transfer cell count"
+        assertEq (expected := 5) (actual := cells.length) "transfer cell count"
     }
-  , { name := "Action.requiredCells mint covers 3 cells"
+  , { name := "Action.requiredCells mint covers 4 cells"
     , body := do
         let cells := Authority.Action.requiredCells (.mint 1 2 3) 2
-        assertEq (expected := 3) (actual := cells.length) "mint cell count"
+        assertEq (expected := 4) (actual := cells.length) "mint cell count"
     }
-  , { name := "Action.requiredCells burn covers 3 cells"
+  , { name := "Action.requiredCells burn covers 4 cells"
     , body := do
         let cells := Authority.Action.requiredCells (.burn 1 2 3) 2
-        assertEq (expected := 3) (actual := cells.length) "burn cell count"
+        assertEq (expected := 4) (actual := cells.length) "burn cell count"
     }
-  , { name := "Action.requiredCells freeze covers 2 cells"
+  , { name := "Action.requiredCells freeze covers 3 cells"
     , body := do
         let cells := Authority.Action.requiredCells (.freezeResource 1) 2
-        assertEq (expected := 2) (actual := cells.length) "freeze cell count"
+        assertEq (expected := 3) (actual := cells.length) "freeze cell count"
     }
-  , { name := "Action.requiredCells faultProofChallenge covers 2 cells"
+  , { name := "Action.requiredCells faultProofChallenge covers 3 cells"
     , body := do
         let cells := Authority.Action.requiredCells
           (.faultProofChallenge ByteArray.empty 0 0 ByteArray.empty) 2
-        assertEq (expected := 2) (actual := cells.length) "fpchallenge cell count"
+        assertEq (expected := 3) (actual := cells.length) "fpchallenge cell count"
     }
-  , { name := "Action.requiredCells faultProofResolution covers 2 cells"
+  , { name := "Action.requiredCells faultProofResolution covers 3 cells"
     , body := do
         let cells := Authority.Action.requiredCells
           (.faultProofResolution ByteArray.empty 1 1 0) 2
-        assertEq (expected := 2) (actual := cells.length) "fpresolution cell count"
+        assertEq (expected := 3) (actual := cells.length) "fpresolution cell count"
     }
-  , { name := "Action.requiredCells deposit covers 5 cells (incl. bridgeConsumed)"
+  , { name := "Action.requiredCells deposit covers 6 cells (incl. bridgeConsumed)"
     , body := do
         let cells := Authority.Action.requiredCells (.deposit 1 2 3 4) 2
-        assertEq (expected := 5) (actual := cells.length) "deposit cell count"
+        assertEq (expected := 6) (actual := cells.length) "deposit cell count"
     }
   , -- ===== SMT cell-key derivation =====
     { name := "smtCellKey: every tag maps to a distinct 32-byte key"

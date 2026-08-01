@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "58bf329b387ec5fd9ef748b821237b58a09e1307ef3628a389b340608357323c"
+    "source_digest": "809479640a9bf55027e5bffe631f5d2e7559829300d2a2ced6398701f5bb28d1"
   },
   "summary": {
     "module_count": 324,
@@ -28035,7 +28035,7 @@
         {
           "kind": "def",
           "name": "Action.requiredCells",
-          "line": 223,
+          "line": 225,
           "called": [
             "Action",
             "ActorId",
@@ -28045,7 +28045,7 @@
         {
           "kind": "instance",
           "name": "Action.decReadOnlyCellsMem",
-          "line": 231,
+          "line": 233,
           "called": [
             "Action",
             "ActorId",
@@ -28055,7 +28055,7 @@
         {
           "kind": "instance",
           "name": "Action.decWriteCellsMem",
-          "line": 237,
+          "line": 239,
           "called": [
             "Action",
             "Action.requiredCells",
@@ -28071,7 +28071,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCells_eq_readOnly_append_writeCells",
-          "line": 280,
+          "line": 283,
           "called": [
             "Action",
             "ActorId"
@@ -28080,7 +28080,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCells_length_eq",
-          "line": 287,
+          "line": 290,
           "called": [
             "Action",
             "Action.requiredCells_eq_readOnly_append_writeCells",
@@ -54914,7 +54914,7 @@
         },
         {
           "kind": "def",
-          "name": "transfer_bundle_has_four_cells",
+          "name": "transfer_bundle_has_five_cells",
           "line": 46,
           "called": [
             "Action",
@@ -55017,7 +55017,7 @@
             "bundle_verifies_against_commit",
             "cell_proof_json_byte_pinning_minimal",
             "cell_proof_json_envelope_shape_pinned",
-            "transfer_bundle_has_four_cells",
+            "transfer_bundle_has_five_cells",
             "verify_cell_proofs_api_stable"
           ]
         }

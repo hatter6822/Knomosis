@@ -44,14 +44,14 @@ namespace LegalKernel.Test.Integration.ExportCellProofsCli
 
 /-- The cell-proof bundle for a transfer has the documented
     four cells (registry, balance×2, nonce). -/
-def transfer_bundle_has_four_cells : IO Unit := do
+def transfer_bundle_has_five_cells : IO Unit := do
   let es : ExtendedState := ExtendedState.empty
   let signer : ActorId := 1
   let action : Action := Action.transfer 1 signer 2 100
   let bundle := buildObserverCellProofs es action signer
-  unless bundle.proofs.length = 4 do
+  unless bundle.proofs.length = 5 do
     throw (IO.userError
-      s!"buildObserverCellProofs transfer bundle.proofs.length = {bundle.proofs.length}, expected 4")
+      s!"buildObserverCellProofs transfer bundle.proofs.length = {bundle.proofs.length}, expected 5")
 
 /-- The cell-proof bundle is deterministic in its inputs.
     Audit-pass-4 fix: strengthened from length-only equality to
@@ -207,8 +207,8 @@ namespace LegalKernel.Test.Integration.ExportCellProofsCli
 /-- All tests in this module — collected via the `@[test]`
     attribute and dispatched from `Tests.lean`. -/
 def tests : List TestCase := [
-  ⟨"export-cell-proofs: transfer bundle has 4 cells",
-    transfer_bundle_has_four_cells⟩,
+  ⟨"export-cell-proofs: transfer bundle has 5 cells",
+    transfer_bundle_has_five_cells⟩,
   ⟨"export-cell-proofs: bundle is deterministic",
     bundle_is_deterministic⟩,
   ⟨"export-cell-proofs: bundle verifies against commit",
