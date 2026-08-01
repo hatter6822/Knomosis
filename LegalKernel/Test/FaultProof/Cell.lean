@@ -172,6 +172,23 @@ def tests : List TestCase :=
           assertEq (expected := v.toList)
             (actual := (getCellValue (setCell es t v) t).toList)
             s!"round-trip for {repr t}"
+        -- `bridgePending` carries a structured value, so its bytes
+        -- come from `getCellValue` on a state that holds one — which
+        -- is also the exact round-trip a replayed write performs.
+        let esWith : ExtendedState :=
+          { es with bridge := { es.bridge with
+              pending := es.bridge.pending.insert 4
+                { resource := 1, recipient := LegalKernel.Bridge.EthAddress.zero
+                , amount := 25, l2LogIndex := 9 } } }
+        let pwBytes := getCellValue esWith (.bridgePending 4)
+        assert (pwBytes.size != 0) "the fixture state really holds the withdrawal"
+        assertEq (expected := pwBytes.toList)
+          (actual := (getCellValue (setCell es (.bridgePending 4) pwBytes)
+                       (.bridgePending 4)).toList)
+          "round-trip for bridgePending"
+        assert ((commitExtendedState (setCell es (.bridgePending 4) pwBytes)).toList
+                  != (commitExtendedState es).toList)
+          "and the pending write moves the published root"
     }
   , -- ===== SMT cell-key derivation =====
     { name := "smtCellKey: every tag maps to a distinct 32-byte key"

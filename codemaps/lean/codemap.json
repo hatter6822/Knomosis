@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2b54814a866bc28be98f582ea005478da785326cefc93eb22f3636a5759356b3"
+    "source_digest": "525c5ff3fddb64f3d6764f773cfd4600478f7666e93a595f799b6d68e7f2c3ed"
   },
   "summary": {
     "module_count": 324,
@@ -20640,6 +20640,7 @@
           "line": 315,
           "called": [
             "Bridge.DepositRecord.decode",
+            "Bridge.PendingWithdrawal.decode",
             "CellTag",
             "ExtendedState",
             "actionCost",
@@ -20650,7 +20651,7 @@
         {
           "kind": "theorem",
           "name": "setCell_deterministic",
-          "line": 446,
+          "line": 462,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -20661,7 +20662,7 @@
         {
           "kind": "def",
           "name": "buildCellProof",
-          "line": 458,
+          "line": 474,
           "called": [
             "CellProof",
             "CellTag",
@@ -53048,6 +53049,7 @@
           "called": [
             "CellProof",
             "CellTag",
+            "ExtendedState",
             "ExtendedState.empty",
             "LegalKernel.Test.FaultProof.Cell",
             "TestCase",

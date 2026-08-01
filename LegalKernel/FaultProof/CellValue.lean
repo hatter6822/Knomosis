@@ -370,11 +370,27 @@ def setCell (es : ExtendedState) (tag : CellTag) (value : ByteArray) :
       match Bridge.DepositRecord.decode value.data.toList with
       | .ok (rec, _) => { es with bridge := es.bridge.markConsumed d rec }
       | .error _     => es
-  | .bridgePending _wd =>
-    -- Pending withdrawals are appended via `appendWithdrawal` (which
-    -- assigns a fresh id); arbitrary key writes are a runtime-layer
-    -- concern.  No-op at the cell-write level.
-    es
+  | .bridgePending wd =>
+    -- Inverse of `getCellValue`'s arm, which encodes
+    -- `es.bridge.pending[wd]?` through `PendingWithdrawal.encode`.
+    --
+    -- This was a no-op on the reasoning that pending withdrawals are
+    -- appended via `appendWithdrawal`, which assigns the id, so an
+    -- arbitrary-key write is a runtime concern.  That confuses two
+    -- questions: `appendWithdrawal` is how the KERNEL allocates an
+    -- id, and this is how a verifier REPLAYS a write whose key the
+    -- opening already fixed.  `withdraw` writes
+    -- `bridgePending <nextWdId>`, so leaving the arm inert made that
+    -- action's post-state unreachable from its own proven writes.
+    --
+    -- Empty ⇒ no change, matching `bridgeConsumed`: removal happens
+    -- at finalisation, not inside a step.
+    if value.size = 0 then es
+    else
+      match Bridge.PendingWithdrawal.decode value.data.toList with
+      | .ok (pw, _) =>
+        { es with bridge := { es.bridge with pending := es.bridge.pending.insert wd pw } }
+      | .error _ => es
   | .bridgeNextWdId =>
     match Encodable.decode (T := Nat) value.data.toList with
     | .ok (n, _) =>
