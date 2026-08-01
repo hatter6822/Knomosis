@@ -5161,23 +5161,39 @@ does not close this and was never able to: `recomputeCommitment` is
 *defined* as `commitExtendedState ∘ kernelOnlyApply`, so the theorem
 is definitional and says nothing about the Solidity side.
 
-Two further modelling gaps sit behind it, both read from source and
-pinned as tests in `faultproof-stepvm-coherence`:
+Four modelling gaps sit behind it, each read from source and pinned as
+a test rather than left as prose.  One is closed; three are open and
+are what the step VM's rewrite owes.
 
-  * the 25 per-variant step functions read and write `.balance`
-    cells only, while `Action.writeCells` correctly declares that
-    every action advances the signer's nonce (plus registry /
-    local-policy / bridge cells for eight variants).  Harmless while
-    the dispatcher's output is compared only against another
-    dispatcher output; wrong for every action once it is compared
-    against a state root;
-  * the semantic core `applyCellWrites_to_state` is
-    `kernelOnlyApply`, which models neither bridge nor budget
-    effects, while the runtime advances through
-    `apply_bridge_admissible_with_budget`.
-    `LegalKernel.FaultProof.ProductionApply` now supplies the total,
-    production-faithful core the re-anchoring needs, proved faithful
-    on both legs.
+  * **Closed.**  The semantic core `applyCellWrites_to_state` was
+    `kernelOnlyApply`, which models neither bridge nor budget effects,
+    while the runtime advances through
+    `apply_bridge_admissible_with_budget`.  It IS
+    `productionApplyBudget` now (`LegalKernel.FaultProof.ProductionApply`),
+    proved faithful on both legs, and the per-variant coherence
+    theorems were restated against it.
+  * the 25 per-variant step functions read and write `.balance` cells
+    only, while `Action.writeCells` correctly declares that every
+    action advances the signer's nonce (plus registry / local-policy /
+    bridge cells for eight variants).  Harmless while the dispatcher's
+    output is compared only against another dispatcher output; wrong
+    for every action once it is compared against a state root.
+    `LegalKernel.FaultProof.VerifierWrites` has begun supplying what
+    the handlers owe — the nonce cell's derivation from its proven
+    pre-value, uniform across all twenty-five, and the concrete
+    epoch-budget equation.
+  * **A bulk write set is complete but not verifiable.**  A verifier
+    holding only the pre-root cannot distinguish a complete recipient
+    set from one missing an entry: the missing cell's opening is simply
+    absent, the short bundle folds, and the resulting root is one where
+    that recipient was never credited.  Non-bulk variants re-derive
+    their tag list and are immune.  A deployment leaning on the fault
+    proof should not admit `distributeOthers` / `proportionalDilute`
+    until this is closed.
+  * **A revert is not a verdict.**  `step_impl` is `if pre then
+    apply_impl else id`; the L1 handlers revert where it no-ops, and
+    the terminal step is callable only by whoever's turn it is, so any
+    reverting input costs the responsible party the game by timeout.
 
 Until the state-root Merkleisation lands, the fault-proof game must
 not be treated as an adjudicating backstop; the bisection narrowing
