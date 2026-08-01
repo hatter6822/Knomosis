@@ -434,6 +434,63 @@ def tests : List TestCase :=
         assert (deriveNonceCellValue honest |>.isSome)
           "the honest cell must still derive"
     }
+  , { name := "the epoch-budget equation holds on the three branches"
+    , body := do
+        -- `productionApplyBudget_epochBudgets_eq` at the value level,
+        -- exercised on each branch, because the branch SELECTION is
+        -- what an implementer gets wrong: a grant applied to the
+        -- pre-consume budgets would let a top-up pay for itself, and a
+        -- refused consume that still granted would hand budget to an
+        -- actor who could not afford the step.
+        let policyOf (es : ExtendedState) : Nat × Nat × Nat :=
+          match es.budgetPolicy with
+          | .bounded ft ac ce => (ft, ac, ce)
+        let (freeTier, actionCost, currentEpoch) := policyOf base
+        for action in [ Authority.Action.transfer 1 7 8 30
+                      , .topUpActionBudget 1 5 2 9
+                      , .mint 1 8 5 ] do
+          let st := sign action
+          let post := productionApplyBudget base st 0
+          let expected : EpochBudgetState :=
+            if st.signer = LegalKernel.Bridge.bridgeActor then
+              budgetGrant st.signer st.action freeTier currentEpoch base.epochBudgets
+            else
+              match EpochBudgetState.consume base.epochBudgets st.signer
+                      currentEpoch freeTier
+                      (actionCost + refundConsumeExtra st.action) with
+              | none      => base.epochBudgets
+              | some ebs' => budgetGrant st.signer st.action freeTier currentEpoch ebs'
+          assertEq (expected := (expected[st.signer]?.getD ActorBudget.empty).budgetBalance)
+            (actual := (post.epochBudgets[st.signer]?.getD
+              ActorBudget.empty).budgetBalance)
+            s!"epoch-budget equation diverged for {repr action}"
+        -- The refused-consume branch, reached by a policy whose free
+        -- tier cannot cover the cost.  Without this the loop above only
+        -- ever exercises the succeeding consume.
+        let starved : ExtendedState := { base with budgetPolicy := .bounded 0 9999 3 }
+        let st := sign (Authority.Action.transfer 1 7 8 30)
+        let post := productionApplyBudget starved st 0
+        assertEq
+          (expected := (starved.epochBudgets[st.signer]?.getD
+            ActorBudget.empty).budgetBalance)
+          (actual := (post.epochBudgets[st.signer]?.getD
+            ActorBudget.empty).budgetBalance)
+          "a refused consume must leave the budgets entirely alone"
+    }
+  , { name := "API stability: the verifier-side derivation"
+    , body := do
+        let _nonce : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
+            Authority.expectsNonce es st.signer < 256 ^ 8 →
+            deriveNonceCellValue (getCellValue es (CellTag.nonce st.signer))
+              = some (getCellValue (productionApplyBudget es st idx)
+                        (CellTag.nonce st.signer)) :=
+          deriveNonceCellValue_correct
+        let _signer : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
+            Authority.expectsNonce (productionApplyBudget es st idx) st.signer =
+              Authority.expectsNonce es st.signer + 1 :=
+          productionApplyBudget_expectsNonce_signer
+        pure ()
+    }
   , { name := "API stability: WriteSetComplete signatures"
     , body := do
         -- No bulk exclusions: the write set is state-keyed, so all

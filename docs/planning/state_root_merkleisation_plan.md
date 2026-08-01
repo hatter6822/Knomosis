@@ -422,11 +422,25 @@ space:
    job.  Splitting them keeps the semantic content provable without a
    bitwise-OR-versus-sum bridge that says nothing about the kernel.
 
-   Remaining: `.epochBudget` (also uniform, over the
-   consume-then-grant against the proven `.budgetPolicy` cell),
-   `.balance` (per-variant — the part the Solidity handlers already
-   compute), and the registry / local-policy / bridge cells of eight
-   variants.  Then the Solidity mirror and a corpus column.
+   **The epoch-budget SPEC is done too.**
+   `productionApplyBudget_epochBudgets_eq` names the value the advance
+   produces — which
+   `productionApplyBudget_eq_productionApply_off_budget` deliberately
+   left existential, enough to settle the other six fields' footprints
+   and silent about the one a verifier must compute.  The three
+   branches are the content, and each is a real case: the bridge actor
+   is exempt from the consume, a REFUSED consume leaves the budgets
+   entirely alone (grant included, so a step the actor cannot afford
+   grants nothing), and otherwise the grant lands on the consumed
+   state in that order — a grant applied to the pre-consume budgets
+   would let a top-up pay for itself.  The value-level test exercises
+   all three, the refused branch via a policy whose free tier cannot
+   cover the cost, because the happy loop alone never reaches it.
+
+   Remaining: the epoch-budget cell's byte derivation on top of that
+   equation; `.balance` (per-variant — the part the Solidity handlers
+   already compute); and the registry / local-policy / bridge cells of
+   eight variants.  Then the Solidity mirror and a corpus column.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"

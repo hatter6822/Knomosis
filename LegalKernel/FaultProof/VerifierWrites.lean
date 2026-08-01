@@ -27,20 +27,32 @@ that it agrees with the sequencer's.
 specification; `docs/audits/19-findings-and-followups.md` records why
 it is the largest remaining piece of the state-root swap.
 
-**Scope: the nonce cell.**  `Action.writeCells` declares
-`.nonce signer` for all twenty-five variants and the advance is the
-same on every one — `pre + 1` — so this is the one cell whose
-derivation is a single proof rather than twenty-five.  It is also the
-cell the L1 gets most conspicuously wrong today: the step-VM handlers
-read and emit BALANCE cells only, which
-`faultproof-stepvm-coherence`'s `OBLIGATION: stepVMHash ignores the
-nonce cell it must write` pins directly.
+**Scope: the two cells every action writes.**
 
-The remaining cells (`.epochBudget` — also uniform, but over the
-consume-then-grant; `.balance` — per-variant; and the registry /
-local-policy / bridge cells of eight variants) follow the same shape:
-a `derive*CellValue` reading proven pre-values, and a `*_correct`
-theorem against `getCellValue (productionApplyBudget …)`.
+  * **The nonce.**  `Action.writeCells` declares `.nonce signer` on all
+    twenty-five variants and the advance is the same on every one —
+    `pre + 1` — so the derivation is a single proof rather than
+    twenty-five.  It is also the cell the L1 gets most conspicuously
+    wrong today: the step-VM handlers read and emit BALANCE cells only,
+    which `faultproof-stepvm-coherence`'s `OBLIGATION: stepVMHash
+    ignores the nonce cell it must write` pins directly.
+  * **The epoch budget**, as far as the SPEC.
+    `productionApplyBudget_epochBudgets_eq` names the value the advance
+    produces, which
+    `productionApplyBudget_eq_productionApply_off_budget` deliberately
+    left existential — enough to settle the other six fields'
+    footprints, and silent about the one a verifier has to compute.
+    The three branches are the content: the bridge actor is exempt from
+    the consume, a refused consume leaves the budgets entirely alone
+    (grant included), and otherwise the grant lands on the consumed
+    state in that order.
+
+Remaining, in the same shape — a `derive*CellValue` over proven
+pre-values plus a `*_correct` theorem: the epoch-budget cell's byte
+derivation on top of the equation above; `.balance`, which is the
+per-variant part and the only part the Solidity handlers already
+compute; and the registry / local-policy / bridge cells of eight
+variants.
 
 **Which decoder.**  This module decodes with `Encodable.decode`, whose
 round-trip is `Encoding.nat_roundtrip`.  The L1 mirrors it with
@@ -154,6 +166,62 @@ theorem deriveNonceCellValue_correct
     (T := Nat) (Authority.expectsNonce es st.signer + 1)).toArray) = _
   rw [← productionApplyBudget_expectsNonce_signer es st idx]
   rfl
+
+/-! ## The epoch-budget cell
+
+The second cell every action writes.  Unlike the nonce it is not a
+single arithmetic step — the advance is consume-then-grant against the
+deployment's policy — but it is still action-INdependent in shape, so
+the spec is one equation rather than twenty-five.
+-/
+
+/-- **The epoch budgets after the production advance, concretely.**
+
+    `productionApplyBudget_eq_productionApply_off_budget` says the
+    budget leg differs from `productionApply` in this field and nothing
+    else, existentially — enough to settle the OTHER six fields'
+    footprints, and deliberately silent about which value this one
+    takes.  A verifier needs the value.
+
+    Three branches, and each is a real case rather than bookkeeping:
+    the bridge actor is exempt from the consume (it pays no budget, so
+    a bridge-credited deposit cannot be starved); a refused consume
+    leaves the budgets ENTIRELY alone, including the grant, so a step
+    the actor could not afford grants nothing; and otherwise the grant
+    lands on the consumed state, in that order — a grant applied to the
+    pre-consume budgets would let a top-up pay for itself.
+
+    This is the equation the L1 handlers mirror, and the reason the
+    epoch-budget cell cannot be derived from the signer's budget alone:
+    the branch is selected by the `.budgetPolicy` cell, which is why
+    that cell exists in the cell space at all. -/
+theorem productionApplyBudget_epochBudgets_eq
+    (es : ExtendedState) (st : SignedAction) (idx : Nat) :
+    (productionApplyBudget es st idx).epochBudgets =
+      (match es.budgetPolicy with
+       | .bounded freeTier actionCost currentEpoch =>
+         if st.signer = Bridge.bridgeActor then
+           budgetGrant st.signer st.action freeTier currentEpoch es.epochBudgets
+         else
+           match EpochBudgetState.consume es.epochBudgets st.signer currentEpoch
+                   freeTier (actionCost + refundConsumeExtra st.action) with
+           | none      => es.epochBudgets
+           | some ebs' => budgetGrant st.signer st.action freeTier currentEpoch ebs') := by
+  unfold productionApplyBudget
+  cases h_pol : es.budgetPolicy with
+  | bounded freeTier actionCost currentEpoch =>
+    simp only []
+    by_cases h : st.signer = Bridge.bridgeActor
+    · simp only [if_pos h]
+    · simp only [if_neg h]
+      cases hc : EpochBudgetState.consume es.epochBudgets st.signer currentEpoch
+                   freeTier (actionCost + refundConsumeExtra st.action) with
+      | none      =>
+        show (productionApply es st idx).epochBudgets = _
+        unfold productionApply
+        show (Disputes.kernelOnlyApply es (signedActionEntry st)).epochBudgets = _
+        rw [kernelOnlyApply_epochBudgets es st]
+      | some ebs' => rfl
 
 /-- A malformed pre-value derives nothing.
 

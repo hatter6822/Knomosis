@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b6199e4b052555bdbdcbeddf1819439f4a648b58647ebfd5576ef2a4bee1739d"
+    "source_digest": "7757b812e2729af0d6e43cc8c40c546c01b07e8bd4596322df566f7cf334f680"
   },
   "summary": {
-    "module_count": 331,
-    "declaration_count": 5704
+    "module_count": 332,
+    "declaration_count": 5713
   },
   "modules": [
     {
@@ -30936,6 +30936,109 @@
       ]
     },
     {
+      "module": "LegalKernel.FaultProof.VerifierWrites",
+      "path": "LegalKernel/FaultProof/VerifierWrites.lean",
+      "declaration_count": 9,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "FaultProof",
+          "line": 70,
+          "called": [
+            "LegalKernel.Runtime"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveNonceCellValue",
+          "line": 91,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_expectsNonce_signer",
+          "line": 104,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "kernelOnlyApply_nonces",
+            "productionApplyBudget",
+            "productionApplyBudget_eq_productionApply_off_budget",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "decode_nonceCell",
+          "line": 129,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveNonceCellValue_correct",
+          "line": 157,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "decode_nonceCell",
+            "deriveNonceCellValue",
+            "es",
+            "getCellValue",
+            "productionApplyBudget",
+            "productionApplyBudget_expectsNonce_signer"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_epochBudgets_eq",
+          "line": 197,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "actionCost",
+            "budgetGrant",
+            "es",
+            "freeTier",
+            "kernelOnlyApply_epochBudgets",
+            "productionApply",
+            "productionApplyBudget",
+            "refundConsumeExtra",
+            "signedActionEntry"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveNonceCellValue_none_of_malformed",
+          "line": 232,
+          "called": [
+            "deriveNonceCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveNonceCellValue_none_of_trailing",
+          "line": 246,
+          "called": [
+            "FaultProof",
+            "LegalKernel",
+            "deriveNonceCellValue"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.FaultProof.Verify",
       "path": "LegalKernel/FaultProof/Verify.lean",
       "declaration_count": 22,
@@ -56618,17 +56721,20 @@
             "BitsDistinctBelow",
             "CellTag",
             "CellWritesReady",
+            "EpochBudgetState",
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
             "LegalKernel.Test.FaultProof.StepWriteSets",
             "SignedAction",
             "TestCase",
             "WriteSetComplete",
+            "actionCost",
             "ammSwap",
             "amountCellValue",
             "assert",
             "assertEq",
             "base",
+            "budgetGrant",
             "burn",
             "canonicalAbsentValue",
             "checkComplete",
@@ -56636,9 +56742,12 @@
             "commitExtendedState",
             "deposit",
             "depositWithFee",
+            "deriveNonceCellValue",
+            "deriveNonceCellValue_correct",
             "distributeOthers",
             "es",
             "foldStateCellWrites",
+            "freeTier",
             "freezeResource",
             "getCellValue",
             "mem_writeCellsAt_epochBudget",
@@ -56648,8 +56757,10 @@
             "probeVerdict",
             "productionApplyBudget",
             "productionApplyBudget_budgetPolicy",
+            "productionApplyBudget_expectsNonce_signer",
             "proportionalDilute",
             "reclaimAmmReserves",
+            "refundConsumeExtra",
             "reward",
             "sign",
             "smtDepth",
