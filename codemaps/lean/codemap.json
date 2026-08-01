@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0538192c28ba190dc76ddce323ffea3dceb80d7806a6e2307e1cbc08a3e8a24b"
+    "source_digest": "12c2c3d7599d80e7ed0eb53203aeef968715f69d4fd90a9eaeb7b9a987c7a455"
   },
   "summary": {
     "module_count": 327,
-    "declaration_count": 5609
+    "declaration_count": 5614
   },
   "modules": [
     {
@@ -21165,7 +21165,7 @@
     {
       "module": "LegalKernel.FaultProof.CellWrites",
       "path": "LegalKernel/FaultProof/CellWrites.lean",
-      "declaration_count": 24,
+      "declaration_count": 25,
       "declarations": [
         {
           "kind": "namespace",
@@ -21529,8 +21529,29 @@
         },
         {
           "kind": "theorem",
+          "name": "writeSetComplete_of_identity_advance",
+          "line": 617,
+          "called": [
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "WriteSetComplete",
+            "getCellValue",
+            "getCellValue_balance",
+            "getCellValue_bridgeConsumed",
+            "getCellValue_bridgeNextWdId",
+            "getCellValue_bridgePending",
+            "getCellValue_budgetPolicy'",
+            "getCellValue_epochBudget'",
+            "getCellValue_localPolicy",
+            "getCellValue_nonce",
+            "getCellValue_registry"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "fold_stepCellWrites_eq_commit_post",
-          "line": 601,
+          "line": 680,
           "called": [
             "ActorId",
             "BitsDistinctBelow",
@@ -28990,7 +29011,7 @@
     {
       "module": "LegalKernel.FaultProof.StepVariants",
       "path": "LegalKernel/FaultProof/StepVariants.lean",
-      "declaration_count": 9,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
@@ -29032,7 +29053,7 @@
         {
           "kind": "def",
           "name": "Action.writeCells",
-          "line": 135,
+          "line": 132,
           "called": [
             "Action",
             "ActorId",
@@ -29059,8 +29080,61 @@
         },
         {
           "kind": "def",
+          "name": "Action.stateWriteCells",
+          "line": 235,
+          "called": [
+            "Action",
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "es",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "Action.writeCellsAt",
+          "line": 242,
+          "called": [
+            "Action",
+            "ActorId",
+            "CellTag",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "Action.writeCellsAt_eq_writeCells",
+          "line": 248,
+          "called": [
+            "Action",
+            "Action.stateWriteCells",
+            "Action.writeCellsAt",
+            "ActorId",
+            "ExtendedState",
+            "es",
+            "sender",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "Action.writeCellsAt_withdraw",
+          "line": 259,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es",
+            "sender"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "Action.requiredCells",
-          "line": 225,
+          "line": 269,
           "called": [
             "Action",
             "ActorId",
@@ -29070,7 +29144,7 @@
         {
           "kind": "instance",
           "name": "Action.decReadOnlyCellsMem",
-          "line": 233,
+          "line": 277,
           "called": [
             "Action",
             "ActorId",
@@ -29080,7 +29154,7 @@
         {
           "kind": "instance",
           "name": "Action.decWriteCellsMem",
-          "line": 239,
+          "line": 283,
           "called": [
             "Action",
             "Action.requiredCells",
@@ -29096,7 +29170,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCells_eq_readOnly_append_writeCells",
-          "line": 283,
+          "line": 327,
           "called": [
             "Action",
             "ActorId"
@@ -29105,7 +29179,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCells_length_eq",
-          "line": 290,
+          "line": 334,
           "called": [
             "Action",
             "Action.requiredCells_eq_readOnly_append_writeCells",
@@ -54205,6 +54279,7 @@
             "SmtCellProof",
             "TestCase",
             "WriteSetComplete",
+            "ammSwap",
             "amountCellValue",
             "applyCellWrites",
             "assert",
@@ -54218,10 +54293,12 @@
             "chainWrites",
             "commitExtendedState",
             "commitExtendedState_eq_of_cells_agree",
+            "deposit",
             "es",
             "foldStateCellWrites",
             "fold_canonicalCellChain_eq_commit_applyCellWrites",
             "fold_stepCellWrites_eq_commit_post",
+            "freezeResource",
             "getCellValue",
             "getCellValue_applyCellWrites_of_not_written",
             "getCellValue_setCell_getCellValue",
@@ -54233,7 +54310,9 @@
             "stateCellEntries",
             "stepCellWrites",
             "transfer",
-            "transferWrites"
+            "transferWrites",
+            "withdraw",
+            "writeSetComplete_of_identity_advance"
           ]
         }
       ]

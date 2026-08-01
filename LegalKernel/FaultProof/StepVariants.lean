@@ -125,14 +125,11 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
     balance cell proofs.
 
     **Withdraw**: the new bridge pending entry's key is the
-    deployment's current `nextWdId` counter (not knowable
-    statically from the action's parameters).  We declare the
-    `bridgeNextWdId` counter cell and the signer's balance +
-    nonce; the per-game cell-proof bundle additionally carries
-    the witnessed `bridgePending nextWdId` cell, but at the
-    action-declaration level we mark this dependency abstractly
-    by including `bridgeNextWdId` (whose value the L1 step VM
-    reads to derive the pending-id). -/
+    deployment's current `nextWdId` counter, which is not a function
+    of `(action, signer)`.  It is therefore NOT in this list, and this
+    list is correspondingly INCOMPLETE for `withdraw` — see
+    `Action.stateWriteCells` and `Action.writeCellsAt`, which name it
+    and are what the fault proof consumes. -/
 def Action.writeCells : Action → ActorId → List CellTag
   | .transfer r sender receiver _, signer =>
       [.balance r sender, .balance r receiver, .nonce signer, .epochBudget signer]
@@ -219,6 +216,53 @@ def Action.writeCells : Action → ActorId → List CellTag
   -- credit the pool actor) plus the signer's nonce.
   | .reclaimAmmReserves r _ ra pa, signer =>
       [.balance r ra, .balance r pa, .nonce signer, .epochBudget signer]
+
+/-- The cells an action writes whose KEY is a function of the
+    pre-state rather than of the action.
+
+    Exactly one action has any: `withdraw` allocates its pending entry
+    at the deployment's current `nextWdId` (`BridgeState.appendWithdrawal`
+    inserts at `bs.nextWdId` and then increments it), and no
+    `(action, signer)` pair determines that number.
+
+    Splitting it out rather than widening `Action.writeCells` keeps the
+    static declaration a pure function of the action — which is what
+    the Solidity mirror and the cross-stack corpus pin — while making
+    the COMPLETE set (`Action.writeCellsAt`) available to the fault
+    proof, which is the consumer that needs completeness.  Before this
+    existed, a withdrawal's declared write set omitted the cell the
+    withdrawal creates, so a bundle carrying only the declared cells
+    could not reproduce the post-root. -/
+def Action.stateWriteCells (es : ExtendedState) : Action → ActorId → List CellTag
+  | .withdraw _ _ _ _, _ => [.bridgePending es.bridge.nextWdId]
+  | _,                 _ => []
+
+/-- **The complete cell-write set**: the static declaration plus the
+    state-keyed cells.  This is what a fault proof must open, and what
+    `WriteSetComplete` is stated against. -/
+def Action.writeCellsAt (es : ExtendedState) (a : Action) (signer : ActorId) :
+    List CellTag :=
+  a.writeCells signer ++ a.stateWriteCells es signer
+
+/-- Away from `withdraw` the complete set IS the static one, so the
+    twenty-four other variants pay nothing for the split. -/
+theorem Action.writeCellsAt_eq_writeCells (es : ExtendedState) (a : Action)
+    (signer : ActorId)
+    (h : ∀ r sender amount rcp, a ≠ .withdraw r sender amount rcp) :
+    a.writeCellsAt es signer = a.writeCells signer := by
+  unfold Action.writeCellsAt Action.stateWriteCells
+  cases hact : a with
+  | withdraw r sender amount rcp => exact absurd hact (h r sender amount rcp)
+  | _ => exact List.append_nil _
+
+/-- And at `withdraw` it is the static set plus exactly the allocated
+    pending cell. -/
+theorem Action.writeCellsAt_withdraw (es : ExtendedState)
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (rcp : LegalKernel.Bridge.EthAddress) (signer : ActorId) :
+    (Action.withdraw r sender amount rcp).writeCellsAt es signer =
+      [.balance r sender, .nonce signer, .epochBudget signer, .bridgeNextWdId,
+       .bridgePending es.bridge.nextWdId] := rfl
 
 /-- The complete cell set an action touches: read-only ++ writes.
     The L1 step VM expects a `CellProofBundle` of exactly this

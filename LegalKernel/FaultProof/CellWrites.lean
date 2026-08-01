@@ -497,20 +497,20 @@ when nothing else moved. -/
     it reads the post-state.  The L1 is handed these values in the
     bundle and checks them against the pre-root; reproducing them
     on-chain is the step VM's handler job. -/
-def stepCellWrites (post : ExtendedState) (action : Authority.Action)
+def stepCellWrites (pre post : ExtendedState) (action : Authority.Action)
     (signer : ActorId) : List CellWrite :=
-  (action.writeCells signer).map (fun t => (t, getCellValue post t))
+  (action.writeCellsAt pre signer).map (fun t => (t, getCellValue post t))
 
 /-- Every declared cell appears in the write list, at its post value. -/
-theorem mem_stepCellWrites (post : ExtendedState) (action : Authority.Action)
-    (signer : ActorId) (t : CellTag) (h : t ∈ action.writeCells signer) :
-    (t, getCellValue post t) ∈ stepCellWrites post action signer :=
+theorem mem_stepCellWrites (pre post : ExtendedState) (action : Authority.Action)
+    (signer : ActorId) (t : CellTag) (h : t ∈ action.writeCellsAt pre signer) :
+    (t, getCellValue post t) ∈ stepCellWrites pre post action signer :=
   List.mem_map.mpr ⟨t, h, rfl⟩
 
 /-- The write list names exactly the declared cells. -/
-theorem stepCellWrites_tags (post : ExtendedState) (action : Authority.Action)
+theorem stepCellWrites_tags (pre post : ExtendedState) (action : Authority.Action)
     (signer : ActorId) :
-    (stepCellWrites post action signer).map Prod.fst = action.writeCells signer := by
+    (stepCellWrites pre post action signer).map Prod.fst = action.writeCellsAt pre signer := by
   unfold stepCellWrites
   rw [List.map_map]
   exact List.map_id _
@@ -527,7 +527,7 @@ theorem stepCellWrites_tags (post : ExtendedState) (action : Authority.Action)
     composed here. -/
 def WriteSetComplete (pre post : ExtendedState) (action : Authority.Action)
     (signer : ActorId) : Prop :=
-  ∀ t : CellTag, t ∉ action.writeCells signer → getCellValue post t = getCellValue pre t
+  ∀ t : CellTag, t ∉ action.writeCellsAt pre signer → getCellValue post t = getCellValue pre t
 
 /-- **A complete write set reproduces the post-state's cells.**
 
@@ -539,21 +539,21 @@ def WriteSetComplete (pre post : ExtendedState) (action : Authority.Action)
     number the L1 folds.
 
     The `NoDuplicates` hypothesis is what lets the written cells be
-    read off one at a time; every `Action.writeCells` arm satisfies it
+    read off one at a time; every `Action.writeCellsAt` arm satisfies it
     except at a self-transfer, where sender and receiver coincide — see
     `applyCellWrites`'s later-write-wins test. -/
 theorem getCellValue_applyCellWrites_stepCellWrites
     (pre post : ExtendedState) (action : Authority.Action) (signer : ActorId)
     (h_complete : WriteSetComplete pre post action signer)
-    (h_nodup : (action.writeCells signer).Nodup)
+    (h_nodup : (action.writeCellsAt pre signer).Nodup)
     (h_bounds : ExtendedState.CanonicalBounds post)
     (h_append : ∀ t : CellTag, t.appendOnly = true →
       getCellValue post t = canonicalAbsentValue t →
       getCellValue pre t = canonicalAbsentValue t)
     (t : CellTag) :
-    getCellValue (applyCellWrites pre (stepCellWrites post action signer)) t
+    getCellValue (applyCellWrites pre (stepCellWrites pre post action signer)) t
       = getCellValue post t := by
-  by_cases h_mem : t ∈ action.writeCells signer
+  by_cases h_mem : t ∈ action.writeCellsAt pre signer
   · -- A declared cell: split the list at its (unique) occurrence and
     -- read the write back.
     obtain ⟨l₁, l₂, h_split⟩ := List.append_of_mem h_mem
@@ -561,7 +561,7 @@ theorem getCellValue_applyCellWrites_stepCellWrites
     obtain ⟨_, h_tail, h_cross⟩ := List.pairwise_append.mp h_nd
     have h_notin₁ : t ∉ l₁ := fun hc => h_cross t hc t List.mem_cons_self rfl
     have h_notin₂ : t ∉ l₂ := fun hc => (List.pairwise_cons.mp h_tail).1 t hc rfl
-    have h_ws : stepCellWrites post action signer
+    have h_ws : stepCellWrites pre post action signer
         = l₁.map (fun t' => (t', getCellValue post t'))
           ++ (t, getCellValue post t)
             :: l₂.map (fun t' => (t', getCellValue post t')) := by
@@ -590,6 +590,85 @@ theorem getCellValue_applyCellWrites_stepCellWrites
         exact fun he => h_mem (he ▸ ht'))]
     exact (h_complete t h_mem).symm
 
+
+/-! ## Completeness for the kernel-identity variants
+
+Eleven of the twenty-five `Action` constructors compile to
+`Laws.freezeResource`, whose `apply` is the identity on the base
+state, and touch neither the registry, the local policies, the bridge,
+nor the budget grant.  Their entire effect is the nonce bump and the
+budget consume — the two cells every action writes — so their
+completeness is ONE argument, not eleven.
+
+The five hypotheses below are exactly the five ways an action can move
+a cell beyond those two, stated as equations on the sub-states rather
+than as a constructor list.  That keeps the lemma about behaviour: a
+future action that happens to satisfy them gets completeness for free,
+and one that does not fails to instantiate rather than silently
+slipping through a `| _ =>` catch-all. -/
+
+/-- **Completeness for an advance whose only effect is the nonce bump
+    and the budget consume.**
+
+    Note the epoch-budget hypothesis is an inclusion, not an equation:
+    `EpochBudgetState.consume` writes back through `insert` even when
+    it normalises across an epoch boundary, so the signer's budget cell
+    genuinely moves — which is why `.epochBudget signer` is in every
+    `writeCells` arm. -/
+theorem writeSetComplete_of_identity_advance
+    (pre post : ExtendedState) (action : Authority.Action) (signer : ActorId)
+    (h_decl : ∀ t : CellTag,
+      t = .nonce signer ∨ t = .epochBudget signer → t ∈ action.writeCellsAt pre signer)
+    (h_base : post.base = pre.base)
+    (h_registry : post.registry = pre.registry)
+    (h_lp : post.localPolicies = pre.localPolicies)
+    (h_bridge : post.bridge = pre.bridge)
+    (h_pol : post.budgetPolicy = pre.budgetPolicy)
+    (h_nonces : ∀ a : ActorId, a ≠ signer →
+      Authority.expectsNonce post a = Authority.expectsNonce pre a)
+    (h_budget : ∀ a : ActorId, a ≠ signer →
+      post.epochBudgets[a]? = pre.epochBudgets[a]?) :
+    WriteSetComplete pre post action signer := by
+  intro t h_notin
+  cases t with
+  | balance r a => rw [getCellValue_balance, getCellValue_balance, h_base]
+  | nonce a =>
+    rw [getCellValue_nonce, getCellValue_nonce,
+      h_nonces a (fun he => h_notin (h_decl _ (Or.inl (by rw [he]))))]
+  | registry a => rw [getCellValue_registry, getCellValue_registry, h_registry]
+  | localPolicy a => rw [getCellValue_localPolicy, getCellValue_localPolicy, h_lp]
+  | bridgeConsumed d => rw [getCellValue_bridgeConsumed, getCellValue_bridgeConsumed, h_bridge]
+  | bridgePending w => rw [getCellValue_bridgePending, getCellValue_bridgePending, h_bridge]
+  | bridgeNextWdId => rw [getCellValue_bridgeNextWdId, getCellValue_bridgeNextWdId, h_bridge]
+  | bridgeAmmReserveEth =>
+    show getCellValue post .bridgeAmmReserveEth = _
+    unfold getCellValue
+    rw [h_bridge]
+  | bridgeAmmReserveBold =>
+    show getCellValue post .bridgeAmmReserveBold = _
+    unfold getCellValue
+    rw [h_bridge]
+  | bridgeBoldCircuitClosed =>
+    show getCellValue post .bridgeBoldCircuitClosed = _
+    unfold getCellValue
+    rw [h_bridge]
+  | bridgeBoldTvlCap =>
+    show getCellValue post .bridgeBoldTvlCap = _
+    unfold getCellValue
+    rw [h_bridge]
+  | bridgeBoldTotalLockedValue =>
+    show getCellValue post .bridgeBoldTotalLockedValue = _
+    unfold getCellValue
+    rw [h_bridge]
+  | bridgeAmmDisabled =>
+    show getCellValue post .bridgeAmmDisabled = _
+    unfold getCellValue
+    rw [h_bridge]
+  | epochBudget a =>
+    rw [getCellValue_epochBudget', getCellValue_epochBudget',
+      h_budget a (fun he => h_notin (h_decl _ (Or.inr (by rw [he]))))]
+  | budgetPolicy => rw [getCellValue_budgetPolicy', getCellValue_budgetPolicy', h_pol]
+
 /-- **The step-VM statement.**  Folding a step's write bundle into the
     pre-state's published root computes the post-state's published
     root.
@@ -601,16 +680,16 @@ theorem getCellValue_applyCellWrites_stepCellWrites
     declaration names every cell the advance moves". -/
 theorem fold_stepCellWrites_eq_commit_post
     (pre post : ExtendedState) (action : Authority.Action) (signer : ActorId)
-    (h_ready : CellWritesReady pre (stepCellWrites post action signer))
+    (h_ready : CellWritesReady pre (stepCellWrites pre post action signer))
     (h_complete : WriteSetComplete pre post action signer)
-    (h_nodup : (action.writeCells signer).Nodup)
+    (h_nodup : (action.writeCellsAt pre signer).Nodup)
     (h_bounds : ExtendedState.CanonicalBounds post)
     (h_wf : BitsDistinctBelow smtDepth (stateCellEntries post))
     (h_append : ∀ t : CellTag, t.appendOnly = true →
       getCellValue post t = canonicalAbsentValue t →
       getCellValue pre t = canonicalAbsentValue t) :
     foldStateCellWrites (commitExtendedState pre)
-        (chainWrites pre (canonicalCellChain pre (stepCellWrites post action signer)))
+        (chainWrites pre (canonicalCellChain pre (stepCellWrites pre post action signer)))
       = some (commitExtendedState post) :=
   fold_canonicalCellChain_eq_commit_of_cells_agree _ pre post h_ready h_wf
     (getCellValue_applyCellWrites_stepCellWrites pre post action signer

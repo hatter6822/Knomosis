@@ -173,8 +173,8 @@ def tests : List TestCase :=
   , { name := "stepCellWrites names exactly the declared cells"
     , body := do
         let action : Authority.Action := .transfer 1 7 8 30
-        let ws := stepCellWrites base action 7
-        assertEq (expected := (Authority.Action.writeCells action 7).map (fun t => repr t |>.pretty))
+        let ws := stepCellWrites base base action 7
+        assertEq (expected := (Authority.Action.writeCellsAt base action 7).map (fun t => repr t |>.pretty))
           (actual := ws.map (fun w => repr w.1 |>.pretty))
           "write list tags"
         -- Each write carries the POST value, so the list is a
@@ -195,7 +195,7 @@ def tests : List TestCase :=
           [ (.balance 1 7, amountCellValue 70)
           , (.balance 1 8, amountCellValue 70)
           , (.nonce 7,     natCellValue 4) ]
-        let rebuilt := applyCellWrites base (stepCellWrites post action 7)
+        let rebuilt := applyCellWrites base (stepCellWrites base post action 7)
         let probes : List CellTag :=
           [ .balance 1 7, .balance 1 8, .balance 1 9, .nonce 7, .nonce 8
           , .registry 7, .localPolicy 7, .epochBudget 7, .bridgeNextWdId
@@ -218,12 +218,67 @@ def tests : List TestCase :=
         -- would be a hypothesis nothing ever exercised.
         let action : Authority.Action := .mint 1 7 5
         let post := applyCellWrites base [(.balance 1 8, amountCellValue 999)]
-        let rebuilt := applyCellWrites base (stepCellWrites post action 7)
+        let rebuilt := applyCellWrites base (stepCellWrites base post action 7)
         assert ((getCellValue rebuilt (.balance 1 8)).toList
                   != (getCellValue post (.balance 1 8)).toList)
           "the undeclared cell is NOT reproduced"
         assert ((commitExtendedState rebuilt).toList != (commitExtendedState post).toList)
           "so the roots differ — which is what completeness rules out"
+    }
+  , { name := "withdraw's complete write set names the allocated cell"
+    , body := do
+        -- The static `writeCells` cannot name it: the key is the
+        -- deployment's current `nextWdId`, which is not a function of
+        -- `(action, signer)`.  `writeCellsAt` is what closes that, and
+        -- without it a withdrawal's bundle omits the very cell the
+        -- withdrawal creates.
+        let wd : Authority.Action := .withdraw 1 7 30 LegalKernel.Bridge.EthAddress.zero
+        let seeded : ExtendedState :=
+          { base with bridge := { base.bridge with nextWdId := 5 } }
+        let static := Authority.Action.writeCells wd 7
+        let complete := Authority.Action.writeCellsAt seeded wd 7
+        assert (!static.contains (.bridgePending 5))
+          "the static declaration omits the allocated cell"
+        assert (complete.contains (.bridgePending 5))
+          "the complete set names it, keyed by the pre-state's counter"
+        assertEq (expected := static.length + 1) (actual := complete.length)
+          "and adds exactly one cell"
+        -- Every OTHER variant pays nothing for the split.
+        for a in [Authority.Action.transfer 1 7 8 5, .mint 1 7 5, .freezeResource 1,
+                  .deposit 1 7 5 3, .ammSwap 1 2 5 1 9] do
+          assertEq (expected := (Authority.Action.writeCells a 7).map (fun t => repr t |>.pretty))
+            (actual := (Authority.Action.writeCellsAt seeded a 7).map (fun t => repr t |>.pretty))
+            s!"writeCellsAt widened a non-withdraw action: {repr a}"
+    }
+  , { name := "identity-advance completeness on a nonce-and-budget-only step"
+    , body := do
+        -- `writeSetComplete_of_identity_advance` at the value level.
+        -- The post-state moves exactly the two cells every action
+        -- writes; every other cell must read unchanged, which is what
+        -- the lemma asserts and what the L1 relies on when it holds
+        -- openings for those two alone.
+        let post : ExtendedState :=
+          { base with
+              nonces := { next := base.nonces.next.insert 7 4 }
+            , epochBudgets := base.epochBudgets.insert 7
+                { lastSeenEpoch := 4, budgetBalance := 7 } }
+        let action : Authority.Action := .freezeResource 1
+        for t in [CellTag.balance 1 7, .balance 1 8, .nonce 8, .registry 7
+                 , .localPolicy 7, .bridgeConsumed 3, .bridgePending 4
+                 , .bridgeNextWdId, .bridgeAmmDisabled, .epochBudget 8
+                 , .budgetPolicy] do
+          assert (!(Authority.Action.writeCellsAt base action 7).contains t)
+            s!"probe {repr t} must be outside the write set"
+          assertEq (expected := (getCellValue base t).toList)
+            (actual := (getCellValue post t).toList)
+            s!"advance moved undeclared cell {repr t}"
+        -- And the two declared ones really did move, so the test is
+        -- not passing because nothing happened.
+        assert ((getCellValue post (.nonce 7)).toList != (getCellValue base (.nonce 7)).toList)
+          "the nonce moved"
+        assert ((getCellValue post (.epochBudget 7)).toList
+                  != (getCellValue base (.epochBudget 7)).toList)
+          "the budget moved"
     }
   , { name := "API stability: write-chain signatures"
     , body := do
@@ -256,9 +311,9 @@ def tests : List TestCase :=
           getCellValue_setCell_getCellValue
         let _step : ∀ (pre post : ExtendedState) (action : Authority.Action)
             (signer : ActorId),
-            CellWritesReady pre (stepCellWrites post action signer) →
+            CellWritesReady pre (stepCellWrites pre post action signer) →
             WriteSetComplete pre post action signer →
-            (Authority.Action.writeCells action signer).Nodup →
+            (Authority.Action.writeCellsAt pre action signer).Nodup →
             ExtendedState.CanonicalBounds post →
             BitsDistinctBelow smtDepth (stateCellEntries post) →
             (∀ t : CellTag, t.appendOnly = true →
@@ -266,9 +321,22 @@ def tests : List TestCase :=
               getCellValue pre t = canonicalAbsentValue t) →
             foldStateCellWrites (commitExtendedState pre)
                 (chainWrites pre
-                  (canonicalCellChain pre (stepCellWrites post action signer)))
+                  (canonicalCellChain pre (stepCellWrites pre post action signer)))
               = some (commitExtendedState post) :=
           fold_stepCellWrites_eq_commit_post
+        let _identity : ∀ (pre post : ExtendedState) (action : Authority.Action)
+            (signer : ActorId),
+            (∀ t : CellTag, t = .nonce signer ∨ t = .epochBudget signer →
+              t ∈ Authority.Action.writeCellsAt pre action signer) →
+            post.base = pre.base → post.registry = pre.registry →
+            post.localPolicies = pre.localPolicies → post.bridge = pre.bridge →
+            post.budgetPolicy = pre.budgetPolicy →
+            (∀ a : ActorId, a ≠ signer →
+              Authority.expectsNonce post a = Authority.expectsNonce pre a) →
+            (∀ a : ActorId, a ≠ signer →
+              post.epochBudgets[a]? = pre.epochBudgets[a]?) →
+            WriteSetComplete pre post action signer :=
+          writeSetComplete_of_identity_advance
         pure ()
     }
   ]
