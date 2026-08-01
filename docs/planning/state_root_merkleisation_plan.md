@@ -487,9 +487,29 @@ space:
    because a reset counter would let a later withdrawal overwrite an
    earlier one's pending cell.
 
-   What remains of §4 step 3 is the SOLIDITY mirror of these functions
-   — including the on-chain canonical CBE value encoders — and the
-   corpus column that pins the two stacks against each other.
+   **The on-chain CBE value encoders are in** (`src/lib/CBEEncode.sol`),
+   pinned against Lean by the corpus's `cbeEncoderGoldens` column.
+   They are the mirror's foundation rather than an incidental helper:
+   the SMT leaf is hashed over a cell's canonical bytes, so a value
+   that is numerically right and byte-wrong re-walks to a different
+   root and makes the honest sequencer's root unreachable — a liveness
+   failure indistinguishable from a fraudulent submission.  `CBEDecode`
+   had readers and no writers, which sufficed while `executeStep` only
+   READ cell values.
+
+   Two hazards the goldens catch that inspection would not: the CBE
+   head is LITTLE-endian while `actionFieldsForL1` is big-endian, so
+   both orders live in the same contract; and the widths are FIXED
+   rather than minimal, because a compact encoding would give two
+   encodings of one number and an SMT leaf must be a function of the
+   value alone.  Over-wide values revert rather than truncating, and
+   the round-trip is checked against the step VM's OWN decoder — the
+   corpus pins Lean-vs-Solidity, and an encoder/decoder pair wrong the
+   same way would agree with each other but not with Lean.
+
+   What remains of §4 step 3 is the per-variant Solidity derivation on
+   top of those encoders, and `executeStep` verifying openings and
+   returning the fold's result.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"

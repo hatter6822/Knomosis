@@ -1506,6 +1506,69 @@ def packedLayoutGoldens : List Test.Bridge.CrossCheck.Json :=
          , ("valueHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)))
          , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes (uint256BE v))) ])
 
+/-! ### CBE value-encoder goldens (the state-root flip's foundation)
+
+Once `executeStep` computes cell VALUES rather than hashing them, it
+must produce each one in its canonical CBE byte form — the SMT leaf is
+hashed over those bytes, so a value that is numerically right and
+byte-wrong re-walks to a different root and the honest sequencer's root
+becomes unreachable.
+
+Two things make this worth a golden rather than an inspection.  The
+CBE head is LITTLE-endian while `actionFieldsForL1` is big-endian, so
+both orders live in the same contract and a wrong-endianness encoder
+produces a plausible 9-byte value.  And the widths are FIXED, not
+minimal — a uint is always 8 payload bytes even when the value fits in
+one — because a length-minimal encoding would give two encodings of the
+same number, and an SMT leaf must be a function of the value alone.
+
+`solidity/src/lib/CBEEncode.sol` is the mirror.
+-/
+
+/-- Probe values for the CBE encoders: zero, one, byte and word
+    boundaries, and the maxima each width admits.  The boundaries are
+    where a fixed-width little-endian writer with an off-by-one goes
+    wrong while every small value still passes. -/
+def cbeUintGoldenVals : List Nat :=
+  [0, 1, 0xFF, 0x0100, 0x0102030405060708, 0xFFFFFFFFFFFFFFFF]
+
+/-- ...and for the 16-byte amount head. -/
+def cbeAmountGoldenVals : List Nat :=
+  [0, 1, 0xFF, 0x0100, 0x0102030405060708,
+   0xFFFFFFFFFFFFFFFF, 0x0102030405060708090A0B0C0D0E0F10,
+   0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF]
+
+/-- Byte-string payloads: empty (whose 9-byte head is what
+    distinguishes a present-empty registry entry from an absent one),
+    one byte, and a 33-byte payload that crosses the word boundary. -/
+def cbeBytesGoldenPayloads : List ByteArray :=
+  [ ByteArray.empty
+  , ByteArray.mk #[0xAB]
+  , ByteArray.mk (Array.range 33 |>.map (fun i => UInt8.ofNat (i + 1))) ]
+
+/-- Lean's actual CBE encoder output for each probe, for the Solidity
+    side to byte-match against `CBEEncode`. -/
+def cbeEncoderGoldens : List Test.Bridge.CrossCheck.Json :=
+  let h := fun (v : Nat) => Test.Bridge.CrossCheck.hexFromBytes (uint256BE v)
+  cbeUintGoldenVals.map (fun v =>
+    .obj [ ("kind", .str "uint")
+         , ("valueHex", .str (h v))
+         , ("payloadHex", .str "0x")
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes
+             (ByteArray.mk (Encoding.Encodable.encode (T := Nat) v).toArray))) ])
+  ++ cbeAmountGoldenVals.map (fun v =>
+    .obj [ ("kind", .str "amount")
+         , ("valueHex", .str (h v))
+         , ("payloadHex", .str "0x")
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes
+             (ByteArray.mk (Encoding.encodeAmount v).toArray))) ])
+  ++ cbeBytesGoldenPayloads.map (fun bs =>
+    .obj [ ("kind", .str "bytes")
+         , ("valueHex", .str (h 0))
+         , ("payloadHex", .str (Test.Bridge.CrossCheck.hexFromBytes bs))
+         , ("encodedHex", .str (Test.Bridge.CrossCheck.hexFromBytes
+             (ByteArray.mk (Encoding.Encodable.encode (T := ByteArray) bs).toArray))) ])
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -1994,6 +2057,8 @@ def tests : List Test.TestCase :=
           -- `abi.encodePacked`, proving the packed byte layout agrees
           -- byte-for-byte without the keccak binding.
           , ("packedLayoutGoldensCount", .num packedLayoutGoldens.length)
+          , ("cbeEncoderGoldens", .arr cbeEncoderGoldens)
+          , ("cbeEncoderGoldensCount", .num cbeEncoderGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)

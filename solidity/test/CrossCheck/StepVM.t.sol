@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 import {LogChain} from "src/lib/LogChain.sol";
+import {CBEEncode} from "src/lib/CBEEncode.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
@@ -432,6 +433,104 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 string.concat("actionCommit mismatch at ", base)
             );
         }
+    }
+
+    /// @notice **The CBE value encoders agree byte-for-byte.**
+    ///
+    ///         The foundation of the state-root flip: once
+    ///         `executeStep` computes cell VALUES rather than hashing
+    ///         them, it must produce each in its canonical CBE byte
+    ///         form, because the SMT leaf is hashed over those bytes.
+    ///         A value that is numerically right and byte-wrong
+    ///         re-walks to a different root and makes the honest
+    ///         sequencer's root unreachable — a liveness failure that
+    ///         looks exactly like a fraudulent submission.
+    ///
+    ///         Two hazards this catches that inspection would not.
+    ///         The CBE head is LITTLE-endian while `actionFieldsForL1`
+    ///         is big-endian, so both orders live in this contract and
+    ///         a flipped encoder still produces a plausible 9-byte
+    ///         value.  And the widths are FIXED rather than minimal, so
+    ///         a "helpfully" compact encoder would give two encodings
+    ///         of one number — and an SMT leaf must be a function of
+    ///         the value alone.
+    function test_cbeEncoders_match_lean() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".cbeEncoderGoldensCount");
+        assertGt(n, 0, "the corpus must carry encoder goldens");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base =
+                string.concat(".cbeEncoderGoldens[", vm.toString(i), "]");
+            string memory kind =
+                vm.parseJsonString(raw, string.concat(base, ".kind"));
+            bytes memory expected =
+                vm.parseJsonBytes(raw, string.concat(base, ".encodedHex"));
+            bytes32 kindHash = keccak256(bytes(kind));
+            if (kindHash == keccak256("uint")) {
+                uint256 v = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
+                assertEq(CBEEncode.uintValue(v), expected,
+                    string.concat("uint encoder mismatch at ", base));
+            } else if (kindHash == keccak256("amount")) {
+                uint256 v = vm.parseJsonUint(raw, string.concat(base, ".valueHex"));
+                assertEq(CBEEncode.amountValue(v), expected,
+                    string.concat("amount encoder mismatch at ", base));
+            } else if (kindHash == keccak256("bytes")) {
+                bytes memory payload =
+                    vm.parseJsonBytes(raw, string.concat(base, ".payloadHex"));
+                assertEq(CBEEncode.bytesValue(payload), expected,
+                    string.concat("bytes encoder mismatch at ", base));
+            } else {
+                revert(string.concat("unknown golden kind at ", base));
+            }
+        }
+    }
+
+    /// @notice The encoders are the DECODERS' inverse, and refuse
+    ///         values they cannot represent.
+    ///
+    /// @dev    The corpus pins Lean-vs-Solidity; this pins
+    ///         Solidity-vs-Solidity, which the corpus cannot: an
+    ///         encoder and decoder that were wrong the same way would
+    ///         agree with each other, but not with Lean, and vice
+    ///         versa.  Both directions together are what make the
+    ///         round-trip meaningful.
+    function test_cbeEncoders_reject_overwide_and_roundtrip() public {
+        // A uint at 2^64 does not fit its 8-byte payload.  Reverting
+        // rather than truncating is the point: a silent truncation is
+        // how a balance above the width would encode as its low bits
+        // and hash to the leaf for a DIFFERENT balance.
+        vm.expectRevert(
+            abi.encodeWithSelector(CBEEncode.CBEValueTooWide.selector, 1 << 64, 8));
+        this.encodeUintExternal(1 << 64);
+        vm.expectRevert(
+            abi.encodeWithSelector(CBEEncode.CBEValueTooWide.selector, 1 << 128, 16));
+        this.encodeAmountExternal(1 << 128);
+        // ...and the largest representable value of each width does NOT
+        // revert, so the bound is rejecting only what it must.
+        assertEq(CBEEncode.uintValue(type(uint64).max).length, 9, "uint max encodes");
+        assertEq(CBEEncode.amountValue(type(uint128).max).length, 17, "amount max encodes");
+        // Round-trip against the step VM's own decoder.
+        uint64[4] memory probes = [uint64(0), 1, 0xFF, type(uint64).max];
+        for (uint256 i = 0; i < probes.length; i++) {
+            assertEq(stepVM.decodeNatForTest(CBEEncode.uintValue(probes[i])),
+                uint256(probes[i]), "uint round-trip");
+            assertEq(stepVM.decodeNatForTest(CBEEncode.amountValue(probes[i])),
+                uint256(probes[i]), "amount round-trip");
+        }
+    }
+
+    /// @dev `expectRevert` needs an external call boundary.
+    function encodeUintExternal(uint256 n) external pure returns (bytes memory) {
+        return CBEEncode.uintValue(n);
+    }
+
+    /// @dev ...and likewise for the amount head.
+    function encodeAmountExternal(uint256 n) external pure returns (bytes memory) {
+        return CBEEncode.amountValue(n);
     }
 
     function test_perEntry_cellProofs_witness_binding() public {

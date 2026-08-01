@@ -508,6 +508,17 @@ contract KnomosisStepVM {
     ///         revert, on the cell values a bisection game settles against.
     ///         Any unrecognised tag, or a payload whose length does not
     ///         match its tag, reverts.
+    ///
+    /// @dev    `decodeNatForTest` exposes it so the cross-stack suite
+    ///         can round-trip `CBEEncode` against the DECODER the step
+    ///         VM actually uses.  The corpus pins Lean-vs-Solidity; a
+    ///         round-trip against a re-spelling of the decoder would
+    ///         pin nothing, since an encoder and decoder wrong the same
+    ///         way agree with each other.
+    function decodeNatForTest(bytes memory data) external pure returns (uint256) {
+        return _decodeNat(data);
+    }
+
     function _decodeNat(bytes memory data) internal pure returns (uint256) {
         if (data.length == 0) return 0;
         if (data.length < 1) revert MalformedCellValue();

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "4bcf0d3fdde75c79bda0bf18f21514b9060408ab8a69fc96ac89e123cdf8e3ed"
+    "source_digest": "d9c83b898a1a64b477ea98a50bf45960ea58167b34f3888c076ce2b8c38905d5"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5770
+    "declaration_count": 5774
   },
   "modules": [
     {
@@ -45983,7 +45983,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 71,
+      "declaration_count": 75,
       "declarations": [
         {
           "kind": "namespace",
@@ -46993,8 +46993,34 @@
         },
         {
           "kind": "def",
+          "name": "cbeUintGoldenVals",
+          "line": 1531,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cbeAmountGoldenVals",
+          "line": 1535,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cbeBytesGoldenPayloads",
+          "line": 1543,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "cbeEncoderGoldens",
+          "line": 1550,
+          "called": [
+            "uint256BE"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1515,
+          "line": 1578,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47003,11 +47029,12 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1532,
+          "line": 1595,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "actionCommitHexOf",
             "base",
+            "cbeEncoderGoldens",
             "entries",
             "fixtureToJson",
             "packedLayoutGoldens",

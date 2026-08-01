@@ -807,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 210 | ~159 | `lake test` |
 | Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~945 passed | 62 forge suites | `cd solidity && forge test` |
+| Solidity | ~947 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **945 passed / 0 failed / 0 skipped** — the
+`forge test` runs **947 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 945 / 0 / 0.
+reports the same 947 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -1247,10 +1247,13 @@ than asserted (so a failing one is a no-op, not a revert), and the
 reader is PARTIAL (so an omitted opening derives nothing rather than a
 value of the responder's choosing).
 
-**What remains** is the Solidity mirror of those functions — including
-the on-chain canonical CBE value encoders — the corpus column pinning
-the two stacks, and `executeStep` returning the fold's result instead
-of `stepVMHash`.  `stepWriteBundle es st idx`
+**What remains** is the Solidity mirror.  Its foundation is in —
+`solidity/src/lib/CBEEncode.sol` supplies the canonical value encoders
+(`CBEDecode` had readers and no writers), pinned against Lean by the
+corpus's `cbeEncoderGoldens` column and round-tripped against the step
+VM's own decoder.  Left: the per-variant derivation on top of them, and
+`executeStep` verifying openings and returning the fold's result
+instead of `stepVMHash`.  `stepWriteBundle es st idx`
 takes the pre-state and reads its `newValue` column off
 `productionApplyBudget es st idx` — that is the sequencer's
 computation.  A verifier holding only the pre-root and a submitted
