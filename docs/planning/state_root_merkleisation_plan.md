@@ -335,6 +335,18 @@ space:
    first line.
 2. Extend `CellProof` with `bytes proofData` (bitmask + siblings),
    matching the shipped `SmtCellVerifier` wire format.
+
+   **The primitives step 1 and 3 need are in** (`StepVMMerkle`):
+   `updateCellRoot` re-walks an opening from a new leaf, and
+   `cellLeafHash` supplies the absence branch.  `SmtCellVerifier`
+   gained `recomputeRootFromLeaf`, with the pinned preimage path
+   rewritten as a wrapper over it so the two walks are the same code
+   and the leaf entry point inherits `smt_cell_proof.json`'s
+   cross-stack pin.  The placeholder `updateCommitment` (which
+   discarded its root and siblings and returned `keccak256(newValue)`)
+   and the unreachable `verifyCellProofWitness` /
+   `verifyCellMerkleProof` are deleted.  All additive — `executeStep`
+   is unchanged, so the flip is still one atomic change.
 3. Compute the post-root by applying each write to the pre-root
    through the same opening, rather than emitting the bespoke
    per-variant hash.  The 25 `_step<Variant>` handlers change from
@@ -706,7 +718,28 @@ sets exactly those bits, and that `expandSiblingsAux`'s cursor tracks
 ## 5. Ordering
 
 §2 → §2A → §2B → §2C → §3 → §3A → §3B → §4, and §4's corpus
-regeneration last.  §2, §2A, §2B and §3B are additive and have landed
+regeneration last.
+
+**Where this stands.**  Everything through §4A is landed and green:
+the Lean side computes the post-root from a pre-root plus openings
+(`stepPostRoot`), for all twenty-five variants, and the L1 has the two
+primitives that fold needs.  What remains is one coupled unit, and it
+has to be done together because the wire format, the observer's output
+and the corpus all move at once:
+
+  * the observer emitting real `SmtCellProof` openings instead of
+    witness-state-bearing ones (S4);
+  * `CellProof` gaining `bytes proofData`, with the Rust conduit's
+    ABI head widening, `method_selectors.json` regenerating, and the
+    ~15 byte-layout tests following (S5);
+  * `executeStep` verifying those openings and returning the fold's
+    result, with the corpus's `expectedStepVMCommitHex` becoming a
+    state root (S6).
+
+S4 cannot land before S5 — changing what the observer emits changes
+the wire — and S6 is the semantic flip on top of both.  Treating them
+as one change is what keeps exactly one selector churn and one corpus
+regeneration.  §2, §2A, §2B and §3B are additive and have landed
 on their own; §3 / §3A and §4 are one consensus change and must not be
 split across releases that could be deployed independently.
 

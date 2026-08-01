@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "94538cac12c3561e9b649317fb2d82c9a5f13386b1a935adfc4869a2bdf28226"
+    "source_digest": "bd75a7e85c3f3a8bf477166b3fa11bc8e93d94ec17f0ad3d0f1e3e5e98e319ed"
   },
   "summary": {
-    "module_count": 90,
-    "declaration_count": 1992
+    "module_count": 91,
+    "declaration_count": 2007
   },
   "modules": [
     {
@@ -16703,6 +16703,107 @@
           "kind": "function",
           "name": "_populatedSiblings",
           "line": 328,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "StepVMMerkleUpdate.t",
+      "path": "solidity/test/StepVMMerkleUpdate.t.sol",
+      "declaration_count": 15,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "StepVMMerkleUpdateProxy",
+          "line": 13,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "updateCellRoot",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "cellLeafHash",
+          "line": 22,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRoot",
+          "line": 30,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRootFromLeaf",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "emptyLeafHash",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "verifyCellSmtProof",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "StepVMMerkleUpdateTest",
+          "line": 73,
+          "called": [
+            "StepVMMerkleUpdateProxy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 87,
+          "called": [
+            "StepVMMerkleUpdateProxy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_recomputeRoot_is_the_leaf_path_with_a_hashed_preimage",
+          "line": 94,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_cellLeafHash_branches_on_absence",
+          "line": 106,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_updateCellRoot_re_walks_the_opening",
+          "line": 127,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_updateCellRoot_is_reversible",
+          "line": 146,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_the_verifying_opening_produces_the_post_root",
+          "line": 162,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_absent_and_present_reach_different_roots",
+          "line": 188,
           "called": []
         }
       ]

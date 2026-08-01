@@ -1187,10 +1187,23 @@ to `ProductionApply`'s `productionApplyBudget`, and
 incomplete (`withdraw` creates a cell keyed by the pre-state's
 `nextWdId`, which `writeCells` cannot name).
 
-Remaining: the fourteen per-variant `WriteSetComplete` proofs beyond
-the eleven `writeSetComplete_of_identity_advance` covers, routing the
-two bulk variants through `FaultProof/SubStep.lean`, and the Solidity
-flip itself.
+`WriteSetComplete` is now proved for all twenty-three non-bulk actions
+(`FaultProof/StepWriteSets.lean`); the two bulk ones route through the
+decomposition, which `Laws.BulkBound`'s recipient bound makes complete
+— the law used to credit every actor while the decomposition stopped
+at 256, so above the cap the game could not reach the L2's post-state.
+`stepWriteBundle` / `stepPostRoot` are the honest sequencer's side, and
+`stepPostRoot_eq_commit_productionApplyBudget` is §4's statement: what
+the L1 computes from a pre-root and openings, with no access to the
+post-state, is the root the sequencer published.  On the L1 side
+`StepVMMerkle.updateCellRoot` and `cellLeafHash` supply the fold's two
+primitives.
+
+Remaining is one coupled unit: the observer emitting real SMT openings,
+the `proofData` wire widening (with the Rust conduit and
+`method_selectors.json` following), and `executeStep` returning the
+fold's result instead of `stepVMHash`.  They move together because the
+wire format, the observer's output and the corpus all change at once.
 `docs/audits/19-findings-and-followups.md` records the remaining
 blast radius and
 `docs/planning/state_root_merkleisation_plan.md` is the

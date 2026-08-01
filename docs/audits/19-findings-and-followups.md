@@ -210,8 +210,27 @@ unconditional rather than stated under each law's precondition,
 because `step_impl` is `if pre then apply_impl else id` and a fault
 proof adjudicates a step whose admissibility is not in evidence.
 
-Not landed: the two bulk variants (see the cap finding above), and
-making `executeStep` compute the post-root from the proven writes.  That is what closes this
+`stepWriteBundle` / `stepPostRoot` are the honest sequencer's side:
+the ordered `(cell, proven pre-value, new value, opening)` list the L1
+folds, and the number the fold produces.
+`stepPostRoot_eq_commit_productionApplyBudget` is the statement this
+finding is really about — what the L1 computes from a pre-root and a
+bundle of openings, with no access to the post-state, is exactly the
+root an honest sequencer publishes.  Exercised on real actions
+including `withdraw`, with a forged-value case showing the fold does
+not reach the honest root.
+
+On the L1 side `StepVMMerkle.updateCellRoot` and `cellLeafHash` supply
+the fold's two primitives, replacing a placeholder that returned
+`keccak256(newValue)` and a verifier with no absence branch — both
+zero-caller, which is why neither had been caught.
+
+Not landed, and coupled: the observer emitting real SMT openings, the
+`proofData` wire widening (with the Rust conduit and
+`method_selectors.json` following), and `executeStep` returning the
+fold's result instead of `stepVMHash`.  These move together — the wire
+format, the observer's output and the corpus all change at once — which
+is what keeps exactly one selector churn and one corpus regeneration.  That is what closes this
 finding; the swap was its precondition, since a post-root is not
 computable from a concatenation hash at all.  §0 of
 `docs/fault_proof_runbook.md` stands until §4 lands.
