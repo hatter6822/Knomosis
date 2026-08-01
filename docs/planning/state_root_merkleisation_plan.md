@@ -390,15 +390,43 @@ space:
    form (`CellStore.lean`'s value constructors), on-chain, or the
    re-walked leaf is not the leaf the sequencer's root observes.
 
-   The Lean side of this is a function
-   `stepWritesFromBundle : StateCommit → UInt8 → ByteArray → ActorId →
-   CellProofBundle → List CellWrite` plus the agreement theorem — that
-   it equals `stepCellWrites es (productionApplyBudget es st idx) …`
-   whenever the bundle's proven values are `es`'s.  That theorem is
-   what carries `stepPostRoot`'s guarantee across to a verifier holding
-   no state, and it is what the Solidity handlers mirror.  It is 25
-   arms over ~3 cells each on both stacks, with a matching corpus
-   column.
+   The Lean side lives in `FaultProof/VerifierWrites.lean`: one
+   `derive<Cell>CellValue` per cell kind, reading proven pre-values,
+   each with a `*_correct` theorem against
+   `getCellValue (productionApplyBudget es st idx) …`.  Those theorems
+   are what carry `stepPostRoot`'s guarantee across to a verifier
+   holding no state, and they are what the Solidity handlers mirror.
+
+   **The nonce cell is done.**  `deriveNonceCellValue` plus
+   `deriveNonceCellValue_correct`, and it is the cheapest of the set
+   for a structural reason worth keeping: `Action.writeCells` declares
+   `.nonce signer` on all twenty-five variants and `kernelOnlyApply`
+   advances it BEFORE dispatching on the action, so the derivation is
+   one proof rather than twenty-five.
+   `productionApplyBudget_expectsNonce_signer` is the companion to the
+   existing `_of_ne` — together they are the nonce ledger's whole
+   footprint.
+
+   Two shape decisions there generalise to the rest.  The derivation
+   returns `Option` and refuses a malformed pre-value rather than
+   defaulting — a nonce defaulting to `0` is a replay — and it refuses
+   a value with a RESIDUAL, because a cell holds exactly one encoded
+   value and accepting padding would let two distinct bundles derive
+   the same write.  Both refusals are theorems, and the value-level
+   tests check the honest cell still derives, so the checks are
+   rejecting padding rather than everything.
+
+   It decodes with `Encodable.decode`, whose round-trip is
+   `Encoding.nat_roundtrip`; the L1 mirrors it with
+   `StepVMCoherence.decodeCellNat`, whose agreement is the corpus's
+   job.  Splitting them keeps the semantic content provable without a
+   bitwise-OR-versus-sum bridge that says nothing about the kernel.
+
+   Remaining: `.epochBudget` (also uniform, over the
+   consume-then-grant against the proven `.budgetPolicy` cell),
+   `.balance` (per-variant — the part the Solidity handlers already
+   compute), and the registry / local-policy / bridge cells of eight
+   variants.  Then the Solidity mirror and a corpus column.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"

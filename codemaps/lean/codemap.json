@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "a45168c08ceb0b757703b7eef8da1bd61e64ce53236530a8363fafce3ad330d4"
+    "source_digest": "b6199e4b052555bdbdcbeddf1819439f4a648b58647ebfd5576ef2a4bee1739d"
   },
   "summary": {
     "module_count": 331,
@@ -544,13 +544,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 326,
+          "line": 327,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 342,
+          "line": 343,
           "called": [
             "LegalKernel"
           ]
@@ -56549,13 +56549,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.StepWriteSets",
-          "line": 38,
+          "line": 39,
           "called": []
         },
         {
           "kind": "def",
           "name": "base",
-          "line": 44,
+          "line": 45,
           "called": [
             "ActorId",
             "BalanceMap",
@@ -56569,7 +56569,7 @@
         {
           "kind": "def",
           "name": "probeDispute",
-          "line": 57,
+          "line": 58,
           "called": [
             "challenger"
           ]
@@ -56577,13 +56577,13 @@
         {
           "kind": "def",
           "name": "probeVerdict",
-          "line": 62,
+          "line": 63,
           "called": []
         },
         {
           "kind": "def",
           "name": "sign",
-          "line": 67,
+          "line": 68,
           "called": [
             "SignedAction"
           ]
@@ -56591,7 +56591,7 @@
         {
           "kind": "def",
           "name": "probes",
-          "line": 79,
+          "line": 80,
           "called": [
             "CellTag"
           ]
@@ -56599,7 +56599,7 @@
         {
           "kind": "def",
           "name": "checkComplete",
-          "line": 89,
+          "line": 90,
           "called": [
             "assertEq",
             "base",
@@ -56612,7 +56612,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 102,
+          "line": 103,
           "called": [
             "ActorId",
             "BitsDistinctBelow",

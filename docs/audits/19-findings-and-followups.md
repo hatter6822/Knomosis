@@ -246,6 +246,14 @@ PRE-values alone, in canonical CBE byte form, on both stacks, plus the
 Lean theorem that it agrees with `stepCellWrites es
 (productionApplyBudget es st idx) …` — is the largest remaining piece
 and the one the plan understated as "the root update becomes shared".
+It has started: `FaultProof/VerifierWrites.lean` holds the nonce cell
+(`deriveNonceCellValue` + `deriveNonceCellValue_correct`, with
+`productionApplyBudget_expectsNonce_signer` as the missing half of the
+nonce ledger's footprint), which is the cheapest of the set because
+`kernelOnlyApply` advances the signer's nonce before dispatching on
+the action at all — one proof, not twenty-five.  It is also the cell
+the L1 gets most conspicuously wrong today, which the step-VM
+coherence suite already pins.
 Every input is available (the cell space covers all seven state
 fields, so the signer's nonce, the budget policy and the signer's
 epoch budget are all openable cells), but it amounts to

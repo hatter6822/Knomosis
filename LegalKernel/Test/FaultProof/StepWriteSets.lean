@@ -29,6 +29,7 @@ the statements would not give:
 -/
 
 import LegalKernel.FaultProof.StepWriteSets
+import LegalKernel.FaultProof.VerifierWrites
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -387,6 +388,51 @@ def tests : List TestCase :=
             "the fold must land on the no-op advance's root"
         | none =>
           throw <| IO.userError "the fold rejected a no-op step"
+    }
+  , { name := "the verifier derives the nonce write from the proven cell"
+    , body := do
+        -- §4 step 3 for the one cell every action writes.  Value-level
+        -- because the theorem quantifies over states, and the drift
+        -- that matters is definitional: a change to the nonce cell's
+        -- encoding or to `expectsNonce` would keep the theorem true
+        -- and move the bytes.
+        for action in [ Authority.Action.transfer 1 7 8 30
+                      , .mint 1 8 5
+                      , .freezeResource 1
+                      , .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero
+                      , .distributeOthers 1 7 30 ] do
+          let st := sign action
+          let post := productionApplyBudget base st 0
+          match deriveNonceCellValue (getCellValue base (CellTag.nonce st.signer)) with
+          | some derived =>
+            assertEq
+              (expected := (getCellValue post (CellTag.nonce st.signer)).toList)
+              (actual := derived.toList)
+              s!"derived nonce write ≠ the advance's, for {repr action}"
+          | none =>
+            throw <| IO.userError
+              s!"the derivation refused an honest nonce cell for {repr action}"
+    }
+  , { name := "the nonce derivation is fail-closed on a bad pre-value"
+    , body := do
+        -- Both refusal cases, because an implementation that decoded
+        -- and ignored the residual would pass the happy path and the
+        -- malformed one while accepting a padded cell — and two
+        -- distinct bundles deriving the same write is exactly what
+        -- lets a responder choose.
+        assertEq (expected := (none : Option (List UInt8)))
+          (actual := (deriveNonceCellValue (ByteArray.mk #[0xFF, 0x00])).map
+            (fun b => b.toList))
+          "garbage bytes must derive nothing"
+        let honest := getCellValue base (CellTag.nonce 7)
+        let padded := honest ++ ByteArray.mk #[0x00]
+        assertEq (expected := (none : Option (List UInt8)))
+          (actual := (deriveNonceCellValue padded).map (fun b => b.toList))
+          "a trailing byte must derive nothing"
+        -- ...and the unpadded value still works, so the check above is
+        -- rejecting the padding rather than everything.
+        assert (deriveNonceCellValue honest |>.isSome)
+          "the honest cell must still derive"
     }
   , { name := "API stability: WriteSetComplete signatures"
     , body := do
