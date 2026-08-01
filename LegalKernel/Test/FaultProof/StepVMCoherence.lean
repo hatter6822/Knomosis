@@ -1769,6 +1769,49 @@ def tests : List TestCase :=
                        (productionApply es entry.signedAction 0)).toList)
           "productionApply reproduces the runtime's post-state"
     }
+  , { name := "OBLIGATION: every action writes the signer's epoch-budget cell"
+    , body := do
+        -- Read from `EpochBudgetState.consume`, which ends in
+        -- `ebs.insert a b'` unconditionally: under a `.bounded`
+        -- policy every admitted action from a non-bridge signer
+        -- rewrites the signer's budget entry.  So the runtime's
+        -- advance moves `.epochBudget signer` on EVERY action, and
+        -- `Action.writeCells` declares that cell for NONE of the 25.
+        --
+        -- This is the budget-leg peer of the nonce obligation above,
+        -- and it is strictly larger in consequence: the nonce gap
+        -- makes the post-root wrong for every action, and so does
+        -- this one, but this one is invisible from `kernelOnlyApply`
+        -- (which has no budget leg at all) and therefore does not
+        -- show up in any theorem anchored to it.
+        let signer : ActorId := 7
+        let action : Action := .transfer 1 signer 8 5
+        let st : SignedAction := { action, signer, nonce := 0, sig := ByteArray.empty }
+        assert (!((Action.writeCells action signer).contains (.epochBudget signer)))
+          "writeCells declares no epoch-budget write"
+        -- A state with a bounded budget policy and the signer funded.
+        let es : ExtendedState :=
+          { ExtendedState.empty with
+              base := LegalKernel.setBalance ExtendedState.empty.base 1 signer 100
+            , budgetPolicy := .bounded 10 3 1 }
+        -- The cell moves exactly when the consume SUCCEEDS, which is
+        -- what admission requires — so on the adjudication path (where
+        -- L2 admission already happened) it always moves.  At epoch 0
+        -- against an empty budget the consume refuses and the cell
+        -- stays put, which is why the epoch is 1 here: `normalise`
+        -- refreshes the balance to the free tier first.
+        let after := productionApplyBudget es st 0
+        assert (budgetGateAdmits es st (fun _ => 0)) "the action is admitted"
+        assert ((getCellValue es (.epochBudget signer)).toList
+                  != (getCellValue after (.epochBudget signer)).toList)
+          "but the production advance moves the cell"
+        -- And it moves the published root, so a step VM that omitted
+        -- the write would compute a root no state has.
+        let omitted : ExtendedState := { after with epochBudgets := es.epochBudgets }
+        assert ((commitExtendedState omitted).toList
+                  != (commitExtendedState after).toList)
+          "omitting it lands on a different root"
+    }
   , { name := "productionApply agrees with the replay off the bridge path"
     , body := do
         -- The other half of the divergence: on a non-bridge action

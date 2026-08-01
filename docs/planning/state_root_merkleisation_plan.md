@@ -365,7 +365,21 @@ front rather than halfway through the rewrite:
      wrong for *every* action, not for exotic ones: the nonce moves
      on all 25.  So each handler must become semantically complete
      against its own declaration, not merely restructured.
-     The declaration layer is the good news — `Action.writeCells`
+     **And the declaration layer is itself incomplete.**  Read from
+     `EpochBudgetState.consume`, which ends in `ebs.insert a b'`
+     unconditionally: under a `.bounded` policy every ADMITTED action
+     from a non-bridge signer rewrites the signer's `.epochBudget`
+     cell.  `Action.writeCells` declares that cell for none of the 25.
+     This is the budget-leg peer of the nonce gap and is worse in one
+     respect — it is invisible from `kernelOnlyApply`, which has no
+     budget leg at all, so no theorem anchored to the current
+     reference apply could ever have surfaced it.  Pinned as the
+     fourth `OBLIGATION:` case in `faultproof-stepvm-coherence`,
+     including the detail that the cell moves exactly when the consume
+     succeeds (which is what admission requires, so on the
+     adjudication path it always moves).
+
+     The declaration layer is otherwise the good news — `Action.writeCells`
      already says which cells, so the work is per-variant value
      computation, and the values are all derivable from
      `actionFields` plus the opened pre-values (the CBE-wrapped key
