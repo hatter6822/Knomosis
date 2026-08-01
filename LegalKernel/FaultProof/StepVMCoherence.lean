@@ -137,6 +137,7 @@ import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.Observer
 import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.StepVariants
+import LegalKernel.FaultProof.SubStep
 import LegalKernel.FaultProof.Verify
 import LegalKernel.Runtime.Hash
 
@@ -538,14 +539,14 @@ def readUint128BE (bytes : ByteArray) (offset : Nat) : Nat :=
 def sliceFrom (bytes : ByteArray) (offset : Nat) : ByteArray :=
   bytes.extract offset bytes.size
 
-/-- Cap on the number of cell proofs Solidity's bulk-action loop
-    iterates per `executeStep` invocation.  Matches Solidity's
-    `KnomosisStepVM.MAX_RECIPIENTS_PER_BULK_ACTION = 256`.  The Lean
-    dispatcher honors this cap for bulk variants (kinds 6 + 7) so
-    that for any bundle the Lean output byte-equals Solidity's
-    `executeStep` output, including the edge case where a caller
-    supplies more than 256 cells. -/
-def maxRecipientsPerBulkAction : Nat := 256
+/-! The cap on the number of cell proofs Solidity's bulk-action loop
+iterates per `executeStep` invocation (matching
+`KnomosisStepVM.MAX_RECIPIENTS_PER_BULK_ACTION = 256`) is
+`SubStep.maxRecipientsPerBulkAction`, read from there rather than
+re-declared here.  This module used to carry its own copy of the same
+number, and the sub-step decomposition the bisection game drills into
+has to honour exactly the same cap — two constants that must agree
+with nothing checking them is how a DoS bound drifts. -/
 
 /-- The unified Lean-side dispatcher mirroring Solidity's
     `KnomosisStepVM.executeStep`.  Returns the 32-byte step-VM hash

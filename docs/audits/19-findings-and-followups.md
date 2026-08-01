@@ -158,10 +158,59 @@ pre-state and a function of `(action, signer)` cannot name it — a
 bundle carrying the declared cells could not reproduce a withdrawal's
 post-root.  `Action.writeCellsAt` is the complete set.
 
-Not landed: **§4**'s remaining fourteen `WriteSetComplete` proofs
-(eleven are done in one argument via
-`writeSetComplete_of_identity_advance`), and making `executeStep`
-compute the post-root from the proven writes.  That is what closes this
+### Open: a bulk action can exceed what the game can decompose
+
+Found while wiring the bulk path, and verified rather than inferred
+(`faultproof-substep`, "ABOVE the cap the decomposition is a PROPER
+PREFIX of the law").
+
+`FaultProof/SubStep.lean` caps the sub-step decomposition at
+`maxRecipientsPerBulkAction = 256` — the L1 gas bound.
+`Laws.distributeOthers`'s precondition is `amount > 0` **alone**, so
+the law credits every non-excluded actor however many there are.  The
+same holds for `proportionalDilute`.
+
+Above the cap the two disagree: the decomposition covers a proper
+prefix of the recipients while the law moves all of them.  A bulk
+action with more than 256 non-excluded recipients therefore has a
+post-state the bisection game cannot reach, and a terminal step over it
+would settle on a root the L2 never published.  With 256 actors being
+an ordinary deployment size, this is reachable rather than theoretical.
+
+The truncation is not the defect — an L1 that cannot iterate 257 cells
+in one transaction is a fact.  The defect is that the ACTION layer
+admits a step the L1 cannot adjudicate.  Two remediations, both
+consensus changes:
+
+  1. **A recipient bound in the law's precondition.**  Fail-closed:
+     `step_impl` no-ops above the cap, so the decomposition is complete
+     by construction.  Ripples into the `IsMonotonic` /
+     `FreezePreserving` instances (all take `pre` as a hypothesis, so a
+     stronger `pre` only helps), the Lex codegen sidecar
+     `Lex/Inputs/legalkernel_distributeOthers.json` (byte-pinned, so it
+     must be regenerated in the same PR), and the Solidity mirror.
+  2. **A recipient bound in the admission gate**, alongside the budget
+     gate.  Leaves the kernel law and its sidecar untouched, at the
+     cost of putting a consensus-critical bound outside the law it
+     bounds.
+
+(1) is the better shape — the bound is a property of the transition,
+not of who submits it — but it is the larger change.  Landing either
+requires the two-reviewer pass, since it changes what the L2 admits.
+
+**`WriteSetComplete` is proved for all twenty-three non-bulk
+actions** (`FaultProof/StepWriteSets.lean`,
+`writeSetComplete_productionApplyBudget`).  Six of the seven state
+fields have an action-independent footprint and are settled once; the
+balance footprint is the per-variant half, and `Conservation.LocalTo`
+does not cover it — that class is RESOURCE locality while the cell
+space is keyed by `(resource, actor)`.  The footprints are
+unconditional rather than stated under each law's precondition,
+because `step_impl` is `if pre then apply_impl else id` and a fault
+proof adjudicates a step whose admissibility is not in evidence.
+
+Not landed: the two bulk variants (see the cap finding above), and
+making `executeStep` compute the post-root from the proven writes.  That is what closes this
 finding; the swap was its precondition, since a post-root is not
 computable from a concatenation hash at all.  §0 of
 `docs/fault_proof_runbook.md` stands until §4 lands.

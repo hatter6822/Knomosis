@@ -545,6 +545,31 @@ front rather than halfway through the rewrite:
      through `FaultProof/SubStep.lean` rather than through the
      single-step path.
 
+     **The ordering hazard is resolved and the cap is deduplicated.**
+     `bulkRecipients` names the recipient order once, and
+     `bulkRecipients_eq_law_list` pins it against
+     `Laws.distributeOthers`'s own fold list — so the state-derived
+     order is consensus and the caller-supplied `bundle.proofs` order
+     is not.  `maxRecipientsPerBulkAction` now has one definition
+     (`SubStep.lean`); `StepVMCoherence` read from a second copy of the
+     same number, which is how a DoS bound drifts.  Each sub-step's
+     write set is the singleton `[.balance r recipient]` — the parent
+     step owns the nonce and the budget.
+
+     **A gap this surfaced.**  The cap truncates the decomposition;
+     `Laws.distributeOthers`'s precondition is `amount > 0` alone, so
+     the LAW truncates nothing.  Above 256 recipients the game cannot
+     reach the L2's post-state at all.  The remedy is a recipient bound
+     in the action layer, which is a consensus change — recorded in
+     `docs/audits/19-findings-and-followups.md` and exhibited by
+     `faultproof-substep` rather than left as prose.
+
+     Still owed: `Nodup` on the recipient list (true, since they are a
+     `Std.TreeMap`'s keys, but core states that as
+     `Pairwise (compare · · ≠ .eq)` over `keys` rather than as `Nodup`
+     over `toList.map Prod.fst`), and the game's single-step addressing
+     extended to name a sub-step index.
+
 **Proof ordering within step 3.**  Openings become stale as soon as
 a write lands, so the bundle must be processed strictly in array
 order with proof `i` opening against `root_i` (`root_0 :=

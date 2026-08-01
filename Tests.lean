@@ -169,6 +169,7 @@ import LegalKernel.Test.FaultProof.SmtInjective
 import LegalKernel.Test.FaultProof.StateCellsInjective
 import LegalKernel.Test.FaultProof.CellWrites
 import LegalKernel.Test.FaultProof.StepWriteSets
+import LegalKernel.Test.FaultProof.SubStep
 import LegalKernel.Test.FaultProof.Step
 import LegalKernel.Test.FaultProof.Game
 import LegalKernel.Test.FaultProof.LawClassification
@@ -430,6 +431,8 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.CellWrites.tests)
   failed := failed + (← runAll "faultproof-write-sets"
                                 LegalKernel.Test.FaultProof.StepWriteSets.tests)
+  failed := failed + (← runAll "faultproof-substep"
+                                    LegalKernel.Test.FaultProof.SubStep.tests)
   failed := failed + (← runAll "faultproof-step"
                                     LegalKernel.Test.FaultProof.Step.tests)
   failed := failed + (← runAll "faultproof-game"
