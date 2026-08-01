@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d8eaadaf3b97b7799db2ca994bffb987794e8cf92ec918b2744444ac8f4daa16"
+    "source_digest": "69116979db1d516d6ea7ebf050d0c599cf0e1f57c6a38a9646537eb70cf37ce5"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5723
+    "declaration_count": 5752
   },
   "modules": [
     {
@@ -30938,18 +30938,18 @@
     {
       "module": "LegalKernel.FaultProof.VerifierWrites",
       "path": "LegalKernel/FaultProof/VerifierWrites.lean",
-      "declaration_count": 19,
+      "declaration_count": 48,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 78,
+          "line": 103,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 79,
+          "line": 104,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -30957,13 +30957,13 @@
         {
           "kind": "def",
           "name": "deriveNonceCellValue",
-          "line": 100,
+          "line": 125,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "productionApplyBudget_expectsNonce_signer",
-          "line": 113,
+          "line": 138,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -30977,7 +30977,7 @@
         {
           "kind": "theorem",
           "name": "decode_nonceCell",
-          "line": 138,
+          "line": 163,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30988,7 +30988,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_correct",
-          "line": 166,
+          "line": 191,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -31003,7 +31003,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_epochBudgets_eq",
-          "line": 206,
+          "line": 231,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -31021,7 +31021,7 @@
         {
           "kind": "def",
           "name": "applyGrantAt",
-          "line": 245,
+          "line": 270,
           "called": [
             "Action",
             "ActorBudget",
@@ -31035,7 +31035,7 @@
         {
           "kind": "theorem",
           "name": "budgetGrant_getD_eq_applyGrantAt",
-          "line": 258,
+          "line": 283,
           "called": [
             "Action",
             "ActorId",
@@ -31052,7 +31052,7 @@
         {
           "kind": "def",
           "name": "deriveEpochBudget",
-          "line": 299,
+          "line": 324,
           "called": [
             "Action",
             "ActorBudget",
@@ -31067,7 +31067,7 @@
         {
           "kind": "theorem",
           "name": "deriveEpochBudget_correct",
-          "line": 326,
+          "line": 351,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -31086,7 +31086,7 @@
         {
           "kind": "def",
           "name": "decodeEpochBudgetCellValue",
-          "line": 379,
+          "line": 404,
           "called": [
             "ActorBudget"
           ]
@@ -31094,7 +31094,7 @@
         {
           "kind": "def",
           "name": "encodeEpochBudgetCellValue",
-          "line": 388,
+          "line": 413,
           "called": [
             "ActorBudget"
           ]
@@ -31102,7 +31102,7 @@
         {
           "kind": "theorem",
           "name": "decode_epochBudgetCell",
-          "line": 399,
+          "line": 424,
           "called": [
             "ActorBudget",
             "ActorId",
@@ -31115,7 +31115,7 @@
         {
           "kind": "def",
           "name": "deriveEpochBudgetCellValue",
-          "line": 450,
+          "line": 475,
           "called": [
             "Action",
             "ActorId",
@@ -31128,7 +31128,7 @@
         {
           "kind": "theorem",
           "name": "decode_budgetPolicyCell",
-          "line": 469,
+          "line": 494,
           "called": [
             "ExtendedState",
             "actionCost",
@@ -31140,7 +31140,7 @@
         {
           "kind": "theorem",
           "name": "deriveEpochBudgetCellValue_correct",
-          "line": 504,
+          "line": 529,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -31159,9 +31159,488 @@
           ]
         },
         {
+          "kind": "abbrev",
+          "name": "BalanceReader",
+          "line": 584,
+          "called": [
+            "ActorId",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stateBalanceReader",
+          "line": 588,
+          "called": [
+            "BalanceReader",
+            "ExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveTransferBalances",
+          "line": 602,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "receiver",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveTransferBalances_correct",
+          "line": 622,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deriveTransferBalances",
+            "es",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "receiver",
+            "sender",
+            "stateBalanceReader",
+            "step_impl",
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveCreditBalance",
+          "line": 688,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveBurnBalance",
+          "line": 698,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveCreditBalance_correct_mint",
+          "line": 708,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deriveCreditBalance",
+            "es",
+            "getBalance_setBalance_same",
+            "mint",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveCreditBalance_correct_reward",
+          "line": 731,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deriveCreditBalance",
+            "es",
+            "getBalance_setBalance_same",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "reward",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveBurnBalance_correct",
+          "line": 753,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "burn",
+            "deriveBurnBalance",
+            "es",
+            "getBalance_setBalance_same",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveDepositBalance",
+          "line": 785,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveWithdrawBalance",
+          "line": 794,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDepositBalance_correct",
+          "line": 804,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deposit",
+            "deriveDepositBalance",
+            "es",
+            "getBalance_setBalance_same",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveWithdrawBalance_correct",
+          "line": 823,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deriveWithdrawBalance",
+            "es",
+            "getBalance_setBalance_same",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "sender",
+            "stateBalanceReader",
+            "step_impl",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getBalance_chain_pair",
+          "line": 863,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getBalance_chain_pair_first",
+          "line": 879,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveChainPair",
+          "line": 896,
+          "called": [
+            "ActorId",
+            "BalanceReader",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveChainPair_correct",
+          "line": 906,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "deriveChainPair",
+            "es",
+            "getBalance_chain_pair",
+            "getBalance_chain_pair_first",
+            "setBalance",
+            "stateBalanceReader"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveTopUpBalances",
+          "line": 936,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveRefundBalances",
+          "line": 952,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "claimant",
+            "deriveChainPair",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveDepositWithFeeBalances",
+          "line": 970,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveTopUpBalances_correct",
+          "line": 978,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deriveChainPair_correct",
+            "deriveTopUpBalances",
+            "es",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl",
+            "topUpActionBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveRefundBalances_correct",
+          "line": 1000,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "claimBudgetRefund",
+            "deriveChainPair_correct",
+            "deriveRefundBalances",
+            "es",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDepositWithFeeBalances_correct",
+          "line": 1028,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "depositWithFee",
+            "deriveChainPair_correct",
+            "deriveDepositWithFeeBalances",
+            "es",
+            "poolActor",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveDelegatedTopUpBalances",
+          "line": 1055,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveReclaimBalances",
+          "line": 1074,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDelegatedTopUpBalances_correct",
+          "line": 1091,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deriveChainPair_correct",
+            "deriveDelegatedTopUpBalances",
+            "es",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl",
+            "topUpActionBudgetFor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveReclaimBalances_correct",
+          "line": 1117,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "base",
+            "deriveChainPair_correct",
+            "deriveReclaimBalances",
+            "es",
+            "poolActor",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "reclaimAmmReserves",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "deriveAmmSwapBalances",
+          "line": 1148,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "ammReserveActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveAmmSwapBalances_correct",
+          "line": 1162,
+          "called": [
+            "Action.toTransition",
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "ammReserveActor",
+            "ammSwap",
+            "base",
+            "deriveAmmSwapBalances",
+            "es",
+            "getBalance_setBalance_other",
+            "getBalance_setBalance_same",
+            "productionApplyBudget",
+            "productionApplyBudget_base",
+            "stateBalanceReader",
+            "step_impl"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_malformed",
-          "line": 539,
+          "line": 1209,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -31169,7 +31648,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_trailing",
-          "line": 553,
+          "line": 1223,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -56858,6 +57337,7 @@
           "line": 103,
           "called": [
             "ActorId",
+            "BalanceReader",
             "BitsDistinctBelow",
             "CellTag",
             "CellWritesReady",
@@ -56865,6 +57345,7 @@
             "ExtendedState",
             "ExtendedState.CanonicalBounds",
             "LegalKernel.Test.FaultProof.StepWriteSets",
+            "ResourceId",
             "SignedAction",
             "TestCase",
             "WriteSetComplete",
@@ -56882,11 +57363,22 @@
             "commitExtendedState",
             "deposit",
             "depositWithFee",
+            "deriveAmmSwapBalances",
+            "deriveBurnBalance",
+            "deriveCreditBalance",
+            "deriveDelegatedTopUpBalances",
+            "deriveDepositBalance",
+            "deriveDepositWithFeeBalances",
             "deriveEpochBudget",
             "deriveEpochBudgetCellValue",
             "deriveEpochBudget_correct",
             "deriveNonceCellValue",
             "deriveNonceCellValue_correct",
+            "deriveReclaimBalances",
+            "deriveRefundBalances",
+            "deriveTopUpBalances",
+            "deriveTransferBalances",
+            "deriveWithdrawBalance",
             "distributeOthers",
             "es",
             "foldStateCellWrites",
@@ -56907,6 +57399,7 @@
             "reward",
             "sign",
             "smtDepth",
+            "stateBalanceReader",
             "stateCellEntries",
             "stepCellWrites",
             "stepPostRoot",

@@ -57,11 +57,36 @@ it is the largest remaining piece of the state-root swap.
     deployment's `.budgetPolicy` selects the branch, which is why that
     cell exists in the cell space at all.
 
+  * **The balances**, for every variant that writes one — transfer,
+    mint, reward, burn, deposit, withdraw, depositWithFee,
+    topUpActionBudget, topUpActionBudgetFor, claimBudgetRefund,
+    ammSwap, reclaimAmmReserves.  This is the per-variant part, and
+    the only part the L1 handlers already compute; what they do NOT do
+    is either of the two things every derivation here does:
+
+      * **The precondition is evaluated, not asserted.**  `step_impl`
+        is `if pre then apply_impl else id`, so a failing precondition
+        advances no balance and the cells keep their pre-values.  The
+        handlers revert instead, and a revert is not a verdict — the
+        terminal step is callable only by whoever's turn it is, so any
+        reverting input costs the responsible party the game by
+        timeout, and the turn can land on the challenger.
+      * **The reader is partial.**  A cell the bundle does not open is
+        not a zero balance; `none` in, `none` out, so a responder
+        cannot omit an opening and get a value of their choosing.
+
+    Five of them share `deriveChainPair` — write `x`, then write `y`
+    reading the ALREADY-WRITTEN state — whose `x = y` case is reachable
+    in every one (a self-transfer, a signer who is the pool actor) and
+    is where reading the second cell from the pre-state would
+    miscount.  `ammSwap` is the one that touches two DIFFERENT
+    resources, so its cells are independent; that is sound only
+    because `fromResource ≠ toResource` is a precondition conjunct
+    rather than an assumption.
+
 Remaining, in the same shape — a `derive*CellValue` over proven
-pre-values plus a `*_correct` theorem: `.balance`, which is the
-per-variant part and the only part the Solidity handlers already
-compute; and the registry / local-policy / bridge cells of the eight
-variants that write them.
+pre-values plus a `*_correct` theorem: the registry / local-policy /
+bridge cells of the eight variants that write them.
 
 **Which decoder.**  This module decodes with `Encodable.decode`, whose
 round-trip is `Encoding.nat_roundtrip`.  The L1 mirrors it with
@@ -529,6 +554,651 @@ theorem deriveEpochBudgetCellValue_correct
     (deriveEpochBudget es.budgetPolicy _ _ st.action st.signer a)) = _
   rw [deriveEpochBudget_correct es st idx a]
   rfl
+
+/-! ## Balance cells
+
+The per-variant part, and the only part the L1 handlers already
+compute — which is why it is also the part where the difference
+between what they compute and what they OWE is easiest to miss.
+
+Two things every balance derivation here does that the current
+handlers do not.
+
+**The precondition is evaluated, not asserted.**  `step_impl` is
+`if pre then apply_impl else id`, so an action whose precondition fails
+advances no balance and its cells keep their pre-values.  The handlers
+REVERT instead (`InsufficientBalance`), and a revert is not a verdict:
+the terminal step is callable only by whoever's turn it is, so any
+reverting input costs the responsible party the game by timeout — and
+the turn can land on the challenger.  Returning the pre-values is the
+mirror of `step_impl` and removes the weapon.
+
+**The reader is partial.**  A cell the bundle does not carry is not a
+zero balance; it is a cell the verifier cannot see, and deriving from
+it would let a responder omit an opening and get a value of their
+choosing.  `none` in, `none` out.
+-/
+
+/-- What a balance derivation reads: the proven pre-value of a
+    `(resource, actor)` cell, or `none` when the bundle does not open
+    it. -/
+abbrev BalanceReader := ResourceId → ActorId → Option Nat
+
+/-- The reader backed by a state — what the agreement theorems
+    instantiate, and what an honest sequencer's bundle presents. -/
+def stateBalanceReader (es : ExtendedState) : BalanceReader :=
+  fun r a => some (LegalKernel.getBalance es.base r a)
+
+/-- **`transfer`'s balance writes, derived from proven pre-values.**
+
+    The self-transfer branch mirrors §4.11's read-after-debit: the law
+    debits the sender and then reads the receiver from the DEBITED
+    state, so when the two coincide the net change is zero.  A
+    derivation that debited and credited independently would move the
+    root on a self-transfer, and a self-transfer is a cheap action any
+    actor can submit.
+
+    The `else` branch is the no-op: precondition false, both cells keep
+    their pre-values. -/
+def deriveTransferBalances (read : BalanceReader)
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read r sender, read r receiver with
+  | some sBal, some rBal =>
+    if amount > 0 ∧ amount ≤ sBal then
+      if sender = receiver then
+        some [((r, sender), sBal), ((r, receiver), sBal)]
+      else
+        some [((r, sender), sBal - amount), ((r, receiver), rBal + amount)]
+    else
+      some [((r, sender), sBal), ((r, receiver), rBal)]
+  | _, _ => none
+
+/-- **The verifier's transfer balances are the sequencer's.**
+
+    The worked shape for the twelve other balance-writing variants: read
+    the touched cells, evaluate the law's precondition from them, and
+    branch — the advance on one side, the pre-values on the other.
+    Nothing here consults the post-state. -/
+theorem deriveTransferBalances_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
+    (h_act : st.action = .transfer r sender receiver amount) :
+    deriveTransferBalances (stateBalanceReader es) r sender receiver amount
+      = some [ ((r, sender), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base r sender)
+             , ((r, receiver), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base r receiver) ] := by
+  rw [productionApplyBudget_base, h_act]
+  show (match some (LegalKernel.getBalance es.base r sender),
+              some (LegalKernel.getBalance es.base r receiver) with
+        | some sBal, some rBal =>
+          if amount > 0 ∧ amount ≤ sBal then
+            if sender = receiver then
+              some [((r, sender), sBal), ((r, receiver), sBal)]
+            else
+              some [((r, sender), sBal - amount), ((r, receiver), rBal + amount)]
+          else
+            some [((r, sender), sBal), ((r, receiver), rBal)]
+        | _, _ => none) = _
+  simp only []
+  -- `Laws.transfer.pre` is `getBalance ≥ amount ∧ amount > 0`; the
+  -- derivation orders the conjuncts the other way, so the two guards
+  -- agree only after commuting them.
+  have h_iff : (amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r sender)
+      ↔ (Action.toTransition (.transfer r sender receiver amount) st.signer).pre es.base := by
+    show _ ↔ (LegalKernel.getBalance es.base r sender ≥ amount ∧ amount > 0)
+    exact ⟨fun h => ⟨h.2, h.1⟩, fun h => ⟨h.2, h.1⟩⟩
+  unfold step_impl
+  by_cases h_pre : amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r sender
+  · rw [if_pos h_pre, if_pos (h_iff.mp h_pre)]
+    show _ = some [((r, sender), LegalKernel.getBalance
+                      ((Laws.transfer r sender receiver amount).apply_impl es.base) r sender),
+                   ((r, receiver), LegalKernel.getBalance
+                      ((Laws.transfer r sender receiver amount).apply_impl es.base) r receiver)]
+    simp only [Laws.transfer]
+    by_cases h_self : sender = receiver
+    · subst h_self
+      rw [if_pos rfl]
+      -- Debit then credit at the SAME cell: the credit reads the
+      -- debited value, so the net is the pre-balance.
+      rw [getBalance_setBalance_same]
+      rw [getBalance_setBalance_same]
+      have h_ge : amount ≤ LegalKernel.getBalance es.base r sender := h_pre.2
+      have : LegalKernel.getBalance es.base r sender - amount + amount
+          = LegalKernel.getBalance es.base r sender := Nat.sub_add_cancel h_ge
+      rw [this]
+    · rw [if_neg h_self]
+      -- Distinct cells: the credit misses the sender, and the
+      -- receiver's pre-value is read from the debited state (same
+      -- value, since the debit missed it).
+      rw [getBalance_setBalance_same]
+      rw [getBalance_setBalance_other _ r r receiver sender _ (Or.inr (fun h => h_self h.symm))]
+      rw [getBalance_setBalance_same]
+      rw [getBalance_setBalance_other _ r r sender receiver _ (Or.inr h_self)]
+  · rw [if_neg h_pre, if_neg (fun h => h_pre (h_iff.mpr h))]
+
+/-- **`mint` / `reward`'s balance write.**
+
+    Both laws are `setBalance r to (pre + amount)` under `amount > 0`,
+    so they share a derivation.  Kept as one function with the variant
+    named at the call site rather than two identical copies — a second
+    spelling is a second place for the credit arithmetic to drift, and
+    the two laws differ in classification (`IsMonotonic` vs
+    conservation tier), not in cell effect. -/
+def deriveCreditBalance (read : BalanceReader)
+    (r : ResourceId) (to : ActorId) (amount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read r to with
+  | some bal =>
+    if amount > 0 then some [((r, to), bal + amount)]
+    else some [((r, to), bal)]
+  | none => none
+
+/-- **`burn`'s balance write** — a debit under a sufficiency check. -/
+def deriveBurnBalance (read : BalanceReader)
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read r fromActor with
+  | some bal =>
+    if amount > 0 ∧ amount ≤ bal then some [((r, fromActor), bal - amount)]
+    else some [((r, fromActor), bal)]
+  | none => none
+
+/-- The verifier's `mint` balance is the sequencer's. -/
+theorem deriveCreditBalance_correct_mint
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (to : ActorId) (amount : Amount)
+    (h_act : st.action = .mint r to amount) :
+    deriveCreditBalance (stateBalanceReader es) r to amount
+      = some [((r, to), LegalKernel.getBalance
+                (productionApplyBudget es st idx).base r to)] := by
+  rw [productionApplyBudget_base, h_act]
+  show (if amount > 0 then some [((r, to), LegalKernel.getBalance es.base r to + amount)]
+        else some [((r, to), LegalKernel.getBalance es.base r to)]) = _
+  unfold step_impl
+  by_cases h : amount > 0
+  · rw [if_pos h, if_pos (show (Action.toTransition (.mint r to amount) st.signer).pre es.base from h)]
+    show _ = some [((r, to), LegalKernel.getBalance
+                      ((Laws.mint r to amount).apply_impl es.base) r to)]
+    simp only [Laws.mint]
+    rw [getBalance_setBalance_same]
+  · rw [if_neg h, if_neg (show ¬ (Action.toTransition (.mint r to amount) st.signer).pre es.base from h)]
+
+/-- ...and the verifier's `reward` balance likewise.  Stated separately
+    because the two are different `Action` constructors even though the
+    transitions coincide; a shared statement would hide a future
+    divergence rather than prevent one. -/
+theorem deriveCreditBalance_correct_reward
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (to : ActorId) (amount : Amount)
+    (h_act : st.action = .reward r to amount) :
+    deriveCreditBalance (stateBalanceReader es) r to amount
+      = some [((r, to), LegalKernel.getBalance
+                (productionApplyBudget es st idx).base r to)] := by
+  rw [productionApplyBudget_base, h_act]
+  show (if amount > 0 then some [((r, to), LegalKernel.getBalance es.base r to + amount)]
+        else some [((r, to), LegalKernel.getBalance es.base r to)]) = _
+  unfold step_impl
+  by_cases h : amount > 0
+  · rw [if_pos h,
+      if_pos (show (Action.toTransition (.reward r to amount) st.signer).pre es.base from h)]
+    show _ = some [((r, to), LegalKernel.getBalance
+                      ((Laws.reward r to amount).apply_impl es.base) r to)]
+    simp only [Laws.reward]
+    rw [getBalance_setBalance_same]
+  · rw [if_neg h,
+      if_neg (show ¬ (Action.toTransition (.reward r to amount) st.signer).pre es.base from h)]
+
+/-- The verifier's `burn` balance is the sequencer's. -/
+theorem deriveBurnBalance_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (h_act : st.action = .burn r fromActor amount) :
+    deriveBurnBalance (stateBalanceReader es) r fromActor amount
+      = some [((r, fromActor), LegalKernel.getBalance
+                (productionApplyBudget es st idx).base r fromActor)] := by
+  rw [productionApplyBudget_base, h_act]
+  show (if amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r fromActor then
+          some [((r, fromActor), LegalKernel.getBalance es.base r fromActor - amount)]
+        else some [((r, fromActor), LegalKernel.getBalance es.base r fromActor)]) = _
+  have h_iff : (amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r fromActor)
+      ↔ (Action.toTransition (.burn r fromActor amount) st.signer).pre es.base :=
+    ⟨fun h => ⟨h.2, h.1⟩, fun h => ⟨h.2, h.1⟩⟩
+  unfold step_impl
+  by_cases h : amount > 0 ∧ amount ≤ LegalKernel.getBalance es.base r fromActor
+  · rw [if_pos h, if_pos (h_iff.mp h)]
+    show _ = some [((r, fromActor), LegalKernel.getBalance
+                      ((Laws.burn r fromActor amount).apply_impl es.base) r fromActor)]
+    simp only [Laws.burn]
+    rw [getBalance_setBalance_same]
+  · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
+
+/-- **`deposit`'s balance write** — an UNCONDITIONAL credit.
+
+    `Laws.deposit.pre` is `True`: a bridge deposit's admissibility is
+    settled by the bridge gate (the consumed-deposit cell, the attested
+    receipt), not by the kernel transition, so there is no branch here
+    and a zero-amount deposit credits zero rather than being refused.
+    Separate from `deriveCreditBalance` for exactly that reason —
+    reusing the `amount > 0` guarded one would silently no-op a
+    legitimate zero deposit. -/
+def deriveDepositBalance (read : BalanceReader)
+    (r : ResourceId) (recipient : ActorId) (amount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read r recipient with
+  | some bal => some [((r, recipient), bal + amount)]
+  | none     => none
+
+/-- **`withdraw`'s balance write** — a debit under a sufficiency
+    check, the `burn` shape with the conjuncts in the other order. -/
+def deriveWithdrawBalance (read : BalanceReader)
+    (r : ResourceId) (sender : ActorId) (amount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read r sender with
+  | some bal =>
+    if 0 < amount ∧ amount ≤ bal then some [((r, sender), bal - amount)]
+    else some [((r, sender), bal)]
+  | none => none
+
+/-- The verifier's `deposit` balance is the sequencer's. -/
+theorem deriveDepositBalance_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (d : LegalKernel.Bridge.DepositId)
+    (h_act : st.action = .deposit r recipient amount d) :
+    deriveDepositBalance (stateBalanceReader es) r recipient amount
+      = some [((r, recipient), LegalKernel.getBalance
+                (productionApplyBudget es st idx).base r recipient)] := by
+  rw [productionApplyBudget_base, h_act]
+  show some [((r, recipient), LegalKernel.getBalance es.base r recipient + amount)] = _
+  unfold step_impl
+  rw [if_pos (show (Action.toTransition (.deposit r recipient amount d)
+    st.signer).pre es.base from trivial)]
+  show _ = some [((r, recipient), LegalKernel.getBalance
+                    ((Laws.deposit r recipient amount d).apply_impl es.base) r recipient)]
+  simp only [Laws.deposit]
+  rw [getBalance_setBalance_same]
+
+/-- The verifier's `withdraw` balance is the sequencer's. -/
+theorem deriveWithdrawBalance_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (rcp : LegalKernel.Bridge.EthAddress)
+    (h_act : st.action = .withdraw r sender amount rcp) :
+    deriveWithdrawBalance (stateBalanceReader es) r sender amount
+      = some [((r, sender), LegalKernel.getBalance
+                (productionApplyBudget es st idx).base r sender)] := by
+  rw [productionApplyBudget_base, h_act]
+  show (if 0 < amount ∧ amount ≤ LegalKernel.getBalance es.base r sender then
+          some [((r, sender), LegalKernel.getBalance es.base r sender - amount)]
+        else some [((r, sender), LegalKernel.getBalance es.base r sender)]) = _
+  have h_iff : (0 < amount ∧ amount ≤ LegalKernel.getBalance es.base r sender)
+      ↔ (Action.toTransition (.withdraw r sender amount rcp) st.signer).pre es.base :=
+    ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
+  unfold step_impl
+  by_cases h : 0 < amount ∧ amount ≤ LegalKernel.getBalance es.base r sender
+  · rw [if_pos h, if_pos (h_iff.mp h)]
+    show _ = some [((r, sender), LegalKernel.getBalance
+                      ((Laws.withdraw r sender amount rcp).apply_impl es.base) r sender)]
+    simp only [Laws.withdraw]
+    rw [getBalance_setBalance_same]
+  · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
+
+/-! ### The two-cell chain
+
+Five of the remaining balance-writing variants share one shape: write
+`x`, then write `y` reading the ALREADY-WRITTEN state.
+`topUpActionBudget` and `topUpActionBudgetFor` debit the payer and
+credit the pool; `claimBudgetRefund` is the mirror; `depositWithFee`
+credits the recipient and then the pool.  `transfer` is the same shape
+and was proved directly above, before the pattern was visible.
+
+The `x = y` case is what makes the chain more than two independent
+writes, and it is reachable in every one of them — a self-transfer, a
+signer who IS the pool actor.  Reading the second cell from the
+pre-state instead would over- or under-count by the first write.
+-/
+
+/-- Both cells of a chained same-resource pair, after the chain. -/
+theorem getBalance_chain_pair (s : State) (r : ResourceId) (x y : ActorId)
+    (fx fy : Nat → Nat) :
+    LegalKernel.getBalance
+        (setBalance (setBalance s r x (fx (LegalKernel.getBalance s r x))) r y
+          (fy (LegalKernel.getBalance
+            (setBalance s r x (fx (LegalKernel.getBalance s r x))) r y))) r y
+      = fy (if x = y then fx (LegalKernel.getBalance s r x)
+            else LegalKernel.getBalance s r y) := by
+  rw [getBalance_setBalance_same]
+  by_cases h : x = y
+  · subst h
+    rw [getBalance_setBalance_same, if_pos rfl]
+  · rw [getBalance_setBalance_other _ r r x y _ (Or.inr h), if_neg h]
+
+/-- ...and the first cell, which the second write moves only when the
+    two coincide. -/
+theorem getBalance_chain_pair_first (s : State) (r : ResourceId) (x y : ActorId)
+    (fx fy : Nat → Nat) :
+    LegalKernel.getBalance
+        (setBalance (setBalance s r x (fx (LegalKernel.getBalance s r x))) r y
+          (fy (LegalKernel.getBalance
+            (setBalance s r x (fx (LegalKernel.getBalance s r x))) r y))) r x
+      = (if x = y then fy (fx (LegalKernel.getBalance s r x))
+         else fx (LegalKernel.getBalance s r x)) := by
+  by_cases h : x = y
+  · subst h
+    rw [getBalance_setBalance_same, getBalance_setBalance_same, if_pos rfl]
+  · rw [getBalance_setBalance_other _ r r y x _ (Or.inr (fun he => h he.symm)),
+      getBalance_setBalance_same, if_neg h]
+
+/-- **The chained pair's derivation.**  `fx` and `fy` are the law's own
+    per-cell arithmetic; the branch on `x = y` is the chain's, not the
+    law's, so every caller gets it right by construction. -/
+def deriveChainPair (read : BalanceReader) (r : ResourceId) (x y : ActorId)
+    (fx fy : Nat → Nat) : Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read r x, read r y with
+  | some bx, some by' =>
+    let nx := fx bx
+    let ny := fy (if x = y then nx else by')
+    some [((r, x), if x = y then ny else nx), ((r, y), ny)]
+  | _, _ => none
+
+/-- The chained pair's derivation is the chain. -/
+theorem deriveChainPair_correct (es : ExtendedState) (r : ResourceId)
+    (x y : ActorId) (fx fy : Nat → Nat) :
+    deriveChainPair (stateBalanceReader es) r x y fx fy
+      = some [ ((r, x), LegalKernel.getBalance
+                  (setBalance (setBalance es.base r x
+                    (fx (LegalKernel.getBalance es.base r x))) r y
+                    (fy (LegalKernel.getBalance (setBalance es.base r x
+                      (fx (LegalKernel.getBalance es.base r x))) r y))) r x)
+             , ((r, y), LegalKernel.getBalance
+                  (setBalance (setBalance es.base r x
+                    (fx (LegalKernel.getBalance es.base r x))) r y
+                    (fy (LegalKernel.getBalance (setBalance es.base r x
+                      (fx (LegalKernel.getBalance es.base r x))) r y))) r y) ] := by
+  rw [getBalance_chain_pair, getBalance_chain_pair_first]
+  -- The derivation's own `if x = y then ny else nx` is the same
+  -- branch, so both sides reduce to the identical pair.
+  show some [((r, x), if x = y then
+                fy (if x = y then fx (LegalKernel.getBalance es.base r x)
+                    else LegalKernel.getBalance es.base r y)
+              else fx (LegalKernel.getBalance es.base r x)),
+             ((r, y), fy (if x = y then fx (LegalKernel.getBalance es.base r x)
+                          else LegalKernel.getBalance es.base r y))] = _
+  by_cases h : x = y
+  · simp only [if_pos h]
+  · simp only [if_neg h]
+
+/-- **`topUpActionBudget`'s balance writes** — debit the signer's gas
+    balance, credit the pool.  `pre` is sufficiency only; there is no
+    positivity conjunct, so a zero top-up is an admissible no-op rather
+    than a refusal. -/
+def deriveTopUpBalances (read : BalanceReader)
+    (gr : ResourceId) (payer poolActor : ActorId) (gasAmount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read gr payer with
+  | some payerBal =>
+    if gasAmount ≤ payerBal then
+      deriveChainPair read gr payer poolActor
+        (fun b => b - gasAmount) (fun b => b + gasAmount)
+    else
+      match read gr poolActor with
+      | some poolBal => some [((gr, payer), payerBal), ((gr, poolActor), poolBal)]
+      | none         => none
+  | none => none
+
+/-- **`claimBudgetRefund`'s balance writes** — the mirror: debit the
+    pool, credit the claimant. -/
+def deriveRefundBalances (read : BalanceReader)
+    (gr : ResourceId) (poolActor claimant : ActorId) (refundAmount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read gr poolActor with
+  | some poolBal =>
+    if refundAmount ≤ poolBal then
+      deriveChainPair read gr poolActor claimant
+        (fun b => b - refundAmount) (fun b => b + refundAmount)
+    else
+      match read gr claimant with
+      | some claimBal =>
+          some [((gr, poolActor), poolBal), ((gr, claimant), claimBal)]
+      | none => none
+  | none => none
+
+/-- **`depositWithFee`'s balance writes** — credit the recipient, then
+    the pool.  `pre` is `True`, like `deposit`'s, so there is no
+    branch. -/
+def deriveDepositWithFeeBalances (read : BalanceReader)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  deriveChainPair read r recipient poolActor
+    (fun b => b + userAmount) (fun b => b + poolAmount)
+
+/-- The verifier's `topUpActionBudget` balances are the sequencer's. -/
+theorem deriveTopUpBalances_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (gr : ResourceId) (gasAmount : Amount) (bi : Nat) (pa : ActorId)
+    (h_act : st.action = .topUpActionBudget gr gasAmount bi pa) :
+    deriveTopUpBalances (stateBalanceReader es) gr st.signer pa gasAmount
+      = some [ ((gr, st.signer), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base gr st.signer)
+             , ((gr, pa), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base gr pa) ] := by
+  rw [productionApplyBudget_base, h_act]
+  unfold deriveTopUpBalances stateBalanceReader step_impl
+  simp only []
+  by_cases h : gasAmount ≤ LegalKernel.getBalance es.base gr st.signer
+  · rw [if_pos h,
+      if_pos (show (Action.toTransition (.topUpActionBudget gr gasAmount bi pa)
+        st.signer).pre es.base from h)]
+    exact deriveChainPair_correct es gr st.signer pa _ _
+  · rw [if_neg h,
+      if_neg (show ¬ (Action.toTransition (.topUpActionBudget gr gasAmount bi pa)
+        st.signer).pre es.base from h)]
+
+/-- The verifier's `claimBudgetRefund` balances are the sequencer's. -/
+theorem deriveRefundBalances_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (gr : ResourceId) (budgetUnits weiPerBudgetUnit : Nat) (pa : ActorId)
+    (h_act : st.action = .claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa) :
+    deriveRefundBalances (stateBalanceReader es) gr pa st.signer
+        (budgetUnits * weiPerBudgetUnit)
+      = some [ ((gr, pa), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base gr pa)
+             , ((gr, st.signer), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base gr st.signer) ] := by
+  -- The refund is `budgetUnits × weiPerBudgetUnit`, not a field: the
+  -- amount is COMPUTED from the action's gate-verified fields, so a
+  -- verifier reproduces it from the logged action alone.
+  rw [productionApplyBudget_base, h_act]
+  unfold deriveRefundBalances stateBalanceReader step_impl
+  simp only []
+  by_cases h : budgetUnits * weiPerBudgetUnit ≤ LegalKernel.getBalance es.base gr pa
+  · rw [if_pos h,
+      if_pos (show (Action.toTransition
+        (.claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa)
+        st.signer).pre es.base from h)]
+    exact deriveChainPair_correct es gr pa st.signer _ _
+  · rw [if_neg h,
+      if_neg (show ¬ (Action.toTransition
+        (.claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa)
+        st.signer).pre es.base from h)]
+
+/-- The verifier's `depositWithFee` balances are the sequencer's. -/
+theorem deriveDepositWithFeeBalances_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount) (bg : Nat)
+    (d : LegalKernel.Bridge.DepositId)
+    (h_act : st.action = .depositWithFee r recipient poolActor
+      userAmount poolAmount bg d) :
+    deriveDepositWithFeeBalances (stateBalanceReader es) r recipient poolActor
+        userAmount poolAmount
+      = some [ ((r, recipient), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base r recipient)
+             , ((r, poolActor), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base r poolActor) ] := by
+  rw [productionApplyBudget_base, h_act]
+  unfold deriveDepositWithFeeBalances step_impl
+  rw [if_pos (show (Action.toTransition (.depositWithFee r recipient poolActor
+    userAmount poolAmount bg d) st.signer).pre es.base from trivial)]
+  exact deriveChainPair_correct es r recipient poolActor _ _
+
+/-- **`topUpActionBudgetFor`'s balance writes** — the delegated
+    top-up: the SIGNER pays, the pool is credited, and the recipient
+    (who gets the budget, not the gas) is not a balance cell at all.
+
+    Its precondition carries a second conjunct the undelegated form
+    does not — `recipient ≠ signer` — so a self-delegation is a no-op
+    rather than a top-up, and the derivation has to see it or it would
+    move balances the advance leaves alone. -/
+def deriveDelegatedTopUpBalances (read : BalanceReader)
+    (gr : ResourceId) (payer poolActor recipient : ActorId)
+    (gasAmount : Amount) : Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read gr payer with
+  | some payerBal =>
+    if gasAmount ≤ payerBal ∧ recipient ≠ payer then
+      deriveChainPair read gr payer poolActor
+        (fun b => b - gasAmount) (fun b => b + gasAmount)
+    else
+      match read gr poolActor with
+      | some poolBal => some [((gr, payer), payerBal), ((gr, poolActor), poolBal)]
+      | none         => none
+  | none => none
+
+/-- **`reclaimAmmReserves`' balance writes** — the post-disable sweep:
+    debit the reserve actor its ENTIRE balance, credit the pool.
+
+    The precondition is an EQUALITY (`balance = amount`), not a
+    sufficiency: an exact sweep, so a partial reclaim is a no-op. -/
+def deriveReclaimBalances (read : BalanceReader)
+    (r : ResourceId) (reserveActor poolActor : ActorId) (amount : Amount) :
+    Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read r reserveActor with
+  | some reserveBal =>
+    if reserveBal = amount ∧ reserveActor ≠ poolActor ∧ amount > 0 then
+      deriveChainPair read r reserveActor poolActor
+        (fun b => b - amount) (fun b => b + amount)
+    else
+      match read r poolActor with
+      | some poolBal =>
+          some [((r, reserveActor), reserveBal), ((r, poolActor), poolBal)]
+      | none => none
+  | none => none
+
+/-- The verifier's `topUpActionBudgetFor` balances are the
+    sequencer's. -/
+theorem deriveDelegatedTopUpBalances_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (recipient : ActorId) (gr : ResourceId) (gasAmount : Amount)
+    (bi : Nat) (pa : ActorId)
+    (h_act : st.action = .topUpActionBudgetFor recipient gr gasAmount bi pa) :
+    deriveDelegatedTopUpBalances (stateBalanceReader es) gr st.signer pa
+        recipient gasAmount
+      = some [ ((gr, st.signer), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base gr st.signer)
+             , ((gr, pa), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base gr pa) ] := by
+  rw [productionApplyBudget_base, h_act]
+  unfold deriveDelegatedTopUpBalances stateBalanceReader step_impl
+  simp only []
+  have h_iff : (gasAmount ≤ LegalKernel.getBalance es.base gr st.signer ∧
+      recipient ≠ st.signer)
+      ↔ (Action.toTransition (.topUpActionBudgetFor recipient gr gasAmount bi pa)
+          st.signer).pre es.base :=
+    ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
+  by_cases h : gasAmount ≤ LegalKernel.getBalance es.base gr st.signer ∧
+      recipient ≠ st.signer
+  · rw [if_pos h, if_pos (h_iff.mp h)]
+    exact deriveChainPair_correct es gr st.signer pa _ _
+  · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
+
+/-- The verifier's `reclaimAmmReserves` balances are the sequencer's. -/
+theorem deriveReclaimBalances_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (r : ResourceId) (amount : Amount) (reserveActor poolActor : ActorId)
+    (h_act : st.action = .reclaimAmmReserves r amount reserveActor poolActor) :
+    deriveReclaimBalances (stateBalanceReader es) r reserveActor poolActor amount
+      = some [ ((r, reserveActor), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base r reserveActor)
+             , ((r, poolActor), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base r poolActor) ] := by
+  rw [productionApplyBudget_base, h_act]
+  unfold deriveReclaimBalances stateBalanceReader step_impl
+  simp only []
+  have h_iff : (LegalKernel.getBalance es.base r reserveActor = amount ∧
+      reserveActor ≠ poolActor ∧ amount > 0)
+      ↔ (Action.toTransition (.reclaimAmmReserves r amount reserveActor poolActor)
+          st.signer).pre es.base :=
+    ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
+  by_cases h : LegalKernel.getBalance es.base r reserveActor = amount ∧
+      reserveActor ≠ poolActor ∧ amount > 0
+  · rw [if_pos h, if_pos (h_iff.mp h)]
+    exact deriveChainPair_correct es r reserveActor poolActor _ _
+  · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
+
+/-- **`ammSwap`'s balance writes** — the one variant that touches two
+    DIFFERENT resources, so the two cells are independent and the
+    chained-pair lemma does not apply.
+
+    `fromResource ≠ toResource` is a precondition conjunct rather than
+    an assumption, which is what makes the independence sound: without
+    it a same-resource swap would be a chain and reading the second
+    cell from the pre-state would miscount. -/
+def deriveAmmSwapBalances (read : BalanceReader)
+    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId) : Option (List ((ResourceId × ActorId) × Nat)) :=
+  match read fromResource ammReserveActor, read toResource ammReserveActor with
+  | some fromBal, some toBal =>
+    if toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0 then
+      some [ ((fromResource, ammReserveActor), fromBal + amountIn)
+           , ((toResource, ammReserveActor), toBal - amountOut) ]
+    else
+      some [ ((fromResource, ammReserveActor), fromBal)
+           , ((toResource, ammReserveActor), toBal) ]
+  | _, _ => none
+
+/-- The verifier's `ammSwap` balances are the sequencer's. -/
+theorem deriveAmmSwapBalances_correct
+    (es : ExtendedState) (st : SignedAction) (idx : Nat)
+    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId)
+    (h_act : st.action = .ammSwap fromResource toResource amountIn amountOut
+      ammReserveActor) :
+    deriveAmmSwapBalances (stateBalanceReader es) fromResource toResource
+        amountIn amountOut ammReserveActor
+      = some [ ((fromResource, ammReserveActor), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base fromResource ammReserveActor)
+             , ((toResource, ammReserveActor), LegalKernel.getBalance
+                  (productionApplyBudget es st idx).base toResource ammReserveActor) ] := by
+  rw [productionApplyBudget_base, h_act]
+  unfold deriveAmmSwapBalances stateBalanceReader step_impl
+  simp only []
+  have h_iff : (LegalKernel.getBalance es.base toResource ammReserveActor ≥ amountOut ∧
+      fromResource ≠ toResource ∧ amountIn > 0)
+      ↔ (Action.toTransition (.ammSwap fromResource toResource amountIn amountOut
+          ammReserveActor) st.signer).pre es.base :=
+    ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
+  by_cases h : LegalKernel.getBalance es.base toResource ammReserveActor ≥ amountOut ∧
+      fromResource ≠ toResource ∧ amountIn > 0
+  · rw [if_pos h, if_pos (h_iff.mp h)]
+    show _ = some [((fromResource, ammReserveActor), LegalKernel.getBalance
+                      ((Laws.ammSwap fromResource toResource amountIn amountOut
+                        ammReserveActor).apply_impl es.base) fromResource ammReserveActor),
+                   ((toResource, ammReserveActor), LegalKernel.getBalance
+                      ((Laws.ammSwap fromResource toResource amountIn amountOut
+                        ammReserveActor).apply_impl es.base) toResource ammReserveActor)]
+    simp only [Laws.ammSwap]
+    -- The credit lands at `fromResource`, the debit at `toResource`;
+    -- the resources differ, so neither write is visible to the other.
+    rw [getBalance_setBalance_other _ toResource fromResource ammReserveActor
+      ammReserveActor _ (Or.inl (fun he => h.2.1 he.symm))]
+    rw [getBalance_setBalance_same]
+    rw [getBalance_setBalance_same]
+    rw [getBalance_setBalance_other _ fromResource toResource ammReserveActor
+      ammReserveActor _ (Or.inl h.2.1)]
+  · rw [if_neg h, if_neg (fun hc => h (h_iff.mpr hc))]
 
 /-- A malformed pre-value derives nothing.
 

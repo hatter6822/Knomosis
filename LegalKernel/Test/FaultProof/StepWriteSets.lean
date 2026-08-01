@@ -536,6 +536,63 @@ def tests : List TestCase :=
           | none =>
             throw <| IO.userError "the derivation refused honest cells"
     }
+  , { name := "the verifier derives every variant's balance writes"
+    , body := do
+        -- All twelve balance-writing variants at the value level, each
+        -- against the advance's own cells.  The theorems quantify over
+        -- states; what this catches is definitional drift in a law's
+        -- `apply_impl` that keeps its theorem true and moves the bytes.
+        let read := stateBalanceReader base
+        let check (action : Authority.Action)
+            (derived : Option (List ((ResourceId × ActorId) × Nat))) : IO Unit := do
+          let post := productionApplyBudget base (sign action) 0
+          match derived with
+          | some ws =>
+            for ((r, a), v) in ws do
+              assertEq (expected := LegalKernel.getBalance post.base r a)
+                (actual := v)
+                s!"derived balance ≠ the advance's at ({r}, {a}) for {repr action}"
+          | none =>
+            throw <| IO.userError s!"the derivation refused honest cells for {repr action}"
+        check (.transfer 1 7 8 30) (deriveTransferBalances read 1 7 8 30)
+        -- The self-transfer, where the credit reads the debited state.
+        check (.transfer 1 7 7 30) (deriveTransferBalances read 1 7 7 30)
+        -- ...and the no-op, where the precondition fails and the L1
+        -- currently reverts instead of returning the pre-values.
+        check (.transfer 1 7 8 999999) (deriveTransferBalances read 1 7 8 999999)
+        check (.mint 1 8 5) (deriveCreditBalance read 1 8 5)
+        check (.reward 1 8 5) (deriveCreditBalance read 1 8 5)
+        check (.burn 1 8 5) (deriveBurnBalance read 1 8 5)
+        check (.burn 1 8 999999) (deriveBurnBalance read 1 8 999999)
+        check (.deposit 1 8 5 3) (deriveDepositBalance read 1 8 5)
+        check (.withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero)
+          (deriveWithdrawBalance read 1 7 5)
+        check (.depositWithFee 1 8 9 5 1 1 3)
+          (deriveDepositWithFeeBalances read 1 8 9 5 1)
+        check (.topUpActionBudget 1 5 2 9) (deriveTopUpBalances read 1 7 9 5)
+        check (.topUpActionBudgetFor 8 1 5 2 9)
+          (deriveDelegatedTopUpBalances read 1 7 9 8 5)
+        check (.claimBudgetRefund 1 2 3 9) (deriveRefundBalances read 1 9 7 (2 * 3))
+        check (.ammSwap 1 2 5 4 9) (deriveAmmSwapBalances read 1 2 5 4 9)
+        check (.reclaimAmmReserves 1 25 9 8) (deriveReclaimBalances read 1 9 8 25)
+    }
+  , { name := "a partial reader derives nothing"
+    , body := do
+        -- The fail-closed direction that makes the derivation an
+        -- adjudicator: a cell the bundle does not open is not a zero
+        -- balance, and a responder who omits an opening must not get a
+        -- value of their choosing.
+        let blind : BalanceReader := fun _ _ => none
+        assert (deriveTransferBalances blind 1 7 8 30 |>.isNone)
+          "a blind reader must derive nothing"
+        assert (deriveAmmSwapBalances blind 1 2 5 4 9 |>.isNone)
+          "...on the cross-resource variant too"
+        -- Half-blind: the sender opens, the receiver does not.
+        let partial_ : BalanceReader := fun r a =>
+          if a == 7 then some (LegalKernel.getBalance base.base r a) else none
+        assert (deriveTransferBalances partial_ 1 7 8 30 |>.isNone)
+          "one missing opening must be enough to refuse"
+    }
   , { name := "API stability: the verifier-side derivation"
     , body := do
         let _nonce : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),

@@ -1232,9 +1232,10 @@ authenticates the `(actionKind, actionFields, signer)` triple it is
 handed instead of executing whatever it is given.
 
 **What remains, and it is the largest piece:** the verifier-side
-derivation of a step's written VALUES (started —
-`FaultProof/VerifierWrites.lean` has the nonce cell, uniform across
-all twenty-five variants).  `stepWriteBundle es st idx`
+derivation of a step's written VALUES.  `FaultProof/VerifierWrites.lean`
+has the nonce and epoch-budget cells (uniform across all twenty-five)
+and the balances of all twelve variants that write one; the registry /
+local-policy / bridge cells of eight variants are left.  `stepWriteBundle es st idx`
 takes the pre-state and reads its `newValue` column off
 `productionApplyBudget es st idx` — that is the sequencer's
 computation.  A verifier holding only the pre-root and a submitted

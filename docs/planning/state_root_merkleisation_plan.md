@@ -451,10 +451,32 @@ space:
    branch is exercised through a policy whose free tier cannot cover
    the cost.
 
-   Remaining: `.balance` (per-variant — the part the Solidity handlers
-   already compute); and the registry / local-policy / bridge cells of
-   the eight variants that write them.  Then the Solidity mirror and a
-   corpus column.
+   **The balance cells are done**, for all twelve variants that write
+   one.  Two things every derivation does that the L1 handlers do not,
+   and both are the difference between computing and adjudicating:
+
+     * **The precondition is EVALUATED, not asserted.**  `step_impl` is
+       `if pre then apply_impl else id`, so a failing precondition
+       advances no balance and the cells keep their pre-values.  This
+       is where §4's "a revert is not a verdict" finding gets its fix:
+       the handlers revert, and a revert costs the responsible party
+       the game by timeout rather than settling it.
+     * **The reader is PARTIAL.**  A cell the bundle does not open is
+       not a zero balance; `none` in, `none` out, so a responder cannot
+       omit an opening and get a value of their choosing.
+
+   Five variants share `deriveChainPair` — write `x`, then write `y`
+   reading the already-written state — whose `x = y` case is reachable
+   in every one of them (a self-transfer, a signer who IS the pool
+   actor) and is exactly where reading the second cell from the
+   pre-state would miscount.  `ammSwap` is the one variant touching two
+   different resources, so its cells are independent; that is sound
+   only because `fromResource ≠ toResource` is a precondition conjunct
+   rather than an assumption, and the proof uses it as one.
+
+   Remaining: the registry / local-policy / bridge cells of the eight
+   variants that write them.  Then the Solidity mirror and a corpus
+   column.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"
