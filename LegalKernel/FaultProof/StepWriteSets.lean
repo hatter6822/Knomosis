@@ -31,11 +31,13 @@ The work splits in two, and only the second half is per-variant:
     resource too (a transfer moves two actors at one resource, and the
     cell space is keyed by the pair).
 
-Both bulk actions are out of scope by construction:
-`distributeOthers` and `proportionalDilute` touch every non-excluded
-actor's balance, which is unboundedly many cells and no `O(log N)`
-opening bundle can carry.  They route through `FaultProof/SubStep.lean`
-instead — see the plan's §4 item 4.
+All twenty-five variants are in scope, bulk included.  The two bulk
+actions were once out of scope on the grounds that they touch every
+non-excluded actor's balance and so have no finite write set.  They do
+have one — `Laws.bulkRecipients`, capped by the law's own
+`BulkBounded` precondition — and it is a function of the STATE, which
+is what `Action.stateWriteCells` is for.  The obstacle was never the
+size of the set but the arity of `Action.writeCells`.
 
 `docs/planning/state_root_merkleisation_plan.md` §4A.
 -/
@@ -413,6 +415,42 @@ theorem getBalance_setBalance_of_ne (s : State) (r₀ : ResourceId) (a₀ : Acto
       · exact Or.inl hr)
 
 
+/-- **The bulk fold is local too.**
+
+    Both bulk laws credit their recipients by folding `setBalance` over
+    `Laws.bulkRecipients`, differing only in the amount each recipient
+    gets — so the locality argument is one induction over the list,
+    parameterised by the credit function, rather than two copies.
+
+    The hypothesis is per-element rather than "`a` is not a recipient"
+    because that is the shape the caller has: it holds a
+    `CellTag.balance r a ∉ (recipients).map (.balance r' ·.1)`, which
+    unfolds to exactly this. -/
+theorem getBalance_foldl_setBalance_of_all_ne
+    (r' : ResourceId) (r : ResourceId) (a : ActorId)
+    (credit : State → ActorId × Amount → Amount)
+    (l : List (ActorId × Amount))
+    (h : ∀ kv ∈ l, (r', kv.1) ≠ (r, a)) (s : State) :
+    getBalance (l.foldl (fun s' kv => setBalance s' r' kv.1 (credit s' kv)) s) r a
+      = getBalance s r a := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons kv rest ih =>
+    show getBalance (rest.foldl _ (setBalance s r' kv.1 (credit s kv))) r a = _
+    rw [ih (fun x hx => h x (List.mem_cons_of_mem _ hx))]
+    exact getBalance_setBalance_of_ne s r' kv.1 _ r a (h kv (List.mem_cons_self ..))
+
+/-- The caller's form: not naming a cell in the recipient-keyed write
+    list means differing from every recipient pair. -/
+theorem bulk_pair_ne_of_not_mem
+    {r r' : ResourceId} {a : ActorId} {l : List (ActorId × Amount)}
+    (h : CellTag.balance r a ∉ l.map (fun p => CellTag.balance r' p.1)) :
+    ∀ kv ∈ l, (r', kv.1) ≠ (r, a) := by
+  intro kv hkv he
+  have h1 : r' = r := congrArg Prod.fst he
+  have h2 : kv.1 = a := congrArg Prod.snd he
+  exact h (List.mem_map.2 ⟨kv, hkv, by rw [h1, h2]⟩)
+
 /-- A `CellTag` disequality read as a `(resource, actor)` pair
     disequality, which is the form `getBalance_setBalance_of_ne`
     consumes. -/
@@ -432,23 +470,23 @@ set_option linter.unusedSimpArgs false in
     genuinely per-variant: the other six fields were settled above,
     action-independently.
 
-    The two bulk actions are excluded by hypothesis rather than by a
-    catch-all arm.  Their footprint is the whole non-excluded actor set
-    at a resource — unboundedly many cells — so there is no finite write
-    set to be complete against, and a proof that pretended otherwise
-    would be the most dangerous kind of true statement.  They route
-    through `FaultProof/SubStep.lean`.
+    **Including the two bulk actions.**  They were excluded by
+    hypothesis while their footprint was thought to be unnameable — the
+    whole non-excluded actor set at a resource.  It is nameable: it is
+    `Laws.bulkRecipients`, a function of the state, and
+    `Action.stateWriteCells` is where a state-keyed write set goes.
+    What made the exclusion look necessary was `Action.writeCells`
+    taking only `(action, signer)`; `writeCellsAt` takes the state, so
+    the same split that let `withdraw` name its `nextWdId`-keyed
+    pending cell lets these name their recipients.
 
     The linter option is scoped to this proof and is about the shared
     automation: one `simp only` list serves all twenty-five arms, and
-    `withdraw` is the only one whose state-keyed write list is
-    non-empty, so the append-elimination lemma is idle in the other
-    twenty-four. -/
+    only three have a non-empty state-keyed write list, so the
+    append-elimination lemma is idle in the other twenty-two. -/
 theorem productionApplyBudget_getBalance_of_not_written
     (es : ExtendedState) (st : SignedAction) (idx : Nat)
     (r : ResourceId) (a : ActorId)
-    (h_bulk₁ : ∀ x y z, st.action ≠ .distributeOthers x y z)
-    (h_bulk₂ : ∀ x y z, st.action ≠ .proportionalDilute x y z)
     (h : CellTag.balance r a ∉ st.action.writeCellsAt es st.signer) :
     LegalKernel.getBalance (productionApplyBudget es st idx).base r a
       = LegalKernel.getBalance es.base r a := by
@@ -574,8 +612,32 @@ theorem productionApplyBudget_getBalance_of_not_written
       (balance_pair_ne h.2.1)]
     exact getBalance_setBalance_of_ne _ r' ra _ r a
       (balance_pair_ne h.1)
-  | distributeOthers x y z => exact absurd hact (h_bulk₁ x y z)
-  | proportionalDilute x y z => exact absurd hact (h_bulk₂ x y z)
+  -- The two bulk variants.  Their write set is state-keyed
+  -- (`Action.stateWriteCells` enumerates `Laws.bulkRecipients`), so
+  -- membership unfolds to a per-recipient pair disequality and the
+  -- fold's locality follows by induction over the SAME list both laws
+  -- fold.
+  | distributeOthers r' excluded amount =>
+    rw [hact] at h
+    simp only [Action.writeCells, Action.stateWriteCells, List.mem_append,
+      List.mem_cons, List.not_mem_nil, or_false, not_or] at h
+    show LegalKernel.getBalance
+      ((Laws.distributeOthers r' excluded amount).apply_impl es.base) r a = _
+    simp only [Laws.distributeOthers]
+    exact getBalance_foldl_setBalance_of_all_ne r' r a
+      (fun s' kv => LegalKernel.getBalance s' r' kv.1 + amount) _
+      (bulk_pair_ne_of_not_mem h.2) es.base
+  | proportionalDilute r' excluded totalReward =>
+    rw [hact] at h
+    simp only [Action.writeCells, Action.stateWriteCells, List.mem_append,
+      List.mem_cons, List.not_mem_nil, or_false, not_or] at h
+    show LegalKernel.getBalance
+      ((Laws.proportionalDilute r' excluded totalReward).apply_impl es.base) r a = _
+    simp only [Laws.proportionalDilute]
+    exact getBalance_foldl_setBalance_of_all_ne r' r a
+      (fun s' kv => LegalKernel.getBalance s' r' kv.1 +
+        totalReward * kv.2 / LegalKernel.sumOthers es.base r' excluded) _
+      (bulk_pair_ne_of_not_mem h.2) es.base
   -- The kernel-identity family: `apply_impl` is `fun s => s`, so the
   -- footprint is empty and every balance cell survives.
   | freezeResource _ => rfl
@@ -690,8 +752,7 @@ theorem mem_writeCellsAt_epochBudget_topUpFor
       ∈ (Action.topUpActionBudgetFor recipient gr ga bi pa).writeCellsAt es signer := by
   simp [Action.writeCellsAt, Action.writeCells, Action.stateWriteCells]
 
-/-- **`WriteSetComplete` for the production advance, on every
-    non-bulk action.**
+/-- **`WriteSetComplete` for the production advance, on every action.**
 
     This is what `docs/planning/state_root_merkleisation_plan.md` §4A
     asks for on the Lean side.  Composed with
@@ -700,19 +761,13 @@ theorem mem_writeCellsAt_epochBudget_topUpFor
     publishes — the property the fault-proof game has never had and
     cannot adjudicate without.
 
-    The bulk exclusions are the same two as
-    `productionApplyBudget_getBalance_of_not_written`, and for the same
-    reason: no finite write set is complete for an action that touches
-    every actor's balance, so they route through
-    `FaultProof/SubStep.lean` instead. -/
+    All twenty-five, bulk included: `Action.stateWriteCells` names the
+    bulk recipient set, so there is nothing left to exclude. -/
 theorem writeSetComplete_productionApplyBudget
-    (es : ExtendedState) (st : SignedAction) (idx : Nat)
-    (h_bulk₁ : ∀ x y z, st.action ≠ .distributeOthers x y z)
-    (h_bulk₂ : ∀ x y z, st.action ≠ .proportionalDilute x y z) :
+    (es : ExtendedState) (st : SignedAction) (idx : Nat) :
     WriteSetComplete es (productionApplyBudget es st idx) st.action st.signer :=
   writeSetComplete_of_field_footprints es _ st.action st.signer
-    (fun r a h => productionApplyBudget_getBalance_of_not_written es st idx r a
-      h_bulk₁ h_bulk₂ h)
+    (fun r a h => productionApplyBudget_getBalance_of_not_written es st idx r a h)
     (fun a h => productionApplyBudget_expectsNonce_of_ne es st idx a (by
       intro he; subst he; exact h (mem_writeCellsAt_nonce es st.action st.signer)))
     (fun a h => productionApplyBudget_registry_of_ne es st idx a
@@ -781,10 +836,10 @@ sequencer publishes for the post-state. -/
 
     Every hypothesis is either standing well-formedness (the SMT side
     conditions and `CanonicalBounds`, which the commitment layer
-    already carries), a bulk exclusion, or the append-only restriction
-    that no `Action` violates.  Nothing here is a fact about a
-    particular variant — those were discharged in
-    `writeSetComplete_productionApplyBudget`.
+    already carries) or the append-only restriction that no `Action`
+    violates.  Nothing here is a fact about a particular variant —
+    those were discharged in `writeSetComplete_productionApplyBudget`,
+    which now covers all twenty-five.
 
     `Nodup` is the one hypothesis a caller must check per step rather
     than per deployment, and the reason is a real shape rather than an
@@ -796,8 +851,6 @@ sequencer publishes for the post-state. -/
     is required rather than quietly assumed. -/
 theorem fold_stepWrites_eq_commit_productionApplyBudget
     (es : ExtendedState) (st : SignedAction) (idx : Nat)
-    (h_bulk₁ : ∀ x y z, st.action ≠ .distributeOthers x y z)
-    (h_bulk₂ : ∀ x y z, st.action ≠ .proportionalDilute x y z)
     (h_ready : CellWritesReady es
       (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer))
     (h_nodup : (st.action.writeCellsAt es st.signer).Nodup)
@@ -813,7 +866,7 @@ theorem fold_stepWrites_eq_commit_productionApplyBudget
       = some (commitExtendedState (productionApplyBudget es st idx)) :=
   fold_stepCellWrites_eq_commit_post es (productionApplyBudget es st idx)
     st.action st.signer h_ready
-    (writeSetComplete_productionApplyBudget es st idx h_bulk₁ h_bulk₂)
+    (writeSetComplete_productionApplyBudget es st idx)
     h_nodup h_bounds h_wf h_append
 
 
@@ -861,14 +914,13 @@ def stepPostRoot (es : ExtendedState) (st : SignedAction) (idx : Nat) :
     from a pre-root and a bundle of openings is exactly the root an
     honest sequencer publishes for the post-state.
 
-    Every hypothesis is standing well-formedness, a bulk exclusion, or
-    the append-only restriction no `Action` violates — nothing about a
-    particular variant, because
-    `writeSetComplete_productionApplyBudget` discharged those. -/
+    Every hypothesis is standing well-formedness or the append-only
+    restriction no `Action` violates — nothing about a particular
+    variant, and no bulk exclusion, because
+    `writeSetComplete_productionApplyBudget` discharged all
+    twenty-five. -/
 theorem stepPostRoot_eq_commit_productionApplyBudget
     (es : ExtendedState) (st : SignedAction) (idx : Nat)
-    (h_bulk₁ : ∀ x y z, st.action ≠ .distributeOthers x y z)
-    (h_bulk₂ : ∀ x y z, st.action ≠ .proportionalDilute x y z)
     (h_ready : CellWritesReady es
       (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer))
     (h_nodup : (st.action.writeCellsAt es st.signer).Nodup)
@@ -880,7 +932,7 @@ theorem stepPostRoot_eq_commit_productionApplyBudget
       getCellValue es t = canonicalAbsentValue t) :
     stepPostRoot es st idx
       = some (commitExtendedState (productionApplyBudget es st idx)) :=
-  fold_stepWrites_eq_commit_productionApplyBudget es st idx h_bulk₁ h_bulk₂
+  fold_stepWrites_eq_commit_productionApplyBudget es st idx
     h_ready h_nodup h_bounds h_wf h_append
 
 /-- The bundle names exactly the cells the write set declares, in

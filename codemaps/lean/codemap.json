@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c54e968ebacc52cbfe6597042236b31dcde955780e4384b9e237b6b9a7c928ec"
+    "source_digest": "ede0721b1a6419f106142672ec65a889dda5e16c6ab6a675a9283daeb463930a"
   },
   "summary": {
     "module_count": 331,
-    "declaration_count": 5700
+    "declaration_count": 5704
   },
   "modules": [
     {
@@ -29111,7 +29111,7 @@
     {
       "module": "LegalKernel.FaultProof.StepVariants",
       "path": "LegalKernel/FaultProof/StepVariants.lean",
-      "declaration_count": 13,
+      "declaration_count": 15,
       "declarations": [
         {
           "kind": "namespace",
@@ -29153,7 +29153,7 @@
         {
           "kind": "def",
           "name": "Action.writeCells",
-          "line": 132,
+          "line": 138,
           "called": [
             "Action",
             "ActorId",
@@ -29181,20 +29181,22 @@
         {
           "kind": "def",
           "name": "Action.stateWriteCells",
-          "line": 235,
+          "line": 241,
           "called": [
             "Action",
             "ActorId",
             "CellTag",
             "ExtendedState",
+            "distributeOthers",
             "es",
+            "proportionalDilute",
             "withdraw"
           ]
         },
         {
           "kind": "def",
           "name": "Action.writeCellsAt",
-          "line": 242,
+          "line": 258,
           "called": [
             "Action",
             "ActorId",
@@ -29206,22 +29208,48 @@
         {
           "kind": "theorem",
           "name": "Action.writeCellsAt_eq_writeCells",
-          "line": 248,
+          "line": 264,
           "called": [
             "Action",
             "Action.stateWriteCells",
             "Action.writeCellsAt",
             "ActorId",
             "ExtendedState",
+            "distributeOthers",
             "es",
+            "proportionalDilute",
             "sender",
             "withdraw"
           ]
         },
         {
           "kind": "theorem",
+          "name": "Action.writeCellsAt_distributeOthers",
+          "line": 279,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "Action.writeCellsAt_proportionalDilute",
+          "line": 287,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ExtendedState",
+            "ResourceId",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "Action.writeCellsAt_withdraw",
-          "line": 259,
+          "line": 296,
           "called": [
             "ActorId",
             "Amount",
@@ -29234,7 +29262,7 @@
         {
           "kind": "def",
           "name": "Action.requiredCells",
-          "line": 269,
+          "line": 306,
           "called": [
             "Action",
             "ActorId",
@@ -29244,7 +29272,7 @@
         {
           "kind": "instance",
           "name": "Action.decReadOnlyCellsMem",
-          "line": 277,
+          "line": 314,
           "called": [
             "Action",
             "ActorId",
@@ -29254,7 +29282,7 @@
         {
           "kind": "instance",
           "name": "Action.decWriteCellsMem",
-          "line": 283,
+          "line": 320,
           "called": [
             "Action",
             "Action.requiredCells",
@@ -29270,7 +29298,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCells_eq_readOnly_append_writeCells",
-          "line": 327,
+          "line": 364,
           "called": [
             "Action",
             "ActorId"
@@ -29279,7 +29307,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCells_length_eq",
-          "line": 334,
+          "line": 371,
           "called": [
             "Action",
             "Action.requiredCells_eq_readOnly_append_writeCells",
@@ -29293,18 +29321,18 @@
     {
       "module": "LegalKernel.FaultProof.StepWriteSets",
       "path": "LegalKernel/FaultProof/StepWriteSets.lean",
-      "declaration_count": 40,
+      "declaration_count": 42,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 45,
+          "line": 47,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 46,
+          "line": 48,
           "called": [
             "LegalKernel.Bridge",
             "LegalKernel.Runtime"
@@ -29313,7 +29341,7 @@
         {
           "kind": "theorem",
           "name": "kernelOnlyApply_base",
-          "line": 63,
+          "line": 65,
           "called": [
             "Action.toTransition",
             "ExtendedState",
@@ -29328,7 +29356,7 @@
         {
           "kind": "theorem",
           "name": "kernelOnlyApply_nonces",
-          "line": 71,
+          "line": 73,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29340,7 +29368,7 @@
         {
           "kind": "theorem",
           "name": "kernelOnlyApply_epochBudgets",
-          "line": 82,
+          "line": 84,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29352,7 +29380,7 @@
         {
           "kind": "theorem",
           "name": "kernelOnlyApply_budgetPolicy",
-          "line": 88,
+          "line": 90,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29364,7 +29392,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_eq_productionApply_off_budget",
-          "line": 104,
+          "line": 106,
           "called": [
             "EpochBudgetState",
             "ExtendedState",
@@ -29382,7 +29410,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_base",
-          "line": 124,
+          "line": 126,
           "called": [
             "Action.toTransition",
             "ExtendedState",
@@ -29399,7 +29427,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_budgetPolicy",
-          "line": 136,
+          "line": 138,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29413,7 +29441,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_expectsNonce_of_ne",
-          "line": 146,
+          "line": 148,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -29429,7 +29457,7 @@
         {
           "kind": "theorem",
           "name": "budgetGrant_getElem?_of_ne",
-          "line": 173,
+          "line": 175,
           "called": [
             "Action",
             "ActorId",
@@ -29445,7 +29473,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_epochBudgets_of_ne",
-          "line": 201,
+          "line": 203,
           "called": [
             "ActorId",
             "EpochBudgetState",
@@ -29472,7 +29500,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_registry_of_ne",
-          "line": 257,
+          "line": 259,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -29487,7 +29515,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_localPolicies_of_ne",
-          "line": 277,
+          "line": 279,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -29503,7 +29531,7 @@
         {
           "kind": "theorem",
           "name": "applyActionToBridgeState_scalars",
-          "line": 311,
+          "line": 313,
           "called": [
             "Action",
             "BridgeState",
@@ -29513,7 +29541,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_bridgeConsumed_of_ne",
-          "line": 334,
+          "line": 336,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29529,7 +29557,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_bridgePending_of_ne",
-          "line": 357,
+          "line": 359,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29544,7 +29572,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_bridgeNextWdId_of_ne",
-          "line": 373,
+          "line": 375,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29559,7 +29587,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_step_impl_of_untouched",
-          "line": 394,
+          "line": 396,
           "called": [
             "ActorId",
             "ResourceId",
@@ -29572,7 +29600,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_setBalance_of_ne",
-          "line": 405,
+          "line": 407,
           "called": [
             "ActorId",
             "Amount",
@@ -29585,8 +29613,32 @@
         },
         {
           "kind": "theorem",
+          "name": "getBalance_foldl_setBalance_of_all_ne",
+          "line": 428,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "getBalance",
+            "getBalance_setBalance_of_ne",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bulk_pair_ne_of_not_mem",
+          "line": 444,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "balance_pair_ne",
-          "line": 418,
+          "line": 456,
           "called": [
             "ActorId",
             "ResourceId"
@@ -29595,7 +29647,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_getBalance_of_not_written",
-          "line": 446,
+          "line": 486,
           "called": [
             "Action.stateWriteCells",
             "Action.toTransition",
@@ -29608,6 +29660,7 @@
             "ammSwap",
             "balance_pair_ne",
             "base",
+            "bulk_pair_ne_of_not_mem",
             "burn",
             "claimBudgetRefund",
             "deposit",
@@ -29615,6 +29668,7 @@
             "distributeOthers",
             "es",
             "freezeResource",
+            "getBalance_foldl_setBalance_of_all_ne",
             "getBalance_setBalance_of_ne",
             "getBalance_step_impl_of_untouched",
             "mint",
@@ -29635,7 +29689,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_nonce",
-          "line": 603,
+          "line": 665,
           "called": [
             "Action",
             "Action.stateWriteCells",
@@ -29649,7 +29703,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_epochBudget",
-          "line": 609,
+          "line": 671,
           "called": [
             "Action",
             "Action.stateWriteCells",
@@ -29663,7 +29717,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_registry_replaceKey",
-          "line": 616,
+          "line": 678,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29676,7 +29730,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_registry_registerIdentity",
-          "line": 623,
+          "line": 685,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29689,7 +29743,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_localPolicy_declare",
-          "line": 629,
+          "line": 691,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29703,7 +29757,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_localPolicy_revoke",
-          "line": 636,
+          "line": 698,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29716,7 +29770,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_consumed_deposit",
-          "line": 642,
+          "line": 704,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29731,7 +29785,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_consumed_depositWithFee",
-          "line": 650,
+          "line": 712,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29747,7 +29801,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_pending_withdraw",
-          "line": 660,
+          "line": 722,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29763,7 +29817,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_nextWdId_withdraw",
-          "line": 668,
+          "line": 730,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29779,7 +29833,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_epochBudget_depositWithFee",
-          "line": 677,
+          "line": 739,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29795,7 +29849,7 @@
         {
           "kind": "theorem",
           "name": "mem_writeCellsAt_epochBudget_topUpFor",
-          "line": 685,
+          "line": 747,
           "called": [
             "Action.stateWriteCells",
             "Action.writeCells",
@@ -29810,13 +29864,12 @@
         {
           "kind": "theorem",
           "name": "writeSetComplete_productionApplyBudget",
-          "line": 707,
+          "line": 765,
           "called": [
             "ExtendedState",
             "SignedAction",
             "WriteSetComplete",
             "applyActionToBridgeState_scalars",
-            "distributeOthers",
             "es",
             "mem_writeCellsAt_consumed_deposit",
             "mem_writeCellsAt_consumed_depositWithFee",
@@ -29843,7 +29896,6 @@
             "productionApplyBudget_getBalance_of_not_written",
             "productionApplyBudget_localPolicies_of_ne",
             "productionApplyBudget_registry_of_ne",
-            "proportionalDilute",
             "sender",
             "writeSetComplete_of_field_footprints"
           ]
@@ -29851,7 +29903,7 @@
         {
           "kind": "theorem",
           "name": "fold_stepWrites_eq_commit_productionApplyBudget",
-          "line": 796,
+          "line": 851,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -29863,13 +29915,11 @@
             "canonicalCellChain",
             "chainWrites",
             "commitExtendedState",
-            "distributeOthers",
             "es",
             "foldStateCellWrites",
             "fold_stepCellWrites_eq_commit_post",
             "getCellValue",
             "productionApplyBudget",
-            "proportionalDilute",
             "smtDepth",
             "stateCellEntries",
             "stepCellWrites",
@@ -29879,7 +29929,7 @@
         {
           "kind": "def",
           "name": "stepWriteBundle",
-          "line": 841,
+          "line": 894,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29894,7 +29944,7 @@
         {
           "kind": "def",
           "name": "stepPostRoot",
-          "line": 853,
+          "line": 906,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -29908,7 +29958,7 @@
         {
           "kind": "theorem",
           "name": "stepPostRoot_eq_commit_productionApplyBudget",
-          "line": 867,
+          "line": 921,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -29918,12 +29968,10 @@
             "SignedAction",
             "canonicalAbsentValue",
             "commitExtendedState",
-            "distributeOthers",
             "es",
             "fold_stepWrites_eq_commit_productionApplyBudget",
             "getCellValue",
             "productionApplyBudget",
-            "proportionalDilute",
             "smtDepth",
             "stateCellEntries",
             "stepCellWrites",
@@ -29933,7 +29981,7 @@
         {
           "kind": "theorem",
           "name": "stepWriteBundle_tags",
-          "line": 888,
+          "line": 940,
           "called": [
             "CellWrite",
             "ExtendedState",

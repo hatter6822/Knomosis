@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "bdabcf6b33ac9ce070bccc67c25fbac61db49fbab06d255fd81881836a2d1823"
+    "source_digest": "094a7581fd152cb64c818608f7445f601e3553c02da6164897608a1485a54a5f"
   },
   "summary": {
-    "module_count": 91,
-    "declaration_count": 2029
+    "module_count": 92,
+    "declaration_count": 2033
   },
   "modules": [
     {
@@ -3260,6 +3260,7 @@
             "SubmissionTooFrequent",
             "SubmittedRoot",
             "TooManyOutstandingRoots",
+            "actionCommit",
             "roots",
             "sequencer"
           ]
@@ -4571,6 +4572,37 @@
           "kind": "function",
           "name": "digest",
           "line": 124,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "LogChain",
+      "path": "solidity/src/lib/LogChain.sol",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "LogChain",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "actionCommit",
+          "line": 58,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "actionCommitMemory",
+          "line": 74,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "nextEntryHash",
+          "line": 92,
           "called": []
         }
       ]
@@ -13706,6 +13738,7 @@
           "line": 53,
           "called": [
             "RootRecord",
+            "actionCommit",
             "roots",
             "sequencer"
           ]

@@ -159,19 +159,47 @@ def tests : List TestCase :=
                   != (getCellValue base .bridgeNextWdId).toList)
           "and the counter moved too"
     }
-  , { name := "the bulk exclusion is not bookkeeping"
+  , { name := "a bulk action's write set covers every cell it moves"
     , body := do
-        -- `distributeOthers` credits every non-excluded actor, so its
-        -- declared write set (nonce + budget) omits balance cells the
-        -- advance moves.  The theorem excludes it by hypothesis; this
-        -- exhibits the reason rather than asserting it.
+        -- The inversion that S3 landed.  This test previously asserted
+        -- the OPPOSITE — that `distributeOthers` moves balance cells
+        -- its write set omits — because the write set was the static
+        -- `Action.writeCells`, which cannot name a recipient.  It is
+        -- now `writeCellsAt`, which takes the state and enumerates
+        -- `Laws.bulkRecipients`, so nothing escapes.
+        --
+        -- Value-level rather than a restatement of
+        -- `writeSetComplete_productionApplyBudget`: the theorem
+        -- quantifies over all cells, and a probe over concrete
+        -- recipients catches an enumeration that drifted from the
+        -- fold's own order or filter.
+        for bulk in [Authority.Action.distributeOthers 1 7 30,
+                     .proportionalDilute 1 7 30] do
+          let post := productionApplyBudget base (sign bulk) 0
+          let declared := Authority.Action.writeCellsAt base bulk 7
+          let escaped := [CellTag.balance 1 7, .balance 1 8, .balance 1 9,
+                          .balance 1 20, .balance 2 8].filter (fun t =>
+            !declared.contains t &&
+              (getCellValue post t).toList != (getCellValue base t).toList)
+          assert escaped.isEmpty
+            s!"{repr bulk} moved a balance cell outside its write set: {repr escaped}"
+    }
+  , { name := "a bulk write set names exactly the credited actors"
+    , body := do
+        -- ...and it must not over-declare either: a write set naming a
+        -- cell the advance leaves alone still folds correctly (the
+        -- write is a no-op), but it costs the L1 an opening per phantom
+        -- cell, and a cap is what stands between that and a step no
+        -- honest sequencer can afford to defend.
         let bulk : Authority.Action := .distributeOthers 1 7 30
-        let post := productionApplyBudget base (sign bulk) 0
         let declared := Authority.Action.writeCellsAt base bulk 7
-        let escaped := [CellTag.balance 1 8, .balance 1 9].filter (fun t =>
-          !declared.contains t && (getCellValue post t).toList != (getCellValue base t).toList)
-        assert (!escaped.isEmpty)
-          "distributeOthers must move a balance cell outside its write set"
+        let recipients := Laws.bulkRecipients base.base 1 7
+        assertEq (expected := recipients.length + 2)
+          (actual := declared.length)
+          "declared = nonce + epochBudget + one cell per recipient"
+        -- The excluded actor is not credited, so it is not written.
+        assert (!declared.contains (CellTag.balance 1 7))
+          "the excluded actor must not be in the write set"
     }
   , { name := "the budget policy survives every advance"
     , body := do
@@ -224,7 +252,14 @@ def tests : List TestCase :=
         for action in [ Authority.Action.transfer 1 7 8 30
                       , .mint 1 8 5
                       , .freezeResource 1
-                      , .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero ] do
+                      , .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero
+                      -- The two bulk variants, which the fold could not
+                      -- reach at all until their write set became
+                      -- state-keyed.  A bulk step is where the ordered
+                      -- fold earns its keep: one opening per recipient,
+                      -- each against the root the previous write left.
+                      , .distributeOthers 1 7 30
+                      , .proportionalDilute 1 7 30 ] do
           let post := productionApplyBudget base (sign action) 0
           match stepPostRoot base (sign action) 0 with
           | some root =>
@@ -256,9 +291,11 @@ def tests : List TestCase :=
     }
   , { name := "API stability: WriteSetComplete signatures"
     , body := do
+        -- No bulk exclusions: the write set is state-keyed, so all
+        -- twenty-five variants are covered.  A regression that
+        -- reintroduced the hypotheses would fail HERE rather than
+        -- quietly narrowing what the game can adjudicate.
         let _complete : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
-            (∀ x y z, st.action ≠ .distributeOthers x y z) →
-            (∀ x y z, st.action ≠ .proportionalDilute x y z) →
             WriteSetComplete es (productionApplyBudget es st idx) st.action st.signer :=
           writeSetComplete_productionApplyBudget
         let _nonce : ∀ (es : ExtendedState) (action : Authority.Action) (signer : ActorId),
@@ -271,8 +308,6 @@ def tests : List TestCase :=
             (productionApplyBudget es st idx).budgetPolicy = es.budgetPolicy :=
           productionApplyBudget_budgetPolicy
         let _root : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
-            (∀ x y z, st.action ≠ .distributeOthers x y z) →
-            (∀ x y z, st.action ≠ .proportionalDilute x y z) →
             CellWritesReady es
               (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer) →
             (Authority.Action.writeCellsAt es st.action st.signer).Nodup →

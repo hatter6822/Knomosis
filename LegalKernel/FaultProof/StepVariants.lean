@@ -116,20 +116,26 @@ def Action.readOnlyCells : Action → ActorId → List CellTag
     every action advances the signer's nonce; the per-action
     additional writes are captured by the per-variant arms below.
 
-    **Bulk actions** (`distributeOthers`, `proportionalDilute`):
-    the recipient-list-dependent balance writes are NOT enumerated
-    at this action level; instead they decompose per-recipient
-    via `Action.subSteps` (per WU H.1.4).  At the action level
-    we declare only the writes the action ALWAYS does (the
-    signer's nonce); the bulk sub-steps emit the per-recipient
-    balance cell proofs.
+    **This list is deliberately incomplete**, for three variants, and
+    for one reason: their write sets are functions of the STATE, which
+    `(action, signer)` cannot name.  `Action.stateWriteCells` names
+    them and `Action.writeCellsAt` is the union — that is what the
+    fault proof consumes, and what `WriteSetComplete` is stated
+    against.
 
-    **Withdraw**: the new bridge pending entry's key is the
-    deployment's current `nextWdId` counter, which is not a function
-    of `(action, signer)`.  It is therefore NOT in this list, and this
-    list is correspondingly INCOMPLETE for `withdraw` — see
-    `Action.stateWriteCells` and `Action.writeCellsAt`, which name it
-    and are what the fault proof consumes. -/
+      * **`withdraw`** — the new pending entry is keyed by the
+        deployment's current `nextWdId`.
+      * **`distributeOthers` / `proportionalDilute`** — one balance
+        cell per non-excluded actor at the resource, i.e.
+        `Laws.bulkRecipients`.
+
+    The bulk pair used to be described as decomposing per-recipient via
+    `Action.subSteps` instead.  That was the plan while the write set
+    was thought to be unbounded; `Laws.BulkBounded` now caps it in the
+    law's own precondition, so above the cap the step is a no-op and
+    below it the recipient list IS the footprint.  Enumerating it keeps
+    the bisection's terminal step a single `executeStep` rather than a
+    second addressing scheme the game would have to carry. -/
 def Action.writeCells : Action → ActorId → List CellTag
   | .transfer r sender receiver _, signer =>
       [.balance r sender, .balance r receiver, .nonce signer, .epochBudget signer]
@@ -235,6 +241,16 @@ def Action.writeCells : Action → ActorId → List CellTag
     could not reproduce the post-root. -/
 def Action.stateWriteCells (es : ExtendedState) : Action → ActorId → List CellTag
   | .withdraw _ _ _ _, _ => [.bridgePending es.bridge.nextWdId]
+  -- The two bulk variants credit every non-excluded actor at `r`, so
+  -- their write set is the recipient list — a function of the state,
+  -- which is exactly what this projection is for.  `Laws.bulkRecipients`
+  -- is the SAME list both laws fold over, in the same `Std.TreeMap`
+  -- order, so the write set is the footprint rather than a
+  -- re-derivation of it.
+  | .distributeOthers r excluded _, _ =>
+      (Laws.bulkRecipients es.base r excluded).map (fun p => .balance r p.1)
+  | .proportionalDilute r excluded _, _ =>
+      (Laws.bulkRecipients es.base r excluded).map (fun p => .balance r p.1)
   | _,                 _ => []
 
 /-- **The complete cell-write set**: the static declaration plus the
@@ -244,16 +260,37 @@ def Action.writeCellsAt (es : ExtendedState) (a : Action) (signer : ActorId) :
     List CellTag :=
   a.writeCells signer ++ a.stateWriteCells es signer
 
-/-- Away from `withdraw` the complete set IS the static one, so the
-    twenty-four other variants pay nothing for the split. -/
+/-- Away from `withdraw` and the two bulk variants the complete set IS
+    the static one, so the other twenty-two pay nothing for the split. -/
 theorem Action.writeCellsAt_eq_writeCells (es : ExtendedState) (a : Action)
     (signer : ActorId)
-    (h : ∀ r sender amount rcp, a ≠ .withdraw r sender amount rcp) :
+    (h : ∀ r sender amount rcp, a ≠ .withdraw r sender amount rcp)
+    (h_bulk₁ : ∀ r excluded amount, a ≠ .distributeOthers r excluded amount)
+    (h_bulk₂ : ∀ r excluded amount, a ≠ .proportionalDilute r excluded amount) :
     a.writeCellsAt es signer = a.writeCells signer := by
   unfold Action.writeCellsAt Action.stateWriteCells
   cases hact : a with
   | withdraw r sender amount rcp => exact absurd hact (h r sender amount rcp)
+  | distributeOthers r e amt => exact absurd hact (h_bulk₁ r e amt)
+  | proportionalDilute r e amt => exact absurd hact (h_bulk₂ r e amt)
   | _ => exact List.append_nil _
+
+/-- At a bulk variant the complete set is the static one plus one
+    balance cell per recipient, in the order both laws fold. -/
+theorem Action.writeCellsAt_distributeOthers (es : ExtendedState)
+    (r : ResourceId) (excluded : ActorId) (amount : Amount) (signer : ActorId) :
+    (Action.distributeOthers r excluded amount).writeCellsAt es signer =
+      [.nonce signer, .epochBudget signer] ++
+        (Laws.bulkRecipients es.base r excluded).map (fun p => .balance r p.1) :=
+  rfl
+
+/-- ...and the same at `proportionalDilute`. -/
+theorem Action.writeCellsAt_proportionalDilute (es : ExtendedState)
+    (r : ResourceId) (excluded : ActorId) (totalReward : Amount) (signer : ActorId) :
+    (Action.proportionalDilute r excluded totalReward).writeCellsAt es signer =
+      [.nonce signer, .epochBudget signer] ++
+        (Laws.bulkRecipients es.base r excluded).map (fun p => .balance r p.1) :=
+  rfl
 
 /-- And at `withdraw` it is the static set plus exactly the allocated
     pending cell. -/
