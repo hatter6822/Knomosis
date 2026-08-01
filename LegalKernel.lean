@@ -292,6 +292,7 @@ import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.Smt
 import LegalKernel.FaultProof.LawClassification
 import LegalKernel.FaultProof.StepVariants
+import LegalKernel.FaultProof.StepWriteSets
 import LegalKernel.FaultProof.Verify
 import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.Game

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "12c2c3d7599d80e7ed0eb53203aeef968715f69d4fd90a9eaeb7b9a987c7a455"
+    "source_digest": "1367e486a600d035f83810d37a227d2813e85a9897a68de464630044960bb193"
   },
   "summary": {
     "module_count": 327,
-    "declaration_count": 5614
+    "declaration_count": 5615
   },
   "modules": [
     {
@@ -544,13 +544,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 325,
+          "line": 326,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 341,
+          "line": 342,
           "called": [
             "LegalKernel"
           ]
@@ -21165,7 +21165,7 @@
     {
       "module": "LegalKernel.FaultProof.CellWrites",
       "path": "LegalKernel/FaultProof/CellWrites.lean",
-      "declaration_count": 25,
+      "declaration_count": 26,
       "declarations": [
         {
           "kind": "namespace",
@@ -21529,8 +21529,28 @@
         },
         {
           "kind": "theorem",
+          "name": "writeSetComplete_of_field_footprints",
+          "line": 615,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "WriteSetComplete",
+            "getCellValue",
+            "getCellValue_balance",
+            "getCellValue_bridgeConsumed",
+            "getCellValue_bridgeNextWdId",
+            "getCellValue_bridgePending",
+            "getCellValue_budgetPolicy'",
+            "getCellValue_epochBudget'",
+            "getCellValue_localPolicy",
+            "getCellValue_nonce",
+            "getCellValue_registry"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "writeSetComplete_of_identity_advance",
-          "line": 617,
+          "line": 684,
           "called": [
             "ActorId",
             "CellTag",
@@ -21551,7 +21571,7 @@
         {
           "kind": "theorem",
           "name": "fold_stepCellWrites_eq_commit_post",
-          "line": 680,
+          "line": 747,
           "called": [
             "ActorId",
             "BitsDistinctBelow",
@@ -67813,7 +67833,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 220,
+          "line": 221,
           "called": [
             "runAll"
           ]

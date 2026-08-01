@@ -593,19 +593,86 @@ theorem getCellValue_applyCellWrites_stepCellWrites
 
 /-! ## Completeness for the kernel-identity variants
 
-Eleven of the twenty-five `Action` constructors compile to
-`Laws.freezeResource`, whose `apply` is the identity on the base
-state, and touch neither the registry, the local policies, the bridge,
-nor the budget grant.  Their entire effect is the nonce bump and the
-budget consume — the two cells every action writes — so their
-completeness is ONE argument, not eleven.
+`WriteSetComplete` quantifies over cells; every advance is defined by
+what it does to the seven `ExtendedState` FIELDS.
+`writeSetComplete_of_field_footprints` is the bridge: it takes one
+footprint per field and produces the cell-level statement, so no
+per-variant proof ever does a `cases t` over the fifteen tags.
 
-The five hypotheses below are exactly the five ways an action can move
-a cell beyond those two, stated as equations on the sub-states rather
-than as a constructor list.  That keeps the lemma about behaviour: a
-future action that happens to satisfy them gets completeness for free,
-and one that does not fails to instantiate rather than silently
-slipping through a `| _ =>` catch-all. -/
+Both lemmas below state their hypotheses as equations on the state
+rather than as a constructor list.  That keeps them about behaviour —
+a future action satisfying them gets completeness for free, and one
+that does not fails to instantiate rather than slipping through a
+`| _ =>` catch-all. -/
+
+/-- **Cell completeness from per-field footprints.**
+
+    Each hypothesis says: this field moved only at keys the write set
+    declares.  The six bridge scalars take an unconditional equation
+    because no `Action` constructor touches them —
+    `applyActionToBridgeState` writes `consumed`, `pending` and
+    `nextWdId` and nothing else — so making them conditional would
+    invite a caller to believe otherwise. -/
+theorem writeSetComplete_of_field_footprints
+    (pre post : ExtendedState) (action : Authority.Action) (signer : ActorId)
+    (h_bal : ∀ r a, CellTag.balance r a ∉ action.writeCellsAt pre signer →
+      LegalKernel.getBalance post.base r a = LegalKernel.getBalance pre.base r a)
+    (h_nonce : ∀ a, CellTag.nonce a ∉ action.writeCellsAt pre signer →
+      Authority.expectsNonce post a = Authority.expectsNonce pre a)
+    (h_reg : ∀ a, CellTag.registry a ∉ action.writeCellsAt pre signer →
+      post.registry[a]? = pre.registry[a]?)
+    (h_lp : ∀ a, CellTag.localPolicy a ∉ action.writeCellsAt pre signer →
+      post.localPolicies[a]? = pre.localPolicies[a]?)
+    (h_cons : ∀ d, CellTag.bridgeConsumed d ∉ action.writeCellsAt pre signer →
+      post.bridge.consumed[d]? = pre.bridge.consumed[d]?)
+    (h_pend : ∀ w, CellTag.bridgePending w ∉ action.writeCellsAt pre signer →
+      post.bridge.pending[w]? = pre.bridge.pending[w]?)
+    (h_nxt : CellTag.bridgeNextWdId ∉ action.writeCellsAt pre signer →
+      post.bridge.nextWdId = pre.bridge.nextWdId)
+    (h_ammEth : post.bridge.ammReserveEth = pre.bridge.ammReserveEth)
+    (h_ammBold : post.bridge.ammReserveBold = pre.bridge.ammReserveBold)
+    (h_circuit : post.bridge.boldCircuitClosed = pre.bridge.boldCircuitClosed)
+    (h_tvlCap : post.bridge.boldTvlCap = pre.bridge.boldTvlCap)
+    (h_tvl : post.bridge.boldTotalLockedValue = pre.bridge.boldTotalLockedValue)
+    (h_ammDisabled : post.bridge.ammDisabled = pre.bridge.ammDisabled)
+    (h_eb : ∀ a, CellTag.epochBudget a ∉ action.writeCellsAt pre signer →
+      post.epochBudgets[a]? = pre.epochBudgets[a]?)
+    (h_pol : post.budgetPolicy = pre.budgetPolicy) :
+    WriteSetComplete pre post action signer := by
+  intro t h_notin
+  cases t with
+  | balance r a =>
+    rw [getCellValue_balance, getCellValue_balance, h_bal r a h_notin]
+  | nonce a => rw [getCellValue_nonce, getCellValue_nonce, h_nonce a h_notin]
+  | registry a => rw [getCellValue_registry, getCellValue_registry, h_reg a h_notin]
+  | localPolicy a => rw [getCellValue_localPolicy, getCellValue_localPolicy, h_lp a h_notin]
+  | bridgeConsumed d =>
+    rw [getCellValue_bridgeConsumed, getCellValue_bridgeConsumed, h_cons d h_notin]
+  | bridgePending w =>
+    rw [getCellValue_bridgePending, getCellValue_bridgePending, h_pend w h_notin]
+  | bridgeNextWdId =>
+    rw [getCellValue_bridgeNextWdId, getCellValue_bridgeNextWdId, h_nxt h_notin]
+  | bridgeAmmReserveEth =>
+    show getCellValue post .bridgeAmmReserveEth = _
+    unfold getCellValue; rw [h_ammEth]
+  | bridgeAmmReserveBold =>
+    show getCellValue post .bridgeAmmReserveBold = _
+    unfold getCellValue; rw [h_ammBold]
+  | bridgeBoldCircuitClosed =>
+    show getCellValue post .bridgeBoldCircuitClosed = _
+    unfold getCellValue; rw [h_circuit]
+  | bridgeBoldTvlCap =>
+    show getCellValue post .bridgeBoldTvlCap = _
+    unfold getCellValue; rw [h_tvlCap]
+  | bridgeBoldTotalLockedValue =>
+    show getCellValue post .bridgeBoldTotalLockedValue = _
+    unfold getCellValue; rw [h_tvl]
+  | bridgeAmmDisabled =>
+    show getCellValue post .bridgeAmmDisabled = _
+    unfold getCellValue; rw [h_ammDisabled]
+  | epochBudget a =>
+    rw [getCellValue_epochBudget', getCellValue_epochBudget', h_eb a h_notin]
+  | budgetPolicy => rw [getCellValue_budgetPolicy', getCellValue_budgetPolicy', h_pol]
 
 /-- **Completeness for an advance whose only effect is the nonce bump
     and the budget consume.**
