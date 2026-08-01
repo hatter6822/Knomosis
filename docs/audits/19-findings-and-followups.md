@@ -34,11 +34,14 @@ findings outside the TCB.  Their dispositions:
 | **B-2** — vacuous headline injectivity theorems | `Bridge/Eip712.lean` and every `CollisionFree` consumer | **Closed.**  `CollisionFreeOn S h` replaces the globally-injective (and hence *refutable*) predicate; satisfiability is exhibited, not assumed. |
 | **B-4a** — terminate ABI drift | `knomosis-faultproof-observer/src/submitter.rs` | **Closed.**  Rust moved to the contract's 5-argument form, and the selector table is now pinned against `method_selectors.json`, emitted from the COMPILED artifacts by `solidity/scripts/export_method_selectors.py` and gated in `ci-solidity.yml` — so the pin can no longer re-derive its expectation from the string it tests. |
 | **B-4b** — game-model fidelity (Lean/Rust) | `FaultProof/Game.lean`, `FaultProof/Step.lean`, observer `game.rs` | **Closed.**  `kernelStepApply` computes through `stepVMHash` instead of echoing the responder's `postStateCommit`; `terminateOnSingleStep` dropped `claimedPostCommit` and reads both sides from the game state; `submitMidpoint` carries only a commit and the index is derived, which made the convergence bound logarithmic (`bisection_converges_in_log_rounds`). |
-| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **OPEN — Lean side all but complete.**  See "Open critical: the fault-proof commit-recipe split" below. |
+| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **OPEN — Lean sequencer side + the whole wire are in; the verifier-side write derivation and the flip are not.**  See "Open critical: the fault-proof commit-recipe split" below. |
 
 ### Open critical: the fault-proof commit-recipe split
 
-**Status: every prerequisite is in; the root swap is not.**
+**Status: the root swap is in (§3).  What is open is the step VM —
+specifically the verifier-side derivation of a step's written VALUES,
+without which the fold it feeds is a calculator rather than an
+adjudicator.**
 
 Landed:
 
@@ -199,9 +202,19 @@ The cap now has ONE definition, in the law.  `SubStep` and
 `StepVMCoherence` each used to hold their own copy of the same number,
 checked by nothing.
 
-**`WriteSetComplete` is proved for all twenty-three non-bulk
-actions** (`FaultProof/StepWriteSets.lean`,
-`writeSetComplete_productionApplyBudget`).  Six of the seven state
+**`WriteSetComplete` is proved for all twenty-five actions**
+(`FaultProof/StepWriteSets.lean`,
+`writeSetComplete_productionApplyBudget`), bulk included.  The two bulk
+variants were excluded while their footprint was believed unnameable —
+"every non-excluded actor's balance, unboundedly many cells".  It is
+nameable: `Laws.BulkBounded` caps it in both laws' own preconditions,
+and the real obstacle was the ARITY of `Action.writeCells`, not the
+size of the set.  `Action.stateWriteCells` — which already existed
+because `withdraw`'s pending cell is keyed by the pre-state's
+`nextWdId` — takes the state, so the recipients go there, enumerated
+as `Laws.bulkRecipients` in the order both laws fold.  A bulk step
+therefore stays a single `executeStep` rather than acquiring a sub-step
+index in the game's addressing.  Six of the seven state
 fields have an action-independent footprint and are settled once; the
 balance footprint is the per-variant half, and `Conservation.LocalTo`
 does not cover it — that class is RESOURCE locality while the cell
@@ -213,27 +226,63 @@ proof adjudicates a step whose admissibility is not in evidence.
 `stepWriteBundle` / `stepPostRoot` are the honest sequencer's side:
 the ordered `(cell, proven pre-value, new value, opening)` list the L1
 folds, and the number the fold produces.
-`stepPostRoot_eq_commit_productionApplyBudget` is the statement this
-finding is really about — what the L1 computes from a pre-root and a
-bundle of openings, with no access to the post-state, is exactly the
-root an honest sequencer publishes.  Exercised on real actions
-including `withdraw`, with a forged-value case showing the fold does
-not reach the honest root.
+`stepPostRoot_eq_commit_productionApplyBudget` says the fold of THAT
+bundle lands on exactly the root an honest sequencer publishes — the
+fold itself never touches the post-state.  Exercised on real actions
+including `withdraw` and both bulk variants, with a forged-value case
+showing the fold does not reach the honest root.
+
+**But read the quantifier, because it is the whole of what is left.**
+`stepWriteBundle es st idx` takes the pre-state and derives its
+`newValue` column from `productionApplyBudget es st idx` — it is the
+SEQUENCER's computation.  A verifier holding only the pre-root and a
+submitted bundle has neither, so if it simply folds what it is handed,
+a responder free to choose the `newValue` column folds to a root of
+their choosing and wins every game.  The fold is an adjudicator only
+over a write list the verifier derived itself.
+
+That derivation — each written cell's new value from the proven
+PRE-values alone, in canonical CBE byte form, on both stacks, plus the
+Lean theorem that it agrees with `stepCellWrites es
+(productionApplyBudget es st idx) …` — is the largest remaining piece
+and the one the plan understated as "the root update becomes shared".
+Every input is available (the cell space covers all seven state
+fields, so the signer's nonce, the budget policy and the signer's
+epoch budget are all openable cells), but it amounts to
+`productionApplyBudget` re-expressed cell-locally: `.nonce` is `pre +
+1` uniformly, `.epochBudget` is the consume-then-grant against the
+proven policy cell uniformly, `.balance` is the per-variant arithmetic
+the Solidity handlers already do, and the eight variants that write
+registry / local-policy / bridge cells supply those from the action's
+own fields.  `docs/planning/state_root_merkleisation_plan.md` §4 step 3
+holds the specification.
 
 On the L1 side `StepVMMerkle.updateCellRoot` and `cellLeafHash` supply
 the fold's two primitives, replacing a placeholder that returned
 `keccak256(newValue)` and a verifier with no absence branch — both
 zero-caller, which is why neither had been caught.
 
-Not landed, and coupled: the observer emitting real SMT openings, the
-`proofData` wire widening (with the Rust conduit and
-`method_selectors.json` following), and `executeStep` returning the
-fold's result instead of `stepVMHash`.  These move together — the wire
-format, the observer's output and the corpus all change at once — which
-is what keeps exactly one selector churn and one corpus regeneration.  That is what closes this
-finding; the swap was its precondition, since a post-root is not
+**The wire is landed.**  Every production bundle is built by
+`buildCellProofWithOpening`; `CellProof` carries `bytes proofData` —
+the 32-byte bitmask plus siblings — through the Lean CBE codec, the
+JSON emitter, the Rust conduit's ABI encoder (head 5 → 6 words, so
+`terminateOnSingleStep`'s selector moved and `method_selectors.json`
+regenerated) and the Solidity struct, which shape-validates it at
+intake (`MalformedProofData`); and the corpus publishes `proofDataHex`
+per proof.  Nothing consumes the opening yet, so nothing that any
+surface computes has changed.
+
+The field carries NO default.  It had `:= ByteArray.empty` for one
+iteration and two of the corpus's bulk builders inherited it and
+published proofs with no opening at all — caught by the corpus shape
+check and by nothing else.
+
+Not landed: the bundle-only write derivation above, and `executeStep`
+verifying the openings and returning the fold's result instead of
+`stepVMHash`.  Those two are one consensus change and close this
+finding; the swap was their precondition, since a post-root is not
 computable from a concatenation hash at all.  §0 of
-`docs/fault_proof_runbook.md` stands until §4 lands.
+`docs/fault_proof_runbook.md` stands until they land.
 
 Three obligations for that work were read from source during this
 pass and are pinned as tests (`faultproof-stepvm-coherence`, the

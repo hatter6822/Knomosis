@@ -731,7 +731,7 @@ work units.  Status:
 | E-A–G | Ethereum integration (7 workstreams) | Complete |
 | LP | Actor-scoped policies | Complete (Lean side) |
 | LX-M1–M3 | Lex language (3 milestones) | Complete |
-| H | Fault-proof migration | Built (Lean + Rust RH-G); **the terminal step does not adjudicate** — see the Workstream H section below |
+| H | Fault-proof migration | Built (Lean + Rust RH-G); the terminal step now authenticates its action against the log-entry chain, but **still does not adjudicate the state transition** — `executeStep` returns a bespoke hash, not a state root.  See the Workstream H section below |
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
@@ -805,11 +805,11 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 190 | ~158 | `lake test` |
-| Rust | ~2 350 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~934 passed | 62 forge suites | `cd solidity && forge test` |
+| Lean | ~3 210 | ~159 | `lake test` |
+| Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
+| Solidity | ~945 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **934 passed / 0 failed / 0 skipped** — the
+`forge test` runs **945 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 934 / 0 / 0.
+reports the same 945 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -852,6 +852,12 @@ full catalogue):
   differ), and the negative control — an INCOMPLETE write set does not
   reproduce the post-state, so `WriteSetComplete` is a hypothesis
   something actually exercises.
+- `faultproof-write-sets` — `WriteSetComplete` per action and the
+  honest sequencer's bundle: the fold lands on the published root for
+  every variant shape including `withdraw`'s state-keyed pending cell
+  and both bulk variants; a bulk write set covers every cell the
+  advance moves and over-declares none; and a FORGED post-value does
+  not reach the honest root.
 - `faultproof-state-cells-injective` — cell determination, the
   well-formedness side conditions checked on a real state, and the
   write algebra: a single write lands on the post-state's published
@@ -1187,29 +1193,54 @@ to `ProductionApply`'s `productionApplyBudget`, and
 incomplete (`withdraw` creates a cell keyed by the pre-state's
 `nextWdId`, which `writeCells` cannot name).
 
-`WriteSetComplete` is now proved for all twenty-three non-bulk actions
-(`FaultProof/StepWriteSets.lean`); the two bulk ones route through the
-decomposition, which `Laws.BulkBound`'s recipient bound makes complete
-— the law used to credit every actor while the decomposition stopped
-at 256, so above the cap the game could not reach the L2's post-state.
-`stepWriteBundle` / `stepPostRoot` are the honest sequencer's side, and
-`stepPostRoot_eq_commit_productionApplyBudget` is §4's statement: what
-the L1 computes from a pre-root and openings, with no access to the
-post-state, is the root the sequencer published.  On the L1 side
+`WriteSetComplete` is now proved for all twenty-five actions
+(`FaultProof/StepWriteSets.lean`), bulk included.  The bulk pair was
+going to route through `SubStep.lean` on the grounds that its
+footprint is unboundedly many cells; `Laws.BulkBounded` caps it in
+both laws' preconditions, and the real obstacle was the ARITY of
+`Action.writeCells` rather than the size — a recipient set is a
+function of the state, so it belongs in `Action.stateWriteCells`
+alongside `withdraw`'s `nextWdId`-keyed pending cell.  A bulk step
+stays a single `executeStep`, with no sub-step index in the game's
+addressing.  `stepWriteBundle` / `stepPostRoot` are the honest
+sequencer's side, and
+`stepPostRoot_eq_commit_productionApplyBudget` says the fold of THAT
+bundle lands on the root the sequencer published.  On the L1 side
 `StepVMMerkle.updateCellRoot` and `cellLeafHash` supply the fold's two
 primitives.
 
-Remaining is one coupled unit: the observer emitting real SMT openings,
-the `proofData` wire widening (with the Rust conduit and
-`method_selectors.json` following), and `executeStep` returning the
-fold's result instead of `stepVMHash`.  They move together because the
-wire format, the observer's output and the corpus all change at once.
-`docs/audits/19-findings-and-followups.md` records the remaining
-blast radius and
-`docs/planning/state_root_merkleisation_plan.md` is the
-implementation spec (§4 / §4A are what is left).  Until it lands the
-fault-proof game must not be treated as an adjudicating backstop;
-the bisection narrowing is proved and unaffected.
+**The wire is landed.**  Every production bundle is built by
+`buildCellProofWithOpening`; `CellProof` carries `bytes proofData` (a
+32-byte bitmask plus siblings) through the Lean CBE codec, the JSON
+emitter, the Rust conduit's ABI encoder and the Solidity struct, which
+shape-validates it at intake; the corpus publishes `proofDataHex` per
+proof.  So is the action binding: `KnomosisStateRootSubmission`'s
+log-entry chain now folds in an `actionCommit`
+(`solidity/src/lib/LogChain.sol`, mirrored by
+`StepVMCoherence.l1ActionCommit`), so `terminateOnSingleStep`
+authenticates the `(actionKind, actionFields, signer)` triple it is
+handed instead of executing whatever it is given.
+
+**What remains, and it is the largest piece:** the verifier-side
+derivation of a step's written VALUES.  `stepWriteBundle es st idx`
+takes the pre-state and reads its `newValue` column off
+`productionApplyBudget es st idx` — that is the sequencer's
+computation.  A verifier holding only the pre-root and a submitted
+bundle has neither, so folding what it is handed lets a responder
+choose the resulting root.  The fold adjudicates only over a write
+list the verifier derived itself, and that derivation is
+`productionApplyBudget` re-expressed cell-locally on both stacks
+(`.nonce` is `pre + 1` uniformly, `.epochBudget` is consume-then-grant
+against the proven policy cell uniformly, `.balance` is the
+per-variant arithmetic, and eight variants supply registry /
+local-policy / bridge cells from the action's own fields), each value
+in canonical CBE bytes.  That plus `executeStep` returning the fold's
+result is one consensus change.
+`docs/audits/19-findings-and-followups.md` records the blast radius
+and `docs/planning/state_root_merkleisation_plan.md` §4 step 3 is the
+specification.  Until it lands the fault-proof game must not be
+treated as an adjudicating backstop; the bisection narrowing is proved
+and unaffected.
 
 ### Fair queuing (Workstream FQ / GP.8)
 

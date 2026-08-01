@@ -352,6 +352,57 @@ space:
    per-variant hash.  The 25 `_step<Variant>` handlers change from
    "return a hash of the new values" to "return the list of
    `(cellKey, newValue)` writes"; the root update becomes shared.
+
+   **The `newValue` column is the work, and §4A does not supply it.**
+   Read the signatures: `stepWriteBundle es st idx` and
+   `stepPostRoot es st idx` both take the pre-state `es`, and build
+   their write list as `stepCellWrites es (productionApplyBudget es st
+   idx) …` — i.e. by consulting the POST-state.  They are the honest
+   sequencer's computation, and
+   `stepPostRoot_eq_commit_productionApplyBudget` says the fold of
+   THAT bundle lands on the published root.  It does not say a bundle
+   an arbitrary party supplies does, and it cannot: a responder free to
+   choose the `newValue` column folds to a root of their choosing and
+   wins every game.  The fold is sound only over a write list the
+   verifier derived itself.
+
+   So the L1 needs a **bundle-only derivation**: each written cell's
+   new value as a function of the proven PRE-values alone, which is the
+   only state it holds.  Every input is available — the cell space
+   covers all seven `ExtendedState` fields, so the signer's nonce, the
+   budget policy, and the signer's epoch budget are all openable cells
+   — but the derivation is `productionApplyBudget` re-expressed
+   cell-locally:
+
+     * `.nonce signer` → `pre + 1`, uniform across all 25.
+     * `.epochBudget signer` → `EpochBudgetState.consume` against the
+       proven `.budgetPolicy` cell, then `budgetGrant`; uniform across
+       all 25, plus `.epochBudget recipient` on the two granting
+       variants.
+     * `.balance r a` → the per-variant arithmetic; this is the part
+       the Solidity handlers already compute, and the only part.
+     * `.registry` / `.localPolicy` / `.bridgeConsumed` /
+       `.bridgePending` / `.bridgeNextWdId` → the eight variants that
+       write them, from the action's own fields plus the proven
+       pre-value.
+
+   Each new value must also be produced in its canonical CBE byte
+   form (`CellStore.lean`'s value constructors), on-chain, or the
+   re-walked leaf is not the leaf the sequencer's root observes.
+
+   The Lean side of this is a function
+   `stepWritesFromBundle : StateCommit → UInt8 → ByteArray → ActorId →
+   CellProofBundle → List CellWrite` plus the agreement theorem — that
+   it equals `stepCellWrites es (productionApplyBudget es st idx) …`
+   whenever the bundle's proven values are `es`'s.  That theorem is
+   what carries `stepPostRoot`'s guarantee across to a verifier holding
+   no state, and it is what the Solidity handlers mirror.  It is 25
+   arms over ~3 cells each on both stacks, with a matching corpus
+   column.
+
+   **This is the largest single remaining piece**, and the plan's
+   original framing of step 3 as "the root update becomes shared"
+   understated it: sharing the update is the easy half.
 4. ~~Delete the per-entry SKIP in `test/CrossCheck/StepVM.t.sol` so
    the corpus pins the equality it was written to pin.~~ **DONE**, and
    it was three defects rather than one — see "The cross-stack corpus
@@ -657,11 +708,24 @@ pre-state, and a function of `(action, signer)` cannot name it.
 `Action.stateWriteCells` / `Action.writeCellsAt` close that;
 `writeCellsAt_eq_writeCells` proves the other twenty-four pay nothing.
 
-**§4A is complete on the Lean side.**
+**§4A is complete on the Lean side, for all twenty-five actions.**
 `writeSetComplete_productionApplyBudget`
-(`FaultProof/StepWriteSets.lean`) proves it for all twenty-three
-non-bulk actions; the two bulk ones route through the decomposition,
-which the recipient bound now makes complete.
+(`FaultProof/StepWriteSets.lean`) proves it with no bulk exclusion.
+
+The bulk pair was going to route through `SubStep.lean`'s
+decomposition, on the stated grounds that their footprint is
+unboundedly many cells.  Neither half of that held.  `Laws.BulkBounded`
+caps the recipient count in both laws' own preconditions, so above the
+cap the step is a no-op; and the real obstacle was ARITY, not size —
+`Action.writeCells` takes `(action, signer)` and a recipient set is a
+function of the state.  `Action.stateWriteCells` already existed for
+exactly that shape (`withdraw`'s pending cell is keyed by the
+pre-state's `nextWdId`), so the recipients go there, enumerated as
+`Laws.bulkRecipients` in the same order both laws fold.  A bulk step
+therefore stays a single `executeStep` — no sub-step index in the
+game's addressing, no re-run of the convergence proof — with a bundle
+of at most 2 + 256 written cells, inside the contract's existing
+`MAX_CELL_PROOFS_PER_STEP = 256 + 16`.
 
 The split turned out uneven, which is the useful part: six of the seven
 state fields have an action-INdependent footprint, so they are proved
@@ -679,18 +743,43 @@ adjudicates a step whose admissibility is not in evidence.
 `stepWriteBundle` and `stepPostRoot` are the honest sequencer's side,
 also landed: the ordered `(cell, pre-value, post-value, opening)` list
 the L1 folds, and the number the fold produces.
-`stepPostRoot_eq_commit_productionApplyBudget` is §4's statement — what
-the L1 computes from a pre-root and openings, with no access to the
-post-state, is the root an honest sequencer publishes.  Exercised on
-real actions including `withdraw` (the state-keyed `bridgePending`
-cell), with a forged-value case showing the fold does not reach the
-honest root.
+`stepPostRoot_eq_commit_productionApplyBudget` says the fold of THAT
+bundle lands on the root an honest sequencer publishes — the fold
+itself never touches the post-state.  Exercised on real actions
+including `withdraw` (the state-keyed `bridgePending` cell) and both
+bulk variants, with a forged-value case showing the fold does not reach
+the honest root.
 
-What is left is the OTHER stacks: the observer emitting these openings
-(S4), the `proofData` wire widening (S5), and `executeStep` returning
-the fold's result instead of `stepVMHash` (S6).  Nothing landed so far
-changes what any surface computes — the step VM still returns the
+**Read the quantifier carefully.**  This is the sequencer's side and
+only the sequencer's side: `stepWriteBundle` takes `es` and derives its
+`newValue` column from `productionApplyBudget es st idx`.  A verifier
+holding only the pre-root and a submitted bundle has neither, so it
+must derive that column itself before the fold means anything — see §4
+step 3, which is where that obligation now lives.  It is not a gap in
+what §4A proves; it is the next theorem, and the plan did not name it.
+
+What is left, in order: the bundle-only write derivation on both
+stacks (§4 step 3 above — the largest piece), and `executeStep`
+returning the fold's result instead of `stepVMHash`.  The observer's
+openings (S4) and the `proofData` wire widening (S5) are **landed**:
+every production bundle is built by `buildCellProofWithOpening`, the
+`CellProof` wire carries `proofData` end to end (Lean CBE codec, JSON,
+Rust ABI encoder, Solidity struct with intake shape validation), and
+the corpus publishes `proofDataHex` per proof.  Nothing landed so far
+changes what any surface COMPUTES — the step VM still returns the
 bespoke hash — so the flip remains one atomic consensus change.
+
+S5 also closed a defect the plan had mis-scoped.  "Bind the step's
+action to the stored log-entry hash chain" assumed the chain carried
+the action; `KnomosisStateRootSubmission` chained
+`keccak256(abi.encode(prevLogEntryHash, stateCommit))`, state roots
+alone, so nothing on L1 recorded WHICH action carried root `i-1` to
+root `i` and `terminateOnSingleStep` executed whatever triple it was
+handed.  The chain now folds in an `actionCommit`
+(`solidity/src/lib/LogChain.sol`, mirrored by
+`StepVMCoherence.l1ActionCommit` and pinned per-entry by the corpus),
+which is also what the Lean chain it mirrors has always done —
+`Runtime.LogFile.LogEntry.hash` chains the encoded signed action.
 
 **Lean and Rust move with it.**  `StepVMCoherence.stepVMHash`'s
 25-arm match currently ends each arm in a `stepCommit<Variant>` hash;
@@ -723,25 +812,37 @@ regeneration last.
 **Where this stands.**  Everything through §4A is landed and green:
 the Lean side computes the post-root from a pre-root plus openings
 (`stepPostRoot`), for all twenty-five variants, and the L1 has the two
-primitives that fold needs.  What remains is one coupled unit, and it
-has to be done together because the wire format, the observer's output
-and the corpus all move at once:
+primitives that fold needs.
 
-  * the observer emitting real `SmtCellProof` openings instead of
-    witness-state-bearing ones (S4);
-  * `CellProof` gaining `bytes proofData`, with the Rust conduit's
-    ABI head widening, `method_selectors.json` regenerating, and the
-    ~15 byte-layout tests following (S5);
-  * `executeStep` verifying those openings and returning the fold's
-    result, with the corpus's `expectedStepVMCommitHex` becoming a
-    state root (S6).
+S4 and S5 have landed too, in one change since the wire and the
+observer's output move together: every production bundle is built by
+`buildCellProofWithOpening`, `CellProof` carries `bytes proofData`
+through the Lean CBE codec, the JSON emitter, the Rust conduit's ABI
+encoder (head 5 → 6 words, so `terminateOnSingleStep`'s selector moved
+and `method_selectors.json` regenerated) and the Solidity struct, which
+shape-validates it at intake.  The corpus publishes `proofDataHex` per
+proof.  Nothing consumes the opening yet — that is the flip.
 
-S4 cannot land before S5 — changing what the observer emits changes
-the wire — and S6 is the semantic flip on top of both.  Treating them
-as one change is what keeps exactly one selector churn and one corpus
-regeneration.  §2, §2A, §2B and §3B are additive and have landed
-on their own; §3 / §3A and §4 are one consensus change and must not be
-split across releases that could be deployed independently.
+**What remains is S6, and it is one coupled unit:**
+
+  * the **bundle-only write derivation** (§4 step 3): each written
+    cell's new value from the proven pre-values alone, on both stacks,
+    plus the Lean theorem that it agrees with
+    `stepCellWrites es (productionApplyBudget es st idx) …`.  This is
+    the largest piece and the one the plan originally understated;
+    without it the fold is a calculator, not an adjudicator, because
+    the `newValue` column would be the responder's to choose.
+  * `executeStep` verifying the openings and returning the fold's
+    result, with the corpus's `expectedStepVMCommitHex` becoming
+    `expectedPostStateRootHex` and the fixture `identifier` bumped.
+  * `Step.kernelStepApply` and
+    `TerminateBundle.buildTerminateBundle` moving onto the derived
+    fold, and the retirement of `SolidityStepVMCommit.lean` +
+    `stepVMHash` + the 36 recipe-bound theorems (S7).
+
+§2, §2A, §2B, §3B, S4 and S5 are additive and have landed on their
+own; §3 / §3A and S6 are one consensus change and must not be split
+across releases that could be deployed independently.
 
 The runbook's §0 deployment blocker stays in force until §4 lands
 and `verify_keccak_crossstack.sh` reports the step-VM

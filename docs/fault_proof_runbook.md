@@ -41,11 +41,18 @@ it never succeeds.  Operationally:
     defends.**  A challenger who opens a game on a valid root and
     plays to single-step wins, and the sequencer's bond is
     slashed.
-  * The `forge test` suite does not report this.  The per-entry
-    byte-equivalence assertion in
-    `solidity/test/CrossCheck/StepVM.t.sol` gates itself on the
-    fixture header and skips, so the corpus never compares the
-    two recipes.
+  * The corpus does not report this, and cannot.  It pins Lean's
+    `stepVMHash` against Solidity's `executeStep` — two
+    implementations of the SAME bespoke recipe.  They agree, on all
+    278 entries; agreement between them says nothing about whether
+    either equals a published state root, which is the only property
+    the game needs.  (The corpus used to be worse: the per-entry
+    assertion skipped on the fixture header and the committed
+    fixtures carried the fallback hash, so a bare `forge test`
+    reported green having compared nothing.  That is fixed — the
+    corpora are keccak artifacts by construction and the suites fail
+    loudly rather than skipping — but fixing it did not make the
+    corpus evidence for THIS.)
 
 **Until this is closed**, run the dispute pipeline
 (`KnomosisDisputeVerifier`, adjudicator quorum) as the operative
@@ -64,15 +71,33 @@ seven `ExtendedState` fields; the SMT cell key is derived on-chain
 rather than accepted from the caller; the root is proved injective
 (`smtRootListAux_perm_of_eq_under_collision_free`, the EI.8
 replacement) and proved to determine every cell
-(`commitExtendedState_determines_cells`); and the incremental
+(`commitExtendedState_determines_cells`); the incremental
 write `smtUpdateRoot` is proved independent of which verifying
-opening the responder supplies.  But `executeStep` still returns the
-other construction, so **§0 still applies in full**.  The remaining
-work is `docs/planning/state_root_merkleisation_plan.md` §4.
-`docs/audits/19-findings-and-followups.md` ("Open critical: the
-fault-proof commit-recipe split") records the remaining blast
-radius: `KnomosisStepVM`'s 25 per-variant handlers, the observer,
-and the step-VM fixture corpus.
+opening the responder supplies; and on the Lean side `stepPostRoot`
+folds a step's proven writes onto exactly the root an honest
+sequencer publishes, for all twenty-five action variants.
+
+The wire is in too: `CellProof` carries its SMT opening
+(`proofData`), validated for shape at L1 intake but not yet consumed;
+and `terminateOnSingleStep` now authenticates the
+`(actionKind, actionFields, signer)` triple it is handed against the
+log-entry chain, which the state-roots-only chain could not do.
+
+**§0 still applies in full**, for two reasons rather than one:
+
+  1. `executeStep` still returns the bespoke hash.
+  2. Even folding proven writes would not be enough on its own.  The
+     verifier must DERIVE each written cell's new value from the
+     proven pre-values; a fold over a write list the responder
+     supplies lets them choose the resulting root.  That derivation —
+     `productionApplyBudget` re-expressed cell-locally, on both
+     stacks — is the largest remaining piece.
+
+The remaining work is `docs/planning/state_root_merkleisation_plan.md`
+§4 step 3.  `docs/audits/19-findings-and-followups.md` ("Open
+critical: the fault-proof commit-recipe split") records the blast
+radius: `KnomosisStepVM`'s 25 per-variant handlers, the observer, and
+the step-VM fixture corpus.
 
 ---
 
