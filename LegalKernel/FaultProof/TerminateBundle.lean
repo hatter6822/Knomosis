@@ -65,7 +65,9 @@ serde-deserialize default conventions, so the Rust observer's
   "signer": 5,
   "expected_post_commit_hex": "abcd1234...",
   "cell_proofs": [
-    {"cell_kind": 0, "key_a": "0x01", "key_b": "0x05", ...},
+    {"cell_kind": 0, "key_a": "0x01", "key_b": "0x05",
+     "cell_value": "...", "witness_commit": "...",
+     "proof_data": "..."},
     ...
   ]
 }

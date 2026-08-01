@@ -163,7 +163,7 @@ cd runtime && cargo fmt --all -- --check
 # host / l1-ingest / indexer `tests/property.rs` (which DO ride --workspace).
 rustup toolchain install nightly --component rust-src   # one-time
 cargo install cargo-fuzz --locked                       # one-time (pin 0.13.2)
-cd runtime && cargo +nightly fuzz list                  # host / l1-ingest / indexer decoders
+cd runtime && cargo +nightly fuzz list                  # host / l1-ingest / indexer / observer
 cd runtime && cargo +nightly fuzz build                 # compile all targets (API-drift guard)
 cd runtime && cargo +nightly fuzz run l1_ingest_decode_event -- -max_total_time=60
 

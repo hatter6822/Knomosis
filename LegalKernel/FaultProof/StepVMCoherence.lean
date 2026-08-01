@@ -395,6 +395,63 @@ def actionFieldsForL1 : Action → ByteArray
       uint64BE r.toNat ++ uint128BE amount ++
       uint64BE reserveActor.toNat ++ uint64BE poolActor.toNat
 
+/-! ## The L1 log-entry chain
+
+The L1 mirror of `Runtime.LogFile.LogEntry.hash`.  Both chain a log
+entry to its predecessor, and both commit to the ACTION that produced
+the entry — but over different encodings, because the L1 never sees a
+CBE-encoded `SignedAction`.  It sees the
+`(actionKindByte, signer, actionFieldsForL1)` triple, so that is what
+it commits to.
+
+Mirrored byte-for-byte by `solidity/src/lib/LogChain.sol`, which is
+where the encoding's design constraints are recorded, and pinned
+per-entry by the `step_vm.json` cross-stack corpus. -/
+
+/-- The L1 commitment to a signed action's step-VM form:
+    `hash(actionKindByte ‖ uint64BE signer ‖ actionFieldsForL1)`.
+
+    The variable-length field goes LAST.  The concatenation carries no
+    length prefixes, so a leading variable-length component would make
+    the encoding ambiguous; with the fields last, the first nine bytes
+    are fixed-width and the remainder is exactly the fields, which
+    makes the encoding injective on the triple.
+
+    This is what `KnomosisStateRootSubmission.submitStateRoot` binds
+    into the chain and what
+    `KnomosisFaultProofGame.terminateOnSingleStep` re-derives from the
+    action it is handed. -/
+def l1ActionCommitBytes (kind : UInt8) (signer : Nat) (fields : ByteArray) :
+    ByteArray :=
+  LegalKernel.Runtime.hashBytes
+    (ByteArray.mk #[kind] ++ uint64BE signer ++ fields)
+
+/-- The same commitment over an `Action`, projecting the triple. -/
+def l1ActionCommit (action : Action) (signer : ActorId) : ByteArray :=
+  l1ActionCommitBytes (actionKindByte action) signer.toNat
+    (actionFieldsForL1 action)
+
+/-- Extend the L1 log-entry chain by one entry:
+    `hash(prevLogEntryHash ‖ stateCommit ‖ actionCommit)`.
+
+    Solidity spells this `keccak256(abi.encode(a, b, c))`, which for
+    three `bytes32` values is their plain 96-byte concatenation — no
+    offsets, no padding — so the mirror is a concatenation. -/
+def l1NextEntryHash
+    (prevLogEntryHash stateCommit actionCommit : ByteArray) : ByteArray :=
+  LegalKernel.Runtime.hashBytes (prevLogEntryHash ++ stateCommit ++ actionCommit)
+
+/-- The action commitment is 32 bytes, as every `hashBytes` output is
+    — so it fits the `bytes32` the L1 chain stores it in. -/
+theorem l1ActionCommit_size (action : Action) (signer : ActorId) :
+    (l1ActionCommit action signer).size = 32 :=
+  LegalKernel.Runtime.hashBytes_size _
+
+/-- ...and so is the chain value it feeds. -/
+theorem l1NextEntryHash_size (p s a : ByteArray) :
+    (l1NextEntryHash p s a).size = 32 :=
+  LegalKernel.Runtime.hashBytes_size _
+
 /-! ## Helpers for reading cell values from cell-proof bundles
 
 The Solidity-side `_stepXX` functions read cell values via

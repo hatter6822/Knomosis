@@ -77,7 +77,7 @@ def buildObserverCellProofs
     (es : ExtendedState) (action : Action) (signer : ActorId) :
     CellProofBundle :=
   { proofs := (Action.requiredCells action signer).map
-                (fun t => buildCellProof es t) }
+                (fun t => buildCellProofWithOpening es t) }
 
 /-- The observer's bundle verifies against the state's commit
     by `verifyCellProofs_complete_for_canonical_bundle`. -/
@@ -86,7 +86,9 @@ theorem buildObserverCellProofs_verifies
     verifyCellProofs (commitExtendedState es)
       (buildObserverCellProofs es action signer) = true := by
   unfold buildObserverCellProofs
-  exact verifyCellProofs_complete_for_canonical_bundle es _
+  -- The opening-bearing builder differs from the plain one only in
+  -- `proofData`, which `verifyCellProof` does not read.
+  exact verifyCellProofs_complete_for_opening_bundle es _
 
 /-! ## Honest-strategy game player
 

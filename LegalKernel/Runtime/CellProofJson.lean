@@ -109,12 +109,20 @@ def bytesHex (bs : ByteArray) : String :=
     deserializer can consume the output without renames:
 
     ```
-    {"cell_kind":N,"key_a":"HEX","key_b":"HEX","cell_value":"HEX","witness_commit":"HEX"}
+    {"cell_kind":N,"key_a":"HEX","key_b":"HEX","cell_value":"HEX",
+     "witness_commit":"HEX","proof_data":"HEX"}
     ```
 
     The `witness_commit` field is `commitExtendedState(p.witnessState)`
     — the verifier-supplied commit that must match the
-    `preStateCommit` in `terminateOnSingleStep`. -/
+    `preStateCommit` in `terminateOnSingleStep`.
+
+    `proof_data` is the SMT opening in the L1 wire format
+    (`bitmask(32) || siblings(N × 32)`), which is what the step VM
+    walks once the flip lands.  Emitted alongside `witness_commit`
+    rather than replacing it so the wire change and the semantic
+    change stay separable: a consumer can ignore the new field and
+    behave exactly as before. -/
 def formatCellProofJson (p : CellProof) : String :=
   let (kind, keyA, keyB) := formatCellTag p.cellTag
   let cellValHex := bytesHex p.cellValue
@@ -128,7 +136,8 @@ def formatCellProofJson (p : CellProof) : String :=
     q ++ "key_a" ++ q, ":", q ++ keyA ++ q, ",",
     q ++ "key_b" ++ q, ":", q ++ keyB ++ q, ",",
     q ++ "cell_value" ++ q, ":", q ++ cellValHex ++ q, ",",
-    q ++ "witness_commit" ++ q, ":", q ++ commitHex ++ q,
+    q ++ "witness_commit" ++ q, ":", q ++ commitHex ++ q, ",",
+    q ++ "proof_data" ++ q, ":", q ++ bytesHex p.proofData ++ q,
     "}"
   ]
   String.join parts

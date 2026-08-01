@@ -95,6 +95,19 @@ def verifyCellProofs (commit : StateCommit) (bundle : CellProofBundle) :
     Bool :=
   bundle.proofs.all (fun p => verifyCellProof commit p)
 
+/-- **The verifier does not read the opening.**  `verifyCellProof`
+    inspects the witness state, the tag and the value; `proofData`
+    carries the SMT siblings the L1 walks and is invisible here.
+
+    Stated because the two builders differ in exactly that field, so
+    every theorem about the plain bundle transfers to the
+    opening-bearing one without re-proving anything — and because a
+    verifier that DID read it would be checking two independent
+    encodings of the same fact, which is how they drift. -/
+@[simp] theorem verifyCellProof_proofData_irrelevant
+    (commit : StateCommit) (p : CellProof) (d : ByteArray) :
+    verifyCellProof commit { p with proofData := d } = verifyCellProof commit p := rfl
+
 /-- Named decidable instance for `verifyCellProof`. -/
 instance instDecidableVerifyCellProof
     (commit : StateCommit) (proof : CellProof) :
@@ -152,6 +165,23 @@ theorem verifyCellProofs_complete_for_canonical_bundle
   simp only [List.all_eq_true, List.mem_map]
   intro p hp
   obtain ⟨t, _, rfl⟩ := hp
+  exact verifyCellProof_complete es t
+
+/-- The same, for the opening-bearing builder.  Stated separately
+    rather than derived at each call site because the two builders
+    differ in a field `verifyCellProof` does not read, and threading
+    that through a `List.map` congruence at every use is noise. -/
+theorem verifyCellProofs_complete_for_opening_bundle
+    (es : ExtendedState) (tags : List CellTag) :
+    verifyCellProofs (commitExtendedState es)
+      { proofs := tags.map (fun t => buildCellProofWithOpening es t) } = true := by
+  unfold verifyCellProofs
+  simp only [List.all_eq_true, List.mem_map]
+  intro p hp
+  obtain ⟨t, _, rfl⟩ := hp
+  show verifyCellProof (commitExtendedState es) (buildCellProofWithOpening es t) = true
+  unfold buildCellProofWithOpening
+  rw [verifyCellProof_proofData_irrelevant]
   exact verifyCellProof_complete es t
 
 /-! ## #222 — Verifier soundness under collision-freeness on the level's pre-images -/
@@ -274,14 +304,22 @@ theorem updateCommitment_agrees_with_setCell
 /-- A canonical-absent cell proof verifies against any state's
     commit at a tag where the state has no cell.  The witness is
     the state itself; the proof's value matches the canonical
-    absent marker by `isCellAbsent`. -/
+    absent marker by `isCellAbsent`.
+
+    Quantified over the `opening`: `verifyCellProof` recomputes the
+    commit from `witnessState` and never reads `proofData`, so the
+    completeness result holds for every opening — including the empty
+    one a `buildCellProof`-built proof carries.  Stating it that way
+    keeps the Lean verifier's independence from the L1 one visible in
+    the type. -/
 theorem verifyCellProof_complete_for_absent_cell
-    (es : ExtendedState) (tag : CellTag)
+    (es : ExtendedState) (tag : CellTag) (opening : ByteArray)
     (h_absent : isCellAbsent es tag) :
     verifyCellProof (commitExtendedState es)
       { cellTag := tag,
         cellValue := canonicalAbsentValue tag,
-        witnessState := es } = true := by
+        witnessState := es,
+        proofData := opening } = true := by
   unfold verifyCellProof
   -- (1) commitExtendedState witness = commit: rfl
   -- (2) getCellValue witness tag = canonicalAbsentValue tag: from h_absent

@@ -92,7 +92,7 @@ def countSorriesSeesPastCharLiteral : TestCase := {
   name := "count_sorries: a char literal containing a quote does not blank the file"
   body := do
     let survives (src : String) : Bool :=
-      let masked := String.ofList (Tools.CountSorries.maskNonCode src.toList)
+      let masked := String.ofList (Tools.maskNonCode src.toList)
       decide ((masked.splitOn "sorry").length > 1)
     -- One `'"'` literal (odd count) followed by a real `sorry`.
     if !survives "def quoteChar : Char := '\"'\ntheorem t : True := sorry\n" then
@@ -204,6 +204,50 @@ def stubAuditFindsIndentedDocstring : TestCase := {
       throw <| IO.userError "BUG: a block was reported where no docstring exists"
 }
 
+/-! ## `stub_audit` — comment masking -/
+
+/-- **The stub pattern is matched on code, not on prose — and the gate
+    still fires on real code.**
+
+    Both halves matter, and only together.  `stub_audit` used to match
+    the raw line, so a docstring EXPLAINING a placeholder (or explaining
+    that a field deliberately has no default) read as the placeholder
+    itself; the only ways out were to allowlist a comment or to not
+    write it.  Masking fixes that — and could just as easily blank the
+    gate entirely, since a mask that is too eager leaves no code to
+    match.  This asserts the two directions against each other. -/
+def stubAuditMasksCommentsButStillFires : TestCase := {
+  name := "stub_audit: masking hides prose without disarming the gate"
+  body := do
+    let masked (src : String) : String :=
+      String.ofList (Tools.maskNonCode src.toList)
+    -- (1) A placeholder written inside a docstring is NOT code.
+    let inDoc := "  /-- It carried `:= ByteArray.empty` once. -/"
+    if Tools.StubAudit.lineHasStubPattern (masked inDoc) then
+      throw <| IO.userError
+        "BUG: a placeholder expression inside a docstring matched as \
+         code — documenting a fix trips the gate for the thing fixed"
+    -- (2) ...nor is one inside a line comment.
+    let inLine := "  -- proofData := ByteArray.empty"
+    if Tools.StubAudit.lineHasStubPattern (masked inLine) then
+      throw <| IO.userError "BUG: a line comment matched as code"
+    -- (3) But the same text in CODE position still matches.  Without
+    -- this the mask could be blanking everything and (1)/(2) would
+    -- pass vacuously.
+    let inCode := "  proofData := ByteArray.empty"
+    if !Tools.StubAudit.lineHasStubPattern (masked inCode) then
+      throw <| IO.userError
+        "BUG: the gate no longer fires on a real placeholder body — \
+         masking disarmed it"
+    -- (4) A block comment spanning lines is masked throughout, not
+    -- just on its opening line.
+    let block := masked "/- opening\n  x := sorry\n-/\ndef f := 0"
+    if Tools.StubAudit.lineHasStubPattern
+        ((block.splitOn "\n").getD 1 "") then
+      throw <| IO.userError
+        "BUG: a block comment's interior lines were not masked"
+}
+
 /-! ## `api_stability_audit` — ascription detection -/
 
 /-- The unascribed API-pin shape is detected and the ascribed one is
@@ -266,6 +310,7 @@ def tests : List TestCase :=
   , namingAuditParsesAttributedDeclarations
   , namingAuditRejectsNonDeclarations
   , stubAuditFindsIndentedDocstring
+  , stubAuditMasksCommentsButStillFires
   , apiStabilityDetectsUnascribedPins
   , apiStabilityAllowlistKeyShape
   ]

@@ -263,11 +263,19 @@ require `Coherence` to import `Step` and close the cycle. -/
 
 /-- Build the full canonical cell-proof bundle for a state +
     action: one cell proof per required cell tag, all witness
-    states equal to the pre-state. -/
+    states equal to the pre-state.
+
+    Each proof carries its **SMT opening** in `proofData`
+    (`buildCellProofWithOpening`), not just the witness state.  The
+    witness state is what the Lean-side `verifyCellProof` checks
+    against; the opening is what an L1 verifier — which cannot hold an
+    `ExtendedState` — needs in order to check the same cell against the
+    published root.  Emitting both keeps the two verifiers checking one
+    bundle rather than two shapes. -/
 def buildCellProofsForAction
     (es : ExtendedState) (st : SignedAction) : CellProofBundle :=
   { proofs := (Authority.Action.requiredCells st.action st.signer).map
-                (fun t => buildCellProof es t) }
+                (fun t => buildCellProofWithOpening es t) }
 
 /-- The canonical bundle verifies against the pre-state commit. -/
 theorem buildCellProofsForAction_verifies
@@ -275,7 +283,7 @@ theorem buildCellProofsForAction_verifies
     verifyCellProofs (commitExtendedState es)
       (buildCellProofsForAction es st) = true := by
   unfold buildCellProofsForAction
-  exact verifyCellProofs_complete_for_canonical_bundle es _
+  exact verifyCellProofs_complete_for_opening_bundle es _
 
 end FaultProof
 end LegalKernel

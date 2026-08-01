@@ -234,20 +234,36 @@ def readAllowlist (path : String) : IO (List String) := do
     pure (text.splitOn "\n" |>.filter nonEmpty |>.map stripWhitespace)
 
 /-- Per-file violation scan.  Returns every line whose code matches
-    a stub pattern AND has a red-flag docstring above it. -/
+    a stub pattern AND has a red-flag docstring above it.
+
+    The stub PATTERN is matched against the comment-masked source
+    (`Tools.Common.maskNonCode`), while the docstring scan and the
+    allowlist key read the ORIGINAL lines.  Both halves need what they
+    get: a placeholder expression is only a stub when it is code, and
+    the red-flag tokens that qualify it live precisely in the comments
+    the mask blanks out.
+
+    Matching the raw line made the gate fire on prose.  Documenting a
+    removed default as `:= ByteArray.empty` inside the field's own
+    docstring — an explanation of why the field has no default — read
+    to the unmasked scanner as a field WITH that default, so writing
+    down the fix tripped the check for the thing that was fixed.  The
+    only escapes were to allowlist a docstring or to not write it. -/
 def scanFile (path : String) : IO (List Violation) := do
   match (← readFileSafe path) with
   | none      => pure []
   | some text =>
     let lines := text.splitOn "\n" |>.toArray
+    let maskedLines :=
+      (String.ofList (maskNonCode text.toList)).splitOn "\n" |>.toArray
     let mut acc : List Violation := []
-    let mut i := 0
-    for line in lines do
-      i := i + 1
-      if lineHasStubPattern line then
-        let block := docstringAbove lines i
+    for i in [0 : lines.size] do
+      let masked := if h : i < maskedLines.size then maskedLines[i] else ""
+      if lineHasStubPattern masked then
+        let block := docstringAbove lines (i + 1)
         if blockHasRedFlag block then
-          acc := { path := path, lineNo := i, rawLine := line } :: acc
+          let raw := if h : i < lines.size then lines[i] else ""
+          acc := { path := path, lineNo := i + 1, rawLine := raw } :: acc
     pure acc.reverse
 
 /-- Aggregate violations across every `.lean` file under the

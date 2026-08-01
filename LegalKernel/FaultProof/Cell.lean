@@ -251,6 +251,24 @@ structure CellProof where
   /-- The witness state from which the verifier can recompute
       the commitment and read the cell. -/
   witnessState  : ExtendedState
+  /-- The SMT opening for this cell, in the L1 wire format:
+      `bitmask(32 bytes) || siblings(N × 32 bytes)`.
+
+      **No default.**  It carried `:= ByteArray.empty` briefly, and
+      that is exactly the shape that lets an opening go missing without
+      anyone noticing: two of the cross-stack corpus's bulk builders
+      inherited the default and published proofs with no opening at
+      all, which the shape check caught and nothing else would have.
+      A field every construction site must state is a field no site can
+      forget.
+
+      Empty is still a representable value, and an honest one — it says
+      "this proof carries no opening" — but it is now a written choice
+      rather than the path of least resistance.  It is not a valid
+      opening for a populated tree (it would encode "every sibling is
+      the canonical empty sub-tree"), so it fails L1 intake rather than
+      passing with a hole. -/
+  proofData     : ByteArray
   deriving Repr
 
 /-- A bundle of cell proofs covering every cell read/written by

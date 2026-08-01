@@ -241,6 +241,31 @@ fn real_knomosis_export_cell_proofs_transfer_round_trip() {
             "cell {i} witness_commit should match cell 0 (same pre-state)",
         );
     }
+
+    // 8. Every proof carries a real SMT opening.
+    assert_openings_present(&parsed_proofs);
+}
+
+/// Every proof carries a real SMT opening.
+///
+/// The Rust deserializer already rejects a malformed one, so reaching
+/// here proves the shape; what this adds is that the REAL Lean binary
+/// emits it at all.  An `ExtendedState`-witnessed bundle is well-formed
+/// in every other respect without an opening, so a builder that stopped
+/// attaching them would look correct everywhere but here.
+fn assert_openings_present(proofs: &[CellProof]) {
+    for (i, p) in proofs.iter().enumerate() {
+        assert!(
+            !p.proof_data.is_empty(),
+            "cell {i} carries no SMT opening — the Lean builder dropped it",
+        );
+        assert_eq!(
+            p.proof_data.len() % 32,
+            0,
+            "cell {i} opening is misaligned: {} bytes",
+            p.proof_data.len(),
+        );
+    }
 }
 
 /// Idempotency check: running knomosis twice produces identical

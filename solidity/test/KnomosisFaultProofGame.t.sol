@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
 import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
+import {LogChain} from "src/lib/LogChain.sol";
 
 /// @notice A mock state-root submission contract used by the
 ///         game test.  Implements the dispute-locking, bond-
@@ -39,17 +40,31 @@ contract MockStateRootSubmissionForGame {
         deploymentId = id;
     }
 
+    /// @notice Seed a root, computing its chain value the way the real
+    ///         registry does.
+    ///
+    /// @dev    `expectedNextHash` used to be seeded as zero, which made
+    ///         the mock a stub for exactly the field
+    ///         `terminateOnSingleStep` now authenticates against — a
+    ///         test using it would have proved the binding could not be
+    ///         satisfied rather than that it works.  Computing it here
+    ///         means a seeded root is chain-coherent by construction and
+    ///         the only way to reach terminate is to name the bound
+    ///         action.
     function seedRoot(
         uint64 logIndex,
         address sequencer,
         bytes32 stateCommit,
-        uint128 bond
+        uint128 bond,
+        bytes32 prevLogEntryHash,
+        bytes32 actionCommit
     ) external payable {
         roots[logIndex] = RootRecord({
             sequencer: sequencer,
             stateCommit: stateCommit,
-            prevLogEntryHash: bytes32(0),
-            expectedNextHash: bytes32(0),
+            prevLogEntryHash: prevLogEntryHash,
+            expectedNextHash: LogChain.nextEntryHash(
+                prevLogEntryHash, stateCommit, actionCommit),
             bond: bond,
             submittedAtBlock: uint64(block.number),
             finalised: false,
@@ -140,14 +155,14 @@ contract KnomosisFaultProofGameTest is Test {
         // Index 0 is the agreed `low` anchor every challenge references
         // (lowLogIndex = 0, lowCommit = LOW_ROOT); the low-anchor fix
         // requires `lowCommit` to match this submitted root.
-        mockStateRootSubmission.seedRoot(0, sequencer, LOW_ROOT, STATE_ROOT_BOND);
-        mockStateRootSubmission.seedRoot(10, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND);
-        mockStateRootSubmission.seedRoot(11, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND);
-        mockStateRootSubmission.seedRoot(12, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND);
-        mockStateRootSubmission.seedRoot(64, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND);
-        mockStateRootSubmission.seedRoot(65, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND);
-        mockStateRootSubmission.seedRoot(66, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND);
-        mockStateRootSubmission.seedRoot(67, sequencer, DISPUTED_ROOT, STATE_ROOT_BOND);
+        _seedUnboundRoot(0, LOW_ROOT);
+        _seedUnboundRoot(10, DISPUTED_ROOT);
+        _seedUnboundRoot(11, DISPUTED_ROOT);
+        _seedUnboundRoot(12, DISPUTED_ROOT);
+        _seedUnboundRoot(64, DISPUTED_ROOT);
+        _seedUnboundRoot(65, DISPUTED_ROOT);
+        _seedUnboundRoot(66, DISPUTED_ROOT);
+        _seedUnboundRoot(67, DISPUTED_ROOT);
 
         game = new KnomosisFaultProofGame(
             BISECTION_TIMEOUT,
@@ -159,6 +174,38 @@ contract KnomosisFaultProofGameTest is Test {
         );
         vm.deal(challenger, 100 ether);
         vm.deal(sequencer, 100 ether);
+    }
+
+    /// @notice Seed a root with no action bound to it.
+    ///
+    /// @dev    For indices the test never TERMINATES on — challenge,
+    ///         bisection, and timeout paths only read the sequencer,
+    ///         the commit, and the bond.  A terminate against one of
+    ///         these reverts `ActionNotInLogChain`, which is the
+    ///         correct outcome for a root whose action was never
+    ///         published, and is asserted directly by
+    ///         `test_terminate_rejects_an_action_absent_from_the_chain`.
+    function _seedUnboundRoot(uint64 logIndex, bytes32 commit) internal {
+        mockStateRootSubmission.seedRoot(
+            logIndex, sequencer, commit, STATE_ROOT_BOND, bytes32(0), bytes32(0));
+    }
+
+    /// @notice Seed a root and bind the action that produced it, the
+    ///         way a real `submitStateRoot` would.
+    function _seedRootForAction(
+        uint64 logIndex,
+        bytes32 commit,
+        uint8 actionKind,
+        uint64 signer,
+        bytes memory actionFields
+    ) internal {
+        mockStateRootSubmission.seedRoot(
+            logIndex,
+            sequencer,
+            commit,
+            STATE_ROOT_BOND,
+            bytes32(0),
+            LogChain.actionCommitMemory(actionKind, signer, actionFields));
     }
 
     /* -------- Constructor -------- */
@@ -394,6 +441,18 @@ contract KnomosisFaultProofGameTest is Test {
         return result;
     }
 
+    /// @notice A well-formed but minimal SMT opening: a 32-byte
+    ///         all-zero bitmask and no siblings.
+    ///
+    /// @dev    Not a filler value — it is the exact opening of a cell in
+    ///         an otherwise-empty tree, where every level's sibling is
+    ///         the canonical empty sub-tree.  `executeStep` shape-checks
+    ///         `proofData` at intake, so a helper returning `""` would
+    ///         make every caller revert.
+    function _defaultProofData() internal pure returns (bytes memory) {
+        return new bytes(32);
+    }
+
     function _makeCellProof(
         uint8 cellKind,
         uint256 keyA,
@@ -401,12 +460,25 @@ contract KnomosisFaultProofGameTest is Test {
         bytes memory cellValue,
         bytes32 witnessCommit
     ) internal pure returns (KnomosisStepVM.CellProof memory) {
+        return _makeCellProofWithOpening(
+            cellKind, keyA, keyB, cellValue, witnessCommit, _defaultProofData());
+    }
+
+    function _makeCellProofWithOpening(
+        uint8 cellKind,
+        uint256 keyA,
+        uint256 keyB,
+        bytes memory cellValue,
+        bytes32 witnessCommit,
+        bytes memory proofData
+    ) internal pure returns (KnomosisStepVM.CellProof memory) {
         return KnomosisStepVM.CellProof({
             cellKind: cellKind,
             keyA: keyA,
             keyB: keyB,
             cellValue: cellValue,
-            witnessCommit: witnessCommit
+            witnessCommit: witnessCommit,
+            proofData: proofData
         });
     }
 
@@ -442,7 +514,7 @@ contract KnomosisFaultProofGameTest is Test {
 
         // Seed a single-step disputed root at index 1 committing to the
         // honest post-state, sequenced by `sequencer`.
-        mockStateRootSubmission.seedRoot(1, sequencer, honestPost, STATE_ROOT_BOND);
+        _seedRootForAction(1, honestPost, kind, stepSigner, actionFields);
 
         // Challenger disputes with a WRONG commit (!= honestPost) and the
         // correctly-anchored low (LOW_ROOT at index 0).  Range = 1 step.
@@ -477,6 +549,120 @@ contract KnomosisFaultProofGameTest is Test {
             "sequencer win must clear (not slash) the disputed root");
     }
 
+    /// @notice **The terminal step adjudicates the action the L2
+    ///         published, not one the responding party picks.**
+    ///
+    ///         Before the log-chain binding, `terminateOnSingleStep`
+    ///         executed whatever `(actionKind, actionFields, signer)`
+    ///         it was handed and compared the result to `g.high.commit`.
+    ///         Nothing on L1 recorded which action carried the pre-root
+    ///         to the disputed root, so a party about to lose could
+    ///         search for a DIFFERENT action whose step happens to
+    ///         reproduce the disputed root and settle in its favour on
+    ///         a step that never ran.
+    ///
+    ///         Here the sequencer publishes root 1 bound to a transfer
+    ///         of 5, then tries to terminate naming a transfer of 7.
+    ///         The chain check rejects it before the step VM runs.
+    function test_terminate_rejects_a_substituted_action() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
+        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
+        uint8 kind = 0;
+        uint64 stepSigner = 10;
+        bytes memory boundFields =
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
+        bytes memory substitutedFields =
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(7));
+
+        bytes32 honestPost =
+            stepVM.executeStep(LOW_ROOT, kind, boundFields, stepSigner, proofs);
+        _seedRootForAction(1, honestPost, kind, stepSigner, boundFields);
+
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        game.terminateOnSingleStep(
+            gameId, kind, substitutedFields, stepSigner, proofs);
+
+        // ...and the bound action still terminates, so the rejection is
+        // the substitution and not the binding refusing everything.
+        vm.prank(sequencer);
+        game.terminateOnSingleStep(gameId, kind, boundFields, stepSigner, proofs);
+        (, , , , , , , , , , ,
+         KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
+        assertEq(uint8(status), uint8(KnomosisFaultProofGame.GameStatus.SequencerWon),
+            "the BOUND action must still win the game");
+    }
+
+    /// @notice The signer is bound too, not just the fields.  A step
+    ///         signed by a different actor is a different step, and the
+    ///         commitment covers all three components.
+    function test_terminate_rejects_a_substituted_signer() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
+        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
+        bytes memory actionFields =
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
+        bytes32 honestPost = stepVM.executeStep(LOW_ROOT, 0, actionFields, 10, proofs);
+        _seedRootForAction(1, honestPost, 0, 10, actionFields);
+
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        game.terminateOnSingleStep(gameId, 0, actionFields, 11, proofs);
+    }
+
+    /// @notice The action KIND is bound: naming a different variant
+    ///         over the same field bytes is rejected.
+    function test_terminate_rejects_a_substituted_action_kind() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
+        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
+        bytes memory actionFields =
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
+        bytes32 honestPost = stepVM.executeStep(LOW_ROOT, 0, actionFields, 10, proofs);
+        _seedRootForAction(1, honestPost, 0, 10, actionFields);
+
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        game.terminateOnSingleStep(gameId, 1 /* Mint */, actionFields, 10, proofs);
+    }
+
+    /// @notice A root published with NO action bound to it cannot be
+    ///         terminated on at all.  This is the pre-binding world
+    ///         made explicit: an unbound root is one whose action the
+    ///         L1 never recorded, and the game refuses to adjudicate a
+    ///         step it cannot authenticate rather than executing a
+    ///         caller-chosen one.
+    function test_terminate_rejects_an_action_absent_from_the_chain() public {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
+        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
+        bytes memory actionFields =
+            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
+        bytes32 honestPost = stepVM.executeStep(LOW_ROOT, 0, actionFields, 10, proofs);
+        _seedUnboundRoot(1, honestPost);
+
+        vm.prank(challenger);
+        uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
+            1, bytes32(uint256(0xC1)), LOW_ROOT, 0);
+
+        vm.prank(sequencer);
+        vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
+        game.terminateOnSingleStep(gameId, 0, actionFields, 10, proofs);
+    }
+
     /// @notice Companion to the above: an honest CHALLENGER wins the
     ///         single-step termination when the sequencer's committed
     ///         `high` does NOT match the real step from the anchored
@@ -492,7 +678,7 @@ contract KnomosisFaultProofGameTest is Test {
         // Seed the disputed root with a FABRICATED high (!= the honest
         // step output) — i.e. the sequencer published an invalid root.
         bytes32 fakeHigh = bytes32(uint256(0xF00D));
-        mockStateRootSubmission.seedRoot(1, sequencer, fakeHigh, STATE_ROOT_BOND);
+        _seedRootForAction(1, fakeHigh, 0, 10, actionFields);
 
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
@@ -554,9 +740,14 @@ contract KnomosisFaultProofGameTest is Test {
             balTo += 5;
         }
 
-        // The sequencer honestly published commits[4] at log index 4.
-        mockStateRootSubmission.seedRoot(
-            4, sequencer, commits[4], STATE_ROOT_BOND);
+        // The sequencer honestly published each commit at its log index,
+        // binding the transfer that produced it.  Index 1 matters as
+        // much as index 4: after two disagreeing bisection rounds the
+        // terminal range is [0, 1], so the action authenticated at
+        // terminate time is the one bound to root 1.
+        for (uint64 i = 1; i <= 4; i++) {
+            _seedRootForAction(i, commits[i], kind, stepSigner, actionFields);
+        }
 
         // Challenger opens a 4-step dispute with a WRONG claim.
         vm.prank(challenger);

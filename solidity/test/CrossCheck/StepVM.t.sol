@@ -3,6 +3,7 @@ pragma solidity 0.8.20;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
 import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
+import {LogChain} from "src/lib/LogChain.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
@@ -369,7 +370,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///      have witnessCommitHex matching the fixture's
     ///      preStateCommitHex.  Extracted to keep the outer
     ///      driver's stack shallow.
-    function _assertWitnessBinding(string memory raw, string memory base) internal pure {
+    function _assertWitnessBinding(string memory raw, string memory base) internal view {
         string memory preStateHex =
             vm.parseJsonString(raw, string.concat(base, ".preStateCommitHex"));
         uint256 nProofs = vm.parseJsonUint(raw, string.concat(base, ".cellProofsCount"));
@@ -379,6 +380,56 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 vm.parseJsonString(raw, string.concat(cpBase, ".witnessCommitHex")),
                 preStateHex,
                 string.concat("witnessCommitHex != preStateCommitHex for ", cpBase)
+            );
+            // Every corpus entry must also carry an opening the L1
+            // would accept.  `executeStep` shape-checks `proofData` at
+            // intake, so a corpus entry that failed this would be one
+            // the contract rejects — a fixture proving nothing.
+            bytes memory pd = vm.parseJsonBytes(raw, string.concat(cpBase, ".proofDataHex"));
+            assertTrue(pd.length > 0, string.concat("empty proofData for ", cpBase));
+            assertEq(pd.length % 32, 0, string.concat("misaligned proofData for ", cpBase));
+            assertLe(
+                pd.length,
+                stepVM.MAX_PROOF_DATA_BYTES(),
+                string.concat("oversize proofData for ", cpBase)
+            );
+        }
+    }
+
+    /// @notice **The log-chain action commitment is byte-identical
+    ///         across the stacks.**
+    ///
+    ///         `KnomosisStateRootSubmission` binds this value when the
+    ///         sequencer publishes a root and
+    ///         `KnomosisFaultProofGame.terminateOnSingleStep`
+    ///         re-derives it from the action it is handed, so a
+    ///         one-byte disagreement between the Lean encoder and the
+    ///         Solidity one makes every honest terminate revert
+    ///         `ActionNotInLogChain` — a liveness failure that looks
+    ///         exactly like a malicious submission.  The corpus is
+    ///         where that is caught.
+    function test_perEntry_actionCommit_matches_lean() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
+        uint256 n = vm.parseJsonUint(raw, ".count");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = string.concat(".entries[", vm.toString(i), "]");
+            bytes32 expected =
+                vm.parseJsonBytes32(raw, string.concat(base, ".expectedActionCommitHex"));
+            uint8 kind =
+                uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte")));
+            uint64 signer =
+                uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat")));
+            bytes memory fields =
+                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
+            assertEq(
+                LogChain.actionCommitMemory(kind, signer, fields),
+                expected,
+                string.concat("actionCommit mismatch at ", base)
             );
         }
     }
@@ -469,9 +520,16 @@ contract StepVMCrossCheck is CrossCheckFramework {
     }
 
     /// @dev SVC.5.e+ — parser for one cell-proof JSON entry.
-    ///      Builds a `KnomosisStepVM.CellProof` from the 5 fields
+    ///      Builds a `KnomosisStepVM.CellProof` from the 6 fields
     ///      at the given JSON base path.  Uses an in-place
     ///      struct initialization to keep stack pressure low.
+    ///
+    ///      `proofDataHex` is the cell's SMT opening against the
+    ///      pre-state root.  It is parsed — not defaulted — because
+    ///      the corpus is where the two stacks agree on the consensus
+    ///      encoding: substituting a synthetic opening here would make
+    ///      every entry pass while proving nothing about the bytes
+    ///      Lean emits.
     function _parseCellProof(string memory raw, string memory base)
         internal
         pure
@@ -482,6 +540,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
         cp.keyB = vm.parseJsonUint(raw, string.concat(base, ".keyB"));
         cp.cellValue = vm.parseJsonBytes(raw, string.concat(base, ".cellValueHex"));
         cp.witnessCommit = vm.parseJsonBytes32(raw, string.concat(base, ".witnessCommitHex"));
+        cp.proofData = vm.parseJsonBytes(raw, string.concat(base, ".proofDataHex"));
     }
 
     /// @dev SVC.5.e+ — parser for an entire fixture's

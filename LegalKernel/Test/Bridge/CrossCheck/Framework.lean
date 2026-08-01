@@ -176,6 +176,38 @@ def hexFromBytes (bs : ByteArray) : String :=
   -- Iterate via foldl over data: concise, terminates trivially.
   "0x" ++ bs.toList.foldl (fun acc b => acc ++ hexFromUInt8 b) ""
 
+/-- The nibble value of a hex character, or `none` if it is not one. -/
+def nibbleFromHex (c : Char) : Option Nat :=
+  if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat)
+  else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
+  else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
+  else none
+
+/-- Decode a `0x`-prefixed hex string back to bytes — the inverse of
+    `hexFromBytes`.
+
+    The framework had an encoder and no decoder, which forced anything
+    that wanted to re-derive a value from a published fixture field to
+    either re-spell the producing computation (and drift from it) or
+    carry the raw bytes alongside the hex.  Both are worse than the
+    inverse.
+
+    Returns `none` on a missing prefix, an odd digit count, or a
+    non-hex character — a corpus field that does not decode is a corpus
+    bug, so the failure is surfaced rather than absorbed. -/
+def bytesFromHex (s : String) : Option ByteArray :=
+  if !s.startsWith "0x" then none
+  else
+    let digits := s.toList.drop 2
+    let rec loop : List Char → List UInt8 → Option (List UInt8)
+      | [], acc => some acc.reverse
+      | [_], _ => none          -- odd digit count
+      | hi :: lo :: rest, acc =>
+        match nibbleFromHex hi, nibbleFromHex lo with
+        | some h, some l => loop rest (UInt8.ofNat (h * 16 + l) :: acc)
+        | _, _ => none
+    (loop digits []).map (fun bs => ByteArray.mk bs.toArray)
+
 /-- Encode a `Nat` as a 32-byte big-endian hex string (256-bit
     uint).  Required for fixture compatibility with EVM's `bytes32`
     and `uint256`. -/

@@ -3,6 +3,7 @@ pragma solidity 0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
+import {LogChain} from "src/lib/LogChain.sol";
 
 /// @title KnomosisStateRootSubmissionTest
 /// @notice Forge tests for the state-root submission registry
@@ -15,6 +16,12 @@ contract KnomosisStateRootSubmissionTest is Test {
     address private stranger = address(0xDEAD);
 
     bytes32 private constant DEPLOYMENT_ID = bytes32(uint256(0xCAFE));
+    /// An arbitrary but FIXED action commitment.  The registry treats
+    /// it opaquely — it folds the value into the chain and never
+    /// interprets it — so these tests need one stable value, not a
+    /// realistic one.  `KnomosisFaultProofGame.t.sol` is where a real
+    /// `LogChain.actionCommit` is exercised end-to-end.
+    bytes32 private constant ACTION_COMMIT = bytes32(uint256(0xAC7104));
     uint128 private constant BOND = 1 ether;
     uint64  private constant DISPUTE_WINDOW = 100;
     uint64  private constant MIN_INTERVAL = 10;
@@ -115,7 +122,7 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_submitStateRoot_first_index_succeeds() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         // Verify the record was stored.
         (address seq, bytes32 commit, , , uint128 bond, uint64 atBlock, , )
           = registry.roots(0);
@@ -130,49 +137,50 @@ contract KnomosisStateRootSubmissionTest is Test {
         vm.deal(stranger, 100 ether);
         vm.expectRevert(KnomosisStateRootSubmission.NotSequencer.selector);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_rejects_wrong_bond() public {
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.InvalidBond.selector);
         registry.submitStateRoot{value: BOND - 1}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_rejects_duplicate_index() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         vm.roll(block.number + MIN_INTERVAL + 1);
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.AlreadyClaimed.selector);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xBBB)), bytes32(0));
+            0, bytes32(uint256(0xBBB)), bytes32(0), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_enforces_rate_limit() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         // Try to submit a second root immediately.
         vm.prank(sequencer);
         vm.expectRevert(KnomosisStateRootSubmission.SubmissionTooFrequent.selector);
         registry.submitStateRoot{value: BOND}(
             1, bytes32(uint256(0xBBB)),
-            keccak256(abi.encode(bytes32(0), bytes32(uint256(0xAAA)))));
+            LogChain.nextEntryHash(bytes32(0), bytes32(uint256(0xAAA)), ACTION_COMMIT),
+            ACTION_COMMIT);
     }
 
     function test_submitStateRoot_hash_chain_break_rejected() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         vm.roll(block.number + MIN_INTERVAL + 1);
         vm.prank(sequencer);
         // Submit at idx 1 with WRONG prevLogEntryHash.
         vm.expectRevert(KnomosisStateRootSubmission.HashChainBroken.selector);
         registry.submitStateRoot{value: BOND}(
-            1, bytes32(uint256(0xBBB)), bytes32(uint256(0xDEAD0FF)));
+            1, bytes32(uint256(0xBBB)), bytes32(uint256(0xDEAD0FF)), ACTION_COMMIT);
     }
 
     function test_submitStateRoot_rejects_idx1_without_idx0() public {
@@ -180,7 +188,7 @@ contract KnomosisStateRootSubmissionTest is Test {
         // Submit at idx 1 without idx 0 first.
         vm.expectRevert(KnomosisStateRootSubmission.PreviousRootMissing.selector);
         registry.submitStateRoot{value: BOND}(
-            1, bytes32(uint256(0xBBB)), bytes32(0));
+            1, bytes32(uint256(0xBBB)), bytes32(0), ACTION_COMMIT);
     }
 
     /* -------- finaliseStateRoot -------- */
@@ -188,7 +196,7 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_finaliseStateRoot_after_dispute_window_succeeds() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         vm.roll(block.number + DISPUTE_WINDOW + 1);
 
         uint256 bondBefore = sequencer.balance;
@@ -202,7 +210,7 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_finaliseStateRoot_rejects_within_window() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         vm.expectRevert(KnomosisStateRootSubmission.NotYetFinalisable.selector);
         registry.finaliseStateRoot(0);
     }
@@ -210,7 +218,7 @@ contract KnomosisStateRootSubmissionTest is Test {
     function test_finaliseStateRoot_double_call_rejected() public {
         vm.prank(sequencer);
         registry.submitStateRoot{value: BOND}(
-            0, bytes32(uint256(0xAAA)), bytes32(0));
+            0, bytes32(uint256(0xAAA)), bytes32(0), ACTION_COMMIT);
         vm.roll(block.number + DISPUTE_WINDOW + 1);
         registry.finaliseStateRoot(0);
         vm.expectRevert(KnomosisStateRootSubmission.AlreadyFinalised.selector);
@@ -294,7 +302,7 @@ contract KnomosisStateRootSubmissionTest is Test {
             vm.roll(block.number + MIN_INTERVAL + 1);
             vm.prank(sequencer);
             registry.submitStateRoot{value: BOND}(
-                i, bytes32(uint256(0xAAA) + i), nextHash);
+                i, bytes32(uint256(0xAAA) + i), nextHash, ACTION_COMMIT);
             (, , , bytes32 expectedNext, , , , ) = registry.roots(i);
             nextHash = expectedNext;
         }

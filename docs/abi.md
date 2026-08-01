@@ -2810,7 +2810,21 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStateRootSubmission`:
 
-  * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash)` payable
+  * `submitStateRoot(uint64 logIndex, bytes32 stateCommit, bytes32 prevLogEntryHash, bytes32 actionCommit)` payable
+    — `actionCommit` is `LogChain.actionCommit(actionKind, signer,
+    actionFields)`, i.e.
+    `keccak256(abi.encodePacked(uint8 actionKind, uint64 signer, bytes actionFields))`,
+    over the action that carried `logIndex - 1` to `logIndex`.  The
+    stored chain value becomes
+    `keccak256(abi.encode(prevLogEntryHash, stateCommit, actionCommit))`.
+    Binding the action here is what lets
+    `terminateOnSingleStep` authenticate the step it is asked to
+    adjudicate; the state-roots-only chain it replaced recorded no
+    action at all, so the terminal step executed whatever the
+    responding party supplied.  Lean mirror:
+    `LegalKernel.FaultProof.StepVMCoherence.l1ActionCommit` /
+    `l1NextEntryHash`; pinned per-entry by `step_vm.json`'s
+    `expectedActionCommitHex`.
   * `finaliseStateRoot(uint64 logIndex)`
   * `revertStateRootsFrom(uint64 fromIdx)` (called by game)
   * `isStateRootReverted(uint64 logIndex) view returns (bool)`
@@ -2826,12 +2840,34 @@ All contracts immutable per Workstream-E §20 discipline.
     `g.high.commit`, so the claim is not the caller's to make.  (An
     earlier draft of this line documented a third, non-existent form;
     the Rust observer had been built against it and its calldata could
-    not be dispatched.)
+    not be dispatched.)  The `(actionKind, actionFields, signer)`
+    triple is authenticated against the log-entry chain at
+    `g.high.idx` before dispatch — reverts `ActionNotInLogChain` if it
+    is not the action the sequencer bound when it published that root.
   * `claimTimeout(uint256 gameId)`
 
 `KnomosisStepVM`:
 
   * `executeStep(bytes32 preStateCommit, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs) pure returns (bytes32 postStateCommit)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`.
+
+  `CellProof` is the ABI tuple
+  `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes cellValue, bytes32 witnessCommit, bytes proofData)`.
+
+  * `cellValue` — the CBE-encoded cell value.
+  * `witnessCommit` — `commitExtendedState` of the state the value was
+    read from; must equal `preStateCommit`.
+  * `proofData` — the cell's SMT opening against that root: a 32-byte
+    bitmask followed by one 32-byte sibling per set bit, in depth
+    order (Lean `SmtCellProof.toWireBytes`).  Shape-validated at
+    intake — a nonzero multiple of 32, at most
+    `MAX_PROOF_DATA_BYTES = 32 * (1 + 256)` — and rejected with
+    `MalformedProofData(length)` otherwise.  It is what an L1 verifier
+    holding nothing but the 32-byte root can check; `witnessCommit`
+    can only be recomputed by a party holding the whole
+    `ExtendedState`.  The JSON wire form (`knomosis
+    export-cell-proofs`, the Rust observer's `CellProof`) spells it
+    `proof_data`, lowercase hex without the `0x` prefix; the
+    cross-stack corpus spells it `proofDataHex`, `0x`-prefixed.
 
 `KnomosisDisputeVerifierV2`:
 

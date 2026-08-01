@@ -1841,6 +1841,7 @@ mod terminate_bundle_tests {
             key_b: 0,
             cell_value: vec![],
             witness_commit: [0; 32],
+            proof_data: vec![0u8; 32],
         };
         let proofs: Vec<CellProof> = (0..=super::MAX_TERMINATE_BUNDLE_CELL_PROOFS)
             .map(|_| proof.clone())

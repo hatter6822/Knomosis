@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "bd75a7e85c3f3a8bf477166b3fa11bc8e93d94ec17f0ad3d0f1e3e5e98e319ed"
+    "source_digest": "bdabcf6b33ac9ce070bccc67c25fbac61db49fbab06d255fd81881836a2d1823"
   },
   "summary": {
     "module_count": 91,
-    "declaration_count": 2007
+    "declaration_count": 2029
   },
   "modules": [
     {
@@ -2071,42 +2071,42 @@
     {
       "module": "KnomosisFaultProofGame",
       "path": "solidity/src/contracts/KnomosisFaultProofGame.sol",
-      "declaration_count": 45,
+      "declaration_count": 47,
       "declarations": [
         {
           "kind": "interface",
           "name": "IStateRootSubmission",
-          "line": 19,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "markDisputed",
-          "line": 20,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "clearDisputed",
           "line": 21,
           "called": []
         },
         {
           "kind": "function",
-          "name": "slashSequencerBond",
+          "name": "markDisputed",
           "line": 22,
           "called": []
         },
         {
           "kind": "function",
-          "name": "revertStateRootsFrom",
+          "name": "clearDisputed",
           "line": 23,
           "called": []
         },
         {
           "kind": "function",
+          "name": "slashSequencerBond",
+          "line": 24,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "revertStateRootsFrom",
+          "line": 25,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "roots",
-          "line": 28,
+          "line": 30,
           "called": [
             "sequencer"
           ]
@@ -2114,13 +2114,13 @@
         {
           "kind": "function",
           "name": "deploymentId",
-          "line": 41,
+          "line": 43,
           "called": []
         },
         {
           "kind": "contract",
           "name": "KnomosisFaultProofGame",
-          "line": 51,
+          "line": 53,
           "called": [
             "KnomosisStepVM"
           ]
@@ -2128,25 +2128,25 @@
         {
           "kind": "struct",
           "name": "Claim",
-          "line": 86,
+          "line": 88,
           "called": []
         },
         {
           "kind": "enum",
           "name": "TurnSide",
-          "line": 91,
+          "line": 93,
           "called": []
         },
         {
           "kind": "enum",
           "name": "GameStatus",
-          "line": 92,
+          "line": 94,
           "called": []
         },
         {
           "kind": "struct",
           "name": "Game",
-          "line": 100,
+          "line": 102,
           "called": [
             "Claim",
             "GameStatus",
@@ -2159,25 +2159,25 @@
         {
           "kind": "event",
           "name": "FaultProofGameOpened",
-          "line": 140,
+          "line": 142,
           "called": []
         },
         {
           "kind": "event",
           "name": "BisectionMidpointSubmitted",
-          "line": 147,
+          "line": 149,
           "called": []
         },
         {
           "kind": "event",
           "name": "BisectionResponseSubmitted",
-          "line": 154,
+          "line": 156,
           "called": []
         },
         {
           "kind": "event",
           "name": "FaultProofGameSettled",
-          "line": 160,
+          "line": 162,
           "called": [
             "GameStatus"
           ]
@@ -2185,121 +2185,127 @@
         {
           "kind": "error",
           "name": "ZeroAddress",
-          "line": 171,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "InsufficientBond",
-          "line": 172,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "WrongTurn",
           "line": 173,
           "called": []
         },
         {
           "kind": "error",
-          "name": "TurnDeadlineExpired",
+          "name": "InsufficientBond",
           "line": 174,
           "called": []
         },
         {
           "kind": "error",
-          "name": "NoPendingMidpoint",
+          "name": "WrongTurn",
           "line": 175,
           "called": []
         },
         {
           "kind": "error",
-          "name": "MidpointAlreadyPending",
+          "name": "TurnDeadlineExpired",
           "line": 176,
           "called": []
         },
         {
           "kind": "error",
-          "name": "MidpointOutOfRange",
+          "name": "NoPendingMidpoint",
           "line": 177,
           "called": []
         },
         {
           "kind": "error",
-          "name": "RangeNotSingleStep",
+          "name": "MidpointAlreadyPending",
           "line": 178,
           "called": []
         },
         {
           "kind": "error",
-          "name": "GameAlreadyEnded",
+          "name": "MidpointOutOfRange",
           "line": 179,
           "called": []
         },
         {
           "kind": "error",
-          "name": "NotResponsible",
+          "name": "RangeNotSingleStep",
           "line": 180,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BondTransferFailed",
+          "name": "GameAlreadyEnded",
           "line": 181,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BisectionStepTooFast",
+          "name": "NotResponsible",
           "line": 182,
           "called": []
         },
         {
           "kind": "error",
-          "name": "GameAlreadyExists",
+          "name": "BondTransferFailed",
           "line": 183,
           "called": []
         },
         {
           "kind": "error",
-          "name": "DepthCapExceeded",
+          "name": "BisectionStepTooFast",
           "line": 184,
           "called": []
         },
         {
           "kind": "error",
+          "name": "GameAlreadyExists",
+          "line": 185,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DepthCapExceeded",
+          "line": 186,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "LowRootNotSubmitted",
-          "line": 188,
+          "line": 190,
           "called": []
         },
         {
           "kind": "error",
           "name": "LowCommitMismatch",
-          "line": 194,
+          "line": 196,
           "called": []
         },
         {
           "kind": "error",
           "name": "InvalidTimeoutConfig",
-          "line": 199,
+          "line": 201,
           "called": []
         },
         {
           "kind": "error",
           "name": "NothingToWithdraw",
-          "line": 202,
+          "line": 204,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ActionNotInLogChain",
+          "line": 215,
           "called": []
         },
         {
           "kind": "error",
           "name": "InvalidBondConfig",
-          "line": 208,
+          "line": 221,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 214,
+          "line": 227,
           "called": [
             "InvalidBondConfig",
             "InvalidTimeoutConfig",
@@ -2310,7 +2316,7 @@
         {
           "kind": "function",
           "name": "initiateChallenge",
-          "line": 274,
+          "line": 287,
           "called": [
             "Claim",
             "FaultProofGameOpened",
@@ -2328,7 +2334,7 @@
         {
           "kind": "function",
           "name": "submitMidpoint",
-          "line": 377,
+          "line": 390,
           "called": [
             "BisectionMidpointSubmitted",
             "BisectionStepTooFast",
@@ -2344,7 +2350,7 @@
         {
           "kind": "function",
           "name": "respondToMidpoint",
-          "line": 412,
+          "line": 425,
           "called": [
             "BisectionResponseSubmitted",
             "BisectionStepTooFast",
@@ -2359,20 +2365,31 @@
         {
           "kind": "function",
           "name": "terminateOnSingleStep",
-          "line": 451,
+          "line": 464,
           "called": [
             "Game",
             "GameAlreadyEnded",
             "MidpointAlreadyPending",
             "NotResponsible",
             "RangeNotSingleStep",
+            "_requireActionInLogChain",
             "_settle"
           ]
         },
         {
           "kind": "function",
+          "name": "_requireActionInLogChain",
+          "line": 522,
+          "called": [
+            "ActionNotInLogChain",
+            "IStateRootSubmission",
+            "roots"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "claimTimeout",
-          "line": 491,
+          "line": 551,
           "called": [
             "Game",
             "GameAlreadyEnded",
@@ -2383,7 +2400,7 @@
         {
           "kind": "function",
           "name": "_settle",
-          "line": 508,
+          "line": 568,
           "called": [
             "FaultProofGameSettled",
             "Game",
@@ -2397,7 +2414,7 @@
         {
           "kind": "function",
           "name": "withdraw",
-          "line": 648,
+          "line": 708,
           "called": [
             "BondTransferFailed",
             "NothingToWithdraw"
@@ -2406,13 +2423,13 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 662,
+          "line": 722,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 668,
+          "line": 728,
           "called": []
         }
       ]
@@ -3047,7 +3064,7 @@
         {
           "kind": "contract",
           "name": "KnomosisStateRootSubmission",
-          "line": 29,
+          "line": 37,
           "called": [
             "deploymentId",
             "sequencer"
@@ -3056,7 +3073,7 @@
         {
           "kind": "struct",
           "name": "SubmittedRoot",
-          "line": 59,
+          "line": 67,
           "called": [
             "roots",
             "sequencer"
@@ -3065,7 +3082,7 @@
         {
           "kind": "event",
           "name": "StateRootSubmitted",
-          "line": 116,
+          "line": 124,
           "called": [
             "sequencer"
           ]
@@ -3073,7 +3090,7 @@
         {
           "kind": "event",
           "name": "StateRootFinalised",
-          "line": 122,
+          "line": 130,
           "called": [
             "sequencer"
           ]
@@ -3081,13 +3098,13 @@
         {
           "kind": "event",
           "name": "StateRootRangeReverted",
-          "line": 127,
+          "line": 135,
           "called": []
         },
         {
           "kind": "event",
           "name": "StateRootDisputed",
-          "line": 135,
+          "line": 143,
           "called": [
             "sequencer"
           ]
@@ -3095,7 +3112,7 @@
         {
           "kind": "event",
           "name": "SequencerBondSlashed",
-          "line": 143,
+          "line": 151,
           "called": [
             "sequencer"
           ]
@@ -3103,121 +3120,121 @@
         {
           "kind": "error",
           "name": "NotSequencer",
-          "line": 154,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "NotFaultProofGame",
-          "line": 155,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "SubmissionTooFrequent",
-          "line": 156,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "TooManyOutstandingRoots",
-          "line": 157,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AlreadyClaimed",
-          "line": 158,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "InvalidBond",
-          "line": 159,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "HashChainBroken",
-          "line": 160,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "RootMissing",
-          "line": 161,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AlreadyDisputed",
           "line": 162,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AlreadySlashed",
+          "name": "NotFaultProofGame",
           "line": 163,
           "called": []
         },
         {
           "kind": "error",
-          "name": "BondAlreadyZero",
+          "name": "SubmissionTooFrequent",
           "line": 164,
           "called": []
         },
         {
           "kind": "error",
-          "name": "SlashTransferFailed",
+          "name": "TooManyOutstandingRoots",
           "line": 165,
           "called": []
         },
         {
           "kind": "error",
-          "name": "PreviousRootMissing",
+          "name": "AlreadyClaimed",
           "line": 166,
           "called": []
         },
         {
           "kind": "error",
-          "name": "NotYetFinalisable",
+          "name": "InvalidBond",
           "line": 167,
           "called": []
         },
         {
           "kind": "error",
-          "name": "AlreadyFinalised",
+          "name": "HashChainBroken",
           "line": 168,
           "called": []
         },
         {
           "kind": "error",
-          "name": "DisputeInProgress",
+          "name": "RootMissing",
           "line": 169,
           "called": []
         },
         {
           "kind": "error",
-          "name": "ZeroAddress",
+          "name": "AlreadyDisputed",
           "line": 170,
           "called": []
         },
         {
           "kind": "error",
-          "name": "WindowTooShort",
+          "name": "AlreadySlashed",
           "line": 171,
           "called": []
         },
         {
           "kind": "error",
-          "name": "SequencerIsFaultProofGame",
+          "name": "BondAlreadyZero",
+          "line": 172,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SlashTransferFailed",
+          "line": 173,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PreviousRootMissing",
+          "line": 174,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "NotYetFinalisable",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AlreadyFinalised",
           "line": 176,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "DisputeInProgress",
+          "line": 177,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ZeroAddress",
+          "line": 178,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WindowTooShort",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SequencerIsFaultProofGame",
+          "line": 184,
           "called": []
         },
         {
           "kind": "constructor",
           "name": "constructor",
-          "line": 182,
+          "line": 190,
           "called": [
             "InvalidBond",
             "SequencerIsFaultProofGame",
@@ -3232,7 +3249,7 @@
         {
           "kind": "function",
           "name": "submitStateRoot",
-          "line": 228,
+          "line": 246,
           "called": [
             "AlreadyClaimed",
             "HashChainBroken",
@@ -3250,7 +3267,7 @@
         {
           "kind": "function",
           "name": "finaliseStateRoot",
-          "line": 287,
+          "line": 306,
           "called": [
             "AlreadyFinalised",
             "DisputeInProgress",
@@ -3264,7 +3281,7 @@
         {
           "kind": "function",
           "name": "markDisputed",
-          "line": 331,
+          "line": 350,
           "called": [
             "AlreadyDisputed",
             "AlreadyFinalised",
@@ -3278,7 +3295,7 @@
         {
           "kind": "function",
           "name": "clearDisputed",
-          "line": 356,
+          "line": 375,
           "called": [
             "NotFaultProofGame",
             "RootMissing",
@@ -3289,7 +3306,7 @@
         {
           "kind": "function",
           "name": "slashSequencerBond",
-          "line": 382,
+          "line": 401,
           "called": [
             "AlreadyFinalised",
             "BondAlreadyZero",
@@ -3305,7 +3322,7 @@
         {
           "kind": "function",
           "name": "revertStateRootsFrom",
-          "line": 432,
+          "line": 451,
           "called": [
             "NotFaultProofGame",
             "StateRootRangeReverted"
@@ -3314,13 +3331,13 @@
         {
           "kind": "function",
           "name": "isStateRootReverted",
-          "line": 463,
+          "line": 482,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 484,
+          "line": 503,
           "called": [
             "sequencer"
           ]
@@ -3330,7 +3347,7 @@
     {
       "module": "KnomosisStepVM",
       "path": "solidity/src/contracts/KnomosisStepVM.sol",
-      "declaration_count": 51,
+      "declaration_count": 52,
       "declarations": [
         {
           "kind": "contract",
@@ -3359,89 +3376,96 @@
         {
           "kind": "error",
           "name": "BadCellProof",
-          "line": 201,
+          "line": 212,
           "called": []
         },
         {
           "kind": "error",
           "name": "InadmissibleAction",
-          "line": 202,
+          "line": 213,
           "called": []
         },
         {
           "kind": "error",
           "name": "PostStateMismatch",
-          "line": 203,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "UnknownActionKind",
-          "line": 204,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "MissingCellProof",
-          "line": 205,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "InsufficientBalance",
-          "line": 206,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "AmountMustBePositive",
-          "line": 207,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "SameResourceSwap",
-          "line": 208,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "SameActorSweep",
           "line": 214,
           "called": []
         },
         {
           "kind": "error",
+          "name": "UnknownActionKind",
+          "line": 215,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MissingCellProof",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "InsufficientBalance",
+          "line": 217,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "AmountMustBePositive",
+          "line": 218,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SameResourceSwap",
+          "line": 219,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "SameActorSweep",
+          "line": 225,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "SweepAmountMismatch",
-          "line": 220,
+          "line": 231,
           "called": []
         },
         {
           "kind": "error",
           "name": "UnauthorizedSigner",
-          "line": 221,
+          "line": 232,
           "called": []
         },
         {
           "kind": "error",
           "name": "TooManyCellProofs",
-          "line": 222,
+          "line": 233,
           "called": []
         },
         {
           "kind": "error",
           "name": "MalformedCellValue",
-          "line": 223,
+          "line": 234,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MalformedProofData",
+          "line": 247,
           "called": []
         },
         {
           "kind": "function",
           "name": "executeStep",
-          "line": 288,
+          "line": 312,
           "called": [
             "ActionKind",
             "BadCellProof",
             "CellProof",
+            "MalformedProofData",
             "TooManyCellProofs",
             "UnknownActionKind",
             "_stepAmmSwap",
@@ -3475,7 +3499,7 @@
         {
           "kind": "function",
           "name": "_toActionKind",
-          "line": 399,
+          "line": 435,
           "called": [
             "ActionKind",
             "UnknownActionKind"
@@ -3484,7 +3508,7 @@
         {
           "kind": "function",
           "name": "_findCellProof",
-          "line": 418,
+          "line": 454,
           "called": [
             "CellKind",
             "CellProof",
@@ -3494,7 +3518,7 @@
         {
           "kind": "function",
           "name": "_findBalanceCellProof",
-          "line": 433,
+          "line": 469,
           "called": [
             "CellProof",
             "MissingCellProof"
@@ -3503,7 +3527,7 @@
         {
           "kind": "function",
           "name": "_decodeNat",
-          "line": 474,
+          "line": 510,
           "called": [
             "MalformedCellValue"
           ]
@@ -3511,25 +3535,25 @@
         {
           "kind": "function",
           "name": "_decodeUint64BE",
-          "line": 498,
+          "line": 534,
           "called": []
         },
         {
           "kind": "function",
           "name": "_decodeUint128BE",
-          "line": 520,
+          "line": 556,
           "called": []
         },
         {
           "kind": "function",
           "name": "_decodeUint256BE",
-          "line": 533,
+          "line": 569,
           "called": []
         },
         {
           "kind": "function",
           "name": "_stepTransfer",
-          "line": 552,
+          "line": 588,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3543,7 +3567,7 @@
         {
           "kind": "function",
           "name": "_stepMint",
-          "line": 612,
+          "line": 648,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3556,7 +3580,7 @@
         {
           "kind": "function",
           "name": "_stepBurn",
-          "line": 635,
+          "line": 671,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3570,7 +3594,7 @@
         {
           "kind": "function",
           "name": "_stepFreezeResource",
-          "line": 664,
+          "line": 700,
           "called": [
             "CellProof",
             "_decodeUint64BE"
@@ -3579,7 +3603,7 @@
         {
           "kind": "function",
           "name": "_stepReplaceKey",
-          "line": 682,
+          "line": 718,
           "called": [
             "CellProof",
             "_decodeUint64BE"
@@ -3588,7 +3612,7 @@
         {
           "kind": "function",
           "name": "_stepReward",
-          "line": 704,
+          "line": 740,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3601,7 +3625,7 @@
         {
           "kind": "function",
           "name": "_stepDistributeOthers",
-          "line": 731,
+          "line": 767,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3613,7 +3637,7 @@
         {
           "kind": "function",
           "name": "_stepProportionalDilute",
-          "line": 769,
+          "line": 805,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3625,7 +3649,7 @@
         {
           "kind": "function",
           "name": "_stepDispute",
-          "line": 833,
+          "line": 869,
           "called": [
             "CellProof"
           ]
@@ -3633,7 +3657,7 @@
         {
           "kind": "function",
           "name": "_stepDisputeWithdraw",
-          "line": 845,
+          "line": 881,
           "called": [
             "CellProof"
           ]
@@ -3641,7 +3665,7 @@
         {
           "kind": "function",
           "name": "_stepVerdict",
-          "line": 857,
+          "line": 893,
           "called": [
             "CellProof"
           ]
@@ -3649,7 +3673,7 @@
         {
           "kind": "function",
           "name": "_stepRollback",
-          "line": 868,
+          "line": 904,
           "called": [
             "CellProof"
           ]
@@ -3657,7 +3681,7 @@
         {
           "kind": "function",
           "name": "_stepRegisterIdentity",
-          "line": 883,
+          "line": 919,
           "called": [
             "CellProof",
             "_decodeUint64BE"
@@ -3666,7 +3690,7 @@
         {
           "kind": "function",
           "name": "_stepDeposit",
-          "line": 903,
+          "line": 939,
           "called": [
             "CellProof",
             "_decodeNat",
@@ -3678,7 +3702,7 @@
         {
           "kind": "function",
           "name": "_stepWithdraw",
-          "line": 928,
+          "line": 964,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3691,7 +3715,7 @@
         {
           "kind": "function",
           "name": "_stepDeclareLocalPolicy",
-          "line": 954,
+          "line": 990,
           "called": [
             "CellProof"
           ]
@@ -3699,7 +3723,7 @@
         {
           "kind": "function",
           "name": "_stepRevokeLocalPolicy",
-          "line": 966,
+          "line": 1002,
           "called": [
             "CellProof"
           ]
@@ -3707,7 +3731,7 @@
         {
           "kind": "function",
           "name": "_stepFaultProofChallenge",
-          "line": 982,
+          "line": 1018,
           "called": [
             "CellProof"
           ]
@@ -3715,7 +3739,7 @@
         {
           "kind": "function",
           "name": "_stepFaultProofResolution",
-          "line": 994,
+          "line": 1030,
           "called": [
             "CellProof"
           ]
@@ -3723,7 +3747,7 @@
         {
           "kind": "function",
           "name": "_stepDepositWithFee",
-          "line": 1029,
+          "line": 1065,
           "called": [
             "CellProof",
             "_decodeNat",
@@ -3735,7 +3759,7 @@
         {
           "kind": "function",
           "name": "_stepTopUpActionBudget",
-          "line": 1096,
+          "line": 1132,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3748,7 +3772,7 @@
         {
           "kind": "function",
           "name": "_stepTopUpActionBudgetFor",
-          "line": 1168,
+          "line": 1204,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3761,7 +3785,7 @@
         {
           "kind": "function",
           "name": "_stepClaimBudgetRefund",
-          "line": 1231,
+          "line": 1267,
           "called": [
             "CellProof",
             "InsufficientBalance",
@@ -3774,7 +3798,7 @@
         {
           "kind": "function",
           "name": "_stepAmmSwap",
-          "line": 1290,
+          "line": 1326,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3789,7 +3813,7 @@
         {
           "kind": "function",
           "name": "_stepReclaimAmmReserves",
-          "line": 1344,
+          "line": 1380,
           "called": [
             "AmountMustBePositive",
             "CellProof",
@@ -3804,7 +3828,7 @@
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 1381,
+          "line": 1417,
           "called": []
         }
       ]
@@ -11899,12 +11923,12 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 19,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "contract",
           "name": "StepVMCrossCheck",
-          "line": 68,
+          "line": 69,
           "called": [
             "CrossCheckFramework"
           ]
@@ -11912,7 +11936,7 @@
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
-          "line": 74,
+          "line": 75,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11921,7 +11945,7 @@
         {
           "kind": "function",
           "name": "test_perVariant_counts",
-          "line": 95,
+          "line": 96,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -11930,7 +11954,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
-          "line": 138,
+          "line": 139,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11940,7 +11964,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
-          "line": 160,
+          "line": 161,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11950,7 +11974,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
-          "line": 190,
+          "line": 191,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11960,7 +11984,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_stepVMCommit_present_and_well_formed",
-          "line": 232,
+          "line": 233,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -11970,7 +11994,7 @@
         {
           "kind": "function",
           "name": "_executeStepFromFixture",
-          "line": 286,
+          "line": 287,
           "called": [
             "_parseCellProofs"
           ]
@@ -11978,7 +12002,7 @@
         {
           "kind": "function",
           "name": "_checkEntryAtIndex",
-          "line": 305,
+          "line": 306,
           "called": [
             "_executeStepFromFixture"
           ]
@@ -11986,7 +12010,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_byte_equivalence_all_happy",
-          "line": 320,
+          "line": 321,
           "called": [
             "_checkEntryAtIndex",
             "_requireKeccakLinked",
@@ -11998,13 +12022,24 @@
         {
           "kind": "function",
           "name": "_assertWitnessBinding",
-          "line": 371,
+          "line": 372,
           "called": []
         },
         {
           "kind": "function",
+          "name": "test_perEntry_actionCommit_matches_lean",
+          "line": 410,
+          "called": [
+            "_requireKeccakLinked",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 385,
+          "line": 436,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12015,7 +12050,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 413,
+          "line": 464,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12025,7 +12060,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 438,
+          "line": 489,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12035,13 +12070,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 474,
+          "line": 532,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 489,
+          "line": 548,
           "called": [
             "_parseCellProof"
           ]
@@ -12049,7 +12084,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 522,
+          "line": 581,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12059,7 +12094,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 569,
+          "line": 628,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12070,7 +12105,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 594,
+          "line": 653,
           "called": [
             "KnomosisStepVM"
           ]
@@ -13639,18 +13674,18 @@
     {
       "module": "KnomosisFaultProofGame.t",
       "path": "solidity/test/KnomosisFaultProofGame.t.sol",
-      "declaration_count": 48,
+      "declaration_count": 56,
       "declarations": [
         {
           "kind": "contract",
           "name": "MockStateRootSubmissionForGame",
-          "line": 12,
+          "line": 13,
           "called": []
         },
         {
           "kind": "struct",
           "name": "RootRecord",
-          "line": 13,
+          "line": 14,
           "called": [
             "deploymentId",
             "roots",
@@ -13660,7 +13695,7 @@
         {
           "kind": "function",
           "name": "setDeploymentId",
-          "line": 37,
+          "line": 38,
           "called": [
             "deploymentId"
           ]
@@ -13668,7 +13703,7 @@
         {
           "kind": "function",
           "name": "seedRoot",
-          "line": 41,
+          "line": 53,
           "called": [
             "RootRecord",
             "roots",
@@ -13678,7 +13713,7 @@
         {
           "kind": "function",
           "name": "markDisputed",
-          "line": 59,
+          "line": 74,
           "called": [
             "roots"
           ]
@@ -13686,7 +13721,7 @@
         {
           "kind": "function",
           "name": "clearDisputed",
-          "line": 65,
+          "line": 80,
           "called": [
             "roots"
           ]
@@ -13694,7 +13729,7 @@
         {
           "kind": "function",
           "name": "slashSequencerBond",
-          "line": 71,
+          "line": 86,
           "called": [
             "roots"
           ]
@@ -13702,31 +13737,31 @@
         {
           "kind": "function",
           "name": "revertStateRootsFrom",
-          "line": 83,
+          "line": 98,
           "called": []
         },
         {
           "kind": "receive",
           "name": "receive",
-          "line": 88,
+          "line": 103,
           "called": []
         },
         {
           "kind": "contract",
           "name": "RevertingReceiver",
-          "line": 94,
+          "line": 109,
           "called": []
         },
         {
           "kind": "receive",
           "name": "receive",
-          "line": 95,
+          "line": 110,
           "called": []
         },
         {
           "kind": "contract",
           "name": "KnomosisFaultProofGameTest",
-          "line": 103,
+          "line": 118,
           "called": [
             "KnomosisFaultProofGame",
             "KnomosisStepVM",
@@ -13737,24 +13772,41 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 126,
+          "line": 141,
           "called": [
             "KnomosisFaultProofGame",
             "KnomosisStepVM",
             "MockStateRootSubmissionForGame",
+            "_seedUnboundRoot",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_seedUnboundRoot",
+          "line": 187,
+          "called": [
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_seedRootForAction",
+          "line": 194,
+          "called": [
             "sequencer"
           ]
         },
         {
           "kind": "function",
           "name": "test_constructor_sets_immutables",
-          "line": 165,
+          "line": 212,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_treasury",
-          "line": 174,
+          "line": 221,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13762,7 +13814,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stepVM",
-          "line": 181,
+          "line": 228,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13770,7 +13822,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stateRootSubmission",
-          "line": 188,
+          "line": 235,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13778,7 +13830,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_eoa_stateRootSubmission",
-          "line": 202,
+          "line": 249,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13786,13 +13838,13 @@
         {
           "kind": "function",
           "name": "test_constants_max_bisection_depth_is_64",
-          "line": 209,
+          "line": 256,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_timeout_le_step_interval",
-          "line": 217,
+          "line": 264,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -13800,37 +13852,37 @@
         {
           "kind": "function",
           "name": "test_initiateChallenge_returns_gameId",
-          "line": 234,
+          "line": 281,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_marks_disputed_root",
-          "line": 246,
+          "line": 293,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_wrong_bond",
-          "line": 254,
+          "line": 301,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_no_dispute",
-          "line": 261,
+          "line": 308,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_duplicate_game",
-          "line": 269,
+          "line": 316,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_uses_canonical_sequencer",
-          "line": 288,
+          "line": 335,
           "called": [
             "sequencer"
           ]
@@ -13838,79 +13890,141 @@
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_missing_root",
-          "line": 299,
+          "line": 346,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_unanchored_low_commit",
-          "line": 316,
+          "line": 363,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_unsubmitted_low_root",
-          "line": 332,
+          "line": 379,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_inverted_range",
-          "line": 348,
+          "line": 395,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_equal_range",
-          "line": 360,
+          "line": 407,
           "called": []
         },
         {
           "kind": "function",
           "name": "_encodeCbeAmount",
-          "line": 386,
+          "line": 433,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_defaultProofData",
+          "line": 451,
           "called": []
         },
         {
           "kind": "function",
           "name": "_makeCellProof",
-          "line": 396,
+          "line": 455,
+          "called": [
+            "_defaultProofData",
+            "_makeCellProofWithOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_makeCellProofWithOpening",
+          "line": 466,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_terminate_single_step_honest_sequencer_wins",
-          "line": 424,
+          "line": 496,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof",
+            "_seedRootForAction",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_terminate_rejects_a_substituted_action",
+          "line": 566,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof",
+            "_seedRootForAction",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_terminate_rejects_a_substituted_signer",
+          "line": 603,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof",
+            "_seedRootForAction",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_terminate_rejects_a_substituted_action_kind",
+          "line": 623,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof",
+            "_seedRootForAction",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_terminate_rejects_an_action_absent_from_the_chain",
+          "line": 647,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof",
+            "_seedUnboundRoot",
             "sequencer"
           ]
         },
         {
           "kind": "function",
           "name": "test_terminate_single_step_invalid_root_challenger_wins",
-          "line": 484,
+          "line": 670,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof",
+            "_seedRootForAction",
             "sequencer"
           ]
         },
         {
           "kind": "function",
           "name": "test_multi_round_bisection_then_terminate_sequencer_wins",
-          "line": 529,
+          "line": 715,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof",
+            "_seedRootForAction",
             "sequencer"
           ]
         },
         {
           "kind": "function",
           "name": "test_rechallenge_succeeds_after_settled_game_with_reassigned_high",
-          "line": 621,
+          "line": 812,
           "called": [
             "sequencer"
           ]
@@ -13918,19 +14032,19 @@
         {
           "kind": "function",
           "name": "test_claimTimeout_after_window_settles_against_sequencer",
-          "line": 669,
+          "line": 860,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_distributes_bonds_95_5_split",
-          "line": 683,
+          "line": 874,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_settlement_not_bricked_by_reverting_treasury",
-          "line": 724,
+          "line": 915,
           "called": [
             "KnomosisFaultProofGame",
             "RevertingReceiver"
@@ -13939,31 +14053,31 @@
         {
           "kind": "function",
           "name": "test_withdraw_nothing_credited_reverts",
-          "line": 757,
+          "line": 948,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_slashSequencerBond_on_challenger_wins",
-          "line": 763,
+          "line": 954,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins",
-          "line": 782,
+          "line": 973,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_rejects_already_settled_game",
-          "line": 796,
+          "line": 987,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_sequencer_first_round",
-          "line": 811,
+          "line": 1002,
           "called": [
             "sequencer"
           ]
@@ -13971,13 +14085,13 @@
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_wrong_caller",
-          "line": 821,
+          "line": 1012,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_after_deadline",
-          "line": 831,
+          "line": 1022,
           "called": [
             "sequencer"
           ]
@@ -13985,7 +14099,7 @@
         {
           "kind": "function",
           "name": "test_respondToMidpoint_rejects_without_pending",
-          "line": 841,
+          "line": 1032,
           "called": []
         }
       ]
@@ -14829,7 +14943,7 @@
         {
           "kind": "contract",
           "name": "KnomosisStateRootSubmissionTest",
-          "line": 9,
+          "line": 10,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -14838,7 +14952,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 23,
+          "line": 30,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -14847,7 +14961,7 @@
         {
           "kind": "function",
           "name": "test_constructor_sets_immutables",
-          "line": 43,
+          "line": 50,
           "called": [
             "sequencer"
           ]
@@ -14855,7 +14969,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_sequencer",
-          "line": 53,
+          "line": 60,
           "called": [
             "KnomosisStateRootSubmission"
           ]
@@ -14863,15 +14977,6 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_faultProofGame",
-          "line": 60,
-          "called": [
-            "KnomosisStateRootSubmission",
-            "sequencer"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_constructor_rejects_dispute_window_too_short",
           "line": 67,
           "called": [
             "KnomosisStateRootSubmission",
@@ -14880,8 +14985,17 @@
         },
         {
           "kind": "function",
+          "name": "test_constructor_rejects_dispute_window_too_short",
+          "line": 74,
+          "called": [
+            "KnomosisStateRootSubmission",
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_constructor_rejects_zero_bond",
-          "line": 78,
+          "line": 85,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -14890,7 +15004,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_dispute_window",
-          "line": 86,
+          "line": 93,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -14899,7 +15013,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_submission_interval",
-          "line": 95,
+          "line": 102,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -14908,7 +15022,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_max_outstanding",
-          "line": 104,
+          "line": 111,
           "called": [
             "KnomosisStateRootSubmission",
             "sequencer"
@@ -14917,7 +15031,7 @@
         {
           "kind": "function",
           "name": "test_submitStateRoot_first_index_succeeds",
-          "line": 114,
+          "line": 121,
           "called": [
             "sequencer"
           ]
@@ -14925,20 +15039,12 @@
         {
           "kind": "function",
           "name": "test_submitStateRoot_rejects_non_sequencer",
-          "line": 127,
+          "line": 134,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitStateRoot_rejects_wrong_bond",
-          "line": 135,
-          "called": [
-            "sequencer"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_submitStateRoot_rejects_duplicate_index",
           "line": 142,
           "called": [
             "sequencer"
@@ -14946,8 +15052,16 @@
         },
         {
           "kind": "function",
+          "name": "test_submitStateRoot_rejects_duplicate_index",
+          "line": 149,
+          "called": [
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_submitStateRoot_enforces_rate_limit",
-          "line": 153,
+          "line": 160,
           "called": [
             "sequencer"
           ]
@@ -14955,7 +15069,7 @@
         {
           "kind": "function",
           "name": "test_submitStateRoot_hash_chain_break_rejected",
-          "line": 165,
+          "line": 173,
           "called": [
             "sequencer"
           ]
@@ -14963,7 +15077,7 @@
         {
           "kind": "function",
           "name": "test_submitStateRoot_rejects_idx1_without_idx0",
-          "line": 177,
+          "line": 185,
           "called": [
             "sequencer"
           ]
@@ -14971,7 +15085,7 @@
         {
           "kind": "function",
           "name": "test_finaliseStateRoot_after_dispute_window_succeeds",
-          "line": 187,
+          "line": 195,
           "called": [
             "sequencer"
           ]
@@ -14979,14 +15093,6 @@
         {
           "kind": "function",
           "name": "test_finaliseStateRoot_rejects_within_window",
-          "line": 201,
-          "called": [
-            "sequencer"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_finaliseStateRoot_double_call_rejected",
           "line": 209,
           "called": [
             "sequencer"
@@ -14994,68 +15100,76 @@
         },
         {
           "kind": "function",
+          "name": "test_finaliseStateRoot_double_call_rejected",
+          "line": 217,
+          "called": [
+            "sequencer"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_finaliseStateRoot_unknown_index_reverts",
-          "line": 219,
+          "line": 227,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_revertStateRootsFrom_only_faultProofGame",
-          "line": 226,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_markDisputed_only_faultProofGame",
           "line": 234,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_markDisputed_rejects_missing_root",
-          "line": 240,
+          "name": "test_markDisputed_only_faultProofGame",
+          "line": 242,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_clearDisputed_only_faultProofGame",
+          "name": "test_markDisputed_rejects_missing_root",
           "line": 248,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_clearDisputed_rejects_missing_root",
-          "line": 254,
+          "name": "test_clearDisputed_only_faultProofGame",
+          "line": 256,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_slashSequencerBond_only_faultProofGame",
+          "name": "test_clearDisputed_rejects_missing_root",
           "line": 262,
           "called": []
         },
         {
           "kind": "function",
+          "name": "test_slashSequencerBond_only_faultProofGame",
+          "line": 270,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "test_slashSequencerBond_rejects_zero_recipient",
-          "line": 268,
+          "line": 276,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_slashSequencerBond_rejects_missing_root",
-          "line": 274,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_revertStateRootsFrom_updates_range",
           "line": 282,
           "called": []
         },
         {
           "kind": "function",
-          "name": "_submitChain",
+          "name": "test_revertStateRootsFrom_updates_range",
           "line": 290,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_submitChain",
+          "line": 298,
           "called": [
             "sequencer"
           ]
@@ -15063,7 +15177,7 @@
         {
           "kind": "function",
           "name": "test_revertStateRootsFrom_sweeps_descendants",
-          "line": 309,
+          "line": 317,
           "called": [
             "_submitChain"
           ]
@@ -15071,7 +15185,7 @@
         {
           "kind": "function",
           "name": "test_revertStateRootsFrom_zero_reverts_the_genesis_root",
-          "line": 333,
+          "line": 341,
           "called": [
             "_submitChain"
           ]
@@ -15079,7 +15193,7 @@
         {
           "kind": "function",
           "name": "test_revertStateRootsFrom_range_is_monotone",
-          "line": 349,
+          "line": 357,
           "called": [
             "_submitChain"
           ]
@@ -15087,7 +15201,7 @@
         {
           "kind": "function",
           "name": "test_latestSubmittedLogIndex_is_a_running_maximum",
-          "line": 370,
+          "line": 378,
           "called": [
             "_submitChain"
           ]
@@ -15095,25 +15209,25 @@
         {
           "kind": "function",
           "name": "test_isStateRootReverted_in_range",
-          "line": 375,
+          "line": 383,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_isStateRootReverted_below_floor",
-          "line": 381,
+          "line": 389,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_isStateRootReverted_unset_floor_is_the_sentinel",
-          "line": 387,
+          "line": 395,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_assertConsistent_does_not_revert",
-          "line": 398,
+          "line": 406,
           "called": []
         }
       ]
@@ -15121,7 +15235,7 @@
     {
       "module": "KnomosisStepVM.t",
       "path": "solidity/test/KnomosisStepVM.t.sol",
-      "declaration_count": 72,
+      "declaration_count": 82,
       "declarations": [
         {
           "kind": "contract",
@@ -15153,28 +15267,108 @@
         },
         {
           "kind": "function",
+          "name": "_defaultProofData",
+          "line": 42,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "_makeCellProof",
-          "line": 34,
+          "line": 46,
+          "called": [
+            "_defaultProofData",
+            "_makeCellProofWithOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_makeCellProofWithOpening",
+          "line": 57,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_executeStep_rejects_mismatched_witness_commit",
-          "line": 50,
+          "line": 75,
           "called": [
             "_makeCellProof"
           ]
         },
         {
           "kind": "function",
+          "name": "_transferBundleWithProofData",
+          "line": 101,
+          "called": [
+            "_makeCellProofWithOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_executeTransferStep",
+          "line": 112,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_rejects_empty_proof_data",
+          "line": 122,
+          "called": [
+            "_executeTransferStep",
+            "_transferBundleWithProofData"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_rejects_misaligned_proof_data",
+          "line": 131,
+          "called": [
+            "_executeTransferStep",
+            "_transferBundleWithProofData"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_rejects_oversized_proof_data",
+          "line": 140,
+          "called": [
+            "_executeTransferStep",
+            "_transferBundleWithProofData"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_accepts_proof_data_at_the_cap",
+          "line": 153,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProofWithOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStep_result_is_independent_of_proof_data_today",
+          "line": 173,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProofWithOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_constants_proof_data_cap_matches_smt_depth",
+          "line": 198,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "test_executeStep_unknown_action_kind_reverts",
-          "line": 74,
+          "line": 204,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_transfer_returns_deterministic_post_commit",
-          "line": 87,
+          "line": 217,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15183,7 +15377,7 @@
         {
           "kind": "function",
           "name": "test_transfer_self_transfer_net_zero",
-          "line": 130,
+          "line": 260,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15192,78 +15386,6 @@
         {
           "kind": "function",
           "name": "test_executeStep_rejects_oversize_cellproof_bundle",
-          "line": 156,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_burn_rejects_zero_amount",
-          "line": 173,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_transfer_rejects_zero_amount",
-          "line": 184,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_transfer_rejects_malformed_cell_value",
-          "line": 204,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_transfer_rejects_insufficient_balance",
-          "line": 219,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_mint_increases_balance",
-          "line": 236,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_mint_rejects_zero_amount",
-          "line": 254,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_burn_decreases_balance",
-          "line": 268,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_burn_rejects_insufficient_balance",
           "line": 286,
           "called": [
             "_encodeCbeAmount",
@@ -15272,14 +15394,86 @@
         },
         {
           "kind": "function",
+          "name": "test_burn_rejects_zero_amount",
+          "line": 303,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_rejects_zero_amount",
+          "line": 314,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_rejects_malformed_cell_value",
+          "line": 334,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_transfer_rejects_insufficient_balance",
+          "line": 349,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_mint_increases_balance",
+          "line": 366,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_mint_rejects_zero_amount",
+          "line": 384,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_burn_decreases_balance",
+          "line": 398,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_burn_rejects_insufficient_balance",
+          "line": 416,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_freezeResource_kernel_identity",
-          "line": 300,
+          "line": 430,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_reward_credits_recipient",
-          "line": 311,
+          "line": 441,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15288,7 +15482,7 @@
         {
           "kind": "function",
           "name": "test_distributeOthers_iterates_recipients",
-          "line": 331,
+          "line": 461,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15297,7 +15491,7 @@
         {
           "kind": "function",
           "name": "test_proportionalDilute_rejects_zero_sumOthers",
-          "line": 355,
+          "line": 485,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15306,7 +15500,7 @@
         {
           "kind": "function",
           "name": "test_proportionalDilute_rejects_zero_totalReward",
-          "line": 371,
+          "line": 501,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15315,7 +15509,7 @@
         {
           "kind": "function",
           "name": "test_reward_rejects_zero_amount",
-          "line": 387,
+          "line": 517,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15324,7 +15518,7 @@
         {
           "kind": "function",
           "name": "test_distributeOthers_rejects_zero_amount",
-          "line": 402,
+          "line": 532,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15333,37 +15527,37 @@
         {
           "kind": "function",
           "name": "test_dispute_action_executes",
-          "line": 416,
+          "line": 546,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_disputeWithdraw_action_executes",
-          "line": 424,
+          "line": 554,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_verdict_action_executes",
-          "line": 432,
+          "line": 562,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_rollback_action_executes",
-          "line": 440,
+          "line": 570,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_registerIdentity_action_executes",
-          "line": 450,
+          "line": 580,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_deposit_action_executes",
-          "line": 458,
+          "line": 588,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15372,7 +15566,7 @@
         {
           "kind": "function",
           "name": "test_withdraw_action_executes",
-          "line": 470,
+          "line": 600,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15381,31 +15575,31 @@
         {
           "kind": "function",
           "name": "test_declareLocalPolicy_action_executes",
-          "line": 484,
+          "line": 614,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_revokeLocalPolicy_action_executes",
-          "line": 492,
+          "line": 622,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_faultProofChallenge_action_executes",
-          "line": 502,
+          "line": 632,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_faultProofResolution_action_executes",
-          "line": 511,
+          "line": 641,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_depositWithFee_action_executes",
-          "line": 522,
+          "line": 652,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15414,7 +15608,7 @@
         {
           "kind": "function",
           "name": "test_depositWithFee_self_credit_handles_recipient_equals_poolActor",
-          "line": 542,
+          "line": 672,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15423,13 +15617,13 @@
         {
           "kind": "function",
           "name": "test_depositWithFee_rejects_short_fields",
-          "line": 560,
+          "line": 690,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_topUpActionBudget_action_executes",
-          "line": 569,
+          "line": 699,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15438,13 +15632,13 @@
         {
           "kind": "function",
           "name": "test_topUpActionBudget_rejects_short_fields",
-          "line": 588,
+          "line": 718,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_topUpActionBudget_rejects_insufficient_gas_balance",
-          "line": 597,
+          "line": 727,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15453,7 +15647,7 @@
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_action_executes",
-          "line": 614,
+          "line": 744,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15462,7 +15656,7 @@
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_matches_canonical_recipe",
-          "line": 645,
+          "line": 775,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15471,7 +15665,7 @@
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_distinct_from_topUpActionBudget",
-          "line": 680,
+          "line": 810,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15480,7 +15674,7 @@
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_self_pool_net_zero",
-          "line": 712,
+          "line": 842,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15489,7 +15683,7 @@
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_exact_balance_zeroes_signer",
-          "line": 742,
+          "line": 872,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15498,13 +15692,13 @@
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_rejects_short_fields",
-          "line": 768,
+          "line": 898,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_topUpActionBudgetFor_rejects_insufficient_gas_balance",
-          "line": 777,
+          "line": 907,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15513,7 +15707,7 @@
         {
           "kind": "function",
           "name": "test_claimBudgetRefund_matches_canonical_recipe",
-          "line": 801,
+          "line": 931,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15522,7 +15716,7 @@
         {
           "kind": "function",
           "name": "test_claimBudgetRefund_uint256_product_no_overflow",
-          "line": 844,
+          "line": 974,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15531,13 +15725,13 @@
         {
           "kind": "function",
           "name": "test_claimBudgetRefund_distinct_from_topUp",
-          "line": 868,
+          "line": 998,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimBudgetRefund_self_pool_net_zero",
-          "line": 888,
+          "line": 1018,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15546,63 +15740,6 @@
         {
           "kind": "function",
           "name": "test_claimBudgetRefund_exact_pool_drain",
-          "line": 912,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_claimBudgetRefund_rejects_short_fields",
-          "line": 934,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_claimBudgetRefund_rejects_insufficient_pool",
-          "line": 943,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_ammSwap_happy_path",
-          "line": 964,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_ammSwap_exact_drain",
-          "line": 989,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_ammSwap_rejects_short_fields",
-          "line": 1010,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_ammSwap_rejects_zero_amountIn",
-          "line": 1022,
-          "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_ammSwap_rejects_same_resource",
           "line": 1042,
           "called": [
             "_encodeCbeAmount",
@@ -15611,8 +15748,65 @@
         },
         {
           "kind": "function",
+          "name": "test_claimBudgetRefund_rejects_short_fields",
+          "line": 1064,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_claimBudgetRefund_rejects_insufficient_pool",
+          "line": 1073,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_happy_path",
+          "line": 1094,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_exact_drain",
+          "line": 1119,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_rejects_short_fields",
+          "line": 1140,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_rejects_zero_amountIn",
+          "line": 1152,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_ammSwap_rejects_same_resource",
+          "line": 1172,
+          "called": [
+            "_encodeCbeAmount",
+            "_makeCellProof"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_ammSwap_rejects_insufficient_balance",
-          "line": 1057,
+          "line": 1187,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15621,7 +15815,7 @@
         {
           "kind": "function",
           "name": "test_reclaimAmmReserves_happy_path",
-          "line": 1076,
+          "line": 1206,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15630,7 +15824,7 @@
         {
           "kind": "function",
           "name": "test_reclaimAmmReserves_fresh_pool",
-          "line": 1101,
+          "line": 1231,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15639,13 +15833,13 @@
         {
           "kind": "function",
           "name": "test_reclaimAmmReserves_rejects_short_fields",
-          "line": 1122,
+          "line": 1252,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_reclaimAmmReserves_rejects_zero_amount",
-          "line": 1133,
+          "line": 1263,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15654,7 +15848,7 @@
         {
           "kind": "function",
           "name": "test_reclaimAmmReserves_rejects_same_actor",
-          "line": 1150,
+          "line": 1280,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15663,7 +15857,7 @@
         {
           "kind": "function",
           "name": "test_reclaimAmmReserves_rejects_partial_sweep",
-          "line": 1166,
+          "line": 1296,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15672,7 +15866,7 @@
         {
           "kind": "function",
           "name": "test_reclaimAmmReserves_rejects_over_sweep",
-          "line": 1184,
+          "line": 1314,
           "called": [
             "_encodeCbeAmount",
             "_makeCellProof"
@@ -15681,19 +15875,19 @@
         {
           "kind": "function",
           "name": "test_executeStep_kind_25_reverts",
-          "line": 1199,
+          "line": 1329,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_assertConsistent_does_not_revert",
-          "line": 1216,
+          "line": 1346,
           "called": []
         },
         {
           "kind": "function",
           "name": "_encodeCbeAmount",
-          "line": 1237,
+          "line": 1367,
           "called": []
         }
       ]

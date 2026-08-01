@@ -28,6 +28,7 @@ This module is **not** part of the trusted computing base.
 import LegalKernel.Authority.Action
 import LegalKernel.Encoding.Encodable
 import LegalKernel.FaultProof.Cell
+import LegalKernel.FaultProof.StateCellsInjective
 
 namespace LegalKernel
 namespace FaultProof
@@ -143,14 +144,14 @@ def Action.distributeOthers_subSteps
       affectedActor := p.1,
       preBalance := p.2,
       postBalance := p.2 + amount,
-      cellProof :=
-        { cellTag := CellTag.balance r p.1,
-          -- Balance cells ride the amount head; this must stay the
-          -- exact byte form `getCellValue` produces or the proof
-          -- stops verifying against the pre-state commit.
-          cellValue :=
-            ByteArray.mk (Encoding.encodeAmount p.2).toArray,
-          witnessState := es } })
+      -- The canonical builder, not a hand-rolled record: it reads the
+      -- value through `getCellValue` (so the byte form cannot drift
+      -- from what the commit observes) and attaches the cell's SMT
+      -- opening (so an L1 holding only the root can check it).  The
+      -- hand-rolled form carried `encodeAmount p.2` and a comment
+      -- warning that it must stay equal to `getCellValue` — a
+      -- convention where a call suffices.
+      cellProof := buildCellProofWithOpening es (CellTag.balance r p.1) })
 
 /-- Construct the sub-step list for a `proportionalDilute`
     action.  Iterates over non-excluded actors at the resource,
@@ -173,14 +174,14 @@ def Action.proportionalDilute_subSteps
       affectedActor := p.1,
       preBalance := p.2,
       postBalance := p.2 + credit,
-      cellProof :=
-        { cellTag := CellTag.balance r p.1,
-          -- Balance cells ride the amount head; this must stay the
-          -- exact byte form `getCellValue` produces or the proof
-          -- stops verifying against the pre-state commit.
-          cellValue :=
-            ByteArray.mk (Encoding.encodeAmount p.2).toArray,
-          witnessState := es } })
+      -- The canonical builder, not a hand-rolled record: it reads the
+      -- value through `getCellValue` (so the byte form cannot drift
+      -- from what the commit observes) and attaches the cell's SMT
+      -- opening (so an L1 holding only the root can check it).  The
+      -- hand-rolled form carried `encodeAmount p.2` and a comment
+      -- warning that it must stay equal to `getCellValue` — a
+      -- convention where a call suffices.
+      cellProof := buildCellProofWithOpening es (CellTag.balance r p.1) })
 
 /-- Top-level entry: dispatch on action variant. -/
 def Action.subSteps

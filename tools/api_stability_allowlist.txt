@@ -308,8 +308,6 @@ LegalKernel/Test/FaultProof/AbsentCellCreation.lean:29
 LegalKernel/Test/FaultProof/AbsentCellCreation.lean:34
 LegalKernel/Test/FaultProof/AbsentCellCreation.lean:39
 LegalKernel/Test/FaultProof/AbsentCellCreation.lean:44
-LegalKernel/Test/FaultProof/Coherence.lean:151
-LegalKernel/Test/FaultProof/Coherence.lean:157
 LegalKernel/Test/FaultProof/EncodeInjectivity.lean:34
 LegalKernel/Test/FaultProof/EncodeInjectivity.lean:40
 LegalKernel/Test/FaultProof/EncodeInjectivity.lean:61
@@ -328,45 +326,11 @@ LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:113
 LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:88
 LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:93
 LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:98
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1360
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1365
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1370
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1375
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1380
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1385
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1390
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1395
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1400
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1405
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1410
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1415
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1420
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1425
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1430
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1435
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1440
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1445
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1450
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1455
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1460
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1465
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1470
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1475
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1480
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1624
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1629
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1634
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1639
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1644
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1649
 LegalKernel/Test/FaultProof/TerminateBundle.lean:249
 LegalKernel/Test/FaultProof/TerminateBundle.lean:254
 LegalKernel/Test/FaultProof/TerminateBundle.lean:259
 LegalKernel/Test/FaultProof/TerminateBundle.lean:264
 LegalKernel/Test/FaultProof/TerminateBundle.lean:269
-LegalKernel/Test/FaultProof/Transcript.lean:75
-LegalKernel/Test/FaultProof/Transcript.lean:85
-LegalKernel/Test/FaultProof/Transcript.lean:90
 LegalKernel/Test/FaultProof/Trust.lean:124
 LegalKernel/Test/FaultProof/Trust.lean:129
 LegalKernel/Test/FaultProof/Verify.lean:136
@@ -384,3 +348,41 @@ LegalKernel/Test/Laws/ReclaimAmmReserves.lean:287
 LegalKernel/Test/Laws/ReclaimAmmReserves.lean:293
 LegalKernel/Test/Laws/ReclaimAmmReserves.lean:305
 LegalKernel/Test/Laws/ReclaimAmmReserves.lean:306
+
+# Re-keyed: the allowlist is line-addressed, so an edit above a frozen
+# entry re-reports it (see `Violation.key`).  These 31 pins all name
+# `stepVMHash` / `stepVMHashFromAction` theorems, which the state-root
+# swap deletes outright (`state_root_merkleisation_plan.md` S7) — so
+# they burn down by removal rather than by ascription.  The five that
+# survive the swap were ascribed instead of re-keyed.
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1362
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1367
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1372
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1377
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1382
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1387
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1392
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1397
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1402
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1407
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1412
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1417
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1422
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1427
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1432
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1437
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1442
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1447
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1452
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1457
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1462
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1467
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1472
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1477
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1482
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1626
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1631
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1636
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1641
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1646
+LegalKernel/Test/FaultProof/StepVMCoherence.lean:1651

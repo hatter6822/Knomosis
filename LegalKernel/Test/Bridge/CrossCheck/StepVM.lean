@@ -77,6 +77,17 @@ structure CellProofForFixture where
       with `0x` prefix.  Must equal the fixture's
       `preStateCommitHex`. -/
   witnessCommitHex : String
+  /-- The cell's SMT opening against the pre-state root
+      (`SmtCellProof.toWireBytes`), hex-encoded with `0x` prefix: a
+      32-byte bitmask followed by the non-canonical-empty siblings in
+      depth order.
+
+      Pinned cross-stack because it is a CONSENSUS encoding — the L1
+      parses these bytes to re-walk the path — and because it is the
+      only field on the proof an L1 verifier can actually use:
+      `witnessCommitHex` attests the value came from a state with this
+      root, but recomputing it needs the whole `ExtendedState`. -/
+  proofDataHex     : String
   deriving Repr
 
 /-- A single F.1.8 step-VM fixture entry. -/
@@ -141,7 +152,8 @@ private def cellProofForFixtureFromCellProof (p : CellProof) :
     keyBNat           := keyB,
     cellValueHex      := Test.Bridge.CrossCheck.hexFromBytes p.cellValue,
     witnessCommitHex  :=
-      Test.Bridge.CrossCheck.hexFromBytes (commitExtendedState p.witnessState) }
+      Test.Bridge.CrossCheck.hexFromBytes (commitExtendedState p.witnessState),
+    proofDataHex      := Test.Bridge.CrossCheck.hexFromBytes p.proofData }
 
 /-- The base state every fixture builds on.
 
@@ -413,7 +425,7 @@ def buildDistributeOthersHappy
       es action signer
   let recipientProofs : List CellProof :=
     recipients.map (fun (a, _) =>
-      LegalKernel.FaultProof.buildCellProof es (.balance r a))
+      LegalKernel.FaultProof.buildCellProofWithOpening es (.balance r a))
   let bundleProofs := observerBundle.proofs ++ recipientProofs
   -- Compute the expected step-VM commit by walking the bundle in
   -- ITERATION order, mirroring Solidity byte-for-byte.
@@ -850,7 +862,7 @@ def buildProportionalDiluteHappy
       es action signer
   let recipientProofs : List CellProof :=
     recipients.map (fun (a, _) =>
-      LegalKernel.FaultProof.buildCellProof es (.balance r a))
+      LegalKernel.FaultProof.buildCellProofWithOpening es (.balance r a))
   let bundleProofs := observerBundle.proofs ++ recipientProofs
   -- Pass 1: compute sumOthers by walking the bundle in iteration
   -- order, applying Solidity's exact filter.
@@ -1394,6 +1406,30 @@ def allFixtures : List StepVMFixture :=
 
 /-! ## Test suite (Lean-side fixture-stability tests) -/
 
+/-- The L1 action commitment for a fixture entry, hex-encoded.
+
+    Derived from the entry's own PUBLISHED `actionKindByte` /
+    `signerNat` / `actionFieldsHex` rather than from the `Action` the
+    builder started with, because that is exactly what the Solidity
+    side does: it parses those three fields out of the JSON and calls
+    `LogChain.actionCommit` on them.  Deriving from the same published
+    bytes makes the corpus a Lean-vs-Solidity pin on the ENCODING,
+    which is the thing the two stacks have to agree on.
+
+    Calls `l1ActionCommitBytes` — the production function — rather than
+    re-spelling its body; a second spelling here would agree with
+    Solidity while disagreeing with the chain the L2 actually binds. -/
+private def actionCommitHexOf (f : StepVMFixture) : String :=
+  match Test.Bridge.CrossCheck.bytesFromHex f.actionFieldsHex with
+  | some fields =>
+      Test.Bridge.CrossCheck.hexFromBytes
+        (StepVMCoherence.l1ActionCommitBytes f.actionKindByte f.signerNat fields)
+  -- Unreachable: `actionFieldsHex` is written by `hexFromBytes`.  Emit
+  -- a value that cannot be mistaken for a commitment, so a decoder
+  -- regression fails the Solidity-side comparison rather than
+  -- silently publishing a plausible hash.
+  | none => "0x"
+
 /-- Convert one `CellProofForFixture` to its JSON
     representation. -/
 private def cellProofForFixtureToJson (p : CellProofForFixture) :
@@ -1402,7 +1438,8 @@ private def cellProofForFixtureToJson (p : CellProofForFixture) :
        , ("keyA",              .num p.keyANat)
        , ("keyB",              .num p.keyBNat)
        , ("cellValueHex",      .str p.cellValueHex)
-       , ("witnessCommitHex",  .str p.witnessCommitHex) ]
+       , ("witnessCommitHex",  .str p.witnessCommitHex)
+       , ("proofDataHex",      .str p.proofDataHex) ]
 
 /-- Convert one fixture to its JSON representation. -/
 private def fixtureToJson (f : StepVMFixture) :
@@ -1419,6 +1456,7 @@ private def fixtureToJson (f : StepVMFixture) :
        , ("actionKindByte",           .num f.actionKindByte.toNat)
        , ("actionFieldsHex",          .str f.actionFieldsHex)
        , ("signerNat",                .num f.signerNat)
+       , ("expectedActionCommitHex",  .str (actionCommitHexOf f))
        , ("cellProofs",
           .arr (f.cellProofsForFixture.map cellProofForFixtureToJson))
        , ("cellProofsCount", .num f.cellProofsForFixture.length)
@@ -1737,6 +1775,93 @@ def tests : List Test.TestCase :=
           f.cellProofsForFixture.all (fun p =>
             p.witnessCommitHex = f.preStateCommitHex)))
           "witness commit binding"
+    }
+  , { name := "log-chain: every entry publishes a 32-byte action commitment"
+    , body := do
+        -- The L1 stores it in a `bytes32`, and `actionCommitHexOf`
+        -- emits `"0x"` on a hex-decode failure, so anything other than
+        -- 66 characters means the derivation did not run.
+        Test.assert (allFixtures.all (fun f =>
+          (actionCommitHexOf f).length = 66 ∧
+          (actionCommitHexOf f).startsWith "0x"))
+          "action commitment is a 0x-prefixed 32-byte hex string"
+    }
+  , { name := "log-chain: the commitment separates the three components"
+    , body := do
+        -- Injectivity is the property the binding rests on: if two
+        -- distinct `(kind, signer, fields)` triples could collide, a
+        -- responding party could substitute one for the other at
+        -- terminate time.  Exhibited rather than asserted — each pair
+        -- below differs in exactly ONE component.
+        let fields := ByteArray.mk #[1, 2, 3]
+        let base := StepVMCoherence.l1ActionCommitBytes 0 7 fields
+        let otherKind := StepVMCoherence.l1ActionCommitBytes 1 7 fields
+        let otherSigner := StepVMCoherence.l1ActionCommitBytes 0 8 fields
+        let otherFields :=
+          StepVMCoherence.l1ActionCommitBytes 0 7 (ByteArray.mk #[1, 2, 4])
+        Test.assert (base != otherKind) "kind is committed"
+        Test.assert (base != otherSigner) "signer is committed"
+        Test.assert (base != otherFields) "fields are committed"
+    }
+  , { name := "log-chain: a shifted field boundary does not collide"
+    , body := do
+        -- The reason the variable-length component goes LAST.  With
+        -- `fields` first, `(kind=0x01, fields=0x0203)` and
+        -- `(kind=0x02, fields=0x03)` would concatenate to the same
+        -- bytes.  With `fields` last, the first nine bytes are
+        -- fixed-width, so the split is unambiguous and these differ.
+        let a := StepVMCoherence.l1ActionCommitBytes 1 0 (ByteArray.mk #[2, 3])
+        let b := StepVMCoherence.l1ActionCommitBytes 2 0 (ByteArray.mk #[3])
+        Test.assert (a != b) "the fixed-width prefix disambiguates the split"
+    }
+  , { name := "log-chain: the chain step commits to all three inputs"
+    , body := do
+        let z := ByteArray.mk (Array.replicate 32 (0 : UInt8))
+        let o := ByteArray.mk (Array.replicate 32 (1 : UInt8))
+        Test.assert
+          (StepVMCoherence.l1NextEntryHash z z z !=
+           StepVMCoherence.l1NextEntryHash o z z) "prev is committed"
+        Test.assert
+          (StepVMCoherence.l1NextEntryHash z z z !=
+           StepVMCoherence.l1NextEntryHash z o z) "state root is committed"
+        Test.assert
+          (StepVMCoherence.l1NextEntryHash z z z !=
+           StepVMCoherence.l1NextEntryHash z z o) "action is committed"
+    }
+  , { name := "SVC.5.e+: every cellProof carries a well-formed SMT opening"
+    , body := do
+        -- Shape, not value: a `0x`-prefixed hex string of a NONZERO
+        -- multiple of 32 bytes — the 32-byte bitmask plus whole
+        -- siblings.  This is the same predicate
+        -- `KnomosisStepVM.executeStep` enforces at intake and the Rust
+        -- deserialiser enforces on the wire, so a corpus entry the L1
+        -- would reject cannot be committed.
+        --
+        -- It is a real regression guard rather than a restatement:
+        -- `CellProof.proofData` DEFAULTS to empty, so a builder that
+        -- reverted to `buildCellProof` would emit a bundle that is
+        -- well-formed in every other respect.  Two of the bulk
+        -- builders did exactly that, and only this shape check found
+        -- them.
+        Test.assert (allFixtures.all (fun f =>
+          f.cellProofsForFixture.all (fun p =>
+            p.proofDataHex.startsWith "0x" ∧
+            p.proofDataHex.length > 2 ∧
+            (p.proofDataHex.length - 2) % 64 = 0)))
+          "every opening is a nonzero multiple of 32 bytes"
+    }
+  , { name := "SVC.5.e+: openings differ across cells of one fixture"
+    , body := do
+        -- A constant opening would satisfy the shape check above while
+        -- carrying no information.  Distinct cells sit at distinct SMT
+        -- keys, so their sibling paths must differ — pick the largest
+        -- happy bundle and require at least two distinct openings.
+        let happy := allFixtures.filter (fun f =>
+          f.expectedRevertReason = "null" ∧
+          f.cellProofsForFixture.length ≥ 2)
+        Test.assert (happy.any (fun f =>
+          (f.cellProofsForFixture.map (fun p => p.proofDataHex)).eraseDups.length ≥ 2))
+          "openings are cell-specific, not a shared constant"
     }
   , { name := "SVC.5.e+: every happy fixture's cellProofs has a known cellKind"
     , body := do

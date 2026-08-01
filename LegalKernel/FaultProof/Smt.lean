@@ -351,6 +351,48 @@ structure SmtCellProof where
 
 namespace SmtCellProof
 
+/-- **The L1 wire format for an opening**: the 32-byte bitmask
+    followed by the non-canonical-empty siblings in depth order.
+
+    Byte-identical to what `SmtCellVerifier.recomputeRoot` parses:
+    `proofData[0:32]` is the bitmask, `proofData[32:]` splits into
+    32-byte siblings.  The verifier rejects a misaligned tail, so a
+    malformed encoding fails closed rather than being silently
+    reinterpreted.
+
+    Defined here rather than in the JSON layer because it is a
+    consensus encoding — both stacks parse these bytes — and a second
+    spelling of it would be a place for the two to drift. -/
+def toWireBytes (p : SmtCellProof) : ByteArray :=
+  p.siblings.foldl (fun acc s => acc ++ s) p.bitmask
+
+/-- The wire encoding's length is `32 + 32 × |siblings|`, which is
+    exactly the shape the L1 validates before walking. -/
+theorem toWireBytes_size (p : SmtCellProof)
+    (h_mask : p.bitmask.size = 32)
+    (h_sibs : ∀ s ∈ p.siblings, s.size = 32) :
+    (toWireBytes p).size = 32 + 32 * p.siblings.size := by
+  unfold toWireBytes
+  have h : ∀ (l : List ByteArray) (acc : ByteArray),
+      (∀ s ∈ l, s.size = 32) →
+      (l.foldl (fun a s => a ++ s) acc).size = acc.size + 32 * l.length := by
+    intro l
+    induction l with
+    | nil => intro acc _; simp
+    | cons a t ih =>
+      intro acc hl
+      rw [List.foldl_cons, ih (acc ++ a) (fun s hs => hl s (List.mem_cons_of_mem _ hs))]
+      rw [ByteArray.size_append, hl a List.mem_cons_self]
+      simp [List.length_cons]
+      omega
+  rw [show p.siblings.foldl (fun acc s => acc ++ s) p.bitmask
+        = p.siblings.toList.foldl (fun acc s => acc ++ s) p.bitmask from by
+      simp [Array.foldl_toList]]
+  rw [h p.siblings.toList p.bitmask (fun s hs => h_sibs s (by simpa using hs))]
+  rw [h_mask]
+  simp
+
+
 /-- The empty proof: no non-canonical-empty siblings, all-zero
     bitmask.  Represents a path with all canonical-empty
     siblings (e.g. the cell proof for a singleton map). -/

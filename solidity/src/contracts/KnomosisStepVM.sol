@@ -172,7 +172,18 @@ contract KnomosisStepVM {
         uint256 keyB;           // second key (only for balance: actor)
         bytes   cellValue;      // cell value bytes
         bytes32 witnessCommit;  // commitExtendedState(witnessState)
+        bytes   proofData;      // SMT opening: 32-byte bitmask ++ siblings
     }
+
+    /// @notice Maximum `CellProof.proofData` length.
+    ///
+    /// @dev    An opening is a 32-byte bitmask followed by one 32-byte
+    ///         sibling per set bit, and the tree is `SMT_DEPTH = 256`
+    ///         deep — so `32 * (1 + 256)` is the exact upper bound, not
+    ///         a round number.  Mirrors the Lean wire format
+    ///         (`SmtCellProof.toWireBytes`) and the Rust cap
+    ///         (`MAX_PROOF_DATA_BYTES`, `submitter.rs`).
+    uint256 public constant MAX_PROOF_DATA_BYTES = 32 * (1 + 256);
 
     /* ---------------------------------------------------------- */
     /* Per-variant gas budgets (Appendix F)                       */
@@ -222,6 +233,19 @@ contract KnomosisStepVM {
     error UnauthorizedSigner();
     error TooManyCellProofs();
     error MalformedCellValue();
+    /// @notice A `CellProof.proofData` is not a well-formed SMT
+    ///         opening: it must be a 32-byte bitmask followed by whole
+    ///         32-byte siblings, so its length is a nonzero multiple of
+    ///         32 bounded by `MAX_PROOF_DATA_BYTES`.
+    ///
+    /// @dev    Validated at intake even though `executeStep` does not
+    ///         yet consume the opening.  The alternative — accepting
+    ///         any byte string until the consumer lands — means the
+    ///         first release that consumes it starts rejecting bundles
+    ///         that earlier releases accepted, and the observer would
+    ///         discover the shape mismatch on-chain rather than in its
+    ///         own tests.
+    error MalformedProofData(uint256 length);
 
     /* ---------------------------------------------------------- */
     /* Per-variant commit tag hashes                              */
@@ -297,10 +321,22 @@ contract KnomosisStepVM {
         if (cellProofs.length > MAX_CELL_PROOFS_PER_STEP)
             revert TooManyCellProofs();
 
-        // 1. Verify all cell proofs witness the same pre-state commit.
+        // 1. Verify all cell proofs witness the same pre-state commit,
+        //    and that each carries a well-formed SMT opening.
+        //
+        //    The opening is NOT consumed yet — `witnessCommit` is still
+        //    what binds a cell to the pre-state.  It is validated here
+        //    so the wire shape is fixed before the verifier that reads
+        //    it lands, rather than after: an observer emitting a
+        //    malformed opening finds out from this revert, not from a
+        //    later release silently rejecting bundles it used to take.
         for (uint256 i = 0; i < cellProofs.length; i++) {
             if (cellProofs[i].witnessCommit != preStateCommit) {
                 revert BadCellProof();
+            }
+            uint256 pdLen = cellProofs[i].proofData.length;
+            if (pdLen == 0 || pdLen % 32 != 0 || pdLen > MAX_PROOF_DATA_BYTES) {
+                revert MalformedProofData(pdLen);
             }
         }
 

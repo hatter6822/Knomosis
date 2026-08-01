@@ -146,6 +146,26 @@ All five must succeed (no revert).
 
 ### 3.1 State-root submission monitoring
 
+**Sequencer obligation: bind the action.**
+`submitStateRoot(logIndex, stateCommit, prevLogEntryHash, actionCommit)`
+takes a fourth argument, and getting it wrong is a *liveness* failure
+for the sequencer rather than a submission-time error — the contract
+folds the value into the chain without interpreting it, so a wrong
+`actionCommit` is accepted at publish time and surfaces only when the
+root is challenged, at which point every honest
+`terminateOnSingleStep` reverts `ActionNotInLogChain` and the sequencer
+loses by timeout.
+
+Compute it as
+`keccak256(abi.encodePacked(uint8 actionKind, uint64 signer, bytes actionFields))`
+over the action that carried `logIndex - 1` to `logIndex` — the same
+triple the terminate call passes. Lean's
+`LegalKernel.FaultProof.StepVMCoherence.l1ActionCommit` is the
+reference implementation, and `step_vm.json`'s
+`expectedActionCommitHex` pins the two stacks byte-for-byte, so an
+integration can check its own encoder against the corpus before it
+publishes anything.
+
 Track the following events from `KnomosisStateRootSubmission`:
 
 | Event | Action |

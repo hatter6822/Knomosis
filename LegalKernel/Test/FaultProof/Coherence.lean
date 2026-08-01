@@ -151,13 +151,20 @@ def tests : List TestCase :=
   , -- ===== Commit-level chain coherence theorem =====
     { name := "recomputeCommitment chain coherence API stable"
     , body := do
-        let _ := @recomputeCommitment_chain_coherent_with_productionReplayBudget
+        let _proof : ∀ (es : ExtendedState) (i : Nat) (log : List LogEntry),
+            commitExtendedState (foldStepApplyOverLog es i log) =
+            commitExtendedState
+              (productionReplayBudget es i (log.map (·.signedAction))) :=
+          recomputeCommitment_chain_coherent_with_productionReplayBudget
         pure ()
     }
   , -- ===== Per-step coherence theorem (#225) =====
     { name := "recomputeCommitment per-step coherence API stable"
     , body := do
-        let _ := @recomputeCommitment_coherent_with_productionApplyBudget
+        let _proof : ∀ (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat),
+            recomputeCommitment es st l2LogIndex
+              = commitExtendedState (productionApplyBudget es st l2LogIndex) :=
+          recomputeCommitment_coherent_with_productionApplyBudget
         pure ()
     }
   , -- ===== `recomputeCommitment` is deterministic =====

@@ -91,7 +91,7 @@ def tests : List TestCase :=
         let absentProof : CellProof :=
           { cellTag := CellTag.balance 1 2,
             cellValue := canonicalAbsentValue (CellTag.balance 1 2),
-            witnessState := emptyEs }
+            witnessState := emptyEs, proofData := ByteArray.empty }
         assertEq (expected := true)
                  (actual := verifyCellProof emptyCommit absentProof)
                  "absent-cell proof verifies"
@@ -187,12 +187,16 @@ def tests : List TestCase :=
     }
   , { name := "Theorem #260 verifyCellProof_complete_for_absent_cell API"
     , body := do
-        let _proof : ∀ (es : ExtendedState) (tag : CellTag),
+        -- Quantified over the opening: the Lean verifier never reads
+        -- `proofData`, so completeness holds for every one.
+        let _proof : ∀ (es : ExtendedState) (tag : CellTag)
+            (opening : ByteArray),
             isCellAbsent es tag →
             verifyCellProof (commitExtendedState es)
               { cellTag := tag,
                 cellValue := canonicalAbsentValue tag,
-                witnessState := es } = true :=
+                witnessState := es,
+                proofData := opening } = true :=
           verifyCellProof_complete_for_absent_cell
         pure ()
     }

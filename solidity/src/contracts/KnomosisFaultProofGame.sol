@@ -8,6 +8,8 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 
 import {KnomosisStepVM} from "./KnomosisStepVM.sol";
 
+import {LogChain} from "../lib/LogChain.sol";
+
 /// @notice Minimal interface for the state-root submission
 ///         contract's dispute-locking, bond-slashing, flag-
 ///         clearing, and per-root lookup entry points.  Used by
@@ -201,6 +203,17 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
     /// @notice A pull-payment withdrawal was attempted with nothing
     ///         credited, or its transfer failed.
     error NothingToWithdraw();
+    /// @notice The `(actionKind, actionFields, signer)` triple supplied
+    ///         to `terminateOnSingleStep` is not the action the
+    ///         sequencer bound to the disputed root's log-entry chain.
+    ///
+    ///         Without this check the terminal step executed WHATEVER
+    ///         action the responding party submitted, and the L1 had no
+    ///         record of which action the L2 actually ran — so a party
+    ///         about to lose could search for a different action whose
+    ///         step reproduces the disputed root and settle in its
+    ///         favour on a step that never happened.
+    error ActionNotInLogChain();
     /// @notice The constructor's `_minChallengeBond` is zero.  A zero
     ///         minimum bond lets a challenger open a game with nothing at
     ///         risk (`initiateChallenge` accepts `msg.value == 0`) while
@@ -465,6 +478,23 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
                               g.sequencer : g.challenger;
         if (msg.sender != responsible) revert NotResponsible();
 
+        // Authenticate the action against the log-entry chain BEFORE
+        // executing it.  `g.high.idx` is the index the disputed action
+        // produced, and its stored `expectedNextHash` is the chain
+        // value the sequencer committed to when it published that root
+        // — over `(prevLogEntryHash, stateCommit, actionCommit)`.
+        // Re-deriving the commitment from the submitted triple and
+        // requiring the chain value to match makes the action the L2
+        // actually executed the only one this step can adjudicate.
+        //
+        // Read at terminate rather than cached at challenge time: a
+        // submitted root is immutable (`submitStateRoot` rejects a
+        // re-submission at an occupied index, and `revertStateRootsFrom`
+        // marks a range without clearing storage), so the value cannot
+        // have moved, and caching it would cost two storage slots per
+        // game for nothing.
+        _requireActionInLogChain(g.high.idx, actionKind, actionFields, signer);
+
         // Call the step VM with the per-variant dispatch.
         bytes32 computedPostCommit = stepVM.executeStep(
             g.low.commit, actionKind, actionFields, signer, cellProofs);
@@ -483,6 +513,36 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
               ? GameStatus.ChallengerWon
               : GameStatus.SequencerWon);
         }
+    }
+
+    /// @notice Revert unless the submitted action is the one the
+    ///         sequencer bound to `logIndex`'s log-entry chain.
+    ///
+    /// @dev    Extracted from `terminateOnSingleStep` to keep that
+    ///         function's stack shallow under `via_ir`.
+    function _requireActionInLogChain(
+        uint64 logIndex,
+        uint8 actionKind,
+        bytes calldata actionFields,
+        uint64 signer
+    ) internal view {
+        (
+            /* sequencer */,
+            bytes32 stateCommit,
+            bytes32 prevLogEntryHash,
+            bytes32 expectedNextHash,
+            /* bond */,
+            /* submittedAtBlock */,
+            /* finalised */,
+            /* disputed */
+        ) = IStateRootSubmission(stateRootSubmission).roots(logIndex);
+
+        bytes32 expected = LogChain.nextEntryHash(
+            prevLogEntryHash,
+            stateCommit,
+            LogChain.actionCommit(actionKind, signer, actionFields)
+        );
+        if (expected != expectedNextHash) revert ActionNotInLogChain();
     }
 
     /* ---------------------------------------------------------- */

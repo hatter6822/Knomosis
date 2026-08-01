@@ -32,6 +32,18 @@ contract KnomosisStepVMTest is Test {
 
     /* -------- Cell-proof verification -------- */
 
+    /// @notice A well-formed but minimal SMT opening: a 32-byte
+    ///         all-zero bitmask and no siblings.
+    ///
+    /// @dev    Not a filler value — it is the exact opening of a cell in
+    ///         an otherwise-empty tree, where every level's sibling is
+    ///         the canonical empty sub-tree.  `executeStep` shape-checks
+    ///         `proofData` at intake, so a helper returning `""` would
+    ///         make every caller revert.
+    function _defaultProofData() internal pure returns (bytes memory) {
+        return new bytes(32);
+    }
+
     function _makeCellProof(
         uint8 cellKind,
         uint256 keyA,
@@ -39,12 +51,25 @@ contract KnomosisStepVMTest is Test {
         bytes memory cellValue,
         bytes32 witnessCommit
     ) internal pure returns (KnomosisStepVM.CellProof memory) {
+        return _makeCellProofWithOpening(
+            cellKind, keyA, keyB, cellValue, witnessCommit, _defaultProofData());
+    }
+
+    function _makeCellProofWithOpening(
+        uint8 cellKind,
+        uint256 keyA,
+        uint256 keyB,
+        bytes memory cellValue,
+        bytes32 witnessCommit,
+        bytes memory proofData
+    ) internal pure returns (KnomosisStepVM.CellProof memory) {
         return KnomosisStepVM.CellProof({
             cellKind: cellKind,
             keyA: keyA,
             keyB: keyB,
             cellValue: cellValue,
-            witnessCommit: witnessCommit
+            witnessCommit: witnessCommit,
+            proofData: proofData
         });
     }
 
@@ -68,6 +93,111 @@ contract KnomosisStepVMTest is Test {
             actionFields,
             uint64(10),
             proofs);
+    }
+
+    /* -------- Cell-proof opening shape -------- */
+
+    /// @notice Builds a one-proof transfer bundle whose only variable is
+    ///         the `proofData`, so the shape assertions below isolate it.
+    function _transferBundleWithProofData(bytes memory proofData)
+        internal
+        pure
+        returns (KnomosisStepVM.CellProof[] memory)
+    {
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](1);
+        proofs[0] = _makeCellProofWithOpening(
+            0, 1, 10, new bytes(0), FIXTURE_PRE_COMMIT, proofData);
+        return proofs;
+    }
+
+    function _executeTransferStep(KnomosisStepVM.CellProof[] memory proofs) internal {
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(10), uint64(20), uint128(5));
+        stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
+    }
+
+    /// @notice An EMPTY opening is rejected.  Every opening carries at
+    ///         least the 32-byte bitmask, so zero length is not "no
+    ///         siblings" — it is a proof that was never built.
+    function test_executeStep_rejects_empty_proof_data() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(KnomosisStepVM.MalformedProofData.selector, uint256(0)));
+        _executeTransferStep(_transferBundleWithProofData(new bytes(0)));
+    }
+
+    /// @notice A misaligned opening is rejected: the tail after the
+    ///         bitmask must split into whole 32-byte siblings, or the
+    ///         verifier would reinterpret the remainder.
+    function test_executeStep_rejects_misaligned_proof_data() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(KnomosisStepVM.MalformedProofData.selector, uint256(48)));
+        _executeTransferStep(_transferBundleWithProofData(new bytes(48)));
+    }
+
+    /// @notice An opening longer than the tree is deep is rejected.
+    ///         `MAX_PROOF_DATA_BYTES` is `32 * (1 + SMT_DEPTH)`, so one
+    ///         word past it cannot be a path in this tree.
+    function test_executeStep_rejects_oversized_proof_data() public {
+        uint256 over = stepVM.MAX_PROOF_DATA_BYTES() + 32;
+        vm.expectRevert(
+            abi.encodeWithSelector(KnomosisStepVM.MalformedProofData.selector, over));
+        _executeTransferStep(_transferBundleWithProofData(new bytes(over)));
+    }
+
+    /// @notice The exact bound is accepted — an off-by-one in the cap
+    ///         would make the deepest legitimate opening unsubmittable.
+    ///
+    /// @dev    Asserted by executing a step that SUCCEEDS, so the check
+    ///         cannot pass by reverting somewhere else for some other
+    ///         reason.
+    function test_executeStep_accepts_proof_data_at_the_cap() public view {
+        bytes memory maxOpening = new bytes(stepVM.MAX_PROOF_DATA_BYTES());
+        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
+        proofs[0] = _makeCellProofWithOpening(
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT, maxOpening);
+        proofs[1] = _makeCellProofWithOpening(
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT, maxOpening);
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(10), uint64(20), uint128(5));
+        bytes32 result = stepVM.executeStep(
+            FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), proofs);
+        assertTrue(result != bytes32(0), "a cap-length opening must not block the step");
+    }
+
+    /// @notice **The opening does not (yet) change the result.**  S5 is
+    ///         a wire widening: `executeStep` validates the shape and
+    ///         nothing else, so two bundles differing only in their
+    ///         openings must still commit to the same post-state.  When
+    ///         the verifier lands this test inverts, and that inversion
+    ///         is the observable signal that the flip happened.
+    function test_executeStep_result_is_independent_of_proof_data_today() public view {
+        bytes memory shortOpening = new bytes(32);
+        bytes memory longOpening = new bytes(32 * 4);
+        bytes memory actionFields = abi.encodePacked(
+            uint64(1), uint64(10), uint64(20), uint128(5));
+
+        KnomosisStepVM.CellProof[] memory a = new KnomosisStepVM.CellProof[](2);
+        a[0] = _makeCellProofWithOpening(
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT, shortOpening);
+        a[1] = _makeCellProofWithOpening(
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT, shortOpening);
+
+        KnomosisStepVM.CellProof[] memory b = new KnomosisStepVM.CellProof[](2);
+        b[0] = _makeCellProofWithOpening(
+            0, 1, 10, _encodeCbeAmount(100), FIXTURE_PRE_COMMIT, longOpening);
+        b[1] = _makeCellProofWithOpening(
+            0, 1, 20, _encodeCbeAmount(50), FIXTURE_PRE_COMMIT, longOpening);
+
+        assertEq(
+            stepVM.executeStep(FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), a),
+            stepVM.executeStep(FIXTURE_PRE_COMMIT, uint8(0), actionFields, uint64(10), b),
+            "S5 accepts the opening without consuming it");
+    }
+
+    /// @notice The cap is the tree's exact geometry, not a round number.
+    function test_constants_proof_data_cap_matches_smt_depth() public view {
+        assertEq(stepVM.MAX_PROOF_DATA_BYTES(), 32 * (1 + 256));
     }
 
     /* -------- Action-kind dispatch -------- */

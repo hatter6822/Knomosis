@@ -630,6 +630,34 @@ theorem canonicalSiblings_verifies_absent (es : ExtendedState) (t : CellTag)
   obtain ⟨t', ht', rfl, h_ne'⟩ := stateCellEntries_spec es p hp
   exact h_keys t' ht' h_ne'
 
+/-- **The cell proof an honest responder submits**: the canonical
+    witness-state form, plus the SMT opening the L1 actually walks.
+
+    Separate from `buildCellProof` because of the layering rather than
+    the semantics: the opening needs `stateCellEntries`, and the cell
+    READER is defined below the enumeration it feeds — the cell root is
+    built out of `getCellValue`, so the reader cannot see it.
+
+    Every proof this project publishes should come from here.  A
+    `CellProof` with the default empty `proofData` encodes "every
+    sibling is the canonical empty sub-tree", which is a real opening
+    for an empty tree and a wrong one for any populated state — so a
+    forgotten opening fails verification rather than passing with a
+    hole. -/
+def buildCellProofWithOpening (es : ExtendedState) (t : CellTag) : CellProof :=
+  { buildCellProof es t with
+      proofData := SmtCellProof.toWireBytes (buildStateCellProof es t) }
+
+/-- The opening-bearing builder agrees with the plain one everywhere
+    except the opening, so nothing that reads a tag or a value has to
+    care which builder produced the proof. -/
+theorem buildCellProofWithOpening_eq_buildCellProof_fields
+    (es : ExtendedState) (t : CellTag) :
+    (buildCellProofWithOpening es t).cellTag = (buildCellProof es t).cellTag ∧
+    (buildCellProofWithOpening es t).cellValue = (buildCellProof es t).cellValue ∧
+    (buildCellProofWithOpening es t).witnessState = (buildCellProof es t).witnessState :=
+  ⟨rfl, rfl, rfl⟩
+
 /-! ## Writing a cell into the published root
 
 The step VM holds a root and a bundle of openings, not a state, so

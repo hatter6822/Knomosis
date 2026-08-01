@@ -451,6 +451,17 @@ def buildCellProof (es : ExtendedState) (tag : CellTag) : CellProof where
   cellTag      := tag
   cellValue    := getCellValue es tag
   witnessState := es
+  -- No opening.  Not an oversight and not a default: building one
+  -- needs `stateCellEntries`, which is defined ABOVE this module —
+  -- the cell root is built out of `getCellValue`, so the reader
+  -- cannot see the enumeration it feeds.
+  --
+  -- `buildCellProofWithOpening` (`StateCellsInjective.lean`) is the
+  -- builder for anything that reaches an L1 verifier, and every
+  -- production bundle uses it.  This one remains for the Lean-side
+  -- `verifyCellProof` path, which recomputes the commit from
+  -- `witnessState` and never reads the opening.
+  proofData    := ByteArray.empty
 
 end FaultProof
 end LegalKernel

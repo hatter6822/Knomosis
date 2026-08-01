@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2dc8da83a8ace6ff852c9030d3d9a2f4a9593d675cf82c7ef7f0bdf05cd43772"
+    "source_digest": "c54e968ebacc52cbfe6597042236b31dcde955780e4384b9e237b6b9a7c928ec"
   },
   "summary": {
     "module_count": 331,
-    "declaration_count": 5684
+    "declaration_count": 5700
   },
   "modules": [
     {
@@ -18157,7 +18157,7 @@
         {
           "kind": "def",
           "name": "CellProof.decode",
-          "line": 176,
+          "line": 177,
           "called": [
             "CellProof.encode",
             "DecodeError",
@@ -18172,7 +18172,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.encode",
-          "line": 197,
+          "line": 202,
           "called": [
             "Stream"
           ]
@@ -18180,7 +18180,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.decode",
-          "line": 201,
+          "line": 206,
           "called": [
             "CellProofBundle.encode",
             "DecodeError",
@@ -18193,7 +18193,7 @@
         {
           "kind": "def",
           "name": "KernelStep.encode",
-          "line": 216,
+          "line": 221,
           "called": [
             "SignedAction",
             "Stream",
@@ -18203,7 +18203,7 @@
         {
           "kind": "def",
           "name": "KernelStep.decode",
-          "line": 223,
+          "line": 228,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18217,7 +18217,7 @@
         {
           "kind": "theorem",
           "name": "kernelStep_encode_deterministic",
-          "line": 250,
+          "line": 255,
           "called": [
             "KernelStep.encode"
           ]
@@ -18225,7 +18225,7 @@
         {
           "kind": "theorem",
           "name": "cellProof_encode_deterministic",
-          "line": 255,
+          "line": 260,
           "called": [
             "CellProof.encode"
           ]
@@ -18233,7 +18233,7 @@
         {
           "kind": "theorem",
           "name": "cellTag_encode_deterministic",
-          "line": 260,
+          "line": 265,
           "called": [
             "CellTag.encode",
             "Encoding",
@@ -20457,7 +20457,7 @@
         {
           "kind": "structure",
           "name": "CellProofBundle",
-          "line": 259,
+          "line": 277,
           "called": [
             "CellProof"
           ]
@@ -20465,7 +20465,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.empty",
-          "line": 268,
+          "line": 286,
           "called": [
             "CellProofBundle"
           ]
@@ -20473,7 +20473,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.push",
-          "line": 271,
+          "line": 289,
           "called": [
             "CellProof",
             "CellProofBundle"
@@ -20482,7 +20482,7 @@
         {
           "kind": "def",
           "name": "CellProofBundle.size",
-          "line": 276,
+          "line": 294,
           "called": [
             "CellProofBundle"
           ]
@@ -20490,13 +20490,13 @@
         {
           "kind": "namespace",
           "name": "Cell",
-          "line": 295,
+          "line": 313,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "SmtProof",
-          "line": 298,
+          "line": 316,
           "called": [
             "SmtCellProof"
           ]
@@ -20504,7 +20504,7 @@
         {
           "kind": "abbrev",
           "name": "smtVerify",
-          "line": 302,
+          "line": 320,
           "called": [
             "verifySmtCellProof"
           ]
@@ -20512,7 +20512,7 @@
         {
           "kind": "theorem",
           "name": "smtSound",
-          "line": 310,
+          "line": 328,
           "called": [
             "BitsKey",
             "Cell",
@@ -21786,19 +21786,19 @@
         {
           "kind": "def",
           "name": "buildCellProofsForAction",
-          "line": 266,
+          "line": 274,
           "called": [
             "CellProofBundle",
             "ExtendedState",
             "SignedAction",
-            "buildCellProof",
+            "buildCellProofWithOpening",
             "es"
           ]
         },
         {
           "kind": "theorem",
           "name": "buildCellProofsForAction_verifies",
-          "line": 272,
+          "line": 280,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -21808,7 +21808,7 @@
             "commitExtendedState",
             "es",
             "verifyCellProofs",
-            "verifyCellProofs_complete_for_canonical_bundle"
+            "verifyCellProofs_complete_for_opening_bundle"
           ]
         }
       ]
@@ -23808,7 +23808,7 @@
             "ActorId",
             "CellProofBundle",
             "ExtendedState",
-            "buildCellProof",
+            "buildCellProofWithOpening",
             "es"
           ]
         },
@@ -23832,7 +23832,7 @@
             "es",
             "transfer",
             "verifyCellProofs",
-            "verifyCellProofs_complete_for_canonical_bundle"
+            "verifyCellProofs_complete_for_opening_bundle"
           ]
         }
       ]
@@ -25140,7 +25140,7 @@
     {
       "module": "LegalKernel.FaultProof.Smt",
       "path": "LegalKernel/FaultProof/Smt.lean",
-      "declaration_count": 66,
+      "declaration_count": 68,
       "declarations": [
         {
           "kind": "namespace",
@@ -25341,8 +25341,25 @@
         },
         {
           "kind": "def",
+          "name": "toWireBytes",
+          "line": 365,
+          "called": [
+            "SmtCellProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "toWireBytes_size",
+          "line": 370,
+          "called": [
+            "SmtCellProof",
+            "toWireBytes"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "empty",
-          "line": 356,
+          "line": 398,
           "called": [
             "SmtCellProof"
           ]
@@ -25350,7 +25367,7 @@
         {
           "kind": "def",
           "name": "bitmaskBit",
-          "line": 362,
+          "line": 404,
           "called": [
             "SmtCellProof"
           ]
@@ -25358,7 +25375,7 @@
         {
           "kind": "def",
           "name": "isWellFormed",
-          "line": 379,
+          "line": 421,
           "called": [
             "SmtCellProof"
           ]
@@ -25366,7 +25383,7 @@
         {
           "kind": "theorem",
           "name": "isWellFormed_implies_all_siblings_32",
-          "line": 384,
+          "line": 426,
           "called": [
             "SmtCellProof",
             "isWellFormed"
@@ -25375,13 +25392,13 @@
         {
           "kind": "def",
           "name": "paddingHash",
-          "line": 413,
+          "line": 455,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "paddingHash_size",
-          "line": 417,
+          "line": 459,
           "called": [
             "paddingHash"
           ]
@@ -25389,7 +25406,7 @@
         {
           "kind": "def",
           "name": "encodeAsBytes",
-          "line": 428,
+          "line": 470,
           "called": [
             "Encodable"
           ]
@@ -25397,7 +25414,7 @@
         {
           "kind": "def",
           "name": "leafHash",
-          "line": 434,
+          "line": 476,
           "called": [
             "Encodable",
             "encodeAsBytes",
@@ -25407,7 +25424,7 @@
         {
           "kind": "theorem",
           "name": "leafHash_size",
-          "line": 439,
+          "line": 481,
           "called": [
             "Encodable",
             "hashBytes_size",
@@ -25417,7 +25434,7 @@
         {
           "kind": "def",
           "name": "smtStep",
-          "line": 454,
+          "line": 496,
           "called": [
             "hashBytes"
           ]
@@ -25425,13 +25442,13 @@
         {
           "kind": "def",
           "name": "smtStepPreimage",
-          "line": 463,
+          "line": 505,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "smtStep_eq_hash_preimage",
-          "line": 467,
+          "line": 509,
           "called": [
             "hashBytes",
             "smtStep",
@@ -25441,7 +25458,7 @@
         {
           "kind": "theorem",
           "name": "smtStep_size",
-          "line": 473,
+          "line": 515,
           "called": [
             "hashBytes_size",
             "smtStep"
@@ -25450,13 +25467,13 @@
         {
           "kind": "theorem",
           "name": "byteArray_append_inj_left",
-          "line": 483,
+          "line": 525,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "smtStep_inj_under_collision_free",
-          "line": 516,
+          "line": 558,
           "called": [
             "CollisionFreeOn",
             "byteArray_append_inj_left",
@@ -25469,7 +25486,7 @@
         {
           "kind": "def",
           "name": "stepPair",
-          "line": 545,
+          "line": 587,
           "called": [
             "smtStep"
           ]
@@ -25477,7 +25494,7 @@
         {
           "kind": "theorem",
           "name": "stepPair_size",
-          "line": 549,
+          "line": 591,
           "called": [
             "smtStep_size",
             "stepPair"
@@ -25486,7 +25503,7 @@
         {
           "kind": "def",
           "name": "keyBits",
-          "line": 554,
+          "line": 596,
           "called": [
             "BitsKey",
             "smtDepth"
@@ -25495,7 +25512,7 @@
         {
           "kind": "def",
           "name": "expandSiblingsAux",
-          "line": 567,
+          "line": 609,
           "called": [
             "SmtCellProof",
             "emptySubtreeHash",
@@ -25505,7 +25522,7 @@
         {
           "kind": "def",
           "name": "expandSiblings",
-          "line": 577,
+          "line": 619,
           "called": [
             "SmtCellProof",
             "expandSiblingsAux",
@@ -25515,7 +25532,7 @@
         {
           "kind": "def",
           "name": "smtWalk",
-          "line": 583,
+          "line": 625,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25529,7 +25546,7 @@
         {
           "kind": "def",
           "name": "smtRootListAux",
-          "line": 619,
+          "line": 661,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25542,7 +25559,7 @@
         {
           "kind": "def",
           "name": "smtRoot",
-          "line": 647,
+          "line": 689,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25553,7 +25570,7 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_size",
-          "line": 668,
+          "line": 710,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25567,7 +25584,7 @@
         {
           "kind": "theorem",
           "name": "smtRoot_size",
-          "line": 697,
+          "line": 739,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25579,13 +25596,13 @@
         {
           "kind": "def",
           "name": "setBitmaskBit",
-          "line": 728,
+          "line": 770,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildSmtCellProofAux",
-          "line": 759,
+          "line": 801,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25597,7 +25614,7 @@
         {
           "kind": "def",
           "name": "buildSmtCellProof",
-          "line": 808,
+          "line": 850,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25611,7 +25628,7 @@
         {
           "kind": "def",
           "name": "verifySmtCellProof",
-          "line": 824,
+          "line": 866,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25622,7 +25639,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_deterministic",
-          "line": 831,
+          "line": 873,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25633,7 +25650,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_walks_to_root",
-          "line": 850,
+          "line": 892,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25645,13 +25662,13 @@
         {
           "kind": "theorem",
           "name": "SmtCellProof.empty_isWellFormed",
-          "line": 863,
+          "line": 905,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_empty_self_verifies",
-          "line": 878,
+          "line": 920,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25664,7 +25681,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_all_32",
-          "line": 905,
+          "line": 947,
           "called": [
             "SmtCellProof",
             "emptySubtreeHash_size",
@@ -25676,7 +25693,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_all_32",
-          "line": 946,
+          "line": 988,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -25687,7 +25704,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_length",
-          "line": 957,
+          "line": 999,
           "called": [
             "SmtCellProof",
             "expandSiblingsAux"
@@ -25696,7 +25713,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_length",
-          "line": 971,
+          "line": 1013,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -25707,7 +25724,7 @@
         {
           "kind": "theorem",
           "name": "keyBits_length",
-          "line": 976,
+          "line": 1018,
           "called": [
             "BitsKey",
             "keyBits",
@@ -25717,7 +25734,7 @@
         {
           "kind": "def",
           "name": "walkPreimages",
-          "line": 985,
+          "line": 1027,
           "called": [
             "smtStepPreimage",
             "stepPair"
@@ -25726,7 +25743,7 @@
         {
           "kind": "theorem",
           "name": "walk_leaf_inj_under_collision_free",
-          "line": 1002,
+          "line": 1044,
           "called": [
             "CollisionFreeOn",
             "hashBytes",
@@ -25740,7 +25757,7 @@
         {
           "kind": "def",
           "name": "smtCellProofPreimages",
-          "line": 1114,
+          "line": 1156,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25755,7 +25772,7 @@
         {
           "kind": "theorem",
           "name": "smtCellProof_no_value_substitution",
-          "line": 1133,
+          "line": 1175,
           "called": [
             "BitsKey",
             "CollisionFreeOn",
@@ -25782,7 +25799,7 @@
         {
           "kind": "theorem",
           "name": "smtCellProof_sound_under_collision_free",
-          "line": 1202,
+          "line": 1244,
           "called": [
             "BitsKey",
             "CollisionFreeOn",
@@ -27358,7 +27375,7 @@
     {
       "module": "LegalKernel.FaultProof.StateCellsInjective",
       "path": "LegalKernel/FaultProof/StateCellsInjective.lean",
-      "declaration_count": 46,
+      "declaration_count": 48,
       "declarations": [
         {
           "kind": "namespace",
@@ -27769,9 +27786,34 @@
           ]
         },
         {
+          "kind": "def",
+          "name": "buildCellProofWithOpening",
+          "line": 646,
+          "called": [
+            "CellProof",
+            "CellTag",
+            "ExtendedState",
+            "buildCellProof",
+            "buildStateCellProof",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "buildCellProofWithOpening_eq_buildCellProof_fields",
+          "line": 653,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "buildCellProof",
+            "buildCellProofWithOpening",
+            "es"
+          ]
+        },
+        {
           "kind": "theorem",
           "name": "cellLeaf_size",
-          "line": 647,
+          "line": 675,
           "called": [
             "CellTag",
             "canonicalAbsentValue",
@@ -27783,7 +27825,7 @@
         {
           "kind": "def",
           "name": "updateStateCellRoot",
-          "line": 657,
+          "line": 685,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -27796,7 +27838,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_updates_root",
-          "line": 668,
+          "line": 696,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -27826,7 +27868,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_eq_commit_of_canonical",
-          "line": 707,
+          "line": 735,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -27851,7 +27893,7 @@
         {
           "kind": "theorem",
           "name": "updateStateCellRoot_proof_independent",
-          "line": 732,
+          "line": 760,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27871,7 +27913,7 @@
         {
           "kind": "theorem",
           "name": "mem_dropKey_stateCellEntries_iff",
-          "line": 773,
+          "line": 801,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27890,7 +27932,7 @@
         {
           "kind": "theorem",
           "name": "mem_stateCellEntries_iff",
-          "line": 796,
+          "line": 824,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27908,7 +27950,7 @@
         {
           "kind": "theorem",
           "name": "stateCellEntries_perm_of_cells_agree",
-          "line": 812,
+          "line": 840,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -27925,7 +27967,7 @@
         {
           "kind": "theorem",
           "name": "commitExtendedState_eq_of_cells_agree",
-          "line": 846,
+          "line": 874,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -27942,7 +27984,7 @@
         {
           "kind": "theorem",
           "name": "dropKey_stateCellEntries_perm_of_agree_off",
-          "line": 863,
+          "line": 891,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -27961,7 +28003,7 @@
         {
           "kind": "def",
           "name": "applyStateCellWrite",
-          "line": 893,
+          "line": 921,
           "called": [
             "CellTag",
             "SmtCellProof",
@@ -27973,7 +28015,7 @@
         {
           "kind": "abbrev",
           "name": "StateCellWrite",
-          "line": 901,
+          "line": 929,
           "called": [
             "CellTag",
             "SmtCellProof"
@@ -27982,7 +28024,7 @@
         {
           "kind": "def",
           "name": "foldStateCellWrites",
-          "line": 904,
+          "line": 932,
           "called": [
             "StateCellWrite",
             "StateCommit",
@@ -27992,7 +28034,7 @@
         {
           "kind": "abbrev",
           "name": "CellWriteChain",
-          "line": 913,
+          "line": 941,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -28002,7 +28044,7 @@
         {
           "kind": "def",
           "name": "chainWrites",
-          "line": 918,
+          "line": 946,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -28014,7 +28056,7 @@
         {
           "kind": "def",
           "name": "chainLast",
-          "line": 924,
+          "line": 952,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -28024,7 +28066,7 @@
         {
           "kind": "def",
           "name": "ChainCoherent",
-          "line": 932,
+          "line": 960,
           "called": [
             "BitsDistinctBelow",
             "CellWriteChain",
@@ -28046,7 +28088,7 @@
         {
           "kind": "theorem",
           "name": "foldStateCellWrites_eq_commit_of_coherent",
-          "line": 953,
+          "line": 981,
           "called": [
             "CellWriteChain",
             "ChainCoherent",
@@ -28292,7 +28334,7 @@
     {
       "module": "LegalKernel.FaultProof.StepVMCoherence",
       "path": "LegalKernel/FaultProof/StepVMCoherence.lean",
-      "declaration_count": 54,
+      "declaration_count": 59,
       "declarations": [
         {
           "kind": "namespace",
@@ -28381,8 +28423,52 @@
         },
         {
           "kind": "def",
+          "name": "l1ActionCommitBytes",
+          "line": 423,
+          "called": [
+            "uint64BE"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "l1ActionCommit",
+          "line": 429,
+          "called": [
+            "Action",
+            "ActorId",
+            "actionFieldsForL1",
+            "actionKindByte",
+            "l1ActionCommitBytes"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "l1NextEntryHash",
+          "line": 439,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "l1ActionCommit_size",
+          "line": 445,
+          "called": [
+            "Action",
+            "ActorId",
+            "l1ActionCommit"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "l1NextEntryHash_size",
+          "line": 450,
+          "called": [
+            "l1NextEntryHash"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "findCellProof",
-          "line": 406,
+          "line": 463,
           "called": [
             "CellProof",
             "CellProofBundle",
@@ -28392,7 +28478,7 @@
         {
           "kind": "def",
           "name": "readCellValue",
-          "line": 414,
+          "line": 471,
           "called": [
             "CellProofBundle",
             "CellTag",
@@ -28403,19 +28489,19 @@
         {
           "kind": "def",
           "name": "decodeCellNat",
-          "line": 464,
+          "line": 521,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint64BE",
-          "line": 506,
+          "line": 563,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint128BE",
-          "line": 531,
+          "line": 588,
           "called": [
             "readUint64BE"
           ]
@@ -28423,13 +28509,13 @@
         {
           "kind": "def",
           "name": "sliceFrom",
-          "line": 538,
+          "line": 595,
           "called": []
         },
         {
           "kind": "def",
           "name": "stepVMHash",
-          "line": 564,
+          "line": 621,
           "called": [
             "CellProofBundle",
             "ammReserveActor",
@@ -28477,7 +28563,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_deterministic",
-          "line": 946,
+          "line": 1003,
           "called": [
             "CellProofBundle",
             "stepVMHash"
@@ -28486,7 +28572,7 @@
         {
           "kind": "theorem",
           "name": "actionKindByte_deterministic",
-          "line": 956,
+          "line": 1013,
           "called": [
             "Action",
             "actionKindByte"
@@ -28495,7 +28581,7 @@
         {
           "kind": "theorem",
           "name": "actionFieldsForL1_deterministic",
-          "line": 962,
+          "line": 1019,
           "called": [
             "Action",
             "actionFieldsForL1"
@@ -28504,7 +28590,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_transfer_kind",
-          "line": 980,
+          "line": 1037,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28520,7 +28606,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_mint_kind",
-          "line": 1005,
+          "line": 1062,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28534,7 +28620,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_burn_kind",
-          "line": 1018,
+          "line": 1075,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28548,7 +28634,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_freezeResource_kind",
-          "line": 1031,
+          "line": 1088,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -28559,7 +28645,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_replaceKey_kind",
-          "line": 1038,
+          "line": 1095,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -28571,7 +28657,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_reward_kind",
-          "line": 1046,
+          "line": 1103,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28585,7 +28671,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_distributeOthers_kind",
-          "line": 1064,
+          "line": 1121,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28600,7 +28686,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_proportionalDilute_kind",
-          "line": 1091,
+          "line": 1148,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28616,7 +28702,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_dispute_kind",
-          "line": 1128,
+          "line": 1185,
           "called": [
             "CellProofBundle",
             "stepCommitDispute",
@@ -28626,7 +28712,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_disputeWithdraw_kind",
-          "line": 1135,
+          "line": 1192,
           "called": [
             "CellProofBundle",
             "stepCommitDisputeWithdraw",
@@ -28636,7 +28722,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_verdict_kind",
-          "line": 1142,
+          "line": 1199,
           "called": [
             "CellProofBundle",
             "stepCommitVerdict",
@@ -28646,7 +28732,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_rollback_kind",
-          "line": 1149,
+          "line": 1206,
           "called": [
             "CellProofBundle",
             "stepCommitRollback",
@@ -28656,7 +28742,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_registerIdentity_kind",
-          "line": 1156,
+          "line": 1213,
           "called": [
             "CellProofBundle",
             "readUint64BE",
@@ -28668,7 +28754,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_deposit_kind",
-          "line": 1164,
+          "line": 1221,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28682,7 +28768,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_withdraw_kind",
-          "line": 1179,
+          "line": 1236,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28698,7 +28784,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_declareLocalPolicy_kind",
-          "line": 1194,
+          "line": 1251,
           "called": [
             "CellProofBundle",
             "stepCommitDeclareLocalPolicy",
@@ -28708,7 +28794,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_revokeLocalPolicy_kind",
-          "line": 1201,
+          "line": 1258,
           "called": [
             "CellProofBundle",
             "stepCommitRevokeLocalPolicy",
@@ -28718,7 +28804,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofChallenge_kind",
-          "line": 1208,
+          "line": 1265,
           "called": [
             "CellProofBundle",
             "stepCommitFaultProofChallenge",
@@ -28728,7 +28814,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_faultProofResolution_kind",
-          "line": 1215,
+          "line": 1272,
           "called": [
             "CellProofBundle",
             "stepCommitFaultProofResolution",
@@ -28738,7 +28824,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_depositWithFee_kind",
-          "line": 1230,
+          "line": 1287,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28753,7 +28839,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_topUpActionBudget_kind",
-          "line": 1268,
+          "line": 1325,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28769,7 +28855,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_topUpActionBudgetFor_kind",
-          "line": 1305,
+          "line": 1362,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28785,7 +28871,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_claimBudgetRefund_kind",
-          "line": 1337,
+          "line": 1394,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28802,7 +28888,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_ammSwap_kind",
-          "line": 1367,
+          "line": 1424,
           "called": [
             "CellProofBundle",
             "ammReserveActor",
@@ -28817,7 +28903,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_reclaimAmmReserves_kind",
-          "line": 1393,
+          "line": 1450,
           "called": [
             "CellProofBundle",
             "decodeCellNat",
@@ -28832,7 +28918,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHash_unknown_kind_empty",
-          "line": 1421,
+          "line": 1478,
           "called": [
             "CellProofBundle",
             "stepVMHash"
@@ -28841,7 +28927,7 @@
         {
           "kind": "def",
           "name": "stepVMHashFromAction",
-          "line": 1449,
+          "line": 1506,
           "called": [
             "Action",
             "ActorId",
@@ -28856,7 +28942,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_deterministic",
-          "line": 1457,
+          "line": 1514,
           "called": [
             "Action",
             "ActorId",
@@ -28868,7 +28954,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_dispute",
-          "line": 1477,
+          "line": 1534,
           "called": [
             "ActorId",
             "Dispute",
@@ -28883,7 +28969,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_disputeWithdraw",
-          "line": 1485,
+          "line": 1542,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -28897,7 +28983,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_verdict",
-          "line": 1493,
+          "line": 1550,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -28912,7 +28998,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_rollback",
-          "line": 1500,
+          "line": 1557,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -28926,7 +29012,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_declareLocalPolicy",
-          "line": 1507,
+          "line": 1564,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -28941,7 +29027,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_revokeLocalPolicy",
-          "line": 1514,
+          "line": 1571,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -28955,7 +29041,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofChallenge",
-          "line": 1521,
+          "line": 1578,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -28969,7 +29055,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_faultProofResolution",
-          "line": 1530,
+          "line": 1587,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -28983,7 +29069,7 @@
         {
           "kind": "theorem",
           "name": "stepVMHashFromAction_freezeResource",
-          "line": 1539,
+          "line": 1596,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -29000,7 +29086,7 @@
         {
           "kind": "theorem",
           "name": "step_vm_dispatch_well_typed",
-          "line": 1585,
+          "line": 1642,
           "called": [
             "Action",
             "ActorId",
@@ -29995,25 +30081,25 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 31,
+          "line": 32,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 32,
+          "line": 33,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "maxRecipientsPerBulkAction",
-          "line": 48,
+          "line": 49,
           "called": []
         },
         {
           "kind": "structure",
           "name": "SubStep",
-          "line": 59,
+          "line": 60,
           "called": [
             "Action",
             "ActorId",
@@ -30024,7 +30110,7 @@
         {
           "kind": "def",
           "name": "bulkRecipients",
-          "line": 95,
+          "line": 96,
           "called": [
             "ActorId",
             "Amount",
@@ -30036,7 +30122,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_eq_law_list",
-          "line": 105,
+          "line": 106,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30048,13 +30134,14 @@
         {
           "kind": "def",
           "name": "Action.distributeOthers_subSteps",
-          "line": 130,
+          "line": 131,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "ResourceId",
             "SubStep",
+            "buildCellProofWithOpening",
             "bulkRecipients",
             "distributeOthers",
             "es",
@@ -30064,13 +30151,14 @@
         {
           "kind": "def",
           "name": "Action.proportionalDilute_subSteps",
-          "line": 161,
+          "line": 162,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "ResourceId",
             "SubStep",
+            "buildCellProofWithOpening",
             "bulkRecipients",
             "es",
             "maxRecipientsPerBulkAction",
@@ -30081,7 +30169,7 @@
         {
           "kind": "def",
           "name": "Action.subSteps",
-          "line": 185,
+          "line": 186,
           "called": [
             "Action",
             "ExtendedState",
@@ -30094,7 +30182,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_bound",
-          "line": 197,
+          "line": 198,
           "called": [
             "Action",
             "Action.distributeOthers_subSteps",
@@ -30110,7 +30198,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_eq_of_within_cap",
-          "line": 233,
+          "line": 234,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30125,7 +30213,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_complete_of_pre",
-          "line": 247,
+          "line": 248,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30140,7 +30228,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_noop_above_cap",
-          "line": 262,
+          "line": 263,
           "called": [
             "ActorId",
             "Amount",
@@ -30153,7 +30241,7 @@
         {
           "kind": "def",
           "name": "SubStep.writeCells",
-          "line": 278,
+          "line": 279,
           "called": [
             "CellTag",
             "ResourceId",
@@ -30163,7 +30251,7 @@
         {
           "kind": "theorem",
           "name": "SubStep.writeCells_length",
-          "line": 283,
+          "line": 284,
           "called": [
             "ResourceId",
             "SubStep"
@@ -30172,7 +30260,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_affectedActors_nodup",
-          "line": 293,
+          "line": 294,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30185,7 +30273,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_deterministic",
-          "line": 320,
+          "line": 321,
           "called": [
             "Action",
             "Action.subSteps",
@@ -30210,19 +30298,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 84,
+          "line": 86,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 85,
+          "line": 87,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "TerminateBundle",
-          "line": 86,
+          "line": 88,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -30230,7 +30318,7 @@
         {
           "kind": "structure",
           "name": "TerminateBundle",
-          "line": 115,
+          "line": 117,
           "called": [
             "ActorId",
             "CellProofBundle"
@@ -30239,7 +30327,7 @@
         {
           "kind": "def",
           "name": "buildTerminateBundle",
-          "line": 159,
+          "line": 161,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30252,7 +30340,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_deterministic",
-          "line": 172,
+          "line": 174,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30263,7 +30351,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionKind",
-          "line": 179,
+          "line": 181,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30275,7 +30363,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionFields",
-          "line": 185,
+          "line": 187,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30287,7 +30375,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_signer",
-          "line": 191,
+          "line": 193,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30298,7 +30386,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_expectedPostCommit",
-          "line": 198,
+          "line": 200,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30310,7 +30398,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_cellProofs",
-          "line": 206,
+          "line": 208,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30321,7 +30409,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_cellProofs_verify",
-          "line": 214,
+          "line": 216,
           "called": [
             "ExtendedState",
             "LegalKernel.Runtime.CellProofJson",
@@ -30336,19 +30424,19 @@
         {
           "kind": "def",
           "name": "formatUInt8",
-          "line": 230,
+          "line": 232,
           "called": []
         },
         {
           "kind": "def",
           "name": "formatUInt64",
-          "line": 234,
+          "line": 236,
           "called": []
         },
         {
           "kind": "def",
           "name": "formatCellProofsArray",
-          "line": 240,
+          "line": 242,
           "called": [
             "CellProofBundle",
             "entries",
@@ -30358,7 +30446,7 @@
         {
           "kind": "def",
           "name": "formatTerminateBundleJson",
-          "line": 257,
+          "line": 259,
           "called": [
             "FaultProof",
             "LegalKernel",
@@ -30802,7 +30890,7 @@
     {
       "module": "LegalKernel.FaultProof.Verify",
       "path": "LegalKernel/FaultProof/Verify.lean",
-      "declaration_count": 20,
+      "declaration_count": 22,
       "declarations": [
         {
           "kind": "namespace",
@@ -30840,9 +30928,19 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "verifyCellProof_proofData_irrelevant",
+          "line": 106,
+          "called": [
+            "CellProof",
+            "StateCommit",
+            "verifyCellProof"
+          ]
+        },
+        {
           "kind": "instance",
           "name": "instDecidableVerifyCellProof",
-          "line": 98,
+          "line": 111,
           "called": [
             "CellProof",
             "StateCommit",
@@ -30852,7 +30950,7 @@
         {
           "kind": "instance",
           "name": "instDecidableVerifyCellProofs",
-          "line": 104,
+          "line": 117,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -30862,7 +30960,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_deterministic",
-          "line": 111,
+          "line": 124,
           "called": [
             "CellProof",
             "StateCommit",
@@ -30872,7 +30970,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_deterministic",
-          "line": 116,
+          "line": 129,
           "called": [
             "CellProofBundle",
             "StateCommit",
@@ -30882,7 +30980,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete",
-          "line": 126,
+          "line": 139,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -30895,7 +30993,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_empty",
-          "line": 133,
+          "line": 146,
           "called": [
             "CellProofBundle.empty",
             "StateCommit",
@@ -30905,7 +31003,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_singleton",
-          "line": 137,
+          "line": 150,
           "called": [
             "CellProof",
             "StateCommit",
@@ -30916,7 +31014,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProofs_complete_for_canonical_bundle",
-          "line": 146,
+          "line": 159,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -30929,8 +31027,24 @@
         },
         {
           "kind": "theorem",
+          "name": "verifyCellProofs_complete_for_opening_bundle",
+          "line": 173,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "buildCellProofWithOpening",
+            "commitExtendedState",
+            "es",
+            "verifyCellProof",
+            "verifyCellProof_complete",
+            "verifyCellProof_proofData_irrelevant",
+            "verifyCellProofs"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "verifyCellProof_witness_recommits",
-          "line": 160,
+          "line": 190,
           "called": [
             "CellProof",
             "StateCommit",
@@ -30941,7 +31055,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_has_cell_value",
-          "line": 173,
+          "line": 203,
           "called": [
             "CellProof",
             "StateCommit",
@@ -30952,7 +31066,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_sound",
-          "line": 192,
+          "line": 222,
           "called": [
             "CellProof",
             "StateCommit",
@@ -30967,7 +31081,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_witness_cells_agree_under_collision_free",
-          "line": 218,
+          "line": 248,
           "called": [
             "CellProof",
             "CellTag",
@@ -30986,7 +31100,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_no_value_substitution_under_collision_free",
-          "line": 236,
+          "line": 266,
           "called": [
             "CellProof",
             "ExtendedState",
@@ -31004,7 +31118,7 @@
         {
           "kind": "def",
           "name": "updateCommitment",
-          "line": 260,
+          "line": 290,
           "called": [
             "CellProof",
             "StateCommit",
@@ -31015,7 +31129,7 @@
         {
           "kind": "theorem",
           "name": "updateCommitment_agrees_with_setCell",
-          "line": 266,
+          "line": 296,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -31029,7 +31143,7 @@
         {
           "kind": "theorem",
           "name": "verifyCellProof_complete_for_absent_cell",
-          "line": 277,
+          "line": 314,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -35028,7 +35142,7 @@
         {
           "kind": "def",
           "name": "formatCellProofJson",
-          "line": 117,
+          "line": 125,
           "called": [
             "CellProof",
             "LegalKernel.Runtime.CellProofJson",
@@ -43156,7 +43270,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.Framework",
       "path": "LegalKernel/Test/Bridge/CrossCheck/Framework.lean",
-      "declaration_count": 29,
+      "declaration_count": 31,
       "declarations": [
         {
           "kind": "namespace",
@@ -43237,8 +43351,22 @@
         },
         {
           "kind": "def",
+          "name": "nibbleFromHex",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "bytesFromHex",
+          "line": 197,
+          "called": [
+            "nibbleFromHex"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "hexFromUint256BE",
-          "line": 181,
+          "line": 213,
           "called": [
             "hexFromUInt8"
           ]
@@ -43246,7 +43374,7 @@
         {
           "kind": "def",
           "name": "hexFromUInt64BE",
-          "line": 190,
+          "line": 222,
           "called": [
             "hexFromUInt8"
           ]
@@ -43254,13 +43382,13 @@
         {
           "kind": "def",
           "name": "fixturesDir",
-          "line": 203,
+          "line": 235,
           "called": []
         },
         {
           "kind": "def",
           "name": "fixturePath",
-          "line": 206,
+          "line": 238,
           "called": [
             "fixturesDir"
           ]
@@ -43268,13 +43396,13 @@
         {
           "kind": "inductive",
           "name": "WriteFixtureMode",
-          "line": 213,
+          "line": 245,
           "called": []
         },
         {
           "kind": "def",
           "name": "writeFixtureWith",
-          "line": 234,
+          "line": 266,
           "called": [
             "WriteFixtureMode",
             "fixturePath"
@@ -43283,7 +43411,7 @@
         {
           "kind": "def",
           "name": "readWriteMode",
-          "line": 251,
+          "line": 283,
           "called": [
             "WriteFixtureMode"
           ]
@@ -43291,7 +43419,7 @@
         {
           "kind": "def",
           "name": "writeFixture",
-          "line": 261,
+          "line": 293,
           "called": [
             "readWriteMode",
             "writeFixtureWith"
@@ -43300,7 +43428,7 @@
         {
           "kind": "def",
           "name": "writeHashDependentFixture",
-          "line": 286,
+          "line": 318,
           "called": [
             "fixturePath",
             "readWriteMode",
@@ -43310,19 +43438,19 @@
         {
           "kind": "def",
           "name": "beBytes",
-          "line": 325,
+          "line": 357,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfFixturesDir",
-          "line": 336,
+          "line": 368,
           "called": []
         },
         {
           "kind": "def",
           "name": "cxsfFixturePath",
-          "line": 339,
+          "line": 371,
           "called": [
             "cxsfFixturesDir"
           ]
@@ -43330,7 +43458,7 @@
         {
           "kind": "def",
           "name": "buildCxsf",
-          "line": 355,
+          "line": 387,
           "called": [
             "beBytes",
             "magic"
@@ -43339,7 +43467,7 @@
         {
           "kind": "def",
           "name": "writeBinFixtureWith",
-          "line": 377,
+          "line": 409,
           "called": [
             "WriteFixtureMode",
             "cxsfFixturePath"
@@ -43348,7 +43476,7 @@
         {
           "kind": "def",
           "name": "writeBinFixture",
-          "line": 394,
+          "line": 426,
           "called": [
             "readWriteMode",
             "writeBinFixtureWith"
@@ -43357,13 +43485,13 @@
         {
           "kind": "def",
           "name": "skipWithReason",
-          "line": 408,
+          "line": 440,
           "called": []
         },
         {
           "kind": "def",
           "name": "smokeFixture",
-          "line": 419,
+          "line": 451,
           "called": [
             "Json"
           ]
@@ -43371,13 +43499,13 @@
         {
           "kind": "def",
           "name": "smokeFixtureExpected",
-          "line": 426,
+          "line": 458,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 433,
+          "line": 465,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck",
             "TestCase",
@@ -44858,7 +44986,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 70,
+      "declaration_count": 71,
       "declarations": [
         {
           "kind": "namespace",
@@ -44875,7 +45003,7 @@
         {
           "kind": "structure",
           "name": "StepVMFixture",
-          "line": 82,
+          "line": 93,
           "called": [
             "CellProofForFixture",
             "actionKindByte"
@@ -44884,7 +45012,7 @@
         {
           "kind": "def",
           "name": "encodeSignedAction",
-          "line": 123,
+          "line": 134,
           "called": [
             "SignedAction"
           ]
@@ -44892,7 +45020,7 @@
         {
           "kind": "def",
           "name": "encodeActionFields",
-          "line": 128,
+          "line": 139,
           "called": [
             "Action",
             "actionFieldsForL1"
@@ -44901,7 +45029,7 @@
         {
           "kind": "def",
           "name": "cellProofForFixtureFromCellProof",
-          "line": 133,
+          "line": 144,
           "called": [
             "CellProof",
             "CellProofForFixture",
@@ -44911,7 +45039,7 @@
         {
           "kind": "def",
           "name": "fixtureBase",
-          "line": 159,
+          "line": 171,
           "called": [
             "ExtendedState",
             "ExtendedState.empty"
@@ -44920,7 +45048,7 @@
         {
           "kind": "def",
           "name": "stateWithBalances",
-          "line": 164,
+          "line": 176,
           "called": [
             "ActorId",
             "Amount",
@@ -44935,7 +45063,7 @@
         {
           "kind": "def",
           "name": "bundleToFixtureProofs",
-          "line": 173,
+          "line": 185,
           "called": [
             "CellProof",
             "CellProofForFixture",
@@ -44945,7 +45073,7 @@
         {
           "kind": "def",
           "name": "buildTransferHappy",
-          "line": 183,
+          "line": 195,
           "called": [
             "Action",
             "ActorId",
@@ -44973,7 +45101,7 @@
         {
           "kind": "def",
           "name": "buildMintHappy",
-          "line": 225,
+          "line": 237,
           "called": [
             "Action",
             "ActorId",
@@ -44998,7 +45126,7 @@
         {
           "kind": "def",
           "name": "buildBurnHappy",
-          "line": 257,
+          "line": 269,
           "called": [
             "Action",
             "ActorId",
@@ -45023,7 +45151,7 @@
         {
           "kind": "def",
           "name": "buildFreezeResourceHappy",
-          "line": 288,
+          "line": 300,
           "called": [
             "Action",
             "ActorId",
@@ -45047,7 +45175,7 @@
         {
           "kind": "def",
           "name": "buildReplaceKeyHappy",
-          "line": 317,
+          "line": 329,
           "called": [
             "Action",
             "ActorId",
@@ -45069,7 +45197,7 @@
         {
           "kind": "def",
           "name": "buildRewardHappy",
-          "line": 349,
+          "line": 361,
           "called": [
             "Action",
             "ActorId",
@@ -45094,7 +45222,7 @@
         {
           "kind": "def",
           "name": "buildDistributeOthersHappy",
-          "line": 387,
+          "line": 399,
           "called": [
             "Action",
             "ActorId",
@@ -45120,7 +45248,7 @@
         {
           "kind": "def",
           "name": "buildRegisterIdentityHappy",
-          "line": 436,
+          "line": 448,
           "called": [
             "Action",
             "ActorId",
@@ -45142,7 +45270,7 @@
         {
           "kind": "def",
           "name": "buildDepositHappy",
-          "line": 469,
+          "line": 481,
           "called": [
             "Action",
             "ActorId",
@@ -45167,7 +45295,7 @@
         {
           "kind": "def",
           "name": "buildWithdrawHappy",
-          "line": 502,
+          "line": 514,
           "called": [
             "Action",
             "ActorId",
@@ -45193,7 +45321,7 @@
         {
           "kind": "def",
           "name": "buildDepositWithFeeHappy",
-          "line": 547,
+          "line": 559,
           "called": [
             "Action",
             "ActorId",
@@ -45221,7 +45349,7 @@
         {
           "kind": "def",
           "name": "buildTopUpActionBudgetHappy",
-          "line": 607,
+          "line": 619,
           "called": [
             "Action",
             "ActorId",
@@ -45248,7 +45376,7 @@
         {
           "kind": "def",
           "name": "buildTopUpActionBudgetForHappy",
-          "line": 665,
+          "line": 677,
           "called": [
             "Action",
             "ActorId",
@@ -45275,7 +45403,7 @@
         {
           "kind": "def",
           "name": "buildClaimBudgetRefundHappy",
-          "line": 708,
+          "line": 720,
           "called": [
             "Action",
             "ActorId",
@@ -45301,7 +45429,7 @@
         {
           "kind": "def",
           "name": "buildOpaqueHappy",
-          "line": 755,
+          "line": 767,
           "called": [
             "Action",
             "ActorId",
@@ -45323,7 +45451,7 @@
         {
           "kind": "def",
           "name": "buildDisputeWithdrawHappy",
-          "line": 783,
+          "line": 795,
           "called": [
             "ActorId",
             "Nonce",
@@ -45334,7 +45462,7 @@
         {
           "kind": "def",
           "name": "buildRollbackHappy",
-          "line": 790,
+          "line": 802,
           "called": [
             "ActorId",
             "Nonce",
@@ -45345,7 +45473,7 @@
         {
           "kind": "def",
           "name": "buildRevokeLocalPolicyHappy",
-          "line": 797,
+          "line": 809,
           "called": [
             "ActorId",
             "Nonce",
@@ -45356,7 +45484,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofChallengeHappy",
-          "line": 804,
+          "line": 816,
           "called": [
             "ActorId",
             "Nonce",
@@ -45367,7 +45495,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofResolutionHappy",
-          "line": 813,
+          "line": 825,
           "called": [
             "ActorId",
             "Nonce",
@@ -45378,7 +45506,7 @@
         {
           "kind": "def",
           "name": "buildProportionalDiluteHappy",
-          "line": 831,
+          "line": 843,
           "called": [
             "Action",
             "ActorId",
@@ -45404,7 +45532,7 @@
         {
           "kind": "def",
           "name": "minimalDispute",
-          "line": 880,
+          "line": 892,
           "called": [
             "ActorId",
             "Nonce",
@@ -45414,7 +45542,7 @@
         {
           "kind": "def",
           "name": "buildDisputeHappy",
-          "line": 889,
+          "line": 901,
           "called": [
             "ActorId",
             "Nonce",
@@ -45426,7 +45554,7 @@
         {
           "kind": "def",
           "name": "buildVerdictHappy",
-          "line": 898,
+          "line": 910,
           "called": [
             "ActorId",
             "Nonce",
@@ -45437,7 +45565,7 @@
         {
           "kind": "def",
           "name": "buildDeclareLocalPolicyHappy",
-          "line": 910,
+          "line": 922,
           "called": [
             "ActorId",
             "LocalPolicy",
@@ -45450,7 +45578,7 @@
         {
           "kind": "def",
           "name": "buildAdversarialBadPreCommit",
-          "line": 922,
+          "line": 934,
           "called": [
             "StepVMFixture",
             "actionKindByte"
@@ -45459,7 +45587,7 @@
         {
           "kind": "def",
           "name": "transferFixtures",
-          "line": 944,
+          "line": 956,
           "called": [
             "ActorId",
             "Amount",
@@ -45473,7 +45601,7 @@
         {
           "kind": "def",
           "name": "mintFixtures",
-          "line": 962,
+          "line": 974,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45483,7 +45611,7 @@
         {
           "kind": "def",
           "name": "burnFixtures",
-          "line": 972,
+          "line": 984,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -45494,7 +45622,7 @@
         {
           "kind": "def",
           "name": "freezeResourceFixtures",
-          "line": 983,
+          "line": 995,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45504,7 +45632,7 @@
         {
           "kind": "def",
           "name": "replaceKeyFixtures",
-          "line": 991,
+          "line": 1003,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45514,7 +45642,7 @@
         {
           "kind": "def",
           "name": "rewardFixtures",
-          "line": 1002,
+          "line": 1014,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -45525,7 +45653,7 @@
         {
           "kind": "def",
           "name": "distributeOthersFixtures",
-          "line": 1013,
+          "line": 1025,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45535,7 +45663,7 @@
         {
           "kind": "def",
           "name": "proportionalDiluteFixtures",
-          "line": 1022,
+          "line": 1034,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45545,7 +45673,7 @@
         {
           "kind": "def",
           "name": "disputeFixtures",
-          "line": 1031,
+          "line": 1043,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45555,7 +45683,7 @@
         {
           "kind": "def",
           "name": "disputeWithdrawFixtures",
-          "line": 1039,
+          "line": 1051,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45565,7 +45693,7 @@
         {
           "kind": "def",
           "name": "verdictFixtures",
-          "line": 1047,
+          "line": 1059,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45575,7 +45703,7 @@
         {
           "kind": "def",
           "name": "rollbackFixtures",
-          "line": 1055,
+          "line": 1067,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45585,7 +45713,7 @@
         {
           "kind": "def",
           "name": "registerIdentityFixtures",
-          "line": 1063,
+          "line": 1075,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45595,7 +45723,7 @@
         {
           "kind": "def",
           "name": "depositFixtures",
-          "line": 1074,
+          "line": 1086,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -45606,7 +45734,7 @@
         {
           "kind": "def",
           "name": "withdrawFixtures",
-          "line": 1089,
+          "line": 1101,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -45617,7 +45745,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeFixtures",
-          "line": 1109,
+          "line": 1121,
           "called": [
             "ActorId",
             "Amount",
@@ -45631,7 +45759,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetFixtures",
-          "line": 1137,
+          "line": 1149,
           "called": [
             "ActorId",
             "Amount",
@@ -45644,7 +45772,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForFixtures",
-          "line": 1163,
+          "line": 1175,
           "called": [
             "ActorId",
             "Amount",
@@ -45657,7 +45785,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundFixtures",
-          "line": 1186,
+          "line": 1198,
           "called": [
             "ActorId",
             "ResourceId",
@@ -45672,7 +45800,7 @@
         {
           "kind": "def",
           "name": "buildAmmSwapHappy",
-          "line": 1227,
+          "line": 1239,
           "called": [
             "Action",
             "ActorId",
@@ -45698,7 +45826,7 @@
         {
           "kind": "def",
           "name": "ammSwapFixtures",
-          "line": 1267,
+          "line": 1279,
           "called": [
             "ActorId",
             "ResourceId",
@@ -45711,7 +45839,7 @@
         {
           "kind": "def",
           "name": "buildReclaimAmmReservesHappy",
-          "line": 1288,
+          "line": 1300,
           "called": [
             "Action",
             "ActorId",
@@ -45736,7 +45864,7 @@
         {
           "kind": "def",
           "name": "reclaimAmmReservesFixtures",
-          "line": 1326,
+          "line": 1338,
           "called": [
             "ActorId",
             "ResourceId",
@@ -45749,7 +45877,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyFixtures",
-          "line": 1341,
+          "line": 1353,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45759,7 +45887,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyFixtures",
-          "line": 1349,
+          "line": 1361,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45769,7 +45897,7 @@
         {
           "kind": "def",
           "name": "faultProofChallengeFixtures",
-          "line": 1357,
+          "line": 1369,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45779,7 +45907,7 @@
         {
           "kind": "def",
           "name": "faultProofResolutionFixtures",
-          "line": 1367,
+          "line": 1379,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -45789,7 +45917,7 @@
         {
           "kind": "def",
           "name": "allFixtures",
-          "line": 1380,
+          "line": 1392,
           "called": [
             "StepVMFixture",
             "ammSwapFixtures",
@@ -45821,8 +45949,16 @@
         },
         {
           "kind": "def",
+          "name": "actionCommitHexOf",
+          "line": 1421,
+          "called": [
+            "StepVMFixture"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "cellProofForFixtureToJson",
-          "line": 1398,
+          "line": 1434,
           "called": [
             "CellProofForFixture"
           ]
@@ -45830,28 +45966,29 @@
         {
           "kind": "def",
           "name": "fixtureToJson",
-          "line": 1407,
+          "line": 1444,
           "called": [
             "StepVMFixture",
+            "actionCommitHexOf",
             "cellProofForFixtureToJson"
           ]
         },
         {
           "kind": "def",
           "name": "packedLayoutU64Vals",
-          "line": 1443,
+          "line": 1481,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutU256Vals",
-          "line": 1450,
+          "line": 1488,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutGoldens",
-          "line": 1460,
+          "line": 1498,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -45860,7 +45997,7 @@
         {
           "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1477,
+          "line": 1515,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -45869,9 +46006,11 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1494,
+          "line": 1532,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
+            "actionCommitHexOf",
+            "base",
             "entries",
             "fixtureToJson",
             "packedLayoutGoldens",
@@ -56641,9 +56780,12 @@
           "called": [
             "Action.requiredCellProofs_size",
             "ExtendedState",
+            "KernelStep",
             "LegalKernel.Test.FaultProof.Transcript",
+            "LogEntry",
             "NonMembershipProof.build",
             "SignedAction",
+            "StateCommit",
             "TestCase",
             "applyCellWrites_to_state",
             "applyCellWrites_to_state_deterministic",
@@ -57253,7 +57395,7 @@
     {
       "module": "LegalKernel.Test.Integration.ExportCellProofsCli",
       "path": "LegalKernel/Test/Integration/ExportCellProofsCli.lean",
-      "declaration_count": 10,
+      "declaration_count": 11,
       "declarations": [
         {
           "kind": "namespace",
@@ -57344,20 +57486,31 @@
           "called": [
             "CellProof",
             "ExtendedState",
+            "ExtendedState.empty"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cell_proof_json_carries_the_opening",
+          "line": 216,
+          "called": [
+            "ExtendedState",
             "ExtendedState.empty",
-            "LegalKernel.Test.Integration.ExportCellProofsCli"
+            "LegalKernel.Test.Integration.ExportCellProofsCli",
+            "buildCellProofWithOpening",
+            "es"
           ]
         },
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Integration.ExportCellProofsCli",
-          "line": 204,
+          "line": 236,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 208,
+          "line": 240,
           "called": [
             "LegalKernel.Test.Integration.ExportCellProofsCli",
             "TestCase",
@@ -57365,6 +57518,7 @@
             "bundle_is_deterministic",
             "bundle_verifies_against_commit",
             "cell_proof_json_byte_pinning_minimal",
+            "cell_proof_json_carries_the_opening",
             "cell_proof_json_envelope_shape_pinned",
             "transfer_bundle_has_five_cells",
             "verify_cell_proofs_api_stable"
@@ -62638,7 +62792,7 @@
     {
       "module": "LegalKernel.Test.Tools.AuditBinaries",
       "path": "LegalKernel/Test/Tools/AuditBinaries.lean",
-      "declaration_count": 10,
+      "declaration_count": 11,
       "declarations": [
         {
           "kind": "namespace",
@@ -62700,8 +62854,16 @@
         },
         {
           "kind": "def",
+          "name": "stubAuditMasksCommentsButStillFires",
+          "line": 218,
+          "called": [
+            "TestCase"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "apiStabilityDetectsUnascribedPins",
-          "line": 216,
+          "line": 260,
           "called": [
             "TestCase"
           ]
@@ -62709,7 +62871,7 @@
         {
           "kind": "def",
           "name": "apiStabilityAllowlistKeyShape",
-          "line": 250,
+          "line": 294,
           "called": [
             "TestCase",
             "assertEq"
@@ -62718,7 +62880,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 261,
+          "line": 305,
           "called": [
             "LegalKernel.Test.Tools.AuditBinaries",
             "TestCase",
@@ -62729,7 +62891,8 @@
             "deferralDetectsUppercaseMarkers",
             "namingAuditParsesAttributedDeclarations",
             "namingAuditRejectsNonDeclarations",
-            "stubAuditFindsIndentedDocstring"
+            "stubAuditFindsIndentedDocstring",
+            "stubAuditMasksCommentsButStillFires"
           ]
         }
       ]
@@ -69017,7 +69180,7 @@
     {
       "module": "Tools.Common",
       "path": "Tools/Common.lean",
-      "declaration_count": 6,
+      "declaration_count": 10,
       "declarations": [
         {
           "kind": "namespace",
@@ -69050,9 +69213,39 @@
           "called": []
         },
         {
+          "kind": "inductive",
+          "name": "LexState",
+          "line": 80,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "maskStep",
+          "line": 97,
+          "called": [
+            "LexState"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "maskCharLiterals",
+          "line": 134,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "maskNonCode",
+          "line": 154,
+          "called": [
+            "LexState",
+            "maskCharLiterals",
+            "maskStep"
+          ]
+        },
+        {
           "kind": "def",
           "name": "readFileSafe",
-          "line": 69,
+          "line": 176,
           "called": [
             "LegalKernel.Tools"
           ]
@@ -69062,7 +69255,7 @@
     {
       "module": "Tools.CountSorries",
       "path": "Tools/CountSorries.lean",
-      "declaration_count": 17,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
@@ -69089,57 +69282,27 @@
           ]
         },
         {
-          "kind": "inductive",
-          "name": "LexState",
-          "line": 92,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "maskStep",
-          "line": 109,
-          "called": [
-            "LexState"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "maskCharLiterals",
-          "line": 146,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "maskNonCode",
-          "line": 166,
-          "called": [
-            "LexState",
-            "maskCharLiterals",
-            "maskStep"
-          ]
-        },
-        {
           "kind": "def",
           "name": "listContains",
-          "line": 187,
+          "line": 93,
           "called": []
         },
         {
           "kind": "def",
           "name": "dropLeadingWs",
-          "line": 200,
+          "line": 106,
           "called": []
         },
         {
           "kind": "def",
           "name": "dropTrailingWs",
-          "line": 205,
+          "line": 111,
           "called": []
         },
         {
           "kind": "def",
           "name": "isSorryProofPosition",
-          "line": 218,
+          "line": 124,
           "called": [
             "dropLeadingWs",
             "dropTrailingWs",
@@ -69149,13 +69312,13 @@
         {
           "kind": "def",
           "name": "splitOnNewline",
-          "line": 243,
+          "line": 149,
           "called": []
         },
         {
           "kind": "def",
           "name": "matchesInContent",
-          "line": 256,
+          "line": 162,
           "called": [
             "isSorryProofPosition",
             "maskNonCode",
@@ -69165,7 +69328,7 @@
         {
           "kind": "def",
           "name": "fileMatches",
-          "line": 272,
+          "line": 178,
           "called": [
             "matchesInContent",
             "readFileSafe"
@@ -69174,7 +69337,7 @@
         {
           "kind": "def",
           "name": "aggregate",
-          "line": 280,
+          "line": 186,
           "called": [
             "fileMatches",
             "listLeanFiles",
@@ -69184,13 +69347,13 @@
         {
           "kind": "def",
           "name": "patternSelfTests",
-          "line": 326,
+          "line": 232,
           "called": []
         },
         {
           "kind": "def",
           "name": "selfCheckPatternDetector",
-          "line": 347,
+          "line": 253,
           "called": [
             "LegalKernel.Tools.CountSorries",
             "isSorryProofPosition",
@@ -69694,19 +69857,20 @@
         {
           "kind": "def",
           "name": "scanFile",
-          "line": 237,
+          "line": 251,
           "called": [
             "Violation",
             "blockHasRedFlag",
             "docstringAbove",
             "lineHasStubPattern",
+            "maskNonCode",
             "readFileSafe"
           ]
         },
         {
           "kind": "def",
           "name": "aggregate",
-          "line": 254,
+          "line": 270,
           "called": [
             "LegalKernel.Tools.StubAudit",
             "Violation",

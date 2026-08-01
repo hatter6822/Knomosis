@@ -287,6 +287,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -335,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-cli-common"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "thiserror",
  "tracing",
@@ -343,19 +349,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "knomosis-faultproof-observer"
+version = "0.11.0"
+dependencies = [
+ "hex",
+ "k256",
+ "knomosis-cli-common",
+ "knomosis-l1-ingest",
+ "knomosis-storage",
+ "serde",
+ "serde_json",
+ "sha3",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "zeroize",
+]
+
+[[package]]
 name = "knomosis-fuzz"
 version = "0.0.0"
 dependencies = [
  "arbitrary",
+ "knomosis-faultproof-observer",
  "knomosis-host",
  "knomosis-indexer",
  "knomosis-l1-ingest",
  "libfuzzer-sys",
+ "serde_json",
 ]
 
 [[package]]
 name = "knomosis-host"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "knomosis-cli-common",
  "rustls",
@@ -368,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-indexer"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "knomosis-cli-common",
  "knomosis-storage",
@@ -379,7 +405,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-l1-ingest"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "k256",
  "knomosis-cli-common",
@@ -394,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "knomosis-storage"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "rusqlite",
  "thiserror",

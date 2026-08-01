@@ -171,7 +171,8 @@ instance : Encodable FaultProof.CellTag where
 def CellProof.encode (p : FaultProof.CellProof) : Stream :=
   Encodable.encode (T := FaultProof.CellTag) p.cellTag ++
   Encodable.encode (T := ByteArray) p.cellValue ++
-  Encodable.encode (T := ExtendedState) p.witnessState
+  Encodable.encode (T := ExtendedState) p.witnessState ++
+  Encodable.encode (T := ByteArray) p.proofData
 
 /-- Decode a `CellProof`. -/
 def CellProof.decode (s : Stream) :
@@ -182,7 +183,11 @@ def CellProof.decode (s : Stream) :
     | .ok (val, s₂) =>
       match Encodable.decode (T := ExtendedState) s₂ with
       | .ok (es, s₃) =>
-        .ok ({ cellTag := tag, cellValue := val, witnessState := es }, s₃)
+        match Encodable.decode (T := ByteArray) s₃ with
+        | .ok (pd, s₄) =>
+          .ok ({ cellTag := tag, cellValue := val, witnessState := es,
+                 proofData := pd }, s₄)
+        | .error e => .error e
       | .error e => .error e
     | .error e => .error e
   | .error e => .error e

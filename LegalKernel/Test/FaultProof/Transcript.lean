@@ -80,7 +80,10 @@ def tests : List TestCase :=
     }
   , { name := "isLegalTranscript_singleton iff statement"
     , body := do
-        let _ := @isLegalTranscript_singleton
+        let _proof : ∀ (initialCommit : StateCommit) (s : KernelStep),
+            isLegalTranscript initialCommit [s] ↔
+            s.preStateCommit = initialCommit :=
+          isLegalTranscript_singleton
         assert true "API exists"
     }
   , { name := "chainKernelStepApplyFromLog on empty log is empty"
@@ -90,12 +93,17 @@ def tests : List TestCase :=
     }
   , { name := "chainKernelStepApplyFromLog_length theorem holds"
     , body := do
-        let _ := @chainKernelStepApplyFromLog_length
+        let _proof : ∀ (es : ExtendedState) (i : Nat) (log : List LogEntry),
+            (chainKernelStepApplyFromLog es i log).length = log.length :=
+          chainKernelStepApplyFromLog_length
         assert true "API exists"
     }
   , { name := "chainKernelStepApplyFromLog_isLegalTranscript theorem holds"
     , body := do
-        let _ := @chainKernelStepApplyFromLog_isLegalTranscript
+        let _proof : ∀ (es : ExtendedState) (i : Nat) (log : List LogEntry),
+            isLegalTranscript (commitExtendedState es)
+              (chainKernelStepApplyFromLog es i log) :=
+          chainKernelStepApplyFromLog_isLegalTranscript
         assert true "API exists"
     }
   , { name := "chainKernelStepApplyFromLog produces legal transcript on empty"

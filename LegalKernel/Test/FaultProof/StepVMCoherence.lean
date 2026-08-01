@@ -440,7 +440,7 @@ def tests : List TestCase :=
         let cellTag : CellTag := .balance r.toUInt64 (10 : UInt64)
         let proof : CellProof :=
           { cellTag, cellValue := preBalBytes,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [proof] }
         let h1 := stepVMHash pc 6 fields 7 bundle
         let head := stepCommitDistributeOthersHead pc r excluded 7 amount
@@ -460,7 +460,7 @@ def tests : List TestCase :=
         let cellTag : CellTag := .balance r.toUInt64 excluded.toUInt64
         let proof : CellProof :=
           { cellTag, cellValue := preBalBytes,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [proof] }
         let h1 := stepVMHash pc 6 fields 7 bundle
         let h2 := stepCommitDistributeOthersHead pc r excluded 7 amount
@@ -477,11 +477,11 @@ def tests : List TestCase :=
         let regProof : CellProof :=
           { cellTag := .registry (7 : UInt64),
             cellValue := ByteArray.empty,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let nonceProof : CellProof :=
           { cellTag := .nonce (7 : UInt64),
             cellValue := ByteArray.empty,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [regProof, nonceProof] }
         let h1 := stepVMHash pc 6 fields 7 bundle
         let h2 := stepCommitDistributeOthersHead pc r excluded 7 amount
@@ -512,7 +512,7 @@ def tests : List TestCase :=
         let cellTag : CellTag := .balance r.toUInt64 (11 : UInt64)
         let proof : CellProof :=
           { cellTag, cellValue := preBalBytes,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [proof] }
         let h1 := stepVMHash pc 7 fields 7 bundle
         let sumOthers := 200
@@ -542,11 +542,11 @@ def tests : List TestCase :=
         let p11 : CellProof :=
           { cellTag := .balance r.toUInt64 (11 : UInt64),
             cellValue := bal200,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let p12 : CellProof :=
           { cellTag := .balance r.toUInt64 (12 : UInt64),
             cellValue := bal100,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [p11, p12] }
         let h1 := stepVMHash pc 7 fields 7 bundle
         let sumOthers := 300
@@ -574,19 +574,19 @@ def tests : List TestCase :=
         let regProof : CellProof :=
           { cellTag := .registry (7 : UInt64),
             cellValue := ByteArray.empty,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let nonceProof : CellProof :=
           { cellTag := .nonce (7 : UInt64),
             cellValue := ByteArray.empty,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bal20 : CellProof :=
           { cellTag := .balance r.toUInt64 (20 : UInt64),
             cellValue := bal100,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bal30 : CellProof :=
           { cellTag := .balance r.toUInt64 (30 : UInt64),
             cellValue := bal200,
-            witnessState := ExtendedState.empty }
+            witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle :=
           { proofs := [regProof, nonceProof, bal20, bal30] }
         let h1 := stepVMHash pc 6 fields 7 bundle
@@ -653,10 +653,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 700).toArray
         let pReserve : CellProof :=
           { cellTag := .balance (0 : UInt64) (3 : UInt64),
-            cellValue := bal5000, witnessState := ExtendedState.empty }
+            cellValue := bal5000, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (0 : UInt64) (1 : UInt64),
-            cellValue := bal700, witnessState := ExtendedState.empty }
+            cellValue := bal700, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pReserve, pPool] }
         let h1 := stepVMHash pc 24 fields 0 bundle
         let h2 := stepCommitReclaimAmmReserves pc 0 3 1 0 0 5700
@@ -682,10 +682,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 30).toArray
         let pRecipient : CellProof :=
           { cellTag := .balance (1 : UInt64) (2 : UInt64),
-            cellValue := bal20, witnessState := ExtendedState.empty }
+            cellValue := bal20, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (1 : UInt64) (3 : UInt64),
-            cellValue := bal30, witnessState := ExtendedState.empty }
+            cellValue := bal30, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle :=
           { proofs := [pRecipient, pPool] }
         let h1 := stepVMHash pc 19 fields 0 bundle
@@ -709,7 +709,7 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 50).toArray
         let pSelf : CellProof :=
           { cellTag := .balance (1 : UInt64) (5 : UInt64),
-            cellValue := bal50, witnessState := ExtendedState.empty }
+            cellValue := bal50, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSelf] }
         let h1 := stepVMHash pc 19 fields 0 bundle
         -- Expected: newRecipientBal = newPoolBal = 50 + 100 + 10 = 160.
@@ -733,10 +733,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 5).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal5, witnessState := ExtendedState.empty }
+            cellValue := bal5, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle :=
           { proofs := [pSigner, pPool] }
         let h1 := stepVMHash pc 20 fields 10 bundle
@@ -761,7 +761,7 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 100).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSigner] }
         let h1 := stepVMHash pc 20 fields 10 bundle
         -- Expected: newSignerBal = newPoolBal = 100 (self-pool branch).
@@ -791,10 +791,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 30).toArray
         let pRecipient : CellProof :=
           { cellTag := .balance (1 : UInt64) (2 : UInt64),
-            cellValue := bal20, witnessState := ExtendedState.empty }
+            cellValue := bal20, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (1 : UInt64) (3 : UInt64),
-            cellValue := bal30, witnessState := ExtendedState.empty }
+            cellValue := bal30, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle :=
           { proofs := [pRecipient, pPool] }
         let h1 := stepVMHash pc 19 fields1 0 bundle
@@ -820,10 +820,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 5).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal5, witnessState := ExtendedState.empty }
+            cellValue := bal5, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle :=
           { proofs := [pSigner, pPool] }
         let h1 := stepVMHash pc 20 fields1 10 bundle
@@ -850,10 +850,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 5).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal5, witnessState := ExtendedState.empty }
+            cellValue := bal5, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle :=
           { proofs := [pSigner, pPool] }
         let h1 := stepVMHash pc 21 fields 10 bundle
@@ -883,10 +883,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 5).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal5, witnessState := ExtendedState.empty }
+            cellValue := bal5, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
         let h21 := stepVMHash pc 21 (actionFieldsForL1 action21) 10 bundle
         let h20 := stepVMHash pc 20 (actionFieldsForL1 action20) 10 bundle
@@ -909,7 +909,7 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 100).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSigner] }
         let h1 := stepVMHash pc 21 fields 10 bundle
         -- Expected: newSignerBal = newPoolBal = 100 (self-pool branch).
@@ -938,10 +938,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 10).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal50, witnessState := ExtendedState.empty }
+            cellValue := bal50, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal10, witnessState := ExtendedState.empty }
+            cellValue := bal10, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
         let h1 := stepVMHash pc 21 fields 10 bundle
         -- Expected: newSigner = 50 - 50 = 0; newPool = 10 + 50 = 60.
@@ -972,10 +972,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 5).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal5, witnessState := ExtendedState.empty }
+            cellValue := bal5, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle :=
           { proofs := [pSigner, pPool] }
         let h1 := stepVMHash pc 21 fields1 10 bundle
@@ -1001,10 +1001,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 50).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal50, witnessState := ExtendedState.empty }
+            cellValue := bal50, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
         let h1 := stepVMHash pc 22 fields 10 bundle
         -- Expected: newSignerBal = 100 + 15 = 115, newPoolBal = 50 - 15 = 35.
@@ -1042,7 +1042,7 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 100).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal100, witnessState := ExtendedState.empty }
+            cellValue := bal100, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSigner] }
         let h1 := stepVMHash pc 22 fields 10 bundle
         -- Expected: newSigner = newPool = 100 (self-pool branch).
@@ -1069,10 +1069,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 50).toArray
         let pSigner : CellProof :=
           { cellTag := .balance (2 : UInt64) (10 : UInt64),
-            cellValue := bal20, witnessState := ExtendedState.empty }
+            cellValue := bal20, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pPool : CellProof :=
           { cellTag := .balance (2 : UInt64) (99 : UInt64),
-            cellValue := bal50, witnessState := ExtendedState.empty }
+            cellValue := bal50, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pSigner, pPool] }
         let h1 := stepVMHash pc 22 fields 10 bundle
         -- Expected: newSigner = 20 + 50 = 70; newPool = 50 - 50 = 0.
@@ -1099,10 +1099,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 2000).toArray
         let pFrom : CellProof :=
           { cellTag := .balance (0 : UInt64) (3 : UInt64),
-            cellValue := bal1000, witnessState := ExtendedState.empty }
+            cellValue := bal1000, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pTo : CellProof :=
           { cellTag := .balance (1 : UInt64) (3 : UInt64),
-            cellValue := bal2000, witnessState := ExtendedState.empty }
+            cellValue := bal2000, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pFrom, pTo] }
         let h1 := stepVMHash pc 23 fields 0 bundle
         let h2 := stepCommitAmmSwap pc 0 1 3 0 1500 1520
@@ -1131,10 +1131,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 480).toArray
         let pFrom : CellProof :=
           { cellTag := .balance (0 : UInt64) (3 : UInt64),
-            cellValue := bal500, witnessState := ExtendedState.empty }
+            cellValue := bal500, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pTo : CellProof :=
           { cellTag := .balance (1 : UInt64) (3 : UInt64),
-            cellValue := bal480, witnessState := ExtendedState.empty }
+            cellValue := bal480, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pFrom, pTo] }
         let h1 := stepVMHash pc 23 fields 0 bundle
         -- newFromBalance = 500 + 100 = 600, newToBalance = 480 - 480 = 0
@@ -1156,10 +1156,10 @@ def tests : List TestCase :=
           (Encoding.Encodable.encode (T := Nat) 1000).toArray
         let pFrom : CellProof :=
           { cellTag := .balance (1 : UInt64) (3 : UInt64),
-            cellValue := bal800, witnessState := ExtendedState.empty }
+            cellValue := bal800, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let pTo : CellProof :=
           { cellTag := .balance (0 : UInt64) (3 : UInt64),
-            cellValue := bal1000, witnessState := ExtendedState.empty }
+            cellValue := bal1000, witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bundle : CellProofBundle := { proofs := [pFrom, pTo] }
         let h1 := stepVMHash pc 23 fields 0 bundle
         -- newFromBalance = 800 + 200 = 1000, newToBalance = 1000 - 150 = 850
@@ -1604,9 +1604,9 @@ def tests : List TestCase :=
         let mkBundle : CellProofBundle := {
           proofs := [
             { cellTag := .balance 1 7, cellValue := ByteArray.empty,
-              witnessState := ExtendedState.empty },
+              witnessState := ExtendedState.empty, proofData := ByteArray.empty },
             { cellTag := .balance 1 99, cellValue := ByteArray.empty,
-              witnessState := ExtendedState.empty }
+              witnessState := ExtendedState.empty, proofData := ByteArray.empty }
           ]
         }
         -- Each kind has its own fields layout, so we test the
@@ -1696,16 +1696,16 @@ def tests : List TestCase :=
         let bal : CellProof :=
           { cellTag := .balance 1 7
           , cellValue := ByteArray.mk (Encoding.encodeAmount 100).toArray
-          , witnessState := ExtendedState.empty }
+          , witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let bal2 : CellProof :=
           { cellTag := .balance 1 8
           , cellValue := ByteArray.mk (Encoding.encodeAmount 0).toArray
-          , witnessState := ExtendedState.empty }
+          , witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let nonceCell (n : Nat) : CellProof :=
           { cellTag := .nonce signer
           , cellValue := ByteArray.mk
               (Encoding.Encodable.encode (T := Nat) n).toArray
-          , witnessState := ExtendedState.empty }
+          , witnessState := ExtendedState.empty, proofData := ByteArray.empty }
         let b₁ : CellProofBundle := { proofs := [bal, bal2, nonceCell 3] }
         let b₂ : CellProofBundle := { proofs := [bal, bal2, nonceCell 99] }
         assert ((readCellValue b₁ (.nonce signer)).toList

@@ -9,6 +9,8 @@ pragma solidity 0.8.20;
 
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
+import {LogChain} from "../lib/LogChain.sol";
+
 /// @title KnomosisStateRootSubmission
 /// @notice Sequencer state-root submission registry for the
 ///         Workstream-H fault-proof game (per WUs H.7.1 – H.7.4).
@@ -24,6 +26,12 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 /// **Hash-chain integrity** (WU H.7.4): each submission's
 /// `prevLogEntryHash` must match the previous submission's
 /// `expectedNextHash`, preventing out-of-order or skipped indices.
+/// The chain also commits to the ACTION that carried the previous
+/// root to this one (`actionCommit`), which is what lets
+/// `KnomosisFaultProofGame.terminateOnSingleStep` authenticate the
+/// action it is handed instead of executing whatever the responding
+/// party supplies.  See `src/lib/LogChain.sol` for the encoding and
+/// for what the state-roots-only chain could not do.
 ///
 /// **Anti-DoS** (WU H.7.3): immutable rate-limit constants
 /// (submission interval, outstanding cap) set at construction.
@@ -226,10 +234,21 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
 
     /// @notice Submit a new state root.  Only the registered
     ///         sequencer can call.
+    /// @param logIndex          the L2 log index this root publishes.
+    /// @param stateCommit       the state root at `logIndex`.
+    /// @param prevLogEntryHash  the predecessor entry's chain hash.
+    /// @param actionCommit      `LogChain.actionCommit` over the
+    ///                          `(actionKind, signer, actionFields)`
+    ///                          triple of the action that carried
+    ///                          `logIndex - 1` to `logIndex`.  Binding
+    ///                          it here is what makes the fault-proof
+    ///                          game's terminal step adjudicate the
+    ///                          action the L2 actually executed.
     function submitStateRoot(
         uint64  logIndex,
         bytes32 stateCommit,
-        bytes32 prevLogEntryHash
+        bytes32 prevLogEntryHash,
+        bytes32 actionCommit
     ) external payable nonReentrant {
         if (msg.sender != sequencer) revert NotSequencer();
         if (msg.value != STATE_ROOT_SUBMISSION_BOND) revert InvalidBond();
@@ -253,7 +272,7 @@ contract KnomosisStateRootSubmission is ReentrancyGuard {
 
         // Compute this root's expected-next-hash.
         bytes32 expectedNextHash =
-            keccak256(abi.encode(prevLogEntryHash, stateCommit));
+            LogChain.nextEntryHash(prevLogEntryHash, stateCommit, actionCommit);
 
         roots[logIndex] = SubmittedRoot({
             sequencer:        msg.sender,

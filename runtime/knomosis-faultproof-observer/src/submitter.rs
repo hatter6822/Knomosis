@@ -108,8 +108,9 @@ impl MethodSelector {
             //                        bytes actionFields, uint64 signer,
             //                        CellProof[] cellProofs)`
             // The `CellProof` struct's canonical ABI tuple is
-            // `(uint8, uint256, uint256, bytes, bytes32)` — see
-            // `KnomosisStepVM::CellProof`.
+            // `(uint8, uint256, uint256, bytes, bytes32, bytes)` — see
+            // `KnomosisStepVM::CellProof`.  The trailing `bytes` is the
+            // cell's SMT opening against the pre-state root.
             //
             // There is NO trailing `bytes32 claimedPostCommit`.  An
             // earlier form spelled one, which changed the 4-byte
@@ -121,7 +122,7 @@ impl MethodSelector {
             // the caller supplies, so the Rust side moves, not the
             // contract.
             Self::TerminateOnSingleStepFull => {
-                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32)[])"
+                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32,bytes)[])"
             }
             Self::ClaimTimeout => "claimTimeout(uint256)",
         }
@@ -386,6 +387,25 @@ pub struct CellProof {
         deserialize_with = "deserialize_bytes32_hex_or_array"
     )]
     pub witness_commit: [u8; 32],
+    /// The cell's SMT opening against the pre-state root: a 32-byte
+    /// bitmask followed by one 32-byte sibling per set bit, in depth
+    /// order.  Mirrors Lean's `SmtCellProof.toWireBytes`.
+    ///
+    /// This is what an L1 verifier can actually check.  `witness_commit`
+    /// attests that the value was read from a state whose root is the
+    /// pre-state root, but only a party holding the whole
+    /// `ExtendedState` can recompute it; the opening lets a contract
+    /// holding nothing but the 32-byte root do the same check.
+    ///
+    /// JSON wire format: a lowercase hex string (no `0x` prefix), as
+    /// emitted by `LegalKernel.Runtime.CellProofJson`.  The
+    /// deserializer accepts the native byte-array form too, and
+    /// enforces the shape — see [`deserialize_proof_data_hex_or_array`].
+    #[serde(
+        serialize_with = "serialize_bytes_hex",
+        deserialize_with = "deserialize_proof_data_hex_or_array"
+    )]
+    pub proof_data: Vec<u8>,
 }
 
 /// Encode a `u128` as a 16-character lowercase big-endian hex
@@ -499,6 +519,65 @@ where
             "cell_value exceeds cap: {} bytes > {} max",
             bytes.len(),
             MAX_CELL_VALUE_BYTES,
+        )));
+    }
+    Ok(bytes)
+}
+
+/// Upper bound on a decoded `CellProof::proof_data`.
+///
+/// Exact rather than round: an opening is a 32-byte bitmask followed by
+/// at most one 32-byte sibling per level, and the SMT is `SMT_DEPTH =
+/// 256` deep, so `32 * (1 + 256)` is the largest opening the tree can
+/// produce.  Mirrors the Solidity constant
+/// `KnomosisStepVM.MAX_PROOF_DATA_BYTES`; the two are pinned equal by
+/// the cross-stack method-selector export.
+pub const MAX_PROOF_DATA_BYTES: usize = 32 * (1 + 256);
+
+/// Deserialize a `CellProof::proof_data` and enforce its shape.
+///
+/// Rejects a length that is zero, not a multiple of 32, or above
+/// [`MAX_PROOF_DATA_BYTES`] — the same three checks
+/// `KnomosisStepVM.executeStep` applies at intake.  Doing it here means
+/// a malformed bundle is rejected while reading the file, not after a
+/// reverted L1 transaction has cost gas and a game clock.
+///
+/// Zero length is a rejection, not an "empty opening": every opening
+/// carries the bitmask, so an empty `proof_data` is a proof that was
+/// never built.
+fn deserialize_proof_data_hex_or_array<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::{de::Error, Deserialize};
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum HexOrBytes {
+        Str(String),
+        Bytes(Vec<u8>),
+    }
+    let bytes = match HexOrBytes::deserialize(de)? {
+        HexOrBytes::Str(s) => {
+            let trimmed = s.strip_prefix("0x").unwrap_or(&s);
+            // Pre-check the hex length so a pathological string is
+            // rejected before `hex::decode` allocates for it.
+            if trimmed.len() > MAX_PROOF_DATA_BYTES * 2 {
+                return Err(D::Error::custom(format!(
+                    "proof_data hex exceeds cap: {} chars > {} max",
+                    trimmed.len(),
+                    MAX_PROOF_DATA_BYTES * 2,
+                )));
+            }
+            hex::decode(trimmed)
+                .map_err(|e| D::Error::custom(format!("invalid proof_data hex: {e}")))?
+        }
+        HexOrBytes::Bytes(b) => b,
+    };
+    if bytes.is_empty() || bytes.len() % 32 != 0 || bytes.len() > MAX_PROOF_DATA_BYTES {
+        return Err(D::Error::custom(format!(
+            "proof_data must be a nonzero multiple of 32 bytes up to {}, got {}",
+            MAX_PROOF_DATA_BYTES,
+            bytes.len(),
         )));
     }
     Ok(bytes)
@@ -782,36 +861,48 @@ fn encode_cell_proof_array(proofs: &[CellProof]) -> Vec<u8> {
 }
 
 /// Encode a single `CellProof` tuple
-/// `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes cellValue, bytes32 witnessCommit)`.
+/// `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes cellValue,
+///   bytes32 witnessCommit, bytes proofData)`.
 ///
-/// The tuple contains a dynamic field (`bytes cellValue`), so
-/// the encoding uses the head/tail discipline:
-/// * Head (5 words = 160 bytes):
+/// The tuple contains TWO dynamic fields (`bytes cellValue` and
+/// `bytes proofData`), so the encoding uses the head/tail discipline
+/// with two offsets:
+/// * Head (6 words = 192 bytes):
 ///   word 0: cellKind          (uint8 left-padded)
 ///   word 1: keyA              (uint256)
 ///   word 2: keyB              (uint256)
-///   word 3: cellValue offset  (160 bytes, relative to tuple start)
+///   word 3: cellValue offset  (192 bytes, relative to tuple start)
 ///   word 4: witnessCommit     (bytes32)
-/// * Tail: cellValue dynamic-bytes encoding.
+///   word 5: proofData offset  (192 + len(cellValue tail))
+/// * Tail: cellValue dynamic-bytes encoding, then proofData's.
+///
+/// The second offset is computed from the first tail's ACTUAL encoded
+/// length, not from `cell_value.len()` — `encode_dynamic_bytes` pads to
+/// a word boundary, so the two differ for every value whose length is
+/// not a multiple of 32.
 fn encode_cell_proof_tuple(p: &CellProof) -> Vec<u8> {
-    const HEAD_WORDS: usize = 5;
+    const HEAD_WORDS: usize = 6;
     const WORD: usize = 32;
     let head_bytes: usize = HEAD_WORDS * WORD;
 
     let cell_value_tail = encode_dynamic_bytes(&p.cell_value);
-    let mut out = Vec::with_capacity(head_bytes + cell_value_tail.len());
+    let proof_data_tail = encode_dynamic_bytes(&p.proof_data);
+    let mut out = Vec::with_capacity(head_bytes + cell_value_tail.len() + proof_data_tail.len());
     // word 0: cellKind
     out.extend_from_slice(&u256_be(u128::from(p.cell_kind)));
     // word 1: keyA
     out.extend_from_slice(&u256_be(p.key_a));
     // word 2: keyB
     out.extend_from_slice(&u256_be(p.key_b));
-    // word 3: cellValue offset (head_bytes = 160 bytes from tuple start)
+    // word 3: cellValue offset (head_bytes = 192 bytes from tuple start)
     out.extend_from_slice(&u256_be(head_bytes as u128));
     // word 4: witnessCommit
     out.extend_from_slice(&p.witness_commit);
-    // Tail.
+    // word 5: proofData offset (after the cellValue tail)
+    out.extend_from_slice(&u256_be((head_bytes + cell_value_tail.len()) as u128));
+    // Tails, in head order.
     out.extend_from_slice(&cell_value_tail);
+    out.extend_from_slice(&proof_data_tail);
     out
 }
 
@@ -1314,6 +1405,7 @@ mod tests {
             key_b: 11,
             cell_value: vec![0xAA, 0xBB, 0xCC],
             witness_commit: [0x42u8; 32],
+            proof_data: vec![0u8; 32],
         };
         let bytes = encode_terminate_full_calldata(
             123_u128,
@@ -1326,10 +1418,11 @@ mod tests {
         // Length sanity: 4-byte selector + 5×32-byte head + tails.
         // actionFields tail: 32 (length) + 32 (4 bytes padded) = 64.
         // cellProofs tail: 32 (length) + 32 (1 pointer) + per-cell tuple.
-        //   per-cell: 5×32 head + 32 (cellValue length) + 32 (padded 3 bytes) = 224.
-        // Total tail: 64 + 32 + 32 + 224 = 352.
-        // Total: 4 + 160 + 352 = 516.
-        assert_eq!(bytes.len(), 4 + 160 + 64 + 32 + 32 + 224);
+        //   per-cell: 6×32 head + 32 (cellValue length) + 32 (padded 3
+        //   bytes) + 32 (proofData length) + 32 (one word) = 320.
+        // Total tail: 64 + 32 + 32 + 320 = 448.
+        // Total: 4 + 160 + 448 = 612.
+        assert_eq!(bytes.len(), 4 + 160 + 64 + 32 + 32 + 320);
 
         // Selector matches the full-form signature's hash.
         assert_eq!(
@@ -1361,10 +1454,11 @@ mod tests {
         assert_ne!(minimum, full);
     }
 
-    /// `CellProof`-tuple encoding: head/tail boundary checked.
-    /// One cell with empty `cell_value` produces a tuple of
-    /// exactly 5×32 + 32 (length only, no payload) + 0 padding
-    /// = 192 bytes.
+    /// `CellProof`-tuple encoding: head/tail boundaries checked.
+    /// One cell with empty `cell_value` and a one-word `proof_data`
+    /// produces a tuple of exactly 6×32 head + 32 (cellValue length
+    /// only, no payload) + 32 (proofData length) + 32 (its one word)
+    /// = 288 bytes.
     #[test]
     fn cell_proof_tuple_with_empty_cell_value() {
         use super::{encode_cell_proof_tuple, CellProof};
@@ -1374,16 +1468,59 @@ mod tests {
             key_b: 0,
             cell_value: vec![],
             witness_commit: [0u8; 32],
+            proof_data: vec![0u8; 32],
         };
         let bytes = encode_cell_proof_tuple(&cell);
-        assert_eq!(bytes.len(), 5 * 32 + 32);
-        // The cellValue offset (word 3) is `5 * 32 = 160`.
+        assert_eq!(bytes.len(), 6 * 32 + 32 + 32 + 32);
+        // The cellValue offset (word 3) is `6 * 32 = 192`.
         let mut expected_offset = [0u8; 32];
-        expected_offset[31] = 160;
+        expected_offset[31] = 192;
         assert_eq!(&bytes[3 * 32..4 * 32], &expected_offset);
-        // The cellValue length (at offset 5*32 = 160) is 0.
+        // The proofData offset (word 5) is 192 + 32 (the empty
+        // cellValue tail is its length word alone) = 224.
+        let mut expected_pd_offset = [0u8; 32];
+        expected_pd_offset[31] = 224;
+        assert_eq!(&bytes[5 * 32..6 * 32], &expected_pd_offset);
+        // The cellValue length (at offset 6*32 = 192) is 0.
         let expected_len = [0u8; 32];
-        assert_eq!(&bytes[160..192], expected_len.as_slice());
+        assert_eq!(&bytes[192..224], expected_len.as_slice());
+        // The proofData length (at offset 224) is 32.
+        let mut expected_pd_len = [0u8; 32];
+        expected_pd_len[31] = 32;
+        assert_eq!(&bytes[224..256], &expected_pd_len);
+    }
+
+    /// **The second offset is computed from the encoded tail, not the
+    /// raw length.**  `encode_dynamic_bytes` pads to a word boundary,
+    /// so a `cell_value` whose length is not a multiple of 32 makes the
+    /// two differ — and a decoder following a `proof_data` offset
+    /// derived from the raw length would land mid-padding.
+    #[test]
+    fn cell_proof_tuple_second_offset_accounts_for_padding() {
+        use super::{encode_cell_proof_tuple, CellProof};
+        // 3 bytes: one padded word, so raw length 3 vs tail 64.
+        let cell = CellProof {
+            cell_kind: 0,
+            key_a: 1,
+            key_b: 2,
+            cell_value: vec![0xDE, 0xAD, 0xBE],
+            witness_commit: [0u8; 32],
+            proof_data: vec![0xFFu8; 64],
+        };
+        let bytes = encode_cell_proof_tuple(&cell);
+        // proofData offset = 192 (head) + 64 (length word + one padded
+        // data word) = 256.
+        let mut expected_pd_offset = [0u8; 32];
+        expected_pd_offset[31] = 0;
+        expected_pd_offset[30] = 1; // 256
+        assert_eq!(&bytes[5 * 32..6 * 32], &expected_pd_offset);
+        // Following it lands on the proofData length word (= 64).
+        let mut expected_pd_len = [0u8; 32];
+        expected_pd_len[31] = 64;
+        assert_eq!(&bytes[256..288], &expected_pd_len);
+        // ...and the payload that follows is the opening itself.
+        assert_eq!(&bytes[288..352], &[0xFFu8; 64]);
+        assert_eq!(bytes.len(), 352);
     }
 
     /// Empty `cell_proofs` array: encoded as length=0 + no
@@ -1599,7 +1736,8 @@ mod tests {
             "key_a": "0000000000000007",
             "key_b": "0000000000000001",
             "cell_value": "",
-            "witness_commit": "abababababababababababababababababababababababababababababababab"
+            "witness_commit": "abababababababababababababababababababababababababababababababab",
+            "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
         let parsed: CellProof = serde_json::from_str(lean_json)
             .expect("Lean cell-proof JSON must deserialize into Rust CellProof");
@@ -1619,7 +1757,8 @@ mod tests {
             "key_a": "0000000000000005",
             "key_b": "0000000000000000",
             "cell_value": "deadbeef",
-            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000",
+            "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
         let parsed: CellProof = serde_json::from_str(lean_json).unwrap();
         assert_eq!(parsed.cell_value, vec![0xDE, 0xAD, 0xBE, 0xEF]);
@@ -1636,6 +1775,7 @@ mod tests {
             key_b: 0x0011_2233,
             cell_value: vec![1, 2, 3, 4, 5],
             witness_commit: [0xCC; 32],
+            proof_data: vec![0x11u8; 64],
         };
         let serialized = serde_json::to_string(&original).unwrap();
         let parsed: CellProof = serde_json::from_str(&serialized).unwrap();
@@ -1652,6 +1792,7 @@ mod tests {
             key_b: 1,
             cell_value: vec![],
             witness_commit: [0xABu8; 32],
+            proof_data: vec![0xCDu8; 32],
         };
         let json = serde_json::to_string(&cp).unwrap();
         // key_a / key_b are 16-hex-char zero-padded.
@@ -1680,7 +1821,8 @@ mod tests {
             "key_a": "notvalidhex",
             "key_b": "0000000000000001",
             "cell_value": "",
-            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+            "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000",
+            "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
         let err = serde_json::from_str::<CellProof>(bad).unwrap_err();
         assert!(
@@ -1702,7 +1844,8 @@ mod tests {
                 "key_a": "0000000000000007",
                 "key_b": "0000000000000001",
                 "cell_value": "{oversize_hex}",
-                "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000"
+                "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000",
+                "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
             }}"#
         );
         let err = serde_json::from_str::<CellProof>(&bad).unwrap_err();
@@ -1713,6 +1856,81 @@ mod tests {
         );
     }
 
+    /// Build a Lean-shaped cell-proof JSON with a caller-chosen
+    /// `proof_data` hex, so the opening-shape tests below vary exactly
+    /// one field.
+    fn cell_proof_json_with_proof_data(proof_data_hex: &str) -> String {
+        format!(
+            r#"{{
+                "cell_kind": 0,
+                "key_a": "0000000000000007",
+                "key_b": "0000000000000001",
+                "cell_value": "",
+                "witness_commit": "0000000000000000000000000000000000000000000000000000000000000000",
+                "proof_data": "{proof_data_hex}"
+            }}"#
+        )
+    }
+
+    /// An EMPTY `proof_data` is rejected.  Every opening carries the
+    /// 32-byte bitmask, so zero length is a proof that was never built
+    /// — and `CellProof.proofData` defaults to empty on the Lean side,
+    /// which is exactly how one would silently ship.
+    #[test]
+    fn cell_proof_deserialize_rejects_empty_proof_data() {
+        let err =
+            serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data("")).unwrap_err();
+        assert!(
+            err.to_string().contains("proof_data"),
+            "expected a proof_data shape error, got: {err}"
+        );
+    }
+
+    /// A misaligned `proof_data` is rejected: the tail after the
+    /// bitmask must split into whole 32-byte siblings.
+    #[test]
+    fn cell_proof_deserialize_rejects_misaligned_proof_data() {
+        let hex = "00".repeat(48);
+        let err =
+            serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data(&hex)).unwrap_err();
+        assert!(
+            err.to_string().contains("proof_data") && err.to_string().contains("32"),
+            "expected a multiple-of-32 error, got: {err}"
+        );
+    }
+
+    /// A `proof_data` longer than the tree is deep is rejected before
+    /// it is decoded — the cap is checked against the hex length first,
+    /// so a pathological string never allocates.
+    #[test]
+    fn cell_proof_deserialize_rejects_oversize_proof_data() {
+        let hex = "00".repeat(super::MAX_PROOF_DATA_BYTES + 32);
+        let err =
+            serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data(&hex)).unwrap_err();
+        assert!(
+            err.to_string().contains("proof_data"),
+            "expected an oversize proof_data rejection, got: {err}"
+        );
+    }
+
+    /// The exact bound is ACCEPTED.  An off-by-one in the cap would
+    /// make the deepest legitimate opening unsubmittable, which is the
+    /// failure the observer would hit only against a full tree.
+    #[test]
+    fn cell_proof_deserialize_accepts_proof_data_at_the_cap() {
+        let hex = "00".repeat(super::MAX_PROOF_DATA_BYTES);
+        let parsed = serde_json::from_str::<CellProof>(&cell_proof_json_with_proof_data(&hex))
+            .expect("a cap-length opening must deserialize");
+        assert_eq!(parsed.proof_data.len(), super::MAX_PROOF_DATA_BYTES);
+    }
+
+    /// The Rust cap is the SMT's exact geometry and must equal the
+    /// Solidity constant `KnomosisStepVM.MAX_PROOF_DATA_BYTES`.
+    #[test]
+    fn proof_data_cap_matches_smt_geometry() {
+        assert_eq!(super::MAX_PROOF_DATA_BYTES, 32 * (1 + 256));
+    }
+
     /// Witness commit wrong length surfaces a typed serde error.
     #[test]
     fn cell_proof_deserialize_rejects_short_witness_commit() {
@@ -1721,7 +1939,8 @@ mod tests {
             "key_a": "0000000000000007",
             "key_b": "0000000000000001",
             "cell_value": "",
-            "witness_commit": "deadbeef"
+            "witness_commit": "deadbeef",
+            "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
         let err = serde_json::from_str::<CellProof>(bad).unwrap_err();
         assert!(
