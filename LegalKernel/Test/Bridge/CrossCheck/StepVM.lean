@@ -143,6 +143,23 @@ private def cellProofForFixtureFromCellProof (p : CellProof) :
     witnessCommitHex  :=
       Test.Bridge.CrossCheck.hexFromBytes (commitExtendedState p.witnessState) }
 
+/-- The base state every fixture builds on.
+
+    `ExtendedState.empty` ships `budgetPolicy := .bounded 0 1 0` — a
+    zero free tier at epoch 0.  `ActorBudget.empty` then never
+    normalises, its balance stays 0, and the consume refuses for every
+    signer, so `productionApplyBudget` returns the un-updated state
+    and the corpus exercises the budget leg on NO entry.  That is how
+    the epoch-budget write obligation went unnoticed for as long as it
+    did: the only cross-stack evidence covering the reference apply
+    was blind to half of it.
+
+    A non-zero epoch against a real free tier makes the consume
+    succeed, so the fixtures cover the divergence they exist to
+    cover. -/
+private def fixtureBase : ExtendedState :=
+  { ExtendedState.empty with budgetPolicy := .bounded 100 1 1 }
+
 /-- Build a pre-state with one or more `(actor, balance)` entries
     on a single resource.  Other sub-states stay empty. -/
 private def stateWithBalances (r : ResourceId)
@@ -150,7 +167,7 @@ private def stateWithBalances (r : ResourceId)
   let baseState := entries.foldl
     (fun s (a, v) => LegalKernel.setBalance s r a v)
     LegalKernel.genesisState
-  { ExtendedState.empty with base := baseState }
+  { fixtureBase with base := baseState }
 
 /-- Map an entire bundle of real cell proofs into the flat
     fixture-ready list. -/
@@ -212,7 +229,7 @@ def buildMintHappy
     StepVMFixture :=
   let action : Action := .mint r to amount
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
@@ -274,7 +291,7 @@ def buildFreezeResourceHappy
     (nonce : Nonce) (sig : ByteArray) : StepVMFixture :=
   let action : Action := .freezeResource r
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
@@ -304,7 +321,7 @@ def buildReplaceKeyHappy
     StepVMFixture :=
   let action : Action := .replaceKey actor newKey
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
@@ -423,7 +440,7 @@ def buildRegisterIdentityHappy
     StepVMFixture :=
   let action : Action := .registerIdentity actor pk
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
@@ -741,7 +758,7 @@ private def buildOpaqueHappy
     (signer : ActorId) (nonce : Nonce) (sig : ByteArray) :
     StepVMFixture :=
   let st : SignedAction := { action, signer, nonce, sig }
-  let es := ExtendedState.empty
+  let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
