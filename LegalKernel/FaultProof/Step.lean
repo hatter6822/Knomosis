@@ -261,11 +261,37 @@ reverse import and close the cycle. -/
     action.  This is what the responding party builds for
     `terminateOnSingleStep`. -/
 def buildKernelStep
-    (es : ExtendedState) (st : SignedAction) : KernelStep where
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) : KernelStep where
   preStateCommit  := commitExtendedState es
   signedAction    := st
-  postStateCommit := recomputeCommitment es st
+  postStateCommit := recomputeCommitment es st l2LogIndex
   cellProofs      := buildCellProofsForAction es st
+
+/-- The canonical step's pre-commit, as a projection lemma.
+
+    Stated so downstream proofs can rewrite instead of forcing `rfl`
+    through the whole record — `postStateCommit` now carries the
+    production advance, and `whnf` on the full structure is expensive
+    enough to hit the heartbeat limit. -/
+theorem buildKernelStep_preStateCommit
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    (buildKernelStep es st l2LogIndex).preStateCommit = commitExtendedState es := rfl
+
+set_option maxHeartbeats 1000000 in
+/-- The canonical step's post-commit, as a projection lemma.
+
+    The heartbeat bump is not hiding a loop: the defeq is finite but
+    large.  Both sides reduce through `recomputeCommitment` to
+    `commitExtendedState`, whose body is the depth-256 SMT recursion,
+    and the elaborator walks into it rather than stopping at the
+    shared head.  Proving it once here means downstream proofs rewrite
+    with this lemma instead of each paying the same cost. -/
+theorem buildKernelStep_postStateCommit
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    (buildKernelStep es st l2LogIndex).postStateCommit
+      = recomputeCommitment es st l2LogIndex := by
+  unfold buildKernelStep
+  rfl
 
 /-- The canonical `KernelStep`'s cell proofs verify against the
     pre-state commit. -/
@@ -298,17 +324,17 @@ theorem buildCellProofsForAction_eq_observer
     Note what it does **not** say.  The old form claimed
     `= some (recomputeCommitment es st)`, which held only because
     the function returned the claim it was handed;
-    `recomputeCommitment` is `commitExtendedState ∘ stepApply`, a
-    5-component hash over the whole post-state, while `stepVMHash`
-    is a per-step hash over the proven cells.  Those two recipes
+    `recomputeCommitment` is `commitExtendedState` of the
+    production advance — the published state root — while
+    `stepVMHash` is a per-step hash over the proven cells.  Those two recipes
     are not equal today, and reconciling them is the open
     state-root Merkleisation work recorded in
     `docs/audits/19-findings-and-followups.md`.  Stating the
     reduction against the recipe the step VM actually uses makes
     that gap visible instead of papering over it. -/
 theorem kernelStepApply_canonical
-    (es : ExtendedState) (st : SignedAction) :
-    kernelStepApply (buildKernelStep es st) =
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    kernelStepApply (buildKernelStep es st l2LogIndex) =
       some (stepVMHashFromAction es st.action st.signer) := by
   unfold kernelStepApply buildKernelStep stepVMHashFromAction
   have h := buildKernelStep_verifies es st

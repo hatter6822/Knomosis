@@ -40,7 +40,7 @@ private def emptyES : ExtendedState := ExtendedState.empty
 def tests : List TestCase :=
   [ { name := "applyCellWrites is deterministic on equal inputs"
     , body := do
-        let h := applyCellWrites_deterministic emptyES emptyES transferSt transferSt rfl rfl
+        let h := applyCellWrites_deterministic emptyES emptyES transferSt transferSt 0 0 rfl rfl rfl
         let _ := h
         assert true "API exists; determinism holds"
     }
@@ -77,7 +77,7 @@ def tests : List TestCase :=
     }
   , { name := "chainKernelStepApplyFromLog on empty log is empty"
     , body := do
-        let r := chainKernelStepApplyFromLog emptyES []
+        let r := chainKernelStepApplyFromLog emptyES 0 []
         assertEq (expected := 0) (actual := r.length) "empty produces empty"
     }
   , { name := "chainKernelStepApplyFromLog_length theorem holds"
@@ -92,7 +92,7 @@ def tests : List TestCase :=
     }
   , { name := "chainKernelStepApplyFromLog produces legal transcript on empty"
     , body := do
-        let h := chainKernelStepApplyFromLog_isLegalTranscript emptyES []
+        let h := chainKernelStepApplyFromLog_isLegalTranscript emptyES 0 []
         let _ := h
         assert true "value-level legality holds for empty"
     }

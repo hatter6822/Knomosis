@@ -226,7 +226,7 @@ theorem apply_bridge_admissible_with_budget_eq
          some (productionApplyBudget es st l2LogIndex)
        else none) := by
   unfold apply_bridge_admissible_with_budget budgetGateAdmits productionApplyBudget
-  cases h_pol : es.budgetPolicy with
+  cases _h_pol : es.budgetPolicy with
   | bounded freeTier actionCost currentEpoch =>
     -- Peel the five gates in order; each false arm is `none` on both
     -- sides, and the surviving arm splits on the bridgeActor
@@ -292,6 +292,60 @@ theorem productionApply_marks_deposit_consumed
   unfold productionApply
   rw [h]
   rfl
+
+/-! ## Multi-step
+
+`kernelOnlyReplay` is `entries.foldl kernelOnlyApply genesis` — no
+index to thread, because `kernelOnlyApply` has no bridge leg that
+needs one.  The production advance does, and the index it wants is
+the entry's own position in the log, so the production replay is a
+fold that counts. -/
+
+/-- The production advance folded over a log, threading the L2 log
+    index from `startIdx`.  This is what a chain of adjudicated steps
+    computes, and the target the fault-proof layer's multi-step
+    coherence is stated against. -/
+def productionReplayBudget (es : ExtendedState) (startIdx : Nat) :
+    List SignedAction → ExtendedState
+  | []        => es
+  | st :: rest =>
+      productionReplayBudget (productionApplyBudget es st startIdx)
+        (startIdx + 1) rest
+
+/-- The empty-log reduction. -/
+theorem productionReplayBudget_nil (es : ExtendedState) (i : Nat) :
+    productionReplayBudget es i [] = es := rfl
+
+/-- The cons-step reduction: one production advance at `i`, then the
+    rest from `i + 1`. -/
+theorem productionReplayBudget_cons
+    (es : ExtendedState) (i : Nat) (st : SignedAction) (rest : List SignedAction) :
+    productionReplayBudget es i (st :: rest)
+      = productionReplayBudget (productionApplyBudget es st i) (i + 1) rest := rfl
+
+/-- The bridge sub-state after one production advance.  Stated because
+    the fault-proof layer used to assert the OPPOSITE — that its
+    reference apply left the bridge alone — which was true of
+    `kernelOnlyApply` and is the divergence the repoint closes. -/
+theorem productionApplyBudget_bridge
+    (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
+    (productionApplyBudget es st l2LogIndex).bridge
+      = applyActionToBridgeState es.bridge st.action l2LogIndex := by
+  unfold productionApplyBudget productionApply
+  -- Only `epochBudgets` differs between the three branches; the
+  -- bridge field is written once, before any of them.  The consume is
+  -- a match on a non-constructor, so generalise it rather than
+  -- hoping for iota.
+  cases h_pol : es.budgetPolicy with
+  | bounded freeTier actionCost currentEpoch =>
+    simp only []
+    by_cases h : st.signer = bridgeActor
+    · simp only [if_pos h]
+    · simp only [if_neg h]
+      cases _hc : EpochBudgetState.consume es.epochBudgets st.signer currentEpoch
+                    freeTier (actionCost + refundConsumeExtra st.action) with
+      | none   => simp only []
+      | some _ => simp only []
 
 end FaultProof
 end LegalKernel

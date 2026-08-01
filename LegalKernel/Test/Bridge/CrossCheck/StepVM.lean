@@ -179,7 +179,7 @@ def buildTransferHappy
     else [(sender, senderInitBal), (receiver, receiverInitBal)]
   let es := stateWithBalances r entries
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Solidity's `_stepTransfer`:
   -- * self: newSender = newReceiver = preBalance (no debit).
   -- * non-self: newSender = preBalance - amount;
@@ -214,7 +214,7 @@ def buildMintHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -246,7 +246,7 @@ def buildBurnHappy
   let st : SignedAction := { action, signer := fromActor, nonce, sig }
   let es := stateWithBalances r [(fromActor, fromInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -276,7 +276,7 @@ def buildFreezeResourceHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -306,7 +306,7 @@ def buildReplaceKeyHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -338,7 +338,7 @@ def buildRewardHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := stateWithBalances r [(to, toInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -383,7 +383,7 @@ def buildDistributeOthersHappy
       (excluded + 3, 100 + idx) ]
   let es := stateWithBalances r recipients
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Build the bundle: observer's `requiredCells` (registry +
   -- nonce for distributeOthers) plus per-recipient balance cells
   -- in deterministic order.  Solidity's bulk loop iterates the
@@ -425,7 +425,7 @@ def buildRegisterIdentityHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -459,7 +459,7 @@ def buildDepositHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := stateWithBalances r [(recipient, recipientInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -491,7 +491,7 @@ def buildWithdrawHappy
   let st : SignedAction := { action, signer := sender, nonce, sig }
   let es := stateWithBalances r [(sender, senderInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -548,7 +548,7 @@ def buildDepositWithFeeHappy
     else [(recipient, recipientInitBal), (poolActor, poolInitBal)]
   let es := stateWithBalances r entries
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.depositWithFee.apply_impl:
   --   recipient += userAmount; then poolActor += poolAmount.
   -- Self-credit case: both writes target the same cell, so the
@@ -603,7 +603,7 @@ def buildTopUpActionBudgetHappy
   let es := stateWithBalances gasResource
               [(signer, signerInitBal), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.topUpActionBudget.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
   let stepVMCommit :=
@@ -661,7 +661,7 @@ def buildTopUpActionBudgetForHappy
   let es := stateWithBalances gasResource
               [(signer, signerInitBal), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.topUpActionBudgetFor.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
   let stepVMCommit :=
@@ -701,7 +701,7 @@ def buildClaimBudgetRefundHappy
   let es := stateWithBalances gasResource
               [(signer, claimantInitBal), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   -- Per Laws.claimBudgetRefund.apply_impl: poolActor -= refundAmount;
   -- claimant (signer) += refundAmount.
   let stepVMCommit :=
@@ -743,7 +743,7 @@ private def buildOpaqueHappy
   let st : SignedAction := { action, signer, nonce, sig }
   let es := ExtendedState.empty
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -827,7 +827,7 @@ def buildProportionalDiluteHappy
       (excluded + 3, 100 + idx) ]
   let es := stateWithBalances r recipients
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let observerBundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -1223,7 +1223,7 @@ def buildAmmSwapHappy
               { es with base :=
                 LegalKernel.setBalance es.base toResource ammReserveActor toInitBal })
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat
@@ -1281,7 +1281,7 @@ def buildReclaimAmmReservesHappy
   let es := stateWithBalances r
               [(reserveActor, amount), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
-  let postCommit := recomputeCommitment es st
+  let postCommit := recomputeCommitment es st 0
   let stepVMCommit :=
     stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
       st.signer.toNat

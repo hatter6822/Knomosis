@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c2a68e6a0b0b2e1e91780205e4dc80ca10b149c79dfa53fc7f67d190f406e103"
+    "source_digest": "32fa5a3540aec8995256bc5734e8a737c539cbcaddb236650c1320e619464b16"
   },
   "summary": {
     "module_count": 324,
-    "declaration_count": 5528
+    "declaration_count": 5534
   },
   "modules": [
     {
@@ -20696,19 +20696,18 @@
         {
           "kind": "def",
           "name": "applyCellWrites_to_state",
-          "line": 78,
+          "line": 87,
           "called": [
             "ExtendedState",
             "SignedAction",
             "es",
-            "kernelOnlyApply",
-            "signedActionEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "def",
           "name": "recomputeCommitment",
-          "line": 91,
+          "line": 100,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20720,8 +20719,21 @@
         },
         {
           "kind": "theorem",
+          "name": "recomputeCommitment_def",
+          "line": 112,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "applyCellWrites_to_state",
+            "commitExtendedState",
+            "es",
+            "recomputeCommitment"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "applyCellWrites_to_state_deterministic",
-          "line": 98,
+          "line": 118,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20732,7 +20744,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_to_state_total",
-          "line": 110,
+          "line": 130,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20743,7 +20755,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_deterministic",
-          "line": 116,
+          "line": 136,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20754,7 +20766,7 @@
         {
           "kind": "theorem",
           "name": "recomputeCommitment_extensional",
-          "line": 124,
+          "line": 144,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20765,36 +20777,33 @@
         },
         {
           "kind": "theorem",
-          "name": "recomputeCommitment_coherent_with_kernelOnlyApply",
-          "line": 157,
+          "name": "recomputeCommitment_coherent_with_productionApplyBudget",
+          "line": 174,
           "called": [
             "ExtendedState",
-            "LogEntry",
             "SignedAction",
-            "applyCellWrites_to_state",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
-            "recomputeCommitment",
-            "signedActionEntry"
+            "productionApplyBudget",
+            "recomputeCommitment"
           ]
         },
         {
           "kind": "theorem",
-          "name": "applyCellWrites_to_state_preserves_bridge",
-          "line": 193,
+          "name": "applyCellWrites_to_state_bridge",
+          "line": 187,
           "called": [
             "ExtendedState",
             "SignedAction",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply_preserves_bridge"
+            "productionApplyBudget_bridge"
           ]
         },
         {
           "kind": "def",
           "name": "foldStepApplyOverLog",
-          "line": 211,
+          "line": 203,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20805,7 +20814,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_nil",
-          "line": 219,
+          "line": 211,
           "called": [
             "ExtendedState",
             "es",
@@ -20815,7 +20824,7 @@
         {
           "kind": "theorem",
           "name": "foldStepApplyOverLog_cons",
-          "line": 224,
+          "line": 216,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -20826,49 +20835,35 @@
         },
         {
           "kind": "theorem",
-          "name": "applyCellWrites_to_state_eq_kernelOnlyApply",
-          "line": 236,
+          "name": "foldStepApplyOverLog_eq_productionReplayBudget",
+          "line": 229,
           "called": [
             "ExtendedState",
             "LogEntry",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionEntry"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "foldStepApplyOverLog_eq_kernelOnlyReplay",
-          "line": 256,
-          "called": [
-            "ExtendedState",
-            "LogEntry",
-            "applyCellWrites_to_state_eq_kernelOnlyApply",
-            "es",
             "foldStepApplyOverLog",
-            "kernelOnlyApply",
-            "kernelOnlyReplay"
+            "productionReplayBudget"
           ]
         },
         {
           "kind": "theorem",
-          "name": "recomputeCommitment_chain_coherent_with_kernelOnlyReplay",
-          "line": 282,
+          "name": "recomputeCommitment_chain_coherent_with_productionReplayBudget",
+          "line": 243,
           "called": [
             "ExtendedState",
             "LogEntry",
             "commitExtendedState",
             "es",
             "foldStepApplyOverLog",
-            "foldStepApplyOverLog_eq_kernelOnlyReplay",
-            "kernelOnlyReplay"
+            "foldStepApplyOverLog_eq_productionReplayBudget",
+            "productionReplayBudget"
           ]
         },
         {
           "kind": "def",
           "name": "buildCellProofsForAction",
-          "line": 305,
+          "line": 266,
           "called": [
             "CellProofBundle",
             "ExtendedState",
@@ -20880,7 +20875,7 @@
         {
           "kind": "theorem",
           "name": "buildCellProofsForAction_verifies",
-          "line": 311,
+          "line": 272,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -22858,23 +22853,21 @@
         },
         {
           "kind": "theorem",
-          "name": "recomputeCommitment_eq_signedActionToLogEntry",
+          "name": "recomputeCommitment_eq_productionApplyBudget",
           "line": 73,
           "called": [
             "ExtendedState",
             "SignedAction",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
-            "recomputeCommitment",
-            "recomputeCommitment_coherent_with_kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget",
+            "recomputeCommitment"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_transfer",
-          "line": 86,
+          "line": 84,
           "called": [
             "ActorId",
             "Amount",
@@ -22883,19 +22876,18 @@
             "ResourceId",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "receiver",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
+            "recomputeCommitment_eq_productionApplyBudget",
             "sender",
-            "signedActionToLogEntry",
             "transfer"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_mint",
-          "line": 99,
+          "line": 97,
           "called": [
             "ActorId",
             "Amount",
@@ -22904,17 +22896,16 @@
             "ResourceId",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
             "mint",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_burn",
-          "line": 112,
+          "line": 110,
           "called": [
             "ActorId",
             "Amount",
@@ -22924,16 +22915,15 @@
             "burn",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_freezeResource",
-          "line": 125,
+          "line": 123,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -22942,32 +22932,30 @@
             "commitExtendedState",
             "es",
             "freezeResource",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_replaceKey",
-          "line": 138,
+          "line": 136,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_reward",
-          "line": 151,
+          "line": 149,
           "called": [
             "ActorId",
             "Amount",
@@ -22976,17 +22964,16 @@
             "ResourceId",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "reward",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget",
+            "reward"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_distributeOthers",
-          "line": 164,
+          "line": 162,
           "called": [
             "ActorId",
             "Amount",
@@ -22996,16 +22983,15 @@
             "commitExtendedState",
             "distributeOthers",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_proportionalDilute",
-          "line": 177,
+          "line": 175,
           "called": [
             "ActorId",
             "Amount",
@@ -23014,17 +23000,16 @@
             "ResourceId",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "proportionalDilute",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_dispute",
-          "line": 190,
+          "line": 188,
           "called": [
             "ActorId",
             "Dispute",
@@ -23032,16 +23017,15 @@
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_disputeWithdraw",
-          "line": 203,
+          "line": 201,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -23049,16 +23033,15 @@
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_verdict",
-          "line": 216,
+          "line": 214,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -23066,16 +23049,15 @@
             "Verdict",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_rollback",
-          "line": 229,
+          "line": 227,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -23083,32 +23065,30 @@
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_registerIdentity",
-          "line": 242,
+          "line": 240,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_deposit",
-          "line": 255,
+          "line": 253,
           "called": [
             "ActorId",
             "Amount",
@@ -23118,16 +23098,15 @@
             "commitExtendedState",
             "deposit",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_withdraw",
-          "line": 269,
+          "line": 267,
           "called": [
             "ActorId",
             "Amount",
@@ -23136,51 +23115,48 @@
             "ResourceId",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
+            "recomputeCommitment_eq_productionApplyBudget",
             "sender",
-            "signedActionToLogEntry",
             "withdraw"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_declareLocalPolicy",
-          "line": 283,
+          "line": 281,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
             "policy",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_revokeLocalPolicy",
-          "line": 296,
+          "line": 294,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_faultProofChallenge",
-          "line": 308,
+          "line": 306,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -23188,16 +23164,15 @@
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_faultProofResolution",
-          "line": 325,
+          "line": 323,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -23205,16 +23180,15 @@
             "Nonce",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_depositWithFee",
-          "line": 342,
+          "line": 340,
           "called": [
             "ActorId",
             "Amount",
@@ -23225,17 +23199,16 @@
             "commitExtendedState",
             "depositWithFee",
             "es",
-            "kernelOnlyApply",
             "poolActor",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_topUpActionBudget",
-          "line": 362,
+          "line": 360,
           "called": [
             "ActorId",
             "Amount",
@@ -23245,18 +23218,17 @@
             "commitExtendedState",
             "es",
             "gasResource",
-            "kernelOnlyApply",
             "poolActor",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry",
+            "recomputeCommitment_eq_productionApplyBudget",
             "topUpActionBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_topUpActionBudgetFor",
-          "line": 386,
+          "line": 384,
           "called": [
             "ActorId",
             "Amount",
@@ -23266,18 +23238,17 @@
             "commitExtendedState",
             "es",
             "gasResource",
-            "kernelOnlyApply",
             "poolActor",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry",
+            "recomputeCommitment_eq_productionApplyBudget",
             "topUpActionBudgetFor"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_claimBudgetRefund",
-          "line": 406,
+          "line": 404,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -23287,17 +23258,16 @@
             "commitExtendedState",
             "es",
             "gasResource",
-            "kernelOnlyApply",
             "poolActor",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_ammSwap",
-          "line": 423,
+          "line": 421,
           "called": [
             "ActorId",
             "Amount",
@@ -23308,16 +23278,15 @@
             "ammSwap",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "coherence_reclaimAmmReserves",
-          "line": 441,
+          "line": 439,
           "called": [
             "ActorId",
             "Amount",
@@ -23326,431 +23295,406 @@
             "ResourceId",
             "commitExtendedState",
             "es",
-            "kernelOnlyApply",
             "poolActor",
+            "productionApplyBudget",
             "reclaimAmmReserves",
             "recomputeCommitment",
-            "recomputeCommitment_eq_signedActionToLogEntry",
-            "signedActionToLogEntry"
+            "recomputeCommitment_eq_productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
-          "name": "applyCellWrites_eq_signedActionToLogEntry",
-          "line": 464,
+          "name": "applyCellWrites_eq_productionApplyBudget",
+          "line": 462,
           "called": [
             "ExtendedState",
             "SignedAction",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_transfer",
-          "line": 471,
+          "line": 468,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "receiver",
             "sender",
-            "signedActionToLogEntry",
             "transfer"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_mint",
-          "line": 484,
+          "line": 481,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
             "mint",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_burn",
-          "line": 497,
+          "line": 494,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "burn",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_freezeResource",
-          "line": 510,
+          "line": 507,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
             "freezeResource",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_replaceKey",
-          "line": 523,
+          "line": 520,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_reward",
-          "line": 536,
+          "line": 533,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "reward",
-            "signedActionToLogEntry"
+            "productionApplyBudget",
+            "reward"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_distributeOthers",
-          "line": 549,
+          "line": 546,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "distributeOthers",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_proportionalDilute",
-          "line": 562,
+          "line": 559,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "proportionalDilute",
-            "signedActionToLogEntry"
+            "productionApplyBudget",
+            "proportionalDilute"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_dispute",
-          "line": 575,
+          "line": 572,
           "called": [
             "ActorId",
             "Dispute",
             "ExtendedState",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_disputeWithdraw",
-          "line": 588,
+          "line": 585,
           "called": [
             "ActorId",
             "ExtendedState",
             "LogIndex",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_verdict",
-          "line": 601,
+          "line": 598,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
             "Verdict",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_rollback",
-          "line": 614,
+          "line": 611,
           "called": [
             "ActorId",
             "ExtendedState",
             "LogIndex",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_registerIdentity",
-          "line": 627,
+          "line": 624,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_deposit",
-          "line": 640,
+          "line": 637,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "deposit",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_withdraw",
-          "line": 654,
+          "line": 651,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
+            "productionApplyBudget",
             "sender",
-            "signedActionToLogEntry",
             "withdraw"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_declareLocalPolicy",
-          "line": 668,
+          "line": 665,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
             "policy",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_revokeLocalPolicy",
-          "line": 681,
+          "line": 678,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_faultProofChallenge",
-          "line": 693,
+          "line": 690,
           "called": [
             "ActorId",
             "ExtendedState",
             "LogIndex",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_faultProofResolution",
-          "line": 710,
+          "line": 707,
           "called": [
             "ActorId",
             "ExtendedState",
             "LogIndex",
             "Nonce",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_depositWithFee",
-          "line": 726,
+          "line": 723,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "budgetGrant",
             "depositWithFee",
             "es",
-            "kernelOnlyApply",
             "poolActor",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_topUpActionBudget",
-          "line": 744,
+          "line": 741,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
             "gasResource",
-            "kernelOnlyApply",
             "poolActor",
-            "signedActionToLogEntry",
+            "productionApplyBudget",
             "topUpActionBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_topUpActionBudgetFor",
-          "line": 765,
+          "line": 762,
           "called": [
             "ActorId",
             "Amount",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
             "gasResource",
-            "kernelOnlyApply",
             "poolActor",
-            "signedActionToLogEntry",
+            "productionApplyBudget",
             "topUpActionBudgetFor"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_claimBudgetRefund",
-          "line": 786,
+          "line": 783,
           "called": [
             "ActorId",
             "ExtendedState",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "claimBudgetRefund",
             "es",
             "gasResource",
-            "kernelOnlyApply",
             "poolActor",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_ammSwap",
-          "line": 805,
+          "line": 802,
           "called": [
             "ActorId",
             "Amount",
@@ -23759,17 +23703,16 @@
             "ResourceId",
             "ammReserveActor",
             "ammSwap",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
-            "signedActionToLogEntry"
+            "productionApplyBudget"
           ]
         },
         {
           "kind": "theorem",
           "name": "cellwrites_reclaimAmmReserves",
-          "line": 825,
+          "line": 822,
           "called": [
             "ActorId",
             "Amount",
@@ -23778,13 +23721,12 @@
             "LegalKernel",
             "Nonce",
             "ResourceId",
-            "applyCellWrites_eq_signedActionToLogEntry",
+            "applyCellWrites_eq_productionApplyBudget",
             "applyCellWrites_to_state",
             "es",
-            "kernelOnlyApply",
             "poolActor",
-            "reclaimAmmReserves",
-            "signedActionToLogEntry"
+            "productionApplyBudget",
+            "reclaimAmmReserves"
           ]
         }
       ]
@@ -23792,7 +23734,7 @@
     {
       "module": "LegalKernel.FaultProof.ProductionApply",
       "path": "LegalKernel/FaultProof/ProductionApply.lean",
-      "declaration_count": 14,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "namespace",
@@ -23997,14 +23939,64 @@
             "Amount",
             "DepositId",
             "ExtendedState",
-            "FaultProof",
-            "LegalKernel",
             "ResourceId",
             "SignedAction",
             "budgetGrant",
             "deposit",
             "es",
             "productionApply"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "productionReplayBudget",
+          "line": 307,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "productionApplyBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionReplayBudget_nil",
+          "line": 315,
+          "called": [
+            "ExtendedState",
+            "es",
+            "productionReplayBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionReplayBudget_cons",
+          "line": 320,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "es",
+            "productionApplyBudget",
+            "productionReplayBudget"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "productionApplyBudget_bridge",
+          "line": 329,
+          "called": [
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "SignedAction",
+            "actionCost",
+            "applyActionToBridgeState",
+            "bridgeActor",
+            "es",
+            "freeTier",
+            "productionApply",
+            "productionApplyBudget",
+            "refundConsumeExtra"
           ]
         }
       ]
@@ -27010,7 +27002,7 @@
     {
       "module": "LegalKernel.FaultProof.Step",
       "path": "LegalKernel/FaultProof/Step.lean",
-      "declaration_count": 17,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
@@ -27164,8 +27156,32 @@
         },
         {
           "kind": "theorem",
+          "name": "buildKernelStep_preStateCommit",
+          "line": 275,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "buildKernelStep",
+            "commitExtendedState",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "buildKernelStep_postStateCommit",
+          "line": 288,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "buildKernelStep",
+            "es",
+            "recomputeCommitment"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "buildKernelStep_verifies",
-          "line": 271,
+          "line": 297,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -27179,7 +27195,7 @@
         {
           "kind": "theorem",
           "name": "buildCellProofsForAction_eq_observer",
-          "line": 282,
+          "line": 308,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -27190,7 +27206,7 @@
         {
           "kind": "theorem",
           "name": "kernelStepApply_canonical",
-          "line": 308,
+          "line": 334,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -28516,7 +28532,7 @@
         {
           "kind": "theorem",
           "name": "applyCellWrites_deterministic",
-          "line": 54,
+          "line": 55,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -28527,7 +28543,7 @@
         {
           "kind": "def",
           "name": "extractRequiredCells",
-          "line": 65,
+          "line": 66,
           "called": [
             "Action.requiredCells",
             "CellTag",
@@ -28537,7 +28553,7 @@
         {
           "kind": "theorem",
           "name": "extractRequiredCells_deterministic",
-          "line": 69,
+          "line": 70,
           "called": [
             "SignedAction",
             "extractRequiredCells"
@@ -28546,7 +28562,7 @@
         {
           "kind": "def",
           "name": "Action.requiredCellProofs",
-          "line": 79,
+          "line": 80,
           "called": [
             "CellProofBundle",
             "ExtendedState",
@@ -28558,7 +28574,7 @@
         {
           "kind": "theorem",
           "name": "Action.requiredCellProofs_size",
-          "line": 85,
+          "line": 86,
           "called": [
             "Action.requiredCellProofs",
             "ExtendedState",
@@ -28571,7 +28587,7 @@
         {
           "kind": "structure",
           "name": "NonMembershipProof",
-          "line": 98,
+          "line": 99,
           "called": [
             "CellTag",
             "ExtendedState"
@@ -28580,7 +28596,7 @@
         {
           "kind": "def",
           "name": "NonMembershipProof.build",
-          "line": 111,
+          "line": 112,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -28592,7 +28608,7 @@
         {
           "kind": "theorem",
           "name": "NonMembershipProof.build_deterministic",
-          "line": 118,
+          "line": 119,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -28603,7 +28619,7 @@
         {
           "kind": "def",
           "name": "isLegalTranscript",
-          "line": 130,
+          "line": 131,
           "called": [
             "KernelStep",
             "StateCommit"
@@ -28612,7 +28628,7 @@
         {
           "kind": "instance",
           "name": "instDecidableIsLegalTranscript",
-          "line": 139,
+          "line": 140,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28622,7 +28638,7 @@
         {
           "kind": "theorem",
           "name": "isLegalTranscript_nil",
-          "line": 153,
+          "line": 154,
           "called": [
             "StateCommit",
             "isLegalTranscript"
@@ -28631,7 +28647,7 @@
         {
           "kind": "theorem",
           "name": "isLegalTranscript_singleton",
-          "line": 158,
+          "line": 159,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28641,21 +28657,21 @@
         {
           "kind": "def",
           "name": "chainKernelStepApplyFromLog",
-          "line": 177,
+          "line": 178,
           "called": [
             "ExtendedState",
             "KernelStep",
             "LogEntry",
+            "applyCellWrites_to_state",
             "buildKernelStep",
             "es",
-            "kernelOnlyApply",
             "step"
           ]
         },
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_empty",
-          "line": 185,
+          "line": 188,
           "called": [
             "ExtendedState",
             "chainKernelStepApplyFromLog",
@@ -28665,19 +28681,19 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_length",
-          "line": 189,
+          "line": 192,
           "called": [
             "ExtendedState",
             "LogEntry",
+            "applyCellWrites_to_state",
             "chainKernelStepApplyFromLog",
-            "es",
-            "kernelOnlyApply"
+            "es"
           ]
         },
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_first_preCommit",
-          "line": 200,
+          "line": 203,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -28689,20 +28705,21 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApplyFromLog_isLegalTranscript",
-          "line": 210,
+          "line": 213,
           "called": [
             "ExtendedState",
             "FaultProof",
             "LegalKernel",
             "LogEntry",
+            "applyCellWrites_to_state",
             "buildKernelStep",
+            "buildKernelStep_postStateCommit",
+            "buildKernelStep_preStateCommit",
             "chainKernelStepApplyFromLog",
             "commitExtendedState",
             "es",
             "isLegalTranscript",
-            "kernelOnlyApply",
-            "recomputeCommitment",
-            "recomputeCommitment_coherent_with_kernelOnlyApply"
+            "recomputeCommitment_def"
           ]
         }
       ]
@@ -53116,8 +53133,7 @@
             "SignedAction",
             "TestCase",
             "applyCellWrites_to_state",
-            "applyCellWrites_to_state_eq_kernelOnlyApply",
-            "applyCellWrites_to_state_preserves_bridge",
+            "applyCellWrites_to_state_bridge",
             "assert",
             "assertEq",
             "budgetGrant",
@@ -53137,9 +53153,11 @@
             "kernelOnlyApply_preserves_bridge",
             "kernelOnlyReplay",
             "kernelOnlyReplay_preserves_bridge",
+            "productionApplyBudget",
+            "productionReplayBudget",
             "recomputeCommitment",
-            "recomputeCommitment_chain_coherent_with_kernelOnlyReplay",
-            "recomputeCommitment_coherent_with_kernelOnlyApply",
+            "recomputeCommitment_chain_coherent_with_productionReplayBudget",
+            "recomputeCommitment_coherent_with_productionApplyBudget",
             "topUpActionBudgetLogEntry",
             "topUpActionBudgetSignedAction",
             "trivialLogEntry",
