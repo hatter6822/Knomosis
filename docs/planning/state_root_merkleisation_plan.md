@@ -340,10 +340,56 @@ space:
    per-variant hash.  The 25 `_step<Variant>` handlers change from
    "return a hash of the new values" to "return the list of
    `(cellKey, newValue)` writes"; the root update becomes shared.
-4. Delete the per-entry SKIP in `test/CrossCheck/StepVM.t.sol` so
-   the corpus pins the equality it was written to pin.
+4. ~~Delete the per-entry SKIP in `test/CrossCheck/StepVM.t.sol` so
+   the corpus pins the equality it was written to pin.~~ **DONE**, and
+   it was three defects rather than one — see "The cross-stack corpus
+   was not evidence" below.
 5. Deploy-script guard so `DeploySepolia.s.sol` /
    `DeployFaultProof.s.sol` cannot ship the unsound configuration.
+
+### The cross-stack corpus was not evidence — **FIXED**
+
+The 278-entry step-VM corpus looked like the thing that would have
+caught all of this.  It was not, for three compounding reasons, none
+of them visible from a green test run.  All three are closed; the
+failure mode is recorded here because it is more instructive than the
+fix.
+
+1. **It pinned bespoke-hash against bespoke-hash.**  Both sides
+   computed a construction living outside state-root space, so
+   agreement between them said nothing about whether either equals a
+   published root.  Only the §4 flip closes this one.
+2. **The Lean side bypassed the Lean dispatcher.**
+   `Test/Bridge/CrossCheck/StepVM.lean` called `stepCommit<Variant>`
+   directly in every builder and never invoked `stepVMHash`, so an
+   offset bug in the dispatcher would have been invisible — the fixture
+   carried the test's value, not the dispatcher's.  All 18 builders now
+   route through the production entry point.  Result: **zero drift
+   across 278 entries** — the dispatcher was correct, and the corpus
+   now proves it rather than assuming it.
+3. **The default lane did not run the comparison at all.**  The
+   per-entry assertion skipped on `isKeccak256Linked == false`, and the
+   committed corpus carried `false`, so a bare `forge test` reported
+   green having compared nothing.  Fixed structurally rather than by
+   convention: `writeHashDependentFixture` / `writeHashDependentGoldens`
+   REFUSE to author a hash-dependent fixture on a fallback-hash build,
+   and the consuming suites call `_requireKeccakLinked`, which fails
+   loudly instead of skipping.
+
+A fourth, adjacent: `StepVM.t.sol`'s 278-entry replay needs well past
+foundry's ~1.07e9 default gas limit and died `EvmError: OutOfGas` under
+it, so only `verify_keccak_crossstack.sh` (which passes `--gas-limit`)
+could ever have run it.  `gas_limit` is now set in
+`solidity/foundry.toml` `[profile.default]`.
+
+`forge test` went from 913 passed / 12 skipped to **928 / 0 / 0**.
+
+Corpus staleness is now detectable too: the `identifier` field existed
+and was read by nothing, so a superseded corpus still parsed and every
+assertion passed against the wrong contract.
+`CrossCheckFramework._requireIdentifier` wires it, with a self-test in
+both directions — a gate never observed to fire is indistinguishable
+from an absent gate.
 
 **§4 is bigger than a return-type change, and the reason was not
 visible from the plan's original text.**  Three things were read from
@@ -442,10 +488,28 @@ front rather than halfway through the rewrite:
      admission already happened on L2 and the dispute is over what
      the state became.
 
-     What remains for §4 is repointing `Coherence.lean`'s
-     `applyCellWrites_to_state` at `productionApplyBudget` and
-     restating the ~33 `PerVariantCoherence.lean` theorems against
-     it.
+     **Both halves have landed.**  `applyCellWrites_to_state` IS
+     `productionApplyBudget`, threaded with the step's `l2LogIndex`
+     (~100 sites across 8 files), and `PerVariantCoherence.lean`'s
+     theorems were restated against it.  Note the count in this plan's
+     earlier text was wrong: it is 52 theorems, not ~33, and they are
+     not the recipe-bound ones — those are the 36 in
+     `StepVMCoherence.lean`, which move for a different reason (S7).
+
+     Four of the 52 were FALSE rather than merely weaker and had to be
+     restated rather than re-proved; the inversion of
+     `applyCellWrites_to_state_preserves_bridge` into
+     `applyCellWrites_to_state_bridge` is the clearest, since the old
+     name asserted the bridge is preserved and the whole point of the
+     repoint is that it is not.
+
+     Measured effect on the corpus: 18 of 278 entries moved on the
+     bridge leg.  None moved on the budget leg — because every fixture
+     was built from `ExtendedState.empty`, whose `.bounded 0 1 0` policy
+     refuses every consume, so the budget path was entirely unexercised.
+     Fixtures now use a `fixtureBase` with `.bounded 100 1 1`; 170
+     entries moved and all 278 now have a post-root differing from
+     their pre-root.
 
   3. **The fold's off-cell hypothesis — DISCHARGED (§3C).**
      `foldStateCellWrites_eq_commit_of_coherent` asks each link
@@ -491,9 +555,71 @@ already-written cell fails verification against the updated root,
 which is the fail-closed direction.  §3B is what makes this
 correct rather than merely well-defined: `foldStateCellWrites` is
 that fold, and `foldStateCellWrites_eq_commit_of_coherent` proves it
-lands on `commitExtendedState` of the state the writes produce.  What
-§4 still owes it is the per-variant write list — the fold is
-generic, the values are not.
+lands on `commitExtendedState` of the state the writes produce.
+
+### 4A. The Lean side of step 3 — the write list
+
+**The per-variant obligation is not what this plan first assumed.**
+The original framing was "decompose `productionApplyBudget` into a
+`setCell` chain, twenty-five times".  It does not have to be, and
+`LegalKernel/FaultProof/CellWrites.lean` is why.
+
+A step's write list is "each declared cell, set to the value the
+advance gives it".  Every value in it is therefore one `getCellValue`
+produced, and `getCellValue_setCell_getCellValue` — proved over all
+fifteen cell kinds — says `setCell` round-trips exactly that class.
+The written cells land by construction, and what is left is the cells
+the declaration does NOT name:
+
+```
+WriteSetComplete pre post action signer :=
+  ∀ t ∉ action.writeCellsAt pre signer,
+    getCellValue post t = getCellValue pre t
+```
+
+`fold_stepCellWrites_eq_commit_post` composes that with the chain
+machinery into the §4 statement: the fold of a step's writes lands on
+the post-state's published root.
+
+Three enabling results, in the order they matter:
+
+  * `commitExtendedState_eq_of_cells_agree` — two states whose every
+    cell reads the same publish the same root.  This is load-bearing,
+    not a convenience.  A step's post-state is reached two ways —
+    by the production advance and by a `setCell` chain — and those two
+    `ExtendedState`s are **not** provably equal: `Std.TreeMap` is a
+    balanced search tree, the two paths insert the same bindings in
+    different orders, and Lean core supplies no extensional equality.
+    Targeting cell agreement instead is both provable and exactly what
+    the root observes.
+  * `chainCoherent_canonicalCellChain` — the chain a write list induces
+    is coherent, discharging all six `ChainCoherent` conjuncts once
+    rather than per link per variant.  The off-cell conjunct comes from
+    `CellStore`'s locality law composed with §3C's discharge lemma.
+  * `getCellValue_setCell_getCellValue` — the round-trip, whose two side
+    conditions are both real: `CanonicalBounds` on the source (extended
+    here, since it bounded five of the seven state fields and the epoch
+    budgets and budget policy had none), and the `appendOnly`
+    restriction at `registry` / `bridgeConsumed` / `bridgePending`,
+    where writing the absent marker is a no-op rather than an erase.
+
+**A declaration gap this surfaced.**  `Action.writeCells` was
+incomplete for `withdraw`, provably: `BridgeState.appendWithdrawal`
+inserts at `bs.nextWdId`, so the created cell is keyed by the
+pre-state, and a function of `(action, signer)` cannot name it.
+`Action.stateWriteCells` / `Action.writeCellsAt` close that;
+`writeCellsAt_eq_writeCells` proves the other twenty-four pay nothing.
+
+**What §4A still owes.**  `WriteSetComplete` per variant.  Eleven are
+done in one argument — `writeSetComplete_of_identity_advance` covers
+every action compiling to `Laws.freezeResource` (identity on the base
+state, no registry / policy / bridge / grant effect), which is
+`freezeResource`, the four dispute actions, `rollback`, the two
+fault-proof actions and their siblings.  The remaining fourteen each
+need their law's balance footprint: `Conservation.LocalTo` gives
+resource locality but not actor locality within a resource, so that
+part is genuinely new work.  Then `stepPostRoot` and the Solidity
+mirror (§4 steps 1–5 above).
 
 **Lean and Rust move with it.**  `StepVMCoherence.stepVMHash`'s
 25-arm match currently ends each arm in a `stepCommit<Variant>` hash;
@@ -510,7 +636,13 @@ sibling path along a key's route walks back to exactly the root
 `smtRootListAux` computes.  The representation half — that the
 shipped bitmask-compressed encoding expands to that path — is pinned
 by `faultproof-smt-injective` rather than proved, and is bookkeeping
-over `setBitmaskBit` rather than content.
+over `setBitmaskBit` rather than content.  It is threaded explicitly
+as `CellWriteReady.expands` wherever it is consumed, so it is visible
+in every signature that depends on it rather than assumed silently.
+Discharging it is a self-contained piece of `ByteArray` bit
+manipulation: that folding `setBitmaskBit` over a distinct depth list
+sets exactly those bits, and that `expandSiblingsAux`'s cursor tracks
+`buildSmtCellProofAux`'s low-depth-first output.
 
 ## 5. Ordering
 

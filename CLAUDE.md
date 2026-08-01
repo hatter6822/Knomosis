@@ -659,6 +659,11 @@ The Genesis Plan promises a small set of type-level guarantees
 | B-3 | Off-cell agreement discharges the fold | `dropKey_stateCellEntries_perm_of_agree_off` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | The root is order-independent | `smtRootListAux_perm` | `FaultProof/SmtInjective.lean` |
 | B-3 | Production-faithful semantic core | `apply_bridge_admissible_with_budget_eq` | `FaultProof/ProductionApply.lean` |
+| B-3 | Root observes exactly the cells | `commitExtendedState_eq_of_cells_agree` | `FaultProof/StateCellsInjective.lean` |
+| B-3 | A step's write chain is coherent | `chainCoherent_canonicalCellChain` | `FaultProof/CellWrites.lean` |
+| B-3 | `setCell` round-trips the reader | `getCellValue_setCell_getCellValue` | `FaultProof/CellWrites.lean` |
+| B-3 | Write fold lands on the post root | `fold_stepCellWrites_eq_commit_post` | `FaultProof/CellWrites.lean` |
+| B-3 | Writing one cell leaves the rest | `getCellValue_setCell_ne` | `FaultProof/CellStore.lean` |
 | Phase 6 | Dispute filing rejects malformed | `fileDispute_rejects_*` | `Disputes/Filing.lean` |
 | Phase 6 | Evidence verifiers deterministic | `checkEvidence_deterministic` | `Disputes/Evidence.lean` |
 | LP | Meta-action independence | `localPolicy_meta_action_independent` | `Authority/SignedAction.lean` |
@@ -802,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 190 | ~158 | `lake test` |
 | Rust | ~2 350 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~925 passed | 61 forge suites | `cd solidity && forge test` |
+| Solidity | ~928 passed | 61 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **925 passed / 0 failed / 0 skipped** — the
+`forge test` runs **928 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -825,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 925 / 0 / 0.
+reports the same 928 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -840,6 +845,13 @@ full catalogue):
 - `faultproof-smt-injective` — B-3 SMT root injectivity, cell
   updates, canonical-path coherence; includes the negative control
   showing a duplicate-keyed bucket hashes as if it were empty.
+- `faultproof-cell-writes` — the write-list machinery: a later write
+  to the same cell wins (the self-transfer shape), a write moves the
+  published root and restoring the value restores it, each chain link
+  opens against its OWN state (with the stale pre-state path shown to
+  differ), and the negative control — an INCOMPLETE write set does not
+  reproduce the post-state, so `WriteSetComplete` is a hypothesis
+  something actually exercises.
 - `faultproof-state-cells-injective` — cell determination, the
   well-formedness side conditions checked on a real state, and the
   write algebra: a single write lands on the post-state's published
@@ -1152,18 +1164,32 @@ multi-write fold on the last state's root, and
 `updateStateCellRoot_proof_independent` stops a responder steering
 either by choosing among verifying openings.
 
-But `executeStep` still returns the other construction.  What it owes
-is the per-variant write list that feeds the fold: the 25 handlers
-compute `.balance` cells only, while `Action.writeCells` correctly
-declares that every action advances `.nonce signer` (plus registry /
-local-policy / bridge cells for eight variants), the reference apply
-must move from `kernelOnlyApply` to `ProductionApply`'s
-`productionApplyBudget`, and the two bulk variants must route through
-`FaultProof/SubStep.lean`.
+But `executeStep` still returns the other construction.  The Lean side
+of what it owes is now largely built.  `FaultProof/CellWrites.lean`
+turns a step's writes into a `setCell` chain and discharges every
+SMT-shaped obligation once — `chainCoherent_canonicalCellChain` for
+the six `ChainCoherent` conjuncts and
+`getCellValue_setCell_getCellValue` for the write values, over all
+fifteen cell kinds — so the per-variant residue is
+`WriteSetComplete`: the advance changes no cell the declaration omits.
+`commitExtendedState_eq_of_cells_agree` is what makes that provable at
+all, since the production advance and a `setCell` chain build their
+`Std.TreeMap`s in different insertion orders and Lean core has no
+extensional equality to bridge them — the root observes cell values,
+not tree shape.  The reference apply has moved from `kernelOnlyApply`
+to `ProductionApply`'s `productionApplyBudget`, and
+`Action.writeCellsAt` fixes the one declaration that was genuinely
+incomplete (`withdraw` creates a cell keyed by the pre-state's
+`nextWdId`, which `writeCells` cannot name).
+
+Remaining: the fourteen per-variant `WriteSetComplete` proofs beyond
+the eleven `writeSetComplete_of_identity_advance` covers, routing the
+two bulk variants through `FaultProof/SubStep.lean`, and the Solidity
+flip itself.
 `docs/audits/19-findings-and-followups.md` records the remaining
 blast radius and
 `docs/planning/state_root_merkleisation_plan.md` is the
-implementation spec (§4 is what is left).  Until it lands the
+implementation spec (§4 / §4A are what is left).  Until it lands the
 fault-proof game must not be treated as an adjudicating backstop;
 the bisection narrowing is proved and unaffected.
 

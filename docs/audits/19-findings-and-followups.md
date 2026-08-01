@@ -34,7 +34,7 @@ findings outside the TCB.  Their dispositions:
 | **B-2** — vacuous headline injectivity theorems | `Bridge/Eip712.lean` and every `CollisionFree` consumer | **Closed.**  `CollisionFreeOn S h` replaces the globally-injective (and hence *refutable*) predicate; satisfiability is exhibited, not assumed. |
 | **B-4a** — terminate ABI drift | `knomosis-faultproof-observer/src/submitter.rs` | **Closed.**  Rust moved to the contract's 5-argument form, and the selector table is now pinned against `method_selectors.json`, emitted from the COMPILED artifacts by `solidity/scripts/export_method_selectors.py` and gated in `ci-solidity.yml` — so the pin can no longer re-derive its expectation from the string it tests. |
 | **B-4b** — game-model fidelity (Lean/Rust) | `FaultProof/Game.lean`, `FaultProof/Step.lean`, observer `game.rs` | **Closed.**  `kernelStepApply` computes through `stepVMHash` instead of echoing the responder's `postStateCommit`; `terminateOnSingleStep` dropped `claimedPostCommit` and reads both sides from the game state; `submitMidpoint` carries only a commit and the index is derived, which made the convergence bound logarithmic (`bisection_converges_in_log_rounds`). |
-| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **OPEN — prerequisites landed.**  See "Open critical: the fault-proof commit-recipe split" below. |
+| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **OPEN — Lean side all but complete.**  See "Open critical: the fault-proof commit-recipe split" below. |
 
 ### Open critical: the fault-proof commit-recipe split
 
@@ -128,12 +128,38 @@ multi-write fold lands on the last state's root.  A stale opening —
 one built against the pre-root and replayed after an earlier write —
 is rejected by the fold, pinned as a negative control.
 
-Not landed: **§4**, making `executeStep` compute the post-root from
-the proven writes.  The fold is now generic and proved; what §4 owes
-is the per-variant write list that feeds it.  That is what closes this finding; the swap was
-its precondition, since a post-root is not computable from a
-concatenation hash at all.  §0 of `docs/fault_proof_runbook.md`
-stands until §4 lands.
+**§4A has landed on the Lean side.**
+`LegalKernel/FaultProof/CellWrites.lean` turns a step's writes into a
+`setCell` chain and discharges every SMT-shaped obligation once —
+`chainCoherent_canonicalCellChain` for the six `ChainCoherent`
+conjuncts, `getCellValue_setCell_getCellValue` for the write values
+(all fifteen cell kinds).  That reduces the per-variant obligation to
+`WriteSetComplete`: the advance changes no cell the declaration omits.
+`fold_stepCellWrites_eq_commit_post` composes it into the statement §4
+needs.
+
+The enabling result is `commitExtendedState_eq_of_cells_agree` — two
+states whose every cell reads the same publish the same root.  Without
+it the per-variant proofs would need `ExtendedState` EQUALITY between
+the production advance and a `setCell` chain, which is not provable:
+`Std.TreeMap` is a balanced search tree, the two paths insert in
+different orders, and Lean core has no extensional equality for it.
+Cell agreement is both provable and exactly what the root observes.
+
+Proving `WriteSetComplete` found a declaration gap.  `Action.writeCells`
+was incomplete for `withdraw`: `appendWithdrawal` inserts at
+`bs.nextWdId`, so the cell a withdrawal creates is keyed by the
+pre-state and a function of `(action, signer)` cannot name it — a
+bundle carrying the declared cells could not reproduce a withdrawal's
+post-root.  `Action.writeCellsAt` is the complete set.
+
+Not landed: **§4**'s remaining fourteen `WriteSetComplete` proofs
+(eleven are done in one argument via
+`writeSetComplete_of_identity_advance`), and making `executeStep`
+compute the post-root from the proven writes.  That is what closes this
+finding; the swap was its precondition, since a post-root is not
+computable from a concatenation hash at all.  §0 of
+`docs/fault_proof_runbook.md` stands until §4 lands.
 
 Three obligations for that work were read from source during this
 pass and are pinned as tests (`faultproof-stepvm-coherence`, the
@@ -161,9 +187,14 @@ otherwise surface halfway through the rewrite:
     `apply_bridge_admissible_with_eq_productionApply` for the bridge
     advance and `apply_bridge_admissible_with_budget_eq` for the
     budget one (split into computation + gate, since the guarded
-    entry point returns `Option`).  What remains is repointing
-    `Coherence.lean` at it and restating the ~33
-    `PerVariantCoherence.lean` theorems;
+    entry point returns `Option`).  **Both are now done**:
+    `applyCellWrites_to_state` IS `productionApplyBudget`, threaded
+    with the step's `l2LogIndex`, and `PerVariantCoherence.lean`'s
+    theorems were restated against it — 52 of them, not the ~33 this
+    entry previously claimed, and four were FALSE rather than merely
+    weaker.  Measured effect: 18 of 278 corpus entries moved on the
+    bridge leg, and 170 once the fixtures stopped being built from a
+    policy (`.bounded 0 1 0`) under which every budget consume refuses;
   * `distributeOthers` / `proportionalDilute` touch unboundedly many
     balance cells and must route through `FaultProof/SubStep.lean`
     rather than the single-step path.
