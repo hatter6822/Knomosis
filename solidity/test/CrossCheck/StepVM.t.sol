@@ -776,6 +776,62 @@ contract StepVMCrossCheck is CrossCheckFramework {
         );
     }
 
+    /// @notice **The step VM does not yet return a state root, and the
+    ///         corpus now says so in numbers.**
+    ///
+    ///         `stepPostRootGoldens` carries, per probe, the root Lean
+    ///         reaches by FOLDING a step's proven writes into the
+    ///         pre-root — the value `executeStep` must return after the
+    ///         flip — alongside the bespoke hash it returns today.
+    ///
+    ///         This is the one fact the 278-entry byte-equivalence
+    ///         corpus cannot establish.  That corpus pins Lean's
+    ///         `stepVMHash` against Solidity's `executeStep`: two
+    ///         implementations of the SAME recipe, agreeing on every
+    ///         entry, and their agreement says nothing about whether
+    ///         either equals a published state root.  Here the two
+    ///         numbers are compared directly, and they differ on every
+    ///         probe.
+    ///
+    ///         When the flip lands this test inverts: the assertion
+    ///         becomes `executeStep(...) == expectedPostStateRootHex`
+    ///         and the bespoke column retires.  Written as a
+    ///         measurement rather than a comment so the day it stops
+    ///         being true is a test failure.
+    function test_stepVM_does_not_yet_return_the_state_root() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
+        uint256 n = vm.parseJsonUint(raw, ".stepPostRootGoldensCount");
+        assertGt(n, 0, "the corpus must carry state-root goldens");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base =
+                string.concat(".stepPostRootGoldens[", vm.toString(i), "]");
+            bytes32 foldRoot =
+                vm.parseJsonBytes32(raw, string.concat(base, ".expectedPostStateRootHex"));
+            bytes32 published =
+                vm.parseJsonBytes32(raw, string.concat(base, ".publishedPostRootHex"));
+            bytes32 bespoke =
+                vm.parseJsonBytes32(raw, string.concat(base, ".bespokeStepVMCommitHex"));
+            bytes32 preRoot =
+                vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex"));
+            // The fold's target is the production advance's published
+            // root — so the number the flip aims at is the right one.
+            assertEq(foldRoot, published,
+                string.concat("fold != published root at ", base));
+            // ...and it is not what the step VM returns today.
+            assertTrue(foldRoot != bespoke,
+                string.concat("fold unexpectedly equals the bespoke hash at ", base));
+            // ...nor the pre-root, so a fold that did nothing would
+            // fail the first assertion rather than pass it.
+            assertTrue(foldRoot != preRoot,
+                string.concat("the fold did not move the root at ", base));
+        }
+    }
+
     function test_perEntry_cellProofs_witness_binding() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");

@@ -1785,6 +1785,73 @@ def recordWriteGoldens : List Test.Bridge.CrossCheck.Json :=
              { resource := 1, recipient := rcp
              , amount := 5, l2LogIndex := 7 }))) ] ]
 
+/-! ### The state-root target the flip must hit
+
+`expectedStepVMCommitHex` is the BESPOKE recipe — a value living
+outside state-root space, which both stacks compute identically and
+neither can compare against a published root.  These goldens carry the
+other number: `stepPostRoot`, the root an L1 reaches by folding a
+step's proven writes into the pre-root.
+
+Emitting both makes the gap a corpus column rather than a claim.  The
+tests assert three things about it: the fold LANDS on
+`commitExtendedState` of the production advance (so the target is the
+right one), it DIFFERS from the bespoke hash (so the flip is a real
+change and not a relabelling), and the pre-root is not accidentally
+the post-root (so a fold that did nothing would fail).
+
+When `executeStep` flips, `expectedStepVMCommitHex` retires and this
+column becomes the per-entry expectation.
+-/
+
+/-- Probes for the post-state root, over a populated two-resource
+    state — the same base the balance goldens use, for the same reason:
+    over an empty one the interesting variants no-op. -/
+def stepPostRootGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let probes : List (String × Action) :=
+    [ ("transfer",   .transfer 1 signer 8 30)
+    , ("mint",       .mint 1 8 5)
+    , ("burn",       .burn 1 8 5)
+    , ("freezeResource", .freezeResource 1)
+    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
+    , ("deposit",    .deposit 1 8 5 3)
+    , ("registerIdentity", .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
+    , ("revokeLocalPolicy", .revokeLocalPolicy) ]
+  probes.filterMap (fun (name, action) =>
+    let st : SignedAction :=
+      { action, signer, nonce := 0, sig := ByteArray.empty }
+    match stepPostRoot es st 0 with
+    | none => none
+    | some root =>
+      some (.obj
+        [ ("variant", .str name)
+        , ("preStateRootHex", .str (hx (commitExtendedState es)))
+        , ("actionKindByte", .num (actionKindByte action).toNat)
+        , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
+        , ("signerNat", .num signer.toNat)
+          -- What the fold produces, and what `executeStep` must return.
+        , ("expectedPostStateRootHex", .str (hx root))
+          -- The published root of the production advance: the fold's
+          -- target, emitted separately so the two are compared rather
+          -- than assumed equal.
+        , ("publishedPostRootHex",
+           .str (hx (commitExtendedState (productionApplyBudget es st 0))))
+          -- The bespoke recipe the step VM returns TODAY, for the gap.
+        , ("bespokeStepVMCommitHex",
+           .str (hx (stepVMHash (commitExtendedState es)
+             (actionKindByte action) (actionFieldsForL1 action) signer.toNat
+             (LegalKernel.FaultProof.Observer.buildObserverCellProofs
+               es action signer)))) ]))
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -2107,6 +2174,38 @@ def tests : List Test.TestCase :=
           (StepVMCoherence.l1NextEntryHash z z z !=
            StepVMCoherence.l1NextEntryHash z z o) "action is committed"
     }
+  , { name := "the fold lands on the published root, and it is NOT the bespoke hash"
+    , body := do
+        -- The corpus's state-root column, checked in both directions.
+        -- Landing on the published root says the target is right; the
+        -- inequality says the flip is a real change rather than a
+        -- relabelling, and it is the single fact the 278-entry
+        -- byte-equivalence corpus cannot establish — that corpus pins
+        -- `stepVMHash` against `executeStep`, two implementations of
+        -- the SAME recipe.
+        let goldens := stepPostRootGoldens
+        Test.assert (goldens.length > 0) "the root goldens must be non-empty"
+        for g in goldens do
+          match g with
+          | .obj fields =>
+            let get := fun (k : String) =>
+              (fields.find? (fun p => p.1 = k)).map Prod.snd
+            match get "expectedPostStateRootHex", get "publishedPostRootHex",
+                  get "bespokeStepVMCommitHex", get "preStateRootHex" with
+            | some (.str fold), some (.str published),
+              some (.str bespoke), some (.str pre) =>
+              Test.assertEq (expected := published) (actual := fold)
+                "the fold must land on the production advance's published root"
+              Test.assert (fold != bespoke)
+                s!"the fold must DIFFER from the bespoke hash ({fold})"
+              -- ...and it must not be the pre-root either, or a fold
+              -- that did nothing would pass the first check on any
+              -- action whose advance happens to be inert.
+              Test.assert (fold != pre)
+                "the fold must move the root"
+            | _, _, _, _ => throw <| IO.userError "malformed root golden"
+          | _ => throw <| IO.userError "malformed root golden"
+    }
   , { name := "SVC.5.e+: every cellProof carries a well-formed SMT opening"
     , body := do
         -- Shape, not value: a `0x`-prefixed hex string of a NONZERO
@@ -2281,6 +2380,8 @@ def tests : List Test.TestCase :=
           , ("balanceWriteGoldensCount", .num balanceWriteGoldens.length)
           , ("recordWriteGoldens", .arr recordWriteGoldens)
           , ("recordWriteGoldensCount", .num recordWriteGoldens.length)
+          , ("stepPostRootGoldens", .arr stepPostRootGoldens)
+          , ("stepPostRootGoldensCount", .num stepPostRootGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)

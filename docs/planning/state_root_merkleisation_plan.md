@@ -546,8 +546,25 @@ space:
    §4 step 3 is therefore complete on both stacks.  What remains of §4
    is step 1 and step 3's consumer: `executeStep` verifying each
    opening against the running root and returning the fold's result
-   instead of `stepVMHash`, with the corpus's
-   `expectedStepVMCommitHex` becoming a state root.
+   instead of `stepVMHash`.
+
+   **The target is now a corpus column.**  `stepPostRootGoldens`
+   carries, per probe, the root Lean reaches by folding a step's proven
+   writes into the pre-root — the value `executeStep` must return —
+   alongside the bespoke hash it returns today.  Three assertions run
+   on both stacks: the fold LANDS on `commitExtendedState` of the
+   production advance (the target is the right one), it DIFFERS from
+   the bespoke hash (the flip is a real change, not a relabelling), and
+   it is not the PRE-root (a fold that did nothing would fail rather
+   than pass).
+
+   That last pair is the one thing the 278-entry byte-equivalence
+   corpus cannot establish, and the reason is structural: that corpus
+   pins Lean's `stepVMHash` against Solidity's `executeStep` — two
+   implementations of the SAME recipe, agreeing on every entry, whose
+   agreement says nothing about whether either equals a published root.
+   Written as a measurement rather than a comment, so the day it stops
+   being true is a test failure rather than a stale paragraph.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"

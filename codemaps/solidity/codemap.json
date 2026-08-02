@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "ae8d96d8cd5682d1e21db454cb25554abd3cb4cdf1a196e566b07f53efb8966a"
+    "source_digest": "94c5b4fc16e9348dd5d3bcba09205537cff53849a0d401a37565d44cf2ec6c87"
   },
   "summary": {
     "module_count": 94,
-    "declaration_count": 2083
+    "declaration_count": 2084
   },
   "modules": [
     {
@@ -12247,7 +12247,7 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 33,
+      "declaration_count": 34,
       "declarations": [
         {
           "kind": "contract",
@@ -12459,8 +12459,19 @@
         },
         {
           "kind": "function",
+          "name": "test_stepVM_does_not_yet_return_the_state_root",
+          "line": 800,
+          "called": [
+            "_requireKeccakLinked",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 778,
+          "line": 834,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12471,7 +12482,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 806,
+          "line": 862,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12481,7 +12492,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 831,
+          "line": 887,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12491,13 +12502,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 874,
+          "line": 930,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 890,
+          "line": 946,
           "called": [
             "_parseCellProof"
           ]
@@ -12505,7 +12516,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 923,
+          "line": 979,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12515,7 +12526,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 970,
+          "line": 1026,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12526,7 +12537,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 995,
+          "line": 1051,
           "called": [
             "KnomosisStepVM"
           ]

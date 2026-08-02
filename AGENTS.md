@@ -807,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 210 | ~159 | `lake test` |
 | Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~952 passed | 62 forge suites | `cd solidity && forge test` |
+| Solidity | ~953 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **952 passed / 0 failed / 0 skipped** — the
+`forge test` runs **953 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 952 / 0 / 0.
+reports the same 953 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -1261,8 +1261,16 @@ which a happy-path corpus never reaches) and the registry /
 local-policy / bridge cells (`recordWriteGoldens`).  **Every cell kind
 now agrees byte-for-byte across both stacks.**  Left: `executeStep`
 verifying each opening against the running root and returning the
-fold's result instead of `stepVMHash`, with the corpus's
-`expectedStepVMCommitHex` becoming a state root.  `stepWriteBundle es st idx`
+fold's result instead of `stepVMHash`.
+
+The target for that is a corpus column too — `stepPostRootGoldens`
+carries the root Lean reaches by FOLDING a step's proven writes into
+the pre-root, alongside the bespoke hash the step VM returns today, and
+both stacks assert the fold lands on the published root, differs from
+the bespoke hash, and is not the pre-root.  That gap is the one fact
+the 278-entry byte-equivalence corpus cannot establish: it pins
+`stepVMHash` against `executeStep`, two implementations of the same
+recipe.  `stepWriteBundle es st idx`
 takes the pre-state and reads its `newValue` column off
 `productionApplyBudget es st idx` — that is the sequencer's
 computation.  A verifier holding only the pre-root and a submitted

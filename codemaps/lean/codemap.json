@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "bf3f52e190f3a7017b360adc80e163c39e843b3389a06588755469f2cead847c"
+    "source_digest": "3eb6e4c379c4c544b1c4834ccc58095eb84770850013762a7e95ae661e03157e"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5779
+    "declaration_count": 5780
   },
   "modules": [
     {
@@ -45983,7 +45983,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 80,
+      "declaration_count": 81,
       "declarations": [
         {
           "kind": "namespace",
@@ -47099,8 +47099,37 @@
         },
         {
           "kind": "def",
+          "name": "stepPostRootGoldens",
+          "line": 1809,
+          "called": [
+            "Action",
+            "ActorId",
+            "BalanceMap",
+            "ExtendedState",
+            "ResourceId",
+            "SignedAction",
+            "actionFieldsForL1",
+            "actionKindByte",
+            "base",
+            "burn",
+            "commitExtendedState",
+            "deposit",
+            "es",
+            "fixtureBase",
+            "freezeResource",
+            "mint",
+            "probes",
+            "productionApplyBudget",
+            "stepPostRoot",
+            "stepVMHash",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1794,
+          "line": 1861,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47109,7 +47138,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1811,
+          "line": 1878,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "actionCommitHexOf",
@@ -47121,6 +47150,7 @@
             "packedLayoutGoldens",
             "readUint64BE",
             "recordWriteGoldens",
+            "stepPostRootGoldens",
             "uint256BE",
             "uint64BE",
             "uniformWriteGoldens",
