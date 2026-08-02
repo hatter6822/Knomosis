@@ -2001,6 +2001,36 @@ def writeSetGoldens : List Test.Bridge.CrossCheck.Json :=
              let (k, a, b) : Nat × Nat × Nat := t.flatKey
              .obj [ ("cellKind", .num k), ("keyA", .num a), ("keyB", .num b) ]))) ])
 
+/-! ### Canonical absence, per cell kind
+
+The last primitive the fold needs, and it is not cosmetic:
+`stateCellEntries` DROPS canonically-absent cells, so "value is
+canonically absent" and "key is absent from the tree" are the same
+condition.  A cell at this value has an EMPTY sub-tree beneath its key,
+so its leaf is the canonical empty one rather than a hash of the
+preimage — which is what makes an absent cell openable at all, and a
+step crediting a fresh actor opens one on its first line.
+-/
+
+/-- One representative tag per cell kind, so the goldens cover all
+    fifteen rather than the handful a step happens to touch. -/
+def absentValueProbeTags : List CellTag :=
+  [ .balance 1 7, .nonce 7, .registry 7, .localPolicy 7
+  , .bridgeConsumed 3, .bridgePending 4, .bridgeNextWdId
+  , .bridgeAmmReserveEth, .bridgeAmmReserveBold
+  , .bridgeBoldCircuitClosed, .bridgeBoldTvlCap
+  , .bridgeBoldTotalLockedValue, .bridgeAmmDisabled
+  , .epochBudget 7, .budgetPolicy ]
+
+/-- The canonical absent bytes for every cell kind. -/
+def absentValueGoldens : List Test.Bridge.CrossCheck.Json :=
+  absentValueProbeTags.map (fun t =>
+    let (k, _, _) : Nat × Nat × Nat := t.flatKey
+    .obj [ ("cellKind", .num k)
+         , ("absentValueHex",
+            .str (Test.Bridge.CrossCheck.hexFromBytes
+              (canonicalAbsentValue t))) ])
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -2535,6 +2565,8 @@ def tests : List Test.TestCase :=
           , ("writeBundleGoldensCount", .num writeBundleGoldens.length)
           , ("writeSetGoldens", .arr writeSetGoldens)
           , ("writeSetGoldensCount", .num writeSetGoldens.length)
+          , ("absentValueGoldens", .arr absentValueGoldens)
+          , ("absentValueGoldensCount", .num absentValueGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)

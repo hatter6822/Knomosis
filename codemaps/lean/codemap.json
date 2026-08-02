@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "dcdf45520fb72c64cac407e6fbc0bb410227255fea054a06e04d6aeb2fc3d1c6"
+    "source_digest": "19db68caa57dfd8603e61e4d46dc3bd5e338e2a33d5a558ee8a72ba4e69f84c4"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5784
+    "declaration_count": 5786
   },
   "modules": [
     {
@@ -46000,7 +46000,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 83,
+      "declaration_count": 85,
       "declarations": [
         {
           "kind": "namespace",
@@ -47202,8 +47202,24 @@
         },
         {
           "kind": "def",
+          "name": "absentValueProbeTags",
+          "line": 2016,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "absentValueGoldens",
+          "line": 2025,
+          "called": [
+            "canonicalAbsentValue"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "variant21TailGolden",
-          "line": 2010,
+          "line": 2040,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47212,9 +47228,10 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 2027,
+          "line": 2057,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
+            "absentValueGoldens",
             "actionCommitHexOf",
             "balanceWriteGoldens",
             "base",

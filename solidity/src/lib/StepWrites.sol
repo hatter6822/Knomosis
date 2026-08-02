@@ -767,6 +767,79 @@ library StepWrites {
         if (fields.length < n) revert ActionFieldsTooShort(actionKind, fields.length);
     }
 
+    /* ---------------------------------------------------------- */
+    /* Canonical absence                                          */
+    /* ---------------------------------------------------------- */
+
+    /// @notice The value a cell reads as when the state holds no entry
+    ///         for it.  Mirrors `FaultProof.canonicalAbsentValue`.
+    ///
+    /// @dev    The last primitive the fold needs, and it is not
+    ///         cosmetic: `stateCellEntries` DROPS canonically-absent
+    ///         cells, so "value is canonically absent" and "key is
+    ///         absent from the tree" are the same condition.  A cell at
+    ///         this value has an EMPTY sub-tree beneath its key, so its
+    ///         leaf is the canonical empty one rather than a hash of
+    ///         the preimage — which is what makes an absent cell
+    ///         openable at all, and a step crediting a fresh actor
+    ///         opens one on its first line.
+    ///
+    ///         Without the check, `setBalance s r a 0` and "no entry
+    ///         for `a`" would be indistinguishable to the verifier
+    ///         while producing different leaves, and the fold would
+    ///         reach a root the sequencer never published.
+    ///
+    /// @param  cellKind the cell-kind discriminator (0..14).
+    /// @return the canonical absent bytes for that kind.
+    function canonicalAbsentValue(uint8 cellKind)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        // Balances and the four bridge amount scalars ride the amount
+        // head; nonces, the withdrawal counter and the two 0/1 flags
+        // ride the uint head.
+        if (cellKind == 0 || cellKind == 7 || cellKind == 8
+            || cellKind == 10 || cellKind == 11) {
+            return CBEEncode.amountValue(0);
+        }
+        if (cellKind == 1 || cellKind == 6 || cellKind == 9 || cellKind == 12) {
+            return CBEEncode.uintValue(0);
+        }
+        // Registry, local policy and the two bridge records read as
+        // genuinely EMPTY when absent — which is why their present
+        // values go through the byte-string encoder, whose 9-byte head
+        // is there even for a zero-length payload.  Without that a
+        // registration with the empty key would be indistinguishable
+        // from an absent one, and registration is an admissibility
+        // gate.
+        if (cellKind == 2 || cellKind == 3 || cellKind == 4 || cellKind == 5) {
+            return "";
+        }
+        if (cellKind == 13) {                       // epochBudget
+            return CBEEncode.epochBudgetValue(0, 0);
+        }
+        if (cellKind == 14) {                       // budgetPolicy
+            // `BudgetPolicy.bounded 0 0 0`: the constructor tag then
+            // three zero fields.
+            return bytes.concat(
+                CBEEncode.uintValue(0), CBEEncode.uintValue(0),
+                CBEEncode.uintValue(0), CBEEncode.uintValue(0)
+            );
+        }
+        revert ActionNotAdjudicable(cellKind);
+    }
+
+    /// @notice Whether a cell value is the canonical absent one.
+    /// @dev    The predicate the leaf branch turns on.
+    function isCanonicallyAbsent(uint8 cellKind, bytes memory value)
+        internal
+        pure
+        returns (bool)
+    {
+        return keccak256(value) == keccak256(canonicalAbsentValue(cellKind));
+    }
+
     /// @notice The epoch-budget cell's post-value, in canonical bytes.
     /// @dev    The byte-level counterpart, mirroring
     ///         `VerifierWrites.deriveEpochBudgetCellValue`.

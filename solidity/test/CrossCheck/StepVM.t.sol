@@ -803,6 +803,76 @@ contract StepVMCrossCheck is CrossCheckFramework {
         );
     }
 
+    /// @notice **The canonical-absence markers agree, per cell kind.**
+    ///
+    ///         `stateCellEntries` DROPS a cell whose value is the
+    ///         canonically-absent one, so "this value means absent" and
+    ///         "this key is not in the tree" are the SAME condition —
+    ///         and the leaf a cell hashes to branches on it.  A stack
+    ///         that disagreed here would hash an absent cell as a
+    ///         present one holding zero, reach a leaf the other stack
+    ///         never computes, and walk to a root the honest sequencer
+    ///         cannot reproduce.
+    ///
+    ///         The markers are NOT uniform, which is why this is a
+    ///         golden rather than a constant: balances and the bridge
+    ///         amount scalars carry the 17-byte AMOUNT head, counters
+    ///         and flags the 9-byte UINT head, the record cells are
+    ///         genuinely empty, and the two budget cells are runs of
+    ///         zero uints (two and four).  Getting a kind's head wrong
+    ///         produces plausible-looking zero bytes of the wrong
+    ///         length.
+    function test_canonicalAbsentValues_match_lean() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".absentValueGoldensCount");
+        assertGt(n, 0, "the corpus must carry absence goldens");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base =
+                string.concat(".absentValueGoldens[", vm.toString(i), "]");
+            uint8 cellKind =
+                uint8(vm.parseJsonUint(raw, string.concat(base, ".cellKind")));
+            bytes memory expected =
+                vm.parseJsonBytes(raw, string.concat(base, ".absentValueHex"));
+            bytes memory got = StepWrites.canonicalAbsentValue(cellKind);
+            assertEq(got, expected, string.concat("absence mismatch at ", base));
+            assertTrue(
+                StepWrites.isCanonicallyAbsent(cellKind, got),
+                string.concat("the marker must classify as absent at ", base)
+            );
+        }
+        assertEq(n, 15, "every cell kind must be covered");
+    }
+
+    /// @notice A NON-marker value is not classified as absent.
+    ///
+    /// @dev    The negative control for the test above, and it is the
+    ///         direction that matters: `isCanonicallyAbsent` returning
+    ///         true too eagerly would erase a present cell from the
+    ///         tree, which is a state change no write declared.  A
+    ///         balance of one, and the marker of a DIFFERENT kind, both
+    ///         have to fail.
+    function test_canonicalAbsence_rejects_present_values() public pure {
+        assertFalse(
+            StepWrites.isCanonicallyAbsent(0, CBEEncode.amountValue(1)),
+            "a balance of one is present"
+        );
+        // Kind 1 is a nonce (uint head); kind 0's marker is the amount
+        // head.  Same numeric zero, different width — so a length-blind
+        // comparison would call this absent.
+        assertFalse(
+            StepWrites.isCanonicallyAbsent(1, StepWrites.canonicalAbsentValue(0)),
+            "another kind's marker is not this kind's absence"
+        );
+        assertFalse(
+            StepWrites.isCanonicallyAbsent(2, CBEEncode.bytesValue("")),
+            "an encoded EMPTY registry entry is present, not absent"
+        );
+    }
+
     /// @notice **The step VM does not yet return a state root, and the
     ///         corpus now says so in numbers.**
     ///
