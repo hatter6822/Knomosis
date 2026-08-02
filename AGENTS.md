@@ -1283,8 +1283,13 @@ against the pre-root would accept the bundle and reach a root no state
 has.  The write SET is mirrored too (`writeSetGoldens` — all eighteen probed
 variants, from the actual field bytes, with the bulk pair and unknown
 kinds reverting `ActionNotAdjudicable`).  **Every component of the flip
-is now built and cross-stack verified**; what remains is assembly
-inside `executeStep` — call `deriveWriteSet`, derive each value with
+is now built and cross-stack verified**.  One design question stays
+open and is recorded in the plan: the fold takes one opening per write,
+each against the RUNNING root, which is the simple and obviously-sound
+arrangement but not the cheapest — a deduplicating pre-root multiproof
+is materially smaller on calldata, at the cost of having to sequence
+same-cell writes itself.  Chaining first, measure, then decide.  What
+remains is assembly inside `executeStep` — call `deriveWriteSet`, derive each value with
 `StepWrites`, fold with `StepVMMerkle.applyCellWrite`, return the
 result instead of `stepVMHash` — plus the corpus regeneration and
 retiring the old recipe.  The remaining risk is contract size and gas,

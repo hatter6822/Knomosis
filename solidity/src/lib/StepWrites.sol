@@ -479,6 +479,48 @@ library StepWrites {
         return CBEEncode.bytesValue(key);
     }
 
+    /// @notice `declareLocalPolicy`'s local-policy write: the action
+    ///         fields, VERBATIM.
+    ///
+    /// @dev    `actionFieldsForL1 (.declareLocalPolicy policy)` and the
+    ///         cell value are both
+    ///         `Encodable.encode (T := LocalPolicy) policy`, so an L1
+    ///         holding the calldata already holds the cell value.  That
+    ///         removes the single largest encoder the step VM would
+    ///         otherwise carry — a policy is an ARRAY of clauses, not a
+    ///         fixed-width record.
+    ///
+    ///         Pinned in Lean by
+    ///         `deriveDeclaredPolicyCellValue_eq_actionFields`, so a
+    ///         future change to either the field layout or the cell
+    ///         encoding fails to compile rather than silently breaking
+    ///         this shortcut.
+    function deriveDeclaredPolicyCellValue(bytes calldata actionFields)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return actionFields;
+    }
+
+    /// @notice `replaceKey` / `registerIdentity`'s registry write, from
+    ///         the action fields.
+    ///
+    /// @dev    The key is the fields' TAIL, after the 8-byte actor id
+    ///         (`registry_key_is_action_fields_tail`), so this is
+    ///         `CBEEncode.bytesValue` over a calldata slice — no key
+    ///         encoder either.
+    function deriveRegistryFromFields(bytes calldata actionFields)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        if (actionFields.length < 8) {
+            revert ActionFieldsTooShort(0, actionFields.length);
+        }
+        return CBEEncode.bytesValue(actionFields[8:]);
+    }
+
     /// @notice `revokeLocalPolicy`'s local-policy write: the canonical
     ///         ABSENT value.
     /// @dev    `revoke` ERASES the map entry rather than storing an

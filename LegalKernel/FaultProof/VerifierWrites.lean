@@ -116,6 +116,7 @@ bitwise-OR-versus-sum bridge that says nothing about the kernel.
 This module is **not** part of the trusted computing base.
 -/
 
+import LegalKernel.FaultProof.StepVMCoherence
 import LegalKernel.FaultProof.StepWriteSets
 
 namespace LegalKernel
@@ -1332,6 +1333,34 @@ theorem deriveDeclaredPolicyCellValue_correct
   unfold Authority.LocalPolicies.declare
   rw [LegalKernel.RBMap.find?_insert_self _ st.signer policy]
   rfl
+
+/-- **`declareLocalPolicy`'s cell value IS its action fields.**
+
+    Both are `Encodable.encode (T := LocalPolicy) policy`, so an L1
+    holding the calldata already holds the cell value and does not need
+    a `LocalPolicy` encoder of its own — which would otherwise be the
+    single largest encoder the step VM had to carry, since a policy is
+    an array of clauses rather than a fixed-width record.
+
+    Worth stating rather than noticing: the two are equal by
+    construction TODAY, and a future change to either the L1 field
+    layout or the cell encoding would silently break the flip's
+    smallest assumption.  Stated as a theorem, that change fails to
+    compile instead. -/
+theorem deriveDeclaredPolicyCellValue_eq_actionFields
+    (policy : Authority.LocalPolicy) :
+    deriveDeclaredPolicyCellValue policy
+      = FaultProof.StepVMCoherence.actionFieldsForL1 (.declareLocalPolicy policy) := rfl
+
+/-- ...and `replaceKey` / `registerIdentity`'s key is the action
+    fields' TAIL, after the 8-byte actor id.
+
+    So the registry write needs only `CBEEncode.bytesValue` over a
+    calldata slice — no key encoder either. -/
+theorem registry_key_is_action_fields_tail
+    (actor : ActorId) (newKey : Authority.PublicKey) :
+    FaultProof.StepVMCoherence.actionFieldsForL1 (.replaceKey actor newKey)
+      = FaultProof.SolidityStepVMCommit.uint64BE actor.toNat ++ newKey := rfl
 
 /-- The verifier's `revokeLocalPolicy` write is the sequencer's.
 

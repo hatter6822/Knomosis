@@ -1761,6 +1761,24 @@ def recordWriteGoldens : List Test.Bridge.CrossCheck.Json :=
          , ("a", .str (h256 0)), ("b", .str (h256 0))
          , ("c", .str (h256 0)), ("d", .str (h256 0))
          , ("encodedHex", .str (hx (deriveRegistryCellValue ByteArray.empty))) ]
+    -- The two field-passthrough cases.  `payloadHex` carries the
+    -- ACTION FIELDS here, not a key: the Solidity side slices them
+    -- itself, so a layout change shows up as a mismatch rather than
+    -- as a silently-correct-looking value.
+  , .obj [ ("kind", .str "registryFromFields")
+         , ("payloadHex",
+            .str (hx (actionFieldsForL1 (.replaceKey 8 key))))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveRegistryCellValue key))) ]
+  , .obj [ ("kind", .str "declaredPolicy")
+         , ("payloadHex",
+            .str (hx (actionFieldsForL1
+              (.declareLocalPolicy Authority.LocalPolicy.empty))))
+         , ("a", .str (h256 0)), ("b", .str (h256 0))
+         , ("c", .str (h256 0)), ("d", .str (h256 0))
+         , ("encodedHex", .str (hx (deriveDeclaredPolicyCellValue
+             Authority.LocalPolicy.empty))) ]
   , .obj [ ("kind", .str "revokedPolicy"), ("payloadHex", .str "0x")
          , ("a", .str (h256 0)), ("b", .str (h256 0))
          , ("c", .str (h256 0)), ("d", .str (h256 0))

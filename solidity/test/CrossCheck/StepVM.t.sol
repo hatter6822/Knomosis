@@ -737,7 +737,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///      `via_ir`.
     function _assertRecordWrite(string memory raw, string memory base)
         internal
-        pure
+        view
     {
         string memory kind = vm.parseJsonString(raw, string.concat(base, ".kind"));
         bytes memory payload =
@@ -755,6 +755,13 @@ contract StepVMCrossCheck is CrossCheckFramework {
             got = StepWrites.deriveRegistryCellValue(payload);
         } else if (k == keccak256("revokedPolicy")) {
             got = StepWrites.deriveRevokedPolicyCellValue();
+        } else if (k == keccak256("registryFromFields")) {
+            // `payload` is the ACTION FIELDS here; the slice is the
+            // library's, so a layout change fails rather than looking
+            // silently correct.
+            got = this.deriveRegistryFromFieldsExternal(payload);
+        } else if (k == keccak256("declaredPolicy")) {
+            got = this.deriveDeclaredPolicyExternal(payload);
         } else if (k == keccak256("consumed")) {
             got = StepWrites.deriveConsumedCellValue(a, b, c, d);
         } else if (k == keccak256("pending")) {
@@ -763,6 +770,25 @@ contract StepVMCrossCheck is CrossCheckFramework {
             revert(string.concat("unknown record golden kind at ", base));
         }
         assertEq(got, expected, string.concat("record mismatch at ", base));
+    }
+
+    /// @dev Calldata boundaries for the two field-passthrough
+    ///      derivations.
+    function deriveRegistryFromFieldsExternal(bytes calldata fields)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return StepWrites.deriveRegistryFromFields(fields);
+    }
+
+    /// @dev ...and the policy one, which is the fields verbatim.
+    function deriveDeclaredPolicyExternal(bytes calldata fields)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return StepWrites.deriveDeclaredPolicyCellValue(fields);
     }
 
     /// @notice The withdrawal counter advances by one, like the nonce.

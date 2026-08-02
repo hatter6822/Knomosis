@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "67790f461dca2ad8625ec4215e3026658815da5fb4f7974120fc220255802f71"
+    "source_digest": "12fa16001c74da1db3aa3208151803526cdd9e71ec9dfada3675690ad684cd96"
   },
   "summary": {
     "module_count": 94,
-    "declaration_count": 2100
+    "declaration_count": 2104
   },
   "modules": [
     {
@@ -4895,7 +4895,7 @@
     {
       "module": "StepWrites",
       "path": "solidity/src/lib/StepWrites.sol",
-      "declaration_count": 36,
+      "declaration_count": 38,
       "declarations": [
         {
           "kind": "library",
@@ -5078,26 +5078,40 @@
         },
         {
           "kind": "function",
+          "name": "deriveDeclaredPolicyCellValue",
+          "line": 497,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveRegistryFromFields",
+          "line": 512,
+          "called": [
+            "ActionFieldsTooShort"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "deriveRevokedPolicyCellValue",
-          "line": 489,
+          "line": 531,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveConsumedCellValue",
-          "line": 502,
+          "line": 544,
           "called": []
         },
         {
           "kind": "function",
           "name": "derivePendingCellValue",
-          "line": 521,
+          "line": 563,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveNextWdIdCellValue",
-          "line": 541,
+          "line": 583,
           "called": [
             "decodeNonce"
           ]
@@ -5105,31 +5119,31 @@
         {
           "kind": "struct",
           "name": "Cell",
-          "line": 554,
+          "line": 596,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionNotAdjudicable",
-          "line": 568,
+          "line": 610,
           "called": []
         },
         {
           "kind": "error",
           "name": "ActionFieldsTooShort",
-          "line": 571,
+          "line": 613,
           "called": []
         },
         {
           "kind": "function",
           "name": "_fieldUint64",
-          "line": 577,
+          "line": 619,
           "called": []
         },
         {
           "kind": "function",
           "name": "_appendUniform",
-          "line": 590,
+          "line": 632,
           "called": [
             "Cell"
           ]
@@ -5137,7 +5151,7 @@
         {
           "kind": "function",
           "name": "deriveWriteSet",
-          "line": 616,
+          "line": 658,
           "called": [
             "ActionNotAdjudicable",
             "Cell",
@@ -5149,7 +5163,7 @@
         {
           "kind": "function",
           "name": "_need",
-          "line": 720,
+          "line": 762,
           "called": [
             "ActionFieldsTooShort"
           ]
@@ -5157,7 +5171,7 @@
         {
           "kind": "function",
           "name": "deriveEpochBudgetCellValue",
-          "line": 730,
+          "line": 772,
           "called": [
             "ActorBudget",
             "decodeActorBudget",
@@ -12307,7 +12321,7 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 42,
+      "declaration_count": 44,
       "declarations": [
         {
           "kind": "contract",
@@ -12513,14 +12527,26 @@
         },
         {
           "kind": "function",
+          "name": "deriveRegistryFromFieldsExternal",
+          "line": 776,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveDeclaredPolicyExternal",
+          "line": 785,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "test_nextWdIdWrite_advances_by_one",
-          "line": 771,
+          "line": 797,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_stepVM_does_not_yet_return_the_state_root",
-          "line": 801,
+          "line": 827,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12531,7 +12557,7 @@
         {
           "kind": "function",
           "name": "test_writeFold_reaches_lean_root",
-          "line": 851,
+          "line": 877,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12542,19 +12568,19 @@
         {
           "kind": "function",
           "name": "foldBundleExternal",
-          "line": 873,
+          "line": 899,
           "called": []
         },
         {
           "kind": "function",
           "name": "applyOneWrite",
-          "line": 901,
+          "line": 927,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_leafPreimage_is_reconstructible",
-          "line": 921,
+          "line": 947,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12564,7 +12590,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_matches_lean",
-          "line": 949,
+          "line": 975,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12574,25 +12600,25 @@
         {
           "kind": "function",
           "name": "assertWriteSetExternal",
-          "line": 964,
+          "line": 990,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveWriteSetExternal",
-          "line": 989,
+          "line": 1015,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_writeSet_refuses_only_the_bulk_pair",
-          "line": 1002,
+          "line": 1028,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 1024,
+          "line": 1050,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12603,7 +12629,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 1052,
+          "line": 1078,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12613,7 +12639,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 1077,
+          "line": 1103,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12623,13 +12649,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 1120,
+          "line": 1146,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 1136,
+          "line": 1162,
           "called": [
             "_parseCellProof"
           ]
@@ -12637,7 +12663,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 1169,
+          "line": 1195,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12647,7 +12673,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 1216,
+          "line": 1242,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12658,7 +12684,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1241,
+          "line": 1267,
           "called": [
             "KnomosisStepVM"
           ]

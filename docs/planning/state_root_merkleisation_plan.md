@@ -596,6 +596,41 @@ space:
    does an unknown kind, so a new `Action` constructor has to be
    considered rather than defaulting into the kernel-identity family.
 
+   **Open: chained openings are correct, not optimal.**  The fold
+   takes one opening per write, each against the RUNNING root.  That is
+   the simple, obviously-sound arrangement and the right thing to land
+   first — verify-then-re-walk, N times, with no shared state between
+   steps — but it is not where a mature implementation ends up, and the
+   reason is calldata.
+
+   N openings against N different roots share no structure a verifier
+   can exploit.  A **multiproof** over the same N keys against the
+   PRE-root is materially smaller, because sibling paths overlap
+   heavily near the root: `O(K log(N/K))` rather than `O(K log N)`.
+   On L1 the fault proof's dominant cost is calldata, and a terminal
+   step opens four to six cells for an ordinary action and up to 258
+   for a bulk one — which is the case that would actually hurt, if bulk
+   actions were adjudicable at all.  A pre-root multiproof is also
+   ORDER-INDEPENDENT, which is a smaller attack surface than a bundle
+   whose correctness depends on the responder having computed the
+   intermediate roots correctly.
+
+   What chaining buys, and why it should stay until the gas numbers
+   argue otherwise: **same-cell writes fall out for free.**  A
+   self-transfer writes `.balance r sender` twice, and with pre-root
+   openings the verifier must apply both updates along ONE path,
+   which means the multiproof machinery has to dedupe keys and
+   sequence the updates itself.  That is exactly where a subtle bug
+   would live, and it would be a bug in the direction that matters —
+   accepting a bundle that reaches a root no state has.  Chaining
+   makes the case trivial and `writeBundleGoldens`'s `selfTransfer`
+   probe pins it.
+
+   So: land chaining, measure it against the GP.11.9 benchmark, and
+   move to a deduplicating pre-root multiproof only if the numbers
+   demand it — with the same-cell case as the first test written, not
+   the last.
+
    **What is left is assembly, inside `executeStep`:** call
    `deriveWriteSet`, look up each declared cell's proof, derive its new
    value with `StepWrites`, and fold with
