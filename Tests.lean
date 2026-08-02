@@ -183,7 +183,6 @@ import LegalKernel.Test.FaultProof.PerVariantCoherence
 import LegalKernel.Test.FaultProof.EncodeInjectivity
 import LegalKernel.Test.FaultProof.AbsentCellCreation
 import LegalKernel.Test.FaultProof.GameTransitionEdgeCases
-import LegalKernel.Test.FaultProof.SolidityStepVMCommit
 import LegalKernel.Test.FaultProof.Transcript
 import LegalKernel.Test.FaultProof.Coherence
 import LegalKernel.Test.FaultProof.Settlement
@@ -460,8 +459,6 @@ def main : IO UInt32 := do
                                     LegalKernel.Test.FaultProof.AbsentCellCreation.tests)
   failed := failed + (← runAll "faultproof-game-transition-edge-cases"
                                     LegalKernel.Test.FaultProof.GameTransitionEdgeCases.tests)
-  failed := failed + (← runAll "faultproof-solidity-stepvm-commit"
-                                    LegalKernel.Test.FaultProof.SolidityStepVMCommit.tests)
   failed := failed + (← runAll "faultproof-transcript"
                                     LegalKernel.Test.FaultProof.Transcript.tests)
   failed := failed + (← runAll "faultproof-coherence"

@@ -13,14 +13,15 @@ import {StepWrites} from "../lib/StepWrites.sol";
 /// @notice **The step VM that returns a state ROOT** — the fault
 ///         proof's terminal adjudicator.
 ///
-/// @dev    `KnomosisStepVM.executeStep` returns a bespoke per-variant
-///         hash whose own header says it "is NOT byte-identical to" a
-///         `commitExtendedState` value.  The game feeds it a state root
-///         and compares the result to another state root, so the
-///         comparison never succeeds and an honest sequencer loses
-///         every game it correctly defends.  This contract computes the
-///         other side: a post-state root, by folding the step's proven
-///         cell writes into the pre-state root.
+/// @dev    This replaced `KnomosisStepVM`, whose `executeStep`
+///         returned a bespoke per-variant hash — its own header said
+///         the value "is NOT byte-identical to" a
+///         `commitExtendedState` one.  The game fed it a state root
+///         and compared the result to another state root, so the
+///         comparison never succeeded and an honest sequencer lost
+///         every game it correctly defended.  This contract computes
+///         the other side: a post-state root, by folding the step's
+///         proven cell writes into the pre-state root.
 ///
 ///         **The verifier derives the write list; it does not accept
 ///         one.**  Lean's `stepWriteBundle` reads its `newValue` column
@@ -134,6 +135,27 @@ contract KnomosisStepVMRoot {
 
     /// @notice The bundle exceeds `MAX_CELL_OPENINGS`.
     error TooManyCellOpenings(uint256 count);
+
+    /* ---------------------------------------------------------- */
+    /* External: assertConsistent                                 */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Deploy-time self-check, called by the deploy scripts.
+    ///
+    /// @dev    The two constants a bundle is bounded by, asserted
+    ///         against their derivations rather than restated: the
+    ///         opening cap is the tree's exact geometry (a bitmask plus
+    ///         one sibling per level), and the bundle cap has to exceed
+    ///         the largest write set any adjudicable variant produces —
+    ///         `depositWithFee`'s six.  A build whose caps drifted
+    ///         below either would reject honest bundles, which on a
+    ///         terminal step costs the responsible party the game.
+    function assertConsistent() external pure {
+        require(
+            MAX_PROOF_DATA_BYTES == 32 * (1 + 256), "ProofDataCapMismatch"
+        );
+        require(MAX_CELL_OPENINGS >= 6, "CellOpeningCapTooLow");
+    }
 
     /* ---------------------------------------------------------- */
     /* External: executeStepToRoot                                */

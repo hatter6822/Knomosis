@@ -28,12 +28,12 @@ the result to `g.high.commit`, another state root.  Two different
 constructions, so the comparison never succeeded: **an honest sequencer
 lost every game it correctly defended.**
 
-The 278-entry cross-stack corpus could not report it and never can.  It
-pins Lean's `stepVMHash` against Solidity's `executeStep` — two
-implementations of the SAME bespoke recipe.  They agree on all 278
-entries; agreement between them says nothing about whether either
-equals a published state root, which is the only property the game
-needs.
+The 278-entry cross-stack corpus could not report it and never could.
+It pinned Lean's `stepVMHash` against Solidity's `executeStep` — two
+implementations of the SAME bespoke recipe.  They agreed on all 278
+entries; agreement between them said nothing about whether either
+equalled a published state root, which is the only property the game
+needs.  That column and its driver are gone, along with the recipe.
 
 **It is closed.**  `terminateOnSingleStep` calls
 `KnomosisStepVMRoot.executeStepToRoot`, which returns a post-state ROOT
@@ -72,13 +72,15 @@ predicate; it is false on exactly those two, mirrored by
 variants by the corpus's `adjudicable` column.  The contract refuses
 them before verifying any opening.
 
-**One residue, and it is not a soundness one.**  The old
-`KnomosisStepVM` and Lean's `stepVMHash` are still compiled alongside
-the new path, called by nothing.  Removing them is
-`docs/planning/state_root_merkleisation_plan.md` §5's S7 and changes
-what no surface computes.  The Lean MODEL of the terminal step
-(`Step.kernelStepApply`) already routes through the verifier, so it
-computes what the contract computes.
+**The old recipe is gone.**  `KnomosisStepVM.sol`,
+`SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
+the 37 theorems pinning their per-variant arms were deleted once
+nothing referenced them.  What survives from that surface is the L1
+FIELD LAYOUT — `actionKindByte`, `actionFieldsForL1`, the big-endian
+encoders and the log-entry chain's `l1ActionCommit` — which the
+root-computing step VM reads unchanged.  The Lean MODEL of the
+terminal step (`Step.kernelStepApply`) routes through the verifier, so
+it computes what the contract computes.
 
 ---
 

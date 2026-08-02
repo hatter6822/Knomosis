@@ -805,11 +805,11 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 210 | ~159 | `lake test` |
+| Lean | ~3 124 | ~159 | `lake test` |
 | Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~967 passed | 63 forge suites | `cd solidity && forge test` |
+| Solidity | ~891 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **967 passed / 0 failed / 0 skipped** — the
+`forge test` runs **891 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 967 / 0 / 0.
+reports the same 891 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -839,9 +839,11 @@ full catalogue):
 
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
-- `faultproof-stepvm-coherence` — 25-variant step-VM dispatcher
-  byte-equivalence (kinds 0–24), plus the three `OBLIGATION:` cases
-  pinning what the state-root swap must close.
+- `faultproof-terminate` — the openings-only verifier
+  (`verifierPostRoot`) against the sequencer's fold on twenty probes,
+  plus the forgeries it must refuse: a forged pre-value, a short
+  bundle, a reordered bundle, a substituted policy cell, the two bulk
+  variants.
 - `faultproof-smt-injective` — B-3 SMT root injectivity, cell
   updates, canonical-path coherence; includes the negative control
   showing a duplicate-keyed bucket hashes as if it were empty.
@@ -1337,12 +1339,16 @@ step over a REAL state, because an empty bundle no longer verifies
 vacuously — it fails the re-derived shape check, since every one of
 the twenty-five variants writes the signer's nonce and epoch budget.
 
-**What remains is dead-code removal**: `KnomosisStepVM.sol` and its
-test, `SolidityStepVMCommit.lean`, `stepVMHash` /
-`stepVMHashFromAction` and the 36 recipe-bound theorems in
-`StepVMCoherence.lean`, and the corpus's `expectedStepVMCommitHex`
-column.  Nothing calls any of it; removing it changes what no surface
-COMPUTES.
+**The old recipe is gone.**  `KnomosisStepVM.sol` and its test,
+`SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
+the 37 theorems pinning their per-variant arms, the corpus's
+`expectedStepVMCommitHex` column and the 79 coherence cases that
+consumed it — deleted once nothing referenced them.  What survives
+from that surface is the L1 FIELD LAYOUT: `actionKindByte`,
+`actionFieldsForL1`, the big-endian encoders (moved into
+`StepVMCoherence.lean` when their file went) and the log-entry chain's
+`l1ActionCommit`.  Those were never recipe-bound, and the
+root-computing step VM reads them unchanged.
 `docs/audits/19-findings-and-followups.md` records the blast radius
 and `docs/planning/state_root_merkleisation_plan.md` §4 step 3 is the
 specification.  Until the retirement lands the fault-proof game's

@@ -64,7 +64,7 @@ library StepVMMerkle {
     ///         `WithdrawalId` are unbounded naturals, so a packed
     ///         `1 + 8 + 8` key would alias ids agreeing mod 2^64.
     ///
-    /// @param cellKind the `KnomosisStepVM.CellKind` discriminator.
+    /// @param cellKind the cell-kind discriminator (0..14).
     /// @param keyA     the first key component (resource / actor /
     ///                 deposit id / withdrawal id; 0 for singletons).
     /// @param keyB     the second key component (actor for balance

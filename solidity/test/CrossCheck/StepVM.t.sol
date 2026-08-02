@@ -2,7 +2,7 @@
 pragma solidity 0.8.20;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
-import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
+import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
@@ -14,53 +14,25 @@ import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
 ///         ammSwap kind-23 arm added 10; #226 / #251
 ///         coherence corpus).
 ///
-/// @dev    **Two commits per entry.**  Each fixture entry carries
-///         two distinct 32-byte hashes:
+/// @dev    **One commit per entry.**  Each fixture entry carries
+///         `expectedPostStateCommitHex` — the canonical
+///         `commitExtendedState` of the production advance.
 ///
-///           * `expectedPostStateCommitHex` — the canonical
-///             `commitExtendedState ∘ kernelOnlyApply` value,
-///             produced from the 5-component state-aggregate
-///             recipe (Workstream H §6).
-///           * `expectedStepVMCommitHex` — the step-VM-specific
-///             `keccak256(preCommit || tagHash || packed-fields)`
-///             value, mirroring `KnomosisStepVM.executeStep`'s output
-///             exactly.  Lean-side mirror at
-///             `LegalKernel.FaultProof.SolidityStepVMCommit`.
+///         There used to be a second, `expectedStepVMCommitHex`: the
+///         step-VM-specific `keccak256(preCommit || tagHash ||
+///         packed-fields)` value, mirroring `KnomosisStepVM.executeStep`
+///         byte-for-byte.  Both stacks computed it identically on all
+///         170 happy entries — and neither value was a state root, so
+///         the agreement said nothing about the only property the
+///         fault-proof game needs.  The column and its driver went
+///         with the recipe; `CrossCheck/StepVMRoot.t.sol` replaced
+///         them, comparing state roots on both sides.
 ///
-///         The Lean-side `expectedStepVMCommitHex` byte-equals
-///         `KnomosisStepVM.executeStep`'s output on the same inputs.
-///         That claim is verified by
-///         `test_perEntry_byte_equivalence_all_happy` — NOT by
-///         `test_perEntry_stepVMCommit_present_and_well_formed`,
-///         which only checks the hex string's shape.  An earlier
-///         version of this header credited the shape check with the
-///         equivalence claim, which is how the corpus read as
-///         stronger than it was.
-///
-///         Two further corrections to what this corpus used to be
-///         worth, both closed:
-///
-///           * `expectedStepVMCommitHex` is now produced by Lean's
-///             `stepVMHash` — the production dispatcher — rather than
-///             by per-variant re-derivation in the fixture builder.
-///             Before that, an offset bug in a `stepVMHash` arm would
-///             not have been caught: the fixture carried the test's
-///             own arithmetic, so the corpus compared a test
-///             reimplementation against Solidity rather than Lean
-///             against Solidity.
-///           * The fixture is a keccak artifact by construction (the
-///             Lean writer refuses to author one on a fallback-hash
-///             build), so this suite ASSERTS the binding rather than
-///             skipping on it.  It previously skipped, and the
-///             committed corpus carried `false`, so a bare
-///             `forge test` compared nothing at all.
-///
-///         **Still outstanding.**  Both sides compute the same
-///         *bespoke* recipe, which lives outside state-root space.
-///         Agreement here does not yet mean either side equals a
-///         published `commitExtendedState`, which is the property the
-///         bisection game actually needs — see
-///         `docs/planning/state_root_merkleisation_plan.md` §4.
+///         The fixture is a keccak artifact by construction (the Lean
+///         writer refuses to author one on a fallback-hash build), so
+///         this suite ASSERTS the binding rather than skipping on it.
+///         It previously skipped, and the committed corpus carried
+///         `false`, so a bare `forge test` compared nothing at all.
 ///
 ///         **Active checks** (independent of binding status):
 ///           * Fixture file exists + header shape.
@@ -216,128 +188,24 @@ contract StepVMCrossCheck is CrossCheckFramework {
         assertEq(happyCount, 170, "170 happy entries total (32 + 23 x6)");
     }
 
-    /// @notice **Cross-stack per-entry byte-equivalence.**  The
-    ///         fixture ships `expectedStepVMCommitHex` produced
-    ///         by Lean's
-    ///         `LegalKernel.FaultProof.SolidityStepVMCommit.stepCommit*`
-    ///         functions — the Lean-side mirror of the Solidity
-    ///         step-VM commit recipe (`keccak256(preCommit ||
-    ///         tagHash || packed-fields)`).
+    /// @notice **The bespoke-hash byte-equivalence driver is gone.**
     ///
-    ///         Under the production keccak256 binding, the
-    ///         Lean-side `expectedStepVMCommitHex` byte-equals
-    ///         what `KnomosisStepVM.executeStep` would return on the
-    ///         same inputs.  This is the real cross-stack
-    ///         byte-equivalence claim.
+    /// @dev    It walked every happy fixture, called
+    ///         `KnomosisStepVM.executeStep`, and asserted byte
+    ///         equality against Lean's `expectedStepVMCommitHex`.
+    ///         Both sides agreed on all 170 — and neither value was a
+    ///         state root, so the agreement said nothing about the
+    ///         only property the fault-proof game needs.  Two
+    ///         implementations of the same wrong thing concurring.
     ///
-    ///         Without the binding (FNV-1a-64 fallback), Lean uses
-    ///         FNV (8-byte output) while Solidity uses keccak256
-    ///         (32-byte output) — outputs cannot match.  The test
-    ///         correctly skips in fallback mode.
-    function test_perEntry_stepVMCommit_present_and_well_formed() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        uint256 n = vm.parseJsonUint(raw, ".count");
-        // Every entry (happy or adversarial) must have the new
-        // expectedStepVMCommitHex field populated.
-        for (uint256 i = 0; i < n; i++) {
-            string memory base = string.concat(".entries[", vm.toString(i), "]");
-            string memory revertReason =
-                vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
-            string memory svmCommit =
-                vm.parseJsonString(raw, string.concat(base, ".expectedStepVMCommitHex"));
-            if (keccak256(bytes(revertReason)) == keccak256(bytes("null"))) {
-                // Happy: must be 32-byte hex.
-                assertEq(bytes(svmCommit).length, 66, "happy entry's stepVMCommit is 32 bytes");
-            } else {
-                // Adversarial: null marker.
-                assertEq(svmCommit, "null", "adversarial entry's stepVMCommit is null");
-            }
-        }
-    }
+    ///         `CrossCheck/StepVMRoot.t.sol` is what replaced it: it
+    ///         drives `KnomosisStepVMRoot.executeStepToRoot` against
+    ///         the root Lean's `stepPostRoot` reaches, so both sides
+    ///         are state roots.  The corpus's per-entry columns that
+    ///         survive here — the action-kind dispatch, the field
+    ///         layouts, the cell-proof shapes — are the L1 CALLDATA
+    ///         contract, which the new verifier reads unchanged.
 
-    /// @notice SVC.5.e+ — single uniform cross-stack
-    ///         byte-equivalence driver.  Replaces the previous
-    ///         per-variant tests (mint, opaque, freezeResource,
-    ///         replaceKey, registerIdentity) with one generic
-    ///         loop that walks every happy fixture, parses the
-    ///         (preCommit, actionKind, actionFields, signer,
-    ///         cellProofs) tuple from JSON, invokes
-    ///         `KnomosisStepVM.executeStep`, and asserts byte
-    ///         equality against `expectedStepVMCommitHex`.
-    ///
-    ///         Under `isKeccak256Linked = true`, all 170 happy
-    ///         fixtures (16 transfer + 16 mint + 22 x6 other
-    ///         variants) must produce identical bytes on both
-    ///         sides.  Skipped under FNV fallback.
-    ///
-    ///         This is the load-bearing cross-stack byte-equivalence
-    ///         claim closing Workstream SVC.5.e+: the 7
-    ///         cell-bound structured variants (Transfer, Burn,
-    ///         Reward, Deposit, Withdraw, DistributeOthers,
-    ///         ProportionalDilute) now ship cell-proof bundles
-    ///         from non-empty pre-states, so Solidity's
-    ///         `_findBalanceCellProof` finds the matching cell
-    ///         and the step-VM hash recipe can be invoked
-    ///         without reverting.
-    /// @dev SVC.5.e+ — execute the step VM with all inputs
-    ///      parsed from JSON at the given base path, return
-    ///      the recomputed step-VM commit.  Extracted to a
-    ///      pure entry-parsing + call-chain so the outer
-    ///      driver's stack stays shallow.
-    function _executeStepFromFixture(string memory raw, string memory base)
-        internal
-        view
-        returns (bytes32)
-    {
-        return stepVM.executeStep(
-            vm.parseJsonBytes32(raw, string.concat(base, ".preStateCommitHex")),
-            uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
-            vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
-            uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
-            _parseCellProofs(raw, base)
-        );
-    }
-
-    /// @dev Check entry at index `i` is byte-equivalent.
-    ///      Returns 1 if happy (asserted), 0 if adversarial
-    ///      (skipped).  Pulled into a helper function so each
-    ///      iteration of the outer loop resets its own stack
-    ///      frame (avoiding Yul stack-too-deep).
-    function _checkEntryAtIndex(string memory raw, uint256 i) internal view returns (uint256) {
-        string memory base = string.concat(".entries[", vm.toString(i), "]");
-        string memory revertReason =
-            vm.parseJsonString(raw, string.concat(base, ".expectedRevertReason"));
-        if (keccak256(bytes(revertReason)) != keccak256(bytes("null"))) {
-            return 0;
-        }
-        assertEq(
-            _executeStepFromFixture(raw, base),
-            vm.parseJsonBytes32(raw, string.concat(base, ".expectedStepVMCommitHex")),
-            string.concat("byte-equivalence failed for ", base)
-        );
-        return 1;
-    }
-
-    function test_perEntry_byte_equivalence_all_happy() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        _requireKeccakLinked(raw, ".isKeccak256Linked");
-        uint256 n = vm.parseJsonUint(raw, ".count");
-        uint256 happyChecked = 0;
-        for (uint256 i = 0; i < n; i++) {
-            happyChecked += _checkEntryAtIndex(raw, i);
-        }
-        // 16 transfer + 16 mint + 22 x6 other-variant happy entries
-        // (17 SVC.5.e + 5 Workstream-GP variants).
-        assertEq(happyChecked, 170, "expected 170 happy entries");
-    }
 
     /// @notice SVC.5.e+: cell-proof schema invariants are
     ///         enforced via two paths and don't need a separate
@@ -393,7 +261,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
             assertEq(pd.length % 32, 0, string.concat("misaligned proofData for ", cpBase));
             assertLe(
                 pd.length,
-                stepVM.MAX_PROOF_DATA_BYTES(),
+                vmRoot.MAX_PROOF_DATA_BYTES(),
                 string.concat("oversize proofData for ", cpBase)
             );
         }
@@ -515,12 +383,15 @@ contract StepVMCrossCheck is CrossCheckFramework {
         // revert, so the bound is rejecting only what it must.
         assertEq(CBEEncode.uintValue(type(uint64).max).length, 9, "uint max encodes");
         assertEq(CBEEncode.amountValue(type(uint128).max).length, 17, "amount max encodes");
-        // Round-trip against the step VM's own decoder.
+        // Round-trip against the step VM's own decoders — the ones
+        // the fold reads proven cell values through, so an encoder
+        // that disagreed with them would build a leaf no opening
+        // verifies.
         uint64[4] memory probes = [uint64(0), 1, 0xFF, type(uint64).max];
         for (uint256 i = 0; i < probes.length; i++) {
-            assertEq(stepVM.decodeNatForTest(CBEEncode.uintValue(probes[i])),
+            assertEq(StepWrites.decodeNonce(CBEEncode.uintValue(probes[i])),
                 uint256(probes[i]), "uint round-trip");
-            assertEq(stepVM.decodeNatForTest(CBEEncode.amountValue(probes[i])),
+            assertEq(StepWrites.decodeAmount(CBEEncode.amountValue(probes[i])),
                 uint256(probes[i]), "amount round-trip");
         }
     }
@@ -911,19 +782,14 @@ contract StepVMCrossCheck is CrossCheckFramework {
                 vm.parseJsonBytes32(raw, string.concat(base, ".expectedPostStateRootHex"));
             bytes32 published =
                 vm.parseJsonBytes32(raw, string.concat(base, ".publishedPostRootHex"));
-            bytes32 bespoke =
-                vm.parseJsonBytes32(raw, string.concat(base, ".bespokeStepVMCommitHex"));
             bytes32 preRoot =
                 vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex"));
             // The fold's target is the production advance's published
             // root — so the number the flip aims at is the right one.
             assertEq(foldRoot, published,
                 string.concat("fold != published root at ", base));
-            // ...and it is not what the step VM returns today.
-            assertTrue(foldRoot != bespoke,
-                string.concat("fold unexpectedly equals the bespoke hash at ", base));
-            // ...nor the pre-root, so a fold that did nothing would
-            // fail the first assertion rather than pass it.
+            // ...and not the pre-root, so a fold that did nothing
+            // would fail the first assertion rather than pass it.
             assertTrue(foldRoot != preRoot,
                 string.concat("the fold did not move the root at ", base));
         }
@@ -1225,49 +1091,6 @@ contract StepVMCrossCheck is CrossCheckFramework {
         }
     }
 
-    /// @dev SVC.5.e+ — parser for one cell-proof JSON entry.
-    ///      Builds a `KnomosisStepVM.CellProof` from the 6 fields
-    ///      at the given JSON base path.  Uses an in-place
-    ///      struct initialization to keep stack pressure low.
-    ///
-    ///      `proofDataHex` is the cell's SMT opening against the
-    ///      pre-state root.  It is parsed — not defaulted — because
-    ///      the corpus is where the two stacks agree on the consensus
-    ///      encoding: substituting a synthetic opening here would make
-    ///      every entry pass while proving nothing about the bytes
-    ///      Lean emits.
-    function _parseCellProof(string memory raw, string memory base)
-        internal
-        pure
-        returns (KnomosisStepVM.CellProof memory cp)
-    {
-        cp.cellKind = uint8(vm.parseJsonUint(raw, string.concat(base, ".cellKind")));
-        cp.keyA = vm.parseJsonUint(raw, string.concat(base, ".keyA"));
-        cp.keyB = vm.parseJsonUint(raw, string.concat(base, ".keyB"));
-        cp.cellValue = vm.parseJsonBytes(raw, string.concat(base, ".cellValueHex"));
-        cp.witnessCommit = vm.parseJsonBytes32(raw, string.concat(base, ".witnessCommitHex"));
-        cp.proofData = vm.parseJsonBytes(raw, string.concat(base, ".proofDataHex"));
-    }
-
-    /// @dev SVC.5.e+ — parser for an entire fixture's
-    ///      `cellProofs` array.  Discovers the array length via
-    ///      `vm.parseJsonKeys` and iterates per-element.
-    function _parseCellProofs(string memory raw, string memory base)
-        internal
-        pure
-        returns (KnomosisStepVM.CellProof[] memory proofs)
-    {
-        // Use the per-entry `cellProofsCount` scalar instead of
-        // `vm.parseJsonKeys` (which only works on objects, not
-        // arrays of objects).
-        uint256 nProofs = vm.parseJsonUint(raw, string.concat(base, ".cellProofsCount"));
-        proofs = new KnomosisStepVM.CellProof[](nProofs);
-        for (uint256 k = 0; k < nProofs; k++) {
-            proofs[k] =
-                _parseCellProof(raw, string.concat(base, ".cellProofs[", vm.toString(k), "]"));
-        }
-    }
-
     /// @notice GP.5.3 — hash-independent **data-flow** layout pin for
     ///         the packed primitives EVERY structured step-VM variant's
     ///         commit preimage is built from.  Lean EMITS its actual
@@ -1354,10 +1177,16 @@ contract StepVMCrossCheck is CrossCheckFramework {
         );
     }
 
-    /// @dev Deploy `KnomosisStepVM` for the byte-equivalence test.
-    KnomosisStepVM internal stepVM;
+    /// @dev The step VM this corpus's shape checks read constants
+    ///      from.  It used to be `KnomosisStepVM`, deployed so the
+    ///      per-entry byte-equivalence driver could call
+    ///      `executeStep`; that driver and that contract are gone, and
+    ///      what remains here is the L1 CALLDATA contract — field
+    ///      layouts, cell-proof shapes, the opening's depth bound —
+    ///      which the root-computing step VM reads unchanged.
+    KnomosisStepVMRoot internal vmRoot;
 
     function setUp() public {
-        stepVM = new KnomosisStepVM();
+        vmRoot = new KnomosisStepVMRoot();
     }
 }

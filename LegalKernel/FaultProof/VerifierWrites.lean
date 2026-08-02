@@ -1360,7 +1360,7 @@ theorem deriveDeclaredPolicyCellValue_eq_actionFields
 theorem registry_key_is_action_fields_tail
     (actor : ActorId) (newKey : Authority.PublicKey) :
     FaultProof.StepVMCoherence.actionFieldsForL1 (.replaceKey actor newKey)
-      = FaultProof.SolidityStepVMCommit.uint64BE actor.toNat ++ newKey := rfl
+      = FaultProof.StepVMCoherence.uint64BE actor.toNat ++ newKey := rfl
 
 /-- The verifier's `revokeLocalPolicy` write is the sequencer's.
 

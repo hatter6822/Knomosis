@@ -8,11 +8,11 @@ import {StepWrites} from "src/lib/StepWrites.sol";
 /// @title StepVMRootCrossCheck
 /// @notice **The flip, checked end to end against Lean.**
 ///
-/// @dev    `KnomosisStepVM.executeStep` returns a bespoke per-variant
-///         hash that lives outside state-root space, so the fault
-///         proof's terminal comparison — computed value against the
-///         disputed state root — never succeeds and an honest
-///         sequencer loses every game it correctly defends.
+/// @dev    The retired `KnomosisStepVM.executeStep` returned a
+///         bespoke per-variant hash living outside state-root space,
+///         so the fault proof's terminal comparison — computed value
+///         against the disputed state root — never succeeded and an
+///         honest sequencer lost every game it correctly defended.
 ///         `KnomosisStepVMRoot.executeStepToRoot` computes the other
 ///         side, and this suite is what says it agrees with Lean.
 ///

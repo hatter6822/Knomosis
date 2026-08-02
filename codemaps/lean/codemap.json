@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b1f9a794ad4d7ba0e859eca95683c9544d73fe0c29ddfb09d3c42f6c54068f71"
+    "source_digest": "678ebb41d66c5330196c23e0026d8cc191e0314ce2ced61eac34c636bac37571"
   },
   "summary": {
-    "module_count": 334,
-    "declaration_count": 5815
+    "module_count": 332,
+    "declaration_count": 5707
   },
   "modules": [
     {
@@ -544,13 +544,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 328,
+          "line": 327,
           "called": []
         },
         {
           "kind": "def",
           "name": "kernelVersion",
-          "line": 344,
+          "line": 343,
           "called": [
             "LegalKernel"
           ]
@@ -26674,592 +26674,6 @@
       ]
     },
     {
-      "module": "LegalKernel.FaultProof.SolidityStepVMCommit",
-      "path": "LegalKernel/FaultProof/SolidityStepVMCommit.lean",
-      "declaration_count": 67,
-      "declarations": [
-        {
-          "kind": "namespace",
-          "name": "LegalKernel",
-          "line": 56,
-          "called": []
-        },
-        {
-          "kind": "namespace",
-          "name": "FaultProof",
-          "line": 57,
-          "called": []
-        },
-        {
-          "kind": "namespace",
-          "name": "SolidityStepVMCommit",
-          "line": 58,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "uint64BE",
-          "line": 70,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "uint128BE",
-          "line": 92,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "uint256BE",
-          "line": 114,
-          "called": []
-        },
-        {
-          "kind": "theorem",
-          "name": "uint64BE_size",
-          "line": 150,
-          "called": [
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "uint128BE_size",
-          "line": 155,
-          "called": [
-            "uint128BE"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "uint256BE_size",
-          "line": 160,
-          "called": [
-            "uint256BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "hashString",
-          "line": 179,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "tagTransfer",
-          "line": 183,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagMint",
-          "line": 185,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagBurn",
-          "line": 187,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagFreezeResource",
-          "line": 189,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagReplaceKey",
-          "line": 191,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagReward",
-          "line": 193,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagDistributeOthers",
-          "line": 195,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagProportionalDilute",
-          "line": 197,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagDispute",
-          "line": 199,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagDisputeWithdraw",
-          "line": 201,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagVerdict",
-          "line": 203,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagRollback",
-          "line": 205,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagRegisterIdentity",
-          "line": 207,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagDeposit",
-          "line": 209,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagWithdraw",
-          "line": 211,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagDeclareLocalPolicy",
-          "line": 213,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagRevokeLocalPolicy",
-          "line": 215,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagFaultProofChallenge",
-          "line": 217,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagFaultProofResolution",
-          "line": 219,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagDepositWithFee",
-          "line": 221,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagTopUpActionBudget",
-          "line": 223,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagTopUpActionBudgetFor",
-          "line": 225,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagClaimBudgetRefund",
-          "line": 227,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagAmmSwap",
-          "line": 229,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "tagReclaimAmmReserves",
-          "line": 232,
-          "called": [
-            "hashString"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitTransfer",
-          "line": 244,
-          "called": [
-            "receiver",
-            "sender",
-            "tagTransfer",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitMint",
-          "line": 255,
-          "called": [
-            "tagMint",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitBurn",
-          "line": 264,
-          "called": [
-            "tagBurn",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitFreezeResource",
-          "line": 273,
-          "called": [
-            "tagFreezeResource",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitReplaceKey",
-          "line": 281,
-          "called": [
-            "tagReplaceKey",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitReward",
-          "line": 290,
-          "called": [
-            "tagReward",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitDistributeOthersHead",
-          "line": 300,
-          "called": [
-            "tagDistributeOthers",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitDistributeOthersFold",
-          "line": 319,
-          "called": [
-            "uint256BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitProportionalDiluteHead",
-          "line": 325,
-          "called": [
-            "sumOthers",
-            "tagProportionalDilute",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitProportionalDiluteFold",
-          "line": 345,
-          "called": [
-            "uint256BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitDispute",
-          "line": 352,
-          "called": [
-            "tagDispute",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitDisputeWithdraw",
-          "line": 361,
-          "called": [
-            "tagDisputeWithdraw",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitVerdict",
-          "line": 370,
-          "called": [
-            "tagVerdict",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitRollback",
-          "line": 379,
-          "called": [
-            "tagRollback",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitRegisterIdentity",
-          "line": 388,
-          "called": [
-            "tagRegisterIdentity",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitDeposit",
-          "line": 397,
-          "called": [
-            "tagDeposit",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitWithdraw",
-          "line": 408,
-          "called": [
-            "sender",
-            "tagWithdraw",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitDeclareLocalPolicy",
-          "line": 418,
-          "called": [
-            "tagDeclareLocalPolicy",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitRevokeLocalPolicy",
-          "line": 427,
-          "called": [
-            "tagRevokeLocalPolicy",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitFaultProofChallenge",
-          "line": 436,
-          "called": [
-            "tagFaultProofChallenge",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitFaultProofResolution",
-          "line": 445,
-          "called": [
-            "tagFaultProofResolution",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitDepositWithFee",
-          "line": 462,
-          "called": [
-            "poolActor",
-            "tagDepositWithFee",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitTopUpActionBudget",
-          "line": 480,
-          "called": [
-            "gasResource",
-            "poolActor",
-            "tagTopUpActionBudget",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitTopUpActionBudgetFor",
-          "line": 506,
-          "called": [
-            "gasResource",
-            "poolActor",
-            "tagTopUpActionBudgetFor",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitClaimBudgetRefund",
-          "line": 534,
-          "called": [
-            "gasResource",
-            "poolActor",
-            "tagClaimBudgetRefund",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitAmmSwap",
-          "line": 555,
-          "called": [
-            "ammReserveActor",
-            "tagAmmSwap",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepCommitReclaimAmmReserves",
-          "line": 580,
-          "called": [
-            "poolActor",
-            "tagReclaimAmmReserves",
-            "uint256BE",
-            "uint64BE"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepCommitTransfer_deterministic",
-          "line": 594,
-          "called": [
-            "stepCommitTransfer"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepCommitTransfer_size",
-          "line": 607,
-          "called": [
-            "receiver",
-            "sender",
-            "stepCommitTransfer"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepCommitMint_size",
-          "line": 615,
-          "called": [
-            "stepCommitMint"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepCommitBurn_size",
-          "line": 622,
-          "called": [
-            "stepCommitBurn"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "hashString_inj_under_collision_free",
-          "line": 636,
-          "called": [
-            "FaultProof",
-            "LegalKernel",
-            "SolidityStepVMCommit",
-            "hashString"
-          ]
-        }
-      ]
-    },
-    {
       "module": "LegalKernel.FaultProof.StateCells",
       "path": "LegalKernel/FaultProof/StateCells.lean",
       "declaration_count": 13,
@@ -28355,24 +27769,24 @@
     {
       "module": "LegalKernel.FaultProof.StepVMCoherence",
       "path": "LegalKernel/FaultProof/StepVMCoherence.lean",
-      "declaration_count": 59,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 143,
+          "line": 142,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 144,
+          "line": 143,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "StepVMCoherence",
-          "line": 145,
+          "line": 144,
           "called": [
             "LegalKernel.Bridge",
             "LegalKernel.Runtime"
@@ -28380,8 +27794,50 @@
         },
         {
           "kind": "def",
+          "name": "uint64BE",
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "uint128BE",
+          "line": 197,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "uint256BE",
+          "line": 219,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "uint64BE_size",
+          "line": 255,
+          "called": [
+            "uint64BE"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "uint128BE_size",
+          "line": 260,
+          "called": [
+            "uint128BE"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "uint256BE_size",
+          "line": 265,
+          "called": [
+            "uint256BE"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "actionKindByte",
-          "line": 170,
+          "line": 274,
           "called": [
             "Action",
             "ammSwap",
@@ -28404,13 +27860,13 @@
         {
           "kind": "def",
           "name": "actionKindByteCases",
-          "line": 234,
+          "line": 338,
           "called": []
         },
         {
           "kind": "def",
           "name": "actionFieldsForL1",
-          "line": 273,
+          "line": 377,
           "called": [
             "Action",
             "Dispute",
@@ -28445,7 +27901,7 @@
         {
           "kind": "def",
           "name": "l1ActionCommitBytes",
-          "line": 423,
+          "line": 527,
           "called": [
             "uint64BE"
           ]
@@ -28453,7 +27909,7 @@
         {
           "kind": "def",
           "name": "l1ActionCommit",
-          "line": 429,
+          "line": 533,
           "called": [
             "Action",
             "ActorId",
@@ -28465,13 +27921,13 @@
         {
           "kind": "def",
           "name": "l1NextEntryHash",
-          "line": 439,
+          "line": 543,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "l1ActionCommit_size",
-          "line": 445,
+          "line": 549,
           "called": [
             "Action",
             "ActorId",
@@ -28481,48 +27937,27 @@
         {
           "kind": "theorem",
           "name": "l1NextEntryHash_size",
-          "line": 450,
+          "line": 554,
           "called": [
             "l1NextEntryHash"
           ]
         },
         {
           "kind": "def",
-          "name": "findCellProof",
-          "line": 463,
-          "called": [
-            "CellProof",
-            "CellProofBundle",
-            "CellTag"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "readCellValue",
-          "line": 471,
-          "called": [
-            "CellProofBundle",
-            "CellTag",
-            "canonicalAbsentValue",
-            "findCellProof"
-          ]
-        },
-        {
-          "kind": "def",
           "name": "decodeCellNat",
-          "line": 521,
+          "line": 602,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint64BE",
-          "line": 563,
+          "line": 644,
           "called": []
         },
         {
           "kind": "def",
           "name": "readUint128BE",
-          "line": 588,
+          "line": 669,
           "called": [
             "readUint64BE"
           ]
@@ -28530,600 +27965,16 @@
         {
           "kind": "def",
           "name": "sliceFrom",
-          "line": 595,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "stepVMHash",
-          "line": 621,
+          "line": 676,
           "called": [
-            "CellProofBundle",
-            "ammReserveActor",
-            "decodeCellNat",
-            "gasResource",
-            "maxRecipientsPerBulkAction",
-            "poolActor",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "receiver",
-            "refundAmount",
-            "sender",
-            "sliceFrom",
-            "stepCommitAmmSwap",
-            "stepCommitBurn",
-            "stepCommitClaimBudgetRefund",
-            "stepCommitDeclareLocalPolicy",
-            "stepCommitDeposit",
-            "stepCommitDepositWithFee",
-            "stepCommitDispute",
-            "stepCommitDisputeWithdraw",
-            "stepCommitDistributeOthersFold",
-            "stepCommitDistributeOthersHead",
-            "stepCommitFaultProofChallenge",
-            "stepCommitFaultProofResolution",
-            "stepCommitFreezeResource",
-            "stepCommitMint",
-            "stepCommitProportionalDiluteFold",
-            "stepCommitProportionalDiluteHead",
-            "stepCommitReclaimAmmReserves",
-            "stepCommitRegisterIdentity",
-            "stepCommitReplaceKey",
-            "stepCommitRevokeLocalPolicy",
-            "stepCommitReward",
-            "stepCommitRollback",
-            "stepCommitTopUpActionBudget",
-            "stepCommitTopUpActionBudgetFor",
-            "stepCommitTransfer",
-            "stepCommitVerdict",
-            "stepCommitWithdraw",
-            "sumOthers"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_deterministic",
-          "line": 1003,
-          "called": [
-            "CellProofBundle",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "actionKindByte_deterministic",
-          "line": 1013,
-          "called": [
-            "Action",
-            "actionKindByte"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "actionFieldsForL1_deterministic",
-          "line": 1019,
-          "called": [
-            "Action",
-            "actionFieldsForL1"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_transfer_kind",
-          "line": 1037,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "receiver",
-            "sender",
-            "stepCommitTransfer",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_mint_kind",
-          "line": 1062,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitMint",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_burn_kind",
-          "line": 1075,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitBurn",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_freezeResource_kind",
-          "line": 1088,
-          "called": [
-            "CellProofBundle",
-            "readUint64BE",
-            "stepCommitFreezeResource",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_replaceKey_kind",
-          "line": 1095,
-          "called": [
-            "CellProofBundle",
-            "readUint64BE",
-            "sliceFrom",
-            "stepCommitReplaceKey",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_reward_kind",
-          "line": 1103,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitReward",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_distributeOthers_kind",
-          "line": 1121,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "maxRecipientsPerBulkAction",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitDistributeOthersFold",
-            "stepCommitDistributeOthersHead",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_proportionalDilute_kind",
-          "line": 1148,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "maxRecipientsPerBulkAction",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitProportionalDiluteFold",
-            "stepCommitProportionalDiluteHead",
-            "stepVMHash",
-            "sumOthers"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_dispute_kind",
-          "line": 1185,
-          "called": [
-            "CellProofBundle",
-            "stepCommitDispute",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_disputeWithdraw_kind",
-          "line": 1192,
-          "called": [
-            "CellProofBundle",
-            "stepCommitDisputeWithdraw",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_verdict_kind",
-          "line": 1199,
-          "called": [
-            "CellProofBundle",
-            "stepCommitVerdict",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_rollback_kind",
-          "line": 1206,
-          "called": [
-            "CellProofBundle",
-            "stepCommitRollback",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_registerIdentity_kind",
-          "line": 1213,
-          "called": [
-            "CellProofBundle",
-            "readUint64BE",
-            "sliceFrom",
-            "stepCommitRegisterIdentity",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_deposit_kind",
-          "line": 1221,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitDeposit",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_withdraw_kind",
-          "line": 1236,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "sender",
-            "sliceFrom",
-            "stepCommitWithdraw",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_declareLocalPolicy_kind",
-          "line": 1251,
-          "called": [
-            "CellProofBundle",
-            "stepCommitDeclareLocalPolicy",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_revokeLocalPolicy_kind",
-          "line": 1258,
-          "called": [
-            "CellProofBundle",
-            "stepCommitRevokeLocalPolicy",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_faultProofChallenge_kind",
-          "line": 1265,
-          "called": [
-            "CellProofBundle",
-            "stepCommitFaultProofChallenge",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_faultProofResolution_kind",
-          "line": 1272,
-          "called": [
-            "CellProofBundle",
-            "stepCommitFaultProofResolution",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_depositWithFee_kind",
-          "line": 1287,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "poolActor",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitDepositWithFee",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_topUpActionBudget_kind",
-          "line": 1325,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "gasResource",
-            "poolActor",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitTopUpActionBudget",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_topUpActionBudgetFor_kind",
-          "line": 1362,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "gasResource",
-            "poolActor",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitTopUpActionBudgetFor",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_claimBudgetRefund_kind",
-          "line": 1394,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "gasResource",
-            "poolActor",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "refundAmount",
-            "stepCommitClaimBudgetRefund",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_ammSwap_kind",
-          "line": 1424,
-          "called": [
-            "CellProofBundle",
-            "ammReserveActor",
-            "decodeCellNat",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitAmmSwap",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_reclaimAmmReserves_kind",
-          "line": 1450,
-          "called": [
-            "CellProofBundle",
-            "decodeCellNat",
-            "poolActor",
-            "readCellValue",
-            "readUint128BE",
-            "readUint64BE",
-            "stepCommitReclaimAmmReserves",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHash_unknown_kind_empty",
-          "line": 1478,
-          "called": [
-            "CellProofBundle",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepVMHashFromAction",
-          "line": 1506,
-          "called": [
-            "Action",
-            "ActorId",
-            "ExtendedState",
-            "actionFieldsForL1",
-            "actionKindByte",
-            "commitExtendedState",
-            "es",
-            "stepVMHash"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_deterministic",
-          "line": 1514,
-          "called": [
-            "Action",
-            "ActorId",
-            "ExtendedState",
-            "es",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_dispute",
-          "line": 1534,
-          "called": [
-            "ActorId",
-            "Dispute",
-            "ExtendedState",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitDispute",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_disputeWithdraw",
-          "line": 1542,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitDisputeWithdraw",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_verdict",
-          "line": 1550,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "Verdict",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitVerdict",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_rollback",
-          "line": 1557,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitRollback",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_declareLocalPolicy",
-          "line": 1564,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "LocalPolicy",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitDeclareLocalPolicy",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_revokeLocalPolicy",
-          "line": 1571,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitRevokeLocalPolicy",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_faultProofChallenge",
-          "line": 1578,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitFaultProofChallenge",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_faultProofResolution",
-          "line": 1587,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "stepCommitFaultProofResolution",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepVMHashFromAction_freezeResource",
-          "line": 1596,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "ResourceId",
-            "actionFieldsForL1",
-            "commitExtendedState",
-            "es",
-            "freezeResource",
-            "readUint64BE",
-            "stepCommitFreezeResource",
-            "stepVMHashFromAction"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "step_vm_dispatch_well_typed",
-          "line": 1642,
-          "called": [
-            "Action",
-            "ActorId",
-            "ExtendedState",
             "FaultProof",
             "LegalKernel",
             "StepVMCoherence",
             "actionFieldsForL1",
             "actionKindByte",
             "burn",
-            "commitExtendedState",
-            "es",
             "freezeResource",
             "mint",
-            "stepVMHash",
-            "stepVMHashFromAction",
             "transfer"
           ]
         }
@@ -46282,19 +45133,19 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
-          "line": 55,
+          "line": 53,
           "called": []
         },
         {
           "kind": "structure",
           "name": "CellProofForFixture",
-          "line": 64,
+          "line": 62,
           "called": []
         },
         {
           "kind": "structure",
           "name": "StepVMFixture",
-          "line": 94,
+          "line": 92,
           "called": [
             "CellProofForFixture",
             "actionKindByte"
@@ -46303,7 +45154,7 @@
         {
           "kind": "def",
           "name": "encodeSignedAction",
-          "line": 135,
+          "line": 128,
           "called": [
             "SignedAction"
           ]
@@ -46311,7 +45162,7 @@
         {
           "kind": "def",
           "name": "encodeActionFields",
-          "line": 140,
+          "line": 133,
           "called": [
             "Action",
             "actionFieldsForL1"
@@ -46320,7 +45171,7 @@
         {
           "kind": "def",
           "name": "cellProofForFixtureFromCellProof",
-          "line": 145,
+          "line": 138,
           "called": [
             "CellProof",
             "CellProofForFixture",
@@ -46330,7 +45181,7 @@
         {
           "kind": "def",
           "name": "fixtureBase",
-          "line": 172,
+          "line": 165,
           "called": [
             "ExtendedState",
             "ExtendedState.empty"
@@ -46339,7 +45190,7 @@
         {
           "kind": "def",
           "name": "stateWithBalances",
-          "line": 177,
+          "line": 170,
           "called": [
             "ActorId",
             "Amount",
@@ -46354,7 +45205,7 @@
         {
           "kind": "def",
           "name": "bundleToFixtureProofs",
-          "line": 186,
+          "line": 179,
           "called": [
             "CellProof",
             "CellProofForFixture",
@@ -46364,7 +45215,7 @@
         {
           "kind": "def",
           "name": "buildTransferHappy",
-          "line": 196,
+          "line": 189,
           "called": [
             "Action",
             "ActorId",
@@ -46373,7 +45224,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46385,14 +45235,13 @@
             "recomputeCommitment",
             "sender",
             "stateWithBalances",
-            "stepVMHash",
             "transfer"
           ]
         },
         {
           "kind": "def",
           "name": "buildMintHappy",
-          "line": 238,
+          "line": 226,
           "called": [
             "Action",
             "ActorId",
@@ -46401,7 +45250,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46410,14 +45258,13 @@
             "es",
             "fixtureBase",
             "mint",
-            "recomputeCommitment",
-            "stepVMHash"
+            "recomputeCommitment"
           ]
         },
         {
           "kind": "def",
           "name": "buildBurnHappy",
-          "line": 270,
+          "line": 253,
           "called": [
             "Action",
             "ActorId",
@@ -46426,7 +45273,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "burn",
@@ -46435,14 +45281,13 @@
             "encodeSignedAction",
             "es",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "buildFreezeResourceHappy",
-          "line": 301,
+          "line": 279,
           "called": [
             "Action",
             "ActorId",
@@ -46450,7 +45295,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46459,21 +45303,19 @@
             "es",
             "fixtureBase",
             "freezeResource",
-            "recomputeCommitment",
-            "stepVMHash"
+            "recomputeCommitment"
           ]
         },
         {
           "kind": "def",
           "name": "buildReplaceKeyHappy",
-          "line": 330,
+          "line": 303,
           "called": [
             "Action",
             "ActorId",
             "Nonce",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46481,14 +45323,13 @@
             "encodeSignedAction",
             "es",
             "fixtureBase",
-            "recomputeCommitment",
-            "stepVMHash"
+            "recomputeCommitment"
           ]
         },
         {
           "kind": "def",
           "name": "buildRewardHappy",
-          "line": 362,
+          "line": 330,
           "called": [
             "Action",
             "ActorId",
@@ -46497,7 +45338,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46506,14 +45346,13 @@
             "es",
             "recomputeCommitment",
             "reward",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "buildDistributeOthersHappy",
-          "line": 400,
+          "line": 363,
           "called": [
             "Action",
             "ActorId",
@@ -46523,7 +45362,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46532,21 +45370,19 @@
             "encodeSignedAction",
             "es",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "buildRegisterIdentityHappy",
-          "line": 449,
+          "line": 406,
           "called": [
             "Action",
             "ActorId",
             "Nonce",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46554,14 +45390,13 @@
             "encodeSignedAction",
             "es",
             "fixtureBase",
-            "recomputeCommitment",
-            "stepVMHash"
+            "recomputeCommitment"
           ]
         },
         {
           "kind": "def",
           "name": "buildDepositHappy",
-          "line": 482,
+          "line": 434,
           "called": [
             "Action",
             "ActorId",
@@ -46570,7 +45405,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46579,14 +45413,13 @@
             "encodeSignedAction",
             "es",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "buildWithdrawHappy",
-          "line": 515,
+          "line": 462,
           "called": [
             "Action",
             "ActorId",
@@ -46595,7 +45428,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46605,14 +45437,13 @@
             "recomputeCommitment",
             "sender",
             "stateWithBalances",
-            "stepVMHash",
             "withdraw"
           ]
         },
         {
           "kind": "def",
           "name": "buildDepositWithFeeHappy",
-          "line": 560,
+          "line": 502,
           "called": [
             "Action",
             "ActorId",
@@ -46621,7 +45452,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "budgetGrant",
             "bundleToFixtureProofs",
@@ -46633,14 +45463,13 @@
             "es",
             "poolActor",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "buildTopUpActionBudgetHappy",
-          "line": 620,
+          "line": 557,
           "called": [
             "Action",
             "ActorId",
@@ -46649,7 +45478,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46660,14 +45488,13 @@
             "poolActor",
             "recomputeCommitment",
             "stateWithBalances",
-            "stepVMHash",
             "topUpActionBudget"
           ]
         },
         {
           "kind": "def",
           "name": "buildTopUpActionBudgetForHappy",
-          "line": 678,
+          "line": 610,
           "called": [
             "Action",
             "ActorId",
@@ -46676,7 +45503,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46687,14 +45513,13 @@
             "poolActor",
             "recomputeCommitment",
             "stateWithBalances",
-            "stepVMHash",
             "topUpActionBudgetFor"
           ]
         },
         {
           "kind": "def",
           "name": "buildClaimBudgetRefundHappy",
-          "line": 721,
+          "line": 648,
           "called": [
             "Action",
             "ActorId",
@@ -46702,7 +45527,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "claimBudgetRefund",
@@ -46713,21 +45537,19 @@
             "gasResource",
             "poolActor",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "buildOpaqueHappy",
-          "line": 768,
+          "line": 690,
           "called": [
             "Action",
             "ActorId",
             "Nonce",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46735,14 +45557,13 @@
             "encodeSignedAction",
             "es",
             "fixtureBase",
-            "recomputeCommitment",
-            "stepVMHash"
+            "recomputeCommitment"
           ]
         },
         {
           "kind": "def",
           "name": "buildDisputeWithdrawHappy",
-          "line": 796,
+          "line": 713,
           "called": [
             "ActorId",
             "Nonce",
@@ -46753,7 +45574,7 @@
         {
           "kind": "def",
           "name": "buildRollbackHappy",
-          "line": 803,
+          "line": 720,
           "called": [
             "ActorId",
             "Nonce",
@@ -46764,7 +45585,7 @@
         {
           "kind": "def",
           "name": "buildRevokeLocalPolicyHappy",
-          "line": 810,
+          "line": 727,
           "called": [
             "ActorId",
             "Nonce",
@@ -46775,7 +45596,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofChallengeHappy",
-          "line": 817,
+          "line": 734,
           "called": [
             "ActorId",
             "Nonce",
@@ -46786,7 +45607,7 @@
         {
           "kind": "def",
           "name": "buildFaultProofResolutionHappy",
-          "line": 826,
+          "line": 743,
           "called": [
             "ActorId",
             "Nonce",
@@ -46797,7 +45618,7 @@
         {
           "kind": "def",
           "name": "buildProportionalDiluteHappy",
-          "line": 844,
+          "line": 761,
           "called": [
             "Action",
             "ActorId",
@@ -46807,7 +45628,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -46816,14 +45636,13 @@
             "es",
             "proportionalDilute",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "minimalDispute",
-          "line": 893,
+          "line": 806,
           "called": [
             "ActorId",
             "Nonce",
@@ -46833,7 +45652,7 @@
         {
           "kind": "def",
           "name": "buildDisputeHappy",
-          "line": 902,
+          "line": 815,
           "called": [
             "ActorId",
             "Nonce",
@@ -46845,7 +45664,7 @@
         {
           "kind": "def",
           "name": "buildVerdictHappy",
-          "line": 911,
+          "line": 824,
           "called": [
             "ActorId",
             "Nonce",
@@ -46856,7 +45675,7 @@
         {
           "kind": "def",
           "name": "buildDeclareLocalPolicyHappy",
-          "line": 923,
+          "line": 836,
           "called": [
             "ActorId",
             "LocalPolicy",
@@ -46869,7 +45688,7 @@
         {
           "kind": "def",
           "name": "buildAdversarialBadPreCommit",
-          "line": 935,
+          "line": 848,
           "called": [
             "StepVMFixture",
             "actionKindByte"
@@ -46878,7 +45697,7 @@
         {
           "kind": "def",
           "name": "transferFixtures",
-          "line": 957,
+          "line": 869,
           "called": [
             "ActorId",
             "Amount",
@@ -46892,7 +45711,7 @@
         {
           "kind": "def",
           "name": "mintFixtures",
-          "line": 975,
+          "line": 887,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46902,7 +45721,7 @@
         {
           "kind": "def",
           "name": "burnFixtures",
-          "line": 985,
+          "line": 897,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -46913,7 +45732,7 @@
         {
           "kind": "def",
           "name": "freezeResourceFixtures",
-          "line": 996,
+          "line": 908,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46923,7 +45742,7 @@
         {
           "kind": "def",
           "name": "replaceKeyFixtures",
-          "line": 1004,
+          "line": 916,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46933,7 +45752,7 @@
         {
           "kind": "def",
           "name": "rewardFixtures",
-          "line": 1015,
+          "line": 927,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -46944,7 +45763,7 @@
         {
           "kind": "def",
           "name": "distributeOthersFixtures",
-          "line": 1026,
+          "line": 938,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46954,7 +45773,7 @@
         {
           "kind": "def",
           "name": "proportionalDiluteFixtures",
-          "line": 1035,
+          "line": 947,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46964,7 +45783,7 @@
         {
           "kind": "def",
           "name": "disputeFixtures",
-          "line": 1044,
+          "line": 956,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46974,7 +45793,7 @@
         {
           "kind": "def",
           "name": "disputeWithdrawFixtures",
-          "line": 1052,
+          "line": 964,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46984,7 +45803,7 @@
         {
           "kind": "def",
           "name": "verdictFixtures",
-          "line": 1060,
+          "line": 972,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -46994,7 +45813,7 @@
         {
           "kind": "def",
           "name": "rollbackFixtures",
-          "line": 1068,
+          "line": 980,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -47004,7 +45823,7 @@
         {
           "kind": "def",
           "name": "registerIdentityFixtures",
-          "line": 1076,
+          "line": 988,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -47014,7 +45833,7 @@
         {
           "kind": "def",
           "name": "depositFixtures",
-          "line": 1087,
+          "line": 999,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -47025,7 +45844,7 @@
         {
           "kind": "def",
           "name": "withdrawFixtures",
-          "line": 1102,
+          "line": 1014,
           "called": [
             "Amount",
             "StepVMFixture",
@@ -47036,7 +45855,7 @@
         {
           "kind": "def",
           "name": "depositWithFeeFixtures",
-          "line": 1122,
+          "line": 1034,
           "called": [
             "ActorId",
             "Amount",
@@ -47050,7 +45869,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetFixtures",
-          "line": 1150,
+          "line": 1062,
           "called": [
             "ActorId",
             "Amount",
@@ -47063,7 +45882,7 @@
         {
           "kind": "def",
           "name": "topUpActionBudgetForFixtures",
-          "line": 1176,
+          "line": 1088,
           "called": [
             "ActorId",
             "Amount",
@@ -47076,7 +45895,7 @@
         {
           "kind": "def",
           "name": "claimBudgetRefundFixtures",
-          "line": 1199,
+          "line": 1111,
           "called": [
             "ActorId",
             "ResourceId",
@@ -47091,7 +45910,7 @@
         {
           "kind": "def",
           "name": "buildAmmSwapHappy",
-          "line": 1240,
+          "line": 1152,
           "called": [
             "Action",
             "ActorId",
@@ -47099,7 +45918,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "ammReserveActor",
             "ammSwap",
@@ -47110,14 +45928,13 @@
             "encodeSignedAction",
             "es",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "ammSwapFixtures",
-          "line": 1280,
+          "line": 1187,
           "called": [
             "ActorId",
             "ResourceId",
@@ -47130,7 +45947,7 @@
         {
           "kind": "def",
           "name": "buildReclaimAmmReservesHappy",
-          "line": 1301,
+          "line": 1208,
           "called": [
             "Action",
             "ActorId",
@@ -47138,7 +45955,6 @@
             "ResourceId",
             "SignedAction",
             "StepVMFixture",
-            "actionFieldsForL1",
             "actionKindByte",
             "bundleToFixtureProofs",
             "commitExtendedState",
@@ -47148,14 +45964,13 @@
             "poolActor",
             "reclaimAmmReserves",
             "recomputeCommitment",
-            "stateWithBalances",
-            "stepVMHash"
+            "stateWithBalances"
           ]
         },
         {
           "kind": "def",
           "name": "reclaimAmmReservesFixtures",
-          "line": 1339,
+          "line": 1241,
           "called": [
             "ActorId",
             "ResourceId",
@@ -47168,7 +45983,7 @@
         {
           "kind": "def",
           "name": "declareLocalPolicyFixtures",
-          "line": 1354,
+          "line": 1256,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -47178,7 +45993,7 @@
         {
           "kind": "def",
           "name": "revokeLocalPolicyFixtures",
-          "line": 1362,
+          "line": 1264,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -47188,7 +46003,7 @@
         {
           "kind": "def",
           "name": "faultProofChallengeFixtures",
-          "line": 1370,
+          "line": 1272,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -47198,7 +46013,7 @@
         {
           "kind": "def",
           "name": "faultProofResolutionFixtures",
-          "line": 1380,
+          "line": 1282,
           "called": [
             "StepVMFixture",
             "buildAdversarialBadPreCommit",
@@ -47208,7 +46023,7 @@
         {
           "kind": "def",
           "name": "allFixtures",
-          "line": 1393,
+          "line": 1295,
           "called": [
             "StepVMFixture",
             "ammSwapFixtures",
@@ -47241,7 +46056,7 @@
         {
           "kind": "def",
           "name": "actionCommitHexOf",
-          "line": 1422,
+          "line": 1324,
           "called": [
             "StepVMFixture"
           ]
@@ -47249,7 +46064,7 @@
         {
           "kind": "def",
           "name": "cellProofForFixtureToJson",
-          "line": 1435,
+          "line": 1337,
           "called": [
             "CellProofForFixture"
           ]
@@ -47257,7 +46072,7 @@
         {
           "kind": "def",
           "name": "fixtureToJson",
-          "line": 1445,
+          "line": 1347,
           "called": [
             "StepVMFixture",
             "actionCommitHexOf",
@@ -47267,19 +46082,19 @@
         {
           "kind": "def",
           "name": "packedLayoutU64Vals",
-          "line": 1482,
+          "line": 1382,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutU256Vals",
-          "line": 1489,
+          "line": 1389,
           "called": []
         },
         {
           "kind": "def",
           "name": "packedLayoutGoldens",
-          "line": 1499,
+          "line": 1399,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47288,25 +46103,25 @@
         {
           "kind": "def",
           "name": "cbeUintGoldenVals",
-          "line": 1532,
+          "line": 1432,
           "called": []
         },
         {
           "kind": "def",
           "name": "cbeAmountGoldenVals",
-          "line": 1536,
+          "line": 1436,
           "called": []
         },
         {
           "kind": "def",
           "name": "cbeBytesGoldenPayloads",
-          "line": 1544,
+          "line": 1444,
           "called": []
         },
         {
           "kind": "def",
           "name": "cbeEncoderGoldens",
-          "line": 1551,
+          "line": 1451,
           "called": [
             "uint256BE"
           ]
@@ -47314,7 +46129,7 @@
         {
           "kind": "def",
           "name": "grantTripleOf",
-          "line": 1591,
+          "line": 1491,
           "called": [
             "Action",
             "ActorId",
@@ -47327,7 +46142,7 @@
         {
           "kind": "def",
           "name": "uniformWriteGoldens",
-          "line": 1603,
+          "line": 1503,
           "called": [
             "Action",
             "ActorId",
@@ -47351,7 +46166,7 @@
         {
           "kind": "def",
           "name": "balanceGolden",
-          "line": 1662,
+          "line": 1562,
           "called": [
             "uint256BE"
           ]
@@ -47359,7 +46174,7 @@
         {
           "kind": "def",
           "name": "balanceWriteGoldens",
-          "line": 1674,
+          "line": 1574,
           "called": [
             "ActorId",
             "BalanceMap",
@@ -47381,7 +46196,7 @@
         {
           "kind": "def",
           "name": "recordWriteGoldens",
-          "line": 1747,
+          "line": 1647,
           "called": [
             "actionFieldsForL1",
             "budgetGrant",
@@ -47396,7 +46211,7 @@
         {
           "kind": "def",
           "name": "stepPostRootGoldens",
-          "line": 1827,
+          "line": 1727,
           "called": [
             "Action",
             "ActorId",
@@ -47417,7 +46232,6 @@
             "probes",
             "productionApplyBudget",
             "stepPostRoot",
-            "stepVMHash",
             "transfer",
             "withdraw"
           ]
@@ -47425,7 +46239,7 @@
         {
           "kind": "def",
           "name": "writeBundleGoldens",
-          "line": 1892,
+          "line": 1787,
           "called": [
             "Action",
             "ActorId",
@@ -47465,7 +46279,7 @@
         {
           "kind": "def",
           "name": "writeSetGoldens",
-          "line": 2017,
+          "line": 1912,
           "called": [
             "Action",
             "ActorId",
@@ -47496,7 +46310,7 @@
         {
           "kind": "def",
           "name": "absentValueProbeTags",
-          "line": 2075,
+          "line": 1970,
           "called": [
             "CellTag"
           ]
@@ -47504,7 +46318,7 @@
         {
           "kind": "def",
           "name": "absentValueGoldens",
-          "line": 2084,
+          "line": 1979,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -47512,7 +46326,7 @@
         {
           "kind": "def",
           "name": "variant21TailGolden",
-          "line": 2099,
+          "line": 1994,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47521,7 +46335,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 2116,
+          "line": 2011,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "absentValueGoldens",
@@ -57660,55 +56474,6 @@
       ]
     },
     {
-      "module": "LegalKernel.Test.FaultProof.SolidityStepVMCommit",
-      "path": "LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean",
-      "declaration_count": 3,
-      "declarations": [
-        {
-          "kind": "namespace",
-          "name": "LegalKernel.Test.FaultProof.SolidityStepVMCommit",
-          "line": 31,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "zero32",
-          "line": 33,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "tests",
-          "line": 36,
-          "called": [
-            "LegalKernel.Test.FaultProof.SolidityStepVMCommit",
-            "TestCase",
-            "assert",
-            "assertEq",
-            "hashString_inj_under_collision_free",
-            "stepCommitBurn",
-            "stepCommitBurn_size",
-            "stepCommitDistributeOthersFold",
-            "stepCommitFreezeResource",
-            "stepCommitMint",
-            "stepCommitMint_size",
-            "stepCommitProportionalDiluteFold",
-            "stepCommitTransfer",
-            "stepCommitTransfer_size",
-            "tagBurn",
-            "tagMint",
-            "tagReward",
-            "tagTransfer",
-            "uint256BE",
-            "uint256BE_size",
-            "uint64BE",
-            "uint64BE_size",
-            "zero32"
-          ]
-        }
-      ]
-    },
-    {
       "module": "LegalKernel.Test.FaultProof.StateCells",
       "path": "LegalKernel/Test/FaultProof/StateCells.lean",
       "declaration_count": 3,
@@ -57964,20 +56729,17 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.StepVMCoherence",
-          "line": 41,
+          "line": 46,
           "called": []
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 44,
+          "line": 49,
           "called": [
             "Action",
             "Action.writeCells",
             "ActorId",
-            "CellProof",
-            "CellProofBundle",
-            "CellTag",
             "EpochBudgetState",
             "ExtendedState",
             "ExtendedState.empty",
@@ -57988,8 +56750,6 @@
             "TestCase",
             "actionFieldsForL1",
             "actionKindByte",
-            "actionKindByteCases",
-            "ammReserveActor",
             "ammSwap",
             "apply_bridge_admissible_with_budget_eq",
             "apply_bridge_admissible_with_eq_productionApply",
@@ -58012,63 +56772,12 @@
             "productionApply",
             "productionApplyBudget",
             "proportionalDilute",
-            "readCellValue",
             "readUint128BE",
             "readUint64BE",
             "reclaimAmmReserves",
             "refundRate",
             "reward",
             "signedActionEntry",
-            "stepCommitAmmSwap",
-            "stepCommitClaimBudgetRefund",
-            "stepCommitDepositWithFee",
-            "stepCommitDispute",
-            "stepCommitDistributeOthersFold",
-            "stepCommitDistributeOthersHead",
-            "stepCommitFaultProofResolution",
-            "stepCommitFreezeResource",
-            "stepCommitMint",
-            "stepCommitProportionalDiluteFold",
-            "stepCommitProportionalDiluteHead",
-            "stepCommitReclaimAmmReserves",
-            "stepCommitRevokeLocalPolicy",
-            "stepCommitTopUpActionBudget",
-            "stepCommitTopUpActionBudgetFor",
-            "stepCommitTransfer",
-            "stepVMHash",
-            "stepVMHashFromAction",
-            "stepVMHashFromAction_dispute",
-            "stepVMHashFromAction_freezeResource",
-            "stepVMHashFromAction_revokeLocalPolicy",
-            "stepVMHashFromAction_verdict",
-            "stepVMHash_ammSwap_kind",
-            "stepVMHash_burn_kind",
-            "stepVMHash_claimBudgetRefund_kind",
-            "stepVMHash_declareLocalPolicy_kind",
-            "stepVMHash_depositWithFee_kind",
-            "stepVMHash_deposit_kind",
-            "stepVMHash_disputeWithdraw_kind",
-            "stepVMHash_dispute_kind",
-            "stepVMHash_distributeOthers_kind",
-            "stepVMHash_faultProofChallenge_kind",
-            "stepVMHash_faultProofResolution_kind",
-            "stepVMHash_freezeResource_kind",
-            "stepVMHash_mint_kind",
-            "stepVMHash_proportionalDilute_kind",
-            "stepVMHash_reclaimAmmReserves_kind",
-            "stepVMHash_registerIdentity_kind",
-            "stepVMHash_replaceKey_kind",
-            "stepVMHash_revokeLocalPolicy_kind",
-            "stepVMHash_reward_kind",
-            "stepVMHash_rollback_kind",
-            "stepVMHash_topUpActionBudgetFor_kind",
-            "stepVMHash_topUpActionBudget_kind",
-            "stepVMHash_transfer_kind",
-            "stepVMHash_unknown_kind_empty",
-            "stepVMHash_verdict_kind",
-            "stepVMHash_withdraw_kind",
-            "step_vm_dispatch_well_typed",
-            "sumOthers",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "transfer",
@@ -70773,7 +69482,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 223,
+          "line": 222,
           "called": [
             "runAll"
           ]

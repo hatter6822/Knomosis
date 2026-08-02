@@ -314,7 +314,7 @@ Pinned by four value-level tests, including the fail-closed negative
 control: a second write whose opening was built against the PRE-root
 is rejected by the fold rather than folded into a wrong root.
 
-## 4. The step VM — REMAINING
+## 4. The step VM — **DONE**
 
 `KnomosisStepVM.executeStep` must return a value in state-root
 space:
@@ -1240,15 +1240,21 @@ across the three stacks:
     apply at all.  That is a strengthening: those tests now settle on a
     post-root anyone can reproduce.
 
-**What remains is DEAD-CODE REMOVAL**, which changes what no surface
+**The old recipe is gone**, and its removal changed what no surface
 computes: `KnomosisStepVM.sol` and its test,
 `SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
-the 36 recipe-bound theorems in `StepVMCoherence.lean` (its
-`actionKindByte` / `actionFieldsForL1` / `l1ActionCommit` stay — the
-L1 field layout and the log-entry chain are unaffected), and the
-corpus's `expectedStepVMCommitHex` column with the fixture
-`identifier` bumped.  Every remaining reference to `stepVMHash` in
-non-test Lean is already a COMMENT.
+the 37 theorems pinning their per-variant arms, the corpus's
+`expectedStepVMCommitHex` column, its per-entry byte-equivalence
+driver, and the 79 coherence cases that consumed it.
+
+What survives from that surface is the L1 FIELD LAYOUT:
+`actionKindByte`, `actionFieldsForL1`, the big-endian encoders and the
+log-entry chain's `l1ActionCommit`.  The encoders moved into
+`StepVMCoherence.lean` when `SolidityStepVMCommit.lean` was deleted —
+`actionFieldsForL1` is built from them, and they were never bound to
+the hash recipe.
+
+§4 is DONE.
 
 §2, §2A, §2B, §3B, S4 and S5 are additive and have landed on their
 own; §3 / §3A and S6 are one consensus change and must not be split

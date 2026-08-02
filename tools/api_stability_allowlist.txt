@@ -317,12 +317,6 @@ LegalKernel/Test/FaultProof/GameTransitionEdgeCases.lean:44
 LegalKernel/Test/FaultProof/Settlement.lean:232
 LegalKernel/Test/FaultProof/Settlement.lean:237
 LegalKernel/Test/FaultProof/Settlement.lean:242
-LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:103
-LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:108
-LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:113
-LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:88
-LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:93
-LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:98
 LegalKernel/Test/FaultProof/Trust.lean:124
 LegalKernel/Test/FaultProof/Trust.lean:129
 LegalKernel/Test/FaultProof/Verify.lean:136
@@ -347,34 +341,3 @@ LegalKernel/Test/Laws/ReclaimAmmReserves.lean:306
 # swap deletes outright (`state_root_merkleisation_plan.md` S7) — so
 # they burn down by removal rather than by ascription.  The five that
 # survive the swap were ascribed instead of re-keyed.
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1362
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1367
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1372
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1377
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1382
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1387
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1392
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1397
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1402
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1407
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1412
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1417
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1422
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1427
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1432
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1437
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1442
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1447
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1452
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1457
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1462
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1467
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1472
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1477
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1482
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1626
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1631
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1636
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1641
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1646
-LegalKernel/Test/FaultProof/StepVMCoherence.lean:1651

@@ -40,7 +40,6 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.FaultProof.Coherence
-import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.StepVMCoherence
 import LegalKernel.FaultProof.VerifierWrites
@@ -49,7 +48,6 @@ import LegalKernel.Test.Framework
 
 open LegalKernel
 open LegalKernel.FaultProof
-open LegalKernel.FaultProof.SolidityStepVMCommit
 open LegalKernel.FaultProof.StepVMCoherence
 open LegalKernel.Authority
 
@@ -104,11 +102,6 @@ structure StepVMFixture where
   /-- The expected post-state commit via `commitExtendedState` —
       the canonical 5-component state commit. -/
   expectedPostStateCommitHex : String
-  /-- The expected post-state commit via Solidity's step-VM
-      recipe (`keccak256(preCommit || tagHash || packed-fields)`).
-      Under the production keccak256 binding, this equals what
-      `KnomosisStepVM.executeStep` returns byte-for-byte. -/
-  expectedStepVMCommitHex    : String
   /-- The expected revert reason, or "null" for happy paths. -/
   expectedRevertReason       : String
   /-- The action-kind dispatcher byte (0..20 post-Workstream-GP),
@@ -214,10 +207,6 @@ def buildTransferHappy
   -- * self: newSender = newReceiver = preBalance (no debit).
   -- * non-self: newSender = preBalance - amount;
   --             newReceiver = receiverPreBalance + amount.
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action sender
@@ -226,7 +215,6 @@ def buildTransferHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -245,10 +233,6 @@ def buildMintHappy
   let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -257,7 +241,6 @@ def buildMintHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -277,10 +260,6 @@ def buildBurnHappy
   let es := stateWithBalances r [(fromActor, fromInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action fromActor
@@ -289,7 +268,6 @@ def buildBurnHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -307,10 +285,6 @@ def buildFreezeResourceHappy
   let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -319,7 +293,6 @@ def buildFreezeResourceHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -337,10 +310,6 @@ def buildReplaceKeyHappy
   let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -349,7 +318,6 @@ def buildReplaceKeyHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -369,10 +337,6 @@ def buildRewardHappy
   let es := stateWithBalances r [(to, toInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -381,7 +345,6 @@ def buildRewardHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -428,17 +391,11 @@ def buildDistributeOthersHappy
     recipients.map (fun (a, _) =>
       LegalKernel.FaultProof.buildCellProofWithOpening es (.balance r a))
   let bundleProofs := observerBundle.proofs ++ recipientProofs
-  -- Compute the expected step-VM commit by walking the bundle in
-  -- ITERATION order, mirroring Solidity byte-for-byte.
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat { proofs := bundleProofs }
   { fixtureId := s!"distributeOthers-happy-{idx}",
     actionVariant := "distributeOthers",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -456,10 +413,6 @@ def buildRegisterIdentityHappy
   let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -468,7 +421,6 @@ def buildRegisterIdentityHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -490,10 +442,6 @@ def buildDepositHappy
   let es := stateWithBalances r [(recipient, recipientInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -502,7 +450,6 @@ def buildDepositHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -522,10 +469,6 @@ def buildWithdrawHappy
   let es := stateWithBalances r [(sender, senderInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action sender
@@ -534,7 +477,6 @@ def buildWithdrawHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -583,10 +525,6 @@ def buildDepositWithFeeHappy
   --   recipient += userAmount; then poolActor += poolAmount.
   -- Self-credit case: both writes target the same cell, so the
   -- new balance is `pre + userAmount + poolAmount`.
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -595,7 +533,6 @@ def buildDepositWithFeeHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -636,10 +573,6 @@ def buildTopUpActionBudgetHappy
   let postCommit := recomputeCommitment es st 0
   -- Per Laws.topUpActionBudget.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -648,7 +581,6 @@ def buildTopUpActionBudgetHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -694,10 +626,6 @@ def buildTopUpActionBudgetForHappy
   let postCommit := recomputeCommitment es st 0
   -- Per Laws.topUpActionBudgetFor.apply_impl:
   --   signer's gas balance -= gasAmount; poolActor's += gasAmount.
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -706,7 +634,6 @@ def buildTopUpActionBudgetForHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -734,10 +661,6 @@ def buildClaimBudgetRefundHappy
   let postCommit := recomputeCommitment es st 0
   -- Per Laws.claimBudgetRefund.apply_impl: poolActor -= refundAmount;
   -- claimant (signer) += refundAmount.
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -746,7 +669,6 @@ def buildClaimBudgetRefundHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -774,10 +696,6 @@ private def buildOpaqueHappy
   let es := fixtureBase
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -786,7 +704,6 @@ private def buildOpaqueHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -868,15 +785,11 @@ def buildProportionalDiluteHappy
   -- Pass 1: compute sumOthers by walking the bundle in iteration
   -- order, applying Solidity's exact filter.
   -- Pass 2: per-recipient credit + fold.
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat { proofs := bundleProofs }
   { fixtureId := s!"proportionalDilute-happy-{idx}",
     actionVariant := "proportionalDilute",
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -942,7 +855,6 @@ def buildAdversarialBadPreCommit
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes badCommit,
     signedActionHex := "0x",
     expectedPostStateCommitHex := "null",
-    expectedStepVMCommitHex := "null",
     expectedRevertReason := "BadCellProof",
     actionKindByte := 0,
     actionFieldsHex := "0x",
@@ -1254,10 +1166,6 @@ def buildAmmSwapHappy
                 LegalKernel.setBalance es.base toResource ammReserveActor toInitBal })
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -1266,7 +1174,6 @@ def buildAmmSwapHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -1312,10 +1219,6 @@ def buildReclaimAmmReservesHappy
               [(reserveActor, amount), (poolActor, poolInitBal)]
   let preCommit := commitExtendedState es
   let postCommit := recomputeCommitment es st 0
-  let stepVMCommit :=
-    stepVMHash preCommit (actionKindByte action) (actionFieldsForL1 action)
-      st.signer.toNat
-      (LegalKernel.FaultProof.Observer.buildObserverCellProofs es action st.signer)
   let bundle :=
     LegalKernel.FaultProof.Observer.buildObserverCellProofs
       es action signer
@@ -1324,7 +1227,6 @@ def buildReclaimAmmReservesHappy
     preStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes preCommit,
     signedActionHex := encodeSignedAction st,
     expectedPostStateCommitHex := Test.Bridge.CrossCheck.hexFromBytes postCommit,
-    expectedStepVMCommitHex := Test.Bridge.CrossCheck.hexFromBytes stepVMCommit,
     expectedRevertReason := "null",
     actionKindByte := actionKindByte action,
     actionFieldsHex := encodeActionFields action,
@@ -1451,8 +1353,6 @@ private def fixtureToJson (f : StepVMFixture) :
        , ("signedActionHex",          .str f.signedActionHex)
        , ("expectedPostStateCommitHex",
           .str f.expectedPostStateCommitHex)
-       , ("expectedStepVMCommitHex",
-          .str f.expectedStepVMCommitHex)
        , ("expectedRevertReason",     .str f.expectedRevertReason)
        , ("actionKindByte",           .num f.actionKindByte.toNat)
        , ("actionFieldsHex",          .str f.actionFieldsHex)
@@ -1863,12 +1763,7 @@ def stepPostRootGoldens : List Test.Bridge.CrossCheck.Json :=
           -- than assumed equal.
         , ("publishedPostRootHex",
            .str (hx (commitExtendedState (productionApplyBudget es st 0))))
-          -- The bespoke recipe the step VM returns TODAY, for the gap.
-        , ("bespokeStepVMCommitHex",
-           .str (hx (stepVMHash (commitExtendedState es)
-             (actionKindByte action) (actionFieldsForL1 action) signer.toNat
-             (LegalKernel.FaultProof.Observer.buildObserverCellProofs
-               es action signer)))) ]))
+        ]))
 
 /-! ### The ordered write bundle, for the fold
 
@@ -2299,14 +2194,6 @@ def tests : List Test.TestCase :=
                       (fun f => f.preStateCommitHex.length = 66))
           "preCommit is '0x' + 64 hex chars (32 bytes)"
     }
-  , { name := "SVC.5.e: every happy fixture's expectedStepVMCommit is 32 bytes"
-    , body := do
-        let happy := allFixtures.filter
-                       (fun f => f.expectedRevertReason = "null")
-        Test.assert (happy.all
-                      (fun f => f.expectedStepVMCommitHex.length = 66))
-          "happy stepVMCommit is 32 bytes"
-    }
   , { name := "GP.3.3: per-variant happy-fixture count is uniform"
     , body := do
         -- Every non-Transfer / non-Mint variant has exactly 6
@@ -2412,15 +2299,17 @@ def tests : List Test.TestCase :=
           (StepVMCoherence.l1NextEntryHash z z z !=
            StepVMCoherence.l1NextEntryHash z z o) "action is committed"
     }
-  , { name := "the fold lands on the published root, and it is NOT the bespoke hash"
+  , { name := "the fold lands on the published root"
     , body := do
         -- The corpus's state-root column, checked in both directions.
-        -- Landing on the published root says the target is right; the
-        -- inequality says the flip is a real change rather than a
-        -- relabelling, and it is the single fact the 278-entry
-        -- byte-equivalence corpus cannot establish — that corpus pins
-        -- `stepVMHash` against `executeStep`, two implementations of
-        -- the SAME recipe.
+        -- Landing on the published root says the target is right; not
+        -- landing on the PRE-root says the fold is doing something —
+        -- otherwise a fold that returned its input would pass the
+        -- first check on any action whose advance happens to be inert.
+        --
+        -- A third check used to sit here: that the fold DIFFERS from
+        -- the bespoke `stepVMHash`.  It went with the recipe, which no
+        -- longer exists to differ from.
         let goldens := stepPostRootGoldens
         Test.assert (goldens.length > 0) "the root goldens must be non-empty"
         for g in goldens do
@@ -2429,19 +2318,13 @@ def tests : List Test.TestCase :=
             let get := fun (k : String) =>
               (fields.find? (fun p => p.1 = k)).map Prod.snd
             match get "expectedPostStateRootHex", get "publishedPostRootHex",
-                  get "bespokeStepVMCommitHex", get "preStateRootHex" with
-            | some (.str fold), some (.str published),
-              some (.str bespoke), some (.str pre) =>
+                  get "preStateRootHex" with
+            | some (.str fold), some (.str published), some (.str pre) =>
               Test.assertEq (expected := published) (actual := fold)
                 "the fold must land on the production advance's published root"
-              Test.assert (fold != bespoke)
-                s!"the fold must DIFFER from the bespoke hash ({fold})"
-              -- ...and it must not be the pre-root either, or a fold
-              -- that did nothing would pass the first check on any
-              -- action whose advance happens to be inert.
               Test.assert (fold != pre)
                 "the fold must move the root"
-            | _, _, _, _ => throw <| IO.userError "malformed root golden"
+            | _, _, _ => throw <| IO.userError "malformed root golden"
           | _ => throw <| IO.userError "malformed root golden"
     }
   , { name := "SVC.5.e+: every cellProof carries a well-formed SMT opening"

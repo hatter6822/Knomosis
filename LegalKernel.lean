@@ -304,7 +304,6 @@ import LegalKernel.FaultProof.PerVariantCoherence
 import LegalKernel.FaultProof.EncodeInjectivity
 import LegalKernel.FaultProof.AbsentCellCreation
 import LegalKernel.FaultProof.GameTransitionEdgeCases
-import LegalKernel.FaultProof.SolidityStepVMCommit
 import LegalKernel.FaultProof.StepVMCoherence
 import LegalKernel.FaultProof.TerminateBundle
 import LegalKernel.FaultProof.Transcript

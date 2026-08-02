@@ -471,14 +471,17 @@ The `witnessCommit` word went with it: a claim only a holder of the
 whole `ExtendedState` could check, and one a responder could set
 freely.
 
-Two operator-facing conditions remain, and both are recorded in the
-runbook's §0 rather than here: a deployment leaning on the fault proof
-must not authorise `distributeOthers` / `proportionalDilute` (a
-verifier cannot tell a complete recipient set from a short one), and
-the old recipe is still compiled alongside the new path until S7
-removes it.  The Lean MODEL of the terminal step
+The old recipe has been removed — `KnomosisStepVM.sol`,
+`SolidityStepVMCommit.lean`, `stepVMHash` and the 37 theorems pinning
+its per-variant arms, the corpus's `expectedStepVMCommitHex` column and
+its byte-equivalence driver.  The Lean MODEL of the terminal step
 (`Step.kernelStepApply`) routes through the verifier, so the game model
 and the contract compute the same thing.
+
+One operator-facing condition remains, recorded in the runbook's §0
+rather than here: a deployment leaning on the fault proof must not
+authorise `distributeOthers` / `proportionalDilute`, because a verifier
+cannot tell a complete recipient set from a short one.
 
 **Closed, and independently of the above.**
 `KnomosisFaultProofGame.submitMidpoint` derives
