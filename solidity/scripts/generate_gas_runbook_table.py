@@ -118,6 +118,17 @@ ROWS: list[tuple[str, str]] = [
     ("autoTriggerClose_firstBranch", "Auto-trigger close (first branch, ETH, in shutdown)"),
     ("autoTriggerClose_lastBranch", "Auto-trigger close (last branch, rETH, in shutdown)"),
     ("autoTriggerProbe_noShutdown", "Auto-trigger probe (no shutdown — reverts)"),
+    # The fault proof's terminal step.  Not a bridge operation, but the
+    # L1 call a challenger and a defender each pay to settle a game, and
+    # the one whose cost is dominated by SMT walks rather than storage.
+    (
+        "executeStepToRoot_distinctCells",
+        "`executeStepToRoot` (terminal step, 4 distinct cells + policy)",
+    ),
+    (
+        "executeStepToRoot_duplicateCell",
+        "`executeStepToRoot` (terminal step, one cell written twice)",
+    ),
 ]
 
 

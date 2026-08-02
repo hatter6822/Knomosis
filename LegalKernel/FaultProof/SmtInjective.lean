@@ -1015,6 +1015,29 @@ def smtWalkFrom (leaf : ByteArray) (key : ByteArray)
 theorem smtWalk_eq_smtWalkFrom (key value : ByteArray) (proof : SmtCellProof) :
     smtWalk key value proof = smtWalkFrom (leafHash key value) key proof := rfl
 
+/-- **One pass, two leaves.**  The root an opening reproduces from
+    `oldLeaf`, and the root the SAME opening reaches from `newLeaf`.
+
+    This is the shape a WRITE has, and it is the shape it should be
+    specified in.  Walking twice rebuilds `expandSiblings` twice (a
+    256-element list), `keyBits` twice (another), the zip twice, and
+    folds 256 levels twice — to obtain two hashes per level that differ
+    only in one operand.  The L1 mirror
+    (`SmtCellVerifier.recomputeRootPairFromLeaves`) implements exactly
+    this, so specifying the two-walk form would leave the reference and
+    the implementation describing different computations and relying on
+    a corpus to notice. -/
+def smtWalkPairFrom (oldLeaf newLeaf key : ByteArray) (proof : SmtCellProof) :
+    ByteArray × ByteArray :=
+  ((expandSiblings proof).zip (keyBits key)).foldl stepPairBoth (oldLeaf, newLeaf)
+
+/-- The paired walk is the pair of walks — so the fusion inherits every
+    theorem about `smtWalkFrom` rather than needing its own. -/
+theorem smtWalkPairFrom_eq (oldLeaf newLeaf key : ByteArray) (proof : SmtCellProof) :
+    smtWalkPairFrom oldLeaf newLeaf key proof
+      = (smtWalkFrom oldLeaf key proof, smtWalkFrom newLeaf key proof) :=
+  foldl_stepPairBoth _ _ _
+
 /-! ## Absent keys
 
 A key with no entry has an EMPTY SUB-TREE beneath it, not a leaf

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "678ebb41d66c5330196c23e0026d8cc191e0314ce2ced61eac34c636bac37571"
+    "source_digest": "e480a4a3aab957aff294715386027b98711df2b078f90657ee3bed8caad4ab8c"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5707
+    "declaration_count": 5715
   },
   "modules": [
     {
@@ -25184,7 +25184,7 @@
     {
       "module": "LegalKernel.FaultProof.Smt",
       "path": "LegalKernel/FaultProof/Smt.lean",
-      "declaration_count": 68,
+      "declaration_count": 71,
       "declarations": [
         {
           "kind": "namespace",
@@ -25546,8 +25546,34 @@
         },
         {
           "kind": "def",
+          "name": "stepPairBoth",
+          "line": 603,
+          "called": [
+            "stepPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "foldl_stepPairBoth",
+          "line": 614,
+          "called": [
+            "stepPair",
+            "stepPairBoth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "stepPairBoth_size",
+          "line": 623,
+          "called": [
+            "stepPairBoth",
+            "stepPair_size"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "keyBits",
-          "line": 596,
+          "line": 628,
           "called": [
             "BitsKey",
             "smtDepth"
@@ -25556,7 +25582,7 @@
         {
           "kind": "def",
           "name": "expandSiblingsAux",
-          "line": 609,
+          "line": 641,
           "called": [
             "SmtCellProof",
             "emptySubtreeHash",
@@ -25566,7 +25592,7 @@
         {
           "kind": "def",
           "name": "expandSiblings",
-          "line": 619,
+          "line": 651,
           "called": [
             "SmtCellProof",
             "expandSiblingsAux",
@@ -25576,7 +25602,7 @@
         {
           "kind": "def",
           "name": "smtWalk",
-          "line": 625,
+          "line": 657,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25590,7 +25616,7 @@
         {
           "kind": "def",
           "name": "smtRootListAux",
-          "line": 661,
+          "line": 693,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25603,7 +25629,7 @@
         {
           "kind": "def",
           "name": "smtRoot",
-          "line": 689,
+          "line": 721,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25614,7 +25640,7 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_size",
-          "line": 710,
+          "line": 742,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25628,7 +25654,7 @@
         {
           "kind": "theorem",
           "name": "smtRoot_size",
-          "line": 739,
+          "line": 771,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25640,13 +25666,13 @@
         {
           "kind": "def",
           "name": "setBitmaskBit",
-          "line": 770,
+          "line": 802,
           "called": []
         },
         {
           "kind": "def",
           "name": "buildSmtCellProofAux",
-          "line": 801,
+          "line": 833,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25658,7 +25684,7 @@
         {
           "kind": "def",
           "name": "buildSmtCellProof",
-          "line": 850,
+          "line": 882,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25672,7 +25698,7 @@
         {
           "kind": "def",
           "name": "verifySmtCellProof",
-          "line": 866,
+          "line": 898,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25683,7 +25709,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_deterministic",
-          "line": 873,
+          "line": 905,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25694,7 +25720,7 @@
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_walks_to_root",
-          "line": 892,
+          "line": 924,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25706,13 +25732,13 @@
         {
           "kind": "theorem",
           "name": "SmtCellProof.empty_isWellFormed",
-          "line": 905,
+          "line": 937,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "verifySmtCellProof_empty_self_verifies",
-          "line": 920,
+          "line": 952,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25725,7 +25751,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_all_32",
-          "line": 947,
+          "line": 979,
           "called": [
             "SmtCellProof",
             "emptySubtreeHash_size",
@@ -25737,7 +25763,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_all_32",
-          "line": 988,
+          "line": 1020,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -25748,7 +25774,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblingsAux_length",
-          "line": 999,
+          "line": 1031,
           "called": [
             "SmtCellProof",
             "expandSiblingsAux"
@@ -25757,7 +25783,7 @@
         {
           "kind": "theorem",
           "name": "expandSiblings_length",
-          "line": 1013,
+          "line": 1045,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -25768,7 +25794,7 @@
         {
           "kind": "theorem",
           "name": "keyBits_length",
-          "line": 1018,
+          "line": 1050,
           "called": [
             "BitsKey",
             "keyBits",
@@ -25778,7 +25804,7 @@
         {
           "kind": "def",
           "name": "walkPreimages",
-          "line": 1027,
+          "line": 1059,
           "called": [
             "smtStepPreimage",
             "stepPair"
@@ -25787,7 +25813,7 @@
         {
           "kind": "theorem",
           "name": "walk_leaf_inj_under_collision_free",
-          "line": 1044,
+          "line": 1076,
           "called": [
             "CollisionFreeOn",
             "hashBytes",
@@ -25801,7 +25827,7 @@
         {
           "kind": "def",
           "name": "smtCellProofPreimages",
-          "line": 1156,
+          "line": 1188,
           "called": [
             "BitsKey",
             "Encodable",
@@ -25816,7 +25842,7 @@
         {
           "kind": "theorem",
           "name": "smtCellProof_no_value_substitution",
-          "line": 1175,
+          "line": 1207,
           "called": [
             "BitsKey",
             "CollisionFreeOn",
@@ -25843,7 +25869,7 @@
         {
           "kind": "theorem",
           "name": "smtCellProof_sound_under_collision_free",
-          "line": 1244,
+          "line": 1276,
           "called": [
             "BitsKey",
             "CollisionFreeOn",
@@ -25863,7 +25889,7 @@
     {
       "module": "LegalKernel.FaultProof.SmtInjective",
       "path": "LegalKernel/FaultProof/SmtInjective.lean",
-      "declaration_count": 67,
+      "declaration_count": 69,
       "declarations": [
         {
           "kind": "namespace",
@@ -26358,8 +26384,30 @@
         },
         {
           "kind": "def",
+          "name": "smtWalkPairFrom",
+          "line": 1029,
+          "called": [
+            "SmtCellProof",
+            "expandSiblings",
+            "keyBits",
+            "stepPairBoth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtWalkPairFrom_eq",
+          "line": 1035,
+          "called": [
+            "SmtCellProof",
+            "foldl_stepPairBoth",
+            "smtWalkFrom",
+            "smtWalkPairFrom"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "bucketAt",
-          "line": 1033,
+          "line": 1056,
           "called": [
             "SmtEntries",
             "entries"
@@ -26368,7 +26416,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_walks_from_bucket",
-          "line": 1045,
+          "line": 1068,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -26388,7 +26436,7 @@
         {
           "kind": "theorem",
           "name": "bucketAt_subset",
-          "line": 1113,
+          "line": 1136,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -26398,7 +26446,7 @@
         {
           "kind": "theorem",
           "name": "bucketAt_bits",
-          "line": 1131,
+          "line": 1154,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -26409,7 +26457,7 @@
         {
           "kind": "theorem",
           "name": "bucketAt_eq_nil_of_not_mem",
-          "line": 1156,
+          "line": 1179,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -26423,7 +26471,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_walks_to_root_absent",
-          "line": 1175,
+          "line": 1198,
           "called": [
             "SmtEntries",
             "bucketAt_eq_nil_of_not_mem",
@@ -26440,13 +26488,13 @@
         {
           "kind": "theorem",
           "name": "perm_of_nodup_of_mem_iff",
-          "line": 1204,
+          "line": 1227,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "smtRootListAux_perm",
-          "line": 1232,
+          "line": 1255,
           "called": [
             "BitsDistinctBelow",
             "BitsDistinctBelow.filter_high",
@@ -26460,7 +26508,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_perm",
-          "line": 1281,
+          "line": 1304,
           "called": [
             "BitsDistinctBelow",
             "BitsDistinctBelow.filter_high",
@@ -26474,7 +26522,7 @@
         {
           "kind": "def",
           "name": "dropKey",
-          "line": 1327,
+          "line": 1350,
           "called": [
             "SmtEntries",
             "entries"
@@ -26483,7 +26531,7 @@
         {
           "kind": "theorem",
           "name": "dropKey_filter",
-          "line": 1332,
+          "line": 1355,
           "called": [
             "SmtEntries",
             "dropKey",
@@ -26493,7 +26541,7 @@
         {
           "kind": "theorem",
           "name": "nodup_of_bitsDistinct",
-          "line": 1343,
+          "line": 1366,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries"
@@ -26502,7 +26550,7 @@
         {
           "kind": "theorem",
           "name": "nodup_dropKey",
-          "line": 1350,
+          "line": 1373,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries",
@@ -26513,7 +26561,7 @@
         {
           "kind": "theorem",
           "name": "dropKey_eq_self",
-          "line": 1356,
+          "line": 1379,
           "called": [
             "SmtEntries",
             "dropKey",
@@ -26523,7 +26571,7 @@
         {
           "kind": "theorem",
           "name": "canonicalSiblings_eq_of_dropKey_perm",
-          "line": 1378,
+          "line": 1401,
           "called": [
             "BitsDistinctBelow",
             "BitsDistinctBelow.filter_high",
@@ -26540,7 +26588,7 @@
         {
           "kind": "theorem",
           "name": "bucketAt_sublist",
-          "line": 1437,
+          "line": 1460,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -26550,7 +26598,7 @@
         {
           "kind": "theorem",
           "name": "length_bucketAt_le_one",
-          "line": 1456,
+          "line": 1479,
           "called": [
             "BitsDistinctBelow",
             "BitsDistinctBelow.sublist",
@@ -26564,7 +26612,7 @@
         {
           "kind": "theorem",
           "name": "mem_bucketAt_of_mem",
-          "line": 1476,
+          "line": 1499,
           "called": [
             "SmtEntries",
             "bucketAt",
@@ -26574,7 +26622,7 @@
         {
           "kind": "theorem",
           "name": "bucketAt_eq_singleton_of_mem",
-          "line": 1495,
+          "line": 1518,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries",
@@ -26587,7 +26635,7 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_update_single",
-          "line": 1520,
+          "line": 1543,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries",
@@ -26605,7 +26653,7 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_update_to_present",
-          "line": 1532,
+          "line": 1555,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries",
@@ -26623,7 +26671,7 @@
         {
           "kind": "theorem",
           "name": "smtRootListAux_update_to_absent",
-          "line": 1548,
+          "line": 1571,
           "called": [
             "BitsDistinctBelow",
             "SmtEntries",
@@ -26642,7 +26690,7 @@
         {
           "kind": "def",
           "name": "smtWalkPairPreimages",
-          "line": 1571,
+          "line": 1594,
           "called": [
             "SmtCellProof",
             "expandSiblings",
@@ -26653,7 +26701,7 @@
         {
           "kind": "theorem",
           "name": "smtWalkFrom_proof_independent",
-          "line": 1581,
+          "line": 1604,
           "called": [
             "CollisionFreeOn",
             "FaultProof",
@@ -26833,7 +26881,7 @@
     {
       "module": "LegalKernel.FaultProof.StateCellsInjective",
       "path": "LegalKernel/FaultProof/StateCellsInjective.lean",
-      "declaration_count": 48,
+      "declaration_count": 51,
       "declarations": [
         {
           "kind": "namespace",
@@ -27460,12 +27508,54 @@
         },
         {
           "kind": "def",
-          "name": "applyStateCellWrite",
-          "line": 921,
+          "name": "stateCellRootPair",
+          "line": 927,
           "called": [
             "CellTag",
             "SmtCellProof",
             "StateCommit",
+            "canonicalAbsentValue",
+            "emptyRootAt",
+            "leafHash",
+            "smtCellKey",
+            "smtWalkPairFrom"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "stateCellRootPair_eq",
+          "line": 935,
+          "called": [
+            "CellTag",
+            "SmtCellProof",
+            "cellLeaf",
+            "smtCellKey",
+            "smtWalkFrom",
+            "smtWalkPairFrom_eq",
+            "stateCellRootPair"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "applyStateCellWrite",
+          "line": 951,
+          "called": [
+            "CellTag",
+            "SmtCellProof",
+            "StateCommit",
+            "stateCellRootPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "applyStateCellWrite_eq_verify_update",
+          "line": 963,
+          "called": [
+            "CellTag",
+            "SmtCellProof",
+            "StateCommit",
+            "applyStateCellWrite",
+            "stateCellRootPair_eq",
             "updateStateCellRoot",
             "verifyStateCellProof"
           ]
@@ -27473,7 +27563,7 @@
         {
           "kind": "abbrev",
           "name": "StateCellWrite",
-          "line": 929,
+          "line": 974,
           "called": [
             "CellTag",
             "SmtCellProof"
@@ -27482,7 +27572,7 @@
         {
           "kind": "def",
           "name": "foldStateCellWrites",
-          "line": 932,
+          "line": 977,
           "called": [
             "StateCellWrite",
             "StateCommit",
@@ -27492,7 +27582,7 @@
         {
           "kind": "abbrev",
           "name": "CellWriteChain",
-          "line": 941,
+          "line": 986,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -27502,7 +27592,7 @@
         {
           "kind": "def",
           "name": "chainWrites",
-          "line": 946,
+          "line": 991,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -27514,7 +27604,7 @@
         {
           "kind": "def",
           "name": "chainLast",
-          "line": 952,
+          "line": 997,
           "called": [
             "CellWriteChain",
             "ExtendedState",
@@ -27524,7 +27614,7 @@
         {
           "kind": "def",
           "name": "ChainCoherent",
-          "line": 960,
+          "line": 1005,
           "called": [
             "BitsDistinctBelow",
             "CellWriteChain",
@@ -27546,7 +27636,7 @@
         {
           "kind": "theorem",
           "name": "foldStateCellWrites_eq_commit_of_coherent",
-          "line": 981,
+          "line": 1026,
           "called": [
             "CellWriteChain",
             "ChainCoherent",
@@ -27554,6 +27644,7 @@
             "FaultProof",
             "LegalKernel",
             "applyStateCellWrite",
+            "applyStateCellWrite_eq_verify_update",
             "chainLast",
             "chainWrites",
             "commitExtendedState",

@@ -491,29 +491,31 @@ round trip (see §9.3).
 
 | Operation (scenario) | User tx (gas, measured) | of which calldata (gas) | $ @ 30 gwei, $3k/ETH |
 |---|---:|---:|---:|
-| `depositETH` (v1.0 reference, first deposit) | 57 655 | 64 | ~$5.2 |
-| `depositETHWithFee` (first deposit) | 66 261 | 204 | ~$6.0 |
-| `depositETHWithFee` (repeat deposit) | 49 161 | 204 | ~$4.4 |
-| `depositETHWithFee` (repeat, migration-wired bridge) | 52 268 | 204 | ~$4.7 |
-| `depositBoldWithFee` (first deposit) | 94 242 | 416 | ~$8.5 |
-| `depositBoldWithFee` (repeat deposit) | 77 142 | 416 | ~$6.9 |
+| `depositETH` (v1.0 reference, first deposit) | 57 677 | 64 | ~$5.2 |
+| `depositETHWithFee` (first deposit) | 66 283 | 204 | ~$6.0 |
+| `depositETHWithFee` (repeat deposit) | 49 183 | 204 | ~$4.4 |
+| `depositETHWithFee` (repeat, migration-wired bridge) | 52 290 | 204 | ~$4.7 |
+| `depositBoldWithFee` (first deposit) | 94 239 | 416 | ~$8.5 |
+| `depositBoldWithFee` (repeat deposit) | 77 139 | 416 | ~$6.9 |
 | BOLD `approve` (prerequisite, fresh allowance) | 45 992 | 644 | ~$4.1 |
-| `ammSwap` ETH→BOLD (first-ever BOLD recipient) | 75 726 | 684 | ~$6.8 |
-| `ammSwap` ETH→BOLD (repeat recipient) | 58 626 | 684 | ~$5.3 |
-| `ammSwap` ETH→BOLD (repeat, migration-wired bridge) | 61 736 | 684 | ~$5.6 |
-| `ammSwap` BOLD→ETH (exact approval) | 68 204 | 708 | ~$6.1 |
-| `ammSwap` BOLD→ETH (infinite approval) | 69 870 | 708 | ~$6.3 |
-| `withdrawWithProof` ETH (canonical 64-sibling proof) | 861 392 | 37 844 | ~$77.5 |
-| `withdrawWithProof` BOLD (canonical 64-sibling proof) | 877 759 | 37 868 | ~$79.0 |
+| `ammSwap` ETH→BOLD (first-ever BOLD recipient) | 75 811 | 684 | ~$6.8 |
+| `ammSwap` ETH→BOLD (repeat recipient) | 58 711 | 684 | ~$5.3 |
+| `ammSwap` ETH→BOLD (repeat, migration-wired bridge) | 61 821 | 684 | ~$5.6 |
+| `ammSwap` BOLD→ETH (exact approval) | 68 233 | 708 | ~$6.1 |
+| `ammSwap` BOLD→ETH (infinite approval) | 69 899 | 708 | ~$6.3 |
+| `withdrawWithProof` ETH (canonical 64-sibling proof) | 846 781 | 37 868 | ~$76.2 |
+| `withdrawWithProof` BOLD (canonical 64-sibling proof) | 863 209 | 37 892 | ~$77.7 |
 | `closeBoldCircuit` | 44 825 | 64 | ~$4.0 |
-| `openBoldCircuit` | 22 985 | 64 | ~$2.1 |
-| `setBoldTvlCap` | 28 090 | 276 | ~$2.5 |
+| `openBoldCircuit` | 23 007 | 64 | ~$2.1 |
+| `setBoldTvlCap` | 28 112 | 276 | ~$2.5 |
 | `emergencyDisableAmm` | 49 623 | 64 | ~$4.5 |
 | `confirmDisable` (3-of-N multisig, non-final confirmation) | 59 629 | 64 | ~$5.4 |
 | `confirmDisable` (3-of-N multisig, threshold-th — executes disable) | 112 582 | 64 | ~$10.1 |
-| Auto-trigger close (first branch, ETH, in shutdown) | 53 834 | 64 | ~$4.8 |
-| Auto-trigger close (last branch, rETH, in shutdown) | 69 037 | 64 | ~$6.2 |
-| Auto-trigger probe (no shutdown — reverts) | 47 250 | 64 | ~$4.3 |
+| Auto-trigger close (first branch, ETH, in shutdown) | 53 856 | 64 | ~$4.8 |
+| Auto-trigger close (last branch, rETH, in shutdown) | 69 059 | 64 | ~$6.2 |
+| Auto-trigger probe (no shutdown — reverts) | 47 272 | 64 | ~$4.3 |
+| `executeStepToRoot` (terminal step, 4 distinct cells + policy) | 845 973 | 17 656 | ~$76.1 |
+| `executeStepToRoot` (terminal step, one cell written twice) | 844 918 | 16 644 | ~$76.0 |
 <!-- END GP.11.9 GENERATED BASELINE TABLE -->
 
 ### 9.3 Cost-structure observations

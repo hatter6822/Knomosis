@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6e9c6da9fefd9346f12665c6bbe2ae76e5ff57693faacaa1581e6541b2c2bcbf"
+    "source_digest": "e2a68c9e76ae5652a73251233ad08e914d194f2602a66370ab03d1a2c46fd834"
   },
   "summary": {
     "module_count": 95,
-    "declaration_count": 2013
+    "declaration_count": 2033
   },
   "modules": [
     {
@@ -3353,61 +3353,61 @@
         {
           "kind": "contract",
           "name": "KnomosisStepVMRoot",
-          "line": 62,
+          "line": 63,
           "called": []
         },
         {
           "kind": "struct",
           "name": "CellOpening",
-          "line": 71,
+          "line": 72,
           "called": []
         },
         {
           "kind": "error",
           "name": "PolicyCellMismatch",
-          "line": 117,
+          "line": 118,
           "called": []
         },
         {
           "kind": "error",
           "name": "BadCellOpening",
-          "line": 122,
+          "line": 123,
           "called": []
         },
         {
           "kind": "error",
           "name": "WriteSetMismatch",
-          "line": 126,
+          "line": 127,
           "called": []
         },
         {
           "kind": "error",
           "name": "WriteSetLengthMismatch",
-          "line": 129,
+          "line": 130,
           "called": []
         },
         {
           "kind": "error",
           "name": "MalformedProofData",
-          "line": 133,
+          "line": 134,
           "called": []
         },
         {
           "kind": "error",
           "name": "TooManyCellOpenings",
-          "line": 136,
+          "line": 137,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 152,
+          "line": 153,
           "called": []
         },
         {
           "kind": "function",
           "name": "executeStepToRoot",
-          "line": 179,
+          "line": 180,
           "called": [
             "CellOpening",
             "TooManyCellOpenings",
@@ -3423,7 +3423,7 @@
         {
           "kind": "function",
           "name": "_requirePolicyOpening",
-          "line": 249,
+          "line": 251,
           "called": [
             "BadCellOpening",
             "CellOpening",
@@ -3435,13 +3435,13 @@
         {
           "kind": "function",
           "name": "_leafPreimage",
-          "line": 285,
+          "line": 289,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireProofDataShape",
-          "line": 298,
+          "line": 302,
           "called": [
             "MalformedProofData"
           ]
@@ -3449,7 +3449,7 @@
         {
           "kind": "function",
           "name": "_nextWdIdPre",
-          "line": 307,
+          "line": 311,
           "called": [
             "CellOpening"
           ]
@@ -3457,7 +3457,7 @@
         {
           "kind": "function",
           "name": "_preStateValue",
-          "line": 331,
+          "line": 335,
           "called": [
             "CellOpening"
           ]
@@ -3465,7 +3465,7 @@
         {
           "kind": "function",
           "name": "_signerBudgetPre",
-          "line": 350,
+          "line": 354,
           "called": [
             "CellOpening",
             "WriteSetMismatch",
@@ -3475,7 +3475,7 @@
         {
           "kind": "function",
           "name": "_plan",
-          "line": 366,
+          "line": 370,
           "called": [
             "CellOpening",
             "_preStateValue"
@@ -3484,7 +3484,7 @@
         {
           "kind": "function",
           "name": "_applyWrite",
-          "line": 389,
+          "line": 393,
           "called": [
             "BadCellOpening",
             "CellOpening",
@@ -3495,7 +3495,7 @@
         {
           "kind": "function",
           "name": "_deriveValue",
-          "line": 425,
+          "line": 431,
           "called": [
             "CellOpening",
             "WriteSetMismatch",
@@ -3507,7 +3507,7 @@
         {
           "kind": "function",
           "name": "_deriveConsumed",
-          "line": 498,
+          "line": 504,
           "called": []
         }
       ]
@@ -4347,18 +4347,18 @@
     {
       "module": "SmtCellVerifier",
       "path": "solidity/src/lib/SmtCellVerifier.sol",
-      "declaration_count": 14,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "library",
           "name": "SmtCellVerifier",
-          "line": 82,
+          "line": 81,
           "called": []
         },
         {
           "kind": "function",
           "name": "emptySubtreeHash",
-          "line": 136,
+          "line": 134,
           "called": [
             "SmtCellDepthOutOfRange",
             "_hashPair"
@@ -4367,7 +4367,7 @@
         {
           "kind": "function",
           "name": "precomputeEmptySubtreeHashes",
-          "line": 160,
+          "line": 170,
           "called": [
             "_hashPair"
           ]
@@ -4375,19 +4375,43 @@
         {
           "kind": "function",
           "name": "readKeyBitMSBFirst",
-          "line": 189,
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "keyWord",
+          "line": 239,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "keyBitFromWord",
+          "line": 263,
           "called": []
         },
         {
           "kind": "function",
           "name": "readBitmaskBit",
-          "line": 213,
+          "line": 280,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "bitmaskWord",
+          "line": 293,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "bitmaskBitFromWord",
+          "line": 318,
           "called": []
         },
         {
           "kind": "function",
           "name": "recomputeRoot",
-          "line": 260,
+          "line": 362,
           "called": [
             "recomputeRootFromLeaf"
           ]
@@ -4395,26 +4419,37 @@
         {
           "kind": "function",
           "name": "recomputeRootFromLeaf",
-          "line": 292,
+          "line": 394,
+          "called": [
+            "keyWord",
+            "precomputeEmptySubtreeHashes",
+            "recomputeRootPairFromLeaves"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRootPairFromLeaves",
+          "line": 435,
           "called": [
             "SmtCellProofTooShort",
             "SmtCellSiblingsMisaligned",
             "_hashPair",
             "_readSiblingAt",
-            "readBitmaskBit",
-            "readKeyBitMSBFirst"
+            "bitmaskBitFromWord",
+            "bitmaskWord",
+            "keyBitFromWord"
           ]
         },
         {
           "kind": "function",
           "name": "emptyLeafHash",
-          "line": 355,
+          "line": 501,
           "called": []
         },
         {
           "kind": "function",
           "name": "verifyCellProof",
-          "line": 376,
+          "line": 522,
           "called": [
             "recomputeRoot"
           ]
@@ -4422,31 +4457,31 @@
         {
           "kind": "error",
           "name": "SmtCellProofTooShort",
-          "line": 401,
+          "line": 547,
           "called": []
         },
         {
           "kind": "error",
           "name": "SmtCellSiblingsMisaligned",
-          "line": 405,
+          "line": 551,
           "called": []
         },
         {
           "kind": "error",
           "name": "SmtCellDepthOutOfRange",
-          "line": 408,
+          "line": 554,
           "called": []
         },
         {
           "kind": "function",
           "name": "_hashPair",
-          "line": 423,
+          "line": 569,
           "called": []
         },
         {
           "kind": "function",
           "name": "_readSiblingAt",
-          "line": 442,
+          "line": 588,
           "called": []
         }
       ]
@@ -4454,7 +4489,7 @@
     {
       "module": "SmtVerifier",
       "path": "solidity/src/lib/SmtVerifier.sol",
-      "declaration_count": 8,
+      "declaration_count": 9,
       "declarations": [
         {
           "kind": "library",
@@ -4480,13 +4515,14 @@
           "line": 72,
           "called": [
             "SmtBadProofShape",
-            "SmtBadSiblingSize"
+            "SmtBadSiblingSize",
+            "_hashPair"
           ]
         },
         {
           "kind": "function",
           "name": "verifyProof",
-          "line": 128,
+          "line": 138,
           "called": [
             "recomputeRoot"
           ]
@@ -4494,13 +4530,15 @@
         {
           "kind": "function",
           "name": "emptyHashAtLevel",
-          "line": 145,
-          "called": []
+          "line": 155,
+          "called": [
+            "_hashPair"
+          ]
         },
         {
           "kind": "function",
           "name": "defaultHashTop",
-          "line": 158,
+          "line": 171,
           "called": [
             "emptyHashAtLevel"
           ]
@@ -4508,10 +4546,16 @@
         {
           "kind": "function",
           "name": "emptyProofSiblings",
-          "line": 171,
+          "line": 194,
           "called": [
-            "emptyHashAtLevel"
+            "_hashPair"
           ]
+        },
+        {
+          "kind": "function",
+          "name": "_hashPair",
+          "line": 213,
+          "called": []
         }
       ]
     },
@@ -4574,25 +4618,25 @@
         {
           "kind": "function",
           "name": "verifyCellSmtProof",
-          "line": 116,
+          "line": 115,
           "called": []
         },
         {
           "kind": "function",
           "name": "updateCellRoot",
-          "line": 153,
+          "line": 154,
           "called": []
         },
         {
           "kind": "function",
           "name": "cellLeafHash",
-          "line": 185,
+          "line": 193,
           "called": []
         },
         {
           "kind": "function",
           "name": "applyCellWrite",
-          "line": 224,
+          "line": 247,
           "called": [
             "cellLeafHash"
           ]
@@ -6823,24 +6867,24 @@
     {
       "module": "BenchmarkGasV1_3.t",
       "path": "solidity/test/BenchmarkGasV1_3.t.sol",
-      "declaration_count": 70,
+      "declaration_count": 77,
       "declarations": [
         {
           "kind": "contract",
           "name": "InactiveMigration",
-          "line": 22,
+          "line": 24,
           "called": []
         },
         {
           "kind": "function",
           "name": "activated",
-          "line": 24,
+          "line": 26,
           "called": []
         },
         {
           "kind": "abstract_contract",
           "name": "BenchmarkGasV1_3Base",
-          "line": 97,
+          "line": 102,
           "called": [
             "KnomosisBridge",
             "bridge"
@@ -6849,7 +6893,7 @@
         {
           "kind": "function",
           "name": "_bench",
-          "line": 170,
+          "line": 175,
           "called": [
             "_calldataGas",
             "name"
@@ -6858,13 +6902,13 @@
         {
           "kind": "function",
           "name": "_calldataGas",
-          "line": 187,
+          "line": 192,
           "called": []
         },
         {
           "kind": "function",
           "name": "_etchMocks",
-          "line": 203,
+          "line": 208,
           "called": [
             "MockBoldOz",
             "MockLiquityV2TroveManager"
@@ -6873,7 +6917,7 @@
         {
           "kind": "function",
           "name": "_deployBridge",
-          "line": 223,
+          "line": 228,
           "called": [
             "KnomosisBridge",
             "_deployBridgeWithRecovery"
@@ -6882,7 +6926,7 @@
         {
           "kind": "function",
           "name": "_deployBridgeWithRecovery",
-          "line": 230,
+          "line": 235,
           "called": [
             "KnomosisBridge",
             "attestor",
@@ -6895,7 +6939,7 @@
         {
           "kind": "function",
           "name": "_mintApprove",
-          "line": 267,
+          "line": 272,
           "called": [
             "KnomosisBridge",
             "MockBoldOz",
@@ -6906,7 +6950,7 @@
         {
           "kind": "function",
           "name": "_seedPool",
-          "line": 279,
+          "line": 284,
           "called": [
             "KnomosisBridge",
             "_mintApprove"
@@ -6915,13 +6959,13 @@
         {
           "kind": "function",
           "name": "_farDeadline",
-          "line": 289,
+          "line": 294,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3DepositsTest",
-          "line": 302,
+          "line": 307,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -6929,7 +6973,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 312,
+          "line": 317,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -6943,7 +6987,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETH_reference",
-          "line": 353,
+          "line": 358,
           "called": [
             "_bench",
             "bridge"
@@ -6952,7 +6996,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_firstDeposit",
-          "line": 365,
+          "line": 370,
           "called": [
             "_bench",
             "bridge"
@@ -6961,7 +7005,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_repeatDeposit",
-          "line": 377,
+          "line": 382,
           "called": [
             "_bench",
             "bridge"
@@ -6970,7 +7014,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositBoldWithFee_firstDeposit",
-          "line": 390,
+          "line": 395,
           "called": [
             "_bench",
             "bridge"
@@ -6979,7 +7023,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositBoldWithFee_repeatDeposit",
-          "line": 402,
+          "line": 407,
           "called": [
             "_bench",
             "bridge"
@@ -6988,7 +7032,7 @@
         {
           "kind": "function",
           "name": "test_gas_boldApprove_fresh",
-          "line": 416,
+          "line": 421,
           "called": [
             "_bench",
             "bridge"
@@ -6997,7 +7041,7 @@
         {
           "kind": "function",
           "name": "test_sanity_depositScenarioAssumptions",
-          "line": 430,
+          "line": 435,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -7008,7 +7052,7 @@
         {
           "kind": "function",
           "name": "test_sanity_depositEffects",
-          "line": 463,
+          "line": 468,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -7019,7 +7063,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3SwapsTest",
-          "line": 508,
+          "line": 513,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7027,7 +7071,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 518,
+          "line": 523,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -7041,7 +7085,7 @@
         {
           "kind": "function",
           "name": "_swapData",
-          "line": 544,
+          "line": 549,
           "called": [
             "_farDeadline"
           ]
@@ -7049,7 +7093,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_firstBoldRecipient",
-          "line": 550,
+          "line": 555,
           "called": [
             "_bench",
             "_swapData",
@@ -7059,7 +7103,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_repeatRecipient",
-          "line": 563,
+          "line": 568,
           "called": [
             "_bench",
             "_swapData",
@@ -7069,7 +7113,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_boldToEth_exactApproval",
-          "line": 576,
+          "line": 581,
           "called": [
             "_bench",
             "_swapData",
@@ -7079,7 +7123,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_boldToEth_infiniteApproval",
-          "line": 590,
+          "line": 595,
           "called": [
             "_bench",
             "_swapData",
@@ -7089,7 +7133,7 @@
         {
           "kind": "function",
           "name": "test_sanity_swapScenarioAssumptions",
-          "line": 603,
+          "line": 608,
           "called": [
             "MockBoldOz",
             "allowance",
@@ -7100,7 +7144,7 @@
         {
           "kind": "function",
           "name": "test_sanity_swapEffects",
-          "line": 637,
+          "line": 642,
           "called": [
             "MockBoldOz",
             "_farDeadline",
@@ -7112,7 +7156,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3MigrationWiredTest",
-          "line": 680,
+          "line": 685,
           "called": [
             "BenchmarkGasV1_3Base",
             "InactiveMigration",
@@ -7122,7 +7166,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 688,
+          "line": 693,
           "called": [
             "InactiveMigration",
             "MockBoldOz",
@@ -7137,7 +7181,7 @@
         {
           "kind": "function",
           "name": "test_gas_depositETHWithFee_repeat_migrationWired",
-          "line": 709,
+          "line": 714,
           "called": [
             "_bench",
             "bridge"
@@ -7146,7 +7190,7 @@
         {
           "kind": "function",
           "name": "test_gas_ammSwap_ethToBold_repeat_migrationWired",
-          "line": 724,
+          "line": 729,
           "called": [
             "_bench",
             "_farDeadline",
@@ -7156,7 +7200,7 @@
         {
           "kind": "function",
           "name": "test_sanity_migrationWiredAssumptions",
-          "line": 736,
+          "line": 741,
           "called": [
             "MockBoldOz",
             "balanceOf",
@@ -7166,7 +7210,7 @@
         {
           "kind": "function",
           "name": "test_sanity_migrationWiredEffects",
-          "line": 749,
+          "line": 754,
           "called": [
             "_farDeadline"
           ]
@@ -7174,7 +7218,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3BreakerTest",
-          "line": 766,
+          "line": 771,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7182,7 +7226,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 767,
+          "line": 772,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -7192,7 +7236,7 @@
         {
           "kind": "function",
           "name": "test_gas_closeBoldCircuit",
-          "line": 773,
+          "line": 778,
           "called": [
             "_bench",
             "bridge"
@@ -7201,7 +7245,7 @@
         {
           "kind": "function",
           "name": "test_gas_setBoldTvlCap",
-          "line": 786,
+          "line": 791,
           "called": [
             "_bench",
             "bridge"
@@ -7210,7 +7254,7 @@
         {
           "kind": "function",
           "name": "test_gas_emergencyDisableAmm",
-          "line": 798,
+          "line": 803,
           "called": [
             "_bench",
             "bridge"
@@ -7219,13 +7263,13 @@
         {
           "kind": "function",
           "name": "test_sanity_breakerEffects",
-          "line": 810,
+          "line": 815,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3BreakerReopenTest",
-          "line": 832,
+          "line": 837,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7233,7 +7277,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 833,
+          "line": 838,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -7243,7 +7287,7 @@
         {
           "kind": "function",
           "name": "test_gas_openBoldCircuit",
-          "line": 841,
+          "line": 846,
           "called": [
             "_bench",
             "bridge"
@@ -7252,13 +7296,13 @@
         {
           "kind": "function",
           "name": "test_sanity_reopenEffects",
-          "line": 853,
+          "line": 858,
           "called": []
         },
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerFirstBranchTest",
-          "line": 865,
+          "line": 870,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7266,7 +7310,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 869,
+          "line": 874,
           "called": [
             "MockLiquityV2TroveManager",
             "_deployBridge",
@@ -7278,7 +7322,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerClose_firstBranch",
-          "line": 877,
+          "line": 882,
           "called": [
             "_bench",
             "bridge"
@@ -7287,7 +7331,7 @@
         {
           "kind": "function",
           "name": "test_sanity_firstBranchEffects",
-          "line": 889,
+          "line": 894,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -7296,7 +7340,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerLastBranchTest",
-          "line": 903,
+          "line": 908,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7304,7 +7348,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 907,
+          "line": 912,
           "called": [
             "MockLiquityV2TroveManager",
             "_deployBridge",
@@ -7316,7 +7360,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerClose_lastBranch",
-          "line": 915,
+          "line": 920,
           "called": [
             "_bench",
             "bridge"
@@ -7325,7 +7369,7 @@
         {
           "kind": "function",
           "name": "test_sanity_lastBranchEffects",
-          "line": 927,
+          "line": 932,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -7334,7 +7378,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3AutoTriggerNoShutdownTest",
-          "line": 944,
+          "line": 949,
           "called": [
             "BenchmarkGasV1_3Base"
           ]
@@ -7342,7 +7386,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 948,
+          "line": 953,
           "called": [
             "_deployBridge",
             "_etchMocks",
@@ -7352,7 +7396,7 @@
         {
           "kind": "function",
           "name": "test_gas_autoTriggerProbe_noShutdown",
-          "line": 955,
+          "line": 960,
           "called": [
             "_bench",
             "bridge"
@@ -7361,7 +7405,7 @@
         {
           "kind": "function",
           "name": "test_sanity_noShutdownEffects",
-          "line": 967,
+          "line": 972,
           "called": [
             "MockLiquityV2TroveManager",
             "shutdownTime"
@@ -7370,7 +7414,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3WithdrawalsTest",
-          "line": 994,
+          "line": 999,
           "called": [
             "BenchmarkGasV1_3Base",
             "WithdrawalFlowHarness"
@@ -7379,7 +7423,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1011,
+          "line": 1016,
           "called": [
             "MockBoldOz",
             "_deployBridge",
@@ -7395,7 +7439,7 @@
         {
           "kind": "function",
           "name": "test_gas_withdrawWithProof_eth",
-          "line": 1056,
+          "line": 1061,
           "called": [
             "_bench",
             "bridge"
@@ -7404,7 +7448,7 @@
         {
           "kind": "function",
           "name": "test_gas_withdrawWithProof_bold",
-          "line": 1069,
+          "line": 1074,
           "called": [
             "_bench",
             "bridge"
@@ -7413,7 +7457,7 @@
         {
           "kind": "function",
           "name": "test_sanity_withdrawalScenarioAssumptions",
-          "line": 1083,
+          "line": 1088,
           "called": [
             "MockBoldOz",
             "balanceOf"
@@ -7422,7 +7466,7 @@
         {
           "kind": "function",
           "name": "test_sanity_withdrawalEffects",
-          "line": 1104,
+          "line": 1109,
           "called": [
             "MockBoldOz",
             "balanceOf"
@@ -7431,7 +7475,7 @@
         {
           "kind": "function",
           "name": "_signStateRoot",
-          "line": 1138,
+          "line": 1143,
           "called": [
             "_signStateRootAs",
             "bridge"
@@ -7440,7 +7484,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3DisasterRecoveryTest",
-          "line": 1152,
+          "line": 1157,
           "called": [
             "BenchmarkGasV1_3Base",
             "KnomosisAmmDisasterRecoveryMultisig"
@@ -7449,7 +7493,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1161,
+          "line": 1166,
           "called": [
             "KnomosisAmmDisasterRecoveryMultisig",
             "_deployBridgeWithRecovery",
@@ -7462,7 +7506,7 @@
         {
           "kind": "function",
           "name": "test_gas_confirmDisable_nonFinal",
-          "line": 1187,
+          "line": 1192,
           "called": [
             "_bench"
           ]
@@ -7470,7 +7514,7 @@
         {
           "kind": "function",
           "name": "test_gas_confirmDisable_executes",
-          "line": 1204,
+          "line": 1209,
           "called": [
             "_bench"
           ]
@@ -7478,7 +7522,63 @@
         {
           "kind": "function",
           "name": "test_sanity_disasterRecoveryScenarioAssumptions",
-          "line": 1221,
+          "line": 1226,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "BenchmarkGasV1_3StepVMRootTest",
+          "line": 1266,
+          "called": [
+            "BenchmarkGasV1_3Base",
+            "KnomosisStepVMRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 1278,
+          "called": [
+            "KnomosisStepVMRoot",
+            "_requireKeccakLinked",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_executeStepToRoot_distinctCells",
+          "line": 1289,
+          "called": [
+            "_bench"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_executeStepToRoot_duplicateCell",
+          "line": 1308,
+          "called": [
+            "_bench"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_sanity_stepVMRootScenarioAssumptions",
+          "line": 1331,
+          "called": [
+            "_distinctCellCount",
+            "_run"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_run",
+          "line": 1367,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_distinctCellCount",
+          "line": 1379,
           "called": []
         }
       ]
@@ -12087,7 +12187,7 @@
         {
           "kind": "contract",
           "name": "StepVMCrossCheck",
-          "line": 44,
+          "line": 45,
           "called": [
             "CrossCheckFramework"
           ]
@@ -12095,7 +12195,7 @@
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
-          "line": 50,
+          "line": 51,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -12104,7 +12204,7 @@
         {
           "kind": "function",
           "name": "test_perVariant_counts",
-          "line": 71,
+          "line": 72,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -12113,7 +12213,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
-          "line": 114,
+          "line": 115,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12123,7 +12223,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
-          "line": 136,
+          "line": 137,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12133,7 +12233,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
-          "line": 166,
+          "line": 167,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12143,13 +12243,13 @@
         {
           "kind": "function",
           "name": "_assertWitnessBinding",
-          "line": 243,
+          "line": 244,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_actionCommit_matches_lean",
-          "line": 281,
+          "line": 282,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12160,7 +12260,7 @@
         {
           "kind": "function",
           "name": "test_cbeEncoders_match_lean",
-          "line": 326,
+          "line": 327,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12170,25 +12270,25 @@
         {
           "kind": "function",
           "name": "test_cbeEncoders_reject_overwide_and_roundtrip",
-          "line": 370,
+          "line": 371,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeUintExternal",
-          "line": 399,
+          "line": 400,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeAmountExternal",
-          "line": 404,
+          "line": 405,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_uniformWrites_match_lean",
-          "line": 428,
+          "line": 429,
           "called": [
             "_assertUniformWrite",
             "_skipWithReason",
@@ -12199,25 +12299,25 @@
         {
           "kind": "function",
           "name": "_assertUniformWrite",
-          "line": 444,
+          "line": 445,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_uniformWrites_are_fail_closed",
-          "line": 480,
+          "line": 481,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveNonceExternal",
-          "line": 497,
+          "line": 498,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_balanceWrites_match_lean",
-          "line": 521,
+          "line": 522,
           "called": [
             "_assertBalanceWrite",
             "_skipWithReason",
@@ -12228,13 +12328,13 @@
         {
           "kind": "function",
           "name": "_assertBalanceWrite",
-          "line": 537,
+          "line": 538,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recordWrites_match_lean",
-          "line": 592,
+          "line": 593,
           "called": [
             "_assertRecordWrite",
             "_skipWithReason",
@@ -12245,31 +12345,31 @@
         {
           "kind": "function",
           "name": "_assertRecordWrite",
-          "line": 608,
+          "line": 609,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveRegistryFromFieldsExternal",
-          "line": 647,
+          "line": 648,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDeclaredPolicyExternal",
-          "line": 656,
+          "line": 657,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_nextWdIdWrite_advances_by_one",
-          "line": 668,
+          "line": 669,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_canonicalAbsentValues_match_lean",
-          "line": 695,
+          "line": 696,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12279,13 +12379,13 @@
         {
           "kind": "function",
           "name": "test_canonicalAbsence_rejects_present_values",
-          "line": 728,
+          "line": 729,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_stepVM_does_not_yet_return_the_state_root",
-          "line": 768,
+          "line": 769,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12296,7 +12396,7 @@
         {
           "kind": "function",
           "name": "test_writeFold_reaches_lean_root",
-          "line": 813,
+          "line": 814,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12307,19 +12407,19 @@
         {
           "kind": "function",
           "name": "foldBundleExternal",
-          "line": 835,
+          "line": 836,
           "called": []
         },
         {
           "kind": "function",
           "name": "applyOneWrite",
-          "line": 863,
+          "line": 864,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_leafPreimage_is_reconstructible",
-          "line": 883,
+          "line": 892,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12329,7 +12429,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_matches_lean",
-          "line": 911,
+          "line": 920,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12339,25 +12439,25 @@
         {
           "kind": "function",
           "name": "assertWriteSetExternal",
-          "line": 926,
+          "line": 935,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveWriteSetExternal",
-          "line": 973,
+          "line": 982,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_writeSet_refuses_only_the_bulk_pair",
-          "line": 986,
+          "line": 995,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 1008,
+          "line": 1017,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12368,7 +12468,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 1036,
+          "line": 1045,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12378,7 +12478,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 1061,
+          "line": 1070,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12388,7 +12488,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 1110,
+          "line": 1119,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12398,7 +12498,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 1157,
+          "line": 1166,
           "called": [
             "KnomosisStepVMRoot",
             "_skipWithReason",
@@ -12409,7 +12509,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1188,
+          "line": 1197,
           "called": [
             "KnomosisStepVMRoot"
           ]
@@ -12419,21 +12519,20 @@
     {
       "module": "StepVMRoot.t",
       "path": "solidity/test/CrossCheck/StepVMRoot.t.sol",
-      "declaration_count": 15,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "contract",
           "name": "StepVMRootCrossCheck",
           "line": 32,
           "called": [
-            "CrossCheckFramework",
             "KnomosisStepVMRoot"
           ]
         },
         {
           "kind": "function",
           "name": "setUp",
-          "line": 42,
+          "line": 39,
           "called": [
             "KnomosisStepVMRoot"
           ]
@@ -12441,7 +12540,7 @@
         {
           "kind": "function",
           "name": "test_executeStepToRoot_matches_lean",
-          "line": 51,
+          "line": 48,
           "called": [
             "_requireKeccakLinked",
             "_runProbe",
@@ -12453,7 +12552,7 @@
         {
           "kind": "function",
           "name": "test_executeStepToRoot_moves_the_root",
-          "line": 81,
+          "line": 78,
           "called": [
             "_runProbe",
             "_skipWithReason",
@@ -12464,10 +12563,9 @@
         {
           "kind": "function",
           "name": "test_omitting_a_write_reverts",
-          "line": 112,
+          "line": 107,
           "called": [
             "_call",
-            "_openings",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -12476,11 +12574,10 @@
         {
           "kind": "function",
           "name": "test_forged_pre_value_reverts",
-          "line": 138,
+          "line": 133,
           "called": [
             "_amountValue",
             "_call",
-            "_openings",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -12489,10 +12586,9 @@
         {
           "kind": "function",
           "name": "test_reordered_bundle_reverts",
-          "line": 163,
+          "line": 158,
           "called": [
             "_call",
-            "_openings",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -12501,10 +12597,8 @@
         {
           "kind": "function",
           "name": "test_policy_opening_must_name_the_policy_cell",
-          "line": 185,
+          "line": 180,
           "called": [
-            "_openings",
-            "_policyOpening",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
@@ -12513,48 +12607,33 @@
         {
           "kind": "function",
           "name": "test_bulk_variants_are_refused",
-          "line": 216,
+          "line": 211,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_isAdjudicable_excludes_exactly_the_bulk_pair",
-          "line": 243,
+          "line": 238,
           "called": []
         },
         {
           "kind": "function",
           "name": "_runProbe",
-          "line": 258,
+          "line": 253,
           "called": [
-            "_call",
-            "_openings"
+            "_call"
           ]
         },
         {
           "kind": "function",
           "name": "_call",
-          "line": 268,
-          "called": [
-            "_policyOpening"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_policyOpening",
-          "line": 285,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "_openings",
-          "line": 299,
+          "line": 263,
           "called": []
         },
         {
           "kind": "function",
           "name": "_amountValue",
-          "line": 320,
+          "line": 280,
           "called": []
         }
       ]
@@ -15965,7 +16044,7 @@
     {
       "module": "SmtCellVerifier.t",
       "path": "solidity/test/SmtCellVerifier.t.sol",
-      "declaration_count": 73,
+      "declaration_count": 81,
       "declarations": [
         {
           "kind": "contract",
@@ -15999,20 +16078,26 @@
         },
         {
           "kind": "function",
-          "name": "recomputeRoot",
+          "name": "bitmaskWord",
           "line": 33,
           "called": []
         },
         {
           "kind": "function",
+          "name": "recomputeRoot",
+          "line": 37,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "verifyCellProof",
-          "line": 41,
+          "line": 45,
           "called": []
         },
         {
           "kind": "contract",
           "name": "SmtCellVerifierTest",
-          "line": 57,
+          "line": 61,
           "called": [
             "SmtCellVerifierProxy"
           ]
@@ -16020,7 +16105,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 76,
+          "line": 80,
           "called": [
             "SmtCellVerifierProxy"
           ]
@@ -16028,133 +16113,133 @@
         {
           "kind": "function",
           "name": "test_emptySubtreeHash_0_equals_keccak_EMPTY_LEAF",
-          "line": 86,
+          "line": 90,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_emptySubtreeHash_recursion_step_1",
-          "line": 91,
+          "line": 95,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_emptySubtreeHash_recursion_step_2",
-          "line": 98,
+          "line": 102,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_emptySubtreeHash_255_consistent_with_recursive_definition",
-          "line": 106,
+          "line": 110,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_emptySubtreeHash_reverts_on_out_of_range",
-          "line": 113,
+          "line": 117,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_emptySubtreeHash_reverts_on_large_d",
-          "line": 120,
+          "line": 124,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_precomputeEmptySubtreeHashes_size_and_consistency",
-          "line": 129,
+          "line": 133,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_precomputeEmptySubtreeHashes_agrees_with_emptySubtreeHash",
-          "line": 139,
+          "line": 143,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_paddingHash_distinct_from_every_canonical_empty",
-          "line": 153,
+          "line": 157,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_H0_equals_keccak_of_hex_ascii_EMPTY_LEAF",
-          "line": 169,
+          "line": 173,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_bit0_is_MSB",
-          "line": 182,
+          "line": 186,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_bit7_is_LSB_of_byte0",
-          "line": 190,
+          "line": 194,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_bit8_is_MSB_of_byte1",
-          "line": 198,
+          "line": 202,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_out_of_bounds_returns_zero",
-          "line": 206,
+          "line": 210,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_empty_key_all_bits_zero",
-          "line": 213,
+          "line": 217,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_uint64_msb_pattern",
-          "line": 222,
+          "line": 226,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_uint64_lsb_pattern",
-          "line": 236,
+          "line": 240,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readBitmaskBit_bit0_is_LSB_of_byte0",
-          "line": 247,
+          "line": 251,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readBitmaskBit_bit7_is_MSB_of_byte0",
-          "line": 255,
+          "line": 259,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readBitmaskBit_bit8_is_LSB_of_byte1",
-          "line": 262,
+          "line": 266,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readBitmaskBit_out_of_bounds_returns_zero",
-          "line": 269,
+          "line": 273,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_emptyProof_self_verifies_for_uint64_pair",
-          "line": 282,
+          "line": 286,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16163,7 +16248,7 @@
         {
           "kind": "function",
           "name": "test_emptyProof_self_verifies_for_multiple_pairs",
-          "line": 296,
+          "line": 300,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16172,7 +16257,7 @@
         {
           "kind": "function",
           "name": "test_nonTrivial_proof_one_set_bit_self_verifies",
-          "line": 322,
+          "line": 326,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16180,7 +16265,7 @@
         {
           "kind": "function",
           "name": "test_nonTrivial_proof_differs_from_emptyProof_root",
-          "line": 350,
+          "line": 354,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16189,7 +16274,7 @@
         {
           "kind": "function",
           "name": "test_adversarial_tamper_value_rejected",
-          "line": 378,
+          "line": 382,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16198,7 +16283,7 @@
         {
           "kind": "function",
           "name": "test_adversarial_tamper_key_rejected",
-          "line": 399,
+          "line": 403,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16207,7 +16292,7 @@
         {
           "kind": "function",
           "name": "test_adversarial_tamper_sibling_at_depth_0_rejected",
-          "line": 419,
+          "line": 423,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16215,7 +16300,7 @@
         {
           "kind": "function",
           "name": "test_adversarial_tamper_bitmask_bit_rejected",
-          "line": 447,
+          "line": 451,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16223,7 +16308,7 @@
         {
           "kind": "function",
           "name": "test_adversarial_wrong_root_rejected",
-          "line": 479,
+          "line": 483,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16232,7 +16317,7 @@
         {
           "kind": "function",
           "name": "test_malformed_proofData_too_short_returns_false",
-          "line": 500,
+          "line": 504,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16240,7 +16325,7 @@
         {
           "kind": "function",
           "name": "test_malformed_proofData_siblings_misaligned_returns_false",
-          "line": 513,
+          "line": 517,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16248,19 +16333,19 @@
         {
           "kind": "function",
           "name": "test_recomputeRoot_reverts_on_too_short_proofData",
-          "line": 528,
+          "line": 532,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recomputeRoot_reverts_on_misaligned_siblings",
-          "line": 539,
+          "line": 543,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_extra_siblings_silently_ignored",
-          "line": 560,
+          "line": 564,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16269,7 +16354,7 @@
         {
           "kind": "function",
           "name": "test_two_cell_empty_proof_walks_differ_per_LSB",
-          "line": 595,
+          "line": 599,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16278,7 +16363,7 @@
         {
           "kind": "function",
           "name": "test_emptyProof_walk_matches_reference_for_zero_key",
-          "line": 614,
+          "line": 618,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16287,7 +16372,7 @@
         {
           "kind": "function",
           "name": "test_emptyProof_walk_matches_reference_for_msb_key",
-          "line": 637,
+          "line": 641,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16296,7 +16381,7 @@
         {
           "kind": "function",
           "name": "test_recomputeRoot_is_deterministic",
-          "line": 663,
+          "line": 667,
           "called": [
             "_emptyProofData"
           ]
@@ -16304,7 +16389,7 @@
         {
           "kind": "function",
           "name": "test_recomputeRoot_distinct_leaves_distinct_roots",
-          "line": 676,
+          "line": 680,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16313,13 +16398,13 @@
         {
           "kind": "function",
           "name": "testFuzz_self_recomputed_root_verifies",
-          "line": 694,
+          "line": 698,
           "called": []
         },
         {
           "kind": "function",
           "name": "testFuzz_tamper_one_sibling_byte_rejected",
-          "line": 734,
+          "line": 738,
           "called": [
             "_cbeEncodeUint64",
             "_popcount8"
@@ -16328,13 +16413,13 @@
         {
           "kind": "function",
           "name": "test_smt_cell_and_withdrawal_depth_constants_distinct",
-          "line": 795,
+          "line": 799,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_lazy_empty_chain_matches_precompute_reference",
-          "line": 816,
+          "line": 820,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16343,7 +16428,7 @@
         {
           "kind": "function",
           "name": "test_short_key_4_bytes_self_verifies",
-          "line": 853,
+          "line": 857,
           "called": [
             "_emptyProofData"
           ]
@@ -16351,7 +16436,7 @@
         {
           "kind": "function",
           "name": "test_full_32byte_key_self_verifies",
-          "line": 866,
+          "line": 870,
           "called": [
             "_emptyProofData"
           ]
@@ -16359,7 +16444,7 @@
         {
           "kind": "function",
           "name": "test_oversized_key_bytes_32_to_63_ignored",
-          "line": 884,
+          "line": 888,
           "called": [
             "_emptyProofData"
           ]
@@ -16367,7 +16452,7 @@
         {
           "kind": "function",
           "name": "test_multi_non_empty_proof_self_verifies",
-          "line": 911,
+          "line": 915,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16375,7 +16460,7 @@
         {
           "kind": "function",
           "name": "test_underfilled_proof_uses_padding_for_missing_siblings",
-          "line": 954,
+          "line": 958,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16383,19 +16468,19 @@
         {
           "kind": "function",
           "name": "test_bitmask_bit_255_is_LSB_of_byte_31",
-          "line": 993,
+          "line": 997,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_key_bit_255_is_LSB_of_byte_31",
-          "line": 1009,
+          "line": 1013,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_empty_leafPreimage_self_verifies",
-          "line": 1029,
+          "line": 1033,
           "called": [
             "_emptyProofData"
           ]
@@ -16403,7 +16488,7 @@
         {
           "kind": "function",
           "name": "test_proof_equivalence_explicit_empty_vs_implicit",
-          "line": 1051,
+          "line": 1055,
           "called": [
             "_cbeEncodeUint64",
             "_emptyProofData"
@@ -16412,7 +16497,7 @@
         {
           "kind": "function",
           "name": "test_mixed_bitpattern_proof_self_verifies_and_tamper_rejects",
-          "line": 1081,
+          "line": 1085,
           "called": [
             "_cbeEncodeUint64"
           ]
@@ -16420,37 +16505,87 @@
         {
           "kind": "function",
           "name": "test_readKeyBitMSBFirst_exhaustive_single_bit",
-          "line": 1128,
+          "line": 1132,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_readBitmaskBit_exhaustive_single_bit",
-          "line": 1152,
+          "line": 1156,
           "called": []
         },
         {
           "kind": "function",
           "name": "_cbeEncodeUint64",
-          "line": 1178,
+          "line": 1182,
           "called": []
         },
         {
           "kind": "function",
           "name": "_emptyProofData",
-          "line": 1188,
+          "line": 1192,
           "called": []
         },
         {
           "kind": "function",
           "name": "_popcount8",
-          "line": 1193,
+          "line": 1197,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_refKeyBit",
+          "line": 1219,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_refBitmaskBit",
+          "line": 1228,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_bitReaderCases",
+          "line": 1239,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_keyWord_readers_agree_with_the_byte_wise_reference",
+          "line": 1265,
+          "called": [
+            "_bitReaderCases",
+            "_refKeyBit"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_bitmaskWord_readers_agree_with_the_byte_wise_reference",
+          "line": 1282,
+          "called": [
+            "_bitReaderCases",
+            "_refBitmaskBit"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_word_readers_diverge_past_the_first_word",
+          "line": 1312,
+          "called": [
+            "_bitReaderCases"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_key_and_bitmask_bit_orders_are_mirror_images",
+          "line": 1336,
           "called": []
         },
         {
           "kind": "contract",
           "name": "SmtCellVerifierGasTest",
-          "line": 1207,
+          "line": 1353,
           "called": [
             "SmtCellVerifierProxy"
           ]
@@ -16458,7 +16593,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1212,
+          "line": 1358,
           "called": [
             "SmtCellVerifierProxy"
           ]
@@ -16466,19 +16601,19 @@
         {
           "kind": "function",
           "name": "test_gas_emptyProof_walk",
-          "line": 1216,
+          "line": 1362,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_gas_oneNonEmptySibling_walk",
-          "line": 1229,
+          "line": 1375,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_gas_fullPopcount_walk",
-          "line": 1246,
+          "line": 1392,
           "called": []
         }
       ]
@@ -16693,7 +16828,7 @@
     {
       "module": "StepVMMerkleUpdate.t",
       "path": "solidity/test/StepVMMerkleUpdate.t.sol",
-      "declaration_count": 15,
+      "declaration_count": 16,
       "declarations": [
         {
           "kind": "contract",
@@ -16748,7 +16883,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 87,
+          "line": 95,
           "called": [
             "StepVMMerkleUpdateProxy"
           ]
@@ -16756,37 +16891,43 @@
         {
           "kind": "function",
           "name": "test_recomputeRoot_is_the_leaf_path_with_a_hashed_preimage",
-          "line": 94,
+          "line": 102,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_cellLeafHash_branches_on_absence",
-          "line": 106,
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_KEY32_is_KEY",
+          "line": 139,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_updateCellRoot_re_walks_the_opening",
-          "line": 127,
+          "line": 144,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_updateCellRoot_is_reversible",
-          "line": 146,
+          "line": 163,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_the_verifying_opening_produces_the_post_root",
-          "line": 162,
+          "line": 179,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_absent_and_present_reach_different_roots",
-          "line": 188,
+          "line": 205,
           "called": []
         }
       ]

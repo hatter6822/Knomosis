@@ -917,13 +917,58 @@ strictly in order, each opening checked against the root the previous
 write produced.  A duplicate entry for an already-written cell fails
 that check, which is the fail-closed direction. -/
 
-/-- One checked write: verify the opening against the CURRENT root,
-    then re-walk it from the new leaf. -/
+/-- **One pass, two leaves, for a cell.**  The root an opening
+    reproduces from `oldValue` and the root it reaches from
+    `newValue`, sharing the key derivation, the expanded path, the bit
+    sequence and the fold.
+
+    `smtCellKey t` is a HASH, so deriving it once matters as much as
+    folding once does; binding it here is what stops the three uses
+    (the two leaves and the walk) from recomputing it. -/
+def stateCellRootPair (t : CellTag) (oldValue newValue : ByteArray)
+    (proof : SmtCellProof) : StateCommit × StateCommit :=
+  let key := smtCellKey t
+  let leafOf : ByteArray → ByteArray := fun v =>
+    if v = canonicalAbsentValue t then emptyRootAt 0 else leafHash key v
+  smtWalkPairFrom (leafOf oldValue) (leafOf newValue) key proof
+
+/-- The paired cell walk is `cellLeaf` composed with the paired walk. -/
+theorem stateCellRootPair_eq (t : CellTag) (oldValue newValue : ByteArray)
+    (proof : SmtCellProof) :
+    stateCellRootPair t oldValue newValue proof
+      = (smtWalkFrom (cellLeaf t oldValue) (smtCellKey t) proof,
+         smtWalkFrom (cellLeaf t newValue) (smtCellKey t) proof) :=
+  smtWalkPairFrom_eq _ _ _ _
+
+/-- One checked write: verify the opening against the CURRENT root and
+    re-walk it from the new leaf — in ONE pass, since the two walks
+    differ only in their starting leaf.
+
+    Stated fused rather than as `verify`-then-`update` because that is
+    what the computation is: an opening determines both roots at once,
+    and a write always wants both.  `applyStateCellWrite_eq_verify_
+    update` recovers the two-call reading, so nothing proved against
+    the earlier phrasing is lost. -/
 def applyStateCellWrite (root : StateCommit) (t : CellTag)
     (oldValue newValue : ByteArray) (proof : SmtCellProof) : Option StateCommit :=
-  if verifyStateCellProof root t oldValue proof then
-    some (updateStateCellRoot t newValue proof)
-  else none
+  let pair := stateCellRootPair t oldValue newValue proof
+  if proof.isWellFormed && decide (pair.1 = root) then some pair.2 else none
+
+/-- **The fused write is the verify-then-update one.**
+
+    The two-call form is what every theorem in this file was proved
+    against, and this equation is what lets the fused definition
+    inherit them rather than re-establish them.  It is also the
+    statement a reader should check when asking whether the
+    optimisation changed the specification: it did not. -/
+theorem applyStateCellWrite_eq_verify_update (root : StateCommit) (t : CellTag)
+    (oldValue newValue : ByteArray) (proof : SmtCellProof) :
+    applyStateCellWrite root t oldValue newValue proof
+      = if verifyStateCellProof root t oldValue proof then
+          some (updateStateCellRoot t newValue proof)
+        else none := by
+  unfold applyStateCellWrite verifyStateCellProof updateStateCellRoot
+  rw [stateCellRootPair_eq]
 
 /-- One entry of a step's write bundle: cell, proven pre-value, new
     value, opening. -/
@@ -997,8 +1042,7 @@ theorem foldStateCellWrites_eq_commit_of_coherent :
         = some (commitExtendedState (chainLast es' rest))
     rw [show applyStateCellWrite (commitExtendedState es) t (getCellValue es t)
               (getCellValue es' t) p = some (commitExtendedState es') from by
-          unfold applyStateCellWrite
-          rw [if_pos h_ver,
+          rw [applyStateCellWrite_eq_verify_update, if_pos h_ver,
             updateStateCellRoot_eq_commit_of_canonical es es' t p h_exp h_off h_wf
               h_wf' h_keys']]
     exact ih es' h_rest

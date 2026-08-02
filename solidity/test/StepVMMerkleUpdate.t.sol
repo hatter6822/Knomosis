@@ -12,7 +12,7 @@ import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
 /// @title StepVMMerkleUpdateProxy
 /// @notice External wrapper for the calldata-typed library functions.
 contract StepVMMerkleUpdateProxy {
-    function updateCellRoot(bytes calldata smtKey, bytes32 newLeaf, bytes calldata proofData)
+    function updateCellRoot(bytes32 smtKey, bytes32 newLeaf, bytes calldata proofData)
         external
         pure
         returns (bytes32)
@@ -79,6 +79,14 @@ contract StepVMMerkleUpdateTest is Test {
     bytes internal constant KEY =
         hex"a3f100000000000000000000000000000000000000000000000000000000005c";
 
+    /// The same key as the word the root-computing entry points take.
+    /// `updateCellRoot` and the fold read a 32-byte DERIVED key, so
+    /// they take `bytes32` rather than re-packing it into `bytes` only
+    /// to unpack it again; `test_KEY32_is_KEY` pins the two forms
+    /// together so this pair cannot drift.
+    bytes32 internal constant KEY32 =
+        0xa3f100000000000000000000000000000000000000000000000000000000005c;
+
     /// An all-zero bitmask with no siblings: every level's sibling is
     /// the canonical empty sub-tree, which is the shape a cell in an
     /// otherwise-empty tree actually has.
@@ -125,12 +133,21 @@ contract StepVMMerkleUpdateTest is Test {
     /// @notice **The update primitive moves the root.**  The old
     ///         placeholder returned `keccak256(newValue)` regardless of
     ///         root or siblings; this walks the supplied opening.
+    /// @notice The two spellings of the probe key are the same bytes.
+    ///
+    /// @dev    A constant duplicated in two types is a constant that
+    ///         can drift, so it is asserted rather than trusted.
+    function test_KEY32_is_KEY() public pure {
+        assertEq(KEY.length, 32, "the probe key is one word");
+        assertEq(KEY, abi.encodePacked(KEY32), "the two spellings agree");
+    }
+
     function test_updateCellRoot_re_walks_the_opening() public view {
         bytes32 oldLeaf = keccak256(hex"01");
         bytes32 newLeaf = keccak256(hex"02");
 
         bytes32 oldRoot = p.recomputeRootFromLeaf(KEY, oldLeaf, EMPTY_PROOF);
-        bytes32 newRoot = p.updateCellRoot(KEY, newLeaf, EMPTY_PROOF);
+        bytes32 newRoot = p.updateCellRoot(KEY32, newLeaf, EMPTY_PROOF);
 
         assertTrue(oldRoot != newRoot, "a different leaf must produce a different root");
         assertTrue(newRoot != newLeaf, "the root is a walk, not the leaf itself");
@@ -148,9 +165,9 @@ contract StepVMMerkleUpdateTest is Test {
         bytes32 leafA = keccak256(hex"aa");
         bytes32 leafB = keccak256(hex"bb");
 
-        bytes32 rootA = p.updateCellRoot(KEY, leafA, EMPTY_PROOF);
-        bytes32 rootB = p.updateCellRoot(KEY, leafB, EMPTY_PROOF);
-        bytes32 backToA = p.updateCellRoot(KEY, leafA, EMPTY_PROOF);
+        bytes32 rootA = p.updateCellRoot(KEY32, leafA, EMPTY_PROOF);
+        bytes32 rootB = p.updateCellRoot(KEY32, leafB, EMPTY_PROOF);
+        bytes32 backToA = p.updateCellRoot(KEY32, leafA, EMPTY_PROOF);
 
         assertTrue(rootA != rootB, "distinct leaves, distinct roots");
         assertEq(rootA, backToA, "restoring the leaf restores the root");
@@ -170,7 +187,7 @@ contract StepVMMerkleUpdateTest is Test {
         );
 
         bytes32 newLeaf = p.cellLeafHash(false, hex"beef");
-        bytes32 postRoot = p.updateCellRoot(KEY, newLeaf, EMPTY_PROOF);
+        bytes32 postRoot = p.updateCellRoot(KEY32, newLeaf, EMPTY_PROOF);
 
         assertTrue(postRoot != preRoot, "the write moved the published root");
         assertTrue(
@@ -188,8 +205,8 @@ contract StepVMMerkleUpdateTest is Test {
     ///         which is exactly why the branch has to exist.
     function test_absent_and_present_reach_different_roots() public view {
         bytes memory absentBytes = hex"";
-        bytes32 asAbsent = p.updateCellRoot(KEY, p.cellLeafHash(true, absentBytes), EMPTY_PROOF);
-        bytes32 asPresent = p.updateCellRoot(KEY, p.cellLeafHash(false, absentBytes), EMPTY_PROOF);
+        bytes32 asAbsent = p.updateCellRoot(KEY32, p.cellLeafHash(true, absentBytes), EMPTY_PROOF);
+        bytes32 asPresent = p.updateCellRoot(KEY32, p.cellLeafHash(false, absentBytes), EMPTY_PROOF);
         assertTrue(
             asAbsent != asPresent,
             "a verifier that always hashed the preimage would conflate these"

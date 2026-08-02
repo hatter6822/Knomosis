@@ -91,12 +91,11 @@ library StepVMMerkle {
     /// `proofData`) from canonical-empty siblings (`SmtCellVerifier`'s
     /// per-depth `H_d` table).
     ///
-    /// Cost: ≈ 35-50k gas per cell when invoked directly from
-    /// another Solidity contract (within the SC.2 50k budget).
-    /// The verifier performs 511 keccak256 operations total
-    /// (256 for the walk + up to 255 to advance the canonical
-    /// empty-subtree chain) without any 8 KiB memory
-    /// allocations.
+    /// Cost: one 256-level walk plus the canonical empty-subtree
+    /// table, which this entry point builds for itself because it
+    /// verifies a single opening.  A step VM folding many openings
+    /// builds the table ONCE and threads it into
+    /// `SmtCellVerifier.recomputeRootPairFromLeaves` instead.
     ///
     /// Cross-stack soundness: under collision-resistance of
     /// `keccak256`, two verifying proofs for the same `(root,
@@ -148,15 +147,24 @@ library StepVMMerkle {
     ///         opening against the root write `i-1` produced.
     ///
     /// @param smtKey    the SMT key, DERIVED via `deriveCellSmtKey`.
+    ///                  Taken as `bytes32`: every caller derives one,
+    ///                  and the walk reads a word.
     /// @param newLeaf   the post-write leaf, from `cellLeafHash`.
     /// @param proofData the opening that verified against the pre-root.
     /// @return the post-write root.
-    function updateCellRoot(bytes memory smtKey, bytes32 newLeaf, bytes calldata proofData)
+    function updateCellRoot(bytes32 smtKey, bytes32 newLeaf, bytes calldata proofData)
         internal
         pure
         returns (bytes32)
     {
-        return SmtCellVerifier.recomputeRootFromLeaf(smtKey, newLeaf, proofData);
+        (bytes32 root,) = SmtCellVerifier.recomputeRootPairFromLeaves(
+            uint256(smtKey),
+            newLeaf,
+            newLeaf,
+            proofData,
+            SmtCellVerifier.precomputeEmptySubtreeHashes()
+        );
+        return root;
     }
 
     /// @notice The leaf a cell occupies: its leaf hash when present,
@@ -199,7 +207,7 @@ library StepVMMerkle {
     /* ---------------------------------------------------------- */
 
     /// @notice One write applied to a running root: verify the
-    ///         opening against it with the OLD leaf, then re-walk the
+    ///         opening against it with the OLD leaf, and re-walk the
     ///         same opening from the NEW leaf.
     ///
     /// @dev    Mirrors Lean's `applyStateCellWrite`.  The two halves
@@ -207,6 +215,16 @@ library StepVMMerkle {
     ///         update sound: the sibling path is a property of the
     ///         key's route through the tree, and the write changes
     ///         only the leaf at its end.
+    ///
+    ///         That shared path is also why the two halves are ONE
+    ///         walk (`recomputeRootPairFromLeaves`) rather than two
+    ///         calls.  The key bits, the bitmask reads, the sibling
+    ///         cursor and the loop are identical between them — only
+    ///         the leaf differs — so walking twice paid for all of it
+    ///         twice to compute two hashes per level.  With the
+    ///         canonical empty-subtree chain hoisted to the caller as
+    ///         well, a five-opening step no longer rebuilds the same
+    ///         255-hash chain ten times.
     ///
     ///         `ok = false` means the opening did not verify.  The
     ///         caller must treat that as fatal rather than skipping
@@ -216,26 +234,38 @@ library StepVMMerkle {
     ///         exists to prevent.
     ///
     /// @param  root       the running root, before this write.
-    /// @param  smtKey     the cell's derived SMT key.
+    /// @param  smtKey     the cell's DERIVED SMT key, passed as the
+    ///                    32-byte word the walk reads rather than
+    ///                    re-packed into `bytes`.
     /// @param  oldIsAbsent whether the PRE-value is canonically absent.
     /// @param  oldPreimage the pre-value's leaf preimage.
     /// @param  newIsAbsent whether the POST-value is canonically absent.
     /// @param  newPreimage the post-value's leaf preimage.
     /// @param  proofData  the opening, against `root`.
+    /// @param  empties    the canonical empty-subtree chain, built once
+    ///                    per transaction by
+    ///                    `SmtCellVerifier.precomputeEmptySubtreeHashes()`.
     function applyCellWrite(
         bytes32 root,
-        bytes memory smtKey,
+        bytes32 smtKey,
         bool oldIsAbsent,
         bytes memory oldPreimage,
         bool newIsAbsent,
         bytes memory newPreimage,
-        bytes calldata proofData
+        bytes calldata proofData,
+        bytes32[256] memory empties
     ) internal pure returns (bool ok, bytes32 newRoot) {
-        bytes32 oldLeaf = cellLeafHash(oldIsAbsent, oldPreimage);
-        if (SmtCellVerifier.recomputeRootFromLeaf(smtKey, oldLeaf, proofData) != root) {
+        (bytes32 openedRoot, bytes32 writtenRoot) =
+            SmtCellVerifier.recomputeRootPairFromLeaves(
+                uint256(smtKey),
+                cellLeafHash(oldIsAbsent, oldPreimage),
+                cellLeafHash(newIsAbsent, newPreimage),
+                proofData,
+                empties
+            );
+        if (openedRoot != root) {
             return (false, root);
         }
-        bytes32 newLeaf = cellLeafHash(newIsAbsent, newPreimage);
-        return (true, SmtCellVerifier.recomputeRootFromLeaf(smtKey, newLeaf, proofData));
+        return (true, writtenRoot);
     }
 }

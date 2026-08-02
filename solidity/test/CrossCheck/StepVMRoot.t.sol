@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.20;
 
-import {CrossCheckFramework} from "./Framework.t.sol";
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
+import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 
 /// @title StepVMRootCrossCheck
 /// @notice **The flip, checked end to end against Lean.**
@@ -30,10 +30,7 @@ import {StepWrites} from "src/lib/StepWrites.sol";
 ///         Feeding it Lean's `newValue` column would test none of the
 ///         derivation, and would be unsound in production: those
 ///         values are the SEQUENCER's computation.
-contract StepVMRootCrossCheck is CrossCheckFramework {
-    /// @notice The corpus this suite consumes.
-    string internal constant FIXTURE_NAME = "step_vm.json";
-
+contract StepVMRootCrossCheck is StepVMRootProbeHarness {
     /// @dev The subject.  Deployed rather than linked as a library so
     ///      the calldata boundary is real — `executeStepToRoot` takes
     ///      `calldata` arrays and slices them, which an internal call
@@ -50,11 +47,11 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
 
     /// @notice **Every probe's fold lands on Lean's post-state root.**
     function test_executeStepToRoot_matches_lean() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
+        if (!fixtureExists(STEP_VM_FIXTURE)) {
             _skipWithReason("fixture missing");
             return;
         }
-        string memory raw = readFixture(FIXTURE_NAME);
+        string memory raw = readFixture(STEP_VM_FIXTURE);
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         uint256 n = vm.parseJsonUint(raw, ".writeBundleGoldensCount");
         assertGt(n, 0, "the corpus must carry write-bundle goldens");
@@ -63,7 +60,7 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
                 string.concat(".writeBundleGoldens[", vm.toString(i), "]");
             assertEq(
                 _runProbe(raw, base),
-                vm.parseJsonBytes32(raw, string.concat(base, ".postStateRootHex")),
+                probePostRoot(raw, base),
                 string.concat("post-root mismatch at ", base)
             );
         }
@@ -80,19 +77,17 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
     ///         probes whose LAW no-ops (`burnNoop`,
     ///         `topUpActionBudgetForSelf`).
     function test_executeStepToRoot_moves_the_root() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
+        if (!fixtureExists(STEP_VM_FIXTURE)) {
             _skipWithReason("fixture missing");
             return;
         }
-        string memory raw = readFixture(FIXTURE_NAME);
+        string memory raw = readFixture(STEP_VM_FIXTURE);
         uint256 n = vm.parseJsonUint(raw, ".writeBundleGoldensCount");
         for (uint256 i = 0; i < n; i++) {
             string memory base =
                 string.concat(".writeBundleGoldens[", vm.toString(i), "]");
             assertTrue(
-                _runProbe(raw, base)
-                    != vm.parseJsonBytes32(
-                        raw, string.concat(base, ".preStateRootHex")),
+                _runProbe(raw, base) != probePreRoot(raw, base),
                 string.concat("the fold left the root alone at ", base)
             );
         }
@@ -111,13 +106,13 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
     ///         derives the cell list itself, so a short bundle cannot
     ///         even be parsed as this action's.
     function test_omitting_a_write_reverts() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
+        if (!fixtureExists(STEP_VM_FIXTURE)) {
             _skipWithReason("fixture missing");
             return;
         }
-        string memory raw = readFixture(FIXTURE_NAME);
+        string memory raw = readFixture(STEP_VM_FIXTURE);
         string memory base = ".writeBundleGoldens[0]";
-        KnomosisStepVMRoot.CellOpening[] memory full = _openings(raw, base);
+        KnomosisStepVMRoot.CellOpening[] memory full = loadOpenings(raw, base);
         KnomosisStepVMRoot.CellOpening[] memory short_ =
             new KnomosisStepVMRoot.CellOpening[](full.length - 1);
         for (uint256 i = 0; i < short_.length; i++) short_[i] = full[i];
@@ -137,13 +132,13 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
     ///         a balance the state does not hold fails the walk rather
     ///         than deriving a post-value of the responder's choosing.
     function test_forged_pre_value_reverts() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
+        if (!fixtureExists(STEP_VM_FIXTURE)) {
             _skipWithReason("fixture missing");
             return;
         }
-        string memory raw = readFixture(FIXTURE_NAME);
+        string memory raw = readFixture(STEP_VM_FIXTURE);
         string memory base = ".writeBundleGoldens[0]";
-        KnomosisStepVMRoot.CellOpening[] memory ops = _openings(raw, base);
+        KnomosisStepVMRoot.CellOpening[] memory ops = loadOpenings(raw, base);
         // Probe 0 is `transfer`, whose cell 0 is the sender's balance.
         // Inflate it: an amount head over a number the state does not
         // hold.
@@ -162,13 +157,13 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
     ///         before the fold does, which is the cheaper failure and
     ///         the one that names the problem.
     function test_reordered_bundle_reverts() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
+        if (!fixtureExists(STEP_VM_FIXTURE)) {
             _skipWithReason("fixture missing");
             return;
         }
-        string memory raw = readFixture(FIXTURE_NAME);
+        string memory raw = readFixture(STEP_VM_FIXTURE);
         string memory base = ".writeBundleGoldens[0]";
-        KnomosisStepVMRoot.CellOpening[] memory ops = _openings(raw, base);
+        KnomosisStepVMRoot.CellOpening[] memory ops = loadOpenings(raw, base);
         (ops[0], ops[1]) = (ops[1], ops[0]);
         vm.expectRevert(
             abi.encodeWithSelector(KnomosisStepVMRoot.WriteSetMismatch.selector, 0)
@@ -184,23 +179,23 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
     ///         off as the deployment's budget policy — which selects
     ///         the branch every epoch-budget write takes.
     function test_policy_opening_must_name_the_policy_cell() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
+        if (!fixtureExists(STEP_VM_FIXTURE)) {
             _skipWithReason("fixture missing");
             return;
         }
-        string memory raw = readFixture(FIXTURE_NAME);
+        string memory raw = readFixture(STEP_VM_FIXTURE);
         string memory base = ".writeBundleGoldens[0]";
-        KnomosisStepVMRoot.CellOpening memory policy = _policyOpening(raw, base);
+        KnomosisStepVMRoot.CellOpening memory policy = loadPolicyOpening(raw, base);
         policy.keyA = 1;
         vm.expectRevert(KnomosisStepVMRoot.PolicyCellMismatch.selector);
         vmRoot.executeStepToRoot(
-            vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex")),
+            probePreRoot(raw, base),
             uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
             vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
             uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
             vm.parseJsonUint(raw, string.concat(base, ".l2LogIndex")),
             policy,
-            _openings(raw, base)
+            loadOpenings(raw, base)
         );
     }
 
@@ -261,7 +256,7 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
         view
         returns (bytes32)
     {
-        return _call(raw, base, _openings(raw, base));
+        return _call(raw, base, loadOpenings(raw, base));
     }
 
     /// @dev The call itself, with a caller-supplied bundle so the
@@ -272,49 +267,14 @@ contract StepVMRootCrossCheck is CrossCheckFramework {
         KnomosisStepVMRoot.CellOpening[] memory ops
     ) private view returns (bytes32) {
         return vmRoot.executeStepToRoot(
-            vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex")),
+            probePreRoot(raw, base),
             uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
             vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
             uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
             vm.parseJsonUint(raw, string.concat(base, ".l2LogIndex")),
-            _policyOpening(raw, base),
+            loadPolicyOpening(raw, base),
             ops
         );
-    }
-
-    /// @dev The read-only budget-policy opening, against the pre-root.
-    function _policyOpening(string memory raw, string memory base)
-        private
-        pure
-        returns (KnomosisStepVMRoot.CellOpening memory op)
-    {
-        op.cellKind = 14;
-        op.preValue = vm.parseJsonBytes(raw, string.concat(base, ".policyValueHex"));
-        op.proofData =
-            vm.parseJsonBytes(raw, string.concat(base, ".policyProofDataHex"));
-    }
-
-    /// @dev The bundle: Lean's ordered writes, with their PRE-values
-    ///      and chained openings — and NOT their new values, which the
-    ///      verifier must derive.
-    function _openings(string memory raw, string memory base)
-        private
-        pure
-        returns (KnomosisStepVMRoot.CellOpening[] memory ops)
-    {
-        uint256 n = vm.parseJsonUint(raw, string.concat(base, ".writeCount"));
-        ops = new KnomosisStepVMRoot.CellOpening[](n);
-        for (uint256 i = 0; i < n; i++) {
-            string memory w =
-                string.concat(base, ".writes[", vm.toString(i), "]");
-            ops[i] = KnomosisStepVMRoot.CellOpening({
-                cellKind: uint8(vm.parseJsonUint(raw, string.concat(w, ".cellKind"))),
-                keyA: vm.parseJsonUint(raw, string.concat(w, ".keyA")),
-                keyB: vm.parseJsonUint(raw, string.concat(w, ".keyB")),
-                preValue: vm.parseJsonBytes(raw, string.concat(w, ".oldValueHex")),
-                proofData: vm.parseJsonBytes(raw, string.concat(w, ".proofDataHex"))
-            });
-        }
     }
 
     /// @dev A CBE amount value, for the forged-balance control.

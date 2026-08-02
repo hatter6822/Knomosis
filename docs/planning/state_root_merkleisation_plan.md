@@ -1324,35 +1324,52 @@ in production: with ~10⁶ live cells each key carries ~20 non-empty
 siblings (the top ~20 levels), of which only the top ~log₂ m are
 shared.
 
-Hashing, keccak calls across the same twenty probes:
+**But calldata is not where the money is, and M0 is what established
+that.**  The terminal step had no gas benchmark at all — the operation
+this section optimises was unmeasured — so M0 added one before
+touching anything.  It came out at **1 814 379 gas**, of which the
+EIP-2028 calldata cost is **17 656 (1.0 %)**.  A 10 % calldata saving
+is therefore worth ~0.1 % of the call.  The cost is the WALK: 256
+levels, twice per opening, once to verify and once to re-walk.
 
-| | keccak calls | Δ |
+M0 then removed the redundant work in that walk, and the result
+reframes the whole section:
+
+| | terminal step (gas) | Δ |
 |---|---|---|
-| chained, today | 99 328 | — |
-| chained + memoised empty-subtree chain | 49 664 | **−50 %** |
-| multiproof, on top of that memoisation | 47 836 | **−3.7 %** further |
+| before M0 | 1 814 379 | — |
+| after M0 | 845 973 | **−53.4 %** |
 
-**The second row is the finding.**  Almost the whole hashing win
-belongs to a change that has nothing to do with multiproofs:
-`SmtCellVerifier.recomputeRootFromLeaf` rebuilds the 256-hash
-canonical empty-subtree chain PER CALL (`SmtCellVerifier.sol:314`,
-advanced at `:341`), and `StepVMMerkle.applyCellWrite` calls it twice
-per opening — so a five-opening step pays 2 560 redundant keccaks.
-Memoising it once per `executeStepToRoot` call recovers 50 % on its
-own, which is why it is M0 and lands separately: bundling it would
-credit the multiproof with a gain it did not produce.
+Four defects, all one class — loop-invariant or duplicated work inside
+the hot loop:
 
-Of the residual 3.7 %, essentially all is the three duplicate probes
-(−15 % to −20 % each); distinct-cell probes gain 0.4–0.9 %.  That is
-arithmetic rather than pessimism: two random 256-bit keys share ~1 bit
-of prefix, so m paths merge only in the top 1–3 of 256 levels.  **A
-multiproof over hash-derived keys does not save hashing.**  It saves
-calldata, and it saves a whole walk whenever a cell repeats.
+  * **`applyCellWrite` walked the tree twice per opening.**  Verify
+    from the old leaf, then re-walk from the new one — same key, same
+    siblings, same 256 iterations of bitmask reads, key-bit reads and
+    cursor maintenance, paid twice to produce two hashes per level.
+    Now one pass, two accumulators.
+  * **The canonical empty-subtree chain was rebuilt inside every
+    walk** — 255 hashes per walk, so a five-opening step rebuilt the
+    identical chain ten times.  The table already existed
+    (`precomputeEmptySubtreeHashes`) and the walk pointedly did not
+    call it, on a documented rationale — "to avoid an 8 KiB memory
+    allocation" — that inverts at step-VM scale, where the allocation
+    costs ~896 gas ONCE.
+  * **The bit sources were byte-indexed per level.**  Key and bitmask
+    are each one loop-invariant word; each level did a bounds check
+    plus a single-byte load plus a shift, 256 times.  Hoisted.
+  * **The key was packed into `bytes` only to be unpacked again.**
+    Every step-VM caller derives a `bytes32`; the walk reads a word.
 
-So the honest headline is ≈10 % calldata, ≈1 % gas on distinct-cell
-steps and ≈15–20 % on duplicate-cell ones — and the multiproof is
-bought mainly for its structural properties.  Those are real, and are
-the part worth having:
+So the honest accounting is: **M0, not the multiproof, is what halved
+the terminal step**, and it is a change with no consensus surface —
+the roots are byte-identical, which the cross-stack corpus asserts.
+The multiproof's remaining economic case is ≈10 % calldata (≈0.1 % of
+the call) plus the fold's per-level work on the DEDUPED key set, which
+matters on duplicate-cell steps and not otherwise.
+
+Which is why it is bought for its structure.  Those gains are real,
+and are the part worth having:
 
   * **One root check, not m.**  The aggregate pre-fold is compared to
     the pre-root once.  No intermediate root is materialised or
@@ -1364,23 +1381,24 @@ the part worth having:
     identity, which is what it always meant.
   * **The proof's shape is derivable from the key set.**  The gap
     count is a closed form (§6.2.4), so a wrong-length proof is
-    REJECTED rather than padded.  Today `recomputeRootFromLeaf`
-    substitutes `PADDING_HASH` when the wire runs short
-    (`SmtCellVerifier.sol:325`) and walks on — a truncated proof is a
-    silent reinterpretation, not a revert.
-  * **One pass computes both roots**, sharing the loop, the mask reads
-    and the bit extraction the chained path pays for twice per
-    opening.
+    REJECTED rather than padded.  Today `recomputeRootPairFromLeaves`
+    substitutes `PADDING_HASH` when the wire runs short and walks on —
+    a truncated proof is a silent reinterpretation, not a revert.
+  * **The honest sequencer's bundle build drops from O(m·N) to
+    O(N).**  `canonicalCellChain` rebuilds `stateCellEntries` per
+    link — one `smtCellKey` hash per live cell, per opening — because
+    each link opens against a DIFFERENT state.  That is inherent to
+    chaining and cannot be memoised away; opening everything against
+    one root removes it outright.
   * **The read-only policy opening stops being special.**  It joins
     the frontier as a write of the same value, retiring
-    `_requirePolicyOpening`'s separate 512-hash walk
-    (`KnomosisStepVMRoot.sol:250-279`).
+    `_requirePolicyOpening`'s separate walk.
 
 The decision rule, stated before the work rather than after it: M0
-lands and is measured on its own; if the multiproof then measures
+landed and was measured on its own; if the multiproof then measures
 net-negative on the distinct-cell majority it STILL lands, for the
-five properties above.  Recording that now is the difference between a
-design choice and a rationalisation.
+five properties above.  Recording that in advance is the difference
+between a design choice and a rationalisation.
 
 ### 6.2 The tree, exactly
 
@@ -1607,7 +1625,7 @@ Every milestone is a commit that builds and tests green: `lake build`
 
 | # | Milestone | Content |
 |---|---|---|
-| M0 | Empty-chain memoisation + the missing benchmark | `BenchmarkGasV1_3.t.sol` has no terminate entry, so the operation this whole section optimises is unmeasured.  Add isolated-mode benchmarks for a distinct-cell and a duplicate-cell step and regenerate the baseline FIRST; then build `bytes32[257] memory empties` once per `executeStepToRoot` and thread it into `StepVMMerkle.applyCellWrite` and a new `recomputeRootFromLeafWithEmpties`.  Do NOT touch `recomputeRoot`'s preimage path — it is pinned by `smt_cell_proof.json`. |
+| M0 | **DONE** — the walk's redundant work, and the missing benchmark | Benchmarks added FIRST (`executeStepToRoot_{distinctCells,duplicateCell}`), then the four defects in §6.1: the double walk fused (`SmtCellVerifier.recomputeRootPairFromLeaves`), the empty-subtree table wired in (`precomputeEmptySubtreeHashes`), the key/bitmask hoisted out of the loop (`keyWord`/`bitmaskWord`), and the key passed as `bytes32` rather than re-packed.  Mirrored in the SPEC — Lean's `applyStateCellWrite` is fused too (`stateCellRootPair`, `smtWalkPairFrom`, `stepPairBoth`), with `applyStateCellWrite_eq_verify_update` recovering the two-call reading so no theorem is re-proved.  `SmtVerifier`'s quadratic `emptyProofSiblings` (2016 hashes for 63 values) and its per-level `abi.encodePacked` allocation went with them.  **−53.4 % on the terminal step; −1.7 % on `withdrawWithProof`.** |
 | M1 | The frontier, test-first | `FaultProof/PathIndex.lean` and `FaultProof/Frontier.lean`: `pathLess`, `div`, `div_max`, `adjacent_div_ne`, `gapCount` and its closed form, `frontierOf`, the sort-and-dedup shape check, the total plan lookup, `plannedBalances_alias_consistent`.  §6.4's six tests are written before the definitions they exercise. |
 | M2 | `multiSiblings` / `multiWalk` | `FaultProof/MultiProof.lean` — the m-key analogue of `canonicalSiblings_walks_to_root`, same structural induction.  Plus `multiWalk_eq_smtRootListAux`, `multiSiblings_eq_canonicalSiblings` at `m = 1`, `multiWalk_perm`, `multiWalk_proof_independent`. |
 | M3 | The pre/post pair | `multiFoldPostRoot` and `multiFold_eq_commit_post`.  This SUBSUMES `foldStateCellWrites_eq_commit_of_coherent` — m keys at once, order-independent — and replaces it in CLAUDE.md's headline table rather than deleting it. |

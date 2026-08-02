@@ -5,6 +5,7 @@
 pragma solidity 0.8.20;
 
 import {CBEEncode} from "../lib/CBEEncode.sol";
+import {SmtCellVerifier} from "../lib/SmtCellVerifier.sol";
 import {StepPlan} from "../lib/StepPlan.sol";
 import {StepVMMerkle} from "../lib/StepVMMerkle.sol";
 import {StepWrites} from "../lib/StepWrites.sol";
@@ -202,7 +203,8 @@ contract KnomosisStepVMRoot {
         //    first because `deriveEpochBudget` selects its branch on the
         //    policy, and every one of the twenty-five variants writes an
         //    epoch-budget cell.
-        _requirePolicyOpening(preStateRoot, policyOpening);
+        bytes32[256] memory empties = SmtCellVerifier.precomputeEmptySubtreeHashes();
+        _requirePolicyOpening(preStateRoot, policyOpening, empties);
 
         // 2. The write set, re-derived.  `nextWdIdPre` is read from the
         //    bundle because `withdraw`'s pending cell is keyed by the
@@ -234,7 +236,7 @@ contract KnomosisStepVMRoot {
             postStateRoot = _applyWrite(
                 postStateRoot, i, cells, writeOpenings,
                 actionKind, actionFields, signer, l2LogIndex,
-                policyOpening.preValue, plan
+                policyOpening.preValue, plan, empties
             );
         }
     }
@@ -249,7 +251,8 @@ contract KnomosisStepVMRoot {
     ///      pass its bytes off as the deployment's policy.
     function _requirePolicyOpening(
         bytes32 preStateRoot,
-        CellOpening calldata policyOpening
+        CellOpening calldata policyOpening,
+        bytes32[256] memory empties
     ) private pure {
         if (policyOpening.cellKind != CELL_BUDGET_POLICY
             || policyOpening.keyA != 0 || policyOpening.keyB != 0) {
@@ -269,9 +272,10 @@ contract KnomosisStepVMRoot {
             StepWrites.isCanonicallyAbsent(CELL_BUDGET_POLICY, policyOpening.preValue);
         bytes memory preimage = _leafPreimage(smtKey, policyOpening.preValue);
         (bool ok, bytes32 unchangedRoot) = StepVMMerkle.applyCellWrite(
-            preStateRoot, abi.encodePacked(smtKey),
+            preStateRoot, smtKey,
             isAbsent, preimage, isAbsent, preimage,
-            policyOpening.proofData
+            policyOpening.proofData,
+            empties
         );
         if (!ok || unchangedRoot != preStateRoot) {
             revert BadCellOpening(type(uint256).max);
@@ -397,7 +401,8 @@ contract KnomosisStepVMRoot {
         uint64 signer,
         uint256 l2LogIndex,
         bytes calldata policyValue,
-        StepPlan.Plan memory plan
+        StepPlan.Plan memory plan,
+        bytes32[256] memory empties
     ) private pure returns (bytes32) {
         bytes memory newValue = _deriveValue(
             i, cells, writeOpenings, actionKind, actionFields,
@@ -407,12 +412,13 @@ contract KnomosisStepVMRoot {
         bytes memory oldValue = writeOpenings[i].preValue;
         (bool ok, bytes32 next) = StepVMMerkle.applyCellWrite(
             root,
-            abi.encodePacked(smtKey),
+            smtKey,
             StepWrites.isCanonicallyAbsent(cells[i].kind, oldValue),
             _leafPreimage(smtKey, oldValue),
             StepWrites.isCanonicallyAbsent(cells[i].kind, newValue),
             _leafPreimage(smtKey, newValue),
-            writeOpenings[i].proofData
+            writeOpenings[i].proofData,
+            empties
         );
         // Fatal, never skipped: a fold that dropped an unverified write
         // would reach a root for a state where that cell never moved,

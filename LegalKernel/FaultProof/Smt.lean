@@ -593,6 +593,38 @@ theorem stepPair_size (current : ByteArray) (sb : ByteArray × Bool) :
     (stepPair current sb).size = 32 :=
   smtStep_size _ _ _
 
+/-- `stepPair` on TWO accumulators sharing one sibling and one bit.
+
+    A cell WRITE needs both roots a single opening determines: the one
+    it reproduces from the pre-value, which is what verifies it, and
+    the one it reaches from the post-value, which is the write's
+    result.  The two consume the same sibling at every level and the
+    same key bit — the starting leaf is their entire difference — so
+    they belong in one pass. -/
+def stepPairBoth (current : ByteArray × ByteArray) (sb : ByteArray × Bool) :
+    ByteArray × ByteArray :=
+  (stepPair current.1 sb, stepPair current.2 sb)
+
+/-- **The paired fold is the two separate folds.**
+
+    Stated as an equation rather than left to inspection, so every
+    theorem proved about the single-accumulator walk transfers to the
+    paired one by rewriting instead of by re-proof.  That is what makes
+    the fused shape a refactoring of the specification rather than a
+    second specification. -/
+theorem foldl_stepPairBoth (l : List (ByteArray × Bool)) (a b : ByteArray) :
+    l.foldl stepPairBoth (a, b) = (l.foldl stepPair a, l.foldl stepPair b) := by
+  induction l generalizing a b with
+  | nil => rfl
+  | cons hd tl ih =>
+    show tl.foldl stepPairBoth (stepPair a hd, stepPair b hd) = _
+    exact ih (stepPair a hd) (stepPair b hd)
+
+/-- Both components of a paired step are 32 bytes. -/
+theorem stepPairBoth_size (current : ByteArray × ByteArray) (sb : ByteArray × Bool) :
+    (stepPairBoth current sb).1.size = 32 ∧ (stepPairBoth current sb).2.size = 32 :=
+  ⟨stepPair_size _ _, stepPair_size _ _⟩
+
 /-- The 256-element bit sequence for `key`, MSB-first. -/
 def keyBits {K : Type} [BitsKey K] (key : K) : List Bool :=
   (List.range smtDepth).map (BitsKey.keyBit key)

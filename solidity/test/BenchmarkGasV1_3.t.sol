@@ -7,7 +7,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {KnomosisBridge} from "src/contracts/KnomosisBridge.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
+import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {SmtVerifier} from "src/lib/SmtVerifier.sol";
+import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 import {WithdrawalFlowHarness} from "test/utils/WithdrawalFlowHarness.sol";
 import {MockBoldOz} from "test/utils/MockBoldOz.sol";
 import {MockLiquityV2TroveManager} from "test/utils/MockLiquityV2.sol";
@@ -33,8 +35,11 @@ contract InactiveMigration {
 ///         `approve` prerequisite, `ammSwap` in both directions and both
 ///         approval shapes, the BOLD circuit-breaker surface, the AMM kill
 ///         switch, the Liquity auto-trigger paths, and the
-///         `withdrawWithProof` exit legs), so deployments can budget
-///         L1-gas costs and review can spot performance regressions.
+///         `withdrawWithProof` exit legs) plus the fault proof's
+///         terminal step (`KnomosisStepVMRoot.executeStepToRoot`, in
+///         both its distinct-cell and duplicate-cell shapes), so
+///         deployments can budget L1-gas costs and review can spot
+///         performance regressions.
 ///
 ///         The committed baseline lives in
 ///         `test/BenchmarkGasV1_3.gas-baseline.json`; regenerate it (and
@@ -1226,5 +1231,169 @@ contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
         assertFalse(multisig.executed(), "not executed in the staged state");
         assertFalse(bridge.ammDisabled(), "AMM live in the staged state");
         assertGt(bridge.ammReserveEth(), 0, "pool seeded");
+    }
+}
+
+/// @title BenchmarkGasV1_3StepVMRootTest
+/// @notice The fault proof's TERMINAL STEP —
+///         `KnomosisStepVMRoot.executeStepToRoot`, the call
+///         `KnomosisFaultProofGame.terminateOnSingleStep` makes to
+///         adjudicate a converged bisection.
+///
+/// @dev    Not a v1.3 bridge operation, and here for a reason the rest
+///         of the suite makes obvious by contrast: every other L1
+///         operation a deployment pays for is measured, and the one
+///         whose cost is dominated by a 256-level Merkle walk per
+///         opening was not.  That is the operation a challenger and a
+///         defender each pay to settle a game, so it is the one whose
+///         calldata and hashing budget an operator most needs, and the
+///         one any change to the opening discipline
+///         (`docs/planning/state_root_merkleisation_plan.md` §6) must
+///         be measured against.
+///
+///         Two probes rather than one, because the cost is not a single
+///         number: `transfer` opens five DISTINCT cells, while
+///         `selfTransfer` names the same balance cell twice — the shape
+///         a deduplicating multiproof helps most and a chained fold
+///         helps not at all.  Measuring only the first would report an
+///         average that neither case has.
+///
+///         The inputs are the committed `writeBundleGoldens` corpus,
+///         loaded through the SAME harness the cross-check suite uses
+///         (`StepVMRootProbeHarness`), so the measured call and the
+///         verified call cannot drift apart.  The corpus is a keccak
+///         artifact by construction, so the scenario is as fixed as a
+///         constant while staying a single source of truth.
+contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbeHarness {
+    /// @dev The subject.  Deployed, not linked, so the calldata
+    ///      boundary the benchmark measures is the real one.
+    KnomosisStepVMRoot internal vmRoot;
+
+    /// @dev The corpus, read once.
+    string internal raw;
+    /// @dev The five-distinct-cell probe.
+    string internal distinctBase;
+    /// @dev The duplicate-cell probe (`transfer` with sender == receiver).
+    string internal duplicateBase;
+
+    function setUp() public {
+        vmRoot = new KnomosisStepVMRoot();
+        raw = readFixture(STEP_VM_FIXTURE);
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
+        distinctBase = findProbeBase(raw, "transfer");
+        duplicateBase = findProbeBase(raw, "selfTransfer");
+    }
+
+    /// @notice `executeStepToRoot` over a bundle of five DISTINCT cells
+    ///         (`transfer`: two balances, the signer's nonce, the
+    ///         signer's epoch budget, plus the read-only policy cell).
+    function test_gas_executeStepToRoot_distinctCells() public {
+        _bench(
+            "executeStepToRoot_distinctCells",
+            address(this),
+            address(vmRoot),
+            0,
+            encodeProbeCall(raw, distinctBase, loadOpenings(raw, distinctBase)),
+            true
+        );
+    }
+
+    /// @notice `executeStepToRoot` over a bundle naming the same balance
+    ///         cell TWICE (`transfer` with sender == receiver).
+    ///
+    /// @dev    Under the chained fold the second write costs a full
+    ///         second opening — 256 levels verified and 256 re-walked —
+    ///         to land the value the first one already did.  That is the
+    ///         cost §6's dedup removes, and this entry is where the
+    ///         removal will show.
+    function test_gas_executeStepToRoot_duplicateCell() public {
+        _bench(
+            "executeStepToRoot_duplicateCell",
+            address(this),
+            address(vmRoot),
+            0,
+            encodeProbeCall(raw, duplicateBase, loadOpenings(raw, duplicateBase)),
+            true
+        );
+    }
+
+    /// @notice Pins both benchmarked scenarios: each probe folds to
+    ///         Lean's published post-root, that root is not the
+    ///         pre-root, and the two probes have the shapes their names
+    ///         claim — five distinct cells against a bundle carrying one
+    ///         cell twice.
+    ///
+    /// @dev    Discipline point (4) of this file's header: a benchmark
+    ///         whose effects are unpinned measures whatever `setUp`
+    ///         happens to stage.  Here that risk is concrete — a corpus
+    ///         regeneration that changed `selfTransfer`'s aliasing would
+    ///         silently turn the duplicate benchmark into a second
+    ///         distinct-cell one.
+    function test_sanity_stepVMRootScenarioAssumptions() public view {
+        KnomosisStepVMRoot.CellOpening[] memory distinct =
+            loadOpenings(raw, distinctBase);
+        KnomosisStepVMRoot.CellOpening[] memory duplicate =
+            loadOpenings(raw, duplicateBase);
+
+        assertEq(distinct.length, 4, "transfer writes four cells");
+        assertEq(duplicate.length, 4, "selfTransfer writes four cells");
+        assertEq(
+            _distinctCellCount(distinct), 4, "transfer's cells are all distinct"
+        );
+        assertEq(
+            _distinctCellCount(duplicate), 3, "selfTransfer names one cell twice"
+        );
+
+        assertEq(
+            _run(distinctBase, distinct),
+            probePostRoot(raw, distinctBase),
+            "the distinct-cell probe reaches Lean's post-root"
+        );
+        assertEq(
+            _run(duplicateBase, duplicate),
+            probePostRoot(raw, duplicateBase),
+            "the duplicate-cell probe reaches Lean's post-root"
+        );
+        assertTrue(
+            probePostRoot(raw, distinctBase) != probePreRoot(raw, distinctBase),
+            "the distinct-cell fold moves the root"
+        );
+        assertTrue(
+            probePostRoot(raw, duplicateBase) != probePreRoot(raw, duplicateBase),
+            "the duplicate-cell fold moves the root"
+        );
+    }
+
+    /// @dev Run a probe and return the root the verifier reaches.
+    function _run(
+        string memory base,
+        KnomosisStepVMRoot.CellOpening[] memory ops
+    ) private view returns (bytes32 root) {
+        (bool ok, bytes memory out) =
+            address(vmRoot).staticcall(encodeProbeCall(raw, base, ops));
+        assertTrue(ok, "probe reverted");
+        root = abi.decode(out, (bytes32));
+    }
+
+    /// @dev How many distinct `(cellKind, keyA, keyB)` triples a bundle
+    ///      names.  Quadratic, over at most `MAX_CELL_OPENINGS` entries.
+    function _distinctCellCount(KnomosisStepVMRoot.CellOpening[] memory ops)
+        private
+        pure
+        returns (uint256 n)
+    {
+        for (uint256 i = 0; i < ops.length; i++) {
+            bool seen = false;
+            for (uint256 j = 0; j < i; j++) {
+                if (
+                    ops[i].cellKind == ops[j].cellKind && ops[i].keyA == ops[j].keyA
+                        && ops[i].keyB == ops[j].keyB
+                ) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) n++;
+        }
     }
 }

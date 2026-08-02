@@ -5,6 +5,7 @@ import {CrossCheckFramework} from "./Framework.t.sol";
 import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
+import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
 import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
 
@@ -846,7 +847,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
             bool ok;
             (ok, root) = this.applyOneWrite(
                 root,
-                vm.parseJsonBytes(raw, string.concat(w, ".smtKeyHex")),
+                vm.parseJsonBytes32(raw, string.concat(w, ".smtKeyHex")),
                 vm.parseJsonBool(raw, string.concat(w, ".oldIsAbsent")),
                 vm.parseJsonBytes(raw, string.concat(w, ".oldLeafPreimageHex")),
                 vm.parseJsonBool(raw, string.concat(w, ".newIsAbsent")),
@@ -863,7 +864,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     /// @dev Calldata boundary for one write.
     function applyOneWrite(
         bytes32 root,
-        bytes calldata smtKey,
+        bytes32 smtKey,
         bool oldIsAbsent,
         bytes calldata oldPreimage,
         bool newIsAbsent,
@@ -871,7 +872,15 @@ contract StepVMCrossCheck is CrossCheckFramework {
         bytes calldata proofData
     ) external pure returns (bool ok, bytes32 newRoot) {
         return StepVMMerkle.applyCellWrite(
-            root, smtKey, oldIsAbsent, oldPreimage, newIsAbsent, newPreimage, proofData);
+            root,
+            smtKey,
+            oldIsAbsent,
+            oldPreimage,
+            newIsAbsent,
+            newPreimage,
+            proofData,
+            SmtCellVerifier.precomputeEmptySubtreeHashes()
+        );
     }
 
     /// @notice The leaf PREIMAGE Lean hashes is one Solidity can build.

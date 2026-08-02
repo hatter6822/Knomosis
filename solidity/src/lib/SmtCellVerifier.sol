@@ -55,23 +55,22 @@ pragma solidity 0.8.20;
 ///         byte 0; bit 8 = MSB of byte 1).  Both conventions match
 ///         Lean's `BitsKey` typeclass and `SmtCellProof.bitmaskBit`.
 ///
-///         **Gas cost.**  The verifier performs at most 511 keccak256
-///         calls (256 for the walk + up to 255 to advance the canonical
-///         empty chain in lockstep) plus per-iteration bit-extraction
-///         and branching.  No 8 KiB memory allocation: the empty
-///         subtree chain is tracked through a single `bytes32`
-///         accumulator that advances each iteration.
+///         **Gas cost.**  One walk is 256 keccak256 calls per leaf
+///         plus per-iteration bit extraction and branching.  The
+///         canonical empty-subtree chain is NOT rebuilt per walk: the
+///         caller builds it once with `precomputeEmptySubtreeHashes`
+///         and threads it in, because a step VM walks many openings and
+///         the chain is a constant of the scheme.  A write opens and
+///         re-walks in a SINGLE pass
+///         (`recomputeRootPairFromLeaves`), since the two differ only
+///         in their leaf.
 ///
-///         When invoked directly from another Solidity contract
-///         (e.g. `StepVMMerkle.verifyCellSmtProof`), the library's
-///         internal call cost is dominated by:
-///           * 511 keccak256 ops via the EVM scratch space (~21k gas).
-///           * 256 iterations of calldata-bit reads, branches, and
-///             cursor maintenance (~15-25k gas).
-///           * Total: 35-50k gas, within the SC.2 50k budget for
-///             typical paths.
+///         The dominant term is the 256-iteration loop itself rather
+///         than its hashing, so the bit sources are hoisted out of it:
+///         the key and the bitmask are each ONE word, loaded once and
+///         shifted, instead of a bounds-checked byte load per level.
 ///         The exact cost depends on the proof's bitmask (no extra
-///         calldata for unset bits; one calldataload per set bit) and
+///         calldata for unset bits; one `calldataload` per set bit) and
 ///         the surrounding contract's own dispatch overhead.
 ///
 ///         **Soundness**.  Under collision-resistance of `keccak256`,
@@ -120,10 +119,9 @@ library SmtCellVerifier {
     ///
     /// @dev    O(d) keccak256 calls per invocation.  Provided as a
     ///         reference for tests, audit scripts, and one-off
-    ///         computations.  `recomputeRoot` does NOT call this
-    ///         function: it tracks the empty-subtree chain through a
-    ///         single `bytes32` accumulator that advances in lockstep
-    ///         with the walk.
+    ///         computations.  The walk does not call this per level —
+    ///         it reads `precomputeEmptySubtreeHashes()`'s table, built
+    ///         once by the caller.
     ///
     ///         Reverts with `SmtCellDepthOutOfRange` if `d >= 256`.
     ///         Lean's `emptySubtreeHash` returns `ByteArray.empty`
@@ -147,15 +145,27 @@ library SmtCellVerifier {
     }
 
     /// @notice Materialise all 256 canonical empty-subtree hashes
-    ///         into an in-memory array.  Provided as a public helper
-    ///         for tests and audit scripts (e.g.
-    ///         `script/ComputeEmptyHashes.s.sol`).
+    ///         into an in-memory array — `H_0 = keccak256("EMPTY_LEAF")`,
+    ///         `H_{d+1} = keccak256(H_d ‖ H_d)`.  Mirrors Lean's
+    ///         memoised `emptySubtreeHash` (`FaultProof/Smt.lean`).
     ///
-    /// @dev    `recomputeRoot` does NOT call this function.  Instead,
-    ///         it advances a single `bytes32` accumulator through the
-    ///         chain in lockstep with the walk to avoid an 8 KiB
-    ///         memory allocation.  Use this helper when you need a
-    ///         full reference table, e.g. for golden-value tests.
+    /// @dev    **The walk's source of empty siblings.**  This used to be
+    ///         a test-and-script helper that the walk pointedly did not
+    ///         call: `recomputeRoot` advanced a single `bytes32`
+    ///         accumulator through the chain in lockstep, one
+    ///         `keccak256` per level, "to avoid an 8 KiB memory
+    ///         allocation".  That trade is the wrong way round at
+    ///         step-VM scale.  The allocation costs ~896 gas ONCE per
+    ///         transaction; the accumulator costs 255 hashes per WALK,
+    ///         and a terminal step walks twice per opening — so a
+    ///         five-opening step rebuilt this identical chain ten
+    ///         times.  The table is now built once by the caller and
+    ///         threaded down.
+    ///
+    ///         Still `pure` and still returned by value: a verifier a
+    ///         challenger can run off-chain must not depend on
+    ///         deployment storage, and 255 `SLOAD`s would cost far more
+    ///         than the hashes they replaced.
     ///
     /// @return hashes  hashes[d] = canonical empty-subtree hash at depth d.
     function precomputeEmptySubtreeHashes()
@@ -200,6 +210,63 @@ library SmtCellVerifier {
         }
     }
 
+    /// @notice `smtKey`'s first 32 bytes as a big-endian word,
+    ///         right-zero-padded when the key is shorter.
+    ///
+    /// @dev    **The walk's key, hoisted.**  A 256-level walk read one
+    ///         bit per level with `readKeyBitMSBFirst`, and each read
+    ///         was a bounds check plus a single-byte `mload` plus a
+    ///         mask and a shift — 256 times over data that never
+    ///         changes and fits in one word.  The key is loaded once
+    ///         here and the walk shifts.
+    ///
+    ///         The right-zero-padding is what makes this agree with the
+    ///         byte-wise reader rather than merely resemble it: a key
+    ///         shorter than 32 bytes must read 0 at every bit at or
+    ///         past `8 * length` (Lean's `BitsKey ByteArray` instance
+    ///         returns `false` there), and masking off the trailing
+    ///         bytes delivers exactly that.
+    ///
+    ///         **Scope: bit indices 0..255 only.**  This word covers
+    ///         the first 32 bytes, so an OVER-LONG key's bits at index
+    ///         256 and above are not in it — and those are bits the
+    ///         byte-wise reader (and Lean) genuinely return, since
+    ///         `BitsKey ByteArray` reads any `i < 8 * size`.  The walk
+    ///         only ever asks for `d < SMT_DEPTH`, which is why the
+    ///         hoist is sound there and why `readKeyBitMSBFirst` keeps
+    ///         its byte-wise body for the general contract.
+    ///         `test_word_readers_diverge_past_the_first_word` pins
+    ///         that boundary rather than leaving it to be rediscovered.
+    function keyWord(bytes memory smtKey) internal pure returns (uint256 w) {
+        uint256 len = smtKey.length;
+        /// @solidity memory-safe-assembly
+        assembly {
+            w := mload(add(smtKey, 32))
+        }
+        if (len < HASH_BYTES) {
+            // Keep the top `len` bytes, zero the rest.  `len << 3 < 256`
+            // here, so the shift is well-defined.
+            unchecked {
+                w &= ~(type(uint256).max >> (len << 3));
+            }
+        }
+    }
+
+    /// @notice Bit `d` of a key word, MSB-first — the word form of
+    ///         `readKeyBitMSBFirst` on the walk's domain.  **Caller
+    ///         MUST guarantee `d < 256`**; the shift underflows
+    ///         otherwise.
+    ///
+    /// @dev    Byte `d / 8` of a big-endian word sits at bit positions
+    ///         `8·(31 − d/8) + 7 … 8·(31 − d/8)`, and bit `d % 8`
+    ///         counted MSB-first within it is offset `7 − (d % 8)` —
+    ///         which sums to `255 − d`.
+    function keyBitFromWord(uint256 keyW, uint256 d) internal pure returns (uint256) {
+        unchecked {
+            return (keyW >> (255 - d)) & 1;
+        }
+    }
+
     /// @notice Read bit `d` of `bitmask` LSB-first within each byte.
     ///         For indices past the bitmask's byte length, returns 0.
     ///         Matches Lean's `SmtCellProof.bitmaskBit`.
@@ -217,6 +284,41 @@ library SmtCellVerifier {
             if (byteIdx >= bitmask.length) return 0;
             uint256 bitIdx = d & 7; // d % 8 (LSB-first within byte)
             bit = (uint256(uint8(bitmask[byteIdx])) >> bitIdx) & 1;
+        }
+    }
+
+    /// @notice `bitmask`'s first 32 bytes as a big-endian word,
+    ///         right-zero-padded when it is shorter.  The bitmask
+    ///         counterpart of `keyWord`, hoisted out of the walk for
+    ///         the same reason and carrying the same 0..255 scope.
+    function bitmaskWord(bytes calldata bitmask) internal pure returns (uint256 w) {
+        uint256 len = bitmask.length;
+        /// @solidity memory-safe-assembly
+        assembly {
+            w := calldataload(bitmask.offset)
+        }
+        if (len < BITMASK_BYTES) {
+            unchecked {
+                w &= ~(type(uint256).max >> (len << 3));
+            }
+        }
+    }
+
+    /// @notice Bit `d` of a bitmask word, LSB-first WITHIN each byte —
+    ///         the word form of `readBitmaskBit` on the walk's domain.
+    ///         **Caller MUST guarantee `d < 256`**; the subtraction
+    ///         underflows otherwise.
+    ///
+    /// @dev    Deliberately not `255 - d`: the bitmask's convention is
+    ///         the key's mirror image within the byte (bit 0 is the LSB
+    ///         of byte 0, bit 7 its MSB), so the offset is
+    ///         `8·(31 − d/8) + (d % 8)`.  The two conventions differing
+    ///         is a property of the wire format, and expressing both
+    ///         here — beside each other — is what keeps the difference
+    ///         deliberate rather than a transcription hazard.
+    function bitmaskBitFromWord(uint256 maskW, uint256 d) internal pure returns (uint256) {
+        unchecked {
+            return (maskW >> (((31 - (d >> 3)) << 3) + (d & 7))) & 1;
         }
     }
 
@@ -295,6 +397,49 @@ library SmtCellVerifier {
         bytes32 leaf,
         bytes calldata proofData
     ) internal pure returns (bytes32 root) {
+        (root,) = recomputeRootPairFromLeaves(
+            keyWord(smtKey), leaf, leaf, proofData, precomputeEmptySubtreeHashes());
+    }
+
+    /// @notice **One walk, two leaves.**  Recompute the root a proof
+    ///         opens against from `oldLeaf`, and the root the same
+    ///         proof reaches from `newLeaf`, in a single pass.
+    ///
+    /// @dev    A cell write needs both: the OLD root to check the
+    ///         opening against the state it claims to be against, and
+    ///         the NEW root the write produces.  Both walks consume the
+    ///         same key bits and the same siblings — the leaf is the
+    ///         entire difference — so running them separately pays
+    ///         twice for the proof parse, the 256 bitmask reads, the
+    ///         256 key-bit reads, the sibling cursor and the loop
+    ///         itself, and only the two `keccak256`s per level are
+    ///         genuinely distinct work.  Fusing them halves the
+    ///         dominant cost of the fold.
+    ///
+    ///         Callers that need only one root pass the same leaf
+    ///         twice; the second accumulator then tracks the first and
+    ///         is discarded.  That keeps ONE walk implementation rather
+    ///         than two that must agree — the same reasoning that keeps
+    ///         `recomputeRoot`'s preimage path a wrapper.
+    ///
+    /// @param  keyW       the SMT key as a word, from `keyWord` (or
+    ///                    `uint256(bytes32 key)` for a caller that
+    ///                    already holds a 32-byte derived key).
+    /// @param  oldLeaf    the leaf the proof is claimed to open.
+    /// @param  newLeaf    the leaf the write installs.
+    /// @param  proofData  the wire-encoded proof:
+    ///                    `bitmask(32) || siblings(N x 32)`.
+    /// @param  empties    the canonical empty-subtree chain, from
+    ///                    `precomputeEmptySubtreeHashes()`.
+    /// @return oldRoot    the root reached from `oldLeaf`.
+    /// @return newRoot    the root reached from `newLeaf`.
+    function recomputeRootPairFromLeaves(
+        uint256 keyW,
+        bytes32 oldLeaf,
+        bytes32 newLeaf,
+        bytes calldata proofData,
+        bytes32[SMT_DEPTH] memory empties
+    ) internal pure returns (bytes32 oldRoot, bytes32 newRoot) {
         if (proofData.length < BITMASK_BYTES) {
             revert SmtCellProofTooShort(proofData.length);
         }
@@ -307,17 +452,22 @@ library SmtCellVerifier {
         bytes calldata bitmask = proofData[0:BITMASK_BYTES];
         bytes calldata siblings = proofData[BITMASK_BYTES:];
 
-        // Initial state: leaf hash + H_0 (the leaf-level canonical
-        // empty subtree hash).  emptyAtD advances per-iteration to
-        // remain in lockstep with the walk's depth.
-        bytes32 current = leaf;
-        bytes32 emptyAtD = keccak256(EMPTY_LEAF_SEED);
+        bytes32 currentOld = oldLeaf;
+        bytes32 currentNew = newLeaf;
+
+        // The bitmask is a single word that does not change across the
+        // 256 levels, so it is loaded once rather than bounds-checked
+        // and byte-indexed per level.  The key arrives already in that
+        // form: every step-VM caller derives it as a `bytes32`, so
+        // packing it into `bytes` only to unpack it again would be a
+        // conversion that exists to be undone.
+        uint256 maskW = bitmaskWord(bitmask);
 
         uint256 siblingsCursor = 0;
         unchecked {
             for (uint256 d = 0; d < SMT_DEPTH; ++d) {
                 bytes32 sibling;
-                if (readBitmaskBit(bitmask, d) == 1) {
+                if (bitmaskBitFromWord(maskW, d) == 1) {
                     if (siblingsCursor < siblingsCount) {
                         sibling = _readSiblingAt(siblings, siblingsCursor);
                         ++siblingsCursor;
@@ -325,26 +475,22 @@ library SmtCellVerifier {
                         sibling = PADDING_HASH;
                     }
                 } else {
-                    sibling = emptyAtD;
+                    sibling = empties[d];
                 }
 
-                if (readKeyBitMSBFirst(smtKey, d) == 1) {
+                if (keyBitFromWord(keyW, d) == 1) {
                     // Right child: parent = keccak256(sibling || current)
-                    current = _hashPair(sibling, current);
+                    currentOld = _hashPair(sibling, currentOld);
+                    currentNew = _hashPair(sibling, currentNew);
                 } else {
                     // Left child: parent = keccak256(current || sibling)
-                    current = _hashPair(current, sibling);
-                }
-
-                // Advance emptyAtD = keccak256(H_d || H_d) for the
-                // next iteration.  Skip at d=255 since H_256 is not
-                // needed (the walk terminates at d=255).
-                if (d < SMT_DEPTH - 1) {
-                    emptyAtD = _hashPair(emptyAtD, emptyAtD);
+                    currentOld = _hashPair(currentOld, sibling);
+                    currentNew = _hashPair(currentNew, sibling);
                 }
             }
         }
-        root = current;
+        oldRoot = currentOld;
+        newRoot = currentNew;
     }
 
     /// @notice The canonical empty-leaf hash — the value a cell with
