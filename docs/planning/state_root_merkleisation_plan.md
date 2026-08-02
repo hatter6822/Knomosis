@@ -1267,10 +1267,13 @@ the hash recipe.
 own; §3 / §3A and S6 are one consensus change and must not be split
 across releases that could be deployed independently.
 
-**The plan is complete.**  The runbook's §0 deployment blocker is
-gone: the terminal step adjudicates, both sides of its comparison are
-state roots, and `forge test` runs 891 / 0 failed / 0 skipped with
-`verify_keccak_crossstack.sh` reporting the same.
+**§§1–4 are complete.**  The runbook's §0 deployment blocker is gone:
+the terminal step adjudicates, both sides of its comparison are state
+roots, and `forge test` runs 891 / 0 failed / 0 skipped with
+`verify_keccak_crossstack.sh` reporting the same.  §6, the
+deduplicating pre-root multiproof, is the follow-on work — a cost and
+structure change on top of a correct adjudicator, not a correction to
+it.
 
 One operator-facing condition outlives the plan and is recorded in the
 runbook rather than here: a deployment leaning on the fault proof must
@@ -1281,10 +1284,388 @@ recipient are indistinguishable to it.  `FaultProofAdjudicable` /
 `StepWrites.isAdjudicable` is the predicate, false on exactly those
 two, and the step VM refuses them before verifying any opening.
 
-One design question is deliberately left open, and is a cost question
+One design question was deliberately left open, and is a cost question
 rather than a correctness one: the fold takes one opening per write,
 each against the RUNNING root.  A deduplicating pre-root multiproof is
-materially smaller on calldata — paths overlap near the root — at the
-cost of having to sequence same-cell writes itself, which is where a
-dangerous bug would live.  Chaining shipped; measure against the
-GP.11.9 benchmark before moving.
+smaller on calldata — paths overlap near the root — at the cost of
+having to sequence same-cell writes itself, which is where a dangerous
+bug would live.  Chaining shipped.  §6 below is the measurement and the
+answer.
+
+---
+
+## 6. The deduplicating pre-root multiproof
+
+§5's closing paragraph left the fold's opening discipline open as a
+cost question.  This section is the measurement and the design that
+answers it: every write is opened ONCE, against the PRE-root; a cell
+written twice appears ONCE; and the fold carries the pre- and
+post-hashes together through a single merged walk, checking the
+pre-side against the submitted pre-root exactly once, at the end.
+
+### 6.1 What it buys — measured, not asserted
+
+Computed from the twenty `writeBundleGoldens` probes in
+`solidity/test/CrossCheck/fixtures/step_vm.json` — real keys, real
+bitmasks, not a model.
+
+Calldata, total opening bytes across the twenty probes:
+
+| | bytes | Δ |
+|---|---|---|
+| chained (today) | 13 152 | — |
+| multiproof | 11 845 | **−9.9 %** |
+
+Concentrated exactly where the design predicts — the three
+duplicate-cell probes: `selfTransfer` 640 → 511 (−20 %),
+`depositWithFeeSelf` 928 → 734 (−21 %), `topUpActionBudgetForSelf`
+768 → 575 (−25 %).  Distinct-cell probes save 4–9 %.  The ratio holds
+in production: with ~10⁶ live cells each key carries ~20 non-empty
+siblings (the top ~20 levels), of which only the top ~log₂ m are
+shared.
+
+Hashing, keccak calls across the same twenty probes:
+
+| | keccak calls | Δ |
+|---|---|---|
+| chained, today | 99 328 | — |
+| chained + memoised empty-subtree chain | 49 664 | **−50 %** |
+| multiproof, on top of that memoisation | 47 836 | **−3.7 %** further |
+
+**The second row is the finding.**  Almost the whole hashing win
+belongs to a change that has nothing to do with multiproofs:
+`SmtCellVerifier.recomputeRootFromLeaf` rebuilds the 256-hash
+canonical empty-subtree chain PER CALL (`SmtCellVerifier.sol:314`,
+advanced at `:341`), and `StepVMMerkle.applyCellWrite` calls it twice
+per opening — so a five-opening step pays 2 560 redundant keccaks.
+Memoising it once per `executeStepToRoot` call recovers 50 % on its
+own, which is why it is M0 and lands separately: bundling it would
+credit the multiproof with a gain it did not produce.
+
+Of the residual 3.7 %, essentially all is the three duplicate probes
+(−15 % to −20 % each); distinct-cell probes gain 0.4–0.9 %.  That is
+arithmetic rather than pessimism: two random 256-bit keys share ~1 bit
+of prefix, so m paths merge only in the top 1–3 of 256 levels.  **A
+multiproof over hash-derived keys does not save hashing.**  It saves
+calldata, and it saves a whole walk whenever a cell repeats.
+
+So the honest headline is ≈10 % calldata, ≈1 % gas on distinct-cell
+steps and ≈15–20 % on duplicate-cell ones — and the multiproof is
+bought mainly for its structural properties.  Those are real, and are
+the part worth having:
+
+  * **One root check, not m.**  The aggregate pre-fold is compared to
+    the pre-root once.  No intermediate root is materialised or
+    trusted.
+  * **Order carries no information.**  Every opening is against the
+    same root, so `preStateValueAt`'s "first occurrence wins" rule
+    (`Terminate.lean:165`) and its L1 twin `_preStateValue`
+    (`KnomosisStepVMRoot.sol:332`) DELETE.  Lookup becomes by cell
+    identity, which is what it always meant.
+  * **The proof's shape is derivable from the key set.**  The gap
+    count is a closed form (§6.2.4), so a wrong-length proof is
+    REJECTED rather than padded.  Today `recomputeRootFromLeaf`
+    substitutes `PADDING_HASH` when the wire runs short
+    (`SmtCellVerifier.sol:325`) and walks on — a truncated proof is a
+    silent reinterpretation, not a revert.
+  * **One pass computes both roots**, sharing the loop, the mask reads
+    and the bit extraction the chained path pays for twice per
+    opening.
+  * **The read-only policy opening stops being special.**  It joins
+    the frontier as a write of the same value, retiring
+    `_requirePolicyOpening`'s separate 512-hash walk
+    (`KnomosisStepVMRoot.sol:250-279`).
+
+The decision rule, stated before the work rather than after it: M0
+lands and is measured on its own; if the multiproof then measures
+net-negative on the distinct-cell majority it STILL lands, for the
+five properties above.  Recording that now is the difference between a
+design choice and a rationalisation.
+
+### 6.2 The tree, exactly
+
+#### 6.2.1 Bit order
+
+`BitsKey.keyBit k i` reads byte `i/8`, bit `7-(i%8)` — MSB-first.  For
+a key loaded big-endian into a `uint256 K`, byte `i/8` occupies bit
+positions `8·(31−i/8)+7 … 8·(31−i/8)`, so **Lean bit index `i`
+corresponds to uint256 bit position `255 − i`**.
+
+`smtRootListAux (d+1)` splits on `keyBit · d` (`Smt.lean:676`) and the
+root is `smtRootListAux 256`, so bit 255 is the ROOT split and bit 0
+the deepest.  `canonicalSiblings` emits depth 0 first
+(`SmtInjective.lean:898`) and `smtWalkFrom` folds in that order.
+Reading a path root-first therefore reads Lean bits 255, 254, …, 0 —
+uint256 positions 0, 1, …, 255, least significant first.
+
+#### 6.2.2 The path index
+
+Define `pathIndex(key) = bitreverse(K)`.  Then bit `d` of `pathIndex`
+(LSB-indexed) is exactly `BitsKey.keyBit key d`; reading a path
+root-first is reading `pathIndex` MSB-first; **path order is plain
+unsigned `pathIndex_a < pathIndex_b`**; and the level at which two
+paths diverge is **`div(a,b) = msb(pathIndex_a ⊕ pathIndex_b)`**.
+
+This is the simplification that makes the rest cheap — sorting, the
+divergence level and every bit test collapse to standard integer
+operations on one derived word.  `pathIndex` becomes a corpus column
+so both stacks are pinned to the same sort key.  Lean:
+`FaultProof/PathIndex.lean`, with
+`testBit_pathIndex : i < 256 → Nat.testBit (pathIndex k) i =
+BitsKey.keyBit k i`.  Solidity: a five-step shift/mask bit reversal
+and a binary-search `msb`.
+
+#### 6.2.3 The Cartesian structure
+
+For keys sorted by `pathIndex`, `div(a,c) = max(div(a,b), div(b,c))`
+for `a<b<c`, and adjacent divergence levels are DISTINCT: if
+`div(kⱼ,kⱼ₊₁) = d` and `div(kⱼ₊₁,kⱼ₊₂) = d` then `kⱼ₊₁` would have to
+sit in both children of the level-`d` split.  Therefore at any level
+at most two ADJACENT active nodes merge, and a single left-to-right
+scan advancing by two on a merge is correct.  Both facts are Lean
+lemmas (`div_max`, `adjacent_div_ne`) — they are what licenses the
+scan, so they are proved rather than commented.
+
+#### 6.2.4 The gap count is a closed form
+
+A GAP is an (active node, level) pair with no merge — a slot that
+consumes a sibling from the wire.  With `active_d` the distinct
+level-`d` prefixes,
+
+```
+G = Σ_d |active_d| − (m−1)
+  = 256 + Σ_{j=0}^{m−2} div(k_j, k_{j+1}) − (m−1)
+```
+
+At `m = 1`, `G = 256`.  At `m = 2` with divergence `p`: `2p` gaps
+below, none at `p`, `255−p` above → `256 + p − 1`.  The verifier
+computes `G` from the key set BEFORE parsing, which is what makes an
+exact-length check possible at all.
+
+### 6.3 The multiproof
+
+#### 6.3.1 Wire format
+
+```
+gapMask   : ceil(G/8) bytes, MSB-first within each byte
+siblings  : 32 × popcount(gapMask) bytes
+```
+
+Gap `g` set means the sibling is drawn from `siblings`; clear means it
+is the canonical empty-subtree hash at that level.  Three exact
+checks: the mask length equals `ceil(G/8)` for the derived `G`; every
+bit beyond `G` in the final mask byte is zero; and the sibling region
+is exactly `32 · popcount(gapMask)`.  The first and third replace the
+`PADDING_HASH` fallback, the second closes a malleability slot.
+
+**At `m = 1` the encoding is byte-identical to today's `proofData`** —
+`G = 256`, the mask is 32 bytes, and post-order over a single path
+degenerates to depth order.  That is a pinned regression test, and it
+is what makes the wire change a widening rather than a break.
+
+#### 6.3.2 Gap order: post-order
+
+Gaps are consumed in post-order over the active tree: the left
+subtree's gaps, then the right subtree's, then this node's own levels.
+
+Post-order is chosen because the Lean recursion then mirrors
+`smtRootListAux` exactly — at depth `d+1`, split keys and entries by
+bit `d`, recurse on both halves, concatenate
+`siblingsLo ++ siblingsHi ++ (this level's gap, if any)`.  The wire
+order falls out of the structural recursion, so the representation
+needs no re-index lemma.  Level-order was considered and rejected: it
+would make the Lean side a bottom-up fold needing a bottom-up /
+top-down bridge, and the wire would need a permutation lemma —
+precisely the `expandSiblings ∘ buildSmtCellProof` shape §4 already
+flags as validated by fixtures rather than proved.  Post-order also
+gives the `m = 1` byte-identity that level-order does not.
+
+The cost lands in Solidity, where post-order needs a cursor discipline
+rather than a straight level scan.  It is one rule: on a merge the
+parent inherits the RIGHT child's cursor, which after the right
+child's own gaps points exactly at the parent's first.  Realised with
+a monotonic stack over the sorted keys — depth bounded by
+`MAX_CELL_OPENINGS`, so no 256-deep recursion.
+
+#### 6.3.3 The fold
+
+```
+sorted, distinct keys k₀ < … < k_{m−1}          (by pathIndex)
+active := [ (kⱼ, preLeafⱼ, postLeafⱼ) ]
+for d in 0 … 255:
+    scan active left→right:
+      if div(activeᵢ, activeᵢ₊₁) == d:          -- merge; no wire read
+          pre  := H(preᵢ  ‖ preᵢ₊₁)
+          post := H(postᵢ ‖ postᵢ₊₁)
+      else:                                     -- gap
+          sib := nextGap(d) ? siblings[cursor++] : empties[d]
+          (pre, post) := combine on bit d of pathIndex(activeᵢ)
+require active == [one node]
+require active[0].pre == preStateRoot
+return  active[0].post
+```
+
+The pre- and post-hashes travel together, sharing the sibling.  That
+is sound because a sibling subtree contains no opened cell, so it is
+identical in both states — the fact
+`foldStateCellWrites_eq_commit_of_coherent` already turns on.  A READ
+is a write of the same value (`postLeaf = preLeaf`), so the policy
+cell needs no separate path; `.budgetPolicy` is written by no action,
+so it never collides with a write.  The leaf still branches on absence
+(`cellLeaf`, `StateCellsInjective.lean:571`).
+
+Soundness rests on the same `CollisionFreeOn` hypothesis and the same
+theorem (`smtRootListAux_perm_of_eq_under_collision_free`) the
+published root's injectivity already rests on.  The multiproof is not
+a new trust assumption; it is the same one, used once instead of m
+times.
+
+#### 6.3.4 The derived-key bootstrap stays sound
+
+`withdraw`'s pending cell is keyed by the pre-state's `nextWdId`, read
+from the bundle (`_nextWdIdPre`, `provenNextWdId`) — the one place a
+submitted value determines WHICH cell is opened, and the one place the
+ordering "derive the key set, then verify" looks circular.  It is not:
+`.bridgeNextWdId` is itself an opened cell, so its claimed pre-value
+enters the pre-fold, and a wrong one moves the aggregate off the
+pre-root.
+
+### 6.4 The same-cell case, and why it is written first
+
+`deriveTransferBalances` (`VerifierWrites.lean:621`) at an alias
+returns
+
+```lean
+if sender = receiver then some [((r, sender), sBal), ((r, receiver), sBal)]
+```
+
+— BOTH ENTRIES EQUAL.  Every sibling in the `derive*Balances` family
+is alias-aware the same way.  So `selfTransfer`, `depositWithFeeSelf`
+and `topUpActionBudgetForSelf` — the three duplicate probes in the
+corpus today — **cannot distinguish a first-occurrence rule from a
+last-occurrence one**.  They pass under either.  Any dedup bug they
+could catch, they catch by accident.
+
+That is why the same-cell case is authored before any tree walking
+exists.  It is the only part of the design the existing corpus is
+blind to, and M1 is small enough to hold it entirely.
+
+**The rule: a duplicate is not representable.**  The verifier derives
+the write set, sorts and dedups it by `pathIndex`, sorts the submitted
+bundle the same way, and requires strict-ascending `pathIndex` plus
+elementwise equality against the derived set.  Strict ascending gives
+distinctness for free, so a bundle carrying the cell twice fails the
+shape check before any hashing.
+
+**The bundle may arrive in any order** — the verifier sorts it
+(insertion sort over at most `MAX_CELL_OPENINGS` `uint256`s; ~28
+comparisons at the realistic m ≤ 8).  Two consequences, both accepted
+deliberately: `test_reordered_bundle_reverts` FLIPS to
+`test_reordered_bundle_same_root`, so order-independence stops being
+an unstated reliance and becomes the proved property `multiWalk_perm`;
+and two distinct calldata encodings become valid for the same step,
+which is harmless here because nothing signs the bundle and the game
+stores only the resulting root.  Recorded so it is a known property
+rather than a later discovery.
+
+The post-value for a deduped cell is `derivedCellValue` evaluated
+once — it is already keyed by cell tag, so there is one value by
+construction, and the dedup is a pure calldata saving with no semantic
+change.  The ONLY place a disagreement could enter is
+`plannedBalances` returning two entries for one key with different
+values.  Two things close that, belt and braces:
+`plannedBalances_alias_consistent` (a theorem over all twelve
+balance-writing variants: two plan entries sharing a key have equal
+values — stating the property `plannedBalanceAt`'s `find?`
+(`Terminate.lean:243`) already relies on and nothing asserts), and a
+TOTAL lookup that returns `none` on a disagreeing duplicate instead of
+silently taking the first.  The theorem says that branch is
+unreachable from any action; the branch means a future derivation bug
+fails closed rather than picking a root.
+
+M1's tests, in authoring order:
+
+  1. a hand-built bundle carrying the duplicate (matching the
+     UNDERIVED write set) fails the shape check;
+  2. `selfTransfer`'s deduped bundle folds to
+     `commitExtendedState post`;
+  3. `derivedCellValue … t = getCellValue post t` at the aliased cell;
+  4. a synthetic plan with two different values at one key yields
+     `none` — unreachable from any action, therefore only testable at
+     this level, and pinned with a comment saying so;
+  5. `plannedBalances_alias_consistent`, plus a value-level sweep over
+     every reachable alias of every balance-writing variant;
+  6. a permuted bundle yields the same root — the replacement for
+     `test_reordered_bundle_reverts`.
+
+### 6.5 Milestones
+
+Every milestone is a commit that builds and tests green: `lake build`
+(zero warnings), `lake test`, the nine audit binaries,
+`regenerate_codemaps.py`, `cargo fmt` / `clippy -D warnings` /
+`test --workspace`, `forge build`, `forge test`.
+
+| # | Milestone | Content |
+|---|---|---|
+| M0 | Empty-chain memoisation + the missing benchmark | `BenchmarkGasV1_3.t.sol` has no terminate entry, so the operation this whole section optimises is unmeasured.  Add isolated-mode benchmarks for a distinct-cell and a duplicate-cell step and regenerate the baseline FIRST; then build `bytes32[257] memory empties` once per `executeStepToRoot` and thread it into `StepVMMerkle.applyCellWrite` and a new `recomputeRootFromLeafWithEmpties`.  Do NOT touch `recomputeRoot`'s preimage path — it is pinned by `smt_cell_proof.json`. |
+| M1 | The frontier, test-first | `FaultProof/PathIndex.lean` and `FaultProof/Frontier.lean`: `pathLess`, `div`, `div_max`, `adjacent_div_ne`, `gapCount` and its closed form, `frontierOf`, the sort-and-dedup shape check, the total plan lookup, `plannedBalances_alias_consistent`.  §6.4's six tests are written before the definitions they exercise. |
+| M2 | `multiSiblings` / `multiWalk` | `FaultProof/MultiProof.lean` — the m-key analogue of `canonicalSiblings_walks_to_root`, same structural induction.  Plus `multiWalk_eq_smtRootListAux`, `multiSiblings_eq_canonicalSiblings` at `m = 1`, `multiWalk_perm`, `multiWalk_proof_independent`. |
+| M3 | The pre/post pair | `multiFoldPostRoot` and `multiFold_eq_commit_post`.  This SUBSUMES `foldStateCellWrites_eq_commit_of_coherent` — m keys at once, order-independent — and replaces it in CLAUDE.md's headline table rather than deleting it. |
+| M4 | Re-plumb `Terminate.lean` | `verifierPostRootMulti`; delete `preStateValueAt`'s first-occurrence rule for by-cell lookup; prove `verifierPostRootMulti_eq_verifierPostRoot` on honest bundles so the settlement chain is inherited rather than re-proved.  The forgery refusals are restated against the new entry point. |
+| M5 | The wire | `Smt.SmtMultiProof` + `toWireBytes` + `Encodable`; `Encoding/KernelStep.lean` instances; `buildTerminateBundle`; the JSON emitter and `knomosis export-terminate-bundle`.  Corpus: a `multiProofGoldens` column (gap mask, siblings, per-cell `pathIndexHex`, `G`) plus the `m = 1` byte-identity pin against `proofDataHex`. |
+| M6 | Solidity | `solidity/src/lib/SmtMultiVerifier.sol` and `KnomosisStepVMRoot.executeStepToRootMulti`.  Both entry points compiled side by side so the corpus asserts they agree on all twenty probes BEFORE the flip.  `_requirePolicyOpening` folds into the frontier.  Measure against M0's baseline. |
+| M7 | The flip | `terminateOnSingleStep` → `executeStepToRootMulti`; the observer builds multiproofs; the Rust conduit follows and `method_selectors.json` is regenerated from the compiled ABI; a `cargo-fuzz` target for the variable-length gap mask + sibling array; deploy scripts assert the multiproof build. |
+| M8 | Retirement and close-out | Retire the chained `applyCellWrite` use, `CellWriteChain` / `ChainCoherent` / `chainWrites` / `canonicalCellChain`, and `dropKey_stateCellEntries_perm_of_agree_off`.  KEEP `updateStateCellRoot_eq_commit_of_canonical` (the `m = 1` instance, a headline theorem) and `WriteSetComplete`.  Docs, byte-identical CLAUDE.md / AGENTS.md, minor version bump in lockstep, codemaps. |
+
+### 6.6 Decisions taken
+
+| Question | Decision |
+|---|---|
+| M0 separately? | **Yes.**  It is ~50 % of the hashing win and unrelated to multiproofs. |
+| Bundle order on the wire | **Any order accepted**; the verifier sorts by `pathIndex`.  `test_reordered_bundle_reverts` flips to a same-root assertion; calldata malleability is accepted and documented. |
+| Duplicate handling | **Not representable** — strict-ascending `pathIndex` after the sort gives distinctness — plus an alias-consistency theorem and a lookup that fails closed. |
+| Gap order | **Post-order**, so the Lean recursion mirrors `smtRootListAux` and needs no re-index lemma, and `m = 1` stays byte-identical. |
+| Keep the chained path? | **No.**  A second consensus surface with its own corpus columns is a drift risk; M6 keeps both only long enough for the equivalence assertion. |
+| Bulk variants | **Unchanged.**  `FaultProofAdjudicable` still excludes the two; a multiproof does not make an unenumerable write set enumerable. |
+| Rust | **Conduit only**, as today.  No SMT implementation enters `runtime/`. |
+
+One question is carried forward: `MAX_CELL_OPENINGS = 32` bounds the
+frontier and hence the stack depth, while the largest adjudicable
+write set is 7 (`depositWithFee`) plus the policy cell.  The bound need
+not be tight, but it should be re-derived from `verifierWriteCells`
+rather than left a round number — a one-line `assertConsistent`
+addition in M6.
+
+### 6.7 Verification
+
+Beyond the standing gates, the targeted proof that each stage landed:
+
+  * **M0** — the terminate benchmark exists and its baseline entry
+    drops by the predicted ≈45 %; `smt_cell_proof.json` is unchanged.
+  * **M1** — §6.4's six tests, authored before the code.  A duplicate
+    bundle REVERTS; a disagreeing-alias plan yields `none`.
+  * **M2** — `multiSiblings` at `m = 1` is byte-equal to
+    `canonicalSiblings`; a permuted key list folds to the same root; a
+    bundle with one sibling removed fails the LENGTH check rather than
+    being padded.
+  * **M3** — the honest bundle lands on `commitExtendedState post` for
+    all twenty probes, duplicates included.
+  * **M4** — `verifierPostRootMulti` agrees with `verifierPostRoot` on
+    every probe; every forgery the chained verifier refused is still
+    refused (forged pre-value, short bundle, substituted policy cell,
+    both bulk variants), with the reorder case flipped to a same-root
+    assertion.
+  * **M6** — both entry points agree on all twenty probes; a
+    wrong-length gap mask, a non-zero pad bit and a wrong sibling
+    count each revert; measured gas recorded against M0's baseline.
+  * **M7** — breaking the Solidity terminate signature breaks the Rust
+    build via `method_selectors.json`;
+    `KnomosisFaultProofGame.t.sol`'s honest-sequencer-wins test still
+    passes, driven by a real corpus probe.
+  * **M8** — `#print axioms` on the surviving headline theorems still
+    returns a subset of `[propext, Classical.choice, Quot.sound]`.
+
+Keccak-linked lane throughout: `KNOMOSIS_HASH_BACKEND=keccak256` plus
+`KNOMOSIS_KECCAK_STATICLIB`, fixtures regenerated with
+`KNOMOSIS_FIXTURES_OVERWRITE=1`, and
+`./scripts/verify_keccak_crossstack.sh` as the belt-and-braces lane.
