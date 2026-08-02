@@ -1311,19 +1311,35 @@ deduplicating pre-root multiproof is materially smaller on calldata, at
 the cost of having to sequence same-cell writes itself.  Chaining
 first, measure, then decide.
 
-**What remains is the wiring**, one consensus change:
-`terminateOnSingleStep` calling `executeStepToRoot` instead of
-`executeStep`, the observer emitting the CHAINED bundle
-`stepWriteBundle` produces (rather than
-`buildObserverCellProofs`' all-against-the-pre-root one), the Rust
-conduit and `method_selectors.json` following the terminate signature,
-and the retirement of `SolidityStepVMCommit.lean` + `stepVMHash` + the
-36 recipe-bound theorems.
+**The wiring has landed.**  `terminateOnSingleStep` calls
+`executeStepToRoot`, so both sides of its terminal comparison are state
+roots and `KnomosisFaultProofGame.t.sol`'s honest-sequencer-wins test
+passes for the right reason — driven by a REAL corpus probe (pre-root,
+action, chained openings, post-root), because a fabricated `low` now
+has no openings that verify against it.  `FaultProof/Terminate.lean` is
+the Lean mirror (`verifierPostRoot`), pinned against `stepPostRoot` on
+twenty probes and refusing a forged pre-value, a short bundle, a
+reordered bundle, a substituted policy cell and the two bulk variants.
+`buildTerminateBundle` emits the CHAINED bundle plus the read-only
+policy opening; the `witnessCommit` word is gone from the wire on all
+three stacks — it was a claim only a holder of the whole
+`ExtendedState` could check and a responder could set freely — and the
+Rust conduit follows the new terminate signature
+(`method_selectors.json` regenerated from the compiled ABI).
+
+**What remains is the retirement**: `KnomosisStepVM.sol` and its test,
+`SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
+the 36 recipe-bound theorems in `StepVMCoherence.lean`, the corpus's
+`expectedStepVMCommitHex` column, and `Step.kernelStepApply` moving
+onto `verifierPostRoot` (it still computes the bespoke hash, so the
+Lean model of the contract is stale in that one place — the deployed
+path does not read it).  None of that changes what any surface
+COMPUTES.
 `docs/audits/19-findings-and-followups.md` records the blast radius
 and `docs/planning/state_root_merkleisation_plan.md` §4 step 3 is the
-specification.  Until it lands the fault-proof game must not be
-treated as an adjudicating backstop; the bisection narrowing is proved
-and unaffected.
+specification.  Until the retirement lands the fault-proof game's
+terminal step adjudicates, but the old recipe is still compiled
+alongside it.
 
 ### Fair queuing (Workstream FQ / GP.8)
 

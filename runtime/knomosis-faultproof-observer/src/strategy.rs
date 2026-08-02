@@ -504,7 +504,23 @@ pub struct TerminateBundle {
         deserialize_with = "deserialize_bytes32_hex_or_array"
     )]
     pub expected_post_commit: [u8; 32],
-    /// The cell-proof bundle for the action's required cells.
+    /// The READ-ONLY budget-policy cell opening, against the
+    /// pre-state root.
+    ///
+    /// Not a write, so it is not in `cell_proofs` — but
+    /// `deriveEpochBudget` selects its branch on it and every one of
+    /// the twenty-five action variants writes an epoch-budget cell, so
+    /// the L1 verifier cannot start without it.
+    pub policy_opening: crate::submitter::CellProof,
+    /// The step's written cells, in `writeCellsAt` order, with CHAINED
+    /// openings: proof `i` opens against the root write `i-1`
+    /// produced.
+    ///
+    /// Not against the pre-state root.  An opening goes stale the
+    /// moment a write lands, and two writes at the SAME cell (a
+    /// self-transfer) are reachable by anyone — a bundle whose
+    /// openings were all against the pre-root would fold to a root no
+    /// state has.
     pub cell_proofs: Vec<crate::submitter::CellProof>,
 }
 
@@ -1726,6 +1742,13 @@ mod terminate_bundle_tests {
             action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
             signer: 5,
             expected_post_commit: [0xCD; 32],
+            policy_opening: CellProof {
+                cell_kind: 14,
+                key_a: 0,
+                key_b: 0,
+                cell_value: vec![0u8; 36],
+                proof_data: vec![0u8; 32],
+            },
             cell_proofs: vec![],
         }
     }
@@ -1823,6 +1846,13 @@ mod terminate_bundle_tests {
             "action_fields_hex": "deadbeef",
             "signer": 0,
             "expected_post_commit_hex": "0000000000000000000000000000000000000000000000000000000000000001",
+            "policy_opening": {
+                "cell_kind": 14,
+                "key_a": "0000000000000000",
+                "key_b": "0000000000000000",
+                "cell_value": "",
+                "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
+            },
             "cell_proofs": []
         }"#;
         let parsed = parse_terminate_bundle_json(0, json).unwrap();
@@ -1840,7 +1870,6 @@ mod terminate_bundle_tests {
             key_a: 0,
             key_b: 0,
             cell_value: vec![],
-            witness_commit: [0; 32],
             proof_data: vec![0u8; 32],
         };
         let proofs: Vec<CellProof> = (0..=super::MAX_TERMINATE_BUNDLE_CELL_PROOFS)
@@ -1852,6 +1881,13 @@ mod terminate_bundle_tests {
             action_fields: vec![],
             signer: 0,
             expected_post_commit: [0; 32],
+            policy_opening: CellProof {
+                cell_kind: 14,
+                key_a: 0,
+                key_b: 0,
+                cell_value: vec![0u8; 36],
+                proof_data: vec![0u8; 32],
+            },
             cell_proofs: proofs,
         };
         let json = serde_json::to_string(&bundle).unwrap();
@@ -1884,6 +1920,13 @@ mod terminate_bundle_tests {
             "action_fields_hex": "0000000000000005",
             "signer": 42,
             "expected_post_commit_hex": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            "policy_opening": {
+                "cell_kind": 14,
+                "key_a": "0000000000000000",
+                "key_b": "0000000000000000",
+                "cell_value": "",
+                "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
+            },
             "cell_proofs": []
         }"#;
         let parsed = parse_terminate_bundle_json(7, lean_json).unwrap();

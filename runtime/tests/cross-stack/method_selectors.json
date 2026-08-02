@@ -18,7 +18,7 @@
       "stateRootSubmission()": "e1afd6f4",
       "stepVM()": "87a433fd",
       "submitMidpoint(uint256,bytes32)": "11d925b3",
-      "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes32,bytes)[])": "e649e504",
+      "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes),(uint8,uint256,uint256,bytes,bytes)[])": "c979c36f",
       "treasury()": "61d027b3",
       "withdraw()": "3ccfd60b"
     }

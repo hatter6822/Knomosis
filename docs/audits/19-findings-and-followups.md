@@ -34,18 +34,18 @@ findings outside the TCB.  Their dispositions:
 | **B-2** — vacuous headline injectivity theorems | `Bridge/Eip712.lean` and every `CollisionFree` consumer | **Closed.**  `CollisionFreeOn S h` replaces the globally-injective (and hence *refutable*) predicate; satisfiability is exhibited, not assumed. |
 | **B-4a** — terminate ABI drift | `knomosis-faultproof-observer/src/submitter.rs` | **Closed.**  Rust moved to the contract's 5-argument form, and the selector table is now pinned against `method_selectors.json`, emitted from the COMPILED artifacts by `solidity/scripts/export_method_selectors.py` and gated in `ci-solidity.yml` — so the pin can no longer re-derive its expectation from the string it tests. |
 | **B-4b** — game-model fidelity (Lean/Rust) | `FaultProof/Game.lean`, `FaultProof/Step.lean`, observer `game.rs` | **Closed.**  `kernelStepApply` computes through `stepVMHash` instead of echoing the responder's `postStateCommit`; `terminateOnSingleStep` dropped `claimedPostCommit` and reads both sides from the game state; `submitMidpoint` carries only a commit and the index is derived, which made the convergence bound logarithmic (`bisection_converges_in_log_rounds`). |
-| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **OPEN — the verifier is built on both stacks and cross-stack verified (`KnomosisStepVMRoot.executeStepToRoot`); what remains is wiring the game onto it and retiring the old recipe.**  See "Open critical: the fault-proof commit-recipe split" below. |
+| **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **CLOSED — the game calls `KnomosisStepVMRoot.executeStepToRoot`, which returns a post-state ROOT folded from derived cell writes, so both sides of the terminal comparison are the same construction.**  What survives is a cleanup (the old recipe is still compiled); see the section below. |
 
 ### Open critical: the fault-proof commit-recipe split
 
-**Status: the root swap is in (§3), and so is the verifier — both
-stacks derive a step's written VALUES from proven pre-values and fold
-them onto a post-state root
-(`KnomosisStepVMRoot.executeStepToRoot`, pinned against Lean's
-`stepPostRoot` by the corpus's `writeBundleGoldens`).  What is open is
-the WIRING: `terminateOnSingleStep` still calls the old
-`executeStep`, so the terminal comparison is still between two
-different constructions.**
+**Status: CLOSED.**  The root swap is in (§3), the verifier is built on
+both stacks (`KnomosisStepVMRoot.executeStepToRoot`, pinned against
+Lean's `stepPostRoot` by the corpus's `writeBundleGoldens`), and
+`terminateOnSingleStep` calls it — so both sides of the terminal
+comparison are state roots.  What survives is a cleanup: the old
+`KnomosisStepVM` and Lean's `stepVMHash` are still compiled alongside
+the new path, called by nothing in the game.  Retiring them is
+`docs/planning/state_root_merkleisation_plan.md` §5's S7.
 
 Landed:
 
@@ -463,22 +463,20 @@ rather than started because a half-migrated commitment scheme is
 a consensus split — the same failure mode the C-1 amount
 migration had to be carried across all three stacks to avoid.
 
-Until it lands, the fault-proof game must be treated as
-**not adjudicating**: the bisection narrowing is proved, now
-logarithmically, but the terminal step is not.  Deployments must
-not rely on it as the sole backstop.
+**That consensus change has landed**, as one unit across the three
+stacks — the game's terminate call, the observer's CHAINED bundle plus
+its read-only policy opening, and the Rust conduit's terminate
+signature (`method_selectors.json` regenerated from the compiled ABI).
+The `witnessCommit` word went with it: a claim only a holder of the
+whole `ExtendedState` could check, and one a responder could set
+freely.
 
-**What "it lands" now means.**  The recomputable-from-cells root is
-built and the verifier that consumes it is built; the residue is one
-consensus change with a fixed shape —
-`KnomosisFaultProofGame.terminateOnSingleStep` calling
-`executeStepToRoot` instead of `executeStep`, the observer emitting the
-CHAINED bundle `stepWriteBundle` produces (rather than
-`buildObserverCellProofs`' all-against-the-pre-root one), the Rust
-conduit and `method_selectors.json` following the terminate signature,
-and the retirement of `SolidityStepVMCommit.lean` + `stepVMHash` + the
-36 recipe-bound theorems.  The half-migrated-scheme hazard the
-paragraph above names is why those move together.
+Two operator-facing conditions remain, and both are recorded in the
+runbook's §0 rather than here: a deployment leaning on the fault proof
+must not authorise `distributeOthers` / `proportionalDilute` (a
+verifier cannot tell a complete recipient set from a short one), and
+the old recipe is still compiled alongside the new path until S7
+retires it.
 
 **Closed, and independently of the above.**
 `KnomosisFaultProofGame.submitMidpoint` derives

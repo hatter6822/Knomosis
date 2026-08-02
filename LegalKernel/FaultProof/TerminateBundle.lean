@@ -81,6 +81,7 @@ import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.Commit
 import LegalKernel.FaultProof.Observer
 import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.Terminate
 import LegalKernel.Runtime.CellProofJson
 import LegalKernel.Runtime.LogFile
 
@@ -133,8 +134,30 @@ structure TerminateBundle where
       state; this field exists so the observer can check its own
       bundle against an independent oracle before it broadcasts. -/
   expectedPostCommit : ByteArray
-  /-- The cell-proof bundle for the action's required cells,
-      witnessed by the pre-state. -/
+  /-- The log index this step produces.  Not an action field:
+      `withdraw`'s pending-withdrawal record carries it, so the fold
+      has to know which index it is adjudicating.
+
+      **Not on the wire either.**  The L1 reads it from the game
+      (`g.high.idx`) rather than from the caller, so shipping it would
+      offer a responder a value to disagree with.  It is retained here
+      because the builder needs it to compute `expectedPostCommit`. -/
+  l2LogIndex        : Nat
+  /-- The READ-ONLY budget-policy opening, against the pre-state
+      root.
+
+      Not a write, so it is not in `cellProofs` — but
+      `deriveEpochBudget` selects its branch on it and every one of the
+      twenty-five variants writes an epoch-budget cell, so the L1
+      verifier cannot start without it. -/
+  policyProof       : CellProof
+  /-- The step's WRITTEN cells, in `writeCellsAt` order, with CHAINED
+      openings: proof `i` opens against the root write `i-1` produced.
+
+      Not against the pre-state root.  An opening goes stale the moment
+      a write lands, and two writes at the SAME cell (a self-transfer)
+      are reachable by anyone — a bundle whose openings were all
+      against the pre-root would fold to a root no state has. -/
   cellProofs        : CellProofBundle
   deriving Repr
 
@@ -160,14 +183,20 @@ The canonical builder threads the per-variant encoders together: -/
       unconditionally so test fixtures and debugging tools can
       emit it for any input pair. -/
 def buildTerminateBundle
-    (preState : ExtendedState) (entry : LogEntry) : TerminateBundle :=
+    (preState : ExtendedState) (entry : LogEntry) (l2LogIndex : Nat := 0) :
+    TerminateBundle :=
   let action := entry.signedAction.action
   let signer := entry.signedAction.signer
   { actionKind        := actionKindByte action,
     actionFields      := actionFieldsForL1 action,
     signer            := signer,
-    expectedPostCommit := stepVMHashFromAction preState action signer,
-    cellProofs        := Observer.buildObserverCellProofs preState action signer }
+    l2LogIndex        := l2LogIndex,
+    expectedPostCommit :=
+      (stepPostRoot preState entry.signedAction l2LogIndex).getD ByteArray.empty,
+    policyProof       := openingCellProof preState (policyOpening preState),
+    cellProofs        :=
+      { proofs := (stepOpenings preState entry.signedAction l2LogIndex).map
+                    (openingCellProof preState) } }
 
 /-! ## Well-formedness theorems -/
 
@@ -196,30 +225,50 @@ theorem buildTerminateBundle_signer
     (buildTerminateBundle es entry).signer =
     entry.signedAction.signer := rfl
 
-/-- The bundle's `expectedPostCommit` agrees with
-    `stepVMHashFromAction`. -/
+/-- The bundle's `expectedPostCommit` is the fold's result — the root
+    an L1 reaches from the pre-root and these openings, and the value
+    the observer cross-checks before broadcasting.
+
+    It was `stepVMHashFromAction`, a bespoke per-variant hash living
+    outside state-root space, so the contract's terminal comparison
+    against `g.high.commit` could never succeed. -/
 theorem buildTerminateBundle_expectedPostCommit
-    (es : ExtendedState) (entry : LogEntry) :
-    (buildTerminateBundle es entry).expectedPostCommit =
-    stepVMHashFromAction es entry.signedAction.action
-      entry.signedAction.signer := rfl
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).expectedPostCommit =
+    (stepPostRoot es entry.signedAction idx).getD ByteArray.empty := rfl
 
-/-- The bundle's `cellProofs` agrees with
-    `buildObserverCellProofs`. -/
+/-- The bundle's `cellProofs` are the step's CHAINED write openings. -/
 theorem buildTerminateBundle_cellProofs
-    (es : ExtendedState) (entry : LogEntry) :
-    (buildTerminateBundle es entry).cellProofs =
-    Observer.buildObserverCellProofs es entry.signedAction.action
-      entry.signedAction.signer := rfl
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).cellProofs =
+    { proofs := (stepOpenings es entry.signedAction idx).map
+                  (openingCellProof es) } := rfl
 
-/-- The bundle's cell-proof bundle verifies against the pre-state
-    commit.  Direct from `buildObserverCellProofs_verifies`. -/
-theorem buildTerminateBundle_cellProofs_verify
-    (es : ExtendedState) (entry : LogEntry) :
-    verifyCellProofs (commitExtendedState es)
-      (buildTerminateBundle es entry).cellProofs = true := by
-  rw [buildTerminateBundle_cellProofs]
-  exact Observer.buildObserverCellProofs_verifies _ _ _
+/-- The bundle's cells are exactly the ones the action writes, in
+    declaration order — so a verifier can check the bundle's SHAPE
+    against `writeCellsAt` before doing any hashing, and an observer
+    that dropped or reordered one fails that check rather than folding
+    to a root no state has. -/
+theorem buildTerminateBundle_cellProofs_tags
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).cellProofs.proofs.map CellProof.cellTag
+      = entry.signedAction.action.writeCellsAt es entry.signedAction.signer := by
+  show ((stepOpenings es entry.signedAction idx).map
+          (openingCellProof es)).map CellProof.cellTag = _
+  rw [List.map_map]
+  show (stepOpenings es entry.signedAction idx).map CellOpening.cellTag = _
+  unfold stepOpenings
+  rw [List.map_map]
+  exact stepWriteBundle_tags es entry.signedAction idx
+
+/-- The bundle's policy proof names the budget-policy cell.  Fixed by
+    the builder rather than chosen: the policy selects the branch every
+    epoch-budget write takes, so a substitutable one would let a
+    responder steer the budget leg of every action. -/
+theorem buildTerminateBundle_policyProof_tag
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).policyProof.cellTag
+      = CellTag.budgetPolicy := rfl
 
 /-! ## JSON formatter
 
@@ -271,6 +320,8 @@ def formatTerminateBundleJson (fixtureId : String)
     q ++ "signer" ++ q, ":", formatUInt64 bundle.signer, ",",
     q ++ "expected_post_commit_hex" ++ q, ":",
       q ++ expectedPostCommitHex ++ q, ",",
+    q ++ "policy_opening" ++ q, ":",
+      formatCellProofJson bundle.policyProof, ",",
     q ++ "cell_proofs" ++ q, ":", cellProofsArr,
     "}"
   ]

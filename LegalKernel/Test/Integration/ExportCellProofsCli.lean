@@ -130,7 +130,6 @@ def cell_proof_json_envelope_shape_pinned : IO Unit := do
     "\"key_a\"",
     "\"key_b\"",
     "\"cell_value\"",
-    "\"witness_commit\"",
     "\"proof_data\""
   ]
   for field in requiredFields do
@@ -159,15 +158,16 @@ def cell_proof_json_envelope_shape_pinned : IO Unit := do
   let newlineParts := json.splitOn "\n"
   unless newlineParts.length = 1 do
     throw (IO.userError s!"formatCellProofJson must be single-line: {json}")
-  -- Enforce EXACTLY 6 fields by counting key-value separators.
-  -- A maintainer adding a seventh field would silently slip into
-  -- production wire traffic otherwise (the Rust serde struct
-  -- ignores unknown fields by default).  Count the `":"`
-  -- separators between keys and values — should be exactly 6.
+  -- Enforce EXACTLY 5 fields by counting key-value separators.
+  -- A maintainer adding a sixth would silently slip into production
+  -- wire traffic otherwise (the Rust serde struct ignores unknown
+  -- fields by default).  It WAS 6: the sixth was `witness_commit`,
+  -- a claim only a holder of the whole `ExtendedState` could check
+  -- and a responder could set freely, which the opening replaced.
   let colonCount := (json.splitOn "\":").length - 1
-  unless colonCount = 6 do
+  unless colonCount = 5 do
     throw (IO.userError
-      s!"formatCellProofJson must have exactly 6 fields, got {colonCount}: {json}")
+      s!"formatCellProofJson must have exactly 5 fields, got {colonCount}: {json}")
 
 /-- Audit-pass-4 fix: pin the JSON output of a known small
     cell-tag input to its exact byte string.  This catches any
@@ -184,16 +184,17 @@ def cell_proof_json_byte_pinning_minimal : IO Unit := do
     , cellValue := ByteArray.empty
     , witnessState := witness, proofData := ByteArray.empty }
   let json := LegalKernel.Runtime.CellProofJson.formatCellProofJson proof
-  -- Pin the prefix (witness_commit value depends on the kernel's
-  -- hash implementation, which is FNV-1a-64 in the default test
-  -- mode but keccak in production — so we don't pin the full
-  -- string).
+  -- The WHOLE object is pinnable now.  It used to carry a
+  -- `witness_commit` word whose value is the kernel's hash of the
+  -- witness state — FNV-1a-64 in the default test build, keccak in
+  -- production — so only a prefix could be pinned.  That word is gone;
+  -- nothing here depends on the hash binding.
   let expectedPrefix :=
     "{\"cell_kind\":0," ++
     "\"key_a\":\"0000000000000007\"," ++
     "\"key_b\":\"0000000000000001\"," ++
     "\"cell_value\":\"\"," ++
-    "\"witness_commit\":\""
+    "\"proof_data\":\"\"}"
   unless json.startsWith expectedPrefix do
     throw (IO.userError s!"formatCellProofJson byte-pinning failed.\n  Expected prefix: {expectedPrefix}\n  Actual:         {json}")
   -- The closing must be the (here empty) `proof_data` hex + brace.

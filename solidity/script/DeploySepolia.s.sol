@@ -14,7 +14,7 @@ import {KnomosisDisputeVerifier} from "src/contracts/KnomosisDisputeVerifier.sol
 import {KnomosisSequencerStake} from "src/contracts/KnomosisSequencerStake.sol";
 import {KnomosisAmmDisasterRecoveryMultisig} from
     "src/contracts/KnomosisAmmDisasterRecoveryMultisig.sol";
-import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
+import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {KnomosisStateRootSubmission} from "src/contracts/KnomosisStateRootSubmission.sol";
 import {KnomosisDisputeVerifierV2} from "src/contracts/KnomosisDisputeVerifierV2.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
@@ -730,7 +730,7 @@ contract DeploySepolia is Script {
         require(deploymentId == bridge.deploymentId(), "deploymentId mismatch vs bridge");
 
         // ---------------- Cluster B (fault-proof stack) ----------------
-        KnomosisStepVM stepVM = new KnomosisStepVM();
+        KnomosisStepVMRoot stepVM = new KnomosisStepVMRoot();
 
         uint64 nB = vm.getNonce(deployer);
         address predSub = vm.computeCreateAddress(deployer, nB);
@@ -809,7 +809,7 @@ contract DeploySepolia is Script {
         console.log("KnomosisDisputeVerifier:   ", d.disputeVerifier);
         console.log("KnomosisSequencerStake:    ", d.sequencerStake);
         console.log("KnomosisAmmDisasterRecovery:", d.ammMultisig);
-        console.log("KnomosisStepVM:            ", d.stepVM);
+        console.log("KnomosisStepVMRoot:        ", d.stepVM);
         console.log("KnomosisStateRootSubmission:", d.stateRootSubmission);
         console.log("KnomosisDisputeVerifierV2: ", d.disputeVerifierV2);
         console.log("KnomosisFaultProofGame:    ", d.faultProofGame);
@@ -827,7 +827,7 @@ contract DeploySepolia is Script {
         vm.serializeAddress(c, "KnomosisBridge", d.bridge);
         vm.serializeAddress(c, "KnomosisDisputeVerifier", d.disputeVerifier);
         vm.serializeAddress(c, "KnomosisSequencerStake", d.sequencerStake);
-        vm.serializeAddress(c, "KnomosisStepVM", d.stepVM);
+        vm.serializeAddress(c, "KnomosisStepVMRoot", d.stepVM);
         vm.serializeAddress(c, "KnomosisStateRootSubmission", d.stateRootSubmission);
         vm.serializeAddress(c, "KnomosisDisputeVerifierV2", d.disputeVerifierV2);
         if (d.ammMultisig != address(0)) {

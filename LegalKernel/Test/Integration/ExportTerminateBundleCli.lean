@@ -90,14 +90,16 @@ def signer_matches_entry : IO Unit := do
     throw (IO.userError
       s!"signer mismatch: expected {exampleEntry.signedAction.signer}, got {bundle.signer}")
 
-/-- The bundle's `expectedPostCommit` matches `stepVMHashFromAction`. -/
-def expectedPostCommit_matches_stepVMHashFromAction : IO Unit := do
+/-- The bundle's `expectedPostCommit` is the fold's root.
+
+    It was `stepVMHashFromAction`, a bespoke per-variant hash living
+    outside state-root space, so the contract's terminal comparison
+    against `g.high.commit` could never succeed. -/
+def expectedPostCommit_matches_stepPostRoot : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
-  let expected := stepVMHashFromAction exampleState
-                    exampleEntry.signedAction.action
-                    exampleEntry.signedAction.signer
-  unless bundle.expectedPostCommit = expected do
-    throw (IO.userError "expectedPostCommit does not match stepVMHashFromAction")
+  let expected := stepPostRoot exampleState exampleEntry.signedAction 0
+  unless some bundle.expectedPostCommit = expected do
+    throw (IO.userError "expectedPostCommit does not match stepPostRoot")
 
 /-- The bundle's cell-proof bundle verifies against the
     pre-state's commit. -/
@@ -287,8 +289,8 @@ def tests : List TestCase := [
     actionFields_matches_encoder⟩,
   ⟨"export-terminate-bundle: signer matches entry",
     signer_matches_entry⟩,
-  ⟨"export-terminate-bundle: expectedPostCommit matches stepVMHashFromAction",
-    expectedPostCommit_matches_stepVMHashFromAction⟩,
+  ⟨"export-terminate-bundle: expectedPostCommit is the fold's root",
+    expectedPostCommit_matches_stepPostRoot⟩,
   ⟨"export-terminate-bundle: cellProofs verify against preCommit",
     cellProofs_verify_against_preCommit⟩,
   ⟨"export-terminate-bundle: bundle is deterministic",

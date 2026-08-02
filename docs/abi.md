@@ -2834,10 +2834,12 @@ All contracts immutable per Workstream-E §20 discipline.
   * `initiateChallenge(...) payable returns (uint256 gameId)`
   * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
   * `respondToMidpoint(uint256 gameId, bool agree)`
-  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs)`
+  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, CellOpening policyOpening, CellOpening[] writeOpenings)`
     — no `claimedPostCommit` argument: the contract computes the
-    post-commit from the step and compares it against the on-chain
-    `g.high.commit`, so the claim is not the caller's to make.  (An
+    post-state ROOT from the step and compares it against the on-chain
+    `g.high.commit`, so the claim is not the caller's to make.  It
+    also takes no `l2LogIndex`: the contract reads `g.high.idx`, which
+    is the index the disputed action produced.  (An
     earlier draft of this line documented a third, non-existent form;
     the Rust observer had been built against it and its calldata could
     not be dispatched.)  The `(actionKind, actionFields, signer)`
@@ -2846,28 +2848,44 @@ All contracts immutable per Workstream-E §20 discipline.
     is not the action the sequencer bound when it published that root.
   * `claimTimeout(uint256 gameId)`
 
-`KnomosisStepVM`:
+`KnomosisStepVMRoot`:
 
-  * `executeStep(bytes32 preStateCommit, uint8 actionKind, bytes actionFields, uint64 signer, CellProof[] cellProofs) pure returns (bytes32 postStateCommit)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`.
+  * `executeStepToRoot(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, CellOpening policyOpening, CellOpening[] writeOpenings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
 
-  `CellProof` is the ABI tuple
-  `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes cellValue, bytes32 witnessCommit, bytes proofData)`.
+  `CellOpening` is the ABI tuple
+  `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes preValue, bytes proofData)`.
 
-  * `cellValue` — the CBE-encoded cell value.
-  * `witnessCommit` — `commitExtendedState` of the state the value was
-    read from; must equal `preStateCommit`.
+  * `preValue` — the cell's CBE-encoded value in the state this
+    opening is against: the PRE-state for the first write to a cell,
+    and the RUNNING state for a later one.  Not trusted — the opening
+    must verify against the running root with a leaf built from
+    exactly these bytes.
   * `proofData` — the cell's SMT opening against that root: a 32-byte
     bitmask followed by one 32-byte sibling per set bit, in depth
     order (Lean `SmtCellProof.toWireBytes`).  Shape-validated at
     intake — a nonzero multiple of 32, at most
     `MAX_PROOF_DATA_BYTES = 32 * (1 + 256)` — and rejected with
-    `MalformedProofData(length)` otherwise.  It is what an L1 verifier
-    holding nothing but the 32-byte root can check; `witnessCommit`
-    can only be recomputed by a party holding the whole
-    `ExtendedState`.  The JSON wire form (`knomosis
-    export-cell-proofs`, the Rust observer's `CellProof`) spells it
-    `proof_data`, lowercase hex without the `0x` prefix; the
+    `MalformedProofData(length)` otherwise.  The JSON wire form
+    (`knomosis export-cell-proofs`, the Rust observer's `CellProof`)
+    spells it `proof_data`, lowercase hex without the `0x` prefix; the
     cross-stack corpus spells it `proofDataHex`, `0x`-prefixed.
+
+  **Openings are CHAINED.**  Opening `i` opens against the root write
+  `i-1` produced, not against `preStateRoot`: an opening goes stale
+  the moment a write lands, and two writes at the SAME cell (a
+  self-transfer) are reachable by anyone.
+
+  **There is no `witnessCommit` word.**  It carried
+  `commitExtendedState` of the state the value was read from — a claim
+  only a party holding the whole `ExtendedState` could check, and one
+  a responder could set freely.  The opening is the binding now, and
+  it is one an L1 holding nothing but a 32-byte root can verify.
+
+  `policyOpening` is the READ-ONLY budget-policy cell, opened against
+  `preStateRoot`.  Its cell identity is fixed by the contract
+  (`(14, 0, 0)`) rather than read from the struct, so a responder
+  cannot pass some other cell's bytes off as the deployment's policy —
+  which selects the branch every epoch-budget write takes.
 
 `KnomosisDisputeVerifierV2`:
 

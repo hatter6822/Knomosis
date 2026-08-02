@@ -3,7 +3,8 @@ pragma solidity 0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {KnomosisFaultProofGame} from "src/contracts/KnomosisFaultProofGame.sol";
-import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
+import {CrossCheckFramework} from "./CrossCheck/Framework.t.sol";
+import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 
 /// @notice A mock state-root submission contract used by the
@@ -116,9 +117,9 @@ contract RevertingReceiver {
 /// @title KnomosisFaultProofGameTest
 /// @notice Forge tests for the bisection-game state machine
 ///         (Workstream-H WUs H.6.1.*).
-contract KnomosisFaultProofGameTest is Test {
+contract KnomosisFaultProofGameTest is CrossCheckFramework {
     KnomosisFaultProofGame private game;
-    KnomosisStepVM private stepVM;
+    KnomosisStepVMRoot private stepVM;
     MockStateRootSubmissionForGame private mockStateRootSubmission;
 
     address private treasury = address(0xBEEF);
@@ -137,10 +138,86 @@ contract KnomosisFaultProofGameTest is Test {
     ///         index 0.  Every challenge in this suite uses
     ///         `lowLogIndex = 0` + `lowCommit = LOW_ROOT`, which must
     ///         match the seeded root at index 0 (the low-anchor fix).
-    bytes32 private constant LOW_ROOT = bytes32(uint256(0x10));
+    ///
+    ///         Loaded from the cross-stack corpus rather than invented.
+    ///         The terminal step now returns a state ROOT computed by
+    ///         folding proven cell writes into `low`, so a FABRICATED
+    ///         `low` has no openings that verify against it and the
+    ///         honest path would be unreachable — which is the very
+    ///         failure this suite's headline test exists to rule out.
+    bytes32 private LOW_ROOT;
+
+    /// @dev The corpus probe this suite adjudicates:
+    ///      `writeBundleGoldens[0]`, a `transfer`.  Its `l2LogIndex` is
+    ///      0 while the game passes `g.high.idx` (at least 1, since
+    ///      `lowLogIndex < disputedLogIndex`); that is sound for every
+    ///      variant except `withdraw`, whose pending-withdrawal record
+    ///      is the only thing that reads the index.  `withdraw` is
+    ///      adjudicated by `CrossCheck/StepVMRoot.t.sol`, which drives
+    ///      the step VM directly and uses the probe's own index.
+    uint8 private probeKind;
+    bytes private probeFields;
+    uint64 private probeSigner;
+    bytes32 private probePostRoot;
+    KnomosisStepVMRoot.CellOpening private probePolicy;
+    KnomosisStepVMRoot.CellOpening[] private probeOpenings;
+
+    /// @dev Load the probe.  A real pre-root with real openings is now
+    ///      the only way the honest terminal step can succeed.
+    function _loadProbe() private {
+        string memory raw = readFixture("step_vm.json");
+        string memory base = ".writeBundleGoldens[0]";
+        LOW_ROOT = vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex"));
+        probePostRoot =
+            vm.parseJsonBytes32(raw, string.concat(base, ".postStateRootHex"));
+        probeKind =
+            uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte")));
+        probeFields = vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
+        probeSigner =
+            uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat")));
+        probePolicy = KnomosisStepVMRoot.CellOpening({
+            cellKind: 14, keyA: 0, keyB: 0,
+            preValue: vm.parseJsonBytes(raw, string.concat(base, ".policyValueHex")),
+            proofData:
+                vm.parseJsonBytes(raw, string.concat(base, ".policyProofDataHex"))
+        });
+        uint256 n = vm.parseJsonUint(raw, string.concat(base, ".writeCount"));
+        for (uint256 i = 0; i < n; i++) {
+            string memory w = string.concat(base, ".writes[", vm.toString(i), "]");
+            probeOpenings.push(KnomosisStepVMRoot.CellOpening({
+                cellKind: uint8(vm.parseJsonUint(raw, string.concat(w, ".cellKind"))),
+                keyA: vm.parseJsonUint(raw, string.concat(w, ".keyA")),
+                keyB: vm.parseJsonUint(raw, string.concat(w, ".keyB")),
+                preValue: vm.parseJsonBytes(raw, string.concat(w, ".oldValueHex")),
+                proofData: vm.parseJsonBytes(raw, string.concat(w, ".proofDataHex"))
+            }));
+        }
+    }
+
+    /// @dev The probe's bundle, as a memory array for the call.
+    function _openings()
+        private
+        view
+        returns (KnomosisStepVMRoot.CellOpening[] memory out)
+    {
+        out = new KnomosisStepVMRoot.CellOpening[](probeOpenings.length);
+        for (uint256 i = 0; i < out.length; i++) out[i] = probeOpenings[i];
+    }
+
+    /// @dev All but the last byte of `b`.  Used to perturb one field of
+    ///      a canonical action-field layout without re-deriving it.
+    function _sliceHead(bytes memory b, uint256 n)
+        private
+        pure
+        returns (bytes memory out)
+    {
+        out = new bytes(n);
+        for (uint256 i = 0; i < n; i++) out[i] = b[i];
+    }
 
     function setUp() public {
-        stepVM = new KnomosisStepVM();
+        stepVM = new KnomosisStepVMRoot();
+        _loadProbe();
         mockStateRootSubmission = new MockStateRootSubmissionForGame();
         mockStateRootSubmission.setDeploymentId(DEPLOYMENT_ID);
         stateRootSubmission = address(mockStateRootSubmission);
@@ -284,7 +361,7 @@ contract KnomosisFaultProofGameTest is Test {
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             10,                     // disputed log index (pre-seeded)
             bytes32(uint256(0xC1)), // challenger commit
-            bytes32(uint256(0x10)), // low commit (genesis)
+            LOW_ROOT, // low commit (genesis)
             0                       // low log index
         );
         assertEq(gameId, 1);
@@ -294,7 +371,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_initiateChallenge_marks_disputed_root() public {
         vm.prank(challenger);
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            10, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            10, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         assertTrue(mockStateRootSubmission.markDisputedCalled());
         assertEq(mockStateRootSubmission.lastMarkedLogIndex(), 10);
     }
@@ -303,7 +380,7 @@ contract KnomosisFaultProofGameTest is Test {
         vm.prank(challenger);
         vm.expectRevert(KnomosisFaultProofGame.InsufficientBond.selector);
         game.initiateChallenge{value: MIN_CHALLENGE_BOND - 1}(
-            10, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            10, bytes32(uint256(0xC1)), LOW_ROOT, 0);
     }
 
     function test_initiateChallenge_rejects_no_dispute() public {
@@ -311,17 +388,17 @@ contract KnomosisFaultProofGameTest is Test {
         vm.prank(challenger);
         vm.expectRevert(KnomosisFaultProofGame.MidpointOutOfRange.selector);
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            10, DISPUTED_ROOT, bytes32(uint256(0x10)), 0);
+            10, DISPUTED_ROOT, LOW_ROOT, 0);
     }
 
     function test_initiateChallenge_rejects_duplicate_game() public {
         vm.prank(challenger);
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            10, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            10, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.prank(challenger);
         vm.expectRevert(KnomosisFaultProofGame.GameAlreadyExists.selector);
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            10, bytes32(uint256(0xC2)), bytes32(uint256(0x10)), 0);
+            10, bytes32(uint256(0xC2)), LOW_ROOT, 0);
     }
 
     /// @notice CRITICAL SECURITY TEST: the game must look up the
@@ -336,7 +413,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_initiateChallenge_uses_canonical_sequencer() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            10, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            10, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         (address actualSequencer, , , , , , , , , , , , , ,) = game.games(gameId);
         assertEq(actualSequencer, sequencer,
             "game's sequencer comes from state-root submission");
@@ -350,7 +427,7 @@ contract KnomosisFaultProofGameTest is Test {
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             999,  // log index not seeded
             bytes32(uint256(0xC1)),
-            bytes32(uint256(0x10)),
+            LOW_ROOT,
             0);
     }
 
@@ -384,7 +461,7 @@ contract KnomosisFaultProofGameTest is Test {
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             10,                     // disputedLogIndex (seeded)
             bytes32(uint256(0xC1)),
-            bytes32(uint256(0x10)),
+            LOW_ROOT,
             5);                     // lowLogIndex NOT seeded
     }
 
@@ -399,7 +476,7 @@ contract KnomosisFaultProofGameTest is Test {
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             10,                     // disputedLogIndex
             bytes32(uint256(0xC1)),
-            bytes32(uint256(0x10)),
+            LOW_ROOT,
             15);                    // lowLogIndex > disputedLogIndex
     }
 
@@ -411,7 +488,7 @@ contract KnomosisFaultProofGameTest is Test {
         game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
             10,
             bytes32(uint256(0xC1)),
-            bytes32(uint256(0x10)),
+            LOW_ROOT,
             10);  // lowLogIndex == disputedLogIndex
     }
 
@@ -453,35 +530,6 @@ contract KnomosisFaultProofGameTest is Test {
         return new bytes(32);
     }
 
-    function _makeCellProof(
-        uint8 cellKind,
-        uint256 keyA,
-        uint256 keyB,
-        bytes memory cellValue,
-        bytes32 witnessCommit
-    ) internal pure returns (KnomosisStepVM.CellProof memory) {
-        return _makeCellProofWithOpening(
-            cellKind, keyA, keyB, cellValue, witnessCommit, _defaultProofData());
-    }
-
-    function _makeCellProofWithOpening(
-        uint8 cellKind,
-        uint256 keyA,
-        uint256 keyB,
-        bytes memory cellValue,
-        bytes32 witnessCommit,
-        bytes memory proofData
-    ) internal pure returns (KnomosisStepVM.CellProof memory) {
-        return KnomosisStepVM.CellProof({
-            cellKind: cellKind,
-            keyA: keyA,
-            keyB: keyB,
-            cellValue: cellValue,
-            witnessCommit: witnessCommit,
-            proofData: proofData
-        });
-    }
-
     /// @notice CRITICAL SECURITY TEST (audit 21 — closes the systemic
     ///         adjudication-path coverage gap AND end-to-end-verifies
     ///         BOTH the low-anchor fix (1.1) and the lock-key fix (1.2)).
@@ -498,19 +546,19 @@ contract KnomosisFaultProofGameTest is Test {
         // Known-good Transfer step recipe, witnessing the ANCHORED low
         // commit (LOW_ROOT): move 5 of resource 1 from actor 10 (bal
         // 100) to actor 20 (bal 50).
-        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
-        bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
-        uint8 kind = 0;            // ActionKind.Transfer
-        uint64 stepSigner = 10;
+        bytes memory actionFields = probeFields;
+        uint8 kind = probeKind;
+        uint64 stepSigner = probeSigner;
 
-        // The HONEST post-state: executeStep applied to the real,
-        // anchored low.  This is the commit the sequencer truthfully
-        // published at the disputed index.
-        bytes32 honestPost =
-            stepVM.executeStep(LOW_ROOT, kind, actionFields, stepSigner, proofs);
+        // The HONEST post-state: the step VM's FOLD from the real,
+        // anchored low.  Unlike the bespoke hash the old step VM
+        // returned, this is a value in state-root space, so the
+        // terminal comparison can succeed at all.
+        bytes32 honestPost = stepVM.executeStepToRoot(
+            LOW_ROOT, kind, actionFields, stepSigner, 1,
+            probePolicy, _openings());
+        assertEq(honestPost, probePostRoot,
+            "the step VM must reach the corpus's post-root");
 
         // Seed a single-step disputed root at index 1 committing to the
         // honest post-state, sequenced by `sequencer`.
@@ -526,7 +574,8 @@ contract KnomosisFaultProofGameTest is Test {
         // with the real step.  executeStep(low) == high ⇒ SequencerWon.
         uint256 seqBalBefore = sequencer.balance;
         vm.prank(sequencer);
-        game.terminateOnSingleStep(gameId, kind, actionFields, stepSigner, proofs);
+        game.terminateOnSingleStep(
+            gameId, kind, actionFields, stepSigner, probePolicy, _openings());
 
         // SequencerWon: the sequencer is CREDITED the winner's 95% share
         // of the challenger's forfeited bond (pull-payment, 1.3) and
@@ -565,19 +614,17 @@ contract KnomosisFaultProofGameTest is Test {
     ///         of 5, then tries to terminate naming a transfer of 7.
     ///         The chain check rejects it before the step VM runs.
     function test_terminate_rejects_a_substituted_action() public {
-        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
-        uint8 kind = 0;
-        uint64 stepSigner = 10;
-        bytes memory boundFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
-        bytes memory substitutedFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(7));
+        uint8 kind = probeKind;
+        uint64 stepSigner = probeSigner;
+        bytes memory boundFields = probeFields;
+        // The SAME layout with its last field perturbed: a transfer of a
+        // different amount is a different step, and the substitution is
+        // rejected before the step VM ever runs.
+        bytes memory substitutedFields = bytes.concat(
+            _sliceHead(boundFields, boundFields.length - 1),
+            bytes1(uint8(boundFields[boundFields.length - 1]) ^ 0xFF));
 
-        bytes32 honestPost =
-            stepVM.executeStep(LOW_ROOT, kind, boundFields, stepSigner, proofs);
-        _seedRootForAction(1, honestPost, kind, stepSigner, boundFields);
+        _seedRootForAction(1, probePostRoot, kind, stepSigner, boundFields);
 
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
@@ -586,12 +633,14 @@ contract KnomosisFaultProofGameTest is Test {
         vm.prank(sequencer);
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
         game.terminateOnSingleStep(
-            gameId, kind, substitutedFields, stepSigner, proofs);
+            gameId, kind, substitutedFields, stepSigner,
+            probePolicy, _openings());
 
         // ...and the bound action still terminates, so the rejection is
         // the substitution and not the binding refusing everything.
         vm.prank(sequencer);
-        game.terminateOnSingleStep(gameId, kind, boundFields, stepSigner, proofs);
+        game.terminateOnSingleStep(
+            gameId, kind, boundFields, stepSigner, probePolicy, _openings());
         (, , , , , , , , , , ,
          KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
         assertEq(uint8(status), uint8(KnomosisFaultProofGame.GameStatus.SequencerWon),
@@ -602,13 +651,8 @@ contract KnomosisFaultProofGameTest is Test {
     ///         signed by a different actor is a different step, and the
     ///         commitment covers all three components.
     function test_terminate_rejects_a_substituted_signer() public {
-        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
-        bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
-        bytes32 honestPost = stepVM.executeStep(LOW_ROOT, 0, actionFields, 10, proofs);
-        _seedRootForAction(1, honestPost, 0, 10, actionFields);
+        bytes memory actionFields = probeFields;
+        _seedRootForAction(1, probePostRoot, probeKind, probeSigner, actionFields);
 
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
@@ -616,19 +660,16 @@ contract KnomosisFaultProofGameTest is Test {
 
         vm.prank(sequencer);
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
-        game.terminateOnSingleStep(gameId, 0, actionFields, 11, proofs);
+        game.terminateOnSingleStep(
+            gameId, probeKind, actionFields, probeSigner + 1,
+            probePolicy, _openings());
     }
 
     /// @notice The action KIND is bound: naming a different variant
     ///         over the same field bytes is rejected.
     function test_terminate_rejects_a_substituted_action_kind() public {
-        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
-        bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
-        bytes32 honestPost = stepVM.executeStep(LOW_ROOT, 0, actionFields, 10, proofs);
-        _seedRootForAction(1, honestPost, 0, 10, actionFields);
+        bytes memory actionFields = probeFields;
+        _seedRootForAction(1, probePostRoot, probeKind, probeSigner, actionFields);
 
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
@@ -636,7 +677,9 @@ contract KnomosisFaultProofGameTest is Test {
 
         vm.prank(sequencer);
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
-        game.terminateOnSingleStep(gameId, 1 /* Mint */, actionFields, 10, proofs);
+        game.terminateOnSingleStep(
+            gameId, 1 /* Mint */, actionFields, probeSigner,
+            probePolicy, _openings());
     }
 
     /// @notice A root published with NO action bound to it cannot be
@@ -646,13 +689,8 @@ contract KnomosisFaultProofGameTest is Test {
     ///         step it cannot authenticate rather than executing a
     ///         caller-chosen one.
     function test_terminate_rejects_an_action_absent_from_the_chain() public {
-        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
-        bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
-        bytes32 honestPost = stepVM.executeStep(LOW_ROOT, 0, actionFields, 10, proofs);
-        _seedUnboundRoot(1, honestPost);
+        bytes memory actionFields = probeFields;
+        _seedUnboundRoot(1, probePostRoot);
 
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
@@ -660,7 +698,9 @@ contract KnomosisFaultProofGameTest is Test {
 
         vm.prank(sequencer);
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
-        game.terminateOnSingleStep(gameId, 0, actionFields, 10, proofs);
+        game.terminateOnSingleStep(
+            gameId, probeKind, actionFields, probeSigner,
+            probePolicy, _openings());
     }
 
     /// @notice Companion to the above: an honest CHALLENGER wins the
@@ -669,16 +709,12 @@ contract KnomosisFaultProofGameTest is Test {
     ///         low (an invalid published root).  It is the sequencer's
     ///         turn, so a mismatch settles `ChallengerWon`.
     function test_terminate_single_step_invalid_root_challenger_wins() public {
-        KnomosisStepVM.CellProof[] memory proofs = new KnomosisStepVM.CellProof[](2);
-        proofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
-        proofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
-        bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
+        bytes memory actionFields = probeFields;
 
         // Seed the disputed root with a FABRICATED high (!= the honest
         // step output) — i.e. the sequencer published an invalid root.
         bytes32 fakeHigh = bytes32(uint256(0xF00D));
-        _seedRootForAction(1, fakeHigh, 0, 10, actionFields);
+        _seedRootForAction(1, fakeHigh, probeKind, probeSigner, actionFields);
 
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
@@ -689,7 +725,9 @@ contract KnomosisFaultProofGameTest is Test {
         // reproduce the fabricated `high`; on its turn a mismatch is a
         // ChallengerWon.
         vm.prank(sequencer);
-        game.terminateOnSingleStep(gameId, 0, actionFields, 10, proofs);
+        game.terminateOnSingleStep(
+            gameId, probeKind, actionFields, probeSigner,
+            probePolicy, _openings());
 
         // Pull-payment (1.3): the challenger claims its credited share.
         vm.prank(challenger);
@@ -718,26 +756,21 @@ contract KnomosisFaultProofGameTest is Test {
         // each step transfers 5 of resource 1 from actor 10 to actor 20,
         // with cell proofs witnessing that step's true pre-commit and the
         // balances evolving 100/50 → 95/55 → 90/60 → 85/65.
-        uint8 kind = 0;    // ActionKind.Transfer
-        uint64 stepSigner = 10;
-        bytes memory actionFields =
-            abi.encodePacked(uint64(1), uint64(10), uint64(20), uint128(5));
+        uint8 kind = probeKind;
+        uint64 stepSigner = probeSigner;
+        bytes memory actionFields = probeFields;
 
+        // Only the TERMINAL step is ever executed, so only `commits[0]`
+        // and `commits[1]` have to be a real (pre-root, post-root) pair.
+        // The later three are the bisection's scaffolding — midpoint
+        // claims the challenger disagrees with, on which no step VM
+        // runs.  Deriving them keeps this test about the GAME and
+        // leaves the step VM's arithmetic to the cross-stack corpus.
         bytes32[5] memory commits;
         commits[0] = LOW_ROOT;
-        uint128 balFrom = 100;
-        uint128 balTo = 50;
-        KnomosisStepVM.CellProof[] memory stepProofs =
-            new KnomosisStepVM.CellProof[](2);
-        for (uint256 i = 0; i < 4; i++) {
-            stepProofs[0] =
-                _makeCellProof(0, 1, 10, _encodeCbeAmount(balFrom), commits[i]);
-            stepProofs[1] =
-                _makeCellProof(0, 1, 20, _encodeCbeAmount(balTo), commits[i]);
-            commits[i + 1] = stepVM.executeStep(
-                commits[i], kind, actionFields, stepSigner, stepProofs);
-            balFrom -= 5;
-            balTo += 5;
+        commits[1] = probePostRoot;
+        for (uint256 i = 2; i < 5; i++) {
+            commits[i] = keccak256(abi.encodePacked(commits[i - 1], uint8(i)));
         }
 
         // The sequencer honestly published each commit at its log index,
@@ -778,13 +811,11 @@ contract KnomosisFaultProofGameTest is Test {
         (, , , , , , uint64 depth, , , , , , , ,) = game.games(gameId);
         assertEq(depth, 2, "two bisection rounds must be recorded");
 
-        // Terminal step: executeStep(commits[0]) == commits[1] == high
-        // ⇒ the responding sequencer wins.
-        stepProofs[0] = _makeCellProof(0, 1, 10, _encodeCbeAmount(100), LOW_ROOT);
-        stepProofs[1] = _makeCellProof(0, 1, 20, _encodeCbeAmount(50), LOW_ROOT);
+        // Terminal step: the fold from commits[0] reaches commits[1],
+        // which is `high` ⇒ the responding sequencer wins.
         vm.prank(sequencer);
         game.terminateOnSingleStep(
-            gameId, kind, actionFields, stepSigner, stepProofs);
+            gameId, kind, actionFields, stepSigner, probePolicy, _openings());
 
         (, , , , , , , , , , ,
          KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
@@ -861,7 +892,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_claimTimeout_after_window_settles_against_sequencer() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            10, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            10, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
@@ -875,7 +906,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_claimTimeout_distributes_bonds_95_5_split() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            11, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            11, bytes32(uint256(0xC1)), LOW_ROOT, 0);
 
         uint256 challengerBefore = challenger.balance;
         uint256 treasuryBefore   = treasury.balance;
@@ -955,7 +986,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_claimTimeout_calls_slashSequencerBond_on_challenger_wins() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            12, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            12, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
@@ -976,7 +1007,7 @@ contract KnomosisFaultProofGameTest is Test {
     {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            12, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            12, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
@@ -988,7 +1019,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_claimTimeout_rejects_already_settled_game() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            12, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            12, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + BISECTION_TIMEOUT + 1);
         vm.prank(challenger);
         game.claimTimeout(gameId);
@@ -1003,7 +1034,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_submitMidpoint_sequencer_first_round() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            64, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            64, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + MIN_STEP_INTERVAL + 1);
         vm.prank(sequencer);
         game.submitMidpoint(gameId, bytes32(uint256(0xAD)));
@@ -1013,7 +1044,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_submitMidpoint_rejects_wrong_caller() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            65, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            65, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + MIN_STEP_INTERVAL + 1);
         vm.prank(challenger);
         vm.expectRevert(KnomosisFaultProofGame.NotResponsible.selector);
@@ -1023,7 +1054,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_submitMidpoint_rejects_after_deadline() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            66, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            66, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + BISECTION_TIMEOUT + 1);
         vm.prank(sequencer);
         vm.expectRevert(KnomosisFaultProofGame.TurnDeadlineExpired.selector);
@@ -1033,7 +1064,7 @@ contract KnomosisFaultProofGameTest is Test {
     function test_respondToMidpoint_rejects_without_pending() public {
         vm.prank(challenger);
         uint256 gameId = game.initiateChallenge{value: MIN_CHALLENGE_BOND}(
-            67, bytes32(uint256(0xC1)), bytes32(uint256(0x10)), 0);
+            67, bytes32(uint256(0xC1)), LOW_ROOT, 0);
         vm.roll(block.number + MIN_STEP_INTERVAL + 1);
         // No midpoint submitted yet.  Challenger tries to respond.
         vm.prank(challenger);

@@ -101,6 +101,19 @@ def policyOpening (es : ExtendedState) : CellOpening :=
   , preValue := getCellValue es .budgetPolicy
   , proof    := buildStateCellProof es .budgetPolicy }
 
+/-- The wire form of an opening: the `CellProof` the JSON emitter and
+    the Rust conduit carry.
+
+    `witnessState` is the pre-state on every entry, and nothing reads
+    it — the L1 verifies `proofData` against the running root.  It is
+    the field the wire dropped; it survives in the Lean structure only
+    until `CellProof` itself retires. -/
+def openingCellProof (es : ExtendedState) (o : CellOpening) : CellProof :=
+  { cellTag      := o.cellTag
+  , cellValue    := o.preValue
+  , witnessState := es
+  , proofData    := SmtCellProof.toWireBytes o.proof }
+
 /-! ## The cell list
 
 The verifier's counterpart to `Action.writeCellsAt`, which it cannot

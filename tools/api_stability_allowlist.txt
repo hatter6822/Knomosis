@@ -326,11 +326,6 @@ LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:113
 LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:88
 LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:93
 LegalKernel/Test/FaultProof/SolidityStepVMCommit.lean:98
-LegalKernel/Test/FaultProof/TerminateBundle.lean:249
-LegalKernel/Test/FaultProof/TerminateBundle.lean:254
-LegalKernel/Test/FaultProof/TerminateBundle.lean:259
-LegalKernel/Test/FaultProof/TerminateBundle.lean:264
-LegalKernel/Test/FaultProof/TerminateBundle.lean:269
 LegalKernel/Test/FaultProof/Trust.lean:124
 LegalKernel/Test/FaultProof/Trust.lean:129
 LegalKernel/Test/FaultProof/Verify.lean:136

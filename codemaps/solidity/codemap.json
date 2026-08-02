@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "88686ed2f8d17fc3912b102bf103955953d021df7c5759dade67930f5c0529eb"
+    "source_digest": "ca4fc3ff348dea5c09fc33a2e473861b7ed723f0f4fe777e967bb7a7eb4b3a08"
   },
   "summary": {
     "module_count": 97,
-    "declaration_count": 2152
+    "declaration_count": 2153
   },
   "modules": [
     {
@@ -60,7 +60,7 @@
             "KnomosisDisputeVerifierV2",
             "KnomosisFaultProofGame",
             "KnomosisStateRootSubmission",
-            "KnomosisStepVM",
+            "KnomosisStepVMRoot",
             "bridge",
             "deploymentId",
             "sequencer"
@@ -168,7 +168,7 @@
             "KnomosisIdentityRegistry",
             "KnomosisSequencerStake",
             "KnomosisStateRootSubmission",
-            "KnomosisStepVM",
+            "KnomosisStepVMRoot",
             "_logSummary",
             "_writeManifest",
             "attestor",
@@ -2122,7 +2122,7 @@
           "name": "KnomosisFaultProofGame",
           "line": 53,
           "called": [
-            "KnomosisStepVM"
+            "KnomosisStepVMRoot"
           ]
         },
         {
@@ -2309,7 +2309,7 @@
           "called": [
             "InvalidBondConfig",
             "InvalidTimeoutConfig",
-            "KnomosisStepVM",
+            "KnomosisStepVMRoot",
             "ZeroAddress"
           ]
         },
@@ -2379,7 +2379,7 @@
         {
           "kind": "function",
           "name": "_requireActionInLogChain",
-          "line": 522,
+          "line": 534,
           "called": [
             "ActionNotInLogChain",
             "IStateRootSubmission",
@@ -2389,7 +2389,7 @@
         {
           "kind": "function",
           "name": "claimTimeout",
-          "line": 551,
+          "line": 563,
           "called": [
             "Game",
             "GameAlreadyEnded",
@@ -2400,7 +2400,7 @@
         {
           "kind": "function",
           "name": "_settle",
-          "line": 568,
+          "line": 580,
           "called": [
             "FaultProofGameSettled",
             "Game",
@@ -2414,7 +2414,7 @@
         {
           "kind": "function",
           "name": "withdraw",
-          "line": 708,
+          "line": 720,
           "called": [
             "BondTransferFailed",
             "NothingToWithdraw"
@@ -2423,13 +2423,13 @@
         {
           "kind": "receive",
           "name": "receive",
-          "line": 722,
+          "line": 734,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 728,
+          "line": 740,
           "called": []
         }
       ]
@@ -14666,18 +14666,18 @@
     {
       "module": "KnomosisFaultProofGame.t",
       "path": "solidity/test/KnomosisFaultProofGame.t.sol",
-      "declaration_count": 56,
+      "declaration_count": 57,
       "declarations": [
         {
           "kind": "contract",
           "name": "MockStateRootSubmissionForGame",
-          "line": 13,
+          "line": 14,
           "called": []
         },
         {
           "kind": "struct",
           "name": "RootRecord",
-          "line": 14,
+          "line": 15,
           "called": [
             "deploymentId",
             "roots",
@@ -14687,7 +14687,7 @@
         {
           "kind": "function",
           "name": "setDeploymentId",
-          "line": 38,
+          "line": 39,
           "called": [
             "deploymentId"
           ]
@@ -14695,7 +14695,7 @@
         {
           "kind": "function",
           "name": "seedRoot",
-          "line": 53,
+          "line": 54,
           "called": [
             "RootRecord",
             "actionCommit",
@@ -14706,7 +14706,7 @@
         {
           "kind": "function",
           "name": "markDisputed",
-          "line": 74,
+          "line": 75,
           "called": [
             "roots"
           ]
@@ -14714,7 +14714,7 @@
         {
           "kind": "function",
           "name": "clearDisputed",
-          "line": 80,
+          "line": 81,
           "called": [
             "roots"
           ]
@@ -14722,7 +14722,7 @@
         {
           "kind": "function",
           "name": "slashSequencerBond",
-          "line": 86,
+          "line": 87,
           "called": [
             "roots"
           ]
@@ -14730,46 +14730,68 @@
         {
           "kind": "function",
           "name": "revertStateRootsFrom",
-          "line": 98,
+          "line": 99,
           "called": []
         },
         {
           "kind": "receive",
           "name": "receive",
-          "line": 103,
+          "line": 104,
           "called": []
         },
         {
           "kind": "contract",
           "name": "RevertingReceiver",
-          "line": 109,
+          "line": 110,
           "called": []
         },
         {
           "kind": "receive",
           "name": "receive",
-          "line": 110,
+          "line": 111,
           "called": []
         },
         {
           "kind": "contract",
           "name": "KnomosisFaultProofGameTest",
-          "line": 118,
+          "line": 119,
           "called": [
+            "CrossCheckFramework",
             "KnomosisFaultProofGame",
-            "KnomosisStepVM",
+            "KnomosisStepVMRoot",
             "MockStateRootSubmissionForGame",
             "sequencer"
           ]
         },
         {
           "kind": "function",
+          "name": "_loadProbe",
+          "line": 166,
+          "called": [
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_openings",
+          "line": 197,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_sliceHead",
+          "line": 208,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "setUp",
-          "line": 141,
+          "line": 217,
           "called": [
             "KnomosisFaultProofGame",
-            "KnomosisStepVM",
+            "KnomosisStepVMRoot",
             "MockStateRootSubmissionForGame",
+            "_loadProbe",
             "_seedUnboundRoot",
             "sequencer"
           ]
@@ -14777,7 +14799,7 @@
         {
           "kind": "function",
           "name": "_seedUnboundRoot",
-          "line": 187,
+          "line": 264,
           "called": [
             "sequencer"
           ]
@@ -14785,7 +14807,7 @@
         {
           "kind": "function",
           "name": "_seedRootForAction",
-          "line": 194,
+          "line": 271,
           "called": [
             "sequencer"
           ]
@@ -14793,13 +14815,13 @@
         {
           "kind": "function",
           "name": "test_constructor_sets_immutables",
-          "line": 212,
+          "line": 289,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_treasury",
-          "line": 221,
+          "line": 298,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -14807,7 +14829,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stepVM",
-          "line": 228,
+          "line": 305,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -14815,7 +14837,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_zero_stateRootSubmission",
-          "line": 235,
+          "line": 312,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -14823,7 +14845,7 @@
         {
           "kind": "function",
           "name": "test_constructor_rejects_eoa_stateRootSubmission",
-          "line": 249,
+          "line": 326,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -14831,13 +14853,13 @@
         {
           "kind": "function",
           "name": "test_constants_max_bisection_depth_is_64",
-          "line": 256,
+          "line": 333,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_constructor_rejects_timeout_le_step_interval",
-          "line": 264,
+          "line": 341,
           "called": [
             "KnomosisFaultProofGame"
           ]
@@ -14845,37 +14867,37 @@
         {
           "kind": "function",
           "name": "test_initiateChallenge_returns_gameId",
-          "line": 281,
+          "line": 358,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_marks_disputed_root",
-          "line": 293,
+          "line": 370,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_wrong_bond",
-          "line": 301,
+          "line": 378,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_no_dispute",
-          "line": 308,
+          "line": 385,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_duplicate_game",
-          "line": 316,
+          "line": 393,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_uses_canonical_sequencer",
-          "line": 335,
+          "line": 412,
           "called": [
             "sequencer"
           ]
@@ -14883,67 +14905,51 @@
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_missing_root",
-          "line": 346,
+          "line": 423,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_unanchored_low_commit",
-          "line": 363,
+          "line": 440,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_unsubmitted_low_root",
-          "line": 379,
+          "line": 456,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_inverted_range",
-          "line": 395,
+          "line": 472,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_initiateChallenge_rejects_equal_range",
-          "line": 407,
+          "line": 484,
           "called": []
         },
         {
           "kind": "function",
           "name": "_encodeCbeAmount",
-          "line": 433,
+          "line": 510,
           "called": []
         },
         {
           "kind": "function",
           "name": "_defaultProofData",
-          "line": 451,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "_makeCellProof",
-          "line": 455,
-          "called": [
-            "_defaultProofData",
-            "_makeCellProofWithOpening"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_makeCellProofWithOpening",
-          "line": 466,
+          "line": 528,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_terminate_single_step_honest_sequencer_wins",
-          "line": 496,
+          "line": 544,
           "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof",
+            "_openings",
             "_seedRootForAction",
             "sequencer"
           ]
@@ -14951,21 +14957,20 @@
         {
           "kind": "function",
           "name": "test_terminate_rejects_a_substituted_action",
-          "line": 566,
+          "line": 615,
           "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof",
+            "_openings",
             "_seedRootForAction",
+            "_sliceHead",
             "sequencer"
           ]
         },
         {
           "kind": "function",
           "name": "test_terminate_rejects_a_substituted_signer",
-          "line": 603,
+          "line": 652,
           "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof",
+            "_openings",
             "_seedRootForAction",
             "sequencer"
           ]
@@ -14973,10 +14978,9 @@
         {
           "kind": "function",
           "name": "test_terminate_rejects_a_substituted_action_kind",
-          "line": 623,
+          "line": 669,
           "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof",
+            "_openings",
             "_seedRootForAction",
             "sequencer"
           ]
@@ -14984,10 +14988,9 @@
         {
           "kind": "function",
           "name": "test_terminate_rejects_an_action_absent_from_the_chain",
-          "line": 647,
+          "line": 690,
           "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof",
+            "_openings",
             "_seedUnboundRoot",
             "sequencer"
           ]
@@ -14995,10 +14998,9 @@
         {
           "kind": "function",
           "name": "test_terminate_single_step_invalid_root_challenger_wins",
-          "line": 670,
+          "line": 710,
           "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof",
+            "_openings",
             "_seedRootForAction",
             "sequencer"
           ]
@@ -15006,10 +15008,9 @@
         {
           "kind": "function",
           "name": "test_multi_round_bisection_then_terminate_sequencer_wins",
-          "line": 715,
+          "line": 753,
           "called": [
-            "_encodeCbeAmount",
-            "_makeCellProof",
+            "_openings",
             "_seedRootForAction",
             "sequencer"
           ]
@@ -15017,7 +15018,7 @@
         {
           "kind": "function",
           "name": "test_rechallenge_succeeds_after_settled_game_with_reassigned_high",
-          "line": 812,
+          "line": 843,
           "called": [
             "sequencer"
           ]
@@ -15025,19 +15026,19 @@
         {
           "kind": "function",
           "name": "test_claimTimeout_after_window_settles_against_sequencer",
-          "line": 860,
+          "line": 891,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_distributes_bonds_95_5_split",
-          "line": 874,
+          "line": 905,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_settlement_not_bricked_by_reverting_treasury",
-          "line": 915,
+          "line": 946,
           "called": [
             "KnomosisFaultProofGame",
             "RevertingReceiver"
@@ -15046,31 +15047,31 @@
         {
           "kind": "function",
           "name": "test_withdraw_nothing_credited_reverts",
-          "line": 948,
+          "line": 979,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_slashSequencerBond_on_challenger_wins",
-          "line": 954,
+          "line": 985,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_calls_revertStateRootsFrom_on_challenger_wins",
-          "line": 973,
+          "line": 1004,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_claimTimeout_rejects_already_settled_game",
-          "line": 987,
+          "line": 1018,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_sequencer_first_round",
-          "line": 1002,
+          "line": 1033,
           "called": [
             "sequencer"
           ]
@@ -15078,13 +15079,13 @@
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_wrong_caller",
-          "line": 1012,
+          "line": 1043,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_submitMidpoint_rejects_after_deadline",
-          "line": 1022,
+          "line": 1053,
           "called": [
             "sequencer"
           ]
@@ -15092,7 +15093,7 @@
         {
           "kind": "function",
           "name": "test_respondToMidpoint_rejects_without_pending",
-          "line": 1032,
+          "line": 1063,
           "called": []
         }
       ]

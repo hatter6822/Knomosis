@@ -223,26 +223,15 @@ fn real_knomosis_export_cell_proofs_transfer_round_trip() {
     assert_eq!(p3.key_a, 1, "cell 3 key_a should be signer=1");
     assert_eq!(p3.key_b, 0, "cell 3 key_b should be 0 for nonce");
 
-    // 6. All cell proofs should have a 32-byte witness_commit.
-    for (i, p) in parsed_proofs.iter().enumerate() {
-        assert_eq!(
-            p.witness_commit.len(),
-            32,
-            "cell {i} witness_commit should be 32 bytes, got {}",
-            p.witness_commit.len()
-        );
-    }
-
-    // 7. All four cell proofs share the same witness_commit
-    //    (they all witness the SAME pre-state).
-    for (i, p) in parsed_proofs.iter().enumerate().skip(1) {
-        assert_eq!(
-            p.witness_commit, parsed_proofs[0].witness_commit,
-            "cell {i} witness_commit should match cell 0 (same pre-state)",
-        );
-    }
-
-    // 8. Every proof carries a real SMT opening.
+    // 6. Every proof carries a real SMT opening.
+    //
+    //    This replaced a pair of checks on a `witness_commit` word
+    //    that no longer exists: it claimed the value came from a state
+    //    whose root is the pre-state root, which only a party holding
+    //    the whole `ExtendedState` could verify — and which a
+    //    responder could set to anything.  The opening is the binding
+    //    now, and it is one an L1 holding nothing but a 32-byte root
+    //    can check.
     assert_openings_present(&parsed_proofs);
 }
 

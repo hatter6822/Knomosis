@@ -16,123 +16,69 @@ Workstream-H fault-proof migration.
 
 ---
 
-## 0. DEPLOYMENT BLOCKER — the terminal step does not adjudicate
+## 0. The terminal step adjudicates — what changed, and the residue
 
-**Do not deploy this system as an adjudicating backstop.**  The
-bisection narrowing works; the step that decides the winner does
-not.
+**This section used to be a deployment blocker.**  It read: do not
+deploy this system as an adjudicating backstop, because the bisection
+narrowing works and the step that decides the winner does not.
+`terminateOnSingleStep` fed `g.low.commit` — a state root — to
+`KnomosisStepVM.executeStep`, whose own header stated that its output
+"is NOT byte-identical to" a `commitExtendedState` value, and compared
+the result to `g.high.commit`, another state root.  Two different
+constructions, so the comparison never succeeded: **an honest sequencer
+lost every game it correctly defended.**
 
-`KnomosisFaultProofGame.initiateChallenge` anchors *both* game
-endpoints to submitted state roots — `g.high.commit` is the
-disputed root's `rootStateCommit`, and `g.low.commit` is checked
-against `lowStateCommit`.  Both are therefore
-`commitExtendedState`-shaped state roots.
-`terminateOnSingleStep` calls
-`stepVM.executeStep(g.low.commit, …)` and compares the result to
-`g.high.commit`.  But `KnomosisStepVM`'s own contract header
-states that `executeStep` returns "a step-VM-specific 32-byte
-hash" that "is NOT byte-identical to the Lean side's
-`commitExtendedState(kernelOnlyApply es entry)` value".
+The 278-entry cross-stack corpus could not report it and never can.  It
+pins Lean's `stepVMHash` against Solidity's `executeStep` — two
+implementations of the SAME bespoke recipe.  They agree on all 278
+entries; agreement between them says nothing about whether either
+equals a published state root, which is the only property the game
+needs.
 
-The two sides of that comparison are different constructions, so
-it never succeeds.  Operationally:
-
-  * **An honest sequencer loses every game it correctly
-    defends.**  A challenger who opens a game on a valid root and
-    plays to single-step wins, and the sequencer's bond is
-    slashed.
-  * The corpus does not report this, and cannot.  It pins Lean's
-    `stepVMHash` against Solidity's `executeStep` — two
-    implementations of the SAME bespoke recipe.  They agree, on all
-    278 entries; agreement between them says nothing about whether
-    either equals a published state root, which is the only property
-    the game needs.  (The corpus used to be worse: the per-entry
-    assertion skipped on the fixture header and the committed
-    fixtures carried the fallback hash, so a bare `forge test`
-    reported green having compared nothing.  That is fixed — the
-    corpora are keccak artifacts by construction and the suites fail
-    loudly rather than skipping — but fixing it did not make the
-    corpus evidence for THIS.)
-
-**Until this is closed**, run the dispute pipeline
-(`KnomosisDisputeVerifier`, adjudicator quorum) as the operative
-backstop and treat the fault-proof game as observability only:
-useful for surfacing a disagreement, not for settling one.  If
-the game contracts are deployed at all, set
-`MIN_CHALLENGE_BOND` high enough that opening a game is not
-profitable purely from the guaranteed sequencer loss.
-
-The fix is to Merkleise the state root so a post-root is
-recomputable from the pre-root plus the proven cell writes.  **The
-root itself has been swapped**: `commitExtendedState` is now the SMT
-root over the state's cells, which a post-root IS computable from.
-Every prerequisite behind it has landed — the cell space covers all
-seven `ExtendedState` fields; the SMT cell key is derived on-chain
-rather than accepted from the caller; the root is proved injective
-(`smtRootListAux_perm_of_eq_under_collision_free`, the EI.8
-replacement) and proved to determine every cell
-(`commitExtendedState_determines_cells`); the incremental
-write `smtUpdateRoot` is proved independent of which verifying
-opening the responder supplies; and on the Lean side `stepPostRoot`
-folds a step's proven writes onto exactly the root an honest
-sequencer publishes, for all twenty-five action variants.
-
-The wire is in too: `CellProof` carries its SMT opening
-(`proofData`), validated for shape at L1 intake but not yet consumed;
-and `terminateOnSingleStep` now authenticates the
-`(actionKind, actionFields, signer)` triple it is handed against the
-log-entry chain, which the state-roots-only chain could not do.
-
-**The verifier that closes this is now built on both stacks.**
-`KnomosisStepVMRoot.executeStepToRoot` takes a pre-root, the action,
-the signer, the log index, a read-only budget-policy opening and the
-chained write openings, and returns a post-state ROOT.  It DERIVES
-both halves rather than accepting them — the cell list from
-`StepWrites.deriveWriteSet` (checked against the submitted bundle
-position by position, so a responder cannot omit a write) and each
+**It is closed.**  `terminateOnSingleStep` calls
+`KnomosisStepVMRoot.executeStepToRoot`, which returns a post-state ROOT
+computed by folding the step's DERIVED cell writes into `g.low.commit`.
+It derives both halves rather than accepting them — the cell list from
+`StepWrites.deriveWriteSet`, checked against the submitted bundle
+position by position so a responder cannot omit a write, and each
 cell's value from `StepWrites` / `StepPlan`, which are
 `productionApplyBudget` re-expressed cell-locally.  Every derivation
 EVALUATES its law's precondition and returns the pre-values when it
-fails, so a failing precondition is a no-op rather than a revert.  The
-corpus's `writeBundleGoldens` drives it end to end against Lean's
-`stepPostRoot`.
+fails, so a failing precondition is a no-op rather than a revert — a
+revert would not be a verdict, since the terminal step is callable only
+by whoever's turn it is.
 
-**§0 still applies in full**, because the game does not call it yet:
+The evidence is a corpus column on both stacks: `writeBundleGoldens`
+carries, per probe, the pre-root, the action, the chained openings and
+the root Lean's `stepPostRoot` reaches, and both the L1 verifier
+(`CrossCheck/StepVMRoot.t.sol`) and the Lean one
+(`FaultProof/Terminate.lean`) reach it.  The game's own
+honest-sequencer-wins test is driven by that probe rather than by
+hand-built values — with a real fold, a fabricated `low` has no
+openings that verify against it, so the honest path is only reachable
+from a real one.
 
-  1. `KnomosisFaultProofGame.terminateOnSingleStep` still calls
-     `KnomosisStepVM.executeStep`, which returns the bespoke hash.
-     Until that call moves, the terminal comparison is still between
-     two different constructions and the honest sequencer still loses.
-  2. The observer still emits `buildObserverCellProofs`' bundle, whose
-     openings are ALL against the pre-root.  The fold needs the
-     CHAINED bundle `stepWriteBundle` produces — an opening goes stale
-     the moment a write lands — so a defender cannot yet produce a
-     bundle the new verifier accepts.
-  3. The terminate signature, and therefore
-     `runtime/tests/cross-stack/method_selectors.json` and the Rust
-     conduit, move with (1).
+**Operator obligation, in force: do not authorise the bulk laws.**  A
+deployment leaning on the fault proof must not permit
+`distributeOthers` / `proportionalDilute` in its `AuthorityPolicy`.  A
+verifier cannot tell a complete recipient set from one missing an entry
+— the missing cell's opening is simply absent, the short bundle folds,
+and the resulting root is one where that recipient was never credited,
+which the sequencer that published it can then successfully defend.
+The two laws remain available to deployments using the
+adjudicator-quorum backstop.  `FaultProof.FaultProofAdjudicable` is the
+predicate; it is false on exactly those two, mirrored by
+`StepWrites.isAdjudicable` and pinned per kind across all twenty-five
+variants by the corpus's `adjudicable` column.  The contract refuses
+them before verifying any opening.
 
-`executeStep`'s revert-where-`step_impl`-no-ops behaviour is listed
-under (1) rather than separately: it is a property of the contract
-being replaced, and the replacement is total.
-
-**Operator obligation, in force now and after the flip: do not
-authorise the bulk laws.**  A deployment leaning on the fault proof
-must not permit `distributeOthers` / `proportionalDilute` in its
-`AuthorityPolicy`.  A verifier cannot tell a complete recipient set
-from one missing an entry — the missing cell's opening is simply
-absent, the short bundle folds, and the resulting root is one where
-that recipient was never credited, which the sequencer that published
-it can then successfully defend.  The two laws remain available to
-deployments using the adjudicator-quorum backstop.
-`FaultProof.FaultProofAdjudicable` is the predicate; it is false on
-exactly those two.
-
-The remaining work is `docs/planning/state_root_merkleisation_plan.md`
-§5's S7.  `docs/audits/19-findings-and-followups.md` ("Open
-critical: the fault-proof commit-recipe split") records the blast
-radius: the game's terminate call, the observer, the Rust conduit, and
-the step-VM fixture corpus.
+**One residue, and it is not a soundness one.**  The old
+`KnomosisStepVM` and Lean's `stepVMHash` are still compiled alongside
+the new path.  Nothing calls them from the game;
+`Step.kernelStepApply` — the Lean MODEL of the terminal step, read by
+no contract — still computes through the bespoke hash.  Retiring them
+is `docs/planning/state_root_merkleisation_plan.md` §5's S7 and changes
+what nothing computes.
 
 ---
 
@@ -140,8 +86,9 @@ the step-VM fixture corpus.
 
 Before deploying the Workstream-H contracts:
 
-  - [ ] **§0 read and accepted.**  The terminal step does not
-        adjudicate; the game is not a settlement backstop yet.
+  - [ ] **§0 read and accepted.**  In particular: the deployment's
+        `AuthorityPolicy` must not authorise `distributeOthers` /
+        `proportionalDilute`, which the fault proof cannot adjudicate.
   - [ ] **Lean side green**: `lake build`, `lake test`,
         `lake exe count_sorries`, `lake exe tcb_audit`,
         `lake exe stub_audit`, `lake exe lex_lint`,

@@ -2998,6 +2998,13 @@ mod tests {
             action_fields: vec![0u8; 16],
             signer: 5,
             expected_post_commit: commit,
+            policy_opening: crate::submitter::CellProof {
+                cell_kind: 14,
+                key_a: 0,
+                key_b: 0,
+                cell_value: vec![0u8; 36],
+                proof_data: vec![0u8; 32],
+            },
             cell_proofs: vec![],
         }
     }

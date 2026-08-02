@@ -179,15 +179,20 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
         32,
         "expected_post_commit is 32 bytes"
     );
-    // Transfer's cell-proof bundle has 5 cells (registry,
-    // balance×2, nonce, epochBudget).  The epoch-budget cell joined
-    // `Action.writeCells` once it was established that the production
-    // advance rewrites the signer's budget entry on every admitted
-    // action.
+    // Transfer's bundle has 4 openings: `balance × 2, nonce,
+    // epochBudget` — the cells `writeCellsAt` names.  It was 5 while
+    // the bundle carried `requiredCells`, which included the READ-ONLY
+    // registry cell; the fold opens what a step WRITES, and the one
+    // read it needs (the budget policy) rides its own field.
     assert_eq!(
         bundle.cell_proofs.len(),
-        5,
-        "Transfer bundle has 5 cell proofs"
+        4,
+        "Transfer bundle has 4 write openings"
+    );
+    // ...and the read-only policy opening names the policy cell.
+    assert_eq!(
+        bundle.policy_opening.cell_kind, 14,
+        "the policy opening must name the budget-policy cell"
     );
 }
 
@@ -258,8 +263,12 @@ fn real_knomosis_export_terminate_bundle_mint_variant() {
     // amount occupies [16..32] (uint128BE), so its LSB is byte 31.
     assert_eq!(bundle.action_fields[31], 42, "amount=42 in BE last byte");
     assert_eq!(bundle.signer, 11, "Mint signer is 11");
-    // Mint bundle: 4 cells (registry, balance, nonce, epochBudget).
-    assert_eq!(bundle.cell_proofs.len(), 4, "Mint bundle has 4 cell proofs");
+    // Mint bundle: 3 write openings (balance, nonce, epochBudget).
+    assert_eq!(
+        bundle.cell_proofs.len(),
+        3,
+        "Mint bundle has 3 write openings"
+    );
 }
 
 /// Withdraw variant: `action_kind` = 14, fields include the
@@ -313,6 +322,15 @@ fn real_knomosis_export_terminate_bundle_withdraw_variant() {
         );
     }
     assert_eq!(bundle.signer, 3, "Withdraw signer is 3");
+    // Withdraw is the one variant whose write set is not a function of
+    // `(action, signer)`: its pending-withdrawal cell is keyed by the
+    // PRE-state's counter, so the bundle carries five openings —
+    // balance, nonce, epochBudget, the counter, and the cell it names.
+    assert_eq!(
+        bundle.cell_proofs.len(),
+        5,
+        "Withdraw bundle has 5 write openings"
+    );
 }
 
 /// Out-of-range idx: exit code 2.

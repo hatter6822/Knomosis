@@ -1199,16 +1199,39 @@ proof.  Nothing consumes the opening yet — that is the flip.
     same value on both sides), so there is one code path and one
     absence branch rather than two that could diverge.
 
-**What remains is S7**: `KnomosisFaultProofGame.terminateOnSingleStep`
-calling `executeStepToRoot`, `Step.kernelStepApply` and
-`TerminateBundle.buildTerminateBundle` moving onto the derived fold
-(the observer must emit the CHAINED bundle `stepWriteBundle` produces,
-not `buildObserverCellProofs`' all-against-the-pre-root one), the Rust
-conduit and `method_selectors.json` following the terminate signature,
-the corpus's `expectedStepVMCommitHex` becoming
-`expectedPostStateRootHex` with the fixture `identifier` bumped, and
-the retirement of `SolidityStepVMCommit.lean` + `stepVMHash` + the 36
-recipe-bound theorems.
+**S7's wiring has landed** — the consensus change itself, as one unit
+across the three stacks:
+
+  * `KnomosisFaultProofGame.terminateOnSingleStep` calls
+    `executeStepToRoot`, passing `g.high.idx` as the log index (the
+    contract reads it from the game rather than from the caller, so a
+    responder has no value to disagree with).  Its
+    honest-sequencer-wins test is driven by a REAL corpus probe: with a
+    real fold, a fabricated `low` has no openings that verify against
+    it, so the honest path is reachable only from a real pre-root.
+  * `FaultProof/Terminate.lean` is the Lean mirror
+    (`verifierPostRoot`), and `TerminateBundle.buildTerminateBundle`
+    emits the CHAINED bundle `stepOpenings` produces plus the
+    read-only policy opening.  `expectedPostCommit` is `stepPostRoot`,
+    not the bespoke hash.
+  * The `witnessCommit` word is gone from the wire on all three stacks.
+    It carried `commitExtendedState` of the state a value was read from
+    — a claim only a party holding the whole `ExtendedState` could
+    check, and one a responder could set freely.  The opening is the
+    binding, and it is one an L1 holding a 32-byte root can verify.
+  * The Rust conduit follows the new terminate signature, with
+    `method_selectors.json` regenerated from the compiled ABI (which is
+    what makes a Solidity signature change break the Rust build).
+
+**What remains is the RETIREMENT**, which changes what nothing
+computes: `KnomosisStepVM.sol` and its test,
+`SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
+the 36 recipe-bound theorems in `StepVMCoherence.lean`, the corpus's
+`expectedStepVMCommitHex` column (with the fixture `identifier`
+bumped), and `Step.kernelStepApply` moving onto `verifierPostRoot` —
+it still computes the bespoke hash, so the Lean model of the contract
+is stale in that one place, though the deployed path does not read
+it.
 
 §2, §2A, §2B, §3B, S4 and S5 are additive and have landed on their
 own; §3 / §3A and S6 are one consensus change and must not be split

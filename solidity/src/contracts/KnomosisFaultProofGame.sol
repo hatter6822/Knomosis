@@ -6,7 +6,7 @@ pragma solidity 0.8.20;
 
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
-import {KnomosisStepVM} from "./KnomosisStepVM.sol";
+import {KnomosisStepVMRoot} from "./KnomosisStepVMRoot.sol";
 
 import {LogChain} from "../lib/LogChain.sol";
 
@@ -75,7 +75,7 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
     address public immutable treasury;
 
     /// @notice The step VM contract.
-    KnomosisStepVM public immutable stepVM;
+    KnomosisStepVMRoot public immutable stepVM;
 
     /// @notice The state-root submission contract.
     address public immutable stateRootSubmission;
@@ -262,7 +262,7 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         MIN_CHALLENGE_BOND = _minChallengeBond;
         MIN_BISECTION_STEP_INTERVAL_BLOCKS = _minBisectionStepInterval;
         treasury = _treasury;
-        stepVM = KnomosisStepVM(_stepVM);
+        stepVM = KnomosisStepVMRoot(_stepVM);
         stateRootSubmission = _stateRootSubmission;
     }
 
@@ -325,7 +325,7 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // root above.  WITHOUT this, `lowCommit` is attacker-controlled:
         // a dishonest challenger could open a single-step range with a
         // FABRICATED pre-state so the honest sequencer's terminal
-        // `stepVM.executeStep(g.low.commit, …)` cannot reproduce the
+        // `stepVM.executeStepToRoot(g.low.commit, …)` cannot reproduce the
         // real `high.commit`, losing the sequencer its bond.  The
         // bisection's soundness REQUIRES `low` be an agreed commit
         // (FaultProof/Game.lean: "both parties have agreed on the
@@ -467,7 +467,8 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         uint8 actionKind,
         bytes calldata actionFields,
         uint64 signer,
-        KnomosisStepVM.CellProof[] calldata cellProofs
+        KnomosisStepVMRoot.CellOpening calldata policyOpening,
+        KnomosisStepVMRoot.CellOpening[] calldata writeOpenings
     ) external nonReentrant {
         Game storage g = games[gameId];
         if (g.status != GameStatus.InProgress) revert GameAlreadyEnded();
@@ -495,9 +496,20 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // game for nothing.
         _requireActionInLogChain(g.high.idx, actionKind, actionFields, signer);
 
-        // Call the step VM with the per-variant dispatch.
-        bytes32 computedPostCommit = stepVM.executeStep(
-            g.low.commit, actionKind, actionFields, signer, cellProofs);
+        // Run the step VM.  It returns a state ROOT — computed by
+        // folding the step's DERIVED cell writes into `g.low.commit` —
+        // so the comparison below is between two values of the same
+        // construction.  It was not: `executeStep` returned a bespoke
+        // per-variant hash, so the comparison never succeeded and an
+        // honest sequencer lost every game it correctly defended.
+        //
+        // `g.high.idx` is the log index the disputed action produced,
+        // and `withdraw`'s pending-withdrawal record carries it — so
+        // the game supplies the index it is adjudicating rather than
+        // the step VM guessing one.
+        bytes32 computedPostCommit = stepVM.executeStepToRoot(
+            g.low.commit, actionKind, actionFields, signer,
+            g.high.idx, policyOpening, writeOpenings);
 
         // The disputed endpoint is the committed transcript high point.
         if (computedPostCommit == g.high.commit) {

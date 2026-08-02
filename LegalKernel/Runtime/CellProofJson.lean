@@ -126,17 +126,22 @@ def bytesHex (bs : ByteArray) : String :=
 def formatCellProofJson (p : CellProof) : String :=
   let (kind, keyA, keyB) := formatCellTag p.cellTag
   let cellValHex := bytesHex p.cellValue
-  let commit := commitExtendedState p.witnessState
-  let commitHex := formatHashHex commit
   -- JSON line builder.  String.append used directly to keep
   -- the literal quotes out of the s!"..." parser.
+  --
+  -- **No `witness_commit` field.**  It carried
+  -- `commitExtendedState p.witnessState` — a claim that the value
+  -- came from a state whose root is the pre-state root, checkable
+  -- only by a party holding the whole `ExtendedState`, and settable
+  -- freely by a responder.  The step VM verifies `proof_data` against
+  -- the running root instead, which is a check an L1 holding nothing
+  -- but a 32-byte root can do.
   let q := "\""
   let parts : List String := [
     "{", q ++ "cell_kind" ++ q, ":", kind, ",",
     q ++ "key_a" ++ q, ":", q ++ keyA ++ q, ",",
     q ++ "key_b" ++ q, ":", q ++ keyB ++ q, ",",
     q ++ "cell_value" ++ q, ":", q ++ cellValHex ++ q, ",",
-    q ++ "witness_commit" ++ q, ":", q ++ commitHex ++ q, ",",
     q ++ "proof_data" ++ q, ":", q ++ bytesHex p.proofData ++ q,
     "}"
   ]
