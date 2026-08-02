@@ -74,11 +74,11 @@ them before verifying any opening.
 
 **One residue, and it is not a soundness one.**  The old
 `KnomosisStepVM` and Lean's `stepVMHash` are still compiled alongside
-the new path.  Nothing calls them from the game;
-`Step.kernelStepApply` — the Lean MODEL of the terminal step, read by
-no contract — still computes through the bespoke hash.  Retiring them
-is `docs/planning/state_root_merkleisation_plan.md` §5's S7 and changes
-what nothing computes.
+the new path, called by nothing.  Removing them is
+`docs/planning/state_root_merkleisation_plan.md` §5's S7 and changes
+what no surface computes.  The Lean MODEL of the terminal step
+(`Step.kernelStepApply`) already routes through the verifier, so it
+computes what the contract computes.
 
 ---
 

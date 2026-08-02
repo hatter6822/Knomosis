@@ -476,7 +476,9 @@ runbook's §0 rather than here: a deployment leaning on the fault proof
 must not authorise `distributeOthers` / `proportionalDilute` (a
 verifier cannot tell a complete recipient set from a short one), and
 the old recipe is still compiled alongside the new path until S7
-retires it.
+removes it.  The Lean MODEL of the terminal step
+(`Step.kernelStepApply`) routes through the verifier, so the game model
+and the contract compute the same thing.
 
 **Closed, and independently of the above.**
 `KnomosisFaultProofGame.submitMidpoint` derives

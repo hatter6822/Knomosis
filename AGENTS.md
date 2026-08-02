@@ -1327,13 +1327,21 @@ three stacks — it was a claim only a holder of the whole
 Rust conduit follows the new terminate signature
 (`method_selectors.json` regenerated from the compiled ABI).
 
-**What remains is the retirement**: `KnomosisStepVM.sol` and its test,
-`SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
-the 36 recipe-bound theorems in `StepVMCoherence.lean`, the corpus's
-`expectedStepVMCommitHex` column, and `Step.kernelStepApply` moving
-onto `verifierPostRoot` (it still computes the bespoke hash, so the
-Lean model of the contract is stale in that one place — the deployed
-path does not read it).  None of that changes what any surface
+`Step.kernelStepApply` — the Lean MODEL of the terminal step — routes
+through `verifierPostRoot` too, so the model computes what the contract
+computes.  That change reached further than a repoint:
+`KernelStep` now carries the log index, the read-only policy opening
+and the chained write openings instead of a witness-state-bearing
+bundle, and the settlement and chain tests had to be rebased on a REAL
+step over a REAL state, because an empty bundle no longer verifies
+vacuously — it fails the re-derived shape check, since every one of
+the twenty-five variants writes the signer's nonce and epoch budget.
+
+**What remains is dead-code removal**: `KnomosisStepVM.sol` and its
+test, `SolidityStepVMCommit.lean`, `stepVMHash` /
+`stepVMHashFromAction` and the 36 recipe-bound theorems in
+`StepVMCoherence.lean`, and the corpus's `expectedStepVMCommitHex`
+column.  Nothing calls any of it; removing it changes what no surface
 COMPUTES.
 `docs/audits/19-findings-and-followups.md` records the blast radius
 and `docs/planning/state_root_merkleisation_plan.md` §4 step 3 is the

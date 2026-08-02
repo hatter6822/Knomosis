@@ -43,13 +43,6 @@ open LegalKernel.Test
 
 namespace LegalKernel.Test.FaultProof.Settlement
 
-/-- A non-zero commit (32 bytes of `0x01`). -/
-private def oneCommit : StateCommit :=
-  ByteArray.mk #[1, 1, 1, 1, 1, 1, 1, 1,
-                 1, 1, 1, 1, 1, 1, 1, 1,
-                 1, 1, 1, 1, 1, 1, 1, 1,
-                 1, 1, 1, 1, 1, 1, 1, 1]
-
 /-- A second non-zero commit, distinct from `oneCommit`. -/
 private def twoCommit : StateCommit :=
   ByteArray.mk #[2, 2, 2, 2, 2, 2, 2, 2,
@@ -64,8 +57,32 @@ private def threeCommit : StateCommit :=
                  3, 3, 3, 3, 3, 3, 3, 3,
                  3, 3, 3, 3, 3, 3, 3, 3]
 
+/-- A populated state, and the real single step from it.
+
+    The fixtures used to be abstract 32-byte constants with an EMPTY
+    opening bundle, which the old `kernelStepApply` accepted
+    vacuously.  The verifier re-derives the cell list and verifies
+    every opening against the running root, so a step has to be a REAL
+    one over a REAL state to apply at all — and `low` has to be that
+    state's published root.  That is a strengthening: the tests below
+    now settle on a step whose post-root anyone can reproduce. -/
+private def settlementBase : ExtendedState :=
+  let st : LegalKernel.State :=
+    { balances := (∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+                    (((∅ : BalanceMap).insert 7 100).insert 8 40) }
+  { base          := st
+  , nonces        := { next := (∅ : Std.TreeMap ActorId Nonce compare).insert 7 3 }
+  , registry      := (∅ : KeyRegistry).insert 7 (ByteArray.mk #[1, 2, 3])
+  , bridge        := LegalKernel.Bridge.BridgeState.empty
+  , epochBudgets  := (∅ : EpochBudgetState).insert 7
+                       { lastSeenEpoch := 2, budgetBalance := 50 }
+  , budgetPolicy  := .bounded 100 1 2 }
+
+/-- The published root of `settlementBase` — the agreed `low`. -/
+private def oneCommit : StateCommit := commitExtendedState settlementBase
+
 /-- A single-step disputed range with low and high commits
-    distinct.  `low = oneCommit`, `high = twoCommit`. -/
+    distinct.  `low` is the real pre-root, `high = twoCommit`. -/
 private def singleStepRange : DisputedRange :=
   { low  := { idx := 0, commit := oneCommit },
     high := { idx := 1, commit := twoCommit } }
@@ -98,37 +115,36 @@ private def sequencerRespondingGame : GameState :=
   , status          := .inProgress
   , deploymentId    := ByteArray.empty }
 
-/-- A trivial signed action used to build minimal KernelSteps. -/
+/-- The action the real step applies. -/
 private def trivialSignedAction : SignedAction :=
-  { action := .freezeResource 0
-  , signer := 1
-  , nonce  := 0
+  { action := .transfer 1 7 8 30
+  , signer := 7
+  , nonce  := 3
   , sig    := ByteArray.empty }
 
-/-- A KernelStep over `trivialSignedAction` with an empty cell-proof
-    bundle.  `postStateCommit` is a claim the settlement no longer
-    reads; it is kept only because `KernelStep` has the field. -/
+/-- The canonical step from `settlementBase`, with the claim and the
+    declared pre-commit left free.
+
+    `postStateCommit` is a claim the settlement no longer reads; it is
+    kept only because `KernelStep` has the field, and one of the tests
+    below exists to show that varying it changes nothing.  Varying
+    `preStateCommit` DOES matter — the transition refuses a step whose
+    declared pre-commit is not the range's `low`. -/
 private def stepClaiming (preCommit postCommit : StateCommit) : KernelStep :=
-  { preStateCommit  := preCommit
-  , signedAction    := trivialSignedAction
-  , postStateCommit := postCommit
-  , cellProofs      := CellProofBundle.empty }
+  { buildKernelStep settlementBase trivialSignedAction 0 with
+      preStateCommit  := preCommit
+    , postStateCommit := postCommit }
 
-/-- What the step VM actually computes for `stepClaiming pre _`.
-    This is the value the settlement compares against
-    `range.high.commit`, so the fixtures below are built around it
-    rather than around a caller-supplied claim.
+/-- What the step VM actually computes from the agreed pre-root.  This
+    is the value the settlement compares against `range.high.commit`,
+    so the fixtures below are built around it rather than around a
+    caller-supplied claim.
 
-    An empty bundle still *verifies* — `List.all` over `[]` is
-    vacuously `true` — but the value returned is the step VM's own
-    output, which the responder does not control.  That is exactly
-    the property the old `some step.postStateCommit` body lacked. -/
-private def computedFor (preCommit : StateCommit) : StateCommit :=
-  StepVMCoherence.stepVMHash preCommit
-    (StepVMCoherence.actionKindByte trivialSignedAction.action)
-    (StepVMCoherence.actionFieldsForL1 trivialSignedAction.action)
-    trivialSignedAction.signer.toNat
-    CellProofBundle.empty
+    It is `some`, and it is the published root of the production
+    advance — which is the whole point of the flip.  A bundle the
+    responder controls no longer sets it. -/
+private def computedFor (_preCommit : StateCommit) : StateCommit :=
+  commitExtendedState (productionApplyBudget settlementBase trivialSignedAction 0)
 
 /-- A single-step game whose committed endpoint IS what the step VM
     computes, so the responder's position is upheld. -/

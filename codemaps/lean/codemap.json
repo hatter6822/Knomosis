@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "4e376fe13fb09b64d35d3e31cc57557fa0e4b469e2b1f8a199a02044de255b6e"
+    "source_digest": "b1f9a794ad4d7ba0e859eca95683c9544d73fe0c29ddfb09d3c42f6c54068f71"
   },
   "summary": {
     "module_count": 334,
-    "declaration_count": 5810
+    "declaration_count": 5815
   },
   "modules": [
     {
@@ -18107,7 +18107,7 @@
     {
       "module": "LegalKernel.Encoding.KernelStep",
       "path": "LegalKernel/Encoding/KernelStep.lean",
-      "declaration_count": 13,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "namespace",
@@ -18192,8 +18192,50 @@
         },
         {
           "kind": "def",
+          "name": "SmtCellProof.encode",
+          "line": 226,
+          "called": [
+            "Stream"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "SmtCellProof.decode",
+          "line": 231,
+          "called": [
+            "DecodeError",
+            "Encodable",
+            "SmtCellProof.encode",
+            "Stream",
+            "decode",
+            "encode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "CellOpening.encode",
+          "line": 245,
+          "called": [
+            "Stream"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "CellOpening.decode",
+          "line": 251,
+          "called": [
+            "CellOpening.encode",
+            "DecodeError",
+            "Encodable",
+            "Stream",
+            "decode",
+            "encode"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "KernelStep.encode",
-          "line": 221,
+          "line": 273,
           "called": [
             "SignedAction",
             "Stream",
@@ -18203,7 +18245,7 @@
         {
           "kind": "def",
           "name": "KernelStep.decode",
-          "line": 228,
+          "line": 282,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18211,13 +18253,15 @@
             "SignedAction",
             "Stream",
             "decode",
-            "encode"
+            "encode",
+            "pol",
+            "policyOpening"
           ]
         },
         {
           "kind": "theorem",
           "name": "kernelStep_encode_deterministic",
-          "line": 255,
+          "line": 317,
           "called": [
             "KernelStep.encode"
           ]
@@ -18225,7 +18269,7 @@
         {
           "kind": "theorem",
           "name": "cellProof_encode_deterministic",
-          "line": 260,
+          "line": 322,
           "called": [
             "CellProof.encode"
           ]
@@ -18233,7 +18277,7 @@
         {
           "kind": "theorem",
           "name": "cellTag_encode_deterministic",
-          "line": 265,
+          "line": 327,
           "called": [
             "CellTag.encode",
             "Encoding",
@@ -28110,7 +28154,7 @@
     {
       "module": "LegalKernel.FaultProof.Step",
       "path": "LegalKernel/FaultProof/Step.lean",
-      "declaration_count": 19,
+      "declaration_count": 17,
       "declarations": [
         {
           "kind": "namespace",
@@ -28127,59 +28171,58 @@
         {
           "kind": "structure",
           "name": "KernelStep",
-          "line": 57,
+          "line": 52,
           "called": [
-            "CellProofBundle",
+            "CellOpening",
             "SignedAction",
-            "StateCommit"
+            "StateCommit",
+            "policyOpening"
           ]
         },
         {
           "kind": "def",
           "name": "kernelStepApply",
-          "line": 106,
+          "line": 113,
           "called": [
             "KernelStep",
             "StateCommit",
-            "actionFieldsForL1",
-            "actionKindByte",
             "step",
-            "stepVMHash",
-            "verifyCellProofs"
+            "verifierPostRoot"
           ]
         },
         {
           "kind": "theorem",
           "name": "kernelStepApply_eq_claim_iff_correct",
-          "line": 121,
+          "line": 123,
           "called": [
             "KernelStep",
-            "actionFieldsForL1",
-            "actionKindByte",
             "kernelStepApply",
             "step",
-            "stepVMHash",
-            "verifyCellProofs"
+            "verifierPostRoot"
           ]
         },
         {
           "kind": "theorem",
-          "name": "kernelStepApply_empty_bundle_computes",
-          "line": 142,
+          "name": "kernelStepApply_empty_bundle_refused",
+          "line": 141,
           "called": [
+            "Action.writeCells",
+            "CellOpening",
+            "FaultProofAdjudicable",
             "SignedAction",
             "StateCommit",
-            "actionFieldsForL1",
-            "actionKindByte",
             "kernelStepApply",
-            "stepVMHash",
-            "verifyCellProofs"
+            "policy",
+            "policyOpening",
+            "verifierPostRoot",
+            "verifierWriteCells",
+            "verifyStateCellProof"
           ]
         },
         {
           "kind": "instance",
           "name": "instDecidableKernelStepApplySome",
-          "line": 156,
+          "line": 161,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28190,7 +28233,7 @@
         {
           "kind": "theorem",
           "name": "kernelStepApply_deterministic",
-          "line": 163,
+          "line": 168,
           "called": [
             "KernelStep",
             "kernelStepApply"
@@ -28199,7 +28242,7 @@
         {
           "kind": "def",
           "name": "chainKernelStepApply",
-          "line": 172,
+          "line": 177,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28209,7 +28252,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_empty",
-          "line": 184,
+          "line": 189,
           "called": [
             "StateCommit",
             "chainKernelStepApply"
@@ -28218,7 +28261,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_deterministic",
-          "line": 189,
+          "line": 194,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28228,7 +28271,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_singleton_match",
-          "line": 200,
+          "line": 205,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28239,7 +28282,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_split",
-          "line": 216,
+          "line": 221,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28251,21 +28294,22 @@
         {
           "kind": "def",
           "name": "buildKernelStep",
-          "line": 262,
+          "line": 267,
           "called": [
             "ExtendedState",
             "KernelStep",
             "SignedAction",
-            "buildCellProofsForAction",
             "commitExtendedState",
             "es",
-            "recomputeCommitment"
+            "policyOpening",
+            "recomputeCommitment",
+            "stepOpenings"
           ]
         },
         {
           "kind": "theorem",
           "name": "buildKernelStep_preStateCommit",
-          "line": 275,
+          "line": 282,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -28277,7 +28321,7 @@
         {
           "kind": "theorem",
           "name": "buildKernelStep_postStateCommit",
-          "line": 288,
+          "line": 295,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -28288,33 +28332,8 @@
         },
         {
           "kind": "theorem",
-          "name": "buildKernelStep_verifies",
-          "line": 297,
-          "called": [
-            "ExtendedState",
-            "SignedAction",
-            "buildCellProofsForAction",
-            "buildCellProofsForAction_verifies",
-            "commitExtendedState",
-            "es",
-            "verifyCellProofs"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "buildCellProofsForAction_eq_observer",
-          "line": 308,
-          "called": [
-            "ExtendedState",
-            "SignedAction",
-            "buildCellProofsForAction",
-            "es"
-          ]
-        },
-        {
-          "kind": "theorem",
           "name": "kernelStepApply_canonical",
-          "line": 334,
+          "line": 321,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -28322,11 +28341,13 @@
             "SignedAction",
             "StateCommit",
             "buildKernelStep",
-            "buildKernelStep_verifies",
             "chainKernelStepApply",
+            "commitExtendedState",
             "es",
             "kernelStepApply",
-            "stepVMHashFromAction"
+            "policyOpening",
+            "stepOpenings",
+            "verifierPostRoot"
           ]
         }
       ]
@@ -30370,7 +30391,7 @@
         {
           "kind": "def",
           "name": "CellOpening.ofStateCellWrite",
-          "line": 84,
+          "line": 85,
           "called": [
             "CellOpening",
             "StateCellWrite"
@@ -30379,7 +30400,7 @@
         {
           "kind": "def",
           "name": "stepOpenings",
-          "line": 89,
+          "line": 90,
           "called": [
             "CellOpening",
             "CellOpening.ofStateCellWrite",
@@ -30392,7 +30413,7 @@
         {
           "kind": "def",
           "name": "policyOpening",
-          "line": 98,
+          "line": 99,
           "called": [
             "CellOpening",
             "ExtendedState",
@@ -30404,7 +30425,7 @@
         {
           "kind": "def",
           "name": "openingCellProof",
-          "line": 110,
+          "line": 111,
           "called": [
             "CellOpening",
             "CellProof",
@@ -30415,7 +30436,7 @@
         {
           "kind": "def",
           "name": "verifierWriteCells",
-          "line": 125,
+          "line": 126,
           "called": [
             "Action",
             "ActorId",
@@ -30426,7 +30447,7 @@
         {
           "kind": "theorem",
           "name": "verifierWriteCells_eq_writeCellsAt",
-          "line": 140,
+          "line": 141,
           "called": [
             "Action",
             "Action.stateWriteCells",
@@ -30445,7 +30466,7 @@
         {
           "kind": "def",
           "name": "preStateValueAt",
-          "line": 163,
+          "line": 164,
           "called": [
             "CellOpening",
             "CellTag"
@@ -30454,7 +30475,7 @@
         {
           "kind": "def",
           "name": "openingBalanceReader",
-          "line": 172,
+          "line": 173,
           "called": [
             "BalanceReader",
             "CellOpening",
@@ -30464,7 +30485,7 @@
         {
           "kind": "def",
           "name": "provenNextWdId",
-          "line": 189,
+          "line": 190,
           "called": [
             "CellOpening",
             "preStateValueAt"
@@ -30473,7 +30494,7 @@
         {
           "kind": "def",
           "name": "plannedBalances",
-          "line": 209,
+          "line": 210,
           "called": [
             "Action",
             "ActorId",
@@ -30510,7 +30531,7 @@
         {
           "kind": "def",
           "name": "plannedBalanceAt",
-          "line": 241,
+          "line": 242,
           "called": [
             "ActorId",
             "ResourceId"
@@ -30519,7 +30540,7 @@
         {
           "kind": "def",
           "name": "derivedCellValue",
-          "line": 250,
+          "line": 251,
           "called": [
             "Action",
             "ActorId",
@@ -30545,7 +30566,7 @@
         {
           "kind": "def",
           "name": "foldEntry",
-          "line": 308,
+          "line": 309,
           "called": [
             "Action",
             "ActorId",
@@ -30558,7 +30579,7 @@
         {
           "kind": "def",
           "name": "verifierPostRoot",
-          "line": 326,
+          "line": 327,
           "called": [
             "Action",
             "ActorId",
@@ -57024,7 +57045,8 @@
             "gameState_encode_deterministic",
             "gameState_encode_distinguishes_inputs",
             "kernelStep_encode_deterministic",
-            "kernelStep_encode_distinguishes_inputs"
+            "kernelStep_encode_distinguishes_inputs",
+            "policyOpening"
           ]
         }
       ]
@@ -57333,7 +57355,7 @@
     {
       "module": "LegalKernel.Test.FaultProof.Settlement",
       "path": "LegalKernel/Test/FaultProof/Settlement.lean",
-      "declaration_count": 13,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "namespace",
@@ -57343,7 +57365,7 @@
         },
         {
           "kind": "def",
-          "name": "oneCommit",
+          "name": "twoCommit",
           "line": 46,
           "called": [
             "StateCommit"
@@ -57351,7 +57373,7 @@
         },
         {
           "kind": "def",
-          "name": "twoCommit",
+          "name": "threeCommit",
           "line": 53,
           "called": [
             "StateCommit"
@@ -57359,16 +57381,33 @@
         },
         {
           "kind": "def",
-          "name": "threeCommit",
-          "line": 60,
+          "name": "settlementBase",
+          "line": 68,
           "called": [
-            "StateCommit"
+            "ActorId",
+            "BalanceMap",
+            "EpochBudgetState",
+            "ExtendedState",
+            "KeyRegistry",
+            "Nonce",
+            "ResourceId",
+            "base"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "oneCommit",
+          "line": 81,
+          "called": [
+            "StateCommit",
+            "commitExtendedState",
+            "settlementBase"
           ]
         },
         {
           "kind": "def",
           "name": "singleStepRange",
-          "line": 68,
+          "line": 85,
           "called": [
             "DisputedRange",
             "oneCommit",
@@ -57378,7 +57417,7 @@
         {
           "kind": "def",
           "name": "challengerRespondingGame",
-          "line": 74,
+          "line": 91,
           "called": [
             "GameState",
             "challenger",
@@ -57389,7 +57428,7 @@
         {
           "kind": "def",
           "name": "sequencerRespondingGame",
-          "line": 88,
+          "line": 105,
           "called": [
             "GameState",
             "challenger",
@@ -57400,36 +57439,40 @@
         {
           "kind": "def",
           "name": "trivialSignedAction",
-          "line": 101,
+          "line": 118,
           "called": [
             "SignedAction",
-            "freezeResource"
+            "transfer"
           ]
         },
         {
           "kind": "def",
           "name": "stepClaiming",
-          "line": 110,
+          "line": 132,
           "called": [
-            "CellProofBundle.empty",
             "KernelStep",
             "StateCommit",
+            "buildKernelStep",
+            "settlementBase",
             "trivialSignedAction"
           ]
         },
         {
           "kind": "def",
           "name": "computedFor",
-          "line": 125,
+          "line": 145,
           "called": [
-            "CellProofBundle.empty",
-            "StateCommit"
+            "StateCommit",
+            "commitExtendedState",
+            "productionApplyBudget",
+            "settlementBase",
+            "trivialSignedAction"
           ]
         },
         {
           "kind": "def",
           "name": "matchingGame",
-          "line": 134,
+          "line": 150,
           "called": [
             "GameState",
             "TurnSide",
@@ -57441,7 +57484,7 @@
         {
           "kind": "def",
           "name": "mismatchGame",
-          "line": 142,
+          "line": 158,
           "called": [
             "GameState",
             "TurnSide",
@@ -57451,7 +57494,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 146,
+          "line": 162,
           "called": [
             "GameState",
             "KernelStep",
@@ -57817,58 +57860,98 @@
     {
       "module": "LegalKernel.Test.FaultProof.Step",
       "path": "LegalKernel/Test/FaultProof/Step.lean",
-      "declaration_count": 5,
+      "declaration_count": 7,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.Step",
-          "line": 22,
+          "line": 31,
           "called": []
         },
         {
           "kind": "def",
-          "name": "emptyCommit",
-          "line": 24,
+          "name": "base",
+          "line": 34,
           "called": [
-            "ExtendedState.empty",
-            "StateCommit",
-            "commitExtendedState"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "someAction",
-          "line": 26,
-          "called": [
-            "transfer"
+            "ActorId",
+            "BalanceMap",
+            "EpochBudgetState",
+            "ExtendedState",
+            "KeyRegistry",
+            "Nonce",
+            "ResourceId"
           ]
         },
         {
           "kind": "def",
           "name": "someSignedAction",
-          "line": 29,
+          "line": 46,
           "called": [
             "SignedAction",
-            "someAction"
+            "transfer"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "firstStep",
+          "line": 50,
+          "called": [
+            "KernelStep",
+            "base",
+            "buildKernelStep",
+            "someSignedAction"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "afterFirst",
+          "line": 52,
+          "called": [
+            "ExtendedState",
+            "base",
+            "productionApplyBudget",
+            "someSignedAction"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "secondStep",
+          "line": 56,
+          "called": [
+            "KernelStep",
+            "afterFirst",
+            "buildKernelStep",
+            "someSignedAction"
           ]
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 37,
+          "line": 61,
           "called": [
-            "CellProofBundle",
+            "ExtendedState",
             "KernelStep",
             "LegalKernel.Test.FaultProof.Step",
-            "StateCommit",
+            "SignedAction",
             "TestCase",
+            "afterFirst",
             "assert",
             "assertEq",
+            "base",
+            "buildKernelStep",
             "chainKernelStepApply",
-            "emptyCommit",
+            "commitExtendedState",
+            "empty",
+            "es",
+            "firstStep",
             "kernelStepApply",
+            "kernelStepApply_canonical",
+            "policyOpening",
+            "productionApplyBudget",
+            "secondStep",
             "someSignedAction",
-            "step"
+            "stepOpenings",
+            "verifierPostRoot"
           ]
         }
       ]

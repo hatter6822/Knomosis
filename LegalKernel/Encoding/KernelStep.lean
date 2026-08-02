@@ -214,16 +214,70 @@ instance : Encodable FaultProof.CellProofBundle where
   encode := CellProofBundle.encode
   decode := CellProofBundle.decode
 
+/-! ## `SmtCellProof` and `CellOpening` codecs
+
+The `KernelStep` a fault-proof game carries is a bundle of OPENINGS,
+not of witness-state-bearing cell proofs, so its codec needs these
+two.  An `SmtCellProof` is its sibling array and its bitmask; a
+`CellOpening` is a cell identity, the cell's value in the state the
+opening is against, and the path. -/
+
+/-- Encode an `SmtCellProof`: the siblings as a length-prefixed list,
+    then the bitmask. -/
+def SmtCellProof.encode (p : FaultProof.SmtCellProof) : Stream :=
+  Encodable.encode (T := List ByteArray) p.siblings.toList ++
+  Encodable.encode (T := ByteArray) p.bitmask
+
+/-- Decode an `SmtCellProof`. -/
+def SmtCellProof.decode (s : Stream) :
+    Except DecodeError (FaultProof.SmtCellProof × Stream) :=
+  match Encodable.decode (T := List ByteArray) s with
+  | .ok (sibs, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (bm, s₂) => .ok ({ siblings := sibs.toArray, bitmask := bm }, s₂)
+    | .error e     => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.SmtCellProof where
+  encode := SmtCellProof.encode
+  decode := SmtCellProof.decode
+
+/-- Encode a `CellOpening`. -/
+def CellOpening.encode (o : FaultProof.CellOpening) : Stream :=
+  Encodable.encode (T := FaultProof.CellTag) o.cellTag ++
+  Encodable.encode (T := ByteArray) o.preValue ++
+  Encodable.encode (T := FaultProof.SmtCellProof) o.proof
+
+/-- Decode a `CellOpening`. -/
+def CellOpening.decode (s : Stream) :
+    Except DecodeError (FaultProof.CellOpening × Stream) :=
+  match Encodable.decode (T := FaultProof.CellTag) s with
+  | .ok (tag, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (val, s₂) =>
+      match Encodable.decode (T := FaultProof.SmtCellProof) s₂ with
+      | .ok (pf, s₃) =>
+        .ok ({ cellTag := tag, preValue := val, proof := pf }, s₃)
+      | .error e => .error e
+    | .error e => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.CellOpening where
+  encode := CellOpening.encode
+  decode := CellOpening.decode
+
 /-! ## `KernelStep` codec -/
 
 /-- Encode a `KernelStep` to its CBE byte sequence.  Layout:
     `preStateCommit ++ signedAction ++ postStateCommit ++
-     cellProofs`. -/
+     l2LogIndex ++ policyOpening ++ writeOpenings`. -/
 def KernelStep.encode (step : FaultProof.KernelStep) : Stream :=
   Encodable.encode (T := ByteArray) step.preStateCommit ++
   Encodable.encode (T := SignedAction) step.signedAction ++
   Encodable.encode (T := ByteArray) step.postStateCommit ++
-  Encodable.encode (T := FaultProof.CellProofBundle) step.cellProofs
+  Encodable.encode (T := Nat) step.l2LogIndex ++
+  Encodable.encode (T := FaultProof.CellOpening) step.policyOpening ++
+  Encodable.encode (T := List FaultProof.CellOpening) step.writeOpenings
 
 /-- Decode a `KernelStep` from a stream. -/
 def KernelStep.decode (s : Stream) :
@@ -234,12 +288,20 @@ def KernelStep.decode (s : Stream) :
     | .ok (sa, s₂) =>
       match Encodable.decode (T := ByteArray) s₂ with
       | .ok (post, s₃) =>
-        match Encodable.decode (T := FaultProof.CellProofBundle) s₃ with
-        | .ok (cb, s₄) =>
-          .ok ({ preStateCommit := pre,
-                 signedAction := sa,
-                 postStateCommit := post,
-                 cellProofs := cb }, s₄)
+        match Encodable.decode (T := Nat) s₃ with
+        | .ok (idx, s₄) =>
+          match Encodable.decode (T := FaultProof.CellOpening) s₄ with
+          | .ok (pol, s₅) =>
+            match Encodable.decode (T := List FaultProof.CellOpening) s₅ with
+            | .ok (ops, s₆) =>
+              .ok ({ preStateCommit := pre,
+                     signedAction := sa,
+                     postStateCommit := post,
+                     l2LogIndex := idx,
+                     policyOpening := pol,
+                     writeOpenings := ops }, s₆)
+            | .error e => .error e
+          | .error e => .error e
         | .error e => .error e
       | .error e => .error e
     | .error e => .error e

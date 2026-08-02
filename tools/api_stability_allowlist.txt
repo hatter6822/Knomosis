@@ -310,9 +310,6 @@ LegalKernel/Test/FaultProof/AbsentCellCreation.lean:39
 LegalKernel/Test/FaultProof/AbsentCellCreation.lean:44
 LegalKernel/Test/FaultProof/EncodeInjectivity.lean:34
 LegalKernel/Test/FaultProof/EncodeInjectivity.lean:40
-LegalKernel/Test/FaultProof/EncodeInjectivity.lean:61
-LegalKernel/Test/FaultProof/EncodeInjectivity.lean:67
-LegalKernel/Test/FaultProof/EncodeInjectivity.lean:72
 LegalKernel/Test/FaultProof/GameTransitionEdgeCases.lean:29
 LegalKernel/Test/FaultProof/GameTransitionEdgeCases.lean:34
 LegalKernel/Test/FaultProof/GameTransitionEdgeCases.lean:39

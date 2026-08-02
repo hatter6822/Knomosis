@@ -77,6 +77,7 @@ structure CellOpening where
   preValue : ByteArray
   /-- The sibling path. -/
   proof    : SmtCellProof
+  deriving Repr
 
 /-- The opening a `StateCellWrite` carries: its tag, its pre-value and
     its path.  The new value is dropped on purpose — that column is

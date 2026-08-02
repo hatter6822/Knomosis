@@ -1223,15 +1223,32 @@ across the three stacks:
     `method_selectors.json` regenerated from the compiled ABI (which is
     what makes a Solidity signature change break the Rust build).
 
-**What remains is the RETIREMENT**, which changes what nothing
+  * `Step.kernelStepApply` — the Lean MODEL of the terminal step —
+    routes through `verifierPostRoot`, so the model computes what the
+    contract computes.  `KernelStep` carries the log index, the
+    read-only policy opening and the chained write openings instead of
+    a witness-state-bearing bundle; the `Encoding/KernelStep.lean`
+    codec gained `SmtCellProof` and `CellOpening` instances to match.
+
+    That reached further than a repoint.  The settlement and chain
+    tests were built on an EMPTY bundle, which the old
+    `kernelStepApply` accepted vacuously (`verifyCellProofs` is
+    `List.all`), and they had to be rebased on a REAL step over a REAL
+    state.  The verifier re-derives the cell list and every one of the
+    twenty-five variants writes the signer's nonce and epoch budget, so
+    an empty bundle fails the shape check — a step has to be genuine to
+    apply at all.  That is a strengthening: those tests now settle on a
+    post-root anyone can reproduce.
+
+**What remains is DEAD-CODE REMOVAL**, which changes what no surface
 computes: `KnomosisStepVM.sol` and its test,
 `SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
-the 36 recipe-bound theorems in `StepVMCoherence.lean`, the corpus's
-`expectedStepVMCommitHex` column (with the fixture `identifier`
-bumped), and `Step.kernelStepApply` moving onto `verifierPostRoot` —
-it still computes the bespoke hash, so the Lean model of the contract
-is stale in that one place, though the deployed path does not read
-it.
+the 36 recipe-bound theorems in `StepVMCoherence.lean` (its
+`actionKindByte` / `actionFieldsForL1` / `l1ActionCommit` stay — the
+L1 field layout and the log-entry chain are unaffected), and the
+corpus's `expectedStepVMCommitHex` column with the fixture
+`identifier` bumped.  Every remaining reference to `stepVMHash` in
+non-test Lean is already a COMMENT.
 
 §2, §2A, §2B, §3B, S4 and S5 are additive and have landed on their
 own; §3 / §3A and S6 are one consensus change and must not be split

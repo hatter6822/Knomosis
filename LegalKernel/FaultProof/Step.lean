@@ -30,18 +30,13 @@ cannot violate any kernel invariant.
 import LegalKernel.Authority.SignedAction
 import LegalKernel.FaultProof.Cell
 import LegalKernel.FaultProof.Commit
-import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.Terminate
 import LegalKernel.FaultProof.Verify
 
 namespace LegalKernel
 namespace FaultProof
 
 open LegalKernel.Authority
--- `stepVMHash` / `stepVMHashFromAction` / `actionKindByte` /
--- `actionFieldsForL1`: the step-VM dispatch `kernelStepApply`
--- computes through, and the same one `KnomosisStepVM.executeStep`
--- implements on L1.
-open LegalKernel.FaultProof.StepVMCoherence
 
 /-! ## `KernelStep` (§12.1.1) -/
 
@@ -62,94 +57,104 @@ structure KernelStep where
   signedAction    : SignedAction
   /-- The 32-byte commit of the claimed post-state. -/
   postStateCommit : StateCommit
-  /-- Per-cell Merkle proofs covering all cells the step
-      reads or writes. -/
-  cellProofs      : CellProofBundle
+  /-- The log index this step produces.  `withdraw`'s
+      pending-withdrawal record carries it, so the verifier has to be
+      told which index it is adjudicating.  On L1 the game supplies
+      `g.high.idx` rather than reading it from the caller. -/
+  l2LogIndex      : Nat
+  /-- The READ-ONLY budget-policy opening, against `preStateCommit`. -/
+  policyOpening   : CellOpening
+  /-- The step's WRITTEN cells, in `writeCellsAt` order, with CHAINED
+      openings: opening `i` is against the root write `i-1`
+      produced. -/
+  writeOpenings   : List CellOpening
   deriving Repr
 
 /-! ## `kernelStepApply` (§12.1.2)
 
-`kernelStepApply` verifies the cell proofs against the pre-state
-commitment and then **computes** the post-state commitment by
-re-executing the step through `StepVMCoherence.stepVMHash` —
-the same dispatch `KnomosisStepVM.executeStep` performs on L1,
-pinned byte-for-byte against it by the SVC cross-stack corpus.
+`kernelStepApply` is the Lean model of
+`KnomosisFaultProofGame.terminateOnSingleStep`'s call into the step
+VM: it folds the step's DERIVED cell writes into the pre-state root
+and returns the post-state root.
 
-It did neither for a while.  The body returned
-`step.postStateCommit` — the *responder's own claim* — whenever
-the proofs verified, and `verifyCellProofs` is `List.all` over
-the bundle, so an **empty** bundle verified vacuously.  A
-responder could hand in an empty proof bundle carrying any
-post-commit they liked, and
-`applyTransition .terminateOnSingleStep` would find the
-"computed" value equal to the claim and award them the game.
-The step VM adjudicated nothing.
+It has been wrong twice, in opposite directions, and both are worth
+keeping on the record.
 
-The per-variant write rules are not re-derived here: routing
-through `stepVMHash` is what makes this function's output the
-same object the L1 contract computes, which is the property the
-single-step termination rests on. -/
+First it returned `step.postStateCommit` — the *responder's own
+claim* — whenever the proofs verified, and `verifyCellProofs` is
+`List.all` over the bundle, so an **empty** bundle verified
+vacuously.  A responder could hand in an empty proof bundle carrying
+any post-commit they liked and win.
 
-/-- The Merkle-state-aware step function.  Given the pre-state
-    commitment, the action, and the Merkle proofs for the touched
-    cells, **compute** the post-state commitment.
+Then it computed through `stepVMHash`, a bespoke per-variant hash
+that lives outside state-root space.  That was faithful to the
+contract of the day — and the contract could not adjudicate, because
+its terminal comparison was between two different constructions.
 
-    Returns `none` if any cell proof fails to verify against
-    `preStateCommit`.  Otherwise returns the step-VM hash for
-    `(preStateCommit, actionKindByte, actionFieldsForL1, signer,
-    cellProofs)` — the value
-    `KnomosisStepVM.executeStep(step.preStateCommit, …)` returns
-    under the production keccak256 binding.
+It now routes through `verifierPostRoot`, which is what
+`KnomosisStepVMRoot.executeStepToRoot` computes: the cell list and
+every cell's value DERIVED from the proven pre-values, then folded.
+A responder supplies openings, not values. -/
 
-    `step.postStateCommit` is deliberately **not** consulted: it
-    is the claim under dispute, and a function that returned it
-    would make the single-step adjudication self-affirming. -/
+/-- The Merkle-state-aware step function.  Given the pre-state ROOT,
+    the action, the log index, the read-only budget-policy opening and
+    the step's chained write openings, **compute** the post-state
+    root.
+
+    Returns `none` on any refusal: a non-adjudicable action, a policy
+    opening that does not verify or does not name the policy cell, a
+    bundle whose cells are not the ones the action writes, a missing
+    or malformed pre-value, or an opening that does not verify against
+    the running root.  A failing law precondition is NOT a refusal —
+    it is a no-op, and the fold still lands on the resulting root.
+
+    `step.postStateCommit` is deliberately **not** consulted: it is
+    the claim under dispute, and a function that returned it would
+    make the single-step adjudication self-affirming. -/
 def kernelStepApply (step : KernelStep) : Option StateCommit :=
-  if verifyCellProofs step.preStateCommit step.cellProofs then
-    some (stepVMHash step.preStateCommit
-            (actionKindByte step.signedAction.action)
-            (actionFieldsForL1 step.signedAction.action)
-            step.signedAction.signer.toNat
-            step.cellProofs)
-  else
-    none
+  verifierPostRoot step.preStateCommit step.signedAction.action
+    step.signedAction.signer step.l2LogIndex
+    step.policyOpening step.writeOpenings
 
-/-- `kernelStepApply` agrees with the claim exactly when the
-    claim is what the step VM computes.  The correctness of the
-    claim is an explicit hypothesis rather than something the
-    function assumes — folding it into the definition is what
-    made the adjudication vacuous. -/
-theorem kernelStepApply_eq_claim_iff_correct
-    (step : KernelStep)
-    (h_proofs : verifyCellProofs step.preStateCommit step.cellProofs = true) :
+/-- `kernelStepApply` agrees with the claim exactly when the claim is
+    the root the fold reaches.  The correctness of the claim is an
+    explicit hypothesis rather than something the function assumes —
+    folding it into the definition is what made the adjudication
+    vacuous. -/
+theorem kernelStepApply_eq_claim_iff_correct (step : KernelStep) :
     kernelStepApply step = some step.postStateCommit ↔
-      stepVMHash step.preStateCommit
-        (actionKindByte step.signedAction.action)
-        (actionFieldsForL1 step.signedAction.action)
-        step.signedAction.signer.toNat
-        step.cellProofs = step.postStateCommit := by
-  -- `simp only`, not `rw`: the `if` condition sits under a
-  -- `Decidable` instance that mentions the same term, so a
-  -- rewrite cannot build a type-correct motive.
-  unfold kernelStepApply
-  simp only [h_proofs, if_true, Option.some.injEq]
+      verifierPostRoot step.preStateCommit step.signedAction.action
+        step.signedAction.signer step.l2LogIndex
+        step.policyOpening step.writeOpenings = some step.postStateCommit :=
+  Iff.rfl
 
-/-- An empty proof bundle no longer wins the game for free.  It
-    still *verifies* — `List.all` over `[]` is vacuously `true` —
-    but the value returned is the step VM's own output on an
-    empty bundle, which the responder does not control.  This is
-    the regression that the old `some step.postStateCommit` body
-    could not satisfy for any statement at all. -/
-theorem kernelStepApply_empty_bundle_computes
-    (pre : StateCommit) (sa : SignedAction) (claim : StateCommit) :
+/-- An empty opening bundle no longer wins the game for free — and
+    now it does not even parse.  Every one of the twenty-five action
+    variants writes the signer's nonce and epoch budget, so the
+    verifier's re-derived cell list is never empty and a bundle that
+    is fails the shape check.
+
+    This is the regression the old `some step.postStateCommit` body
+    could not satisfy for any statement at all, strengthened: it used
+    to return the step VM's own output on an empty bundle (a value the
+    responder did not control, but a value); it now returns
+    nothing. -/
+theorem kernelStepApply_empty_bundle_refused
+    (pre : StateCommit) (sa : SignedAction) (claim : StateCommit)
+    (idx : Nat) (policy : CellOpening)
+    (h_adj : FaultProofAdjudicable sa.action = true)
+    (h_tag : policy.cellTag = CellTag.budgetPolicy)
+    (h_pol : verifyStateCellProof pre CellTag.budgetPolicy
+               policy.preValue policy.proof = true) :
     kernelStepApply
         { preStateCommit := pre, signedAction := sa,
-          postStateCommit := claim, cellProofs := { proofs := [] } } =
-      some (stepVMHash pre (actionKindByte sa.action)
-              (actionFieldsForL1 sa.action) sa.signer.toNat
-              { proofs := [] }) := by
-  unfold kernelStepApply verifyCellProofs
-  simp
+          postStateCommit := claim, l2LogIndex := idx,
+          policyOpening := policy, writeOpenings := [] } = none := by
+  unfold kernelStepApply verifierPostRoot
+  simp only [h_adj, h_tag, h_pol, not_true, if_false, ne_eq, not_false_iff]
+  -- The re-derived list is non-empty (`writeCells` names the nonce and
+  -- the epoch budget on every variant), so the shape check refuses.
+  cases sa.action <;> simp [verifierWriteCells, Action.writeCells]
 
 /-! ## Decidability + determinism -/
 
@@ -265,7 +270,9 @@ def buildKernelStep
   preStateCommit  := commitExtendedState es
   signedAction    := st
   postStateCommit := recomputeCommitment es st l2LogIndex
-  cellProofs      := buildCellProofsForAction es st
+  l2LogIndex      := l2LogIndex
+  policyOpening   := policyOpening es
+  writeOpenings   := stepOpenings es st l2LogIndex
 
 /-- The canonical step's pre-commit, as a projection lemma.
 
@@ -293,53 +300,30 @@ theorem buildKernelStep_postStateCommit
   unfold buildKernelStep
   rfl
 
-/-- The canonical `KernelStep`'s cell proofs verify against the
-    pre-state commit. -/
-theorem buildKernelStep_verifies (es : ExtendedState) (st : SignedAction) :
-    verifyCellProofs (commitExtendedState es)
-      (buildCellProofsForAction es st) = true :=
-  buildCellProofsForAction_verifies es st
-
-/-- `buildCellProofsForAction` and `Observer.buildObserverCellProofs`
-    are the same bundle — both map `buildCellProof es` over
-    `Action.requiredCells`.  They were maintained as independent
-    copies with nothing tying them together; this is the tie, and
-    it is what lets `kernelStepApply_canonical` below be stated in
-    terms of the observer's own `stepVMHashFromAction`. -/
-theorem buildCellProofsForAction_eq_observer
-    (es : ExtendedState) (st : SignedAction) :
-    buildCellProofsForAction es st =
-      Observer.buildObserverCellProofs es st.action st.signer := rfl
-
-/-- The canonical step's `kernelStepApply` is exactly the step-VM
-    hash the observer's terminate-bundle builder computes for the
-    same `(state, action, signer)` triple.
+/-- **The canonical step's `kernelStepApply` IS the verifier on the
+    honest bundle.**
 
     This is the statement that ties the Lean game model to the L1
-    contract: `stepVMHashFromAction` is what
-    `TerminateBundle.buildTerminateBundle` emits and what the SVC
-    cross-stack corpus pins against
-    `KnomosisStepVM.executeStep`.
+    contract: the right-hand side is exactly what
+    `KnomosisStepVMRoot.executeStepToRoot` computes, argument for
+    argument, and the openings are the ones
+    `TerminateBundle.buildTerminateBundle` emits.
 
     Note what it does **not** say.  The old form claimed
-    `= some (recomputeCommitment es st)`, which held only because
-    the function returned the claim it was handed;
-    `recomputeCommitment` is `commitExtendedState` of the
-    production advance — the published state root — while
-    `stepVMHash` is a per-step hash over the proven cells.  Those two recipes
-    are not equal today, and reconciling them is the open
-    state-root Merkleisation work recorded in
-    `docs/audits/19-findings-and-followups.md`.  Stating the
-    reduction against the recipe the step VM actually uses makes
-    that gap visible instead of papering over it. -/
+    `= some (recomputeCommitment es st)`, which held only because the
+    function returned the claim it was handed.  A later form claimed
+    `= some (stepVMHashFromAction …)`, which was faithful to a
+    contract that could not adjudicate — `stepVMHash` lives outside
+    state-root space.  That the fold LANDS on `stepPostRoot` — the
+    root the honest sequencer published — is checked over twenty
+    probes by `faultproof-terminate`, covering the chained pair, the
+    duplicate cell, the failing precondition and the state-keyed
+    write. -/
 theorem kernelStepApply_canonical
     (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
     kernelStepApply (buildKernelStep es st l2LogIndex) =
-      some (stepVMHashFromAction es st.action st.signer) := by
-  unfold kernelStepApply buildKernelStep stepVMHashFromAction
-  have h := buildKernelStep_verifies es st
-  simp only [h, if_true]
-  rfl
+      verifierPostRoot (commitExtendedState es) st.action st.signer l2LogIndex
+        (policyOpening es) (stepOpenings es st l2LogIndex) := rfl
 
 /-! ## Smoke checks -/
 
