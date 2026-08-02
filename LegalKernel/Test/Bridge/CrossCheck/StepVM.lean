@@ -1937,6 +1937,52 @@ def writeBundleGoldens : List Test.Bridge.CrossCheck.Json :=
                  , ("newIsAbsent",
                     .bool (decide (newV = canonicalAbsentValue t))) ])) ) ]))
 
+/-! ### The write SET, per variant
+
+The last piece of the flip's specification: which cells each action
+writes, as a function of `(actionKind, actionFields, signer)` plus the
+proven `.bridgeNextWdId`.  A verifier re-derives this list and rejects
+a bundle naming different cells — without it, a responder could omit a
+write and fold to a root where that cell never moved.
+
+Emitted per variant with the ACTUAL field bytes the L1 decodes, so a
+mirror's field-offset error shows up here rather than being reasoned
+about.  Every offset in `actionFieldsForL1` is a place a mirror can be
+silently wrong: the layouts are big-endian and the widths differ
+(`uint64BE` for identifiers, `uint128BE` for amounts), so a
+one-field slip still decodes to a plausible actor id.
+-/
+
+/-- Per-variant write-set goldens: the action's L1 form, and the
+    ordered `(cellKind, keyA, keyB)` list `writeCellsAt` produces. -/
+def writeSetGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es := fixtureBase
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let probes : List Action :=
+    [ .transfer 1 signer 8 30, .mint 1 8 5, .burn 1 8 5, .freezeResource 1
+    , .replaceKey 8 (ByteArray.mk #[1, 2, 3]), .reward 1 8 5
+    , .dispute (minimalDispute signer 0), .registerIdentity 8 (ByteArray.mk #[9])
+    , .deposit 1 8 5 3
+    , .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero
+    , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
+    , .depositWithFee 1 8 9 5 1 3 4, .topUpActionBudget 1 5 2 9
+    , .topUpActionBudgetFor 8 1 5 2 9, .claimBudgetRefund 1 2 3 9
+    , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 25 9 8 ]
+  probes.map (fun action =>
+    let cells := Authority.Action.writeCellsAt es action signer
+    .obj [ ("actionKindByte", .num (actionKindByte action).toNat)
+         , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
+         , ("signerNat", .num signer.toNat)
+           -- The proven counter the `withdraw` arm keys its pending
+           -- cell by; inert for every other variant, and emitted for
+           -- all of them so the mirror takes the same input shape.
+         , ("nextWdIdPre", .num es.bridge.nextWdId)
+         , ("cellCount", .num cells.length)
+         , ("cells", .arr (cells.map (fun t =>
+             let (k, a, b) : Nat × Nat × Nat := t.flatKey
+             .obj [ ("cellKind", .num k), ("keyA", .num a), ("keyB", .num b) ]))) ])
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -2469,6 +2515,8 @@ def tests : List Test.TestCase :=
           , ("stepPostRootGoldensCount", .num stepPostRootGoldens.length)
           , ("writeBundleGoldens", .arr writeBundleGoldens)
           , ("writeBundleGoldensCount", .num writeBundleGoldens.length)
+          , ("writeSetGoldens", .arr writeSetGoldens)
+          , ("writeSetGoldensCount", .num writeSetGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)

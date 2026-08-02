@@ -807,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 210 | ~159 | `lake test` |
 | Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~955 passed | 62 forge suites | `cd solidity && forge test` |
+| Solidity | ~957 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **955 passed / 0 failed / 0 skipped** — the
+`forge test` runs **957 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 955 / 0 / 0.
+reports the same 957 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -1280,8 +1280,15 @@ against the RUNNING root, then re-walked from the new leaf — arriving
 at exactly `stepPostRoot`.  The `selfTransfer` probe is what makes that
 non-trivial: two writes at the SAME cell, so a fold verifying both
 against the pre-root would accept the bundle and reach a root no state
-has.  What remains is a per-variant write-set dispatch in Solidity and
-wiring it into `executeStep`.  `stepWriteBundle es st idx`
+has.  The write SET is mirrored too (`writeSetGoldens` — all eighteen probed
+variants, from the actual field bytes, with the bulk pair and unknown
+kinds reverting `ActionNotAdjudicable`).  **Every component of the flip
+is now built and cross-stack verified**; what remains is assembly
+inside `executeStep` — call `deriveWriteSet`, derive each value with
+`StepWrites`, fold with `StepVMMerkle.applyCellWrite`, return the
+result instead of `stepVMHash` — plus the corpus regeneration and
+retiring the old recipe.  The remaining risk is contract size and gas,
+not correctness.  `stepWriteBundle es st idx`
 takes the pre-state and reads its `newValue` column off
 `productionApplyBudget es st idx` — that is the sequencer's
 computation.  A verifier holding only the pre-root and a submitted

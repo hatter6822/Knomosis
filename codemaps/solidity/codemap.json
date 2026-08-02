@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "0b93789544572062045041b0a0ff6433ef687fe5b718fefb7b05f29e61061e3c"
+    "source_digest": "67790f461dca2ad8625ec4215e3026658815da5fb4f7974120fc220255802f71"
   },
   "summary": {
     "module_count": 94,
-    "declaration_count": 2089
+    "declaration_count": 2100
   },
   "modules": [
     {
@@ -4895,7 +4895,7 @@
     {
       "module": "StepWrites",
       "path": "solidity/src/lib/StepWrites.sol",
-      "declaration_count": 29,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "library",
@@ -5103,9 +5103,61 @@
           ]
         },
         {
+          "kind": "struct",
+          "name": "Cell",
+          "line": 554,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ActionNotAdjudicable",
+          "line": 568,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "ActionFieldsTooShort",
+          "line": 571,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_fieldUint64",
+          "line": 577,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_appendUniform",
+          "line": 590,
+          "called": [
+            "Cell"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "deriveWriteSet",
+          "line": 616,
+          "called": [
+            "ActionNotAdjudicable",
+            "Cell",
+            "_appendUniform",
+            "_fieldUint64",
+            "_need"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_need",
+          "line": 720,
+          "called": [
+            "ActionFieldsTooShort"
+          ]
+        },
+        {
           "kind": "function",
           "name": "deriveEpochBudgetCellValue",
-          "line": 552,
+          "line": 730,
           "called": [
             "ActorBudget",
             "decodeActorBudget",
@@ -12255,7 +12307,7 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 38,
+      "declaration_count": 42,
       "declarations": [
         {
           "kind": "contract",
@@ -12511,8 +12563,36 @@
         },
         {
           "kind": "function",
+          "name": "test_writeSet_matches_lean",
+          "line": 949,
+          "called": [
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "assertWriteSetExternal",
+          "line": 964,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "deriveWriteSetExternal",
+          "line": 989,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_writeSet_refuses_only_the_bulk_pair",
+          "line": 1002,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 937,
+          "line": 1024,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -12523,7 +12603,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 965,
+          "line": 1052,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12533,7 +12613,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 990,
+          "line": 1077,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12543,13 +12623,13 @@
         {
           "kind": "function",
           "name": "_parseCellProof",
-          "line": 1033,
+          "line": 1120,
           "called": []
         },
         {
           "kind": "function",
           "name": "_parseCellProofs",
-          "line": 1049,
+          "line": 1136,
           "called": [
             "_parseCellProof"
           ]
@@ -12557,7 +12637,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 1082,
+          "line": 1169,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12567,7 +12647,7 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 1129,
+          "line": 1216,
           "called": [
             "KnomosisStepVM",
             "_skipWithReason",
@@ -12578,7 +12658,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1154,
+          "line": 1241,
           "called": [
             "KnomosisStepVM"
           ]

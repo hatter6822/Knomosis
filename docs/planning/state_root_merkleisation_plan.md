@@ -584,11 +584,27 @@ space:
    and compared against Lean's, so the construction agrees and not just
    the walk.
 
-   What is left is therefore mechanical rather than uncertain: a
-   per-variant WRITE-SET dispatch in Solidity (which cells each action
-   writes, from the action plus the proven `.bridgeNextWdId`), wiring
-   it to the derivations and the fold inside `executeStep`, and the
-   corpus regeneration.
+   **The write SET is mirrored too** (`writeSetGoldens`), so every
+   component of the flip is now built and cross-stack verified:
+   `deriveWriteSet` reproduces `Action.writeCellsAt` on all eighteen
+   probed variants, from the ACTUAL field bytes — which is how a
+   field-offset slip surfaces, since the layouts are big-endian with
+   mixed widths and a one-field slip still decodes to a plausible
+   actor id.  `withdraw` takes the proven `.bridgeNextWdId` to key its
+   pending cell, the one place a verifier reads a cell to learn WHICH
+   cell to write; the bulk pair reverts `ActionNotAdjudicable`, and so
+   does an unknown kind, so a new `Action` constructor has to be
+   considered rather than defaulting into the kernel-identity family.
+
+   **What is left is assembly, inside `executeStep`:** call
+   `deriveWriteSet`, look up each declared cell's proof, derive its new
+   value with `StepWrites`, and fold with
+   `StepVMMerkle.applyCellWrite` — every one of those verified against
+   Lean already — then return the fold's result instead of
+   `stepVMHash`, regenerate the corpus so `expectedStepVMCommitHex`
+   becomes `expectedPostStateRootHex`, and retire the old recipe (S7).
+   The remaining risk is contract SIZE and gas (the GP.11.9 benchmark
+   gate), not correctness.
 
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"

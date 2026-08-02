@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "5c7f046a3f7262c3794ed7e96f95df08481c6e7a37364406c81f939f6545376b"
+    "source_digest": "697e5360231a32b43fa55658dd5acc9031fb9cd26e2cfad9fb2d69b28b625a41"
   },
   "summary": {
     "module_count": 332,
-    "declaration_count": 5781
+    "declaration_count": 5782
   },
   "modules": [
     {
@@ -45983,7 +45983,7 @@
     {
       "module": "LegalKernel.Test.Bridge.CrossCheck.StepVM",
       "path": "LegalKernel/Test/Bridge/CrossCheck/StepVM.lean",
-      "declaration_count": 82,
+      "declaration_count": 83,
       "declarations": [
         {
           "kind": "namespace",
@@ -47155,8 +47155,36 @@
         },
         {
           "kind": "def",
+          "name": "writeSetGoldens",
+          "line": 1957,
+          "called": [
+            "Action",
+            "ActorId",
+            "actionFieldsForL1",
+            "actionKindByte",
+            "ammSwap",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "es",
+            "fixtureBase",
+            "freezeResource",
+            "minimalDispute",
+            "mint",
+            "probes",
+            "reclaimAmmReserves",
+            "reward",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "variant21TailGolden",
-          "line": 1946,
+          "line": 1992,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47165,7 +47193,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 1963,
+          "line": 2009,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "actionCommitHexOf",
@@ -47182,7 +47210,8 @@
             "uint64BE",
             "uniformWriteGoldens",
             "variant21TailGolden",
-            "writeBundleGoldens"
+            "writeBundleGoldens",
+            "writeSetGoldens"
           ]
         }
       ]

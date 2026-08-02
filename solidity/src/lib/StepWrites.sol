@@ -547,6 +547,184 @@ library StepWrites {
         return CBEEncode.uintValue(decodeNonce(preValue) + 1);
     }
 
+    /* ---------------------------------------------------------- */
+    /* The write SET                                              */
+    /* ---------------------------------------------------------- */
+
+    /// @notice One declared cell write.
+    struct Cell {
+        uint8 kind;
+        uint256 keyA;
+        uint256 keyB;
+    }
+
+    /// @notice The action's write set is not derivable from the
+    ///         pre-root.
+    /// @dev    True only for the two bulk variants, whose set is the
+    ///         actor set at a resource; `smtCellKey` hashes the cell
+    ///         identity, so balance cells at one resource share no key
+    ///         prefix and no subtree argument enumerates them.  A
+    ///         deployment leaning on the fault proof must not authorise
+    ///         them — mirrors `FaultProof.FaultProofAdjudicable`.
+    error ActionNotAdjudicable(uint8 actionKind);
+
+    /// @notice The action fields are shorter than the variant's layout.
+    error ActionFieldsTooShort(uint8 actionKind, uint256 length);
+
+    /// @dev Read a big-endian `uint64` from the action fields.
+    ///      Big-endian here, LITTLE-endian in the CBE heads — both
+    ///      orders live in this library, so the two readers are named
+    ///      apart rather than sharing one.
+    function _fieldUint64(bytes calldata fields, uint256 offset)
+        private
+        pure
+        returns (uint64 v)
+    {
+        for (uint256 i = 0; i < 8; i++) {
+            v = (v << 8) | uint64(uint8(fields[offset + i]));
+        }
+    }
+
+    /// @dev The nonce + epoch-budget pair every action writes, appended
+    ///      after the variant's own cells.  `CellKind.Nonce = 1`,
+    ///      `CellKind.EpochBudget = 13`.
+    function _appendUniform(Cell[] memory out, uint256 at, uint64 signer)
+        private
+        pure
+    {
+        out[at] = Cell({kind: 1, keyA: signer, keyB: 0});
+        out[at + 1] = Cell({kind: 13, keyA: signer, keyB: 0});
+    }
+
+    /// @notice **The cells an action writes**, mirroring
+    ///         `Authority.Action.writeCellsAt`.
+    ///
+    /// @dev    A verifier re-derives this list and rejects a bundle
+    ///         naming different cells.  Without it a responder could
+    ///         omit a write and fold to a root where that cell never
+    ///         moved — which the corpus's `writeSetGoldens` column pins
+    ///         per variant, with the ACTUAL field bytes, so a
+    ///         field-offset slip fails there rather than being reasoned
+    ///         about.  Offsets are where a mirror goes silently wrong:
+    ///         the layouts are big-endian with mixed widths
+    ///         (`uint64BE` identifiers, `uint128BE` amounts), so a
+    ///         one-field slip still decodes to a plausible actor id.
+    ///
+    /// @param  nextWdIdPre the proven `.bridgeNextWdId` pre-value; the
+    ///         ONLY variant that uses it is `withdraw`, whose pending
+    ///         cell it keys — the one place a verifier reads a cell to
+    ///         learn WHICH cell to write.
+    function deriveWriteSet(
+        uint8 actionKind,
+        bytes calldata fields,
+        uint64 signer,
+        uint256 nextWdIdPre
+    ) internal pure returns (Cell[] memory out) {
+        // Balance cells are kind 0; registry 2; localPolicy 3;
+        // bridgeConsumed 4; bridgePending 5; bridgeNextWdId 6.
+        if (actionKind == 0) {                          // transfer
+            _need(actionKind, fields, 40);
+            out = new Cell[](4);
+            uint64 r = _fieldUint64(fields, 0);
+            out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 8)});
+            out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 16)});
+            _appendUniform(out, 2, signer);
+        } else if (actionKind == 1 || actionKind == 2 || actionKind == 5) {
+            // mint / burn / reward: `r || actor || amount`.
+            _need(actionKind, fields, 32);
+            out = new Cell[](3);
+            out[0] = Cell({
+                kind: 0, keyA: _fieldUint64(fields, 0), keyB: _fieldUint64(fields, 8)});
+            _appendUniform(out, 1, signer);
+        } else if (actionKind == 4 || actionKind == 12) {
+            // replaceKey / registerIdentity: `actor || key-bytes`.
+            _need(actionKind, fields, 8);
+            out = new Cell[](3);
+            out[0] = Cell({kind: 2, keyA: _fieldUint64(fields, 0), keyB: 0});
+            _appendUniform(out, 1, signer);
+        } else if (actionKind == 15 || actionKind == 16) {
+            // declareLocalPolicy / revokeLocalPolicy: the SIGNER's cell.
+            out = new Cell[](3);
+            out[0] = Cell({kind: 3, keyA: signer, keyB: 0});
+            _appendUniform(out, 1, signer);
+        } else if (actionKind == 13) {                  // deposit
+            _need(actionKind, fields, 40);
+            out = new Cell[](4);
+            out[0] = Cell({
+                kind: 0, keyA: _fieldUint64(fields, 0), keyB: _fieldUint64(fields, 8)});
+            _appendUniform(out, 1, signer);
+            out[3] = Cell({kind: 4, keyA: _fieldUint64(fields, 32), keyB: 0});
+        } else if (actionKind == 14) {                  // withdraw
+            _need(actionKind, fields, 32);
+            out = new Cell[](5);
+            out[0] = Cell({
+                kind: 0, keyA: _fieldUint64(fields, 0), keyB: _fieldUint64(fields, 8)});
+            _appendUniform(out, 1, signer);
+            out[3] = Cell({kind: 6, keyA: 0, keyB: 0});
+            // The state-keyed cell: `Action.writeCells` cannot name it,
+            // which is why `Action.stateWriteCells` exists.
+            out[4] = Cell({kind: 5, keyA: nextWdIdPre, keyB: 0});
+        } else if (actionKind == 19) {                  // depositWithFee
+            _need(actionKind, fields, 72);
+            out = new Cell[](6);
+            uint64 r = _fieldUint64(fields, 0);
+            uint64 recipient = _fieldUint64(fields, 8);
+            out[0] = Cell({kind: 0, keyA: r, keyB: recipient});
+            out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 16)});
+            out[2] = Cell({kind: 4, keyA: _fieldUint64(fields, 64), keyB: 0});
+            _appendUniform(out, 3, signer);
+            out[5] = Cell({kind: 13, keyA: recipient, keyB: 0});
+        } else if (actionKind == 20 || actionKind == 22) {
+            // topUpActionBudget / claimBudgetRefund: `gr || _ || _ || pa`.
+            _need(actionKind, fields, 40);
+            out = new Cell[](4);
+            uint64 gr = _fieldUint64(fields, 0);
+            out[0] = Cell({kind: 0, keyA: gr, keyB: signer});
+            out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 32)});
+            _appendUniform(out, 2, signer);
+        } else if (actionKind == 21) {                  // topUpActionBudgetFor
+            _need(actionKind, fields, 48);
+            out = new Cell[](5);
+            uint64 gr = _fieldUint64(fields, 8);
+            out[0] = Cell({kind: 0, keyA: gr, keyB: signer});
+            out[1] = Cell({kind: 0, keyA: gr, keyB: _fieldUint64(fields, 40)});
+            _appendUniform(out, 2, signer);
+            out[4] = Cell({kind: 13, keyA: _fieldUint64(fields, 0), keyB: 0});
+        } else if (actionKind == 23) {                  // ammSwap
+            _need(actionKind, fields, 56);
+            out = new Cell[](4);
+            uint64 reserveActor = _fieldUint64(fields, 48);
+            out[0] = Cell({kind: 0, keyA: _fieldUint64(fields, 0), keyB: reserveActor});
+            out[1] = Cell({kind: 0, keyA: _fieldUint64(fields, 8), keyB: reserveActor});
+            _appendUniform(out, 2, signer);
+        } else if (actionKind == 24) {                  // reclaimAmmReserves
+            _need(actionKind, fields, 40);
+            out = new Cell[](4);
+            uint64 r = _fieldUint64(fields, 0);
+            out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 24)});
+            out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 32)});
+            _appendUniform(out, 2, signer);
+        } else if (actionKind == 6 || actionKind == 7) {
+            // The bulk pair: complete but not VERIFIABLE.  Fail closed.
+            revert ActionNotAdjudicable(actionKind);
+        } else {
+            // The kernel-identity family (3, 8, 9, 10, 11, 17, 18):
+            // nothing but the uniform pair.  Enumerated by exclusion
+            // rather than listed, since every one has the same set.
+            if (actionKind > 24) revert ActionNotAdjudicable(actionKind);
+            out = new Cell[](2);
+            _appendUniform(out, 0, signer);
+        }
+    }
+
+    /// @dev Length guard, extracted so each arm reads as one line.
+    function _need(uint8 actionKind, bytes calldata fields, uint256 n)
+        private
+        pure
+    {
+        if (fields.length < n) revert ActionFieldsTooShort(actionKind, fields.length);
+    }
+
     /// @notice The epoch-budget cell's post-value, in canonical bytes.
     /// @dev    The byte-level counterpart, mirroring
     ///         `VerifierWrites.deriveEpochBudgetCellValue`.

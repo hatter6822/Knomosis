@@ -935,6 +935,93 @@ contract StepVMCrossCheck is CrossCheckFramework {
         );
     }
 
+    /// @notice **The write SET agrees, per variant, on real field
+    ///         bytes.**
+    ///
+    ///         A verifier re-derives which cells an action writes and
+    ///         rejects a bundle naming different ones; without that a
+    ///         responder could omit a write and fold to a root where
+    ///         that cell never moved.  The goldens carry the ACTUAL
+    ///         `actionFieldsForL1` bytes, so a field-offset slip fails
+    ///         here rather than being reasoned about — and offsets are
+    ///         exactly where a mirror goes silently wrong, since the
+    ///         layouts are big-endian with mixed widths and a
+    ///         one-field slip still decodes to a plausible actor id.
+    function test_writeSet_matches_lean() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        uint256 n = vm.parseJsonUint(raw, ".writeSetGoldensCount");
+        assertGt(n, 0, "the corpus must carry write-set goldens");
+        for (uint256 i = 0; i < n; i++) {
+            this.assertWriteSetExternal(raw,
+                string.concat(".writeSetGoldens[", vm.toString(i), "]"));
+        }
+    }
+
+    /// @dev External so `fields` arrives in calldata.
+    function assertWriteSetExternal(string calldata raw, string calldata base)
+        external
+        view
+    {
+        StepWrites.Cell[] memory got = this.deriveWriteSetExternal(
+            uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
+            vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
+            uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
+            vm.parseJsonUint(raw, string.concat(base, ".nextWdIdPre"))
+        );
+        uint256 m = vm.parseJsonUint(raw, string.concat(base, ".cellCount"));
+        assertEq(got.length, m, string.concat("cell count at ", base));
+        for (uint256 j = 0; j < m; j++) {
+            string memory c = string.concat(base, ".cells[", vm.toString(j), "]");
+            assertEq(uint256(got[j].kind),
+                vm.parseJsonUint(raw, string.concat(c, ".cellKind")),
+                string.concat("cellKind at ", c));
+            assertEq(got[j].keyA, vm.parseJsonUint(raw, string.concat(c, ".keyA")),
+                string.concat("keyA at ", c));
+            assertEq(got[j].keyB, vm.parseJsonUint(raw, string.concat(c, ".keyB")),
+                string.concat("keyB at ", c));
+        }
+    }
+
+    /// @dev Calldata boundary for the dispatch.
+    function deriveWriteSetExternal(
+        uint8 actionKind,
+        bytes calldata fields,
+        uint64 signer,
+        uint256 nextWdIdPre
+    ) external pure returns (StepWrites.Cell[] memory) {
+        return StepWrites.deriveWriteSet(actionKind, fields, signer, nextWdIdPre);
+    }
+
+    /// @notice The bulk pair is refused, and only the bulk pair.
+    /// @dev    The deployment decision made executable.  A gate never
+    ///         observed to fire is indistinguishable from an absent
+    ///         one, so both directions are checked.
+    function test_writeSet_refuses_only_the_bulk_pair() public {
+        bytes memory fields = new bytes(72);
+        vm.expectRevert(
+            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(6)));
+        this.deriveWriteSetExternal(6, fields, 7, 0);
+        vm.expectRevert(
+            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(7)));
+        this.deriveWriteSetExternal(7, fields, 7, 0);
+        // An unknown kind is refused too — a new `Action` constructor
+        // must be considered rather than defaulting into the
+        // kernel-identity family.
+        vm.expectRevert(
+            abi.encodeWithSelector(StepWrites.ActionNotAdjudicable.selector, uint8(25)));
+        this.deriveWriteSetExternal(25, fields, 7, 0);
+        // ...and every adjudicable kind still derives.
+        for (uint8 k = 0; k <= 24; k++) {
+            if (k == 6 || k == 7) continue;
+            assertGe(this.deriveWriteSetExternal(k, fields, 7, 0).length, 2,
+                "every adjudicable kind writes at least the uniform pair");
+        }
+    }
+
     function test_perEntry_cellProofs_witness_binding() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
