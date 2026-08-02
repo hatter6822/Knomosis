@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "15e85f5ceb33150880e5683b49dc7007f99f3eeeff05db436df402b8f247d286"
+    "source_digest": "88686ed2f8d17fc3912b102bf103955953d021df7c5759dade67930f5c0529eb"
   },
   "summary": {
-    "module_count": 94,
-    "declaration_count": 2113
+    "module_count": 97,
+    "declaration_count": 2152
   },
   "modules": [
     {
@@ -3845,6 +3845,167 @@
       ]
     },
     {
+      "module": "KnomosisStepVMRoot",
+      "path": "solidity/src/contracts/KnomosisStepVMRoot.sol",
+      "declaration_count": 19,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "KnomosisStepVMRoot",
+          "line": 61,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "CellOpening",
+          "line": 70,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PolicyCellMismatch",
+          "line": 116,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "BadCellOpening",
+          "line": 121,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WriteSetMismatch",
+          "line": 125,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "WriteSetLengthMismatch",
+          "line": 128,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MalformedProofData",
+          "line": 132,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "TooManyCellOpenings",
+          "line": 135,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "executeStepToRoot",
+          "line": 157,
+          "called": [
+            "CellOpening",
+            "TooManyCellOpenings",
+            "WriteSetLengthMismatch",
+            "WriteSetMismatch",
+            "_applyWrite",
+            "_nextWdIdPre",
+            "_plan",
+            "_requirePolicyOpening",
+            "_requireProofDataShape"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_requirePolicyOpening",
+          "line": 227,
+          "called": [
+            "BadCellOpening",
+            "CellOpening",
+            "PolicyCellMismatch",
+            "_leafPreimage",
+            "_requireProofDataShape"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_leafPreimage",
+          "line": 263,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_requireProofDataShape",
+          "line": 276,
+          "called": [
+            "MalformedProofData"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_nextWdIdPre",
+          "line": 285,
+          "called": [
+            "CellOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_preStateValue",
+          "line": 309,
+          "called": [
+            "CellOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_signerBudgetPre",
+          "line": 328,
+          "called": [
+            "CellOpening",
+            "WriteSetMismatch",
+            "_preStateValue"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_plan",
+          "line": 344,
+          "called": [
+            "CellOpening",
+            "_preStateValue"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_applyWrite",
+          "line": 367,
+          "called": [
+            "BadCellOpening",
+            "CellOpening",
+            "_deriveValue",
+            "_leafPreimage"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deriveValue",
+          "line": 403,
+          "called": [
+            "CellOpening",
+            "WriteSetMismatch",
+            "_deriveConsumed",
+            "_preStateValue",
+            "_signerBudgetPre"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deriveConsumed",
+          "line": 476,
+          "called": []
+        }
+      ]
+    },
+    {
       "module": "IKnomosisAmmDisasterRecovery",
       "path": "solidity/src/interfaces/IKnomosisAmmDisasterRecovery.sol",
       "declaration_count": 3,
@@ -4844,6 +5005,45 @@
           "called": [
             "emptyHashAtLevel"
           ]
+        }
+      ]
+    },
+    {
+      "module": "StepPlan",
+      "path": "solidity/src/lib/StepPlan.sol",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "StepPlan",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "Plan",
+          "line": 43,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "planGrant",
+          "line": 69,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "planBalances",
+          "line": 118,
+          "called": [
+            "_planRefundBalances"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_planRefundBalances",
+          "line": 242,
+          "called": []
         }
       ]
     },
@@ -12758,6 +12958,149 @@
           "called": [
             "KnomosisStepVM"
           ]
+        }
+      ]
+    },
+    {
+      "module": "StepVMRoot.t",
+      "path": "solidity/test/CrossCheck/StepVMRoot.t.sol",
+      "declaration_count": 15,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "StepVMRootCrossCheck",
+          "line": 32,
+          "called": [
+            "CrossCheckFramework",
+            "KnomosisStepVMRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 42,
+          "called": [
+            "KnomosisStepVMRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStepToRoot_matches_lean",
+          "line": 51,
+          "called": [
+            "_requireKeccakLinked",
+            "_runProbe",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStepToRoot_moves_the_root",
+          "line": 81,
+          "called": [
+            "_runProbe",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_omitting_a_write_reverts",
+          "line": 112,
+          "called": [
+            "_call",
+            "_openings",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_forged_pre_value_reverts",
+          "line": 138,
+          "called": [
+            "_amountValue",
+            "_call",
+            "_openings",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_reordered_bundle_reverts",
+          "line": 163,
+          "called": [
+            "_call",
+            "_openings",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_policy_opening_must_name_the_policy_cell",
+          "line": 185,
+          "called": [
+            "_openings",
+            "_policyOpening",
+            "_skipWithReason",
+            "fixtureExists",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_bulk_variants_are_refused",
+          "line": 216,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_isAdjudicable_excludes_exactly_the_bulk_pair",
+          "line": 243,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_runProbe",
+          "line": 258,
+          "called": [
+            "_call",
+            "_openings"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_call",
+          "line": 268,
+          "called": [
+            "_policyOpening"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_policyOpening",
+          "line": 285,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_openings",
+          "line": 299,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_amountValue",
+          "line": 320,
+          "called": []
         }
       ]
     },

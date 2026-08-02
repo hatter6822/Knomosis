@@ -293,6 +293,7 @@ import LegalKernel.FaultProof.Smt
 import LegalKernel.FaultProof.LawClassification
 import LegalKernel.FaultProof.StepVariants
 import LegalKernel.FaultProof.StepWriteSets
+import LegalKernel.FaultProof.Terminate
 import LegalKernel.FaultProof.VerifierWrites
 import LegalKernel.FaultProof.Verify
 import LegalKernel.FaultProof.Step
