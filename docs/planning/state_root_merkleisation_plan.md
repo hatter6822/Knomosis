@@ -566,6 +566,30 @@ space:
    Written as a measurement rather than a comment, so the day it stops
    being true is a test failure rather than a stale paragraph.
 
+   **And the fold itself is verified cross-stack, ahead of the flip.**
+   `writeBundleGoldens` publishes the ORDERED
+   `(cell, pre-value, new value, opening)` list Lean folds, and
+   `StepVMMerkle.applyCellWrite` re-walks it: each opening verified
+   against the RUNNING root with the old leaf, then re-walked from the
+   new one.  Solidity arrives at exactly `stepPostRoot`.
+
+   That is the riskiest single piece of §4 done and measured.  The
+   ordering is what makes it risky — openings go stale as soon as a
+   write lands, so proof `i` opens against the root write `i-1`
+   produced, not against the pre-root — and the `selfTransfer` probe is
+   the case that catches a fold which got it wrong: two writes at the
+   SAME cell, where verifying both against the pre-root would accept
+   the bundle and reach a root no state has.  The leaf PREIMAGE is
+   pinned too, rebuilt on the Solidity side from `CBEEncode.bytesValue`
+   and compared against Lean's, so the construction agrees and not just
+   the walk.
+
+   What is left is therefore mechanical rather than uncertain: a
+   per-variant WRITE-SET dispatch in Solidity (which cells each action
+   writes, from the action plus the proven `.bridgeNextWdId`), wiring
+   it to the derivations and the fold inside `executeStep`, and the
+   corpus regeneration.
+
    **This is the largest single remaining piece**, and the plan's
    original framing of step 3 as "the root update becomes shared"
    understated it: sharing the update is the easy half.

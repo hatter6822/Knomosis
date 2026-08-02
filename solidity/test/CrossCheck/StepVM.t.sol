@@ -6,6 +6,7 @@ import {KnomosisStepVM} from "src/contracts/KnomosisStepVM.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
+import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
@@ -830,6 +831,108 @@ contract StepVMCrossCheck is CrossCheckFramework {
             assertTrue(foldRoot != preRoot,
                 string.concat("the fold did not move the root at ", base));
         }
+    }
+
+    /// @notice **The write fold reaches Lean's post-state root.**
+    ///
+    ///         The riskiest single piece of the flip, verified before
+    ///         it lands: given a pre-root and the ORDERED
+    ///         `(cell, pre-value, new value, opening)` bundle Lean
+    ///         publishes, Solidity verifies each opening against the
+    ///         RUNNING root and re-walks it from the new leaf,
+    ///         arriving at exactly `stepPostRoot`.
+    ///
+    ///         The order is load-bearing.  Openings go stale as soon as
+    ///         a write lands, so proof `i` opens against the root write
+    ///         `i-1` produced — not against the pre-root.  The
+    ///         `selfTransfer` probe is the case that catches a fold
+    ///         that got this wrong: two writes at the SAME cell, so a
+    ///         fold verifying both against the pre-root would accept
+    ///         the bundle and reach a root no state has.
+    function test_writeFold_reaches_lean_root() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        _requireKeccakLinked(raw, ".isKeccak256Linked");
+        uint256 n = vm.parseJsonUint(raw, ".writeBundleGoldensCount");
+        assertGt(n, 0, "the corpus must carry write-bundle goldens");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base =
+                string.concat(".writeBundleGoldens[", vm.toString(i), "]");
+            assertEq(
+                this.foldBundleExternal(raw, base),
+                vm.parseJsonBytes32(raw, string.concat(base, ".postStateRootHex")),
+                string.concat("fold did not reach Lean's root at ", base)
+            );
+        }
+    }
+
+    /// @dev External so the per-write `bytes` slices arrive in
+    ///      calldata, which `StepVMMerkle.applyCellWrite` requires.
+    function foldBundleExternal(string calldata raw, string calldata base)
+        external
+        view
+        returns (bytes32 root)
+    {
+        root = vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex"));
+        uint256 m = vm.parseJsonUint(raw, string.concat(base, ".writeCount"));
+        for (uint256 j = 0; j < m; j++) {
+            string memory w =
+                string.concat(base, ".writes[", vm.toString(j), "]");
+            bool ok;
+            (ok, root) = this.applyOneWrite(
+                root,
+                vm.parseJsonBytes(raw, string.concat(w, ".smtKeyHex")),
+                vm.parseJsonBool(raw, string.concat(w, ".oldIsAbsent")),
+                vm.parseJsonBytes(raw, string.concat(w, ".oldLeafPreimageHex")),
+                vm.parseJsonBool(raw, string.concat(w, ".newIsAbsent")),
+                vm.parseJsonBytes(raw, string.concat(w, ".newLeafPreimageHex")),
+                vm.parseJsonBytes(raw, string.concat(w, ".proofDataHex"))
+            );
+            // Fatal, not skippable: a fold that dropped an unverified
+            // write would reach a root for a state where that cell
+            // never moved.
+            require(ok, "opening did not verify against the running root");
+        }
+    }
+
+    /// @dev Calldata boundary for one write.
+    function applyOneWrite(
+        bytes32 root,
+        bytes calldata smtKey,
+        bool oldIsAbsent,
+        bytes calldata oldPreimage,
+        bool newIsAbsent,
+        bytes calldata newPreimage,
+        bytes calldata proofData
+    ) external pure returns (bool ok, bytes32 newRoot) {
+        return StepVMMerkle.applyCellWrite(
+            root, smtKey, oldIsAbsent, oldPreimage, newIsAbsent, newPreimage, proofData);
+    }
+
+    /// @notice The leaf PREIMAGE Lean hashes is one Solidity can build.
+    ///
+    /// @dev    `encodeAsBytes key ++ encodeAsBytes value` — two CBE
+    ///         byte-strings.  Checking the fold with Lean's preimage
+    ///         proves the WALK agrees; rebuilding it here from
+    ///         `CBEEncode.bytesValue` proves the CONSTRUCTION does too,
+    ///         which is what `executeStep` will have to do for itself.
+    function test_leafPreimage_is_reconstructible() public {
+        if (!fixtureExists(FIXTURE_NAME)) {
+            _skipWithReason("fixture missing");
+            return;
+        }
+        string memory raw = readFixture(FIXTURE_NAME);
+        string memory w = ".writeBundleGoldens[0].writes[0]";
+        bytes memory smtKey = vm.parseJsonBytes(raw, string.concat(w, ".smtKeyHex"));
+        bytes memory oldValue = vm.parseJsonBytes(raw, string.concat(w, ".oldValueHex"));
+        assertEq(
+            bytes.concat(CBEEncode.bytesValue(smtKey), CBEEncode.bytesValue(oldValue)),
+            vm.parseJsonBytes(raw, string.concat(w, ".oldLeafPreimageHex")),
+            "the leaf preimage must be two CBE byte-strings"
+        );
     }
 
     function test_perEntry_cellProofs_witness_binding() public {

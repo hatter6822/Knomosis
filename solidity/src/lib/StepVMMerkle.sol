@@ -193,4 +193,49 @@ library StepVMMerkle {
         }
         return keccak256(leafPreimage);
     }
+
+    /* ---------------------------------------------------------- */
+    /* The write fold                                             */
+    /* ---------------------------------------------------------- */
+
+    /// @notice One write applied to a running root: verify the
+    ///         opening against it with the OLD leaf, then re-walk the
+    ///         same opening from the NEW leaf.
+    ///
+    /// @dev    Mirrors Lean's `applyStateCellWrite`.  The two halves
+    ///         use the SAME `proofData`, which is what makes the
+    ///         update sound: the sibling path is a property of the
+    ///         key's route through the tree, and the write changes
+    ///         only the leaf at its end.
+    ///
+    ///         `ok = false` means the opening did not verify.  The
+    ///         caller must treat that as fatal rather than skipping
+    ///         the write — a fold that silently dropped an unverified
+    ///         write would reach a root for a state where that cell
+    ///         never moved, which is precisely the forgery the fold
+    ///         exists to prevent.
+    ///
+    /// @param  root       the running root, before this write.
+    /// @param  smtKey     the cell's derived SMT key.
+    /// @param  oldIsAbsent whether the PRE-value is canonically absent.
+    /// @param  oldPreimage the pre-value's leaf preimage.
+    /// @param  newIsAbsent whether the POST-value is canonically absent.
+    /// @param  newPreimage the post-value's leaf preimage.
+    /// @param  proofData  the opening, against `root`.
+    function applyCellWrite(
+        bytes32 root,
+        bytes calldata smtKey,
+        bool oldIsAbsent,
+        bytes calldata oldPreimage,
+        bool newIsAbsent,
+        bytes calldata newPreimage,
+        bytes calldata proofData
+    ) internal pure returns (bool ok, bytes32 newRoot) {
+        bytes32 oldLeaf = cellLeafHash(oldIsAbsent, oldPreimage);
+        if (SmtCellVerifier.recomputeRootFromLeaf(smtKey, oldLeaf, proofData) != root) {
+            return (false, root);
+        }
+        bytes32 newLeaf = cellLeafHash(newIsAbsent, newPreimage);
+        return (true, SmtCellVerifier.recomputeRootFromLeaf(smtKey, newLeaf, proofData));
+    }
 }

@@ -1852,6 +1852,91 @@ def stepPostRootGoldens : List Test.Bridge.CrossCheck.Json :=
              (LegalKernel.FaultProof.Observer.buildObserverCellProofs
                es action signer)))) ]))
 
+/-! ### The ordered write bundle, for the fold
+
+The riskiest single piece of the flip: given a pre-root and an ORDERED
+list of `(cell, proven pre-value, new value, opening)`, verify each
+opening against the RUNNING root and re-walk it from the new leaf.
+
+The order is load-bearing.  Openings go stale as soon as a write lands,
+so proof `i` opens against the root write `i-1` produced — not against
+the pre-root.  A fold that verified every opening against the pre-root
+would accept a bundle the honest sequencer could not have produced, and
+one that re-walked from the wrong root would reach a root no state has.
+
+`chainWrites` is what threads that, and this column publishes its
+output so the L1's fold is checked against it rather than against a
+re-derivation.
+-/
+
+/-- The write bundle for one probe, as JSON: the ordered
+    `(cell, pre-value, new value, opening)` list plus the pre-root and
+    the root the fold reaches. -/
+def writeBundleGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let probes : List (String × Action) :=
+    [ ("transfer",   .transfer 1 signer 8 30)
+      -- The self-transfer: two writes at the SAME cell, so the second
+      -- opening must be against the root the first produced.  A fold
+      -- verifying both against the pre-root would accept it and reach
+      -- the wrong root.
+    , ("selfTransfer", .transfer 1 signer signer 30)
+    , ("mint",       .mint 1 8 5)
+    , ("freezeResource", .freezeResource 1)
+    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero) ]
+  probes.filterMap (fun (name, action) =>
+    let st : SignedAction :=
+      { action, signer, nonce := 0, sig := ByteArray.empty }
+    match stepPostRoot es st 0 with
+    | none => none
+    | some root =>
+      let bundle := stepWriteBundle es st 0
+      some (.obj
+        [ ("variant", .str name)
+        , ("preStateRootHex", .str (hx (commitExtendedState es)))
+        , ("postStateRootHex", .str (hx root))
+        , ("writeCount", .num bundle.length)
+        , ("writes", .arr (bundle.map (fun w =>
+            let (t, oldV, newV, proof) := w
+            let (kindNat, keyA, keyB) : Nat × Nat × Nat := t.flatKey
+            .obj [ ("cellKind", .num kindNat)
+                 , ("keyA", .num keyA), ("keyB", .num keyB)
+                 , ("oldValueHex", .str (hx oldV))
+                 , ("newValueHex", .str (hx newV))
+                 , ("smtKeyHex", .str (hx (smtCellKey t)))
+                 , ("proofDataHex", .str (hx proof.toWireBytes))
+                   -- The leaf PREIMAGE for each side of the write:
+                   -- `encodeAsBytes key ++ encodeAsBytes value`, which
+                   -- is two CBE byte-strings.  Emitted so the L1's
+                   -- fold is checked against Lean's leaf construction
+                   -- rather than against a re-derivation of it — and
+                   -- so the Solidity side can rebuild it from
+                   -- `CBEEncode.bytesValue` and prove the two agree.
+                 , ("oldLeafPreimageHex",
+                    .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes oldV)))
+                 , ("newLeafPreimageHex",
+                    .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes newV)))
+                   -- Absence is a BRANCH, not an optimisation: a cell
+                   -- whose value is canonically absent has an empty
+                   -- sub-tree beneath its key, so its leaf is the
+                   -- canonical empty one rather than a hash of the
+                   -- preimage.  A verifier that always hashed could
+                   -- not read an absent cell at all, and a step
+                   -- crediting a fresh actor reads one on its first
+                   -- line.
+                 , ("oldIsAbsent",
+                    .bool (decide (oldV = canonicalAbsentValue t)))
+                 , ("newIsAbsent",
+                    .bool (decide (newV = canonicalAbsentValue t))) ])) ) ]))
+
 /-- The variant-21 commit preimage tail (everything after
     `preCommit ++ tag`): `uint64BE gasResource ++ uint64BE signer ++
     uint256BE newSigner ++ uint64BE poolActor ++ uint256BE newPool`.
@@ -2382,6 +2467,8 @@ def tests : List Test.TestCase :=
           , ("recordWriteGoldensCount", .num recordWriteGoldens.length)
           , ("stepPostRootGoldens", .arr stepPostRootGoldens)
           , ("stepPostRootGoldensCount", .num stepPostRootGoldens.length)
+          , ("writeBundleGoldens", .arr writeBundleGoldens)
+          , ("writeBundleGoldensCount", .num writeBundleGoldens.length)
           , ("packedLayoutGoldens",  .arr packedLayoutGoldens)
           , ("variant21TailGolden",  variant21TailGolden)
           , ("entries",             .arr entries)

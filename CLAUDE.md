@@ -807,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 210 | ~159 | `lake test` |
 | Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~953 passed | 62 forge suites | `cd solidity && forge test` |
+| Solidity | ~955 passed | 62 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **953 passed / 0 failed / 0 skipped** — the
+`forge test` runs **955 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 953 / 0 / 0.
+reports the same 955 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -1270,7 +1270,18 @@ both stacks assert the fold lands on the published root, differs from
 the bespoke hash, and is not the pre-root.  That gap is the one fact
 the 278-entry byte-equivalence corpus cannot establish: it pins
 `stepVMHash` against `executeStep`, two implementations of the same
-recipe.  `stepWriteBundle es st idx`
+recipe.
+
+**The fold itself is verified cross-stack ahead of the flip.**
+`writeBundleGoldens` publishes the ordered
+`(cell, pre-value, new value, opening)` list Lean folds, and
+`StepVMMerkle.applyCellWrite` re-walks it — each opening verified
+against the RUNNING root, then re-walked from the new leaf — arriving
+at exactly `stepPostRoot`.  The `selfTransfer` probe is what makes that
+non-trivial: two writes at the SAME cell, so a fold verifying both
+against the pre-root would accept the bundle and reach a root no state
+has.  What remains is a per-variant write-set dispatch in Solidity and
+wiring it into `executeStep`.  `stepWriteBundle es st idx`
 takes the pre-state and reads its `newValue` column off
 `productionApplyBudget es st idx` — that is the sequencer's
 computation.  A verifier holding only the pre-root and a submitted
