@@ -1134,10 +1134,17 @@ sets exactly those bits, and that `expandSiblingsAux`'s cursor tracks
 §2 → §2A → §2B → §2C → §3 → §3A → §3B → §4, and §4's corpus
 regeneration last.
 
-**Where this stands.**  Everything through §4A is landed and green:
-the Lean side computes the post-root from a pre-root plus openings
-(`stepPostRoot`), for all twenty-five variants, and the L1 has the two
-primitives that fold needs.
+**Where this stands: DONE.**  Every stage below has landed and is
+green on all three stacks.  The narrative is kept because the failure
+modes it records are more instructive than the fixes — in particular
+the corpus that reported nothing (S0), the `newValue` column that the
+plan first assumed a verifier could consume (§4 step 3), and the
+completeness/verifiability gap at the bulk pair (S6b).
+
+Everything through §4A landed first: the Lean side computes the
+post-root from a pre-root plus openings (`stepPostRoot`), for all
+twenty-five variants, and the L1 has the two primitives that fold
+needs.
 
 S4 and S5 have landed too, in one change since the wire and the
 observer's output move together: every production bundle is built by
@@ -1260,6 +1267,24 @@ the hash recipe.
 own; §3 / §3A and S6 are one consensus change and must not be split
 across releases that could be deployed independently.
 
-The runbook's §0 deployment blocker stays in force until §4 lands
-and `verify_keccak_crossstack.sh` reports the step-VM
-byte-equivalence corpus running rather than skipping.
+**The plan is complete.**  The runbook's §0 deployment blocker is
+gone: the terminal step adjudicates, both sides of its comparison are
+state roots, and `forge test` runs 891 / 0 failed / 0 skipped with
+`verify_keccak_crossstack.sh` reporting the same.
+
+One operator-facing condition outlives the plan and is recorded in the
+runbook rather than here: a deployment leaning on the fault proof must
+not authorise `distributeOthers` / `proportionalDilute`.  Their write
+set is the actor set at a resource, which an L1 holding only the
+pre-root cannot enumerate — a complete bundle and one missing a
+recipient are indistinguishable to it.  `FaultProofAdjudicable` /
+`StepWrites.isAdjudicable` is the predicate, false on exactly those
+two, and the step VM refuses them before verifying any opening.
+
+One design question is deliberately left open, and is a cost question
+rather than a correctness one: the fold takes one opening per write,
+each against the RUNNING root.  A deduplicating pre-root multiproof is
+materially smaller on calldata — paths overlap near the root — at the
+cost of having to sequence same-cell writes itself, which is where a
+dangerous bug would live.  Chaining shipped; measure against the
+GP.11.9 benchmark before moving.
