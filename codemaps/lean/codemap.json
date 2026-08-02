@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "19db68caa57dfd8603e61e4d46dc3bd5e338e2a33d5a558ee8a72ba4e69f84c4"
+    "source_digest": "41040ac451402b767b4bb7079a6a7f74f4f30e461cc6d71adfb03a1d60076862"
   },
   "summary": {
     "module_count": 332,
@@ -47156,18 +47156,31 @@
             "ExtendedState",
             "ResourceId",
             "SignedAction",
+            "actionFieldsForL1",
+            "actionKindByte",
+            "ammSwap",
             "base",
+            "buildStateCellProof",
+            "burn",
             "canonicalAbsentValue",
+            "claimBudgetRefund",
             "commitExtendedState",
+            "deposit",
+            "depositWithFee",
             "encodeAsBytes",
             "es",
             "fixtureBase",
             "freezeResource",
+            "getCellValue",
             "mint",
             "probes",
+            "reward",
             "smtCellKey",
             "stepPostRoot",
             "stepWriteBundle",
+            "toWireBytes",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
             "transfer",
             "withdraw"
           ]
@@ -47175,10 +47188,11 @@
         {
           "kind": "def",
           "name": "writeSetGoldens",
-          "line": 1975,
+          "line": 2017,
           "called": [
             "Action",
             "ActorId",
+            "FaultProofAdjudicable",
             "actionFieldsForL1",
             "actionKindByte",
             "ammSwap",
@@ -47186,12 +47200,14 @@
             "claimBudgetRefund",
             "deposit",
             "depositWithFee",
+            "distributeOthers",
             "es",
             "fixtureBase",
             "freezeResource",
             "minimalDispute",
             "mint",
             "probes",
+            "proportionalDilute",
             "reclaimAmmReserves",
             "reward",
             "topUpActionBudget",
@@ -47203,7 +47219,7 @@
         {
           "kind": "def",
           "name": "absentValueProbeTags",
-          "line": 2016,
+          "line": 2075,
           "called": [
             "CellTag"
           ]
@@ -47211,7 +47227,7 @@
         {
           "kind": "def",
           "name": "absentValueGoldens",
-          "line": 2025,
+          "line": 2084,
           "called": [
             "canonicalAbsentValue"
           ]
@@ -47219,7 +47235,7 @@
         {
           "kind": "def",
           "name": "variant21TailGolden",
-          "line": 2040,
+          "line": 2099,
           "called": [
             "uint256BE",
             "uint64BE"
@@ -47228,7 +47244,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 2057,
+          "line": 2116,
           "called": [
             "LegalKernel.Test.Bridge.CrossCheck.StepVM",
             "absentValueGoldens",

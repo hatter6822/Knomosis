@@ -1062,8 +1062,30 @@ contract StepVMCrossCheck is CrossCheckFramework {
         external
         view
     {
+        uint8 kind =
+            uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte")));
+        // Adjudicability comes from Lean, not from a constant here, so
+        // the two predicates are PINNED rather than restated — a
+        // variant excluded on one stack and not the other fails at this
+        // line instead of silently adjudicating one-sided.
+        bool adjudicable =
+            vm.parseJsonBool(raw, string.concat(base, ".adjudicable"));
+        assertEq(
+            StepWrites.isAdjudicable(kind), adjudicable,
+            string.concat("adjudicability at ", base)
+        );
+        if (!adjudicable) {
+            // The write set exists on the Lean side and is deliberately
+            // unreachable on the L1 one.  Nothing further to compare.
+            assertGt(
+                vm.parseJsonUint(raw, string.concat(base, ".cellCount")), 0,
+                string.concat("a refused variant still has a Lean write set at ",
+                    base)
+            );
+            return;
+        }
         StepWrites.Cell[] memory got = this.deriveWriteSetExternal(
-            uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
+            kind,
             vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
             uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
             vm.parseJsonUint(raw, string.concat(base, ".nextWdIdPre"))

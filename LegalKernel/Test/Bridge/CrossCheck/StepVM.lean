@@ -1908,8 +1908,33 @@ def writeBundleGoldens : List Test.Bridge.CrossCheck.Json :=
       -- the wrong root.
     , ("selfTransfer", .transfer 1 signer signer 30)
     , ("mint",       .mint 1 8 5)
+    , ("burn",       .burn 1 8 5)
+      -- The precondition FAILS: `step_impl` is a no-op, so every
+      -- balance keeps its pre-value and the fold still has to reach the
+      -- published root.  A verifier that reverted here would cost the
+      -- responsible party the game by timeout.
+    , ("burnNoop",   .burn 1 8 999999)
+    , ("reward",     .reward 1 8 5)
     , ("freezeResource", .freezeResource 1)
-    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero) ]
+    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
+    , ("deposit",    .deposit 1 8 5 3)
+      -- Both chained-pair shapes with a fee split, and the one where
+      -- the recipient IS the signer — so the epoch-budget cell appears
+      -- TWICE in the write set and the second write must land the same
+      -- value the first did.
+    , ("depositWithFee", .depositWithFee 1 8 9 5 2 3 4)
+    , ("depositWithFeeSelf", .depositWithFee 1 signer 9 5 2 3 5)
+    , ("topUpActionBudget", .topUpActionBudget 1 10 4 9)
+      -- ...and its self-delegated form, whose precondition
+      -- (`recipient ≠ payer`) FAILS, so the balances stay put.
+    , ("topUpActionBudgetForSelf", .topUpActionBudgetFor signer 1 10 4 9)
+    , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 10 4 9)
+    , ("claimBudgetRefund", .claimBudgetRefund 1 2 3 9)
+    , ("ammSwap",    .ammSwap 1 2 5 10 9)
+    , ("registerIdentity", .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
+    , ("replaceKey", .replaceKey 8 (ByteArray.mk #[0xAA, 0xBB]))
+    , ("declareLocalPolicy", .declareLocalPolicy Authority.LocalPolicy.empty)
+    , ("revokeLocalPolicy", .revokeLocalPolicy) ]
   probes.filterMap (fun (name, action) =>
     let st : SignedAction :=
       { action, signer, nonce := 0, sig := ByteArray.empty }
@@ -1921,6 +1946,23 @@ def writeBundleGoldens : List Test.Bridge.CrossCheck.Json :=
         [ ("variant", .str name)
         , ("preStateRootHex", .str (hx (commitExtendedState es)))
         , ("postStateRootHex", .str (hx root))
+          -- The action, in the form the L1 holds it.  Emitted here as
+          -- well as in `writeSetGoldens` so this column drives the
+          -- WHOLE verifier — cells derived, values derived, fold — from
+          -- inputs an L1 actually has, rather than only its fold.
+        , ("actionKindByte", .num (actionKindByte action).toNat)
+        , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
+        , ("signerNat", .num signer.toNat)
+        , ("l2LogIndex", .num 0)
+          -- The read-only budget-policy cell.  Not a write, so it is
+          -- not in the bundle — but `deriveEpochBudget` selects its
+          -- branch on it and every one of the twenty-five variants
+          -- writes an epoch-budget cell, so the verifier cannot start
+          -- without it.
+        , ("policyValueHex", .str (hx (getCellValue es .budgetPolicy)))
+        , ("policySmtKeyHex", .str (hx (smtCellKey .budgetPolicy)))
+        , ("policyProofDataHex",
+           .str (hx (buildStateCellProof es .budgetPolicy).toWireBytes))
         , ("writeCount", .num bundle.length)
         , ("writes", .arr (bundle.map (fun w =>
             let (t, oldV, newV, proof) := w
@@ -1980,10 +2022,22 @@ def writeSetGoldens : List Test.Bridge.CrossCheck.Json :=
   let probes : List Action :=
     [ .transfer 1 signer 8 30, .mint 1 8 5, .burn 1 8 5, .freezeResource 1
     , .replaceKey 8 (ByteArray.mk #[1, 2, 3]), .reward 1 8 5
-    , .dispute (minimalDispute signer 0), .registerIdentity 8 (ByteArray.mk #[9])
+      -- The two bulk variants.  Present so the corpus covers all
+      -- twenty-five kinds and the EXCLUSION is data rather than a
+      -- hand-written constant on the L1 side: their write set is the
+      -- actor set at a resource, which a verifier holding only the
+      -- pre-root cannot enumerate.
+    , .distributeOthers 1 8 5, .proportionalDilute 1 8 5
+    , .dispute (minimalDispute signer 0), .disputeWithdraw 0
+    , .verdict { disputeId := 0, outcome := .upheld
+               , rationale := ByteArray.empty, signatures := [] }
+    , .rollback 0
+    , .registerIdentity 8 (ByteArray.mk #[9])
     , .deposit 1 8 5 3
     , .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero
     , .declareLocalPolicy Authority.LocalPolicy.empty, .revokeLocalPolicy
+    , .faultProofChallenge ByteArray.empty 0 1 ByteArray.empty
+    , .faultProofResolution ByteArray.empty 0 8 0
     , .depositWithFee 1 8 9 5 1 3 4, .topUpActionBudget 1 5 2 9
     , .topUpActionBudgetFor 8 1 5 2 9, .claimBudgetRefund 1 2 3 9
     , .ammSwap 1 2 5 4 9, .reclaimAmmReserves 1 25 9 8 ]
@@ -1996,6 +2050,11 @@ def writeSetGoldens : List Test.Bridge.CrossCheck.Json :=
            -- cell by; inert for every other variant, and emitted for
            -- all of them so the mirror takes the same input shape.
          , ("nextWdIdPre", .num es.bridge.nextWdId)
+           -- Whether the fault proof can adjudicate this kind at all.
+           -- False on exactly the bulk pair, and emitted per probe so
+           -- the L1's own predicate is pinned against
+           -- `FaultProofAdjudicable` rather than restated.
+         , ("adjudicable", .bool (FaultProofAdjudicable action))
          , ("cellCount", .num cells.length)
          , ("cells", .arr (cells.map (fun t =>
              let (k, a, b) : Nat × Nat × Nat := t.flatKey

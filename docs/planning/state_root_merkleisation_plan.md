@@ -1148,22 +1148,67 @@ and `method_selectors.json` regenerated) and the Solidity struct, which
 shape-validates it at intake.  The corpus publishes `proofDataHex` per
 proof.  Nothing consumes the opening yet — that is the flip.
 
-**What remains is S6, and it is one coupled unit:**
+**S6 has landed, in three pieces.**
 
-  * the **bundle-only write derivation** (§4 step 3): each written
-    cell's new value from the proven pre-values alone, on both stacks,
-    plus the Lean theorem that it agrees with
-    `stepCellWrites es (productionApplyBudget es st idx) …`.  This is
-    the largest piece and the one the plan originally understated;
-    without it the fold is a calculator, not an adjudicator, because
-    the `newValue` column would be the responder's to choose.
-  * `executeStep` verifying the openings and returning the fold's
-    result, with the corpus's `expectedStepVMCommitHex` becoming
-    `expectedPostStateRootHex` and the fixture `identifier` bumped.
-  * `Step.kernelStepApply` and
-    `TerminateBundle.buildTerminateBundle` moving onto the derived
-    fold, and the retirement of `SolidityStepVMCommit.lean` +
-    `stepVMHash` + the 36 recipe-bound theorems (S7).
+  * **S6a — the bundle-only write derivation** (§4 step 3), the piece
+    the plan originally understated.  `FaultProof/VerifierWrites.lean`
+    derives EVERY cell kind a step can write from proven pre-values
+    alone, each with a `*_correct` theorem against
+    `getCellValue (productionApplyBudget es st idx)`.  Mirrored by
+    `solidity/src/lib/StepWrites.sol`, pinned per kind by the corpus's
+    `uniformWriteGoldens` / `balanceWriteGoldens` /
+    `recordWriteGoldens` / `absentValueGoldens` columns.  Without it
+    the fold is a calculator rather than an adjudicator, because the
+    `newValue` column would be the responder's to choose.
+  * **S6b — the two adjudication decisions**, both made executable
+    rather than documented.  A failing precondition is a NO-OP, not a
+    revert (totality, the closer mirror of `step_impl`; a revert is not
+    a verdict because the terminal step is callable only by whoever's
+    turn it is).  And the two bulk variants are EXCLUDED —
+    `FaultProof.FaultProofAdjudicable` on the Lean side,
+    `StepWrites.isAdjudicable` on the L1 one, pinned against each other
+    per kind by `writeSetGoldens`' `adjudicable` column across all
+    twenty-five variants, so a variant excluded on one stack and not
+    the other fails the corpus rather than adjudicating one-sided.
+  * **S6c — the assembly.**  `KnomosisStepVMRoot.executeStepToRoot`
+    (`solidity/src/contracts/`) takes a pre-root, the action, the
+    signer, the log index, a read-only budget-policy opening and the
+    chained write openings, and returns the post-state ROOT.  It
+    re-derives the cell LIST (`deriveWriteSet`, checked against the
+    bundle position by position, so a responder cannot omit a write),
+    re-derives each cell's VALUE (`StepWrites` / `StepPlan`), and folds
+    with `StepVMMerkle.applyCellWrite` — verifying each opening against
+    the RUNNING root and re-walking it from the new leaf.  The
+    corpus's `writeBundleGoldens` drives the whole of it end to end
+    over twenty probes; the Lean side is `stepPostRoot`.
+
+    A NEW contract rather than a bigger `KnomosisStepVM`, which is
+    already large; S7 deletes the old one, so the end state is still
+    one contract.
+
+    Two details worth keeping, both discovered in the assembly rather
+    than the design.  Every derivation reads its inputs from the FIRST
+    opening naming a cell, not the one at its own index: a later write
+    to the same cell opens against the running state, so its
+    `preValue` is the earlier write's result, and derivations are
+    functions of the pre-state.  Duplicates are reachable — a
+    self-transfer, a `depositWithFee` whose recipient is the signer —
+    and every derivation is idempotent on them, so the second write
+    lands the same value and leaves the root alone.  And the policy
+    cell is READ through the write primitive (`applyCellWrite` with the
+    same value on both sides), so there is one code path and one
+    absence branch rather than two that could diverge.
+
+**What remains is S7**: `KnomosisFaultProofGame.terminateOnSingleStep`
+calling `executeStepToRoot`, `Step.kernelStepApply` and
+`TerminateBundle.buildTerminateBundle` moving onto the derived fold
+(the observer must emit the CHAINED bundle `stepWriteBundle` produces,
+not `buildObserverCellProofs`' all-against-the-pre-root one), the Rust
+conduit and `method_selectors.json` following the terminate signature,
+the corpus's `expectedStepVMCommitHex` becoming
+`expectedPostStateRootHex` with the fixture `identifier` bumped, and
+the retirement of `SolidityStepVMCommit.lean` + `stepVMHash` + the 36
+recipe-bound theorems.
 
 §2, §2A, §2B, §3B, S4 and S5 are additive and have landed on their
 own; §3 / §3A and S6 are one consensus change and must not be split

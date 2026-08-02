@@ -65,6 +65,9 @@ library StepWrites {
     /// @notice CBE uint head width: tag + 8 little-endian bytes.
     uint256 internal constant CBE_UINT_LEN = 9;
 
+    /// @notice CBE amount head width: tag + 16 little-endian bytes.
+    uint256 internal constant CBE_AMOUNT_LEN = 17;
+
     /* ---------------------------------------------------------- */
     /* Decoding                                                   */
     /* ---------------------------------------------------------- */
@@ -92,6 +95,61 @@ library StepWrites {
     function decodeNonce(bytes memory value) internal pure returns (uint256) {
         if (value.length != CBE_UINT_LEN) revert MalformedCellValue();
         return _readUint(value, 0);
+    }
+
+    /// @dev Read one CBE amount at `offset`.  The 17-byte sibling of
+    ///      `_readUint`, and a SEPARATE tag: a balance and a counter
+    ///      holding the same number are different cell values, which is
+    ///      what stops a proof opening one from being replayed as the
+    ///      other.
+    function _readAmount(bytes memory data, uint256 offset)
+        private
+        pure
+        returns (uint256 v)
+    {
+        if (data.length < offset + CBE_AMOUNT_LEN) revert MalformedCellValue();
+        if (uint8(data[offset]) != CBEEncode.CBE_TAG_AMOUNT) revert MalformedCellValue();
+        for (uint256 i = 0; i < 16; i++) {
+            v |= uint256(uint8(data[offset + 1 + i])) << (8 * i);
+        }
+    }
+
+    /// @notice Decode a balance cell.
+    ///
+    /// @dev    The canonically-ABSENT balance decodes here too — it is
+    ///         the amount head over zero, not an empty buffer — so a
+    ///         step crediting a fresh actor reads its pre-value through
+    ///         this function like any other.  That is why absence is a
+    ///         VALUE rather than a missing cell: the alternative would
+    ///         need a second read path exercised on the first line of
+    ///         the first handler.
+    function decodeAmount(bytes memory value) internal pure returns (uint256) {
+        if (value.length != CBE_AMOUNT_LEN) revert MalformedCellValue();
+        return _readAmount(value, 0);
+    }
+
+    /// @notice Read a big-endian unsigned integer of `width` bytes from
+    ///         the action fields.
+    ///
+    /// @dev    The action-field reader, BIG-endian — the CBE heads are
+    ///         little-endian and both orders live in this library, so
+    ///         the two are named apart rather than sharing one.  Widths
+    ///         are 8 for identifiers and 16 for amounts, per
+    ///         `actionFieldsForL1`; a caller passing the wrong one
+    ///         still decodes to a plausible number, which is why the
+    ///         offsets are pinned by `writeSetGoldens` over the ACTUAL
+    ///         field bytes rather than reasoned about.
+    function readFieldUint(bytes calldata fields, uint256 offset, uint256 width)
+        internal
+        pure
+        returns (uint256 v)
+    {
+        if (fields.length < offset + width) {
+            revert ActionFieldsTooShort(0, fields.length);
+        }
+        for (uint256 i = 0; i < width; i++) {
+            v = (v << 8) | uint256(uint8(fields[offset + i]));
+        }
     }
 
     /// @notice Decode an epoch-budget cell: two uints in sequence.
@@ -415,6 +473,29 @@ library StepWrites {
         return deriveChainPair(payerBal, poolBal, payer, poolActor, gasAmount, gasAmount);
     }
 
+    /// @notice `depositWithFee`: credit the recipient, then the pool.
+    /// @dev    Mirrors `VerifierWrites.deriveDepositWithFeeBalances`.
+    ///         The chained pair with TWO credits rather than a
+    ///         debit/credit, so it cannot route through
+    ///         `deriveChainPair` (whose `x` leg subtracts).
+    ///         `Laws.depositWithFee.pre` is `True`, like `deposit`'s —
+    ///         a bridge deposit's admissibility is settled by the
+    ///         bridge gate — so there is no branch, and the `x == y`
+    ///         case (a recipient who IS the pool actor) still has to
+    ///         net both credits onto one cell.
+    function deriveDepositWithFeeBalances(
+        uint256 recipientBal,
+        uint256 poolBal,
+        uint64 recipient,
+        uint64 poolActor,
+        uint256 userAmount,
+        uint256 poolAmount
+    ) internal pure returns (uint256 newRecipient, uint256 newPool) {
+        uint256 nx = recipientBal + userAmount;
+        uint256 ny = (recipient == poolActor ? nx : poolBal) + poolAmount;
+        return (recipient == poolActor ? ny : nx, ny);
+    }
+
     /// @notice `ammSwap`: credit the reserve at `fromResource`, debit
     ///         it at `toResource`.
     /// @dev    The one variant touching two DIFFERENT resources, so the
@@ -610,6 +691,21 @@ library StepWrites {
     ///         them — mirrors `FaultProof.FaultProofAdjudicable`.
     error ActionNotAdjudicable(uint8 actionKind);
 
+    /// @notice Whether the fault proof can adjudicate a step of this
+    ///         kind.  Mirrors `FaultProof.FaultProofAdjudicable`.
+    ///
+    /// @dev    A DECIDABLE predicate rather than a property implicit in
+    ///         `deriveWriteSet`'s arms, so a caller can refuse before
+    ///         doing any work and a deployment can express the
+    ///         restriction in its `AuthorityPolicy`.
+    ///
+    ///         False on exactly the two bulk variants — whose write set
+    ///         is the actor set at a resource, which an L1 holding only
+    ///         the pre-root cannot enumerate — and on unknown kinds.
+    function isAdjudicable(uint8 actionKind) internal pure returns (bool) {
+        return actionKind <= 24 && actionKind != 6 && actionKind != 7;
+    }
+
     /// @notice The action fields are shorter than the variant's layout.
     error ActionFieldsTooShort(uint8 actionKind, uint256 length);
 
@@ -746,14 +842,14 @@ library StepWrites {
             out[0] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 24)});
             out[1] = Cell({kind: 0, keyA: r, keyB: _fieldUint64(fields, 32)});
             _appendUniform(out, 2, signer);
-        } else if (actionKind == 6 || actionKind == 7) {
-            // The bulk pair: complete but not VERIFIABLE.  Fail closed.
-            revert ActionNotAdjudicable(actionKind);
         } else {
             // The kernel-identity family (3, 8, 9, 10, 11, 17, 18):
             // nothing but the uniform pair.  Enumerated by exclusion
             // rather than listed, since every one has the same set.
-            if (actionKind > 24) revert ActionNotAdjudicable(actionKind);
+            //
+            // The bulk pair and unknown kinds fall here too and are
+            // refused: their write set is complete but not VERIFIABLE.
+            if (!isAdjudicable(actionKind)) revert ActionNotAdjudicable(actionKind);
             out = new Cell[](2);
             _appendUniform(out, 0, signer);
         }

@@ -187,7 +187,7 @@ library SmtCellVerifier {
     /// @param  smtKey  the SMT key bytes.
     /// @param  d       the bit index (0 = MSB of byte 0).
     /// @return bit     1 if the bit is set, 0 otherwise.
-    function readKeyBitMSBFirst(bytes calldata smtKey, uint256 d)
+    function readKeyBitMSBFirst(bytes memory smtKey, uint256 d)
         internal
         pure
         returns (uint256 bit)
@@ -259,8 +259,8 @@ library SmtCellVerifier {
     ///                        `bitmask(32) || siblings(N x 32)`.
     /// @return root           the reconstructed root candidate.
     function recomputeRoot(
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
+        bytes memory smtKey,
+        bytes memory leafPreimage,
         bytes calldata proofData
     ) internal pure returns (bytes32 root) {
         root = recomputeRootFromLeaf(smtKey, keccak256(leafPreimage), proofData);
@@ -291,7 +291,7 @@ library SmtCellVerifier {
     ///                    `bitmask(32) || siblings(N x 32)`.
     /// @return root       the reconstructed root candidate.
     function recomputeRootFromLeaf(
-        bytes calldata smtKey,
+        bytes memory smtKey,
         bytes32 leaf,
         bytes calldata proofData
     ) internal pure returns (bytes32 root) {
@@ -376,8 +376,8 @@ library SmtCellVerifier {
     /// @return ok            true iff the proof verifies.
     function verifyCellProof(
         bytes32 root,
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
+        bytes memory smtKey,
+        bytes memory leafPreimage,
         bytes calldata proofData
     ) internal pure returns (bool ok) {
         // Well-formedness checks (mirror Lean's `isWellFormed`,

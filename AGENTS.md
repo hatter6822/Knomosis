@@ -791,7 +791,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.10.3`) — the single
+the `lakefile.lean` `version` field (currently `0.11.0`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -807,9 +807,9 @@ at the current version:
 |---------|-------|--------|-----------------|
 | Lean | ~3 210 | ~159 | `lake test` |
 | Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~957 passed | 62 forge suites | `cd solidity && forge test` |
+| Solidity | ~967 passed | 63 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **957 passed / 0 failed / 0 skipped** — the
+`forge test` runs **967 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +830,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 957 / 0 / 0.
+reports the same 967 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -1282,31 +1282,43 @@ non-trivial: two writes at the SAME cell, so a fold verifying both
 against the pre-root would accept the bundle and reach a root no state
 has.  The write SET is mirrored too (`writeSetGoldens` — all eighteen probed
 variants, from the actual field bytes, with the bulk pair and unknown
-kinds reverting `ActionNotAdjudicable`).  **Every component of the flip
-is now built and cross-stack verified**.  One design question stays
-open and is recorded in the plan: the fold takes one opening per write,
-each against the RUNNING root, which is the simple and obviously-sound
-arrangement but not the cheapest — a deduplicating pre-root multiproof
-is materially smaller on calldata, at the cost of having to sequence
-same-cell writes itself.  Chaining first, measure, then decide.  What
-remains is assembly inside `executeStep` — call `deriveWriteSet`, derive each value with
-`StepWrites`, fold with `StepVMMerkle.applyCellWrite`, return the
-result instead of `stepVMHash` — plus the corpus regeneration and
-retiring the old recipe.  The remaining risk is contract size and gas,
-not correctness.  `stepWriteBundle es st idx`
-takes the pre-state and reads its `newValue` column off
-`productionApplyBudget es st idx` — that is the sequencer's
+kinds reverting `ActionNotAdjudicable`; adjudicability itself is a
+corpus COLUMN across all twenty-five, so a variant excluded on one
+stack and not the other fails there rather than adjudicating
+one-sided).
+
+**The verifier is assembled.**  `KnomosisStepVMRoot.executeStepToRoot`
+takes a pre-root, the action, the signer, the log index, a read-only
+budget-policy opening and the chained write openings, and returns the
+post-state ROOT.  It re-derives the cell list, re-derives every cell's
+post-value, and folds — `writeBundleGoldens` drives the whole of it end
+to end over twenty probes against Lean's `stepPostRoot`, including the
+duplicate-cell shapes (`selfTransfer`, `depositWithFeeSelf`,
+`topUpActionBudgetForSelf`) and the no-op ones (`burnNoop`).  A NEW
+contract rather than a bigger `KnomosisStepVM`, which is already large;
+retiring the old recipe leaves one contract.  Why the derivation and
+not the submitted values: `stepWriteBundle es st idx` takes the
+pre-state and reads its `newValue` column off
+`productionApplyBudget es st idx` — that is the SEQUENCER's
 computation.  A verifier holding only the pre-root and a submitted
 bundle has neither, so folding what it is handed lets a responder
-choose the resulting root.  The fold adjudicates only over a write
-list the verifier derived itself, and that derivation is
-`productionApplyBudget` re-expressed cell-locally on both stacks
-(`.nonce` is `pre + 1` uniformly, `.epochBudget` is consume-then-grant
-against the proven policy cell uniformly, `.balance` is the
-per-variant arithmetic, and eight variants supply registry /
-local-policy / bridge cells from the action's own fields), each value
-in canonical CBE bytes.  That plus `executeStep` returning the fold's
-result is one consensus change.
+choose the resulting root.
+
+One design question stays open and is recorded in the plan: the fold
+takes one opening per write, each against the RUNNING root, which is
+the simple and obviously-sound arrangement but not the cheapest — a
+deduplicating pre-root multiproof is materially smaller on calldata, at
+the cost of having to sequence same-cell writes itself.  Chaining
+first, measure, then decide.
+
+**What remains is the wiring**, one consensus change:
+`terminateOnSingleStep` calling `executeStepToRoot` instead of
+`executeStep`, the observer emitting the CHAINED bundle
+`stepWriteBundle` produces (rather than
+`buildObserverCellProofs`' all-against-the-pre-root one), the Rust
+conduit and `method_selectors.json` following the terminate signature,
+and the retirement of `SolidityStepVMCommit.lean` + `stepVMHash` + the
+36 recipe-bound theorems.
 `docs/audits/19-findings-and-followups.md` records the blast radius
 and `docs/planning/state_root_merkleisation_plan.md` §4 step 3 is the
 specification.  Until it lands the fault-proof game must not be

@@ -83,24 +83,38 @@ and `terminateOnSingleStep` now authenticates the
 `(actionKind, actionFields, signer)` triple it is handed against the
 log-entry chain, which the state-roots-only chain could not do.
 
-**§0 still applies in full**, for three reasons rather than one:
+**The verifier that closes this is now built on both stacks.**
+`KnomosisStepVMRoot.executeStepToRoot` takes a pre-root, the action,
+the signer, the log index, a read-only budget-policy opening and the
+chained write openings, and returns a post-state ROOT.  It DERIVES
+both halves rather than accepting them — the cell list from
+`StepWrites.deriveWriteSet` (checked against the submitted bundle
+position by position, so a responder cannot omit a write) and each
+cell's value from `StepWrites` / `StepPlan`, which are
+`productionApplyBudget` re-expressed cell-locally.  Every derivation
+EVALUATES its law's precondition and returns the pre-values when it
+fails, so a failing precondition is a no-op rather than a revert.  The
+corpus's `writeBundleGoldens` drives it end to end against Lean's
+`stepPostRoot`.
 
-  1. `executeStep` still returns the bespoke hash.
-  2. Even folding proven writes would not be enough on its own.  The
-     verifier must DERIVE each written cell's new value from the
-     proven pre-values; a fold over a write list the responder
-     supplies lets them choose the resulting root.  That derivation —
-     `productionApplyBudget` re-expressed cell-locally, on both
-     stacks — is the largest remaining piece.
-  3. **A revert is not a verdict.**  `executeStep` reverts where
-     `step_impl` no-ops, and the terminal step is callable only by
-     whoever's turn it is, so any reverting input costs the
-     responsible party the game by timeout.  Reachable by a sequencer
-     that binds an inadmissible action into the log-entry chain.  The
-     Lean derivation already resolves it — every balance derivation
-     evaluates its law's precondition and returns the pre-values when
-     it fails — so the Solidity mirror inherits the fix; it is listed
-     here because the deployed contract does not have it yet.
+**§0 still applies in full**, because the game does not call it yet:
+
+  1. `KnomosisFaultProofGame.terminateOnSingleStep` still calls
+     `KnomosisStepVM.executeStep`, which returns the bespoke hash.
+     Until that call moves, the terminal comparison is still between
+     two different constructions and the honest sequencer still loses.
+  2. The observer still emits `buildObserverCellProofs`' bundle, whose
+     openings are ALL against the pre-root.  The fold needs the
+     CHAINED bundle `stepWriteBundle` produces — an opening goes stale
+     the moment a write lands — so a defender cannot yet produce a
+     bundle the new verifier accepts.
+  3. The terminate signature, and therefore
+     `runtime/tests/cross-stack/method_selectors.json` and the Rust
+     conduit, move with (1).
+
+`executeStep`'s revert-where-`step_impl`-no-ops behaviour is listed
+under (1) rather than separately: it is a property of the contract
+being replaced, and the replacement is total.
 
 **Operator obligation, in force now and after the flip: do not
 authorise the bulk laws.**  A deployment leaning on the fault proof
@@ -115,9 +129,9 @@ deployments using the adjudicator-quorum backstop.
 exactly those two.
 
 The remaining work is `docs/planning/state_root_merkleisation_plan.md`
-§4 step 3.  `docs/audits/19-findings-and-followups.md` ("Open
+§5's S7.  `docs/audits/19-findings-and-followups.md` ("Open
 critical: the fault-proof commit-recipe split") records the blast
-radius: `KnomosisStepVM`'s 25 per-variant handlers, the observer, and
+radius: the game's terminate call, the observer, the Rust conduit, and
 the step-VM fixture corpus.
 
 ---

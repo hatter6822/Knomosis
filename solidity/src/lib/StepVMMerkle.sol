@@ -116,8 +116,8 @@ library StepVMMerkle {
     ///                       `expectedRoot`.
     function verifyCellSmtProof(
         bytes32 expectedRoot,
-        bytes calldata smtKey,
-        bytes calldata leafPreimage,
+        bytes memory smtKey,
+        bytes memory leafPreimage,
         bytes calldata proofData
     ) internal pure returns (bool ok) {
         ok = SmtCellVerifier.verifyCellProof(expectedRoot, smtKey, leafPreimage, proofData);
@@ -151,7 +151,7 @@ library StepVMMerkle {
     /// @param newLeaf   the post-write leaf, from `cellLeafHash`.
     /// @param proofData the opening that verified against the pre-root.
     /// @return the post-write root.
-    function updateCellRoot(bytes calldata smtKey, bytes32 newLeaf, bytes calldata proofData)
+    function updateCellRoot(bytes memory smtKey, bytes32 newLeaf, bytes calldata proofData)
         internal
         pure
         returns (bytes32)
@@ -183,7 +183,7 @@ library StepVMMerkle {
     /// @param leafPreimage  `cbe(smtKey) || cbe(value)`, ignored when
     ///                      `isAbsent`.
     /// @return the leaf to walk from.
-    function cellLeafHash(bool isAbsent, bytes calldata leafPreimage)
+    function cellLeafHash(bool isAbsent, bytes memory leafPreimage)
         internal
         pure
         returns (bytes32)
@@ -224,11 +224,11 @@ library StepVMMerkle {
     /// @param  proofData  the opening, against `root`.
     function applyCellWrite(
         bytes32 root,
-        bytes calldata smtKey,
+        bytes memory smtKey,
         bool oldIsAbsent,
-        bytes calldata oldPreimage,
+        bytes memory oldPreimage,
         bool newIsAbsent,
-        bytes calldata newPreimage,
+        bytes memory newPreimage,
         bytes calldata proofData
     ) internal pure returns (bool ok, bytes32 newRoot) {
         bytes32 oldLeaf = cellLeafHash(oldIsAbsent, oldPreimage);
