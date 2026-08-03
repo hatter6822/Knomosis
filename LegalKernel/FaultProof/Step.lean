@@ -151,7 +151,7 @@ theorem kernelStepApply_empty_bundle_refused
           postStateCommit := claim, l2LogIndex := idx,
           policyOpening := policy, writeOpenings := [] } = none := by
   unfold kernelStepApply verifierPostRoot
-  simp only [h_adj, h_tag, h_pol, not_true, if_false, ne_eq, not_false_iff]
+  simp only [h_adj, h_tag, h_pol, not_true, if_false, ne_eq]
   -- The re-derived list is non-empty (`writeCells` names the nonce and
   -- the epoch budget on every variant), so the shape check refuses.
   cases sa.action <;> simp [verifierWriteCells, Action.writeCells]

@@ -116,6 +116,7 @@ bitwise-OR-versus-sum bridge that says nothing about the kernel.
 This module is **not** part of the trusted computing base.
 -/
 
+import LegalKernel.FaultProof.Frontier
 import LegalKernel.FaultProof.StepVMCoherence
 import LegalKernel.FaultProof.StepWriteSets
 
@@ -1681,6 +1682,328 @@ theorem deriveNonceCellValue_none_of_trailing (n : Nat) (b : UInt8)
     deriveNonceCellValue preValue = none := by
   unfold deriveNonceCellValue
   rw [h]
+
+/-! ## Alias consistency
+
+A plan may name the same balance cell twice — every aliasable variant
+reaches that case cheaply and permissionlessly (a self-transfer, a
+self-delegated top-up, a `depositWithFee` whose recipient is the pool).
+Under the chained fold that was harmless: each occurrence read the
+RUNNING value, so the second write simply landed the value the first
+one had.  A pre-root multiproof opens each cell ONCE, so the plan is
+consulted per cell rather than per occurrence, and the question "which
+entry wins" becomes real.
+
+The answer is that it cannot matter, and these lemmas are why: at an
+alias the two entries carry the same value in every variant.  Either
+the branch is guarded against the alias outright, or both entries are
+pre-values obtained from the SAME reader call at the SAME key — and a
+reader is a function.
+
+`plannedBalanceAt?` refuses a disagreeing duplicate rather than
+resolving one.  These lemmas say that refusal is unreachable, which is
+what makes it free; what it buys is that a future derivation bug fails
+closed instead of silently picking whichever entry the search finds
+first. -/
+
+/-- Alias consistency for a two-entry plan reduces to one implication:
+    if the keys coincide, the values must.  Every `derive*Balances`
+    result is at most two entries, so this is the whole obligation. -/
+theorem aliasConsistent_pair (k₁ k₂ : ResourceId × ActorId) (v₁ v₂ : Nat)
+    (h : k₁ = k₂ → v₁ = v₂) : aliasConsistent [(k₁, v₁), (k₂, v₂)] = true := by
+  by_cases hk : k₁ = k₂
+  · subst hk
+    have hv : v₁ = v₂ := h rfl
+    subst hv
+    simp [aliasConsistent]
+  · have hk' : ¬ k₂ = k₁ := fun he => hk he.symm
+    simp [aliasConsistent, hk, hk']
+
+/-- A singleton plan is trivially consistent. -/
+theorem aliasConsistent_singleton (k : ResourceId × ActorId) (v : Nat) :
+    aliasConsistent [(k, v)] = true := by simp [aliasConsistent]
+
+/-- The empty plan is trivially consistent. -/
+theorem aliasConsistent_nil :
+    aliasConsistent ([] : List ((ResourceId × ActorId) × Nat)) = true := by
+  simp [aliasConsistent]
+
+/-- **The chained pair is alias-consistent.**  Its `x = y` branch
+    already exists — it is what makes the chain's second read see the
+    first write — and it lands the SAME value in both slots, which is
+    the property the frontier needs.  Four of the aliasable variants
+    route through here, so they are covered at once. -/
+theorem deriveChainPair_alias_consistent (read : BalanceReader) (r : ResourceId)
+    (x y : ActorId) (fx fy : Nat → Nat)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveChainPair read r x y fx fy = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveChainPair at h
+  cases hx : read r x with
+  | none => rw [hx] at h; cases read r y <;> simp at h
+  | some bx =>
+    cases hy : read r y with
+    | none => rw [hx, hy] at h; simp at h
+    | some by' =>
+      rw [hx, hy] at h
+      simp only [Option.some.injEq] at h
+      subst h
+      refine aliasConsistent_pair _ _ _ _ (fun hk => ?_)
+      have hxy : x = y := (Prod.mk.injEq .. ▸ hk).2
+      simp [hxy]
+
+/-- A pair of PRE-VALUES read at two keys is alias-consistent: when the
+    keys coincide the two values come from the same reader call, and a
+    reader is a function.  This is the shape every refusal branch
+    takes — a failing precondition leaves both cells alone. -/
+theorem aliasConsistent_read_pair (read : BalanceReader) (r₁ r₂ : ResourceId)
+    (a₁ a₂ : ActorId) (v₁ v₂ : Nat)
+    (h₁ : read r₁ a₁ = some v₁) (h₂ : read r₂ a₂ = some v₂) :
+    aliasConsistent [((r₁, a₁), v₁), ((r₂, a₂), v₂)] = true := by
+  refine aliasConsistent_pair _ _ _ _ (fun hk => ?_)
+  have hr : r₁ = r₂ := (Prod.mk.injEq .. ▸ hk).1
+  have ha : a₁ = a₂ := (Prod.mk.injEq .. ▸ hk).2
+  subst hr; subst ha
+  rw [h₁] at h₂
+  exact (Option.some.injEq .. ▸ h₂)
+
+/-- `deriveTransferBalances` is alias-consistent.  Its `sender =
+    receiver` branch already lands the same value in both slots (which
+    is why the corpus cannot tell a first-occurrence rule from a
+    last-occurrence one); the refusal branch is a pair of pre-values. -/
+theorem deriveTransferBalances_alias_consistent (read : BalanceReader)
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveTransferBalances read r sender receiver amount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveTransferBalances at h
+  cases hs : read r sender with
+  | none => rw [hs] at h; cases read r receiver <;> simp at h
+  | some sBal =>
+    cases hr : read r receiver with
+    | none => rw [hs, hr] at h; simp at h
+    | some rBal =>
+      rw [hs, hr] at h
+      simp only [] at h
+      by_cases hpre : amount > 0 ∧ amount ≤ sBal
+      · rw [if_pos hpre] at h
+        by_cases hsr : sender = receiver
+        · rw [if_pos hsr] at h
+          simp only [Option.some.injEq] at h
+          subst h
+          exact aliasConsistent_pair _ _ _ _ (fun _ => rfl)
+        · rw [if_neg hsr] at h
+          simp only [Option.some.injEq] at h
+          subst h
+          refine aliasConsistent_pair _ _ _ _ (fun hk => ?_)
+          exact absurd ((Prod.mk.injEq ..).mp hk).2 hsr
+      · rw [if_neg hpre] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        exact aliasConsistent_read_pair read r r sender receiver sBal rBal hs hr
+
+/-- `deriveTopUpBalances` is alias-consistent: the admitted branch is a
+    chained pair, the refusal branch a pair of pre-values. -/
+theorem deriveTopUpBalances_alias_consistent (read : BalanceReader)
+    (gr : ResourceId) (payer poolActor : ActorId) (gasAmount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveTopUpBalances read gr payer poolActor gasAmount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveTopUpBalances at h
+  cases hp : read gr payer with
+  | none => rw [hp] at h; simp at h
+  | some payerBal =>
+    rw [hp] at h
+    simp only [] at h
+    by_cases hpre : gasAmount ≤ payerBal
+    · rw [if_pos hpre] at h
+      exact deriveChainPair_alias_consistent read gr payer poolActor _ _ plan h
+    · rw [if_neg hpre] at h
+      cases hq : read gr poolActor with
+      | none => rw [hq] at h; simp at h
+      | some poolBal =>
+        rw [hq] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        exact aliasConsistent_read_pair read gr gr payer poolActor payerBal poolBal hp hq
+
+/-- `deriveRefundBalances` is alias-consistent, by the same split. -/
+theorem deriveRefundBalances_alias_consistent (read : BalanceReader)
+    (gr : ResourceId) (poolActor claimant : ActorId) (refundAmount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveRefundBalances read gr poolActor claimant refundAmount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveRefundBalances at h
+  cases hp : read gr poolActor with
+  | none => rw [hp] at h; simp at h
+  | some poolBal =>
+    rw [hp] at h
+    simp only [] at h
+    by_cases hpre : refundAmount ≤ poolBal
+    · rw [if_pos hpre] at h
+      exact deriveChainPair_alias_consistent read gr poolActor claimant _ _ plan h
+    · rw [if_neg hpre] at h
+      cases hq : read gr claimant with
+      | none => rw [hq] at h; simp at h
+      | some claimBal =>
+        rw [hq] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        exact aliasConsistent_read_pair read gr gr poolActor claimant poolBal claimBal hp hq
+
+/-- `deriveAmmSwapBalances` is alias-consistent.  Its two cells are at
+    DIFFERENT resources in the admitted branch — `fromResource ≠
+    toResource` is a precondition conjunct — and both are pre-values in
+    the refusal branch. -/
+theorem deriveAmmSwapBalances_alias_consistent (read : BalanceReader)
+    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId) (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveAmmSwapBalances read fromResource toResource amountIn amountOut
+           ammReserveActor = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveAmmSwapBalances at h
+  cases hf : read fromResource ammReserveActor with
+  | none => rw [hf] at h; cases read toResource ammReserveActor <;> simp at h
+  | some fromBal =>
+    cases ht : read toResource ammReserveActor with
+    | none => rw [hf, ht] at h; simp at h
+    | some toBal =>
+      rw [hf, ht] at h
+      simp only [] at h
+      by_cases hpre : toBal ≥ amountOut ∧ fromResource ≠ toResource ∧ amountIn > 0
+      · rw [if_pos hpre] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        refine aliasConsistent_pair _ _ _ _ (fun hk => ?_)
+        exact absurd ((Prod.mk.injEq ..).mp hk).1 hpre.2.1
+      · rw [if_neg hpre] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        exact aliasConsistent_read_pair read fromResource toResource
+          ammReserveActor ammReserveActor fromBal toBal hf ht
+
+/-- `deriveReclaimBalances` is alias-consistent: `reserveActor ≠
+    poolActor` guards the admitted branch, and the refusal branch is a
+    pair of pre-values. -/
+theorem deriveReclaimBalances_alias_consistent (read : BalanceReader)
+    (r : ResourceId) (reserveActor poolActor : ActorId) (amount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveReclaimBalances read r reserveActor poolActor amount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveReclaimBalances at h
+  cases hs : read r reserveActor with
+  | none => rw [hs] at h; simp at h
+  | some reserveBal =>
+    rw [hs] at h
+    simp only [] at h
+    by_cases hpre : reserveBal = amount ∧ reserveActor ≠ poolActor ∧ amount > 0
+    · rw [if_pos hpre] at h
+      exact deriveChainPair_alias_consistent read r reserveActor poolActor _ _ plan h
+    · rw [if_neg hpre] at h
+      cases hq : read r poolActor with
+      | none => rw [hq] at h; simp at h
+      | some poolBal =>
+        rw [hq] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        exact aliasConsistent_read_pair read r r reserveActor poolActor
+          reserveBal poolBal hs hq
+
+/-- `deriveDelegatedTopUpBalances` is alias-consistent, by the same
+    split as its self-service sibling. -/
+theorem deriveDelegatedTopUpBalances_alias_consistent (read : BalanceReader)
+    (gr : ResourceId) (payer poolActor recipient : ActorId) (gasAmount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveDelegatedTopUpBalances read gr payer poolActor recipient gasAmount
+           = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveDelegatedTopUpBalances at h
+  cases hp : read gr payer with
+  | none => rw [hp] at h; simp at h
+  | some payerBal =>
+    rw [hp] at h
+    simp only [] at h
+    by_cases hpre : gasAmount ≤ payerBal ∧ recipient ≠ payer
+    · rw [if_pos hpre] at h
+      exact deriveChainPair_alias_consistent read gr payer poolActor _ _ plan h
+    · rw [if_neg hpre] at h
+      cases hq : read gr poolActor with
+      | none => rw [hq] at h; simp at h
+      | some poolBal =>
+        rw [hq] at h
+        simp only [Option.some.injEq] at h
+        subst h
+        exact aliasConsistent_read_pair read gr gr payer poolActor payerBal poolBal hp hq
+
+/-- The four single-cell derivations are alias-consistent: one entry
+    cannot alias anything. -/
+theorem deriveCreditBalance_alias_consistent (read : BalanceReader)
+    (r : ResourceId) (to : ActorId) (amount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveCreditBalance read r to amount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveCreditBalance at h
+  cases hb : read r to with
+  | none => rw [hb] at h; simp at h
+  | some bal =>
+    rw [hb] at h
+    simp only [] at h
+    by_cases hpos : amount > 0
+    · rw [if_pos hpos] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
+    · rw [if_neg hpos] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
+
+/-- `deriveBurnBalance` writes one cell. -/
+theorem deriveBurnBalance_alias_consistent (read : BalanceReader)
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveBurnBalance read r fromActor amount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveBurnBalance at h
+  cases hb : read r fromActor with
+  | none => rw [hb] at h; simp at h
+  | some bal =>
+    rw [hb] at h
+    simp only [] at h
+    by_cases hpre : amount > 0 ∧ amount ≤ bal
+    · rw [if_pos hpre] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
+    · rw [if_neg hpre] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
+
+/-- `deriveDepositBalance` writes one cell. -/
+theorem deriveDepositBalance_alias_consistent (read : BalanceReader)
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveDepositBalance read r recipient amount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveDepositBalance at h
+  cases hb : read r recipient with
+  | none => rw [hb] at h; simp at h
+  | some bal =>
+    rw [hb] at h
+    simp only [Option.some.injEq] at h
+    subst h
+    exact aliasConsistent_singleton _ _
+
+/-- `deriveWithdrawBalance` writes one cell. -/
+theorem deriveWithdrawBalance_alias_consistent (read : BalanceReader)
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (plan : List ((ResourceId × ActorId) × Nat))
+    (h : deriveWithdrawBalance read r sender amount = some plan) :
+    aliasConsistent plan = true := by
+  unfold deriveWithdrawBalance at h
+  cases hb : read r sender with
+  | none => rw [hb] at h; simp at h
+  | some bal =>
+    rw [hb] at h
+    simp only [] at h
+    by_cases hpre : 0 < amount ∧ amount ≤ bal
+    · rw [if_pos hpre] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
+    · rw [if_neg hpre] at h; simp only [Option.some.injEq] at h; subst h
+      exact aliasConsistent_singleton _ _
 
 end FaultProof
 end LegalKernel

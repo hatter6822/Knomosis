@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "e480a4a3aab957aff294715386027b98711df2b078f90657ee3bed8caad4ab8c"
+    "source_digest": "346278c5fea2f1b250f9d211a04c6316f47ba3f455b296a24d9d83e285b3a931"
   },
   "summary": {
-    "module_count": 332,
-    "declaration_count": 5715
+    "module_count": 334,
+    "declaration_count": 5758
   },
   "modules": [
     {
@@ -17960,7 +17960,9 @@
           "kind": "namespace",
           "name": "Encoding",
           "line": 50,
-          "called": []
+          "called": [
+            "LegalKernel.FaultProof"
+          ]
         },
         {
           "kind": "def",
@@ -18120,7 +18122,8 @@
           "name": "Encoding",
           "line": 50,
           "called": [
-            "LegalKernel"
+            "LegalKernel",
+            "LegalKernel.FaultProof"
           ]
         },
         {
@@ -22883,6 +22886,212 @@
             "FaultProof",
             "LegalKernel",
             "gameState_encode_deterministic"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.FaultProof.Frontier",
+      "path": "LegalKernel/FaultProof/Frontier.lean",
+      "declaration_count": 23,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.FaultProof",
+          "line": 55,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "divBelow",
+          "line": 65,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "divLevel",
+          "line": 77,
+          "called": [
+            "divBelow",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "pathLess",
+          "line": 81,
+          "called": [
+            "divBelow",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "divBelow_bit_ne",
+          "line": 87,
+          "called": [
+            "divBelow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "divBelow_lt",
+          "line": 105,
+          "called": [
+            "divBelow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "divBelow_comm",
+          "line": 123,
+          "called": [
+            "divBelow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "divLevel_comm",
+          "line": 137,
+          "called": [
+            "divBelow_comm",
+            "divLevel"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "pathLess_irrefl",
+          "line": 141,
+          "called": [
+            "divBelow",
+            "pathLess"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "adjacent_div_ne",
+          "line": 158,
+          "called": [
+            "divBelow",
+            "divBelow_bit_ne",
+            "pathLess",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "frontierInsert",
+          "line": 185,
+          "called": [
+            "CellTag",
+            "pathLess",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "frontierOf",
+          "line": 193,
+          "called": [
+            "CellTag",
+            "frontierInsert"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "pathSorted",
+          "line": 199,
+          "called": [
+            "CellTag",
+            "pathLess",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "frontierShapeOk",
+          "line": 214,
+          "called": [
+            "CellTag",
+            "frontierOf",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "adjacentDivs",
+          "line": 226,
+          "called": [
+            "divLevel"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "activeAt",
+          "line": 233,
+          "called": [
+            "adjacentDivs"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "mergesAt",
+          "line": 237,
+          "called": [
+            "adjacentDivs"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gapsAt",
+          "line": 243,
+          "called": [
+            "activeAt",
+            "mergesAt"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gapCount",
+          "line": 247,
+          "called": [
+            "gapsAt",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "gapCountClosed",
+          "line": 254,
+          "called": [
+            "adjacentDivs",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "aliasConsistent",
+          "line": 273,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "plannedBalanceAt?",
+          "line": 278,
+          "called": [
+            "ActorId",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "plannedBalanceAt?_of_aliasConsistent",
+          "line": 286,
+          "called": [
+            "ActorId",
+            "LegalKernel.FaultProof",
+            "ResourceId",
+            "plannedBalanceAt?"
           ]
         }
       ]
@@ -27880,6 +28089,7 @@
           "line": 144,
           "called": [
             "LegalKernel.Bridge",
+            "LegalKernel.FaultProof",
             "LegalKernel.Runtime"
           ]
         },
@@ -28086,7 +28296,9 @@
           "kind": "namespace",
           "name": "Authority",
           "line": 42,
-          "called": []
+          "called": [
+            "LegalKernel.FaultProof"
+          ]
         },
         {
           "kind": "def",
@@ -29304,18 +29516,18 @@
     {
       "module": "LegalKernel.FaultProof.Terminate",
       "path": "LegalKernel/FaultProof/Terminate.lean",
-      "declaration_count": 17,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 53,
+          "line": 54,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 54,
+          "line": 55,
           "called": [
             "LegalKernel.Bridge",
             "LegalKernel.Runtime"
@@ -29324,7 +29536,7 @@
         {
           "kind": "structure",
           "name": "CellOpening",
-          "line": 72,
+          "line": 73,
           "called": [
             "CellTag",
             "SmtCellProof"
@@ -29333,7 +29545,7 @@
         {
           "kind": "def",
           "name": "CellOpening.ofStateCellWrite",
-          "line": 85,
+          "line": 86,
           "called": [
             "CellOpening",
             "StateCellWrite"
@@ -29342,7 +29554,7 @@
         {
           "kind": "def",
           "name": "stepOpenings",
-          "line": 90,
+          "line": 91,
           "called": [
             "CellOpening",
             "CellOpening.ofStateCellWrite",
@@ -29355,7 +29567,7 @@
         {
           "kind": "def",
           "name": "policyOpening",
-          "line": 99,
+          "line": 100,
           "called": [
             "CellOpening",
             "ExtendedState",
@@ -29367,7 +29579,7 @@
         {
           "kind": "def",
           "name": "openingCellProof",
-          "line": 111,
+          "line": 112,
           "called": [
             "CellOpening",
             "CellProof",
@@ -29378,7 +29590,7 @@
         {
           "kind": "def",
           "name": "verifierWriteCells",
-          "line": 126,
+          "line": 127,
           "called": [
             "Action",
             "ActorId",
@@ -29389,7 +29601,7 @@
         {
           "kind": "theorem",
           "name": "verifierWriteCells_eq_writeCellsAt",
-          "line": 141,
+          "line": 142,
           "called": [
             "Action",
             "Action.stateWriteCells",
@@ -29408,7 +29620,7 @@
         {
           "kind": "def",
           "name": "preStateValueAt",
-          "line": 164,
+          "line": 165,
           "called": [
             "CellOpening",
             "CellTag"
@@ -29417,7 +29629,7 @@
         {
           "kind": "def",
           "name": "openingBalanceReader",
-          "line": 173,
+          "line": 174,
           "called": [
             "BalanceReader",
             "CellOpening",
@@ -29427,7 +29639,7 @@
         {
           "kind": "def",
           "name": "provenNextWdId",
-          "line": 190,
+          "line": 191,
           "called": [
             "CellOpening",
             "preStateValueAt"
@@ -29436,7 +29648,7 @@
         {
           "kind": "def",
           "name": "plannedBalances",
-          "line": 210,
+          "line": 211,
           "called": [
             "Action",
             "ActorId",
@@ -29473,7 +29685,7 @@
         {
           "kind": "def",
           "name": "plannedBalanceAt",
-          "line": 242,
+          "line": 243,
           "called": [
             "ActorId",
             "ResourceId"
@@ -29482,7 +29694,7 @@
         {
           "kind": "def",
           "name": "derivedCellValue",
-          "line": 251,
+          "line": 252,
           "called": [
             "Action",
             "ActorId",
@@ -29508,7 +29720,7 @@
         {
           "kind": "def",
           "name": "foldEntry",
-          "line": 309,
+          "line": 310,
           "called": [
             "Action",
             "ActorId",
@@ -29521,14 +29733,12 @@
         {
           "kind": "def",
           "name": "verifierPostRoot",
-          "line": 327,
+          "line": 328,
           "called": [
             "Action",
             "ActorId",
             "CellOpening",
-            "FaultProof",
             "FaultProofAdjudicable",
-            "LegalKernel",
             "StateCommit",
             "foldEntry",
             "foldStateCellWrites",
@@ -29538,6 +29748,48 @@
             "provenNextWdId",
             "verifierWriteCells",
             "verifyStateCellProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "plannedBalances_alias_consistent",
+          "line": 365,
+          "called": [
+            "Action",
+            "ActorId",
+            "BalanceReader",
+            "FaultProof",
+            "LegalKernel",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_nil",
+            "ammSwap",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "deriveAmmSwapBalances_alias_consistent",
+            "deriveBurnBalance_alias_consistent",
+            "deriveChainPair_alias_consistent",
+            "deriveCreditBalance_alias_consistent",
+            "deriveDelegatedTopUpBalances_alias_consistent",
+            "deriveDepositBalance_alias_consistent",
+            "deriveReclaimBalances_alias_consistent",
+            "deriveRefundBalances_alias_consistent",
+            "deriveTopUpBalances_alias_consistent",
+            "deriveTransferBalances_alias_consistent",
+            "deriveWithdrawBalance_alias_consistent",
+            "mint",
+            "plannedBalances",
+            "poolActor",
+            "receiver",
+            "reclaimAmmReserves",
+            "reward",
+            "sender",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "withdraw"
           ]
         }
       ]
@@ -29564,6 +29816,7 @@
           "name": "TerminateBundle",
           "line": 89,
           "called": [
+            "LegalKernel.FaultProof",
             "LegalKernel.Runtime"
           ]
         },
@@ -30160,18 +30413,18 @@
     {
       "module": "LegalKernel.FaultProof.VerifierWrites",
       "path": "LegalKernel/FaultProof/VerifierWrites.lean",
-      "declaration_count": 68,
+      "declaration_count": 83,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 121,
+          "line": 122,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "FaultProof",
-          "line": 122,
+          "line": 123,
           "called": [
             "LegalKernel.Runtime"
           ]
@@ -30179,13 +30432,13 @@
         {
           "kind": "def",
           "name": "deriveNonceCellValue",
-          "line": 143,
+          "line": 144,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "productionApplyBudget_expectsNonce_signer",
-          "line": 156,
+          "line": 157,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -30199,7 +30452,7 @@
         {
           "kind": "theorem",
           "name": "decode_nonceCell",
-          "line": 181,
+          "line": 182,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30210,7 +30463,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_correct",
-          "line": 209,
+          "line": 210,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -30225,7 +30478,7 @@
         {
           "kind": "theorem",
           "name": "productionApplyBudget_epochBudgets_eq",
-          "line": 249,
+          "line": 250,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -30243,7 +30496,7 @@
         {
           "kind": "def",
           "name": "applyGrantAt",
-          "line": 288,
+          "line": 289,
           "called": [
             "Action",
             "ActorBudget",
@@ -30257,7 +30510,7 @@
         {
           "kind": "theorem",
           "name": "budgetGrant_getD_eq_applyGrantAt",
-          "line": 301,
+          "line": 302,
           "called": [
             "Action",
             "ActorId",
@@ -30274,7 +30527,7 @@
         {
           "kind": "def",
           "name": "deriveEpochBudget",
-          "line": 342,
+          "line": 343,
           "called": [
             "Action",
             "ActorBudget",
@@ -30289,7 +30542,7 @@
         {
           "kind": "theorem",
           "name": "deriveEpochBudget_correct",
-          "line": 369,
+          "line": 370,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30308,7 +30561,7 @@
         {
           "kind": "def",
           "name": "decodeEpochBudgetCellValue",
-          "line": 422,
+          "line": 423,
           "called": [
             "ActorBudget"
           ]
@@ -30316,7 +30569,7 @@
         {
           "kind": "def",
           "name": "encodeEpochBudgetCellValue",
-          "line": 431,
+          "line": 432,
           "called": [
             "ActorBudget"
           ]
@@ -30324,7 +30577,7 @@
         {
           "kind": "theorem",
           "name": "decode_epochBudgetCell",
-          "line": 442,
+          "line": 443,
           "called": [
             "ActorBudget",
             "ActorId",
@@ -30337,7 +30590,7 @@
         {
           "kind": "def",
           "name": "deriveEpochBudgetCellValue",
-          "line": 493,
+          "line": 494,
           "called": [
             "Action",
             "ActorId",
@@ -30350,7 +30603,7 @@
         {
           "kind": "theorem",
           "name": "decode_budgetPolicyCell",
-          "line": 512,
+          "line": 513,
           "called": [
             "ExtendedState",
             "actionCost",
@@ -30362,7 +30615,7 @@
         {
           "kind": "theorem",
           "name": "deriveEpochBudgetCellValue_correct",
-          "line": 547,
+          "line": 548,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30383,7 +30636,7 @@
         {
           "kind": "abbrev",
           "name": "BalanceReader",
-          "line": 602,
+          "line": 603,
           "called": [
             "ActorId",
             "ResourceId"
@@ -30392,7 +30645,7 @@
         {
           "kind": "def",
           "name": "stateBalanceReader",
-          "line": 606,
+          "line": 607,
           "called": [
             "BalanceReader",
             "ExtendedState",
@@ -30402,7 +30655,7 @@
         {
           "kind": "def",
           "name": "deriveTransferBalances",
-          "line": 620,
+          "line": 621,
           "called": [
             "ActorId",
             "Amount",
@@ -30415,7 +30668,7 @@
         {
           "kind": "theorem",
           "name": "deriveTransferBalances_correct",
-          "line": 640,
+          "line": 641,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30440,7 +30693,7 @@
         {
           "kind": "def",
           "name": "deriveCreditBalance",
-          "line": 706,
+          "line": 707,
           "called": [
             "ActorId",
             "Amount",
@@ -30451,7 +30704,7 @@
         {
           "kind": "def",
           "name": "deriveBurnBalance",
-          "line": 716,
+          "line": 717,
           "called": [
             "ActorId",
             "Amount",
@@ -30462,7 +30715,7 @@
         {
           "kind": "theorem",
           "name": "deriveCreditBalance_correct_mint",
-          "line": 726,
+          "line": 727,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30484,7 +30737,7 @@
         {
           "kind": "theorem",
           "name": "deriveCreditBalance_correct_reward",
-          "line": 749,
+          "line": 750,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30506,7 +30759,7 @@
         {
           "kind": "theorem",
           "name": "deriveBurnBalance_correct",
-          "line": 771,
+          "line": 772,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30528,7 +30781,7 @@
         {
           "kind": "def",
           "name": "deriveDepositBalance",
-          "line": 803,
+          "line": 804,
           "called": [
             "ActorId",
             "Amount",
@@ -30539,7 +30792,7 @@
         {
           "kind": "def",
           "name": "deriveWithdrawBalance",
-          "line": 812,
+          "line": 813,
           "called": [
             "ActorId",
             "Amount",
@@ -30551,7 +30804,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositBalance_correct",
-          "line": 822,
+          "line": 823,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30573,7 +30826,7 @@
         {
           "kind": "theorem",
           "name": "deriveWithdrawBalance_correct",
-          "line": 841,
+          "line": 842,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30596,7 +30849,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_chain_pair",
-          "line": 881,
+          "line": 882,
           "called": [
             "ActorId",
             "ResourceId",
@@ -30609,7 +30862,7 @@
         {
           "kind": "theorem",
           "name": "getBalance_chain_pair_first",
-          "line": 897,
+          "line": 898,
           "called": [
             "ActorId",
             "ResourceId",
@@ -30622,7 +30875,7 @@
         {
           "kind": "def",
           "name": "deriveChainPair",
-          "line": 914,
+          "line": 915,
           "called": [
             "ActorId",
             "BalanceReader",
@@ -30632,7 +30885,7 @@
         {
           "kind": "theorem",
           "name": "deriveChainPair_correct",
-          "line": 924,
+          "line": 925,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30648,7 +30901,7 @@
         {
           "kind": "def",
           "name": "deriveTopUpBalances",
-          "line": 954,
+          "line": 955,
           "called": [
             "ActorId",
             "Amount",
@@ -30661,7 +30914,7 @@
         {
           "kind": "def",
           "name": "deriveRefundBalances",
-          "line": 970,
+          "line": 971,
           "called": [
             "ActorId",
             "Amount",
@@ -30676,7 +30929,7 @@
         {
           "kind": "def",
           "name": "deriveDepositWithFeeBalances",
-          "line": 988,
+          "line": 989,
           "called": [
             "ActorId",
             "Amount",
@@ -30689,7 +30942,7 @@
         {
           "kind": "theorem",
           "name": "deriveTopUpBalances_correct",
-          "line": 996,
+          "line": 997,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30711,7 +30964,7 @@
         {
           "kind": "theorem",
           "name": "deriveRefundBalances_correct",
-          "line": 1018,
+          "line": 1019,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30732,7 +30985,7 @@
         {
           "kind": "theorem",
           "name": "deriveDepositWithFeeBalances_correct",
-          "line": 1046,
+          "line": 1047,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30755,7 +31008,7 @@
         {
           "kind": "def",
           "name": "deriveDelegatedTopUpBalances",
-          "line": 1073,
+          "line": 1074,
           "called": [
             "ActorId",
             "Amount",
@@ -30768,7 +31021,7 @@
         {
           "kind": "def",
           "name": "deriveReclaimBalances",
-          "line": 1092,
+          "line": 1093,
           "called": [
             "ActorId",
             "Amount",
@@ -30781,7 +31034,7 @@
         {
           "kind": "theorem",
           "name": "deriveDelegatedTopUpBalances_correct",
-          "line": 1109,
+          "line": 1110,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30803,7 +31056,7 @@
         {
           "kind": "theorem",
           "name": "deriveReclaimBalances_correct",
-          "line": 1135,
+          "line": 1136,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30826,7 +31079,7 @@
         {
           "kind": "def",
           "name": "deriveAmmSwapBalances",
-          "line": 1166,
+          "line": 1167,
           "called": [
             "ActorId",
             "Amount",
@@ -30838,7 +31091,7 @@
         {
           "kind": "theorem",
           "name": "deriveAmmSwapBalances_correct",
-          "line": 1180,
+          "line": 1181,
           "called": [
             "Action.toTransition",
             "ActorId",
@@ -30862,13 +31115,13 @@
         {
           "kind": "def",
           "name": "deriveRegistryCellValue",
-          "line": 1243,
+          "line": 1244,
           "called": []
         },
         {
           "kind": "def",
           "name": "deriveDeclaredPolicyCellValue",
-          "line": 1247,
+          "line": 1248,
           "called": [
             "policy"
           ]
@@ -30876,13 +31129,13 @@
         {
           "kind": "def",
           "name": "deriveRevokedPolicyCellValue",
-          "line": 1259,
+          "line": 1260,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "deriveRegistryCellValue_correct_replaceKey",
-          "line": 1262,
+          "line": 1263,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30898,7 +31151,7 @@
         {
           "kind": "theorem",
           "name": "deriveRegistryCellValue_correct_registerIdentity",
-          "line": 1286,
+          "line": 1287,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30914,7 +31167,7 @@
         {
           "kind": "theorem",
           "name": "deriveDeclaredPolicyCellValue_correct",
-          "line": 1310,
+          "line": 1311,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -30930,7 +31183,7 @@
         {
           "kind": "theorem",
           "name": "deriveDeclaredPolicyCellValue_eq_actionFields",
-          "line": 1349,
+          "line": 1350,
           "called": [
             "deriveDeclaredPolicyCellValue",
             "policy"
@@ -30939,7 +31192,7 @@
         {
           "kind": "theorem",
           "name": "registry_key_is_action_fields_tail",
-          "line": 1359,
+          "line": 1360,
           "called": [
             "ActorId"
           ]
@@ -30947,7 +31200,7 @@
         {
           "kind": "theorem",
           "name": "deriveRevokedPolicyCellValue_correct",
-          "line": 1373,
+          "line": 1374,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -30962,25 +31215,25 @@
         {
           "kind": "def",
           "name": "deriveConsumedCellValue",
-          "line": 1419,
+          "line": 1420,
           "called": []
         },
         {
           "kind": "def",
           "name": "derivePendingCellValue",
-          "line": 1423,
+          "line": 1424,
           "called": []
         },
         {
           "kind": "def",
           "name": "deriveNextWdIdCellValue",
-          "line": 1431,
+          "line": 1432,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "deriveConsumedCellValue_correct_deposit",
-          "line": 1437,
+          "line": 1438,
           "called": [
             "ActorId",
             "Amount",
@@ -30999,7 +31252,7 @@
         {
           "kind": "theorem",
           "name": "deriveConsumedCellValue_correct_depositWithFee",
-          "line": 1471,
+          "line": 1472,
           "called": [
             "ActorId",
             "Amount",
@@ -31019,7 +31272,7 @@
         {
           "kind": "theorem",
           "name": "derivePendingCellValue_correct",
-          "line": 1509,
+          "line": 1510,
           "called": [
             "ActorId",
             "Amount",
@@ -31038,7 +31291,7 @@
         {
           "kind": "theorem",
           "name": "deriveNextWdIdCellValue_correct",
-          "line": 1538,
+          "line": 1539,
           "called": [
             "ActorId",
             "Amount",
@@ -31057,7 +31310,7 @@
         {
           "kind": "def",
           "name": "FaultProofAdjudicable",
-          "line": 1606,
+          "line": 1607,
           "called": [
             "Action",
             "distributeOthers",
@@ -31067,7 +31320,7 @@
         {
           "kind": "theorem",
           "name": "writeCellsAt_eq_writeCells_of_adjudicable",
-          "line": 1615,
+          "line": 1616,
           "called": [
             "Action",
             "Action.writeCellsAt_eq_writeCells",
@@ -31082,7 +31335,7 @@
         {
           "kind": "theorem",
           "name": "writeCellsAt_withdraw_from_proven_counter",
-          "line": 1631,
+          "line": 1632,
           "called": [
             "ActorId",
             "Amount",
@@ -31095,7 +31348,7 @@
         {
           "kind": "theorem",
           "name": "faultProofAdjudicable_eq_false_iff",
-          "line": 1644,
+          "line": 1645,
           "called": [
             "Action",
             "FaultProofAdjudicable",
@@ -31106,7 +31359,7 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_malformed",
-          "line": 1663,
+          "line": 1664,
           "called": [
             "deriveNonceCellValue"
           ]
@@ -31114,11 +31367,222 @@
         {
           "kind": "theorem",
           "name": "deriveNonceCellValue_none_of_trailing",
-          "line": 1677,
+          "line": 1678,
           "called": [
+            "deriveNonceCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "aliasConsistent_pair",
+          "line": 1711,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "aliasConsistent"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "aliasConsistent_singleton",
+          "line": 1722,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "aliasConsistent"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "aliasConsistent_nil",
+          "line": 1726,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "aliasConsistent"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveChainPair_alias_consistent",
+          "line": 1735,
+          "called": [
+            "ActorId",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_pair",
+            "deriveChainPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "aliasConsistent_read_pair",
+          "line": 1758,
+          "called": [
+            "ActorId",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_pair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveTransferBalances_alias_consistent",
+          "line": 1773,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_pair",
+            "aliasConsistent_read_pair",
+            "deriveTransferBalances",
+            "receiver",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveTopUpBalances_alias_consistent",
+          "line": 1806,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_read_pair",
+            "deriveChainPair_alias_consistent",
+            "deriveTopUpBalances",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveRefundBalances_alias_consistent",
+          "line": 1830,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_read_pair",
+            "claimant",
+            "deriveChainPair_alias_consistent",
+            "deriveRefundBalances",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveAmmSwapBalances_alias_consistent",
+          "line": 1857,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_pair",
+            "aliasConsistent_read_pair",
+            "ammReserveActor",
+            "deriveAmmSwapBalances"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveReclaimBalances_alias_consistent",
+          "line": 1887,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_read_pair",
+            "deriveChainPair_alias_consistent",
+            "deriveReclaimBalances",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDelegatedTopUpBalances_alias_consistent",
+          "line": 1913,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_read_pair",
+            "deriveChainPair_alias_consistent",
+            "deriveDelegatedTopUpBalances",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveCreditBalance_alias_consistent",
+          "line": 1939,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_singleton",
+            "deriveCreditBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveBurnBalance_alias_consistent",
+          "line": 1957,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_singleton",
+            "deriveBurnBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDepositBalance_alias_consistent",
+          "line": 1975,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_singleton",
+            "deriveDepositBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveWithdrawBalance_alias_consistent",
+          "line": 1990,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
             "FaultProof",
             "LegalKernel",
-            "deriveNonceCellValue"
+            "ResourceId",
+            "aliasConsistent",
+            "aliasConsistent_singleton",
+            "deriveWithdrawBalance",
+            "sender"
           ]
         }
       ]
@@ -35351,7 +35815,9 @@
           "kind": "namespace",
           "name": "LegalKernel.Runtime.CellProofJson",
           "line": 49,
-          "called": []
+          "called": [
+            "LegalKernel.FaultProof"
+          ]
         },
         {
           "kind": "def",
@@ -42048,6 +42514,7 @@
           "called": [
             "LegalKernel",
             "LegalKernel.Bridge",
+            "LegalKernel.FaultProof",
             "LegalKernel.Runtime",
             "LegalKernel.Test"
           ]
@@ -44933,6 +45400,7 @@
           "called": [
             "LegalKernel",
             "LegalKernel.Bridge",
+            "LegalKernel.FaultProof",
             "LegalKernel.Runtime",
             "LegalKernel.Test"
           ]
@@ -52684,7 +53152,8 @@
           "name": "InjectivityTests",
           "line": 50,
           "called": [
-            "LegalKernel"
+            "LegalKernel",
+            "LegalKernel.FaultProof"
           ]
         },
         {
@@ -56024,6 +56493,70 @@
       ]
     },
     {
+      "module": "LegalKernel.Test.FaultProof.Frontier",
+      "path": "LegalKernel/Test/FaultProof/Frontier.lean",
+      "declaration_count": 4,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.Frontier",
+          "line": 47,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "selfTransferCells",
+          "line": 53,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "transferCells",
+          "line": 57,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 61,
+          "called": [
+            "Action",
+            "ActorId",
+            "BalanceReader",
+            "LegalKernel.Test.FaultProof.Frontier",
+            "ResourceId",
+            "TestCase",
+            "aliasConsistent",
+            "assertEq",
+            "claimBudgetRefund",
+            "depositWithFee",
+            "divLevel",
+            "frontierOf",
+            "frontierShapeOk",
+            "gapCount",
+            "gapCountClosed",
+            "pathLess",
+            "pathSorted",
+            "plannedBalanceAt?",
+            "plannedBalances",
+            "plannedBalances_alias_consistent",
+            "reclaimAmmReserves",
+            "selfTransferCells",
+            "smtCellKey",
+            "smtDepth",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "transferCells"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.Test.FaultProof.Game",
       "path": "LegalKernel/Test/FaultProof/Game.lean",
       "declaration_count": 4,
@@ -56445,6 +56978,7 @@
             "CollisionFreeOn",
             "Encodable",
             "LegalKernel.Bridge",
+            "LegalKernel.FaultProof",
             "LegalKernel.Runtime",
             "LegalKernel.Test",
             "SmtCellProof",
@@ -69573,7 +70107,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 222,
+          "line": 223,
           "called": [
             "runAll"
           ]

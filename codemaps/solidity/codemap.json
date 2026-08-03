@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "e2a68c9e76ae5652a73251233ad08e914d194f2602a66370ab03d1a2c46fd834"
+    "source_digest": "2586616d35aee1b263d247ba08a6f9774998d07619b7baf39754d6f985199bf6"
   },
   "summary": {
-    "module_count": 95,
-    "declaration_count": 2033
+    "module_count": 96,
+    "declaration_count": 2041
   },
   "modules": [
     {
@@ -7531,7 +7531,8 @@
           "line": 1266,
           "called": [
             "BenchmarkGasV1_3Base",
-            "KnomosisStepVMRoot"
+            "KnomosisStepVMRoot",
+            "StepVMRootProbeHarness"
           ]
         },
         {
@@ -7541,6 +7542,7 @@
           "called": [
             "KnomosisStepVMRoot",
             "_requireKeccakLinked",
+            "findProbeBase",
             "readFixture"
           ]
         },
@@ -7549,7 +7551,9 @@
           "name": "test_gas_executeStepToRoot_distinctCells",
           "line": 1289,
           "called": [
-            "_bench"
+            "_bench",
+            "encodeProbeCall",
+            "loadOpenings"
           ]
         },
         {
@@ -7557,7 +7561,9 @@
           "name": "test_gas_executeStepToRoot_duplicateCell",
           "line": 1308,
           "called": [
-            "_bench"
+            "_bench",
+            "encodeProbeCall",
+            "loadOpenings"
           ]
         },
         {
@@ -7566,14 +7572,19 @@
           "line": 1331,
           "called": [
             "_distinctCellCount",
-            "_run"
+            "_run",
+            "loadOpenings",
+            "probePostRoot",
+            "probePreRoot"
           ]
         },
         {
           "kind": "function",
           "name": "_run",
           "line": 1367,
-          "called": []
+          "called": [
+            "encodeProbeCall"
+          ]
         },
         {
           "kind": "function",
@@ -12526,7 +12537,8 @@
           "name": "StepVMRootCrossCheck",
           "line": 32,
           "called": [
-            "KnomosisStepVMRoot"
+            "KnomosisStepVMRoot",
+            "StepVMRootProbeHarness"
           ]
         },
         {
@@ -12546,6 +12558,7 @@
             "_runProbe",
             "_skipWithReason",
             "fixtureExists",
+            "probePostRoot",
             "readFixture"
           ]
         },
@@ -12557,6 +12570,7 @@
             "_runProbe",
             "_skipWithReason",
             "fixtureExists",
+            "probePreRoot",
             "readFixture"
           ]
         },
@@ -12568,6 +12582,7 @@
             "_call",
             "_skipWithReason",
             "fixtureExists",
+            "loadOpenings",
             "readFixture"
           ]
         },
@@ -12580,6 +12595,7 @@
             "_call",
             "_skipWithReason",
             "fixtureExists",
+            "loadOpenings",
             "readFixture"
           ]
         },
@@ -12591,6 +12607,7 @@
             "_call",
             "_skipWithReason",
             "fixtureExists",
+            "loadOpenings",
             "readFixture"
           ]
         },
@@ -12601,6 +12618,9 @@
           "called": [
             "_skipWithReason",
             "fixtureExists",
+            "loadOpenings",
+            "loadPolicyOpening",
+            "probePreRoot",
             "readFixture"
           ]
         },
@@ -12621,14 +12641,18 @@
           "name": "_runProbe",
           "line": 253,
           "called": [
-            "_call"
+            "_call",
+            "loadOpenings"
           ]
         },
         {
           "kind": "function",
           "name": "_call",
           "line": 263,
-          "called": []
+          "called": [
+            "loadPolicyOpening",
+            "probePreRoot"
+          ]
         },
         {
           "kind": "function",
@@ -14294,6 +14318,7 @@
             "KnomosisFaultProofGame",
             "KnomosisStepVMRoot",
             "MockStateRootSubmissionForGame",
+            "probePostRoot",
             "sequencer"
           ]
         },
@@ -14302,6 +14327,7 @@
           "name": "_loadProbe",
           "line": 166,
           "called": [
+            "probePostRoot",
             "readFixture"
           ]
         },
@@ -14485,6 +14511,7 @@
           "called": [
             "_openings",
             "_seedRootForAction",
+            "probePostRoot",
             "sequencer"
           ]
         },
@@ -14496,6 +14523,7 @@
             "_openings",
             "_seedRootForAction",
             "_sliceHead",
+            "probePostRoot",
             "sequencer"
           ]
         },
@@ -14506,6 +14534,7 @@
           "called": [
             "_openings",
             "_seedRootForAction",
+            "probePostRoot",
             "sequencer"
           ]
         },
@@ -14516,6 +14545,7 @@
           "called": [
             "_openings",
             "_seedRootForAction",
+            "probePostRoot",
             "sequencer"
           ]
         },
@@ -14526,6 +14556,7 @@
           "called": [
             "_openings",
             "_seedUnboundRoot",
+            "probePostRoot",
             "sequencer"
           ]
         },
@@ -14546,6 +14577,7 @@
           "called": [
             "_openings",
             "_seedRootForAction",
+            "probePostRoot",
             "sequencer"
           ]
         },
@@ -17709,6 +17741,68 @@
           "name": "shutdownTime",
           "line": 144,
           "called": []
+        }
+      ]
+    },
+    {
+      "module": "StepVMRootProbeHarness",
+      "path": "solidity/test/utils/StepVMRootProbeHarness.sol",
+      "declaration_count": 8,
+      "declarations": [
+        {
+          "kind": "abstract_contract",
+          "name": "StepVMRootProbeHarness",
+          "line": 21,
+          "called": [
+            "CrossCheckFramework"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "probeBase",
+          "line": 26,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "findProbeBase",
+          "line": 37,
+          "called": [
+            "probeBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "loadPolicyOpening",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "loadOpenings",
+          "line": 72,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "probePreRoot",
+          "line": 92,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "probePostRoot",
+          "line": 102,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "encodeProbeCall",
+          "line": 118,
+          "called": [
+            "loadPolicyOpening",
+            "probePreRoot"
+          ]
         }
       ]
     },

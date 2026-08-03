@@ -48,6 +48,7 @@ Two properties run through it, both inherited from `VerifierWrites`:
 This module is **not** part of the trusted computing base.
 -/
 
+import LegalKernel.FaultProof.Frontier
 import LegalKernel.FaultProof.StepWriteSets
 import LegalKernel.FaultProof.VerifierWrites
 
@@ -341,6 +342,61 @@ def verifierPostRoot (preRoot : StateCommit) (a : Action) (signer : ActorId)
       match ops.mapM (foldEntry ops policy.preValue a signer l2LogIndex plan) with
       | none       => none
       | some writes => foldStateCellWrites preRoot writes
+
+/-- **Every variant's plan agrees at an alias.**
+
+    The statement that makes `plannedBalanceAt?`'s refusal free.  A
+    pre-root multiproof opens each cell ONCE, so the plan is consulted
+    per CELL rather than per occurrence, and "which entry wins" becomes
+    a real question wherever a variant can name one cell twice — which
+    every aliasable variant can, cheaply and permissionlessly.
+
+    It cannot matter: at an alias the two entries carry the same value.
+    Either the admitted branch is guarded against the alias outright
+    (`transfer`'s explicit `sender = receiver` arm, `ammSwap`'s
+    `fromResource ≠ toResource` conjunct, `reclaimAmmReserves`'
+    `reserveActor ≠ poolActor`), or both entries are pre-values from
+    the SAME reader call at the SAME key, and a reader is a function.
+
+    This is also why the corpus cannot see a dedup bug: the three
+    duplicate probes pass under a first-occurrence rule and a
+    last-occurrence one alike, because there is nothing to choose
+    between.  The guard exists for the derivation bug that has not been
+    written yet. -/
+theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
+    (signer : ActorId) (plan : List ((ResourceId × ActorId) × Nat))
+    (h : plannedBalances read a signer = some plan) :
+    aliasConsistent plan = true := by
+  unfold plannedBalances at h
+  cases a with
+  | transfer r sender receiver amount =>
+      exact deriveTransferBalances_alias_consistent read r sender receiver amount plan h
+  | mint r to amount => exact deriveCreditBalance_alias_consistent read r to amount plan h
+  | reward r to amount => exact deriveCreditBalance_alias_consistent read r to amount plan h
+  | burn r from_ amount =>
+      exact deriveBurnBalance_alias_consistent read r from_ amount plan h
+  | deposit r recipient amount _ =>
+      exact deriveDepositBalance_alias_consistent read r recipient amount plan h
+  | withdraw r sender amount _ =>
+      exact deriveWithdrawBalance_alias_consistent read r sender amount plan h
+  | depositWithFee r recipient poolActor userAmount poolAmount _ _ =>
+      exact deriveChainPair_alias_consistent read r recipient poolActor _ _ plan h
+  | topUpActionBudget gr gasAmount _ pa =>
+      exact deriveTopUpBalances_alias_consistent read gr signer pa gasAmount plan h
+  | topUpActionBudgetFor recipient gr gasAmount _ pa =>
+      exact deriveDelegatedTopUpBalances_alias_consistent read gr signer pa recipient
+        gasAmount plan h
+  | claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa =>
+      exact deriveRefundBalances_alias_consistent read gr pa signer
+        (budgetUnits * weiPerBudgetUnit) plan h
+  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
+      exact deriveAmmSwapBalances_alias_consistent read fromResource toResource
+        amountIn amountOut reserveActor plan h
+  | reclaimAmmReserves r amount reserveActor poolActor =>
+      exact deriveReclaimBalances_alias_consistent read r reserveActor poolActor
+        amount plan h
+  -- The thirteen variants that write no balance cell at all.
+  | _ => simp only [Option.some.injEq] at h; subst h; exact aliasConsistent_nil
 
 end FaultProof
 end LegalKernel
