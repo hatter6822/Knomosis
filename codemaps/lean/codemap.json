@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "dae6d59943f091e4f76aacadddca59a64ace5094255602df8bd522d7b53b3d19"
+    "source_digest": "57f44fa02663a4ead89d048ab53d5fe08ebfca49c81aee523228d41ee0c23a61"
   },
   "summary": {
     "module_count": 336,
-    "declaration_count": 5810
+    "declaration_count": 5823
   },
   "modules": [
     {
@@ -24023,7 +24023,7 @@
     {
       "module": "LegalKernel.FaultProof.MultiProof",
       "path": "LegalKernel/FaultProof/MultiProof.lean",
-      "declaration_count": 36,
+      "declaration_count": 49,
       "declarations": [
         {
           "kind": "namespace",
@@ -24516,9 +24516,7 @@
             "BitsDistinctBelow",
             "CellTag",
             "ExtendedState",
-            "FaultProof",
             "LeavesCoherent",
-            "LegalKernel",
             "commitExtendedState",
             "es",
             "multiSiblings",
@@ -24527,6 +24525,152 @@
             "openedOf",
             "smtDepth",
             "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "multiGapLevels",
+          "line": 790,
+          "called": [
+            "OpenedLeaf",
+            "opened",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiGapLevels_gapLow",
+          "line": 803,
+          "called": [
+            "OpenedLeaf",
+            "multiGapLevels",
+            "opened",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiGapLevels_gapHigh",
+          "line": 813,
+          "called": [
+            "OpenedLeaf",
+            "multiGapLevels",
+            "opened",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiGapLevels_merge",
+          "line": 823,
+          "called": [
+            "OpenedLeaf",
+            "multiGapLevels",
+            "opened",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiGapLevels_empty",
+          "line": 834,
+          "called": [
+            "OpenedLeaf",
+            "multiGapLevels",
+            "opened",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiGapLevels_length_eq",
+          "line": 846,
+          "called": [
+            "OpenedLeaf",
+            "SmtEntries",
+            "entries",
+            "highHalf",
+            "lowHalf",
+            "multiGapLevels",
+            "multiGapLevels_empty",
+            "multiGapLevels_gapHigh",
+            "multiGapLevels_gapLow",
+            "multiGapLevels_merge",
+            "multiSiblings",
+            "multiSiblings_succ_empty",
+            "multiSiblings_succ_gapHigh",
+            "multiSiblings_succ_gapLow",
+            "multiSiblings_succ_merge",
+            "opened",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiGapLevels_single",
+          "line": 884,
+          "called": [
+            "multiGapLevels",
+            "multiGapLevels_gapHigh",
+            "multiGapLevels_gapLow",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "structure",
+          "name": "SmtMultiProof",
+          "line": 912,
+          "called": []
+        },
+        {
+          "kind": "namespace",
+          "name": "SmtMultiProof",
+          "line": 920,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "gapBit",
+          "line": 924,
+          "called": [
+            "SmtMultiProof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "toWireBytes",
+          "line": 931,
+          "called": [
+            "SmtMultiProof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "buildMultiProof",
+          "line": 939,
+          "called": [
+            "SmtMultiProof",
+            "emptySubtreeHash",
+            "setBitmaskBit"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "expandMultiProof",
+          "line": 950,
+          "called": [
+            "FaultProof",
+            "LegalKernel",
+            "SmtMultiProof",
+            "emptySubtreeHash",
+            "paddingHash"
           ]
         }
       ]
@@ -57395,6 +57539,7 @@
             "TestCase",
             "assertEq",
             "base",
+            "buildMultiProof",
             "canonicalAbsentValue",
             "canonicalSiblings",
             "cellLeaf",
@@ -57402,9 +57547,12 @@
             "emptyRootAt",
             "entries",
             "es",
+            "expandMultiProof",
             "frontierOf",
             "getCellValue",
             "multiFold_eq_commit_post",
+            "multiGapLevels",
+            "multiGapLevels_single",
             "multiSiblings",
             "multiSiblings_single",
             "multiWalk",

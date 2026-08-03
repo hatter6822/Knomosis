@@ -769,5 +769,193 @@ theorem multiFold_eq_commit_pre (es : ExtendedState) (ts : List CellTag)
       = some (commitExtendedState es, []) :=
   multiWalk_eq_smtRootListAux (stateCellEntries es) (openedOf es ts) h_ne h_coh h_dist
 
+/-! ## The wire
+
+The compressed form.  A single-cell opening's mask is indexed by
+LEVEL, because a single path has exactly one sibling per level.  A
+multiproof's is indexed by GAP, and a gap's index is not its level:
+merges consume levels without reading the wire, so the two run out of
+step as soon as two cells share a sub-tree.
+
+That is why the level list is a first-class thing here.  It is
+derivable from the KEY SET alone — `multiGapLevels` never looks at an
+entry — which is exactly what lets a verifier compute the wire's shape
+before parsing it, and refuse a proof of the wrong length instead of
+padding a short one. -/
+
+/-- The level of each gap, in the order the walk consumes them.
+
+    Mirrors `multiSiblings`' recursion exactly, minus the entries: the
+    shape of the wire is a function of which cells are opened and
+    nothing else. -/
+def multiGapLevels : Nat → List OpenedLeaf → List Nat
+  | 0, _ => []
+  | d + 1, opened =>
+    match (openedLow d opened), (openedHigh d opened) with
+    | [],          []          => []
+    | (lo :: los), []          => multiGapLevels d (lo :: los) ++ [d]
+    | [],          (hi :: his) => multiGapLevels d (hi :: his) ++ [d]
+    | (lo :: los), (hi :: his) =>
+      multiGapLevels d (lo :: los) ++ multiGapLevels d (hi :: his)
+
+/-! ### Unfolding `multiGapLevels`, mirroring `multiSiblings` -/
+
+/-- Only the right half is opened. -/
+theorem multiGapLevels_gapLow (k : Nat) (opened : List OpenedLeaf)
+    (hi : OpenedLeaf) (his : List OpenedLeaf)
+    (h_l : openedLow k opened = []) (h_h : openedHigh k opened = hi :: his) :
+    multiGapLevels (k + 1) opened = multiGapLevels k (hi :: his) ++ [k] := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- Only the left half is opened. -/
+theorem multiGapLevels_gapHigh (k : Nat) (opened : List OpenedLeaf)
+    (lo : OpenedLeaf) (los : List OpenedLeaf)
+    (h_l : openedLow k opened = lo :: los) (h_h : openedHigh k opened = []) :
+    multiGapLevels (k + 1) opened = multiGapLevels k (lo :: los) ++ [k] := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- Both halves are opened: a merge, which reads no gap. -/
+theorem multiGapLevels_merge (k : Nat) (opened : List OpenedLeaf)
+    (lo hi : OpenedLeaf) (los his : List OpenedLeaf)
+    (h_l : openedLow k opened = lo :: los) (h_h : openedHigh k opened = hi :: his) :
+    multiGapLevels (k + 1) opened
+      = multiGapLevels k (lo :: los) ++ multiGapLevels k (hi :: his) := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- Nothing is opened. -/
+theorem multiGapLevels_empty (k : Nat) (opened : List OpenedLeaf)
+    (h_l : openedLow k opened = []) (h_h : openedHigh k opened = []) :
+    multiGapLevels (k + 1) opened = [] := by
+  show (match openedLow k opened, openedHigh k opened with
+        | [], [] => _ | (_ :: _), [] => _
+        | [], (_ :: _) => _ | (_ :: _), (_ :: _) => _) = _
+  rw [h_l, h_h]
+
+/-- **The wire's shape matches its content.**  There is exactly one
+    level per gap, so the mask a verifier derives from the KEY SET
+    indexes the siblings the prover sent — which is what makes an
+    exact-length check possible. -/
+theorem multiGapLevels_length_eq :
+    ∀ (d : Nat) (entries : SmtEntries) (opened : List OpenedLeaf),
+      (multiGapLevels d opened).length = (multiSiblings d entries opened).length := by
+  intro d
+  induction d with
+  | zero => intro _ _; rfl
+  | succ k ih =>
+    intro entries opened
+    cases h_l : openedLow k opened with
+    | nil =>
+      cases h_h : openedHigh k opened with
+      | nil =>
+        rw [multiGapLevels_empty k opened h_l h_h,
+          multiSiblings_succ_empty k entries opened h_l h_h]
+        rfl
+      | cons hi his =>
+        rw [multiGapLevels_gapLow k opened hi his h_l h_h,
+          multiSiblings_succ_gapLow k entries opened hi his h_l h_h,
+          List.length_append, List.length_append,
+          ih (highHalf k entries) (hi :: his)]
+        rfl
+    | cons lo los =>
+      cases h_h : openedHigh k opened with
+      | nil =>
+        rw [multiGapLevels_gapHigh k opened lo los h_l h_h,
+          multiSiblings_succ_gapHigh k entries opened lo los h_l h_h,
+          List.length_append, List.length_append,
+          ih (lowHalf k entries) (lo :: los)]
+        rfl
+      | cons hi his =>
+        rw [multiGapLevels_merge k opened lo hi los his h_l h_h,
+          multiSiblings_succ_merge k entries opened lo hi los his h_l h_h,
+          List.length_append, List.length_append,
+          ih (lowHalf k entries) (lo :: los), ih (highHalf k entries) (hi :: his)]
+
+/-- **A single opened cell has one gap per level.**  With `m = 1` the
+    gap index IS the level, which is what makes the compressed wire
+    byte-identical to a single-cell `proofData`. -/
+theorem multiGapLevels_single :
+    ∀ (d : Nat) (k leaf : ByteArray),
+      multiGapLevels d [(k, leaf)] = (List.range d).reverse.reverse := by
+  intro d k leaf
+  rw [List.reverse_reverse]
+  induction d with
+  | zero => rfl
+  | succ i ih =>
+    by_cases hb : BitsKey.keyBit k i
+    · have h_l : openedLow i [(k, leaf)] = [] := by
+        show List.filter _ [(k, leaf)] = []; simp [hb]
+      have h_h : openedHigh i [(k, leaf)] = [(k, leaf)] := by
+        show List.filter _ [(k, leaf)] = _; simp [hb]
+      rw [multiGapLevels_gapLow i [(k, leaf)] (k, leaf) [] h_l h_h, ih,
+        List.range_succ]
+    · have h_l : openedLow i [(k, leaf)] = [(k, leaf)] := by
+        show List.filter _ [(k, leaf)] = _; simp [hb]
+      have h_h : openedHigh i [(k, leaf)] = [] := by
+        show List.filter _ [(k, leaf)] = []; simp [hb]
+      rw [multiGapLevels_gapHigh i [(k, leaf)] (k, leaf) [] h_l h_h, ih,
+        List.range_succ]
+
+/-- The compressed wire: a gap mask, then the siblings the mask marks
+    as non-canonical-empty.
+
+    Mirrors `SmtCellProof` — same mask bit order (LSB-first within each
+    byte), same "clear bit means the canonical empty sub-tree" rule —
+    so that at one opened cell the two encodings coincide. -/
+structure SmtMultiProof where
+  /-- One bit per gap, LSB-first within each byte; set iff the gap's
+      sibling is drawn from `siblings`. -/
+  gapMask : ByteArray
+  /-- The non-canonical-empty siblings, in gap order. -/
+  siblings : Array ByteArray
+  deriving Repr
+
+namespace SmtMultiProof
+
+/-- Bit `g` of the gap mask.  Same convention as
+    `SmtCellProof.bitmaskBit`. -/
+def gapBit (p : SmtMultiProof) (g : Nat) : Bool :=
+  if h : g / 8 < p.gapMask.size then
+    decide (((p.gapMask[g / 8]'h).toNat >>> (g % 8)) % 2 = 1)
+  else
+    false
+
+/-- The L1 wire encoding: the mask, then the siblings. -/
+def toWireBytes (p : SmtMultiProof) : ByteArray :=
+  p.siblings.foldl (fun acc s => acc ++ s) p.gapMask
+
+end SmtMultiProof
+
+/-- Build the compressed wire from the full gap list and its levels: a
+    gap whose sibling is the canonical empty sub-tree at its level
+    costs a cleared bit rather than 32 bytes. -/
+def buildMultiProof (levels : List Nat) (gaps : List ByteArray) : SmtMultiProof :=
+  let n := levels.length
+  -- The gaps worth sending: the rest are the canonical empty sub-tree
+  -- at their own level, which the verifier derives.
+  let kept := (List.range n).filter (fun g => gaps[g]! != emptySubtreeHash (levels[g]!))
+  { gapMask   := kept.foldl setBitmaskBit
+                   (ByteArray.mk (Array.replicate ((n + 7) / 8) (0 : UInt8)))
+  , siblings  := (kept.map (fun g => gaps[g]!)).toArray }
+
+/-- Expand a compressed wire back to the full gap list, using the
+    derived level of each gap for the cleared bits. -/
+def expandMultiProof (levels : List Nat) (p : SmtMultiProof) : List ByteArray :=
+  ((List.range levels.length).foldl
+    (fun (acc : List ByteArray × Nat) g =>
+      if p.gapBit g then
+        (acc.1 ++ [p.siblings[acc.2]?.getD paddingHash], acc.2 + 1)
+      else
+        (acc.1 ++ [emptySubtreeHash (levels[g]!)], acc.2))
+    ([], 0)).1
+
 end FaultProof
 end LegalKernel

@@ -172,6 +172,60 @@ def tests : List TestCase :=
                           (openedOf post ts)).map ByteArray.toList)
           "the wire is a function of the cells, not their values"
     }
+  , { name := "the compressed wire round-trips"
+    , body := do
+        let entries := stateCellEntries base
+        let gaps := multiSiblings smtDepth entries opened
+        let levels := multiGapLevels smtDepth opened
+        assertEq (expected := gaps.length) (actual := levels.length)
+          "one level per gap"
+        let wire := buildMultiProof levels gaps
+        assertEq (expected := gaps.map ByteArray.toList)
+          (actual := (expandMultiProof levels wire).map ByteArray.toList)
+          "expand ∘ build is the identity on the gap list"
+        -- ...and the walk accepts the expansion, so the compression is
+        -- transparent to the verifier.
+        match multiWalk smtDepth opened (expandMultiProof levels wire) with
+        | none => assertEq (expected := "some") (actual := "none") "the walk completes"
+        | some (r, rest) =>
+            assertEq (expected := (commitExtendedState base).toList) (actual := r.toList)
+              "and reaches the published root"
+            assertEq (expected := 0) (actual := rest.length) "consuming it all"
+    }
+  , { name := "the wire drops the canonical-empty siblings"
+    , body := do
+        let entries := stateCellEntries base
+        let gaps := multiSiblings smtDepth entries opened
+        let levels := multiGapLevels smtDepth opened
+        let wire := buildMultiProof levels gaps
+        -- This is the compression's whole point: a gap whose sibling is
+        -- the canonical empty sub-tree costs a cleared bit, not 32
+        -- bytes.  On a sparse state that is nearly all of them.
+        assertEq (expected := true) (actual := wire.siblings.size < gaps.length)
+          "the wire carries fewer siblings than there are gaps"
+        assertEq (expected := (levels.length + 7) / 8)
+          (actual := wire.gapMask.size) "the mask is one bit per gap"
+    }
+  , { name := "at one opened cell the gap index is the level"
+    , body := do
+        -- The compatibility pin, on the WIRE rather than the sibling
+        -- list.  A single-cell multiproof has one gap per level in
+        -- level order, so its mask is indexed exactly as
+        -- `SmtCellProof.bitmask` is — which is what makes the encoding
+        -- a widening of `proofData` rather than a break.
+        let _pin : ∀ (d : Nat) (k leaf : ByteArray),
+            multiGapLevels d [(k, leaf)] = (List.range d).reverse.reverse :=
+          multiGapLevels_single
+        let t : CellTag := .nonce 7
+        let one : OpenedLeaf := (smtCellKey t, cellLeaf t (getCellValue base t))
+        assertEq (expected := List.range smtDepth)
+          (actual := multiGapLevels smtDepth [one])
+          "the gap levels are 0, 1, …, 255 in order"
+        let wire := buildMultiProof (multiGapLevels smtDepth [one])
+          (multiSiblings smtDepth (stateCellEntries base) [one])
+        assertEq (expected := 32) (actual := wire.gapMask.size)
+          "so the mask is 32 bytes, exactly as a single-cell proof's is"
+    }
   , { name := "completeness is pinned at the term level"
     , body := do
         let _pin : ∀ (entries : SmtEntries) (opened : List OpenedLeaf),
