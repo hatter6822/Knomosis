@@ -259,10 +259,26 @@ def plannedBalanceAt (plan : List ((ResourceId × ActorId) × Nat))
 
 /-! ## The per-cell value -/
 
+/-- A partial reader of a bundle's proven pre-values, keyed by cell.
+
+    PARTIAL is the load-bearing half: a derivation reading a cell the
+    bundle does not open must produce nothing rather than a default, so
+    an omitted opening cannot be passed off as a zero. -/
+abbrev CellValueReader := CellTag → Option ByteArray
+
 /-- Cell `t`'s post-value, derived from the bundle's proven
     pre-values and the action's own fields.  `none` when a needed
-    opening is missing or malformed. -/
-def derivedCellValue (ops : List CellOpening) (policyValue : ByteArray)
+    opening is missing or malformed.
+
+    Parameterised by the READER rather than by a list of openings.  The
+    chained fold reads per occurrence (`preStateValueAt ops`) and the
+    multiproof reads per cell (`bundleValueAt b`); those are different
+    lookups over different structures, and the derivation cares about
+    neither — it wants a proven pre-value for a cell.  Taking the list
+    forced the multiproof caller to fabricate `CellOpening`s carrying
+    empty proofs purely to satisfy the type, which is a lie in a
+    structure whose whole purpose is to carry a proof. -/
+def derivedCellValue (read : CellValueReader) (policyValue : ByteArray)
     (a : Action) (signer : ActorId) (l2LogIndex : Nat)
     (plan : List ((ResourceId × ActorId) × Nat)) (t : CellTag) :
     Option ByteArray :=
@@ -271,11 +287,11 @@ def derivedCellValue (ops : List CellOpening) (policyValue : ByteArray)
     (plannedBalanceAt plan r actor).map
       (fun v => ByteArray.mk (Encoding.encodeAmount v).toArray)
   | .nonce _ =>
-    match preStateValueAt ops t with
+    match read t with
     | none   => none
     | some v => deriveNonceCellValue v
   | .epochBudget target =>
-    match preStateValueAt ops (.epochBudget signer), preStateValueAt ops t with
+    match read (.epochBudget signer), read t with
     | some signerValue, some targetValue =>
       deriveEpochBudgetCellValue policyValue signerValue targetValue a signer target
     | _, _ => none
@@ -308,7 +324,7 @@ def derivedCellValue (ops : List CellOpening) (policyValue : ByteArray)
         , l2LogIndex := l2LogIndex })
     | _ => none
   | .bridgeNextWdId =>
-    match preStateValueAt ops t with
+    match read t with
     | none   => none
     | some v => deriveNextWdIdCellValue v
   -- No adjudicable action writes any other cell kind; a bundle
@@ -324,7 +340,8 @@ def foldEntry (ops : List CellOpening) (policyValue : ByteArray)
     (a : Action) (signer : ActorId) (l2LogIndex : Nat)
     (plan : List ((ResourceId × ActorId) × Nat)) (o : CellOpening) :
     Option StateCellWrite :=
-  (derivedCellValue ops policyValue a signer l2LogIndex plan o.cellTag).map
+  (derivedCellValue (preStateValueAt ops) policyValue a signer l2LogIndex plan
+      o.cellTag).map
     (fun newV => (o.cellTag, o.preValue, newV, o.proof))
 
 /-- **The openings-only post-state root** — what an L1 holding a
@@ -443,8 +460,21 @@ differences are all consequences of that one change:
 structure MultiBundle where
   /-- The opened cells with their pre-state values, in any order. -/
   cells : List (CellTag × ByteArray)
-  /-- The shared sibling list, in the walk's post-order. -/
-  siblings : List ByteArray
+  /-- The shared wire: a gap mask plus the siblings it marks.
+      COMPRESSED, not expanded — a gap whose sibling is the canonical
+      empty sub-tree at its level costs a cleared bit rather than 32
+      bytes, and at ~10⁶ live cells that is the overwhelming majority
+      of the 256 levels.
+
+      Carrying the compressed form rather than the expanded list is
+      what makes the verifier's shape check possible at all: the
+      expansion needs the gap LEVELS, which come from the key set, so
+      `isWellFormedFor` can reject a wire of the wrong length before a
+      single sibling is read.  An expanded list has no such length —
+      any list is a list — and `expandMultiProof`'s `paddingHash`
+      substitution, the exact failure mode the single-cell verifier
+      has, becomes unreachable. -/
+  proof : SmtMultiProof
   deriving Repr
 
 /-- A cell's proven pre-value, looked up BY CELL.
@@ -497,8 +527,16 @@ def multiFrontierOf (a : Action) (signer : ActorId) (nextWdIdPre : Nat) :
     rather than a state-transition outcome: a non-adjudicable action, a
     bundle whose cells are not the ones the step opens (a duplicate, a
     missing cell, an extra cell — order is free), a missing or
-    malformed pre-value, a wire that does not reproduce the submitted
-    pre-root, or a wire the walk cannot consume exactly.
+    malformed pre-value, a wire of the wrong shape, a wire that does
+    not reproduce the submitted pre-root, or a wire the walk cannot
+    consume exactly.
+
+    The shape is checked BEFORE the walk and against the KEY SET, not
+    against the wire: `multiGapLevels` never looks at an entry, so the
+    gap count — and hence the mask size, the padding bits and the
+    sibling count — is fixed the moment the frontier is.  That is what
+    makes a short wire a refusal here where the single-cell verifier
+    silently substitutes a padding hash and keeps walking.
 
     A failing law precondition is a NO-OP here, not a refusal: the
     derivations evaluate the precondition and return the pre-values
@@ -531,23 +569,65 @@ def verifierPostRootMulti (preRoot : StateCommit) (a : Action) (signer : ActorId
               if t = .budgetPolicy then
                 (bundleValueAt b t).map (fun v => (smtCellKey t, cellLeaf t v))
               else
-                (derivedCellValue (b.cells.map (fun c =>
-                    ({ cellTag := c.1, preValue := c.2
-                     , proof := { siblings := #[], bitmask := ByteArray.empty } }
-                       : CellOpening)))
-                  policyValue a signer l2LogIndex plan t).map
+                (derivedCellValue (bundleValueAt b) policyValue a signer
+                  l2LogIndex plan t).map
                   (fun v => (smtCellKey t, cellLeaf t v)))
           if preOpened.length ≠ expected.length then none
           else if postOpened.length ≠ expected.length then none
           else
-            match multiWalk smtDepth preOpened b.siblings with
-            | some (r, []) =>
-              if r ≠ preRoot then none
-              else
-                match multiWalk smtDepth postOpened b.siblings with
-                | some (r', []) => some r'
-                | _             => none
-            | _ => none
+            -- The gap levels come from the KEY SET, so the wire's
+            -- shape is known before it is read.  Both sides of the
+            -- fold share one expansion: the same siblings serve both
+            -- roots, which is the whole point of the multiproof.
+            let levels := multiGapLevels smtDepth preOpened
+            if ¬ b.proof.isWellFormedFor levels then none
+            else
+              let sibs := expandMultiProof levels b.proof
+              match multiWalk smtDepth preOpened sibs with
+              | some (r, []) =>
+                if r ≠ preRoot then none
+                else
+                  match multiWalk smtDepth postOpened sibs with
+                  | some (r', []) => some r'
+                  | _             => none
+              | _ => none
+
+/-! ## The honest sequencer's side
+
+`verifierPostRootMulti` is what an L1 computes.  These are what a
+defender publishes so it can: the bundle, the wire, and the root the
+verifier will reach — each a function of `(pre-state, signed action,
+log index)` alone, which is what lets the observer emit them and the
+game recompute them.
+
+The multiproof counterparts of `stepWriteBundle` / `stepPostRoot`.  The
+chained pair carries one opening per WRITE, each against the running
+root; this pair carries one opening per CELL, all against the pre-root,
+with the siblings shared. -/
+
+/-- **The multiproof bundle an honest sequencer publishes for a step.**
+
+    Emitted in path order — which is the order the walk consumes, so a
+    caller who does not want to sort need not.  The verifier sorts
+    anyway: order carries no information here, because every opening is
+    against the same root. -/
+def stepMultiBundle (es : ExtendedState) (st : SignedAction) : MultiBundle :=
+  let ts := multiFrontierOf st.action st.signer es.bridge.nextWdId
+  let opened := openedOf es ts
+  { cells := ts.map (fun t => (t, getCellValue es t))
+  , proof := buildMultiProof (multiGapLevels smtDepth opened)
+               (multiSiblings smtDepth (stateCellEntries es) opened) }
+
+/-- **The post-state root the multiproof verifier reaches** for an
+    honest step: one merged walk, one root check, one answer.
+
+    The multiproof counterpart of `stepPostRoot`, and `Option` for the
+    same reason — the fold is fail-closed, so a bundle whose wire does
+    not reproduce the pre-root aborts rather than inventing a root. -/
+def stepMultiPostRoot (es : ExtendedState) (st : SignedAction) (idx : Nat) :
+    Option StateCommit :=
+  verifierPostRootMulti (commitExtendedState es) st.action st.signer idx
+    (stepMultiBundle es st)
 
 end FaultProof
 end LegalKernel

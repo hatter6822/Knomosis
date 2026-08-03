@@ -233,12 +233,148 @@ multiproof.  These cases exercise what the change makes newly
 possible and newly refusable, rather than re-checking what the chained
 suite above already pins. -/
 
-/-- A step over the probe state: bump the signer's nonce. -/
-def multiCells : List CellTag := [CellTag.nonce 7]
+/-- The zero-gap wire — what `buildMultiProof` produces from no gaps
+    at all.  Used by the cases the verifier refuses on the CELL SET,
+    before it reads a byte of the wire, so what it carries is
+    immaterial; built rather than written out so it stays whatever the
+    builder produces. -/
+def zeroGapWire : SmtMultiProof := buildMultiProof [] []
+
+/-- Set bit `g` of a gap mask, LSB-first within each byte — the
+    tamper the padding check exists to catch. -/
+def setMaskBit (m : ByteArray) (g : Nat) : ByteArray :=
+  if h : g / 8 < m.size then
+    m.set (g / 8) ((m[g / 8]'h) ||| UInt8.ofNat (2 ^ (g % 8))) h
+  else m
+
+/-- The gap levels an honest bundle's wire is indexed by. -/
+def probeLevels (a : Authority.Action) : List Nat :=
+  multiGapLevels smtDepth
+    (openedOf base (multiFrontierOf a 7 base.bridge.nextWdId))
 
 /-- Tests for the multiproof path. -/
 def multiTests : List TestCase :=
-  [ { name := "the frontier includes the policy cell"
+  [ { name := "the multiproof verifier reaches the sequencer's post-root"
+    , body := do
+        -- The equivalence that lets every downstream theorem be
+        -- inherited rather than re-proved: one merged walk against the
+        -- pre-root computes what the chained fold computes.
+        for (name, a) in probes do
+          let st := sign a
+          let expected := stepPostRoot base st 0
+          if expected.isNone then
+            throw <| IO.userError s!"{name}: the sequencer's fold aborted"
+          assertEq (expected := expected.map ByteArray.toList)
+            (actual := (stepMultiPostRoot base st 0).map ByteArray.toList)
+            s!"{name}: the multiproof and the chained fold disagree"
+    }
+  , { name := "a permuted bundle yields the same root"
+    , body := do
+        -- The relaxation `pathSort` bought, at the verifier.  Every
+        -- opening is against the SAME root, so order carries no
+        -- information — and the chained fold's
+        -- `test_reordered_bundle_reverts` becomes this.
+        for (name, a) in probes do
+          let st := sign a
+          let honest := stepMultiBundle base st
+          let flipped : MultiBundle := { honest with cells := honest.cells.reverse }
+          assertEq
+            (expected := (stepMultiPostRoot base st 0).map ByteArray.toList)
+            (actual := (verifierPostRootMulti (commitExtendedState base) a st.signer 0
+                          flipped).map ByteArray.toList)
+            s!"{name}: reversing the bundle changed the root"
+    }
+  , { name := "the multiproof refuses a forged pre-value"
+    , body := do
+        -- The pre-side fold is what binds the submitted values to the
+        -- published root.  Without it a responder could claim any
+        -- pre-value and derive a post-root of their choosing.
+        for (name, a) in probes do
+          let st := sign a
+          let honest := stepMultiBundle base st
+          let forged : MultiBundle :=
+            { honest with
+                cells := match honest.cells with
+                         | []            => []
+                         | (t, v) :: rest => (t, v ++ ByteArray.mk #[0xFF]) :: rest }
+          assertEq (expected := true)
+            (actual := (verifierPostRootMulti (commitExtendedState base) a st.signer 0
+                          forged).isNone)
+            s!"{name}: a forged pre-value was accepted"
+    }
+  , { name := "a wire short by one sibling is refused, not padded"
+    , body := do
+        -- The property the single-cell verifier does NOT have.
+        -- `recomputeRootFromLeaf` substitutes a padding hash when the
+        -- wire runs short and keeps walking, so a truncated proof
+        -- reaches SOME root; here the sibling count is derived from
+        -- the key set, so short is short.
+        for (name, a) in probes do
+          let st := sign a
+          let honest := stepMultiBundle base st
+          if honest.proof.siblings.size == 0 then
+            throw <| IO.userError s!"{name}: the honest wire carries no sibling to drop"
+          let short : MultiBundle :=
+            { honest with
+                proof := { honest.proof with siblings := honest.proof.siblings.pop } }
+          assertEq (expected := true)
+            (actual := (verifierPostRootMulti (commitExtendedState base) a st.signer 0
+                          short).isNone)
+            s!"{name}: a short wire was accepted"
+    }
+  , { name := "a mask bit past the last gap is refused"
+    , body := do
+        -- The malleability slot the exact-shape check closes: a set
+        -- bit in the final byte's padding would draw a sibling the
+        -- walk never consumes, so two wires would encode one proof.
+        for (name, a) in probes do
+          let st := sign a
+          let honest := stepMultiBundle base st
+          let g := (probeLevels a).length
+          -- Only probes whose gap count does not fill its last byte
+          -- have a padding bit to set; the others have nothing to
+          -- test and are skipped rather than asserted about.
+          if g % 8 != 0 then
+            let tampered : MultiBundle :=
+              { honest with
+                  proof := { honest.proof with gapMask := setMaskBit honest.proof.gapMask g } }
+            assertEq (expected := true)
+              (actual := (verifierPostRootMulti (commitExtendedState base) a st.signer 0
+                            tampered).isNone)
+              s!"{name}: a set padding bit was accepted"
+    }
+  , { name := "the multiproof wire is smaller than the chained openings"
+    , body := do
+        -- The calldata claim, measured rather than asserted.  The
+        -- chained fold carries one 32-byte bitmask plus siblings per
+        -- WRITE, and a separate policy opening; the multiproof carries
+        -- one mask plus the siblings the merges did not absorb.
+        --
+        -- Over this probe set the total is 13 312 -> 3 596 bytes
+        -- (-73%), which is MUCH better than the -9.9% the plan
+        -- estimated, and the reason is worth stating because it does
+        -- not generalise.  The masks are a wash at any density: the
+        -- chained path pays 32 bytes per opening and the multiproof
+        -- pays `ceil(G/8)`, and `G ~ 255m` for keys that diverge near
+        -- the root, so both are ~32m.  The whole difference is
+        -- SIBLINGS, and on a sparse state the opened cells are most of
+        -- the live ones, so nearly every chained sibling is another
+        -- opened cell's sub-tree -- exactly what a merge absorbs.  At
+        -- production density (~1e6 live cells) the paths' non-empty
+        -- siblings are mostly distinct and the saving falls back
+        -- toward the estimate.  The assertion is `<`, not a ratio, so
+        -- it stays true either way.
+        for (name, a) in probes do
+          let st := sign a
+          let chained :=
+            (stepOpenings base st 0).foldl
+              (fun acc o => acc + o.proof.toWireBytes.size)
+              (policyOpening base).proof.toWireBytes.size
+          let multi := (stepMultiBundle base st).proof.toWireBytes.size
+          assertEq (expected := true) (actual := multi < chained)
+            s!"{name}: multiproof {multi} bytes vs chained {chained}"
+    }
+  , { name := "the frontier includes the policy cell"
     , body := do
         -- Under the chained fold the read-only budget policy needed its
         -- own opening and its own 256-level walk, because it is a read
@@ -259,7 +395,7 @@ def multiTests : List TestCase :=
         -- the lookup says so directly.
         let b : MultiBundle :=
           { cells := [(.nonce 7, natCellValue 3), (.budgetPolicy, ByteArray.empty)]
-          , siblings := [] }
+          , proof := zeroGapWire }
         assertEq (expected := some (natCellValue 3).toList)
           (actual := (bundleValueAt b (.nonce 7)).map ByteArray.toList)
           "the opened cell reads back"
@@ -269,7 +405,7 @@ def multiTests : List TestCase :=
     }
   , { name := "a non-adjudicable action is refused before any work"
     , body := do
-        let b : MultiBundle := { cells := [], siblings := [] }
+        let b : MultiBundle := { cells := [], proof := zeroGapWire }
         assertEq (expected := true)
           (actual := (verifierPostRootMulti (ByteArray.mk #[]) 
                         (.distributeOthers 1 7 30) 7 0 b).isNone)
@@ -283,7 +419,7 @@ def multiTests : List TestCase :=
     , body := do
         -- The shape check, at the verifier rather than in isolation.
         -- Order is free; content is not.
-        let b : MultiBundle := { cells := [(.nonce 7, natCellValue 3)], siblings := [] }
+        let b : MultiBundle := { cells := [(.nonce 7, natCellValue 3)], proof := zeroGapWire }
         assertEq (expected := true)
           (actual := (verifierPostRootMulti (ByteArray.mk #[])
                         (.transfer 1 7 8 30) 7 0 b).isNone)

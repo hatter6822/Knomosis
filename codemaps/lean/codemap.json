@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "c0d46c9606ed72585a0fd2c982f9ea4f10b4f5ba28633bf754c889d25acc3d15"
+    "source_digest": "3a5ccac986d0be0c499f660df849ad7c661002db89c409d47c7f432e40091e30"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5837
+    "declaration_count": 5842
   },
   "modules": [
     {
@@ -30216,7 +30216,7 @@
     {
       "module": "LegalKernel.FaultProof.Terminate",
       "path": "LegalKernel/FaultProof/Terminate.lean",
-      "declaration_count": 24,
+      "declaration_count": 27,
       "declarations": [
         {
           "kind": "namespace",
@@ -30393,14 +30393,22 @@
           ]
         },
         {
+          "kind": "abbrev",
+          "name": "CellValueReader",
+          "line": 266,
+          "called": [
+            "CellTag"
+          ]
+        },
+        {
           "kind": "def",
           "name": "derivedCellValue",
-          "line": 264,
+          "line": 280,
           "called": [
             "Action",
             "ActorId",
-            "CellOpening",
             "CellTag",
+            "CellValueReader",
             "ResourceId",
             "budgetGrant",
             "deposit",
@@ -30414,27 +30422,27 @@
             "deriveRegistryCellValue",
             "deriveRevokedPolicyCellValue",
             "plannedBalanceAt",
-            "preStateValueAt",
             "withdraw"
           ]
         },
         {
           "kind": "def",
           "name": "foldEntry",
-          "line": 322,
+          "line": 338,
           "called": [
             "Action",
             "ActorId",
             "CellOpening",
             "ResourceId",
             "StateCellWrite",
-            "derivedCellValue"
+            "derivedCellValue",
+            "preStateValueAt"
           ]
         },
         {
           "kind": "def",
           "name": "verifierPostRoot",
-          "line": 340,
+          "line": 357,
           "called": [
             "Action",
             "ActorId",
@@ -30454,7 +30462,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalances_alias_consistent",
-          "line": 377,
+          "line": 394,
           "called": [
             "Action",
             "ActorId",
@@ -30494,16 +30502,17 @@
         {
           "kind": "structure",
           "name": "MultiBundle",
-          "line": 442,
+          "line": 459,
           "called": [
             "CellTag",
+            "SmtMultiProof",
             "cells"
           ]
         },
         {
           "kind": "def",
           "name": "bundleValueAt",
-          "line": 456,
+          "line": 486,
           "called": [
             "CellTag",
             "MultiBundle",
@@ -30513,7 +30522,7 @@
         {
           "kind": "def",
           "name": "bundleBalanceReader",
-          "line": 463,
+          "line": 493,
           "called": [
             "BalanceReader",
             "MultiBundle",
@@ -30523,7 +30532,7 @@
         {
           "kind": "def",
           "name": "bundleNextWdId",
-          "line": 473,
+          "line": 503,
           "called": [
             "MultiBundle",
             "bundleValueAt"
@@ -30532,7 +30541,7 @@
         {
           "kind": "def",
           "name": "multiFrontierOf",
-          "line": 488,
+          "line": 518,
           "called": [
             "Action",
             "ActorId",
@@ -30544,14 +30553,11 @@
         {
           "kind": "def",
           "name": "verifierPostRootMulti",
-          "line": 506,
+          "line": 544,
           "called": [
             "Action",
             "ActorId",
-            "CellOpening",
-            "FaultProof",
             "FaultProofAdjudicable",
-            "LegalKernel",
             "MultiBundle",
             "OpenedLeaf",
             "StateCommit",
@@ -30560,13 +30566,52 @@
             "bundleValueAt",
             "cellLeaf",
             "derivedCellValue",
+            "expandMultiProof",
             "frontierShapeOk",
             "multiFrontierOf",
+            "multiGapLevels",
             "multiWalk",
             "plannedBalances",
             "smtCellKey",
             "smtDepth",
             "verifierWriteCells"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stepMultiBundle",
+          "line": 613,
+          "called": [
+            "ExtendedState",
+            "MultiBundle",
+            "SignedAction",
+            "buildMultiProof",
+            "cells",
+            "es",
+            "getCellValue",
+            "multiFrontierOf",
+            "multiGapLevels",
+            "multiSiblings",
+            "opened",
+            "openedOf",
+            "smtDepth",
+            "stateCellEntries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "stepMultiPostRoot",
+          "line": 626,
+          "called": [
+            "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
+            "SignedAction",
+            "StateCommit",
+            "commitExtendedState",
+            "es",
+            "stepMultiBundle",
+            "verifierPostRootMulti"
           ]
         }
       ]
@@ -58653,7 +58698,7 @@
     {
       "module": "LegalKernel.Test.FaultProof.Terminate",
       "path": "LegalKernel/Test/FaultProof/Terminate.lean",
-      "declaration_count": 9,
+      "declaration_count": 11,
       "declarations": [
         {
           "kind": "namespace",
@@ -58745,36 +58790,67 @@
         },
         {
           "kind": "def",
-          "name": "multiCells",
-          "line": 236,
+          "name": "zeroGapWire",
+          "line": 240,
           "called": [
-            "CellTag"
+            "SmtMultiProof",
+            "buildMultiProof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "setMaskBit",
+          "line": 244,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "probeLevels",
+          "line": 250,
+          "called": [
+            "base",
+            "multiFrontierOf",
+            "multiGapLevels",
+            "openedOf",
+            "smtDepth"
           ]
         },
         {
           "kind": "def",
           "name": "multiTests",
-          "line": 239,
+          "line": 255,
           "called": [
             "MultiBundle",
             "TestCase",
             "assertEq",
+            "base",
             "bundleValueAt",
             "cells",
+            "commitExtendedState",
             "distributeOthers",
             "multiFrontierOf",
             "natCellValue",
             "pathSorted",
+            "policyOpening",
+            "probeLevels",
+            "probes",
             "proportionalDilute",
+            "setMaskBit",
+            "sign",
             "smtCellKey",
+            "stepMultiBundle",
+            "stepMultiPostRoot",
+            "stepOpenings",
+            "stepPostRoot",
             "transfer",
-            "verifierPostRootMulti"
+            "verifierPostRootMulti",
+            "zeroGapWire"
           ]
         },
         {
           "kind": "def",
           "name": "tests",
-          "line": 294,
+          "line": 430,
           "called": [
             "LegalKernel.Test.FaultProof.Terminate",
             "TestCase",
