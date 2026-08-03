@@ -326,6 +326,43 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
     }
 
     /* ---------------------------------------------------------- */
+    /* The frontier bound                                         */
+    /* ---------------------------------------------------------- */
+
+    /// @notice **The opening cap is derived from the write set, and
+    ///         every corpus probe sits under it.**
+    ///
+    /// @dev    `assertConsistent` asks `deriveWriteSet` itself rather
+    ///         than restating a literal, so a variant whose write set
+    ///         grew past the cap fails at deploy time instead of
+    ///         rejecting honest bundles at runtime — which on a
+    ///         terminal step costs the responsible party the game by
+    ///         timeout.  Checked here alongside the two facts that make
+    ///         the bound meaningful: the widest frontier is what the
+    ///         plan said it was, and no probe exceeds it.
+    function test_the_opening_cap_is_derived_from_the_write_set() public view {
+        vmRoot.assertConsistent();
+        // `depositWithFee` writes six cells; plus the policy cell.
+        assertEq(vmRoot.widestFrontier(new bytes(128)), 7, "widest frontier");
+        assertLe(
+            vmRoot.widestFrontier(new bytes(128)),
+            vmRoot.MAX_CELL_OPENINGS(),
+            "the cap must exceed the widest frontier"
+        );
+
+        if (!fixtureExists(STEP_VM_FIXTURE)) return;
+        string memory raw = readFixture(STEP_VM_FIXTURE);
+        uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
+        for (uint256 i = 0; i < n; i++) {
+            assertLe(
+                vm.parseJsonUint(raw, string.concat(multiProbeBase(i), ".cellCount")),
+                vmRoot.widestFrontier(new bytes(128)),
+                "a corpus probe exceeds the derived widest frontier"
+            );
+        }
+    }
+
+    /* ---------------------------------------------------------- */
     /* Helpers                                                    */
     /* ---------------------------------------------------------- */
 

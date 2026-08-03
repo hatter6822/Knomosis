@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "6145d2d35654d91e2338b8bcf9b0e7894956d633e7ebda24cbac9fd770a808c0"
+    "source_digest": "a797f617c5548cead61e50d68c103dbe0328a68ff9da13fdb171c99ff1d91b04"
   },
   "summary": {
-    "module_count": 99,
-    "declaration_count": 2127
+    "module_count": 100,
+    "declaration_count": 2145
   },
   "modules": [
     {
@@ -3348,7 +3348,7 @@
     {
       "module": "KnomosisStepVMRoot",
       "path": "solidity/src/contracts/KnomosisStepVMRoot.sol",
-      "declaration_count": 33,
+      "declaration_count": 34,
       "declarations": [
         {
           "kind": "contract",
@@ -3371,67 +3371,73 @@
         {
           "kind": "error",
           "name": "PolicyCellMismatch",
-          "line": 144,
+          "line": 152,
           "called": []
         },
         {
           "kind": "error",
           "name": "BadCellOpening",
-          "line": 149,
+          "line": 157,
           "called": []
         },
         {
           "kind": "error",
           "name": "WriteSetMismatch",
-          "line": 153,
+          "line": 161,
           "called": []
         },
         {
           "kind": "error",
           "name": "WriteSetLengthMismatch",
-          "line": 156,
+          "line": 164,
           "called": []
         },
         {
           "kind": "error",
           "name": "MalformedProofData",
-          "line": 160,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "TooManyCellOpenings",
-          "line": 163,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "FrontierMissingCell",
           "line": 168,
           "called": []
         },
         {
           "kind": "error",
-          "name": "FrontierLengthMismatch",
+          "name": "TooManyCellOpenings",
           "line": 171,
           "called": []
         },
         {
           "kind": "error",
+          "name": "FrontierMissingCell",
+          "line": 176,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FrontierLengthMismatch",
+          "line": 179,
+          "called": []
+        },
+        {
+          "kind": "error",
           "name": "PreRootMismatch",
-          "line": 175,
+          "line": 183,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 191,
+          "line": 199,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "widestFrontier",
+          "line": 234,
           "called": []
         },
         {
           "kind": "function",
           "name": "executeStepToRoot",
-          "line": 218,
+          "line": 268,
           "called": [
             "CellOpening",
             "TooManyCellOpenings",
@@ -3447,7 +3453,7 @@
         {
           "kind": "function",
           "name": "executeStepToRootMulti",
-          "line": 329,
+          "line": 379,
           "called": [
             "OpenedCell",
             "PreRootMismatch",
@@ -3460,7 +3466,7 @@
         {
           "kind": "function",
           "name": "_nextWdIdPreMulti",
-          "line": 383,
+          "line": 433,
           "called": [
             "OpenedCell"
           ]
@@ -3468,7 +3474,7 @@
         {
           "kind": "function",
           "name": "_findOpened",
-          "line": 398,
+          "line": 448,
           "called": [
             "OpenedCell"
           ]
@@ -3476,7 +3482,7 @@
         {
           "kind": "function",
           "name": "_openedValue",
-          "line": 417,
+          "line": 467,
           "called": [
             "FrontierMissingCell",
             "OpenedCell",
@@ -3486,13 +3492,13 @@
         {
           "kind": "function",
           "name": "_frontierSize",
-          "line": 433,
+          "line": 483,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireFrontier",
-          "line": 459,
+          "line": 509,
           "called": [
             "FrontierLengthMismatch",
             "FrontierMissingCell",
@@ -3504,7 +3510,7 @@
         {
           "kind": "function",
           "name": "_multiLeaves",
-          "line": 487,
+          "line": 537,
           "called": [
             "OpenedCell",
             "_deriveValueMulti",
@@ -3516,7 +3522,7 @@
         {
           "kind": "function",
           "name": "_planMulti",
-          "line": 559,
+          "line": 609,
           "called": [
             "OpenedCell",
             "_openedValue"
@@ -3525,7 +3531,7 @@
         {
           "kind": "function",
           "name": "_deriveValueMulti",
-          "line": 590,
+          "line": 640,
           "called": [
             "OpenedCell",
             "WriteSetMismatch",
@@ -3536,7 +3542,7 @@
         {
           "kind": "function",
           "name": "_requirePolicyOpening",
-          "line": 662,
+          "line": 712,
           "called": [
             "BadCellOpening",
             "CellOpening",
@@ -3548,13 +3554,13 @@
         {
           "kind": "function",
           "name": "_leafPreimage",
-          "line": 700,
+          "line": 750,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireProofDataShape",
-          "line": 713,
+          "line": 763,
           "called": [
             "MalformedProofData"
           ]
@@ -3562,7 +3568,7 @@
         {
           "kind": "function",
           "name": "_nextWdIdPre",
-          "line": 722,
+          "line": 772,
           "called": [
             "CellOpening"
           ]
@@ -3570,7 +3576,7 @@
         {
           "kind": "function",
           "name": "_preStateValue",
-          "line": 746,
+          "line": 796,
           "called": [
             "CellOpening"
           ]
@@ -3578,7 +3584,7 @@
         {
           "kind": "function",
           "name": "_signerBudgetPre",
-          "line": 765,
+          "line": 815,
           "called": [
             "CellOpening",
             "WriteSetMismatch",
@@ -3588,7 +3594,7 @@
         {
           "kind": "function",
           "name": "_plan",
-          "line": 781,
+          "line": 831,
           "called": [
             "CellOpening",
             "_preStateValue"
@@ -3597,7 +3603,7 @@
         {
           "kind": "function",
           "name": "_applyWrite",
-          "line": 804,
+          "line": 854,
           "called": [
             "BadCellOpening",
             "CellOpening",
@@ -3608,7 +3614,7 @@
         {
           "kind": "function",
           "name": "_deriveValue",
-          "line": 842,
+          "line": 892,
           "called": [
             "CellOpening",
             "WriteSetMismatch",
@@ -3620,7 +3626,7 @@
         {
           "kind": "function",
           "name": "_deriveConsumed",
-          "line": 915,
+          "line": 965,
           "called": []
         }
       ]
@@ -13187,6 +13193,212 @@
           "kind": "function",
           "name": "_amountValue",
           "line": 280,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "StepVMRootMulti.t",
+      "path": "solidity/test/CrossCheck/StepVMRootMulti.t.sol",
+      "declaration_count": 17,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "StepVMRootMultiCrossCheck",
+          "line": 36,
+          "called": [
+            "KnomosisStepVMRoot",
+            "StepVMRootProbeHarness"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 42,
+          "called": [
+            "KnomosisStepVMRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStepToRootMulti_matches_lean",
+          "line": 52,
+          "called": [
+            "_requireKeccakLinked",
+            "_runProbe",
+            "_skipWithReason",
+            "fixtureExists",
+            "multiProbeBase",
+            "probePostRoot",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_the_two_entry_points_agree",
+          "line": 79,
+          "called": [
+            "_requireKeccakLinked",
+            "_runProbe",
+            "_skipWithReason",
+            "findProbeBase",
+            "fixtureExists",
+            "loadOpenings",
+            "loadPolicyOpening",
+            "multiProbeBase",
+            "probePreRoot",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_executeStepToRootMulti_moves_the_root",
+          "line": 123,
+          "called": [
+            "_requireKeccakLinked",
+            "_runProbe",
+            "_skipWithReason",
+            "fixtureExists",
+            "multiProbeBase",
+            "probePreRoot",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_a_permuted_frontier_reaches_the_same_root",
+          "line": 157,
+          "called": [
+            "_call",
+            "_requireKeccakLinked",
+            "_skipWithReason",
+            "fixtureExists",
+            "loadOpenedCells",
+            "multiProbeBase",
+            "probeGapMask",
+            "probePostRoot",
+            "probeSiblings",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_the_same_cell_twice_reverts",
+          "line": 199,
+          "called": [
+            "_call",
+            "_probeWithAtLeast",
+            "_skipWithReason",
+            "fixtureExists",
+            "loadOpenedCells",
+            "probeGapMask",
+            "probeSiblings",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_omitting_a_cell_reverts",
+          "line": 225,
+          "called": [
+            "_call",
+            "_probeWithAtLeast",
+            "_skipWithReason",
+            "fixtureExists",
+            "loadOpenedCells",
+            "probeGapMask",
+            "probeSiblings",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_a_forged_pre_value_reverts",
+          "line": 252,
+          "called": [
+            "_amountValue",
+            "_call",
+            "_requireKeccakLinked",
+            "_skipWithReason",
+            "findMultiProbeBase",
+            "fixtureExists",
+            "loadOpenedCells",
+            "probeGapMask",
+            "probeSiblings",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_a_truncated_wire_reverts",
+          "line": 285,
+          "called": [
+            "_call",
+            "_probeWithSiblings",
+            "_skipWithReason",
+            "fixtureExists",
+            "loadOpenedCells",
+            "probeGapMask",
+            "probeSiblings",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_bulk_variants_are_refused",
+          "line": 313,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_the_opening_cap_is_derived_from_the_write_set",
+          "line": 342,
+          "called": [
+            "fixtureExists",
+            "multiProbeBase",
+            "readFixture"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_probeWithAtLeast",
+          "line": 369,
+          "called": [
+            "multiProbeBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_probeWithSiblings",
+          "line": 385,
+          "called": [
+            "multiProbeBase",
+            "probeSiblings"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_runProbe",
+          "line": 399,
+          "called": [
+            "_call",
+            "loadOpenedCells",
+            "probeGapMask",
+            "probeSiblings"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_call",
+          "line": 412,
+          "called": [
+            "probePreRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_amountValue",
+          "line": 432,
           "called": []
         }
       ]

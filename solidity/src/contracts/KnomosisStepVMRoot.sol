@@ -140,6 +140,14 @@ contract KnomosisStepVMRoot {
     ///         still bounding the calldata a single call can carry.
     uint256 public constant MAX_CELL_OPENINGS = 32;
 
+    /// @notice The highest frozen `Action` dispatcher index.
+    uint256 internal constant MAX_ACTION_KIND = 24;
+
+    /// @notice Field-buffer length `widestFrontier` probes with —
+    ///         comfortably past the longest layout `actionFieldsForL1`
+    ///         produces (`depositWithFee`'s 64 bytes).
+    uint256 internal constant PROBE_FIELD_BYTES = 128;
+
     /// @notice The read-only policy opening does not name the
     ///         budget-policy cell.
     error PolicyCellMismatch();
@@ -189,11 +197,53 @@ contract KnomosisStepVMRoot {
     ///         `depositWithFee`'s six.  A build whose caps drifted
     ///         below either would reject honest bundles, which on a
     ///         terminal step costs the responsible party the game.
-    function assertConsistent() external pure {
+    function assertConsistent() external view {
         require(
             MAX_PROOF_DATA_BYTES == 32 * (1 + 256), "ProofDataCapMismatch"
         );
-        require(MAX_CELL_OPENINGS >= 6, "CellOpeningCapTooLow");
+        // Re-derived, not restated.  The bound used to be the literal
+        // `>= 6`, which is a claim about `deriveWriteSet` written down
+        // somewhere `deriveWriteSet` cannot contradict — so a variant
+        // whose write set grew would pass the check and reject honest
+        // bundles at runtime, which on a terminal step costs the
+        // responsible party the game by timeout.  This asks the write
+        // set itself, over every adjudicable kind.
+        require(
+            MAX_CELL_OPENINGS >= this.widestFrontier(new bytes(PROBE_FIELD_BYTES)),
+            "CellOpeningCapTooLow"
+        );
+    }
+
+    /// @notice The widest frontier any adjudicable action can produce:
+    ///         the largest write set over the frozen kinds, plus the
+    ///         read-only budget-policy cell.
+    ///
+    /// @dev    `probeFields` is a zero buffer long enough to satisfy
+    ///         every variant's field-length requirement.  Only the
+    ///         write set's LENGTH is read, and that is a function of
+    ///         the action kind alone — the field bytes determine which
+    ///         cells, never how many — so degenerate values are exactly
+    ///         as informative as real ones here.
+    ///
+    ///         Separate from `assertConsistent` because `deriveWriteSet`
+    ///         takes `calldata` and a no-argument `pure` function has
+    ///         none to give it; `assertConsistent` reaches this through
+    ///         a `staticcall` on itself.
+    ///
+    /// @param  probeFields a zero buffer of at least `PROBE_FIELD_BYTES`.
+    /// @return widest      the largest frontier size.
+    function widestFrontier(bytes calldata probeFields)
+        external
+        pure
+        returns (uint256 widest)
+    {
+        require(probeFields.length >= PROBE_FIELD_BYTES, "ProbeFieldsTooShort");
+        for (uint256 k = 0; k <= MAX_ACTION_KIND; k++) {
+            if (!StepWrites.isAdjudicable(uint8(k))) continue;
+            uint256 n =
+                StepWrites.deriveWriteSet(uint8(k), probeFields, 0, 0).length + 1;
+            if (n > widest) widest = n;
+        }
     }
 
     /* ---------------------------------------------------------- */
