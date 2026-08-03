@@ -42,6 +42,7 @@ This module is **not** part of the trusted computing base.
 import LegalKernel.FaultProof.Coherence
 import LegalKernel.FaultProof.Step
 import LegalKernel.FaultProof.StepVMCoherence
+import LegalKernel.FaultProof.Terminate
 import LegalKernel.FaultProof.VerifierWrites
 import LegalKernel.Test.Bridge.CrossCheck.Framework
 import LegalKernel.Test.Framework
@@ -1892,6 +1893,107 @@ def writeBundleGoldens : List Test.Bridge.CrossCheck.Json :=
                  , ("newIsAbsent",
                     .bool (decide (newV = canonicalAbsentValue t))) ])) ) ]))
 
+/-! ### The multiproof wire, per probe
+
+The same twenty probes as `writeBundleGoldens`, opened the OTHER way:
+one opening per CELL against the pre-root, all sharing a single
+sibling list, instead of one opening per WRITE against the running
+root.
+
+Emitted alongside the chained column rather than instead of it, so the
+two entry points can be asserted to agree before either retires.  That
+is the only check that distinguishes "the multiproof works" from "the
+multiproof and the chained fold both work, differently".
+
+The wire here is the COMPRESSED one — mask plus the siblings the mask
+marks — because that is what an L1 receives.  Its length is not a free
+parameter: `gapCount` is a function of the key set, so the consumer
+derives the expected mask size and sibling count before reading a byte
+and the corpus's own column is checked against that derivation rather
+than trusted.
+-/
+
+/-- Per-probe multiproof goldens: the action in its L1 form, the
+    frontier's cells with their proven pre-values in path order, the
+    shared wire, and the two roots the wire serves. -/
+def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
+  let es : ExtendedState :=
+    let base : LegalKernel.State :=
+      { balances :=
+          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
+             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
+             ((∅ : BalanceMap).insert 9 60) }
+    { fixtureBase with base := base }
+  let signer : ActorId := 7
+  let hx := Test.Bridge.CrossCheck.hexFromBytes
+  let probes : List (String × Action) :=
+    [ ("transfer",   .transfer 1 signer 8 30)
+      -- The same-cell shapes.  Under the chained fold they are two
+      -- writes at one cell; under a multiproof they are ONE opening,
+      -- which is where the calldata saving concentrates and where a
+      -- dedup bug would live.
+    , ("selfTransfer", .transfer 1 signer signer 30)
+    , ("mint",       .mint 1 8 5)
+    , ("burn",       .burn 1 8 5)
+    , ("burnNoop",   .burn 1 8 999999)
+    , ("reward",     .reward 1 8 5)
+    , ("freezeResource", .freezeResource 1)
+    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
+    , ("deposit",    .deposit 1 8 5 3)
+    , ("depositWithFee", .depositWithFee 1 8 9 5 2 3 4)
+    , ("depositWithFeeSelf", .depositWithFee 1 signer 9 5 2 3 5)
+    , ("topUpActionBudget", .topUpActionBudget 1 10 4 9)
+    , ("topUpActionBudgetForSelf", .topUpActionBudgetFor signer 1 10 4 9)
+    , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 10 4 9)
+    , ("claimBudgetRefund", .claimBudgetRefund 1 2 3 9)
+    , ("ammSwap",    .ammSwap 1 2 5 10 9)
+    , ("registerIdentity", .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
+    , ("replaceKey", .replaceKey 8 (ByteArray.mk #[0xAA, 0xBB]))
+    , ("declareLocalPolicy", .declareLocalPolicy Authority.LocalPolicy.empty)
+    , ("revokeLocalPolicy", .revokeLocalPolicy) ]
+  probes.filterMap (fun (name, action) =>
+    let st : SignedAction :=
+      { action, signer, nonce := 0, sig := ByteArray.empty }
+    match stepMultiPostRoot es st 0 with
+    | none => none
+    | some root =>
+      let b := stepMultiBundle es st
+      let opened := openedOf es (b.cells.map Prod.fst)
+      some (.obj
+        [ ("variant", .str name)
+        , ("preStateRootHex", .str (hx (commitExtendedState es)))
+          -- What the merged walk produces, and what
+          -- `executeStepToRootMulti` must return.
+        , ("postStateRootHex", .str (hx root))
+        , ("actionKindByte", .num (actionKindByte action).toNat)
+        , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
+        , ("signerNat", .num signer.toNat)
+        , ("l2LogIndex", .num 0)
+          -- The gap count, so the consumer's own derivation from the
+          -- key set is checked against Lean's rather than against
+          -- itself.  Everything about the wire's length follows from
+          -- this one number.
+        , ("gapCount", .num (multiGapLevels smtDepth opened).length)
+        , ("gapMaskHex", .str (hx b.proof.gapMask))
+        , ("siblingsHex",
+           .str (hx (b.proof.siblings.foldl (fun acc s => acc ++ s)
+                       (ByteArray.mk #[]))))
+        , ("cellCount", .num b.cells.length)
+          -- The frontier, in path order: the cells the wire opens with
+          -- the pre-values it proves.  The policy cell is IN here
+          -- rather than beside it -- a read is a write of the same
+          -- value -- which is what retires the separate policy walk.
+        , ("cells", .arr (b.cells.map (fun c =>
+            let (t, v) := c
+            let (kindNat, keyA, keyB) : Nat × Nat × Nat := t.flatKey
+            .obj [ ("cellKind", .num kindNat)
+                 , ("keyA", .num keyA), ("keyB", .num keyB)
+                 , ("smtKeyHex", .str (hx (smtCellKey t)))
+                 , ("preValueHex", .str (hx v))
+                 , ("preLeafHex", .str (hx (cellLeaf t v)))
+                 , ("isAbsent", .bool (decide (v = canonicalAbsentValue t))) ])))
+        ]))
+
 /-! ### The write SET, per variant
 
 The last piece of the flip's specification: which cells each action
@@ -2327,6 +2429,69 @@ def tests : List Test.TestCase :=
             | _, _, _ => throw <| IO.userError "malformed root golden"
           | _ => throw <| IO.userError "malformed root golden"
     }
+  , { name := "the multiproof column agrees with the chained one"
+    , body := do
+        -- The check that distinguishes "the multiproof works" from
+        -- "the multiproof and the chained fold both work, differently".
+        -- Same probes, same pre-state, opened two different ways; if
+        -- the post-roots ever diverge, exactly one of the two entry
+        -- points is adjudicating the wrong transition and the corpus
+        -- cannot say which.
+        let get : Test.Bridge.CrossCheck.Json → String →
+            Option Test.Bridge.CrossCheck.Json := fun j k =>
+          match j with
+          | .obj fields => (fields.find? (fun p => p.1 = k)).map Prod.snd
+          | _           => none
+        Test.assertEq (expected := writeBundleGoldens.length)
+          (actual := multiProofGoldens.length)
+          "the two columns must cover the same probes"
+        for (chained, multi) in writeBundleGoldens.zip multiProofGoldens do
+          match get chained "variant", get multi "variant",
+                get chained "postStateRootHex", get multi "postStateRootHex",
+                get chained "preStateRootHex", get multi "preStateRootHex" with
+          | some (.str v₁), some (.str v₂),
+            some (.str r₁), some (.str r₂),
+            some (.str p₁), some (.str p₂) =>
+            Test.assertEq (expected := v₁) (actual := v₂)
+              "the two columns must be in the same probe order"
+            Test.assertEq (expected := p₁) (actual := p₂)
+              s!"{v₁}: the two columns must share a pre-state"
+            Test.assertEq (expected := r₁) (actual := r₂)
+              s!"{v₁}: the multiproof and the chained fold disagree"
+            Test.assert (r₁ != p₁) s!"{v₁}: neither fold moved the root"
+          | _, _, _, _, _, _ => throw <| IO.userError "malformed goldens"
+    }
+  , { name := "every multiproof wire is exactly its key set's shape"
+    , body := do
+        -- The corpus's own copy of the consumer's derivation.  The gap
+        -- count fixes the mask size and the sibling count, so a column
+        -- emitted at some other length would pin the L1 to a wire the
+        -- L1's own shape check would reject -- a corpus that could not
+        -- pass its own consumer.
+        for g in multiProofGoldens do
+          match g with
+          | .obj fields =>
+            let get := fun (k : String) =>
+              (fields.find? (fun p => p.1 = k)).map Prod.snd
+            match get "variant", get "gapCount", get "gapMaskHex",
+                  get "siblingsHex", get "cellCount" with
+            | some (.str v), some (.num gaps), some (.str mask),
+              some (.str sibs), some (.num cells) =>
+              -- Hex strings carry a `0x` prefix and two chars a byte.
+              Test.assertEq (expected := (gaps + 7) / 8)
+                (actual := (mask.length - 2) / 2)
+                s!"{v}: the mask must be ceil(G/8) bytes"
+              Test.assertEq (expected := 0) (actual := (sibs.length - 2) % 64)
+                s!"{v}: the sibling region must be whole 32-byte siblings"
+              -- G = (256 + 1) - m + sum divs, so it is at least the
+              -- single-cell 256 and grows with the frontier.  A column
+              -- reporting fewer gaps than levels would mean the walk
+              -- never reached the root.
+              Test.assert (gaps ≥ 256) s!"{v}: fewer gaps than one full path"
+              Test.assert (cells ≥ 1) s!"{v}: the frontier must open something"
+            | _, _, _, _, _ => throw <| IO.userError "malformed multiproof golden"
+          | _ => throw <| IO.userError "malformed multiproof golden"
+    }
   , { name := "SVC.5.e+: every cellProof carries a well-formed SMT opening"
     , body := do
         -- Shape, not value: a `0x`-prefixed hex string of a NONZERO
@@ -2505,6 +2670,8 @@ def tests : List Test.TestCase :=
           , ("stepPostRootGoldensCount", .num stepPostRootGoldens.length)
           , ("writeBundleGoldens", .arr writeBundleGoldens)
           , ("writeBundleGoldensCount", .num writeBundleGoldens.length)
+          , ("multiProofGoldens", .arr multiProofGoldens)
+          , ("multiProofGoldensCount", .num multiProofGoldens.length)
           , ("writeSetGoldens", .arr writeSetGoldens)
           , ("writeSetGoldensCount", .num writeSetGoldens.length)
           , ("absentValueGoldens", .arr absentValueGoldens)

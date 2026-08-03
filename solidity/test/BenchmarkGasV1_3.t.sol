@@ -1275,6 +1275,10 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
     string internal distinctBase;
     /// @dev The duplicate-cell probe (`transfer` with sender == receiver).
     string internal duplicateBase;
+    /// @dev The same two probes in the multiproof column.
+    string internal multiDistinctBase;
+    /// @dev The duplicate-cell probe's multiproof column entry.
+    string internal multiDuplicateBase;
 
     function setUp() public {
         vmRoot = new KnomosisStepVMRoot();
@@ -1282,6 +1286,8 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
         _requireKeccakLinked(raw, ".isKeccak256Linked");
         distinctBase = findProbeBase(raw, "transfer");
         duplicateBase = findProbeBase(raw, "selfTransfer");
+        multiDistinctBase = findMultiProbeBase(raw, "transfer");
+        multiDuplicateBase = findMultiProbeBase(raw, "selfTransfer");
     }
 
     /// @notice `executeStepToRoot` over a bundle of five DISTINCT cells
@@ -1315,6 +1321,109 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
             encodeProbeCall(raw, duplicateBase, loadOpenings(raw, duplicateBase)),
             true
         );
+    }
+
+    /// @notice `executeStepToRootMulti` over the SAME distinct-cell
+    ///         step, opened as a deduplicating pre-root multiproof.
+    ///
+    /// @dev    Paired with `executeStepToRoot_distinctCells` so the two
+    ///         opening disciplines are measured on one scenario rather
+    ///         than compared across two.  This is the majority case —
+    ///         most steps write distinct cells — and it is where the
+    ///         multiproof's structural wins (one root check, order-free
+    ///         bundles, a derived wire length) have to be paid for
+    ///         rather than granted: the merge only absorbs the top few
+    ///         levels of five 256-level paths.
+    function test_gas_executeStepToRootMulti_distinctCells() public {
+        _bench(
+            "executeStepToRootMulti_distinctCells",
+            address(this),
+            address(vmRoot),
+            0,
+            encodeMultiProbeCall(
+                raw, multiDistinctBase, loadOpenedCells(raw, multiDistinctBase),
+                probeGapMask(raw, multiDistinctBase),
+                probeSiblings(raw, multiDistinctBase)
+            ),
+            true
+        );
+    }
+
+    /// @notice `executeStepToRootMulti` over the duplicate-cell step.
+    ///
+    /// @dev    The shape the dedup exists for.  The chained fold pays a
+    ///         full second opening — 256 levels verified and 256
+    ///         re-walked — to land the value the first write already
+    ///         did; here the cell appears once and the second walk is
+    ///         simply gone.  The delta against
+    ///         `executeStepToRoot_duplicateCell` is the measurement
+    ///         `state_root_merkleisation_plan.md` §6 asked for.
+    function test_gas_executeStepToRootMulti_duplicateCell() public {
+        _bench(
+            "executeStepToRootMulti_duplicateCell",
+            address(this),
+            address(vmRoot),
+            0,
+            encodeMultiProbeCall(
+                raw, multiDuplicateBase, loadOpenedCells(raw, multiDuplicateBase),
+                probeGapMask(raw, multiDuplicateBase),
+                probeSiblings(raw, multiDuplicateBase)
+            ),
+            true
+        );
+    }
+
+    /// @notice Pins the multiproof scenarios the same way: each reaches
+    ///         Lean's published post-root, agrees with the chained entry
+    ///         point, and has the shape its name claims — the duplicate
+    ///         probe's frontier is strictly smaller than its write set,
+    ///         which is the dedup being exercised rather than assumed.
+    function test_sanity_stepVMRootMultiScenarioAssumptions() public view {
+        KnomosisStepVMRoot.OpenedCell[] memory distinct =
+            loadOpenedCells(raw, multiDistinctBase);
+        KnomosisStepVMRoot.OpenedCell[] memory duplicate =
+            loadOpenedCells(raw, multiDuplicateBase);
+
+        // The write set is four cells in both probes; the frontier adds
+        // the policy cell and removes the alias.
+        assertEq(distinct.length, 5, "transfer's frontier is five cells");
+        assertEq(duplicate.length, 4, "selfTransfer's frontier dedups to four");
+
+        assertEq(
+            _runMulti(multiDistinctBase, distinct),
+            probePostRoot(raw, multiDistinctBase),
+            "the distinct-cell multiproof reaches Lean's post-root"
+        );
+        assertEq(
+            _runMulti(multiDuplicateBase, duplicate),
+            probePostRoot(raw, multiDuplicateBase),
+            "the duplicate-cell multiproof reaches Lean's post-root"
+        );
+        // And the two disciplines adjudicate the same transition, so
+        // the benchmark is comparing costs of one thing.
+        assertEq(
+            _runMulti(multiDistinctBase, distinct),
+            _run(distinctBase, loadOpenings(raw, distinctBase)),
+            "the two entry points disagree on the distinct-cell step"
+        );
+        assertEq(
+            _runMulti(multiDuplicateBase, duplicate),
+            _run(duplicateBase, loadOpenings(raw, duplicateBase)),
+            "the two entry points disagree on the duplicate-cell step"
+        );
+    }
+
+    /// @dev Run a multiproof probe and return the root it reaches.
+    function _runMulti(
+        string memory base,
+        KnomosisStepVMRoot.OpenedCell[] memory cells
+    ) private view returns (bytes32 root) {
+        (bool ok, bytes memory out) = address(vmRoot).staticcall(
+            encodeMultiProbeCall(
+                raw, base, cells, probeGapMask(raw, base), probeSiblings(raw, base))
+        );
+        assertTrue(ok, "multiproof probe reverted");
+        root = abi.decode(out, (bytes32));
     }
 
     /// @notice Pins both benchmarked scenarios: each probe folds to

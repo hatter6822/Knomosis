@@ -167,16 +167,40 @@ library SmtCellVerifier {
     ///         deployment storage, and 255 `SLOAD`s would cost far more
     ///         than the hashes they replaced.
     ///
+    ///         **Why the loop is assembly.**  Written in Solidity as
+    ///         `hashes[i] = _hashPair(hashes[i-1], hashes[i-1])` it
+    ///         measured ~87k gas — about 340 per level for one 64-byte
+    ///         `keccak256` that costs 42.  The overhead is the indexing:
+    ///         two bounds-checked accesses into a fixed-size memory
+    ///         array per iteration, for a walk that only ever moves
+    ///         forward by one word and already holds the previous value.
+    ///         Carrying the running hash on the stack and advancing a
+    ///         pointer removes both, and this table is built once per
+    ///         terminal step by BOTH entry points, so the saving is on
+    ///         every fault-proof settlement.
+    ///
+    ///         Memory-safe: the writes stay inside `hashes`, which the
+    ///         compiler has already allocated, and the hashing uses the
+    ///         two scratch words.  One surplus hash is computed at the
+    ///         top of the last iteration and discarded, which is
+    ///         cheaper than branching to avoid it.
+    ///
     /// @return hashes  hashes[d] = canonical empty-subtree hash at depth d.
     function precomputeEmptySubtreeHashes()
         internal
         pure
         returns (bytes32[SMT_DEPTH] memory hashes)
     {
-        hashes[0] = keccak256(EMPTY_LEAF_SEED);
-        unchecked {
-            for (uint256 i = 1; i < SMT_DEPTH; ++i) {
-                hashes[i] = _hashPair(hashes[i - 1], hashes[i - 1]);
+        bytes32 h = keccak256(EMPTY_LEAF_SEED);
+        /// @solidity memory-safe-assembly
+        assembly {
+            let p := hashes
+            let last := add(p, mul(32, SMT_DEPTH))
+            for { } lt(p, last) { p := add(p, 32) } {
+                mstore(p, h)
+                mstore(0x00, h)
+                mstore(0x20, h)
+                h := keccak256(0x00, 0x40)
             }
         }
     }

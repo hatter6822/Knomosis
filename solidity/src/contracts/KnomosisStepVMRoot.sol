@@ -6,6 +6,7 @@ pragma solidity 0.8.20;
 
 import {CBEEncode} from "../lib/CBEEncode.sol";
 import {SmtCellVerifier} from "../lib/SmtCellVerifier.sol";
+import {SmtMultiVerifier} from "../lib/SmtMultiVerifier.sol";
 import {StepPlan} from "../lib/StepPlan.sol";
 import {StepVMMerkle} from "../lib/StepVMMerkle.sol";
 import {StepWrites} from "../lib/StepWrites.sol";
@@ -62,6 +63,31 @@ import {StepWrites} from "../lib/StepWrites.sol";
 ///         Mirrors Lean's `stepPostRoot`; pinned cross-stack by the
 ///         corpus's `writeBundleGoldens` and `stepPostRootGoldens`.
 contract KnomosisStepVMRoot {
+    /// @notice One opened cell in a MULTIPROOF bundle: its identity and
+    ///         its PRE-state value, and no proof of its own.
+    ///
+    /// @dev    The whole difference from `CellOpening` is the missing
+    ///         `proofData`.  Under a multiproof every cell is opened
+    ///         against the SAME root, so the openings share one sibling
+    ///         list and a per-cell path would be redundant; and because
+    ///         a cell appears exactly once, `preValue` is unambiguously
+    ///         the pre-state's rather than "the running state's, which
+    ///         is the pre-state's only for the first write".
+    ///
+    ///         `preValue` is no more trusted here than there: it enters
+    ///         the PRE-side fold, which must reproduce the submitted
+    ///         pre-root, so a lie moves the aggregate off it.
+    struct OpenedCell {
+        /// @dev The cell-kind discriminator (0..14).
+        uint8 cellKind;
+        /// @dev First key: resource / actor / depositId / withdrawal id.
+        uint256 keyA;
+        /// @dev Second key; balance cells only, where it is the actor.
+        uint256 keyB;
+        /// @dev The cell's PRE-state value.
+        bytes preValue;
+    }
+
     /// @notice One cell opening in the step's bundle.
     ///
     /// @dev    `preValue` is the cell's value in the state this opening
@@ -136,6 +162,18 @@ contract KnomosisStepVMRoot {
 
     /// @notice The bundle exceeds `MAX_CELL_OPENINGS`.
     error TooManyCellOpenings(uint256 count);
+
+    /// @notice A cell the step's frontier requires is not opened.
+    /// @param  index the write-set position, or `type(uint256).max`
+    ///         for the read-only budget-policy cell.
+    error FrontierMissingCell(uint256 index);
+
+    /// @notice The frontier's size is not the one the key set implies.
+    error FrontierLengthMismatch(uint256 expected, uint256 got);
+
+    /// @notice The multiproof's PRE side does not reproduce the
+    ///         submitted pre-state root.
+    error PreRootMismatch(bytes32 expected, bytes32 got);
 
     /* ---------------------------------------------------------- */
     /* External: assertConsistent                                 */
@@ -239,6 +277,379 @@ contract KnomosisStepVMRoot {
                 policyOpening.preValue, plan, empties
             );
         }
+    }
+
+    /* ---------------------------------------------------------- */
+    /* External: executeStepToRootMulti                            */
+    /* ---------------------------------------------------------- */
+
+    /// @notice Execute one kernel step against a DEDUPLICATING PRE-ROOT
+    ///         MULTIPROOF and return the post-state root.
+    ///
+    /// @dev    The same adjudication as `executeStepToRoot`, opened the
+    ///         other way.  Four differences, each a property rather
+    ///         than an optimisation:
+    ///
+    ///           * **One root check, not `m`.**  Every cell is opened
+    ///             against the pre-root, and the aggregate PRE fold is
+    ///             compared to it once.  No intermediate root is
+    ///             materialised, so none is trusted.
+    ///           * **Order carries no information.**  The verifier
+    ///             sorts by path index, so a permuted bundle yields the
+    ///             identical root and `_preStateValue`'s
+    ///             first-occurrence rule has nothing left to
+    ///             disambiguate — lookup is by cell identity, which is
+    ///             what it always meant.
+    ///           * **A duplicate is not representable.**  Strict
+    ///             ascent after the sort is the distinctness check, so
+    ///             a bundle carrying one cell twice fails before any
+    ///             hashing.
+    ///           * **The wire's shape is derived from the key set**
+    ///             (`SmtMultiVerifier.requireShape`), so a short proof
+    ///             is refused rather than padded out with a placeholder
+    ///             hash and walked to some other root.
+    ///
+    ///         The read-only policy cell stops being special: it joins
+    ///         the frontier as a cell written to its own value, so it
+    ///         needs no separate opening and no separate 256-level
+    ///         walk.  A read is a write of the same value.
+    ///
+    ///         Mirrors Lean's `verifierPostRootMulti` / `stepMultiPostRoot`;
+    ///         pinned cross-stack by the corpus's `multiProofGoldens`.
+    ///
+    /// @param preStateRoot the pre-state's published root.
+    /// @param actionKind   the frozen `Action` dispatcher index.
+    /// @param actionFields the variant's L1 field bytes.
+    /// @param signer       the action's signer.
+    /// @param l2LogIndex   the log index this step produces.
+    /// @param opened       the frontier: the written cells plus the
+    ///                     budget policy, deduplicated, in ANY order.
+    /// @param gapMask      one bit per gap, LSB-first within each byte.
+    /// @param siblings     the packed non-canonical-empty siblings.
+    /// @return postStateRoot the root the merged fold reaches.
+    function executeStepToRootMulti(
+        bytes32 preStateRoot,
+        uint8 actionKind,
+        bytes calldata actionFields,
+        uint64 signer,
+        uint256 l2LogIndex,
+        OpenedCell[] calldata opened,
+        bytes calldata gapMask,
+        bytes calldata siblings
+    ) external pure returns (bytes32 postStateRoot) {
+        if (opened.length > MAX_CELL_OPENINGS) {
+            revert TooManyCellOpenings(opened.length);
+        }
+        if (!StepWrites.isAdjudicable(actionKind)) {
+            revert StepWrites.ActionNotAdjudicable(actionKind);
+        }
+
+        // 1. The write set, re-derived.  `nextWdIdPre` comes from the
+        //    bundle for the same reason as in the chained path — it
+        //    names WHICH pending cell `withdraw` writes — and a lie
+        //    about it is caught the same way: `.bridgeNextWdId` is
+        //    itself opened, so its claimed pre-value enters the PRE
+        //    fold and a wrong one moves the aggregate off the root.
+        StepWrites.Cell[] memory cells = StepWrites.deriveWriteSet(
+            actionKind, actionFields, signer, _nextWdIdPreMulti(opened));
+
+        // 2. The frontier: the write set plus the policy cell,
+        //    deduplicated.  Checked as a SET — every required cell is
+        //    opened, and the counts agree — which with the strict
+        //    ascent enforced inside the walk is set equality.
+        _requireFrontier(cells, opened);
+
+        // 3. Path order, and the leaves on both sides.
+        (uint256[] memory sorted, bytes32[] memory preLeaves,
+         bytes32[] memory postLeaves) =
+            _multiLeaves(cells, opened, actionKind, actionFields, signer, l2LogIndex);
+
+        // 4. One merged walk producing both roots: the siblings are
+        //    sub-trees holding no opened cell, so the writes cannot
+        //    move them and both folds share them.
+        bytes32 preRoot;
+        (preRoot, postStateRoot) = SmtMultiVerifier.multiWalkPair(
+            sorted, preLeaves, postLeaves, gapMask, siblings,
+            SmtCellVerifier.precomputeEmptySubtreeHashes()
+        );
+        if (preRoot != preStateRoot) revert PreRootMismatch(preStateRoot, preRoot);
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Internals — the multiproof path                            */
+    /* ---------------------------------------------------------- */
+
+    /// @dev The proven `.bridgeNextWdId` pre-value, or zero when the
+    ///      frontier does not open that cell.
+    function _nextWdIdPreMulti(OpenedCell[] calldata opened)
+        private
+        pure
+        returns (uint256)
+    {
+        for (uint256 i = 0; i < opened.length; i++) {
+            if (opened[i].cellKind == CELL_BRIDGE_NEXT_WD_ID) {
+                return StepWrites.decodeNonce(opened[i].preValue);
+            }
+        }
+        return 0;
+    }
+
+    /// @dev The position of a cell in the opened set, or
+    ///      `type(uint256).max`.
+    function _findOpened(
+        OpenedCell[] calldata opened,
+        uint8 kind,
+        uint256 keyA,
+        uint256 keyB
+    ) private pure returns (uint256) {
+        for (uint256 i = 0; i < opened.length; i++) {
+            if (opened[i].cellKind == kind && opened[i].keyA == keyA
+                && opened[i].keyB == keyB) {
+                return i;
+            }
+        }
+        return type(uint256).max;
+    }
+
+    /// @dev A cell's proven PRE-value, looked up by identity.  Reverts
+    ///      rather than defaulting: `_requireFrontier` has already
+    ///      established the cell is opened, so a miss here is a bug in
+    ///      this contract and not a submission a responder can make.
+    function _openedValue(
+        OpenedCell[] calldata opened,
+        uint8 kind,
+        uint256 keyA,
+        uint256 keyB
+    ) private pure returns (bytes calldata) {
+        uint256 i = _findOpened(opened, kind, keyA, keyB);
+        if (i == type(uint256).max) revert FrontierMissingCell(i);
+        return opened[i].preValue;
+    }
+
+    /// @dev How many DISTINCT cells the step's frontier holds: the
+    ///      write set deduplicated, plus the budget policy.
+    ///
+    ///      The policy never collides with a write — no adjudicable
+    ///      action writes cell kind 14 — so it contributes exactly one.
+    function _frontierSize(StepWrites.Cell[] memory cells)
+        private
+        pure
+        returns (uint256 n)
+    {
+        n = 1;
+        for (uint256 i = 0; i < cells.length; i++) {
+            bool dup = false;
+            for (uint256 j = 0; j < i; j++) {
+                if (cells[j].kind == cells[i].kind && cells[j].keyA == cells[i].keyA
+                    && cells[j].keyB == cells[i].keyB) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup) n++;
+        }
+    }
+
+    /// @dev The opened set is exactly the step's frontier.
+    ///
+    ///      Membership plus equal cardinality gives set equality once
+    ///      the opened cells are known distinct — which the walk
+    ///      enforces by requiring strict ascent.  Checking membership
+    ///      alone would let a responder pad the bundle with an extra
+    ///      cell; checking the count alone would let them swap one.
+    function _requireFrontier(
+        StepWrites.Cell[] memory cells,
+        OpenedCell[] calldata opened
+    ) private pure {
+        uint256 want = _frontierSize(cells);
+        if (opened.length != want) {
+            revert FrontierLengthMismatch(want, opened.length);
+        }
+        if (_findOpened(opened, CELL_BUDGET_POLICY, 0, 0) == type(uint256).max) {
+            revert FrontierMissingCell(type(uint256).max);
+        }
+        for (uint256 i = 0; i < cells.length; i++) {
+            if (_findOpened(opened, cells[i].kind, cells[i].keyA, cells[i].keyB)
+                == type(uint256).max) {
+                revert FrontierMissingCell(i);
+            }
+        }
+    }
+
+    /// @dev Sort the opened cells into path order and build both sides'
+    ///      leaves.
+    ///
+    ///      An insertion sort over the path indices: `m <= 8` on every
+    ///      adjudicable variant, so it is ~28 comparisons at the
+    ///      realistic size and bounded by `MAX_CELL_OPENINGS` above.
+    ///      The sort is what makes the wire order-free — the caller may
+    ///      submit the frontier however it likes, and the walk still
+    ///      sees the one order the tree defines.
+    function _multiLeaves(
+        StepWrites.Cell[] memory cells,
+        OpenedCell[] calldata opened,
+        uint8 actionKind,
+        bytes calldata actionFields,
+        uint64 signer,
+        uint256 l2LogIndex
+    )
+        private
+        pure
+        returns (
+            uint256[] memory sorted,
+            bytes32[] memory preLeaves,
+            bytes32[] memory postLeaves
+        )
+    {
+        uint256 m = opened.length;
+        sorted = new uint256[](m);
+        preLeaves = new bytes32[](m);
+        postLeaves = new bytes32[](m);
+        uint256[] memory order = new uint256[](m);
+
+        for (uint256 i = 0; i < m; i++) {
+            sorted[i] = SmtMultiVerifier.pathIndex(
+                StepVMMerkle.deriveCellSmtKey(
+                    opened[i].cellKind, opened[i].keyA, opened[i].keyB));
+            order[i] = i;
+        }
+        for (uint256 i = 1; i < m; i++) {
+            uint256 key = sorted[i];
+            uint256 pos = order[i];
+            uint256 j = i;
+            while (j > 0 && sorted[j - 1] > key) {
+                sorted[j] = sorted[j - 1];
+                order[j] = order[j - 1];
+                j--;
+            }
+            sorted[j] = key;
+            order[j] = pos;
+        }
+
+        bytes memory policyValue =
+            _openedValue(opened, CELL_BUDGET_POLICY, 0, 0);
+        StepPlan.Plan memory plan =
+            _planMulti(actionKind, actionFields, signer, cells, opened);
+
+        for (uint256 p = 0; p < m; p++) {
+            uint256 i = order[p];
+            bytes32 smtKey = StepVMMerkle.deriveCellSmtKey(
+                opened[i].cellKind, opened[i].keyA, opened[i].keyB);
+            preLeaves[p] = StepVMMerkle.cellLeafHash(
+                StepWrites.isCanonicallyAbsent(opened[i].cellKind, opened[i].preValue),
+                _leafPreimage(smtKey, opened[i].preValue)
+            );
+            // The policy cell is a READ: its post-value is its
+            // pre-value, so its leaf is unchanged and it contributes to
+            // both folds identically.
+            bytes memory newValue = opened[i].cellKind == CELL_BUDGET_POLICY
+                ? opened[i].preValue
+                : _deriveValueMulti(
+                    i, cells, opened, actionKind, actionFields,
+                    signer, l2LogIndex, policyValue, plan);
+            postLeaves[p] = StepVMMerkle.cellLeafHash(
+                StepWrites.isCanonicallyAbsent(opened[i].cellKind, newValue),
+                _leafPreimage(smtKey, newValue)
+            );
+        }
+    }
+
+    /// @dev The per-variant plan, over PRE-STATE balance values read BY
+    ///      CELL.  Positions 0 and 1 of the WRITE SET are the balance
+    ///      cells the plan's two slots belong to.
+    function _planMulti(
+        uint8 actionKind,
+        bytes calldata actionFields,
+        uint64 signer,
+        StepWrites.Cell[] memory cells,
+        OpenedCell[] calldata opened
+    ) private pure returns (StepPlan.Plan memory plan) {
+        uint256 pre0 = cells.length > 0 && cells[0].kind == CELL_BALANCE
+            ? StepWrites.decodeAmount(
+                _openedValue(opened, CELL_BALANCE, cells[0].keyA, cells[0].keyB))
+            : 0;
+        uint256 pre1 = cells.length > 1 && cells[1].kind == CELL_BALANCE
+            ? StepWrites.decodeAmount(
+                _openedValue(opened, CELL_BALANCE, cells[1].keyA, cells[1].keyB))
+            : 0;
+        (plan.newBal0, plan.newBal1) =
+            StepPlan.planBalances(actionKind, actionFields, signer, pre0, pre1);
+        (plan.grantRecipient, plan.grantAmount, plan.refundExtra) =
+            StepPlan.planGrant(actionKind, actionFields, signer);
+    }
+
+    /// @dev Opened cell `i`'s post-value, derived from proven
+    ///      pre-values and the action's own fields.
+    ///
+    ///      The chained twin selects the balance slot by the write
+    ///      set's POSITION; here the cell arrives by identity, so the
+    ///      slot is found by matching against `cells[0]` / `cells[1]`.
+    ///      Those are the same two cells the plan was computed from,
+    ///      which is what keeps the two paths' arithmetic identical
+    ///      even at an alias, where both positions name one cell and
+    ///      the plan's two slots hold the same value.
+    function _deriveValueMulti(
+        uint256 i,
+        StepWrites.Cell[] memory cells,
+        OpenedCell[] calldata opened,
+        uint8 actionKind,
+        bytes calldata actionFields,
+        uint64 signer,
+        uint256 l2LogIndex,
+        bytes memory policyValue,
+        StepPlan.Plan memory plan
+    ) private pure returns (bytes memory) {
+        uint8 kind = opened[i].cellKind;
+        if (kind == CELL_BALANCE) {
+            if (cells.length > 0 && cells[0].kind == CELL_BALANCE
+                && cells[0].keyA == opened[i].keyA && cells[0].keyB == opened[i].keyB) {
+                return CBEEncode.amountValue(plan.newBal0);
+            }
+            if (cells.length > 1 && cells[1].kind == CELL_BALANCE
+                && cells[1].keyA == opened[i].keyA && cells[1].keyB == opened[i].keyB) {
+                return CBEEncode.amountValue(plan.newBal1);
+            }
+            // Unreachable: `_requireFrontier` admitted this cell, so it
+            // is in the write set, and only positions 0 and 1 are
+            // balances.
+            revert WriteSetMismatch(i);
+        }
+        if (kind == CELL_NONCE) {
+            return StepWrites.deriveNonce(opened[i].preValue);
+        }
+        if (kind == CELL_EPOCH_BUDGET) {
+            return StepWrites.deriveEpochBudgetCellValue(
+                policyValue,
+                _openedValue(opened, CELL_EPOCH_BUDGET, signer, 0),
+                opened[i].preValue,
+                signer, uint64(opened[i].keyA),
+                plan.grantRecipient, plan.grantAmount, plan.refundExtra
+            );
+        }
+        if (kind == CELL_REGISTRY) {
+            return StepWrites.deriveRegistryFromFields(actionFields);
+        }
+        if (kind == CELL_LOCAL_POLICY) {
+            return actionKind == 15
+                ? StepWrites.deriveDeclaredPolicyCellValue(actionFields)
+                : StepWrites.deriveRevokedPolicyCellValue();
+        }
+        if (kind == CELL_BRIDGE_CONSUMED) {
+            return _deriveConsumed(actionKind, actionFields);
+        }
+        if (kind == CELL_BRIDGE_PENDING) {
+            if (actionFields.length < 52) {
+                revert StepWrites.ActionFieldsTooShort(
+                    actionKind, actionFields.length);
+            }
+            return StepWrites.derivePendingCellValue(
+                StepWrites.readFieldUint(actionFields, 0, 8),
+                actionFields[32:52],
+                StepWrites.readFieldUint(actionFields, 16, 16),
+                l2LogIndex
+            );
+        }
+        return StepWrites.deriveNextWdIdCellValue(opened[i].preValue);
     }
 
     /* ---------------------------------------------------------- */

@@ -129,6 +129,17 @@ ROWS: list[tuple[str, str]] = [
         "executeStepToRoot_duplicateCell",
         "`executeStepToRoot` (terminal step, one cell written twice)",
     ),
+    # The same two steps under the deduplicating pre-root multiproof.
+    # Paired with the rows above so an operator reads the two opening
+    # disciplines on one scenario rather than comparing across two.
+    (
+        "executeStepToRootMulti_distinctCells",
+        "`executeStepToRootMulti` (terminal step, multiproof, 4 distinct cells + policy)",
+    ),
+    (
+        "executeStepToRootMulti_duplicateCell",
+        "`executeStepToRootMulti` (terminal step, multiproof, one cell deduped)",
+    ),
 ]
 
 

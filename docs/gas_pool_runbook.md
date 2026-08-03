@@ -514,8 +514,10 @@ round trip (see §9.3).
 | Auto-trigger close (first branch, ETH, in shutdown) | 53 856 | 64 | ~$4.8 |
 | Auto-trigger close (last branch, rETH, in shutdown) | 69 059 | 64 | ~$6.2 |
 | Auto-trigger probe (no shutdown — reverts) | 47 272 | 64 | ~$4.3 |
-| `executeStepToRoot` (terminal step, 4 distinct cells + policy) | 845 973 | 17 656 | ~$76.1 |
-| `executeStepToRoot` (terminal step, one cell written twice) | 844 918 | 16 644 | ~$76.0 |
+| `executeStepToRoot` (terminal step, 4 distinct cells + policy) | 718 880 | 17 656 | ~$64.7 |
+| `executeStepToRoot` (terminal step, one cell written twice) | 717 719 | 16 644 | ~$64.6 |
+| `executeStepToRootMulti` (terminal step, multiproof, 4 distinct cells + policy) | 759 233 | 9 112 | ~$68.3 |
+| `executeStepToRootMulti` (terminal step, multiproof, one cell deduped) | 633 685 | 8 528 | ~$57.0 |
 <!-- END GP.11.9 GENERATED BASELINE TABLE -->
 
 ### 9.3 Cost-structure observations

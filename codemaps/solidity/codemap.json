@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "b1d0a70add52d5b89f3ce4ca107052651a71390f72ae5f5eab79827e1bde90e2"
+    "source_digest": "6145d2d35654d91e2338b8bcf9b0e7894956d633e7ebda24cbac9fd770a808c0"
   },
   "summary": {
     "module_count": 99,
-    "declaration_count": 2099
+    "declaration_count": 2127
   },
   "modules": [
     {
@@ -3348,66 +3348,90 @@
     {
       "module": "KnomosisStepVMRoot",
       "path": "solidity/src/contracts/KnomosisStepVMRoot.sol",
-      "declaration_count": 20,
+      "declaration_count": 33,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisStepVMRoot",
-          "line": 63,
+          "line": 64,
+          "called": []
+        },
+        {
+          "kind": "struct",
+          "name": "OpenedCell",
+          "line": 79,
           "called": []
         },
         {
           "kind": "struct",
           "name": "CellOpening",
-          "line": 72,
+          "line": 98,
           "called": []
         },
         {
           "kind": "error",
           "name": "PolicyCellMismatch",
-          "line": 118,
+          "line": 144,
           "called": []
         },
         {
           "kind": "error",
           "name": "BadCellOpening",
-          "line": 123,
+          "line": 149,
           "called": []
         },
         {
           "kind": "error",
           "name": "WriteSetMismatch",
-          "line": 127,
+          "line": 153,
           "called": []
         },
         {
           "kind": "error",
           "name": "WriteSetLengthMismatch",
-          "line": 130,
+          "line": 156,
           "called": []
         },
         {
           "kind": "error",
           "name": "MalformedProofData",
-          "line": 134,
+          "line": 160,
           "called": []
         },
         {
           "kind": "error",
           "name": "TooManyCellOpenings",
-          "line": 137,
+          "line": 163,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FrontierMissingCell",
+          "line": 168,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "FrontierLengthMismatch",
+          "line": 171,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "PreRootMismatch",
+          "line": 175,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 153,
+          "line": 191,
           "called": []
         },
         {
           "kind": "function",
           "name": "executeStepToRoot",
-          "line": 180,
+          "line": 218,
           "called": [
             "CellOpening",
             "TooManyCellOpenings",
@@ -3422,8 +3446,97 @@
         },
         {
           "kind": "function",
+          "name": "executeStepToRootMulti",
+          "line": 329,
+          "called": [
+            "OpenedCell",
+            "PreRootMismatch",
+            "TooManyCellOpenings",
+            "_multiLeaves",
+            "_nextWdIdPreMulti",
+            "_requireFrontier"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_nextWdIdPreMulti",
+          "line": 383,
+          "called": [
+            "OpenedCell"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_findOpened",
+          "line": 398,
+          "called": [
+            "OpenedCell"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_openedValue",
+          "line": 417,
+          "called": [
+            "FrontierMissingCell",
+            "OpenedCell",
+            "_findOpened"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_frontierSize",
+          "line": 433,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_requireFrontier",
+          "line": 459,
+          "called": [
+            "FrontierLengthMismatch",
+            "FrontierMissingCell",
+            "OpenedCell",
+            "_findOpened",
+            "_frontierSize"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_multiLeaves",
+          "line": 487,
+          "called": [
+            "OpenedCell",
+            "_deriveValueMulti",
+            "_leafPreimage",
+            "_openedValue",
+            "_planMulti"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_planMulti",
+          "line": 559,
+          "called": [
+            "OpenedCell",
+            "_openedValue"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_deriveValueMulti",
+          "line": 590,
+          "called": [
+            "OpenedCell",
+            "WriteSetMismatch",
+            "_deriveConsumed",
+            "_openedValue"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "_requirePolicyOpening",
-          "line": 251,
+          "line": 662,
           "called": [
             "BadCellOpening",
             "CellOpening",
@@ -3435,13 +3548,13 @@
         {
           "kind": "function",
           "name": "_leafPreimage",
-          "line": 289,
+          "line": 700,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireProofDataShape",
-          "line": 302,
+          "line": 713,
           "called": [
             "MalformedProofData"
           ]
@@ -3449,7 +3562,7 @@
         {
           "kind": "function",
           "name": "_nextWdIdPre",
-          "line": 311,
+          "line": 722,
           "called": [
             "CellOpening"
           ]
@@ -3457,7 +3570,7 @@
         {
           "kind": "function",
           "name": "_preStateValue",
-          "line": 335,
+          "line": 746,
           "called": [
             "CellOpening"
           ]
@@ -3465,7 +3578,7 @@
         {
           "kind": "function",
           "name": "_signerBudgetPre",
-          "line": 354,
+          "line": 765,
           "called": [
             "CellOpening",
             "WriteSetMismatch",
@@ -3475,7 +3588,7 @@
         {
           "kind": "function",
           "name": "_plan",
-          "line": 370,
+          "line": 781,
           "called": [
             "CellOpening",
             "_preStateValue"
@@ -3484,7 +3597,7 @@
         {
           "kind": "function",
           "name": "_applyWrite",
-          "line": 393,
+          "line": 804,
           "called": [
             "BadCellOpening",
             "CellOpening",
@@ -3495,7 +3608,7 @@
         {
           "kind": "function",
           "name": "_deriveValue",
-          "line": 431,
+          "line": 842,
           "called": [
             "CellOpening",
             "WriteSetMismatch",
@@ -3507,7 +3620,7 @@
         {
           "kind": "function",
           "name": "_deriveConsumed",
-          "line": 504,
+          "line": 915,
           "called": []
         }
       ]
@@ -4367,51 +4480,49 @@
         {
           "kind": "function",
           "name": "precomputeEmptySubtreeHashes",
-          "line": 170,
-          "called": [
-            "_hashPair"
-          ]
+          "line": 188,
+          "called": []
         },
         {
           "kind": "function",
           "name": "readKeyBitMSBFirst",
-          "line": 199,
+          "line": 223,
           "called": []
         },
         {
           "kind": "function",
           "name": "keyWord",
-          "line": 239,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "keyBitFromWord",
           "line": 263,
           "called": []
         },
         {
           "kind": "function",
+          "name": "keyBitFromWord",
+          "line": 287,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "readBitmaskBit",
-          "line": 280,
+          "line": 304,
           "called": []
         },
         {
           "kind": "function",
           "name": "bitmaskWord",
-          "line": 293,
+          "line": 317,
           "called": []
         },
         {
           "kind": "function",
           "name": "bitmaskBitFromWord",
-          "line": 318,
+          "line": 342,
           "called": []
         },
         {
           "kind": "function",
           "name": "recomputeRoot",
-          "line": 362,
+          "line": 386,
           "called": [
             "recomputeRootFromLeaf"
           ]
@@ -4419,7 +4530,7 @@
         {
           "kind": "function",
           "name": "recomputeRootFromLeaf",
-          "line": 394,
+          "line": 418,
           "called": [
             "keyWord",
             "precomputeEmptySubtreeHashes",
@@ -4429,7 +4540,7 @@
         {
           "kind": "function",
           "name": "recomputeRootPairFromLeaves",
-          "line": 435,
+          "line": 459,
           "called": [
             "SmtCellProofTooShort",
             "SmtCellSiblingsMisaligned",
@@ -4443,13 +4554,13 @@
         {
           "kind": "function",
           "name": "emptyLeafHash",
-          "line": 501,
+          "line": 525,
           "called": []
         },
         {
           "kind": "function",
           "name": "verifyCellProof",
-          "line": 522,
+          "line": 546,
           "called": [
             "recomputeRoot"
           ]
@@ -4457,31 +4568,31 @@
         {
           "kind": "error",
           "name": "SmtCellProofTooShort",
-          "line": 547,
+          "line": 571,
           "called": []
         },
         {
           "kind": "error",
           "name": "SmtCellSiblingsMisaligned",
-          "line": 551,
+          "line": 575,
           "called": []
         },
         {
           "kind": "error",
           "name": "SmtCellDepthOutOfRange",
-          "line": 554,
+          "line": 578,
           "called": []
         },
         {
           "kind": "function",
           "name": "_hashPair",
-          "line": 569,
+          "line": 593,
           "called": []
         },
         {
           "kind": "function",
           "name": "_readSiblingAt",
-          "line": 588,
+          "line": 612,
           "called": []
         }
       ]
@@ -4489,7 +4600,7 @@
     {
       "module": "SmtMultiVerifier",
       "path": "solidity/src/lib/SmtMultiVerifier.sol",
-      "declaration_count": 16,
+      "declaration_count": 21,
       "declarations": [
         {
           "kind": "library",
@@ -4564,46 +4675,79 @@
         {
           "kind": "function",
           "name": "gapBit",
-          "line": 170,
+          "line": 175,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "maskWordFor",
+          "line": 205,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "gapBitFromWord",
+          "line": 224,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "popcount",
+          "line": 240,
           "called": []
         },
         {
           "kind": "function",
           "name": "requireShape",
-          "line": 189,
+          "line": 263,
           "called": [
             "MultiProofMaskLength",
             "MultiProofPadding",
             "MultiProofSiblingCount",
             "gapBit",
-            "gapCount"
+            "gapCount",
+            "popcount"
           ]
         },
         {
           "kind": "function",
           "name": "siblingAt",
-          "line": 220,
+          "line": 311,
           "called": []
         },
         {
           "kind": "function",
           "name": "hashPair",
-          "line": 235,
+          "line": 326,
           "called": []
         },
         {
           "kind": "function",
-          "name": "multiWalk",
-          "line": 266,
+          "name": "climb",
+          "line": 355,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "multiWalkPair",
+          "line": 460,
           "called": [
             "MultiProofEmpty",
             "MultiProofNotStrictlySorted",
             "MultiProofTooManyCells",
+            "climb",
             "divLevel",
-            "gapBit",
             "hashPair",
-            "requireShape",
-            "siblingAt"
+            "maskWordFor",
+            "requireShape"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "multiWalk",
+          "line": 549,
+          "called": [
+            "multiWalkPair"
           ]
         }
       ]
@@ -6989,7 +7133,7 @@
     {
       "module": "BenchmarkGasV1_3.t",
       "path": "solidity/test/BenchmarkGasV1_3.t.sol",
-      "declaration_count": 77,
+      "declaration_count": 81,
       "declarations": [
         {
           "kind": "contract",
@@ -7660,10 +7804,11 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1278,
+          "line": 1282,
           "called": [
             "KnomosisStepVMRoot",
             "_requireKeccakLinked",
+            "findMultiProbeBase",
             "findProbeBase",
             "readFixture"
           ]
@@ -7671,7 +7816,7 @@
         {
           "kind": "function",
           "name": "test_gas_executeStepToRoot_distinctCells",
-          "line": 1289,
+          "line": 1295,
           "called": [
             "_bench",
             "encodeProbeCall",
@@ -7681,7 +7826,7 @@
         {
           "kind": "function",
           "name": "test_gas_executeStepToRoot_duplicateCell",
-          "line": 1308,
+          "line": 1314,
           "called": [
             "_bench",
             "encodeProbeCall",
@@ -7690,8 +7835,54 @@
         },
         {
           "kind": "function",
+          "name": "test_gas_executeStepToRootMulti_distinctCells",
+          "line": 1336,
+          "called": [
+            "_bench",
+            "encodeMultiProbeCall",
+            "loadOpenedCells",
+            "probeGapMask",
+            "probeSiblings"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_gas_executeStepToRootMulti_duplicateCell",
+          "line": 1360,
+          "called": [
+            "_bench",
+            "encodeMultiProbeCall",
+            "loadOpenedCells",
+            "probeGapMask",
+            "probeSiblings"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_sanity_stepVMRootMultiScenarioAssumptions",
+          "line": 1380,
+          "called": [
+            "_run",
+            "_runMulti",
+            "loadOpenedCells",
+            "loadOpenings",
+            "probePostRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "_runMulti",
+          "line": 1416,
+          "called": [
+            "encodeMultiProbeCall",
+            "probeGapMask",
+            "probeSiblings"
+          ]
+        },
+        {
+          "kind": "function",
           "name": "test_sanity_stepVMRootScenarioAssumptions",
-          "line": 1331,
+          "line": 1440,
           "called": [
             "_distinctCellCount",
             "_run",
@@ -7703,7 +7894,7 @@
         {
           "kind": "function",
           "name": "_run",
-          "line": 1367,
+          "line": 1476,
           "called": [
             "encodeProbeCall"
           ]
@@ -7711,7 +7902,7 @@
         {
           "kind": "function",
           "name": "_distinctCellCount",
-          "line": 1379,
+          "line": 1488,
           "called": []
         }
       ]
@@ -12254,6 +12445,7 @@
             "_probe",
             "fixtureExists",
             "name",
+            "popcount",
             "readFixture"
           ]
         },
@@ -16776,7 +16968,8 @@
           "line": 738,
           "called": [
             "_cbeEncodeUint64",
-            "_popcount8"
+            "_popcount8",
+            "popcount"
           ]
         },
         {
@@ -18225,7 +18418,7 @@
     {
       "module": "StepVMRootProbeHarness",
       "path": "solidity/test/utils/StepVMRootProbeHarness.sol",
-      "declaration_count": 8,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "abstract_contract",
@@ -18275,8 +18468,48 @@
         },
         {
           "kind": "function",
+          "name": "multiProbeBase",
+          "line": 122,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "findMultiProbeBase",
+          "line": 128,
+          "called": [
+            "multiProbeBase"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "loadOpenedCells",
+          "line": 148,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "encodeMultiProbeCall",
+          "line": 169,
+          "called": [
+            "probePreRoot"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "probeGapMask",
+          "line": 192,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "probeSiblings",
+          "line": 201,
+          "called": []
+        },
+        {
+          "kind": "function",
           "name": "encodeProbeCall",
-          "line": 118,
+          "line": 217,
           "called": [
             "loadPolicyOpening",
             "probePreRoot"

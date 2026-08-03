@@ -108,6 +108,105 @@ abstract contract StepVMRootProbeHarness is CrossCheckFramework {
         return vm.parseJsonBytes32(raw, string.concat(base, ".postStateRootHex"));
     }
 
+    /* ---------------------------------------------------------- */
+    /* The multiproof column                                      */
+    /* ---------------------------------------------------------- */
+
+    /// @notice The JSON base path of multiproof probe `i`.
+    ///
+    /// @dev    A parallel column over the SAME probes as
+    ///         `writeBundleGoldens`, opened the other way: one entry per
+    ///         CELL against the pre-root with a shared sibling list,
+    ///         rather than one per WRITE against the running root.  The
+    ///         corpus asserts the two columns' post-roots agree, so a
+    ///         consumer of either is consuming the same adjudication.
+    function multiProbeBase(uint256 i) internal pure returns (string memory) {
+        return string.concat(".multiProofGoldens[", vm.toString(i), "]");
+    }
+
+    /// @notice The JSON base path of the multiproof probe named
+    ///         `variant`.  Reverts when the corpus does not carry it.
+    function findMultiProbeBase(string memory raw, string memory variant)
+        internal
+        pure
+        returns (string memory)
+    {
+        uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
+        for (uint256 i = 0; i < n; i++) {
+            string memory base = multiProbeBase(i);
+            if (
+                keccak256(bytes(vm.parseJsonString(raw, string.concat(base, ".variant"))))
+                    == keccak256(bytes(variant))
+            ) {
+                return base;
+            }
+        }
+        revert(string.concat("multiproof probe not in the corpus: ", variant));
+    }
+
+    /// @notice The frontier: each opened cell's identity and PRE-value,
+    ///         and NOT its post-value, which the verifier must derive.
+    function loadOpenedCells(string memory raw, string memory base)
+        internal
+        pure
+        returns (KnomosisStepVMRoot.OpenedCell[] memory cells)
+    {
+        uint256 n = vm.parseJsonUint(raw, string.concat(base, ".cellCount"));
+        cells = new KnomosisStepVMRoot.OpenedCell[](n);
+        for (uint256 i = 0; i < n; i++) {
+            string memory c = string.concat(base, ".cells[", vm.toString(i), "]");
+            cells[i] = KnomosisStepVMRoot.OpenedCell({
+                cellKind: uint8(vm.parseJsonUint(raw, string.concat(c, ".cellKind"))),
+                keyA: vm.parseJsonUint(raw, string.concat(c, ".keyA")),
+                keyB: vm.parseJsonUint(raw, string.concat(c, ".keyB")),
+                preValue: vm.parseJsonBytes(raw, string.concat(c, ".preValueHex"))
+            });
+        }
+    }
+
+    /// @notice The canonical `executeStepToRootMulti` calldata for a
+    ///         probe, with caller-supplied cells and wire so a negative
+    ///         control can perturb either.
+    function encodeMultiProbeCall(
+        string memory raw,
+        string memory base,
+        KnomosisStepVMRoot.OpenedCell[] memory cells,
+        bytes memory gapMask,
+        bytes memory siblings
+    ) internal pure returns (bytes memory) {
+        return abi.encodeCall(
+            KnomosisStepVMRoot.executeStepToRootMulti,
+            (
+                probePreRoot(raw, base),
+                uint8(vm.parseJsonUint(raw, string.concat(base, ".actionKindByte"))),
+                vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex")),
+                uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat"))),
+                vm.parseJsonUint(raw, string.concat(base, ".l2LogIndex")),
+                cells,
+                gapMask,
+                siblings
+            )
+        );
+    }
+
+    /// @notice The probe's published gap mask.
+    function probeGapMask(string memory raw, string memory base)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return vm.parseJsonBytes(raw, string.concat(base, ".gapMaskHex"));
+    }
+
+    /// @notice The probe's published sibling region.
+    function probeSiblings(string memory raw, string memory base)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return vm.parseJsonBytes(raw, string.concat(base, ".siblingsHex"));
+    }
+
     /// @notice The canonical `executeStepToRoot` calldata for a probe,
     ///         with a caller-supplied bundle so a negative control can
     ///         perturb it.
