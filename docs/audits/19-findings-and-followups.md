@@ -1508,3 +1508,35 @@ that does not require a TCB amendment.  ~30 minor and
 informational findings, all bounded.
 
 The project is in good shape.
+
+---
+
+## Close-out: the chained write algebra is retired
+
+The declarations this document references by name — `stepWriteBundle`,
+`stepPostRoot`, `foldStateCellWrites_eq_commit_of_coherent`,
+`chainCoherent_canonicalCellChain`, `ChainCoherent`, `chainWrites`,
+`canonicalCellChain`, `CellWriteChain` — no longer exist.  They were the
+consensus surface before the deduplicating pre-root multiproof replaced
+it, and they were kept past that replacement on one ground: the
+multiproof's guarantee was only value-level.  `stepMultiFold_eq_commit_post`
+(`FaultProof/Terminate.lean`) removed that ground, and the whole chained
+surface went with it.
+
+What the passages below say about the STEP's semantics still holds; only
+the machinery that carried it has changed.  The current statements are:
+
+  * `stepMultiFold_eq_commit_post` — the honest merged walk lands on the
+    published post-root (replaces `stepPostRoot_eq_commit_productionApplyBudget`).
+  * `writeSetComplete_productionApplyBudget` — the per-variant
+    completeness obligation, unchanged, and now consumed by the
+    multiproof through `agreeOffOpened_openedOf`.
+  * `updateStateCellRoot_eq_commit_of_canonical` — the single-cell
+    update, unchanged, with
+    `dropKey_stateCellEntries_perm_of_agree_off` still discharging its
+    hypothesis.
+
+See `docs/planning/state_root_merkleisation_plan.md` M9e for the
+retirement's scope and the two declarations reclassified against the
+original list.
+

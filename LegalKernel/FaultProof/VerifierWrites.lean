@@ -11,7 +11,7 @@
 LegalKernel.FaultProof.VerifierWrites — the write derivation an L1
 verifier can perform, holding only proven cell values.
 
-`StepWriteSets.lean` builds `stepWriteBundle es st idx` and proves its
+`StepWriteSets.lean` proves the per-variant write-set completeness its
 fold lands on the published root.  That bundle's `newValue` column is
 read off `productionApplyBudget es st idx` — it is the SEQUENCER's
 computation, from the pre-state and the post-state.  A verifier holds
@@ -205,7 +205,7 @@ theorem decode_nonceCell (es : ExtendedState) (a : ActorId)
     `productionApplyBudget` puts there — with no access to the
     post-state, and no dependence on the action beyond the signer.
 
-    Composed with `stepPostRoot_eq_commit_productionApplyBudget`, it is
+    Composed with `stepMultiFold_eq_commit_post`, it is
     the piece that carries the fold's guarantee across to a party
     holding only a root. -/
 theorem deriveNonceCellValue_correct

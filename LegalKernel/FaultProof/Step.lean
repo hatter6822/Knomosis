@@ -318,7 +318,7 @@ theorem buildKernelStep_postStateCommit
     function returned the claim it was handed.  A later form claimed
     `= some (stepVMHashFromAction …)`, which was faithful to a
     contract that could not adjudicate — `stepVMHash` lives outside
-    state-root space.  That the fold LANDS on `stepPostRoot` — the
+    state-root space.  That the fold LANDS on the published root — the
     root the honest sequencer published — is checked over twenty
     probes by `faultproof-terminate`, covering the chained pair, the
     duplicate cell, the failing precondition and the state-keyed

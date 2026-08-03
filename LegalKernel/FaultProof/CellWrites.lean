@@ -8,33 +8,33 @@
 -/
 
 /-
-LegalKernel.FaultProof.CellWrites — a step's writes as a `setCell`
-chain, and the one lemma that carries the SMT machinery for all of
-them.
+LegalKernel.FaultProof.CellWrites — the cell-write primitives, and the
+per-step completeness obligation the fault proof consumes.
 
-`foldStateCellWrites_eq_commit_of_coherent` says a coherent chain of
-single-cell writes folds the pre-state's published root into the
-post-state's.  It is stated over an arbitrary `CellWriteChain`, which
-is the right generality for the theorem and the wrong shape for a
-caller: a per-variant proof would have to re-establish six coherence
-conjuncts per link, and there are up to six links per variant across
-twenty-five variants.
+Two concerns, kept together because the second is stated over the
+first.
 
-This module closes that gap once.  A step's writes are a list of
-`(cell, value)` pairs; `canonicalCellChain` turns that list into the
-chain whose intermediate states are the `setCell` results and whose
-openings are the canonical ones; and
-`fold_canonicalCellChain_eq_commit_applyCellWrites` says folding it
-lands on the root of the state the writes produce.
+**The primitives.**  A step's writes are a list of `(cell, value)`
+pairs.  `applyCellWrites` lands them, and the two `getCellValue_…`
+laws say a written cell reads back its value while an unwritten one
+does not move.  `CellTag.appendOnly` names the three kinds `setCell`
+declines to clear, because no `Action` un-consumes a deposit, retires
+a pending withdrawal or removes a registry entry inside one step.
 
-What is left for a variant is then purely a statement about cell
-VALUES — no SMT, no openings, no entry lists:
+**The obligation.**  `WriteSetComplete pre post action signer` says
+the advance moves no cell `Action.writeCellsAt` omits.  That is the
+hypothesis `stepMultiFold_eq_commit_post` (`Terminate.lean`) takes —
+via `agreeOffOpened_openedOf` — so it is what makes the merged walk's
+"one wire, two roots" argument sound: a cell the frontier does not
+open is a cell the step does not move, hence a sibling both roots
+share.  `writeSetComplete_of_field_footprints` and
+`writeSetComplete_of_identity_advance` discharge it per variant, and
+`StepWriteSets.lean` does so for all twenty-five.
 
-    ∀ t, getCellValue (applyCellWrites es ws) t
-           = getCellValue (productionApplyBudget es st idx) t
-
-and `commitExtendedState_eq_of_cells_agree` turns that into root
-equality.
+This module once also hosted the CHAINED fold — `canonicalCellChain`,
+`ChainCoherent` and the per-link coherence machinery — which was the
+consensus surface before the pre-root multiproof replaced it.  That is
+gone; what survives is what the multiproof still consumes.
 
 **Why cells and not states.**  Two reasons, and the second is the
 load-bearing one.
@@ -125,43 +125,14 @@ theorem getCellValue_applyCellWrites_of_written
     obtain ⟨t₀, v₀⟩ := w
     exact ih (setCell es t₀ v₀)
 
-/-! ## The chain the writes induce
+/-! ## What a canonical opening needs of its state
 
-`CellWriteChain` carries the intermediate STATES and the openings
-alongside the tags, because `foldStateCellWrites_eq_commit_of_coherent`
-needs both.  Both are determined by the write list, so the chain is
-derived rather than supplied. -/
-
-/-- The chain a write list induces: each link's successor state is the
-    `setCell` result and each link's opening is the canonical path of
-    the state it opens against. -/
-def canonicalCellChain (es : ExtendedState) : List CellWrite → CellWriteChain
-  | []           => []
-  | (t, v) :: ws =>
-      (setCell es t v, t, buildStateCellProof es t)
-        :: canonicalCellChain (setCell es t v) ws
-
-/-- The chain ends where the writes land. -/
-theorem chainLast_canonicalCellChain :
-    ∀ (ws : List CellWrite) (es : ExtendedState),
-      chainLast es (canonicalCellChain es ws) = applyCellWrites es ws := by
-  intro ws
-  induction ws with
-  | nil => intro _; rfl
-  | cons w rest ih =>
-    obtain ⟨t, v⟩ := w
-    intro es
-    exact ih (setCell es t v)
-
-/-! ## The side conditions
-
-Three obligations per link, and each is a real hypothesis rather than
-a technicality:
+Three obligations per OPENED CELL, and each is a real hypothesis
+rather than a technicality:
 
   * **Distinguishability.**  `smtRootListAux`'s depth-0 case collapses
     a bucket holding two entries, so a root over indistinguishable
-    entries is not determined by them.  Required at every intermediate
-    state, not just the endpoints.
+    entries is not determined by them.
   * **Key injectivity on live cells.**  Two live cells sharing an SMT
     key would make one cell's opening verify as the other's.  Scoped
     to cells that CONTRIBUTE an entry, because a tag can be enumerated
@@ -175,7 +146,8 @@ a technicality:
     `updateStateCellRoot_eq_commit_of_canonical` threads it — visible
     rather than assumed. -/
 
-/-- What one link needs of the state it opens against. -/
+/-- What a cell's canonical opening needs of the state it opens
+    against. -/
 structure CellWriteReady (es : ExtendedState) (t : CellTag) : Prop where
   /-- The state's entries are distinguishable below the SMT depth. -/
   distinct : BitsDistinctBelow smtDepth (stateCellEntries es)
@@ -187,37 +159,6 @@ structure CellWriteReady (es : ExtendedState) (t : CellTag) : Prop where
     = canonicalSiblings smtDepth (stateCellEntries es) (smtCellKey t)
   /-- The built opening is shape-valid. -/
   wellFormed : (buildStateCellProof es t).isWellFormed = true
-
-/-- Every link of a write list is ready, including the state the last
-    write produces. -/
-def CellWritesReady (es : ExtendedState) : List CellWrite → Prop
-  | []           => BitsDistinctBelow smtDepth (stateCellEntries es)
-  | (t, v) :: ws =>
-      CellWriteReady es t
-      ∧ CellWriteReady (setCell es t v) t
-      ∧ CellWritesReady (setCell es t v) ws
-
-/-- Readiness carries the distinguishability of the state it starts
-    from, in both list shapes. -/
-theorem CellWritesReady.distinctHead :
-    ∀ {ws : List CellWrite} {es : ExtendedState}, CellWritesReady es ws →
-      BitsDistinctBelow smtDepth (stateCellEntries es)
-  | [],          _, h => h
-  | (_, _) :: _, _, h => h.1.distinct
-
-/-- ...and, inductively, of the state its writes end in.  This is what
-    `commitExtendedState_eq_of_cells_agree` needs of the chain's own
-    endpoint. -/
-theorem CellWritesReady.distinctLast :
-    ∀ (ws : List CellWrite) (es : ExtendedState), CellWritesReady es ws →
-      BitsDistinctBelow smtDepth (stateCellEntries (applyCellWrites es ws)) := by
-  intro ws
-  induction ws with
-  | nil => intro _ h; exact h
-  | cons w rest ih =>
-    obtain ⟨t, v⟩ := w
-    intro es h
-    exact ih (setCell es t v) h.2.2
 
 /-! ## The canonical opening verifies
 
@@ -241,71 +182,6 @@ theorem verifyStateCellProof_buildStateCellProof
     by_cases hm : t ∈ stateCellTags es
     · exact hm
     · exact absurd (getCellValue_of_not_mem es t hm) h_abs
-
-/-! ## Coherence, once -/
-
-/-- **The chain a write list induces is coherent.**
-
-    This is where all six conjuncts of `ChainCoherent` are discharged.
-    The off-cell one is the substantive step and it comes from
-    locality: `getCellValue_setCell_ne` says the write disturbs no
-    other cell's VALUE, and
-    `dropKey_stateCellEntries_perm_of_agree_off` lifts that to the
-    entry lists the update theorem compares. -/
-theorem chainCoherent_canonicalCellChain :
-    ∀ (ws : List CellWrite) (es : ExtendedState), CellWritesReady es ws →
-      ChainCoherent es (canonicalCellChain es ws) := by
-  intro ws
-  induction ws with
-  | nil => intro _ _; trivial
-  | cons w rest ih =>
-    obtain ⟨t, v⟩ := w
-    intro es h
-    obtain ⟨h_pre, h_post, h_rest⟩ := h
-    refine ⟨h_pre.expands, ?_, h_pre.distinct, h_post.distinct,
-      h_post.keysInjective, verifyStateCellProof_buildStateCellProof es t h_pre,
-      ih (setCell es t v) h_rest⟩
-    exact dropKey_stateCellEntries_perm_of_agree_off es (setCell es t v) t
-      h_pre.distinct h_post.distinct
-      (fun t' h_key => (getCellValue_setCell_ne es t' t v
-        (fun he => h_key (by rw [he]))).symm)
-
-/-- **A step's write bundle folds onto the root of the state its
-    writes produce.**
-
-    The bridge between "here is what the step writes" and "here is the
-    number the L1 computes".  Everything SMT-shaped is discharged
-    here; a per-variant obligation is what remains, and it mentions
-    only `getCellValue`. -/
-theorem fold_canonicalCellChain_eq_commit_applyCellWrites
-    (ws : List CellWrite) (es : ExtendedState) (h : CellWritesReady es ws) :
-    foldStateCellWrites (commitExtendedState es)
-        (chainWrites es (canonicalCellChain es ws))
-      = some (commitExtendedState (applyCellWrites es ws)) := by
-  rw [← chainLast_canonicalCellChain ws es]
-  exact foldStateCellWrites_eq_commit_of_coherent _ es
-    (chainCoherent_canonicalCellChain ws es h)
-
-/-- **The step-VM form.**  Folding a step's writes into the pre-state's
-    published root computes the post-state's published root, where
-    "post-state" is any state the writes agree with cell-for-cell.
-
-    The cell-agreement hypothesis is deliberately not state equality:
-    the production advance builds its maps in a different insertion
-    order than a `setCell` chain does, and `Std.TreeMap` has no
-    extensional equality in Lean core.  Cell agreement is both
-    provable and exactly what the root observes. -/
-theorem fold_canonicalCellChain_eq_commit_of_cells_agree
-    (ws : List CellWrite) (es post : ExtendedState) (h : CellWritesReady es ws)
-    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries post))
-    (h_agree : ∀ t : CellTag,
-      getCellValue (applyCellWrites es ws) t = getCellValue post t) :
-    foldStateCellWrites (commitExtendedState es)
-        (chainWrites es (canonicalCellChain es ws))
-      = some (commitExtendedState post) := by
-  rw [fold_canonicalCellChain_eq_commit_applyCellWrites ws es h]
-  exact congrArg some (commitExtendedState_eq_of_cells_agree _ post
-    (CellWritesReady.distinctLast ws es h) h_wf h_agree)
 
 /-! ## The round-trip law
 
@@ -518,20 +394,6 @@ when nothing else moved. -/
 def stepCellWrites (pre post : ExtendedState) (action : Authority.Action)
     (signer : ActorId) : List CellWrite :=
   (action.writeCellsAt pre signer).map (fun t => (t, getCellValue post t))
-
-/-- Every declared cell appears in the write list, at its post value. -/
-theorem mem_stepCellWrites (pre post : ExtendedState) (action : Authority.Action)
-    (signer : ActorId) (t : CellTag) (h : t ∈ action.writeCellsAt pre signer) :
-    (t, getCellValue post t) ∈ stepCellWrites pre post action signer :=
-  List.mem_map.mpr ⟨t, h, rfl⟩
-
-/-- The write list names exactly the declared cells. -/
-theorem stepCellWrites_tags (pre post : ExtendedState) (action : Authority.Action)
-    (signer : ActorId) :
-    (stepCellWrites pre post action signer).map Prod.fst = action.writeCellsAt pre signer := by
-  unfold stepCellWrites
-  rw [List.map_map]
-  exact List.map_id _
 
 /-- **The declared write set is complete for a step.**
 
@@ -753,32 +615,6 @@ theorem writeSetComplete_of_identity_advance
     rw [getCellValue_epochBudget', getCellValue_epochBudget',
       h_budget a (fun he => h_notin (h_decl _ (Or.inr (by rw [he]))))]
   | budgetPolicy => rw [getCellValue_budgetPolicy', getCellValue_budgetPolicy', h_pol]
-
-/-- **The step-VM statement.**  Folding a step's write bundle into the
-    pre-state's published root computes the post-state's published
-    root.
-
-    This is what `docs/planning/state_root_merkleisation_plan.md` §4
-    asks for on the Lean side, reduced to its per-variant residue: the
-    only hypothesis that is not generic machinery or standing
-    well-formedness is `WriteSetComplete`, and that is exactly "the
-    declaration names every cell the advance moves". -/
-theorem fold_stepCellWrites_eq_commit_post
-    (pre post : ExtendedState) (action : Authority.Action) (signer : ActorId)
-    (h_ready : CellWritesReady pre (stepCellWrites pre post action signer))
-    (h_complete : WriteSetComplete pre post action signer)
-    (h_nodup : (action.writeCellsAt pre signer).Nodup)
-    (h_bounds : ExtendedState.CanonicalBounds post)
-    (h_wf : BitsDistinctBelow smtDepth (stateCellEntries post))
-    (h_append : ∀ t : CellTag, t.appendOnly = true →
-      getCellValue post t = canonicalAbsentValue t →
-      getCellValue pre t = canonicalAbsentValue t) :
-    foldStateCellWrites (commitExtendedState pre)
-        (chainWrites pre (canonicalCellChain pre (stepCellWrites pre post action signer)))
-      = some (commitExtendedState post) :=
-  fold_canonicalCellChain_eq_commit_of_cells_agree _ pre post h_ready h_wf
-    (getCellValue_applyCellWrites_stepCellWrites pre post action signer
-      h_complete h_nodup h_bounds h_append)
 
 end FaultProof
 end LegalKernel

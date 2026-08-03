@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "a95b5e30ce1af501708c11deafa0213ade575dd933f24521ef02b874f5d39a57"
+    "source_digest": "dcac7e6f84dc8a2bec3db8215ac9e4aee5b0e349ff102cf7878a49a1eabba2ee"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5922
+    "declaration_count": 5895
   },
   "modules": [
     {
@@ -21274,7 +21274,7 @@
     {
       "module": "LegalKernel.FaultProof.CellWrites",
       "path": "LegalKernel/FaultProof/CellWrites.lean",
-      "declaration_count": 26,
+      "declaration_count": 15,
       "declarations": [
         {
           "kind": "namespace",
@@ -21340,36 +21340,9 @@
           ]
         },
         {
-          "kind": "def",
-          "name": "canonicalCellChain",
-          "line": 137,
-          "called": [
-            "CellWrite",
-            "CellWriteChain",
-            "ExtendedState",
-            "buildStateCellProof",
-            "es",
-            "setCell"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "chainLast_canonicalCellChain",
-          "line": 144,
-          "called": [
-            "CellWrite",
-            "ExtendedState",
-            "applyCellWrites",
-            "canonicalCellChain",
-            "chainLast",
-            "es",
-            "setCell"
-          ]
-        },
-        {
           "kind": "structure",
           "name": "CellWriteReady",
-          "line": 178,
+          "line": 150,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -21388,54 +21361,9 @@
           ]
         },
         {
-          "kind": "def",
-          "name": "CellWritesReady",
-          "line": 192,
-          "called": [
-            "BitsDistinctBelow",
-            "CellWrite",
-            "CellWriteReady",
-            "ExtendedState",
-            "es",
-            "setCell",
-            "smtDepth",
-            "stateCellEntries"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "CellWritesReady.distinctHead",
-          "line": 201,
-          "called": [
-            "BitsDistinctBelow",
-            "CellWrite",
-            "CellWritesReady",
-            "ExtendedState",
-            "es",
-            "smtDepth",
-            "stateCellEntries"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "CellWritesReady.distinctLast",
-          "line": 210,
-          "called": [
-            "BitsDistinctBelow",
-            "CellWrite",
-            "CellWritesReady",
-            "ExtendedState",
-            "applyCellWrites",
-            "es",
-            "setCell",
-            "smtDepth",
-            "stateCellEntries"
-          ]
-        },
-        {
           "kind": "theorem",
           "name": "verifyStateCellProof_buildStateCellProof",
-          "line": 231,
+          "line": 172,
           "called": [
             "CellTag",
             "CellWriteReady",
@@ -21454,69 +21382,9 @@
           ]
         },
         {
-          "kind": "theorem",
-          "name": "chainCoherent_canonicalCellChain",
-          "line": 254,
-          "called": [
-            "CellWrite",
-            "CellWritesReady",
-            "ChainCoherent",
-            "ExtendedState",
-            "canonicalCellChain",
-            "dropKey_stateCellEntries_perm_of_agree_off",
-            "es",
-            "getCellValue_setCell_ne",
-            "setCell",
-            "verifyStateCellProof_buildStateCellProof"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "fold_canonicalCellChain_eq_commit_applyCellWrites",
-          "line": 279,
-          "called": [
-            "CellWrite",
-            "CellWritesReady",
-            "ExtendedState",
-            "applyCellWrites",
-            "canonicalCellChain",
-            "chainCoherent_canonicalCellChain",
-            "chainLast_canonicalCellChain",
-            "chainWrites",
-            "commitExtendedState",
-            "es",
-            "foldStateCellWrites",
-            "foldStateCellWrites_eq_commit_of_coherent"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "fold_canonicalCellChain_eq_commit_of_cells_agree",
-          "line": 297,
-          "called": [
-            "BitsDistinctBelow",
-            "CellTag",
-            "CellWrite",
-            "CellWritesReady",
-            "CellWritesReady.distinctLast",
-            "ExtendedState",
-            "applyCellWrites",
-            "canonicalCellChain",
-            "chainWrites",
-            "commitExtendedState",
-            "commitExtendedState_eq_of_cells_agree",
-            "es",
-            "foldStateCellWrites",
-            "fold_canonicalCellChain_eq_commit_applyCellWrites",
-            "getCellValue",
-            "smtDepth",
-            "stateCellEntries"
-          ]
-        },
-        {
           "kind": "def",
           "name": "CellTag.appendOnly",
-          "line": 332,
+          "line": 208,
           "called": [
             "CellTag"
           ]
@@ -21524,7 +21392,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_setCell_getCellValue",
-          "line": 359,
+          "line": 235,
           "called": [
             "CellTag",
             "ExtendedState",
@@ -21576,7 +21444,7 @@
         {
           "kind": "def",
           "name": "stepCellWrites",
-          "line": 517,
+          "line": 393,
           "called": [
             "ActorId",
             "CellWrite",
@@ -21585,31 +21453,9 @@
           ]
         },
         {
-          "kind": "theorem",
-          "name": "mem_stepCellWrites",
-          "line": 522,
-          "called": [
-            "ActorId",
-            "CellTag",
-            "ExtendedState",
-            "getCellValue",
-            "stepCellWrites"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stepCellWrites_tags",
-          "line": 528,
-          "called": [
-            "ActorId",
-            "ExtendedState",
-            "stepCellWrites"
-          ]
-        },
-        {
           "kind": "def",
           "name": "WriteSetComplete",
-          "line": 545,
+          "line": 407,
           "called": [
             "ActorId",
             "CellTag",
@@ -21620,7 +21466,7 @@
         {
           "kind": "theorem",
           "name": "getCellValue_applyCellWrites_stepCellWrites",
-          "line": 562,
+          "line": 424,
           "called": [
             "ActorId",
             "CellTag",
@@ -21639,7 +21485,7 @@
         {
           "kind": "theorem",
           "name": "writeSetComplete_of_field_footprints",
-          "line": 633,
+          "line": 495,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -21659,11 +21505,13 @@
         {
           "kind": "theorem",
           "name": "writeSetComplete_of_identity_advance",
-          "line": 702,
+          "line": 564,
           "called": [
             "ActorId",
             "CellTag",
             "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
             "WriteSetComplete",
             "getCellValue",
             "getCellValue_balance",
@@ -21675,33 +21523,6 @@
             "getCellValue_localPolicy",
             "getCellValue_nonce",
             "getCellValue_registry"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "fold_stepCellWrites_eq_commit_post",
-          "line": 765,
-          "called": [
-            "ActorId",
-            "BitsDistinctBelow",
-            "CellTag",
-            "CellWritesReady",
-            "ExtendedState",
-            "ExtendedState.CanonicalBounds",
-            "FaultProof",
-            "LegalKernel",
-            "WriteSetComplete",
-            "canonicalAbsentValue",
-            "canonicalCellChain",
-            "chainWrites",
-            "commitExtendedState",
-            "foldStateCellWrites",
-            "fold_canonicalCellChain_eq_commit_of_cells_agree",
-            "getCellValue",
-            "getCellValue_applyCellWrites_stepCellWrites",
-            "smtDepth",
-            "stateCellEntries",
-            "stepCellWrites"
           ]
         }
       ]
@@ -28450,7 +28271,7 @@
     {
       "module": "LegalKernel.FaultProof.StateCellsInjective",
       "path": "LegalKernel/FaultProof/StateCellsInjective.lean",
-      "declaration_count": 51,
+      "declaration_count": 40,
       "declarations": [
         {
           "kind": "namespace",
@@ -29064,6 +28885,8 @@
             "BitsDistinctBelow",
             "CellTag",
             "ExtendedState",
+            "FaultProof",
+            "LegalKernel",
             "dropKey",
             "es",
             "getCellValue",
@@ -29073,154 +28896,6 @@
             "smtCellKey",
             "smtDepth",
             "stateCellEntries"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stateCellRootPair",
-          "line": 927,
-          "called": [
-            "CellTag",
-            "SmtCellProof",
-            "StateCommit",
-            "canonicalAbsentValue",
-            "emptyRootAt",
-            "leafHash",
-            "smtCellKey",
-            "smtWalkPairFrom"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "stateCellRootPair_eq",
-          "line": 935,
-          "called": [
-            "CellTag",
-            "SmtCellProof",
-            "cellLeaf",
-            "smtCellKey",
-            "smtWalkFrom",
-            "smtWalkPairFrom_eq",
-            "stateCellRootPair"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "applyStateCellWrite",
-          "line": 951,
-          "called": [
-            "CellTag",
-            "SmtCellProof",
-            "StateCommit",
-            "stateCellRootPair"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "applyStateCellWrite_eq_verify_update",
-          "line": 963,
-          "called": [
-            "CellTag",
-            "SmtCellProof",
-            "StateCommit",
-            "applyStateCellWrite",
-            "stateCellRootPair_eq",
-            "updateStateCellRoot",
-            "verifyStateCellProof"
-          ]
-        },
-        {
-          "kind": "abbrev",
-          "name": "StateCellWrite",
-          "line": 974,
-          "called": [
-            "CellTag",
-            "SmtCellProof"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "foldStateCellWrites",
-          "line": 977,
-          "called": [
-            "StateCellWrite",
-            "StateCommit",
-            "applyStateCellWrite"
-          ]
-        },
-        {
-          "kind": "abbrev",
-          "name": "CellWriteChain",
-          "line": 986,
-          "called": [
-            "CellTag",
-            "ExtendedState",
-            "SmtCellProof"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "chainWrites",
-          "line": 991,
-          "called": [
-            "CellWriteChain",
-            "ExtendedState",
-            "StateCellWrite",
-            "es",
-            "getCellValue"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "chainLast",
-          "line": 997,
-          "called": [
-            "CellWriteChain",
-            "ExtendedState",
-            "es"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "ChainCoherent",
-          "line": 1005,
-          "called": [
-            "BitsDistinctBelow",
-            "CellWriteChain",
-            "ExtendedState",
-            "canonicalAbsentValue",
-            "canonicalSiblings",
-            "commitExtendedState",
-            "dropKey",
-            "es",
-            "expandSiblings",
-            "getCellValue",
-            "smtCellKey",
-            "smtDepth",
-            "stateCellEntries",
-            "stateCellTags",
-            "verifyStateCellProof"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "foldStateCellWrites_eq_commit_of_coherent",
-          "line": 1026,
-          "called": [
-            "CellWriteChain",
-            "ChainCoherent",
-            "ExtendedState",
-            "FaultProof",
-            "LegalKernel",
-            "applyStateCellWrite",
-            "applyStateCellWrite_eq_verify_update",
-            "chainLast",
-            "chainWrites",
-            "commitExtendedState",
-            "es",
-            "foldStateCellWrites",
-            "getCellValue",
-            "updateStateCellRoot_eq_commit_of_canonical"
           ]
         }
       ]
@@ -29850,7 +29525,7 @@
     {
       "module": "LegalKernel.FaultProof.StepWriteSets",
       "path": "LegalKernel/FaultProof/StepWriteSets.lean",
-      "declaration_count": 42,
+      "declaration_count": 43,
       "declarations": [
         {
           "kind": "namespace",
@@ -30431,98 +30106,67 @@
         },
         {
           "kind": "theorem",
-          "name": "fold_stepWrites_eq_commit_productionApplyBudget",
-          "line": 851,
+          "name": "nonce_eq_signer",
+          "line": 844,
           "called": [
-            "BitsDistinctBelow",
-            "CellTag",
-            "CellWritesReady",
-            "ExtendedState",
-            "ExtendedState.CanonicalBounds",
-            "SignedAction",
-            "canonicalAbsentValue",
-            "canonicalCellChain",
-            "chainWrites",
-            "commitExtendedState",
-            "es",
-            "foldStateCellWrites",
-            "fold_stepCellWrites_eq_commit_post",
-            "getCellValue",
-            "productionApplyBudget",
-            "smtDepth",
-            "stateCellEntries",
-            "stepCellWrites",
-            "writeSetComplete_productionApplyBudget"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepWriteBundle",
-          "line": 894,
-          "called": [
-            "ExtendedState",
-            "SignedAction",
-            "StateCellWrite",
-            "canonicalCellChain",
-            "chainWrites",
-            "es",
-            "productionApplyBudget",
-            "stepCellWrites"
-          ]
-        },
-        {
-          "kind": "def",
-          "name": "stepPostRoot",
-          "line": 906,
-          "called": [
-            "ExtendedState",
-            "SignedAction",
-            "StateCommit",
-            "commitExtendedState",
-            "es",
-            "foldStateCellWrites",
-            "stepWriteBundle"
+            "Action",
+            "Action.writeCells",
+            "ActorId"
           ]
         },
         {
           "kind": "theorem",
-          "name": "stepPostRoot_eq_commit_productionApplyBudget",
-          "line": 921,
+          "name": "epochBudget_signer_mem",
+          "line": 850,
           "called": [
-            "BitsDistinctBelow",
-            "CellTag",
-            "CellWritesReady",
-            "ExtendedState",
-            "ExtendedState.CanonicalBounds",
-            "SignedAction",
-            "canonicalAbsentValue",
-            "commitExtendedState",
-            "es",
-            "fold_stepWrites_eq_commit_productionApplyBudget",
-            "getCellValue",
-            "productionApplyBudget",
-            "smtDepth",
-            "stateCellEntries",
-            "stepCellWrites",
-            "stepPostRoot"
+            "Action",
+            "Action.writeCells",
+            "ActorId"
           ]
         },
         {
           "kind": "theorem",
-          "name": "stepWriteBundle_tags",
-          "line": 940,
+          "name": "registry_cases",
+          "line": 856,
           "called": [
-            "CellWrite",
-            "ExtendedState",
+            "Action",
+            "Action.writeCells",
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "localPolicy_cases",
+          "line": 864,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeConsumed_cases",
+          "line": 872,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId",
+            "deposit",
+            "depositWithFee"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bridgeNextWdId_cases",
+          "line": 879,
+          "called": [
+            "Action",
+            "Action.writeCells",
+            "ActorId",
             "FaultProof",
             "LegalKernel",
-            "SignedAction",
-            "canonicalCellChain",
-            "chainWrites",
-            "es",
-            "setCell",
-            "stepCellWrites_tags",
-            "stepWriteBundle"
+            "withdraw"
           ]
         }
       ]
@@ -30870,7 +30514,7 @@
     {
       "module": "LegalKernel.FaultProof.Terminate",
       "path": "LegalKernel/FaultProof/Terminate.lean",
-      "declaration_count": 35,
+      "declaration_count": 29,
       "declarations": [
         {
           "kind": "namespace",
@@ -31272,71 +30916,8 @@
         },
         {
           "kind": "theorem",
-          "name": "nonce_eq_signer",
-          "line": 726,
-          "called": [
-            "Action",
-            "Action.writeCells",
-            "ActorId"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "epochBudget_signer_mem",
-          "line": 732,
-          "called": [
-            "Action",
-            "Action.writeCells",
-            "ActorId"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "registry_cases",
-          "line": 738,
-          "called": [
-            "Action",
-            "Action.writeCells",
-            "ActorId"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "localPolicy_cases",
-          "line": 746,
-          "called": [
-            "Action",
-            "Action.writeCells",
-            "ActorId"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "bridgeConsumed_cases",
-          "line": 754,
-          "called": [
-            "Action",
-            "Action.writeCells",
-            "ActorId",
-            "deposit",
-            "depositWithFee"
-          ]
-        },
-        {
-          "kind": "theorem",
-          "name": "bridgeNextWdId_cases",
-          "line": 761,
-          "called": [
-            "Action",
-            "Action.writeCells",
-            "ActorId",
-            "withdraw"
-          ]
-        },
-        {
-          "kind": "theorem",
           "name": "plannedBalanceAt_correct",
-          "line": 779,
+          "line": 737,
           "called": [
             "Action.writeCells",
             "ActorId",
@@ -31384,7 +30965,7 @@
         {
           "kind": "theorem",
           "name": "derivedCellValue_correct",
-          "line": 942,
+          "line": 900,
           "called": [
             "Action.writeCells",
             "ActorId",
@@ -31445,7 +31026,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalances_stateBalanceReader_isSome",
-          "line": 1107,
+          "line": 1065,
           "called": [
             "Action",
             "ActorId",
@@ -31470,7 +31051,7 @@
         {
           "kind": "theorem",
           "name": "postOpened_eq_openedOf",
-          "line": 1130,
+          "line": 1088,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -31499,7 +31080,7 @@
         {
           "kind": "theorem",
           "name": "stepMultiFold_eq_commit_post",
-          "line": 1200,
+          "line": 1158,
           "called": [
             "BitsDistinctBelow",
             "CellTag",
@@ -31535,7 +31116,7 @@
         {
           "kind": "def",
           "name": "stepMultiPostRoot",
-          "line": 1247,
+          "line": 1205,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -58241,17 +57822,12 @@
             "ActorId",
             "Amount",
             "BalanceMap",
-            "BitsDistinctBelow",
             "CellTag",
             "CellWrite",
-            "CellWritesReady",
             "ExtendedState",
-            "ExtendedState.CanonicalBounds",
             "LegalKernel.Test.FaultProof.CellWrites",
             "ResourceId",
-            "SmtCellProof",
             "TestCase",
-            "WriteSetComplete",
             "ammSwap",
             "amountCellValue",
             "applyCellWrites",
@@ -58260,34 +57836,23 @@
             "base",
             "buildStateCellProof",
             "canonicalAbsentValue",
-            "canonicalCellChain",
-            "chainLast",
-            "chainLast_canonicalCellChain",
-            "chainWrites",
             "commitExtendedState",
-            "commitExtendedState_eq_of_cells_agree",
             "deposit",
             "es",
-            "foldStateCellWrites",
-            "fold_canonicalCellChain_eq_commit_applyCellWrites",
-            "fold_stepCellWrites_eq_commit_post",
             "freezeResource",
             "getCellValue",
-            "getCellValue_applyCellWrites_of_not_written",
-            "getCellValue_setCell_getCellValue",
             "lookup",
             "mint",
             "natCellValue",
             "probes",
             "setCell",
             "smtCellKey",
-            "smtDepth",
             "stateCellEntries",
             "stepCellWrites",
             "transfer",
             "transferWrites",
-            "withdraw",
-            "writeSetComplete_of_identity_advance"
+            "verifyStateCellProof",
+            "withdraw"
           ]
         }
       ]
@@ -59343,13 +58908,10 @@
             "BitsDistinctBelow",
             "CellTag",
             "CellTag.flatKey_injective",
-            "CellWriteChain",
-            "ChainCoherent",
             "ExtendedState",
             "LegalKernel.Test.FaultProof.StateCellsInjective",
             "SmtCellProof",
             "SmtEntries",
-            "StateCellWrite",
             "StateCellsWellFormed",
             "TestCase",
             "absentTags",
@@ -59363,16 +58925,12 @@
             "cellKeyPreimage",
             "cellKeyPreimage_injective",
             "cellLeaf",
-            "chainLast",
-            "chainWrites",
             "commitExtendedState",
             "commitExtendedState_determines_cells",
             "dropKey",
             "dropKey_stateCellEntries_perm_of_agree_off",
             "es",
             "expandSiblings",
-            "foldStateCellWrites",
-            "foldStateCellWrites_eq_commit_of_coherent",
             "getCellValue",
             "getCellValue_of_not_mem",
             "keyBitsUpTo",
@@ -59573,13 +59131,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.StepWriteSets",
-          "line": 39,
+          "line": 40,
           "called": []
         },
         {
           "kind": "def",
           "name": "base",
-          "line": 45,
+          "line": 46,
           "called": [
             "ActorId",
             "BalanceMap",
@@ -59593,7 +59151,7 @@
         {
           "kind": "def",
           "name": "probeDispute",
-          "line": 58,
+          "line": 59,
           "called": [
             "challenger"
           ]
@@ -59601,13 +59159,13 @@
         {
           "kind": "def",
           "name": "probeVerdict",
-          "line": 63,
+          "line": 64,
           "called": []
         },
         {
           "kind": "def",
           "name": "sign",
-          "line": 68,
+          "line": 69,
           "called": [
             "SignedAction"
           ]
@@ -59615,7 +59173,7 @@
         {
           "kind": "def",
           "name": "probes",
-          "line": 80,
+          "line": 81,
           "called": [
             "CellTag"
           ]
@@ -59623,7 +59181,7 @@
         {
           "kind": "def",
           "name": "checkComplete",
-          "line": 90,
+          "line": 91,
           "called": [
             "assertEq",
             "base",
@@ -59636,31 +59194,28 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 103,
+          "line": 104,
           "called": [
             "ActorId",
             "BalanceReader",
-            "BitsDistinctBelow",
             "CellTag",
-            "CellWritesReady",
             "EpochBudgetState",
             "ExtendedState",
-            "ExtendedState.CanonicalBounds",
             "FaultProofAdjudicable",
             "LegalKernel.Test.FaultProof.StepWriteSets",
             "ResourceId",
             "SignedAction",
+            "StateCommit",
             "TestCase",
             "WriteSetComplete",
             "actionCost",
             "ammSwap",
-            "amountCellValue",
             "assert",
             "assertEq",
             "base",
             "budgetGrant",
             "burn",
-            "canonicalAbsentValue",
+            "cells",
             "checkComplete",
             "claimBudgetRefund",
             "commitExtendedState",
@@ -59690,13 +59245,15 @@
             "deriveWithdrawBalance",
             "distributeOthers",
             "es",
-            "foldStateCellWrites",
             "freeTier",
             "freezeResource",
             "getCellValue",
             "mem_writeCellsAt_epochBudget",
             "mem_writeCellsAt_nonce",
             "mint",
+            "multiSiblings",
+            "multiWalk",
+            "openedOf",
             "probeDispute",
             "probeVerdict",
             "productionApplyBudget",
@@ -59710,10 +59267,7 @@
             "smtDepth",
             "stateBalanceReader",
             "stateCellEntries",
-            "stepCellWrites",
-            "stepPostRoot",
-            "stepPostRoot_eq_commit_productionApplyBudget",
-            "stepWriteBundle",
+            "stepMultiPostRoot",
             "topUpActionBudget",
             "topUpActionBudgetFor",
             "transfer",
@@ -59962,8 +59516,6 @@
             "smtCellKey",
             "stepMultiBundle",
             "stepMultiPostRoot",
-            "stepPostRoot",
-            "stepWriteBundle",
             "transfer",
             "verifierPostRootMulti",
             "zeroGapWire"
@@ -59972,7 +59524,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 588,
+          "line": 575,
           "called": [
             "LegalKernel.Test.FaultProof.Terminate",
             "TestCase",

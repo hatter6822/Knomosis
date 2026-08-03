@@ -11,7 +11,7 @@
 LegalKernel.Test.FaultProof.Terminate — the openings-only verifier
 against the sequencer's fold.
 
-`verifierPostRootMulti` holds a pre-root and a bundle; `stepPostRoot`
+`verifierPostRootMulti` holds a pre-root and a bundle; `stepMultiBundle`
 holds the state.  The property that matters is that they AGREE on the
 honest bundle — otherwise an honest sequencer's bundle would not
 verify, which is the failure the whole workstream exists to remove —
@@ -108,7 +108,7 @@ def coreTests : List TestCase :=
   [ { name := "the verifier reaches the published post-root on every probe"
     , body := do
         -- Against the STATE, not against another verifier.  This used
-        -- to compare `stepMultiPostRoot` with `stepPostRoot` — the
+        -- to compare `stepMultiPostRoot` with the retired chained fold — the
         -- chained fold — which made the assertion "two verifiers
         -- agree" rather than "the verifier is right".  The target is
         -- now `commitExtendedState` of the state the step produces,
@@ -407,21 +407,7 @@ def probeLevels (a : Authority.Action) : List Nat :=
 
 /-- Tests for the multiproof path. -/
 def multiTests : List TestCase :=
-  [ { name := "the multiproof verifier reaches the sequencer's post-root"
-    , body := do
-        -- The equivalence that lets every downstream theorem be
-        -- inherited rather than re-proved: one merged walk against the
-        -- pre-root computes what the chained fold computes.
-        for (name, a) in probes do
-          let st := sign a
-          let expected := stepPostRoot base st 0
-          if expected.isNone then
-            throw <| IO.userError s!"{name}: the sequencer's fold aborted"
-          assertEq (expected := expected.map ByteArray.toList)
-            (actual := (stepMultiPostRoot base st 0).map ByteArray.toList)
-            s!"{name}: the multiproof and the chained fold disagree"
-    }
-  , { name := "a permuted bundle yields the same root"
+  [ { name := "a permuted bundle yields the same root"
     , body := do
         -- The relaxation `pathSort` bought, at the verifier.  Every
         -- opening is against the SAME root, so order carries no
@@ -519,14 +505,15 @@ def multiTests : List TestCase :=
         -- it stays true either way.
         for (name, a) in probes do
           let st := sign a
-          -- The retired shape, reconstructed from the surviving
-          -- honest-sequencer bundle: one 32-byte bitmask plus siblings
-          -- per WRITE, and a separate opening for the read-only policy
-          -- cell.  Rebuilt rather than measured through the old
-          -- helpers, which went with the verifier that consumed them.
+          -- The retired shape, reconstructed from the cell list and the
+          -- surviving opening builder: one 32-byte bitmask plus
+          -- siblings per WRITE, and a separate opening for the
+          -- read-only policy cell.  Rebuilt rather than measured
+          -- through the old helpers, which went with the verifier that
+          -- consumed them.
           let chained :=
-            (stepWriteBundle base st 0).foldl
-              (fun acc w => acc + w.2.2.2.toWireBytes.size)
+            (st.action.writeCellsAt base st.signer).foldl
+              (fun acc t => acc + (buildStateCellProof base t).toWireBytes.size)
               (buildStateCellProof base .budgetPolicy).toWireBytes.size
           let multi := (stepMultiBundle base st).proof.toWireBytes.size
           assertEq (expected := true) (actual := multi < chained)

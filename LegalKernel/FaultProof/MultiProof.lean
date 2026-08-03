@@ -848,7 +848,7 @@ theorem bitsDistinctBelow_openedOf (es : ExtendedState) (ts : List CellTag)
     fold of the DERIVED post-values lands on
     `commitExtendedState` of the state the step produces.
 
-    It subsumes `foldStateCellWrites_eq_commit_of_coherent` — m cells at
+    It replaced the chained fold it retired — m cells at
     once, with no per-link coherence obligation and no ordering, because
     every opening is against the same root. -/
 theorem multiFold_eq_commit_post (es es' : ExtendedState) (ts : List CellTag)

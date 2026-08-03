@@ -11,7 +11,7 @@
 LegalKernel.FaultProof.Terminate — the OPENINGS-ONLY verifier: the
 Lean mirror of `KnomosisStepVMRoot.executeStepToRootMulti`.
 
-`stepPostRoot` (`StepWriteSets.lean`) is the SEQUENCER's computation.
+`stepMultiBundle` below is the SEQUENCER's computation.
 It takes the pre-state and reads its `newValue` column off
 `productionApplyBudget`, so its guarantee — the fold lands on the root
 the sequencer published — says nothing about a bundle an arbitrary
@@ -480,7 +480,7 @@ verifier will reach — each a function of `(pre-state, signed action,
 log index)` alone, which is what lets the observer emit them and the
 game recompute them.
 
-The multiproof counterparts of `stepWriteBundle` / `stepPostRoot`.  The
+The honest sequencer's side of the merged walk.  The
 chained pair carries one opening per WRITE, each against the running
 root; this pair carries one opening per CELL, all against the pre-root,
 with the siblings shared. -/
@@ -721,48 +721,6 @@ theorem mem_vwc_of_mem_frontier (a : Action) (signer : ActorId) (n : Nat) (t : C
     rcases List.mem_append.mp h' with h'' | h''
     · exact Or.inl h''
     · cases a <;> simp_all
-
-/-- The only nonce cell any action writes is the signer's — which is
-    why `deriveNonceCellValue_correct` can be action-independent. -/
-theorem nonce_eq_signer (a : Action) (signer x : ActorId)
-    (h : CellTag.nonce x ∈ a.writeCells signer) : x = signer := by
-  cases a <;> simp_all [Action.writeCells]
-
-/-- Every action writes the signer's epoch-budget cell, so the
-    derivation's second read is always available. -/
-theorem epochBudget_signer_mem (a : Action) (signer : ActorId) :
-    CellTag.epochBudget signer ∈ a.writeCells signer := by
-  cases a <;> simp [Action.writeCells]
-
-/-- A registry cell in the write set names the action's own actor, and
-    only the two identity actions write one. -/
-theorem registry_cases (a : Action) (signer x : ActorId)
-    (h : CellTag.registry x ∈ a.writeCells signer) :
-    (∃ k, a = .replaceKey x k) ∨ (∃ pk, a = .registerIdentity x pk) := by
-  cases a <;> simp_all [Action.writeCells]
-
-/-- A local-policy cell in the write set is the SIGNER's — an actor
-    cannot declare a policy for anyone else — and only the two policy
-    actions write one. -/
-theorem localPolicy_cases (a : Action) (signer x : ActorId)
-    (h : CellTag.localPolicy x ∈ a.writeCells signer) :
-    x = signer ∧ ((∃ p, a = .declareLocalPolicy p) ∨ a = .revokeLocalPolicy) := by
-  cases a <;> simp_all [Action.writeCells]
-
-/-- A consumed cell in the write set carries the action's own deposit
-    id, so the derivation's record is the action's own fields rather
-    than a lookup. -/
-theorem bridgeConsumed_cases (a : Action) (signer : ActorId) (d : LegalKernel.Bridge.DepositId)
-    (h : CellTag.bridgeConsumed d ∈ a.writeCells signer) :
-    (∃ r rcp amt, a = .deposit r rcp amt d) ∨
-      (∃ r rcp pa ua pam bg, a = .depositWithFee r rcp pa ua pam bg d) := by
-  cases a <;> simp_all [Action.writeCells]
-
-/-- The next-withdrawal-id counter is written by `withdraw` alone. -/
-theorem bridgeNextWdId_cases (a : Action) (signer : ActorId)
-    (h : CellTag.bridgeNextWdId ∈ a.writeCells signer) :
-    ∃ r s amt rcp, a = .withdraw r s amt rcp := by
-  cases a <;> simp_all [Action.writeCells]
 
 /-- **The plan answers every balance cell the step writes**, with the
     value the step leaves there.
@@ -1180,7 +1138,7 @@ theorem postOpened_eq_openedOf (es : ExtendedState) (st : SignedAction) (idx : N
 /-- **The honest merged fold lands on the published post-root.**
 
     The multiproof counterpart of
-    `stepPostRoot_eq_commit_productionApplyBudget`, and the statement
+    the retired chained fold's headline, and the statement
     the chained write algebra was kept alive for: hand a verifier the
     pre-state's wire and the post-state's leaves, and the single
     merged walk computes `commitExtendedState` of the state the step
@@ -1242,7 +1200,7 @@ theorem stepMultiFold_eq_commit_post (es : ExtendedState) (st : SignedAction) (i
 /-- **The post-state root the multiproof verifier reaches** for an
     honest step: one merged walk, one root check, one answer.
 
-    The multiproof counterpart of `stepPostRoot`, and `Option` for the
+    The root the verifier reaches, and `Option` for the
     same reason — the fold is fail-closed, so a bundle whose wire does
     not reproduce the pre-root aborts rather than inventing a root. -/
 def stepMultiPostRoot (es : ExtendedState) (st : SignedAction) (idx : Nat) :

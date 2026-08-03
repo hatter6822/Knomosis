@@ -756,7 +756,7 @@ theorem mem_writeCellsAt_epochBudget_topUpFor
 
     This is what `docs/planning/state_root_merkleisation_plan.md` §4A
     asks for on the Lean side.  Composed with
-    `fold_stepCellWrites_eq_commit_post`, it says the L1's fold of a
+    `stepMultiFold_eq_commit_post`, it says the L1's fold of a
     step's proven writes lands on exactly the root an honest sequencer
     publishes — the property the fault-proof game has never had and
     cannot adjudicate without.
@@ -824,139 +824,63 @@ theorem writeSetComplete_productionApplyBudget
           exact h (mem_writeCellsAt_epochBudget_topUpFor es a gr ga bi pa st.signer)))
     (productionApplyBudget_budgetPolicy es st idx)
 
+/-! ## Inverting write-set membership
 
-/-! ## The §4A headline
+The forward direction above answers "is this cell declared?".  These
+answer the converse — given that a tag IS declared, what does that say
+about the action? — which is what a verifier holding an arbitrary
+frontier tag needs before it can name the derivation that applies.
 
-Composing completeness with the chain machinery.  What the L1 folds
-out of a pre-root and a bundle of proven writes is the root an honest
-sequencer publishes for the post-state. -/
+Both directions belong here rather than half of them in the verifier:
+they are facts about `Action.writeCells`, not about any particular
+consumer of it.  (The frontier-specific inversion stays in
+`Terminate`, because it is about the frontier.)  Each proof is
+`cases a <;> simp_all [Action.writeCells]`, which is the point — the
+write sets are literal lists, so the inversion is decidable rather
+than argued.
+-/
 
-/-- **A step's write bundle folds the pre-root onto the published
-    post-root.**
+/-- The only nonce cell any action writes is the signer's — which is
+    why `deriveNonceCellValue_correct` can be action-independent. -/
+theorem nonce_eq_signer (a : Action) (signer x : ActorId)
+    (h : CellTag.nonce x ∈ a.writeCells signer) : x = signer := by
+  cases a <;> simp_all [Action.writeCells]
 
-    Every hypothesis is either standing well-formedness (the SMT side
-    conditions and `CanonicalBounds`, which the commitment layer
-    already carries) or the append-only restriction that no `Action`
-    violates.  Nothing here is a fact about a particular variant —
-    those were discharged in `writeSetComplete_productionApplyBudget`,
-    which now covers all twenty-five.
+/-- Every action writes the signer's epoch-budget cell, so the
+    derivation's second read is always available. -/
+theorem epochBudget_signer_mem (a : Action) (signer : ActorId) :
+    CellTag.epochBudget signer ∈ a.writeCells signer := by
+  cases a <;> simp [Action.writeCells]
 
-    `Nodup` is the one hypothesis a caller must check per step rather
-    than per deployment, and the reason is a real shape rather than an
-    artefact: a SELF-transfer names `.balance r sender` twice, because
-    sender and receiver coincide.  The fold still lands correctly there
-    — a later write to the same cell wins, matching the production
-    advance's own composition order — but the split-at-the-occurrence
-    argument that reads each written cell back needs uniqueness, so it
-    is required rather than quietly assumed. -/
-theorem fold_stepWrites_eq_commit_productionApplyBudget
-    (es : ExtendedState) (st : SignedAction) (idx : Nat)
-    (h_ready : CellWritesReady es
-      (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer))
-    (h_nodup : (st.action.writeCellsAt es st.signer).Nodup)
-    (h_bounds : ExtendedState.CanonicalBounds (productionApplyBudget es st idx))
-    (h_wf : BitsDistinctBelow smtDepth
-      (stateCellEntries (productionApplyBudget es st idx)))
-    (h_append : ∀ t : CellTag, t.appendOnly = true →
-      getCellValue (productionApplyBudget es st idx) t = canonicalAbsentValue t →
-      getCellValue es t = canonicalAbsentValue t) :
-    foldStateCellWrites (commitExtendedState es)
-        (chainWrites es (canonicalCellChain es
-          (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer)))
-      = some (commitExtendedState (productionApplyBudget es st idx)) :=
-  fold_stepCellWrites_eq_commit_post es (productionApplyBudget es st idx)
-    st.action st.signer h_ready
-    (writeSetComplete_productionApplyBudget es st idx)
-    h_nodup h_bounds h_wf h_append
+/-- A registry cell in the write set names the action's own actor, and
+    only the two identity actions write one. -/
+theorem registry_cases (a : Action) (signer x : ActorId)
+    (h : CellTag.registry x ∈ a.writeCells signer) :
+    (∃ k, a = .replaceKey x k) ∨ (∃ pk, a = .registerIdentity x pk) := by
+  cases a <;> simp_all [Action.writeCells]
 
+/-- A local-policy cell in the write set is the SIGNER's — an actor
+    cannot declare a policy for anyone else — and only the two policy
+    actions write one. -/
+theorem localPolicy_cases (a : Action) (signer x : ActorId)
+    (h : CellTag.localPolicy x ∈ a.writeCells signer) :
+    x = signer ∧ ((∃ p, a = .declareLocalPolicy p) ∨ a = .revokeLocalPolicy) := by
+  cases a <;> simp_all [Action.writeCells]
 
-/-! ## The honest sequencer's bundle
+/-- A consumed cell in the write set carries the action's own deposit
+    id, so the derivation's record is the action's own fields rather
+    than a lookup. -/
+theorem bridgeConsumed_cases (a : Action) (signer : ActorId) (d : LegalKernel.Bridge.DepositId)
+    (h : CellTag.bridgeConsumed d ∈ a.writeCells signer) :
+    (∃ r rcp amt, a = .deposit r rcp amt d) ∨
+      (∃ r rcp pa ua pam bg, a = .depositWithFee r rcp pa ua pam bg d) := by
+  cases a <;> simp_all [Action.writeCells]
 
-Everything above is stated over `stepCellWrites … (productionApplyBudget
-…)`, which is the shape the theorems need and the wrong shape for a
-caller: a defender building a terminate bundle should not have to
-re-derive the post-state to name its own writes.
-
-`stepWriteBundle` is that derivation, done once.  It is the list the L1
-folds — cell, proven pre-value, new value, opening — and `stepPostRoot`
-is the number the fold produces.  Both are functions of
-`(pre-state, signed action, log index)` alone, which is what lets the
-observer publish them and the game recompute them.
-
-Nothing here changes what any existing surface computes; the step VM
-still returns `stepVMHash` until the flip.  These are the honest side
-of that flip, available and proved ahead of it. -/
-
-/-- **The write bundle an honest sequencer publishes for a step.**
-
-    Ordered, and the order is load-bearing: openings go stale as soon
-    as a write lands, so proof `i` opens against the root write `i-1`
-    produced.  `canonicalCellChain` is what threads that. -/
-def stepWriteBundle (es : ExtendedState) (st : SignedAction) (idx : Nat) :
-    List StateCellWrite :=
-  chainWrites es (canonicalCellChain es
-    (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer))
-
-/-- **The post-state root, computed the way the L1 computes it** — by
-    folding proven writes into the pre-state's published root, with no
-    access to the post-state itself.
-
-    `Option` because the fold is fail-closed: a link whose opening does
-    not verify against the running root aborts rather than inventing a
-    root. -/
-def stepPostRoot (es : ExtendedState) (st : SignedAction) (idx : Nat) :
-    Option StateCommit :=
-  foldStateCellWrites (commitExtendedState es) (stepWriteBundle es st idx)
-
-/-- **The fold lands on the published root.**
-
-    The §4 statement in the form the game uses it: what the L1 computes
-    from a pre-root and a bundle of openings is exactly the root an
-    honest sequencer publishes for the post-state.
-
-    Every hypothesis is standing well-formedness or the append-only
-    restriction no `Action` violates — nothing about a particular
-    variant, and no bulk exclusion, because
-    `writeSetComplete_productionApplyBudget` discharged all
-    twenty-five. -/
-theorem stepPostRoot_eq_commit_productionApplyBudget
-    (es : ExtendedState) (st : SignedAction) (idx : Nat)
-    (h_ready : CellWritesReady es
-      (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer))
-    (h_nodup : (st.action.writeCellsAt es st.signer).Nodup)
-    (h_bounds : ExtendedState.CanonicalBounds (productionApplyBudget es st idx))
-    (h_wf : BitsDistinctBelow smtDepth
-      (stateCellEntries (productionApplyBudget es st idx)))
-    (h_append : ∀ t : CellTag, t.appendOnly = true →
-      getCellValue (productionApplyBudget es st idx) t = canonicalAbsentValue t →
-      getCellValue es t = canonicalAbsentValue t) :
-    stepPostRoot es st idx
-      = some (commitExtendedState (productionApplyBudget es st idx)) :=
-  fold_stepWrites_eq_commit_productionApplyBudget es st idx
-    h_ready h_nodup h_bounds h_wf h_append
-
-/-- The bundle names exactly the cells the write set declares, in
-    declaration order — so a verifier can check the bundle's shape
-    against `writeCellsAt` before doing any hashing. -/
-theorem stepWriteBundle_tags (es : ExtendedState) (st : SignedAction) (idx : Nat) :
-    (stepWriteBundle es st idx).map Prod.fst = st.action.writeCellsAt es st.signer := by
-  unfold stepWriteBundle
-  -- `chainWrites` and `canonicalCellChain` both preserve the tag
-  -- column, so the bundle's tags are the write list's tags.
-  have h : ∀ (ws : List CellWrite) (e : ExtendedState),
-      (chainWrites e (canonicalCellChain e ws)).map Prod.fst = ws.map Prod.fst := by
-    intro ws
-    induction ws with
-    | nil => intro _; rfl
-    | cons w rest ih =>
-      obtain ⟨t, v⟩ := w
-      intro e
-      show t :: (chainWrites (setCell e t v)
-        (canonicalCellChain (setCell e t v) rest)).map Prod.fst = _
-      rw [ih (setCell e t v)]
-      rfl
-  rw [h]
-  exact stepCellWrites_tags es _ st.action st.signer
+/-- The next-withdrawal-id counter is written by `withdraw` alone. -/
+theorem bridgeNextWdId_cases (a : Action) (signer : ActorId)
+    (h : CellTag.bridgeNextWdId ∈ a.writeCells signer) :
+    ∃ r s amt rcp, a = .withdraw r s amt rcp := by
+  cases a <;> simp_all [Action.writeCells]
 
 end FaultProof
 end LegalKernel

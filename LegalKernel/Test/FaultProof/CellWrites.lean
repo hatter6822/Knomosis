@@ -128,48 +128,6 @@ def tests : List TestCase :=
                   (smtCellKey (CellTag.balance 1 8)).toList)
           "and contributes no entry to the root"
     }
-  , { name := "chainLast follows the writes"
-    , body := do
-        -- `chainLast_canonicalCellChain` at the value level: the chain
-        -- the fold consumes really does end in the state the writes
-        -- produce, so the root the fold computes is that state's.
-        let viaChain := chainLast base (canonicalCellChain base transferWrites)
-        let viaWrites := applyCellWrites base transferWrites
-        for t in [CellTag.balance 1 7, .balance 1 8, .nonce 7, .epochBudget 7] do
-          assertEq (expected := (getCellValue viaWrites t).toList)
-            (actual := (getCellValue viaChain t).toList)
-            s!"chain and write list disagree at {repr t}"
-    }
-  , { name := "canonicalCellChain opens each write against its own state"
-    , body := do
-        -- Openings go stale the moment a write lands, so each link's
-        -- proof must be built against the state it opens against —
-        -- NOT against the original pre-state.  A builder that reused
-        -- the pre-state's path for every link would produce equal
-        -- proofs here.
-        let chain := canonicalCellChain base transferWrites
-        assertEq (expected := 3) (actual := chain.length) "one link per write"
-        let mid := applyCellWrites base [(.balance 1 7, amountCellValue 70)]
-        match chain with
-        | _ :: (_, _, p₁) :: _ =>
-            -- Flattened to `List UInt8` alongside the count, rather
-            -- than compared as a list of lists: the sibling widths are
-            -- fixed at 32, so the pair is faithful, and the nested
-            -- form blows the elaborator's recursion budget.
-            let sibs (p : SmtCellProof) : Nat × List UInt8 :=
-              (p.siblings.size, p.siblings.toList.flatMap (fun s => s.toList))
-            assertEq (expected := sibs (buildStateCellProof mid (.balance 1 8)))
-              (actual := sibs p₁)
-              "link 1 opens against the state link 0 produced"
-            -- And that is not the same thing as opening against the
-            -- ORIGINAL pre-state: the first write moved a sibling root
-            -- on this cell's path, so a builder that reused the
-            -- pre-state's path would produce a stale opening the fold
-            -- rejects.
-            assert (sibs p₁ != sibs (buildStateCellProof base (.balance 1 8)))
-              "and the pre-state's path really is stale by then"
-        | _ => throw <| IO.userError "canonicalCellChain lost a link"
-    }
   , { name := "stepCellWrites names exactly the declared cells"
     , body := do
         let action : Authority.Action := .transfer 1 7 8 30
@@ -280,6 +238,32 @@ def tests : List TestCase :=
                   != (getCellValue base (.epochBudget 7)).toList)
           "the budget moved"
     }
+  , { name := "the canonical opening verifies against its own root"
+    , body := do
+        -- `verifyStateCellProof_buildStateCellProof` at the value
+        -- level.  `buildStateCellProof` is a LIVE production path — it
+        -- is what `buildCellProofWithOpening` puts on the wire as
+        -- `proofData` — so the statement that its output verifies
+        -- against the published root is a guarantee about something
+        -- the observer actually emits.  It lost its only caller when
+        -- the chained fold retired; that made it unconsumed, not
+        -- untrue, and this is what keeps it wired.
+        for t in [CellTag.balance 1 7, .balance 1 8, .nonce 7, .epochBudget 7,
+                  .budgetPolicy] do
+          assertEq (expected := true)
+            (actual := verifyStateCellProof (commitExtendedState base) t
+              (getCellValue base t) (buildStateCellProof base t))
+            s!"the canonical opening at {repr t} must verify"
+        -- The negative control, and it has to move a DIFFERENT cell:
+        -- a path's siblings are the subtrees it does not contain, so
+        -- rewriting the opened cell itself leaves its own opening
+        -- untouched.  Moving a neighbour is what shifts a sibling.
+        let moved := setCell base (.balance 1 8) (amountCellValue 4242)
+        assertEq (expected := false)
+          (actual := verifyStateCellProof (commitExtendedState base) (.balance 1 7)
+            (getCellValue base (.balance 1 7)) (buildStateCellProof moved (.balance 1 7)))
+          "an opening from a state with a moved neighbour must not verify"
+    }
   , { name := "cell agreement is STRICTLY WEAKER than map agreement"
     , body := do
         -- Why the per-variant proofs target cells rather than states,
@@ -322,65 +306,6 @@ def tests : List TestCase :=
           "while the never-written map has no entry at all"
         assert (lookup zeroed != lookup never)
           "so the maps differ pointwise — map agreement is a FALSE hypothesis here"
-    }
-  , { name := "API stability: write-chain signatures"
-    , body := do
-        let _local : ∀ (ws : List CellWrite) (es : ExtendedState) (t : CellTag),
-            (∀ w ∈ ws, w.1 ≠ t) →
-            getCellValue (applyCellWrites es ws) t = getCellValue es t :=
-          getCellValue_applyCellWrites_of_not_written
-        let _last : ∀ (ws : List CellWrite) (es : ExtendedState),
-            chainLast es (canonicalCellChain es ws) = applyCellWrites es ws :=
-          chainLast_canonicalCellChain
-        let _fold : ∀ (ws : List CellWrite) (es : ExtendedState),
-            CellWritesReady es ws →
-            foldStateCellWrites (commitExtendedState es)
-                (chainWrites es (canonicalCellChain es ws))
-              = some (commitExtendedState (applyCellWrites es ws)) :=
-          fold_canonicalCellChain_eq_commit_applyCellWrites
-        let _agree : ∀ (es₁ es₂ : ExtendedState),
-            BitsDistinctBelow smtDepth (stateCellEntries es₁) →
-            BitsDistinctBelow smtDepth (stateCellEntries es₂) →
-            (∀ t : CellTag, getCellValue es₁ t = getCellValue es₂ t) →
-            commitExtendedState es₁ = commitExtendedState es₂ :=
-          commitExtendedState_eq_of_cells_agree
-        let _roundtrip : ∀ (target source : ExtendedState) (t : CellTag),
-            ExtendedState.CanonicalBounds source →
-            (t.appendOnly = true →
-              getCellValue source t = canonicalAbsentValue t →
-              getCellValue target t = canonicalAbsentValue t) →
-            getCellValue (setCell target t (getCellValue source t)) t
-              = getCellValue source t :=
-          getCellValue_setCell_getCellValue
-        let _step : ∀ (pre post : ExtendedState) (action : Authority.Action)
-            (signer : ActorId),
-            CellWritesReady pre (stepCellWrites pre post action signer) →
-            WriteSetComplete pre post action signer →
-            (Authority.Action.writeCellsAt pre action signer).Nodup →
-            ExtendedState.CanonicalBounds post →
-            BitsDistinctBelow smtDepth (stateCellEntries post) →
-            (∀ t : CellTag, t.appendOnly = true →
-              getCellValue post t = canonicalAbsentValue t →
-              getCellValue pre t = canonicalAbsentValue t) →
-            foldStateCellWrites (commitExtendedState pre)
-                (chainWrites pre
-                  (canonicalCellChain pre (stepCellWrites pre post action signer)))
-              = some (commitExtendedState post) :=
-          fold_stepCellWrites_eq_commit_post
-        let _identity : ∀ (pre post : ExtendedState) (action : Authority.Action)
-            (signer : ActorId),
-            (∀ t : CellTag, t = .nonce signer ∨ t = .epochBudget signer →
-              t ∈ Authority.Action.writeCellsAt pre action signer) →
-            post.base = pre.base → post.registry = pre.registry →
-            post.localPolicies = pre.localPolicies → post.bridge = pre.bridge →
-            post.budgetPolicy = pre.budgetPolicy →
-            (∀ a : ActorId, a ≠ signer →
-              Authority.expectsNonce post a = Authority.expectsNonce pre a) →
-            (∀ a : ActorId, a ≠ signer →
-              post.epochBudgets[a]? = pre.epochBudgets[a]?) →
-            WriteSetComplete pre post action signer :=
-          writeSetComplete_of_identity_advance
-        pure ()
     }
   ]
 

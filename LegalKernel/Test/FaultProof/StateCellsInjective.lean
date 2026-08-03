@@ -252,49 +252,6 @@ def tests : List TestCase :=
           (actual := (updateStateCellRoot t (getCellValue post t) p).toList)
           "and the write still lands on the post-state's root"
     }
-  , { name := "a two-write fold lands on the two-write post root"
-    , body := do
-        let t₁ : CellTag := .balance 1 7
-        let t₂ : CellTag := .balance 2 7
-        let es₁ : ExtendedState :=
-          { populated with base := LegalKernel.setBalance populated.base 1 7 60 }
-        let es₂ : ExtendedState :=
-          { es₁ with base := LegalKernel.setBalance es₁.base 2 7 0 }
-        -- The second opening is built against the state the FIRST
-        -- write produced, not against the pre-state.
-        let writes : List StateCellWrite :=
-          [ (t₁, getCellValue populated t₁, getCellValue es₁ t₁,
-             buildStateCellProof populated t₁)
-          , (t₂, getCellValue es₁ t₂, getCellValue es₂ t₂,
-             buildStateCellProof es₁ t₂) ]
-        assertEq (expected := some (commitExtendedState es₂).toList)
-          (actual := (foldStateCellWrites (commitExtendedState populated)
-                        writes).map ByteArray.toList)
-          "the fold lands on the post-state's root"
-    }
-  , { name := "NEGATIVE CONTROL: a stale opening fails the fold"
-    , body := do
-        -- Openings go stale the moment a write lands under a shared
-        -- ancestor.  This is why the bundle is folded strictly in
-        -- order and each opening re-checked: a responder replaying a
-        -- pre-root opening after an earlier write must be rejected,
-        -- not silently folded into a wrong root.
-        let t₁ : CellTag := .balance 1 7
-        let t₂ : CellTag := .balance 2 7
-        let es₁ : ExtendedState :=
-          { populated with base := LegalKernel.setBalance populated.base 1 7 60 }
-        let es₂ : ExtendedState :=
-          { es₁ with base := LegalKernel.setBalance es₁.base 2 7 0 }
-        let stale : List StateCellWrite :=
-          [ (t₁, getCellValue populated t₁, getCellValue es₁ t₁,
-             buildStateCellProof populated t₁)
-          , (t₂, getCellValue es₁ t₂, getCellValue es₂ t₂,
-             buildStateCellProof populated t₂) ]
-        assertEq (expected := (none : Option (List UInt8)))
-          (actual := (foldStateCellWrites (commitExtendedState populated)
-                        stale).map ByteArray.toList)
-          "the stale second opening is rejected"
-    }
   , { name := "NON-VACUITY: the absent-cell hypothesis holds on a zeroed cell"
     , body := do
         -- `canonicalSiblings_verifies_absent` scopes its key-injectivity
@@ -386,11 +343,6 @@ def tests : List TestCase :=
             verifyStateCellProof (commitExtendedState es) t (getCellValue es t) proof₂ = true →
             updateStateCellRoot t newValue proof₁ = updateStateCellRoot t newValue proof₂ :=
           updateStateCellRoot_proof_independent
-        let _fold : ∀ (chain : CellWriteChain) (es : ExtendedState),
-            ChainCoherent es chain →
-            foldStateCellWrites (commitExtendedState es) (chainWrites es chain)
-              = some (commitExtendedState (chainLast es chain)) :=
-          foldStateCellWrites_eq_commit_of_coherent
         let _single : ∀ (e e' : SmtEntries) (key : ByteArray),
             (dropKey e key).Perm (dropKey e' key) →
             BitsDistinctBelow smtDepth e →

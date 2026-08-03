@@ -17,7 +17,7 @@ a *store*, and the step VM cannot use them until they provably do:
 
   * **Locality.**  Writing one cell must leave every other cell's
     value exactly as it was.  This is what discharges the off-cell
-    hypothesis `foldStateCellWrites_eq_commit_of_coherent` asks of
+    hypothesis the retired chained fold asked of
     each link — via `dropKey_stateCellEntries_perm_of_agree_off`,
     whose hypothesis is stated over cell VALUES, which is precisely
     what locality supplies.

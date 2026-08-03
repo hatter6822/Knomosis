@@ -657,8 +657,7 @@ The Genesis Plan promises a small set of type-level guarantees
 | B-3 | Canonical path walks to the root | `canonicalSiblings_walks_to_root` | `FaultProof/SmtInjective.lean` |
 | B-3 | Absent cells open against the root | `canonicalSiblings_verifies_absent` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | One write lands on the post-state root | `updateStateCellRoot_eq_commit_of_canonical` | `FaultProof/StateCellsInjective.lean` |
-| B-3 | Ordered write fold lands on the post root | `foldStateCellWrites_eq_commit_of_coherent` | `FaultProof/StateCellsInjective.lean` |
-| B-3 | Off-cell agreement discharges the fold | `dropKey_stateCellEntries_perm_of_agree_off` | `FaultProof/StateCellsInjective.lean` |
+| B-3 | Off-cell agreement discharges the update | `dropKey_stateCellEntries_perm_of_agree_off` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | The root is order-independent | `smtRootListAux_perm` | `FaultProof/SmtInjective.lean` |
 | B-3 | Production-faithful semantic core | `apply_bridge_admissible_with_budget_eq` | `FaultProof/ProductionApply.lean` |
 | M | Merged walk = the reference root | `multiWalk_eq_smtRootListAux` | `FaultProof/MultiProof.lean` |
@@ -684,9 +683,9 @@ The Genesis Plan promises a small set of type-level guarantees
 | M | ...hence its keys are distinct | `frontierOf_keys_nodup` | `FaultProof/Frontier.lean` |
 | M | The honest bundle reads the state | `bundleValueAt_stepMultiBundle` | `FaultProof/Terminate.lean` |
 | B-3 | Root observes exactly the cells | `commitExtendedState_eq_of_cells_agree` | `FaultProof/StateCellsInjective.lean` |
-| B-3 | A step's write chain is coherent | `chainCoherent_canonicalCellChain` | `FaultProof/CellWrites.lean` |
 | B-3 | `setCell` round-trips the reader | `getCellValue_setCell_getCellValue` | `FaultProof/CellWrites.lean` |
-| B-3 | Write fold lands on the post root | `fold_stepCellWrites_eq_commit_post` | `FaultProof/CellWrites.lean` |
+| B-3 | A step's write set is complete | `writeSetComplete_productionApplyBudget` | `FaultProof/StepWriteSets.lean` |
+| B-3 | The canonical opening verifies | `verifyStateCellProof_buildStateCellProof` | `FaultProof/CellWrites.lean` |
 | B-3 | Writing one cell leaves the rest | `getCellValue_setCell_ne` | `FaultProof/CellStore.lean` |
 | Phase 6 | Dispute filing rejects malformed | `fileDispute_rejects_*` | `Disputes/Filing.lean` |
 | Phase 6 | Evidence verifiers deterministic | `checkEvidence_deterministic` | `Disputes/Evidence.lean` |
@@ -1200,20 +1199,15 @@ both ways (`canonicalSiblings_verifies_present` /
 `canonicalSiblings_verifies_absent`); and the write algebra is proved
 against the root rather than merely well-defined —
 `updateStateCellRoot_eq_commit_of_canonical` lands a single re-walked
-opening on `commitExtendedState` of the post-state,
-`foldStateCellWrites_eq_commit_of_coherent` lands the ordered
-multi-write fold on the last state's root, and
-`updateStateCellRoot_proof_independent` stops a responder steering
-either by choosing among verifying openings.
+opening on `commitExtendedState` of the post-state, and
+`updateStateCellRoot_proof_independent` stops a responder steering it
+by choosing among verifying openings.
 
-But `executeStep` still returns the other construction.  The Lean side
-of what it owes is now largely built.  `FaultProof/CellWrites.lean`
-turns a step's writes into a `setCell` chain and discharges every
-SMT-shaped obligation once — `chainCoherent_canonicalCellChain` for
-the six `ChainCoherent` conjuncts and
-`getCellValue_setCell_getCellValue` for the write values, over all
-fifteen cell kinds — so the per-variant residue is
-`WriteSetComplete`: the advance changes no cell the declaration omits.
+What the fold owes per variant is `WriteSetComplete`: the advance
+changes no cell the declaration omits.  `FaultProof/CellWrites.lean`
+holds that obligation and the cell-write primitives it is stated over
+(`getCellValue_setCell_getCellValue` supplies the write values across
+all fifteen cell kinds).
 `commitExtendedState_eq_of_cells_agree` is what makes that provable at
 all.  `ExtendedState` equality is out of reach — the two paths build
 their `Std.TreeMap`s in different insertion orders and core has no
@@ -1252,10 +1246,10 @@ predicate, false on exactly those two
 (`faultProofAdjudicable_eq_false_iff`), and a deployment leaning on
 the fault proof must not authorise them — its `AuthorityPolicy`
 already expresses that.  Chosen over a per-resource actor-set cell or
-an explicit recipient list because it costs nothing and is reversible.  `stepWriteBundle` / `stepPostRoot` are the honest
-sequencer's side, and
-`stepPostRoot_eq_commit_productionApplyBudget` says the fold of THAT
-bundle lands on the root the sequencer published.  On the L1 side
+an explicit recipient list because it costs nothing and is reversible.
+`stepMultiBundle` is the honest sequencer's side, and
+`stepMultiFold_eq_commit_post` says the merged walk of THAT bundle
+lands on the root the sequencer published.  On the L1 side
 `StepVMMerkle.updateCellRoot` and `cellLeafHash` supply the fold's two
 primitives.
 
@@ -1299,65 +1293,28 @@ now agrees byte-for-byte across both stacks.**  Left: `executeStep`
 verifying each opening against the running root and returning the
 fold's result instead of `stepVMHash`.
 
-The target for that is a corpus column too — `stepPostRootGoldens`
-carries the root Lean reaches by FOLDING a step's proven writes into
-the pre-root, alongside the bespoke hash the step VM returns today, and
-both stacks assert the fold lands on the published root, differs from
-the bespoke hash, and is not the pre-root.  That gap is the one fact
-the 278-entry byte-equivalence corpus cannot establish: it pins
-`stepVMHash` against `executeStep`, two implementations of the same
-recipe.
+The verifier is `KnomosisStepVMRoot.executeStepToRootMulti`: it takes a
+pre-root, the action, the signer, the log index and one deduplicating
+pre-root multiproof, re-derives the cell list, re-derives every cell's
+post-value, and folds to the post-state ROOT.  A NEW contract rather
+than a bigger `KnomosisStepVM`, which was already large; retiring the
+old recipe left one contract.
 
-**The fold itself is verified cross-stack ahead of the flip.**
-`writeBundleGoldens` publishes the ordered
-`(cell, pre-value, new value, opening)` list Lean folds, and
-`StepVMMerkle.applyCellWrite` re-walks it — each opening verified
-against the RUNNING root, then re-walked from the new leaf — arriving
-at exactly `stepPostRoot`.  The `selfTransfer` probe is what makes that
-non-trivial: two writes at the SAME cell, so a fold verifying both
-against the pre-root would accept the bundle and reach a root no state
-has.  The write SET is mirrored too (`writeSetGoldens` — all eighteen probed
-variants, from the actual field bytes, with the bulk pair and unknown
-kinds reverting `ActionNotAdjudicable`; adjudicability itself is a
-corpus COLUMN across all twenty-five, so a variant excluded on one
-stack and not the other fails there rather than adjudicating
-one-sided).
+Why the DERIVATION and not the submitted values: computing a cell's new
+value takes the pre-state and reads `productionApplyBudget` — that is
+the SEQUENCER's computation.  A verifier holding only a pre-root and a
+submitted bundle has neither, so folding what it is handed would let a
+responder choose the resulting root.
 
-**The verifier is assembled.**  `KnomosisStepVMRoot.executeStepToRoot`
-takes a pre-root, the action, the signer, the log index, a read-only
-budget-policy opening and the chained write openings, and returns the
-post-state ROOT.  It re-derives the cell list, re-derives every cell's
-post-value, and folds — `writeBundleGoldens` drives the whole of it end
-to end over twenty probes against Lean's `stepPostRoot`, including the
-duplicate-cell shapes (`selfTransfer`, `depositWithFeeSelf`,
-`topUpActionBudgetForSelf`) and the no-op ones (`burnNoop`).  A NEW
-contract rather than a bigger `KnomosisStepVM`, which is already large;
-retiring the old recipe leaves one contract.  Why the derivation and
-not the submitted values: `stepWriteBundle es st idx` takes the
-pre-state and reads its `newValue` column off
-`productionApplyBudget es st idx` — that is the SEQUENCER's
-computation.  A verifier holding only the pre-root and a submitted
-bundle has neither, so folding what it is handed lets a responder
-choose the resulting root.
-
-One design question stays open and is recorded in the plan: the fold
-takes one opening per write, each against the RUNNING root, which is
-the simple and obviously-sound arrangement but not the cheapest — a
-deduplicating pre-root multiproof is materially smaller on calldata, at
-the cost of having to sequence same-cell writes itself.  Chaining
-first, measure, then decide.
-
-**The wiring has landed, and the bundle is a DEDUPLICATING PRE-ROOT
-MULTIPROOF.**  `terminateOnSingleStep` calls `executeStepToRootMulti`,
-so both sides of its terminal comparison are state roots and
-`KnomosisFaultProofGame.t.sol`'s honest-sequencer-wins test passes for
-the right reason — driven by a REAL corpus probe (pre-root, action,
-frontier, wire, post-root), because a fabricated `low` has no wire that
-reproduces it.  `FaultProof/Terminate.lean` is the Lean mirror
-(`verifierPostRootMulti` / `stepMultiPostRoot`), pinned against
-`stepPostRoot` on nineteen probes and refusing a forged pre-value, a
-short wire, a set padding bit, a duplicate cell and the two bulk
-variants.
+`terminateOnSingleStep` calls it, so both sides of the terminal
+comparison are state roots and `KnomosisFaultProofGame.t.sol`'s
+honest-sequencer-wins test passes for the right reason — driven by a
+REAL corpus probe (pre-root, action, frontier, wire, post-root),
+because a fabricated `low` has no wire that reproduces it.
+`FaultProof/Terminate.lean` is the Lean mirror
+(`verifierPostRootMulti` / `stepMultiPostRoot`), pinned on nineteen
+probes and refusing a forged pre-value, a short wire, a set padding
+bit, a duplicate cell and the two bulk variants.
 
 Every cell is opened ONCE against the pre-root and they share one
 sibling list, which buys four properties the game relies on.  The
@@ -1427,19 +1384,32 @@ fold's root and `commitExtendedState (productionApplyBudget …)`
 independently, so a verifier is right only if two separately-computed
 numbers coincide.
 
-What SURVIVES from the chained era is the honest sequencer's write
-algebra — `stepWriteBundle` / `stepPostRoot`, `chainWrites`,
-`canonicalCellChain`, `foldStateCellWrites` and their theorems.  It is
-no longer a consensus surface: nothing on L1, in the Rust conduit or in
-the corpus consumes it.  It is kept because
-`stepPostRoot_eq_commit_productionApplyBudget` is the proved statement
-that an honest fold lands on the published root, the multiproof's own
-version of that statement is only VALUE-level so far (twenty corpus
-probes plus nineteen `faultproof-terminate` probes, on both stacks),
-and composing `multiFold_eq_commit_post` into a
-`stepMultiPostRoot` counterpart is a development in its own right.
+**And so is the honest sequencer's chained write algebra.**
+`stepWriteBundle` / `stepPostRoot`, `chainWrites`, `canonicalCellChain`,
+`foldStateCellWrites`, `CellWriteChain` and `ChainCoherent` are gone.
+They were kept through M8 on one ground — the multiproof's guarantee
+was only VALUE-level, and retiring a headline theorem before its
+replacement is proved is the wrong order.  `stepMultiFold_eq_commit_post`
+removed that ground.
 
-Its FOUNDATION is built.  `pathSorted (frontierOf …)` was a
+Deleting them was structural rather than a sweep, because the modules
+mixed lifecycles: `CellWrites.lean` hosted the cell-write primitives,
+the `WriteSetComplete` obligation the multiproof CONSUMES, and the
+retired chain, so the cut ran between declarations rather than around a
+file.  Two things were reclassified on the way.
+`dropKey_stateCellEntries_perm_of_agree_off` stays — its last caller
+was a chain link, but its ROLE is discharging
+`updateStateCellRoot_eq_commit_of_canonical`'s hypothesis, and deleting
+it would leave a headline theorem nobody can apply.
+`verifyStateCellProof_buildStateCellProof` stays for the same reason in
+the other direction: `buildStateCellProof` is a live production path
+(it is what the observer puts on the wire as `proofData`), so a theorem
+saying its opening verifies is a guarantee about something real; losing
+its caller made it unconsumed, not untrue, and a test now pins it.
+The two `OBLIGATION:` cases were restated on the merged walk rather
+than dropped with the fold they were written against.
+
+The multiproof's foundation:  `pathSorted (frontierOf …)` was a
 value-level fact — two examples — while `frontierShapeOk`'s whole
 argument rested on it; `pathLess_trans` / `pathLess_total` now make
 path order a strict total order, `pathSorted_frontierOf` lifts it to

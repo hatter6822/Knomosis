@@ -30,6 +30,7 @@ the statements would not give:
 
 import LegalKernel.FaultProof.StepWriteSets
 import LegalKernel.FaultProof.VerifierWrites
+import LegalKernel.FaultProof.Terminate
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -215,141 +216,58 @@ def tests : List TestCase :=
             (actual := (getCellValue post .budgetPolicy).toList)
             s!"{repr a} moved the budget policy"
     }
-  , { name := "stepWriteBundle names the declared cells, in order"
-    , body := do
-        -- `stepWriteBundle_tags` at the value level.  A verifier can
-        -- check the bundle's shape against `writeCellsAt` before doing
-        -- any hashing, which is only sound if the two agree in ORDER
-        -- as well as membership.
-        let action : Authority.Action := .transfer 1 7 8 30
-        let bundle := stepWriteBundle base (sign action) 0
-        assertEq
-          (expected := (Authority.Action.writeCellsAt base action 7).map
-            (fun t => repr t |>.pretty))
-          (actual := bundle.map (fun w => repr w.1 |>.pretty))
-          "bundle tags = declared cells, same order"
-    }
-  , { name := "each bundle entry carries the pre-value and the post-value"
-    , body := do
-        -- The L1 is handed both: the pre-value to verify against the
-        -- running root, the post-value to re-walk from.  If the pre
-        -- column were the POST value the opening would not verify, and
-        -- if the post column were the PRE value the root would not
-        -- move — so both are checked against the two states.
-        let action : Authority.Action := .transfer 1 7 8 30
-        let post := productionApplyBudget base (sign action) 0
-        for (t, oldV, newV, _) in stepWriteBundle base (sign action) 0 do
-          assertEq (expected := (getCellValue base t).toList) (actual := oldV.toList)
-            s!"pre-value at {repr t} is not the pre-state's"
-          assertEq (expected := (getCellValue post t).toList) (actual := newV.toList)
-            s!"post-value at {repr t} is not the post-state's"
-    }
-  , { name := "the fold lands on the published post-state root"
-    , body := do
-        -- `stepPostRoot_eq_commit_productionApplyBudget` at the value
-        -- level, and the whole point of §4: what the L1 computes from
-        -- a pre-root plus openings — with no access to the post-state
-        -- — is the root an honest sequencer publishes.
-        for action in [ Authority.Action.transfer 1 7 8 30
-                      , .mint 1 8 5
-                      , .freezeResource 1
-                      , .withdraw 1 7 5 LegalKernel.Bridge.EthAddress.zero
-                      -- The two bulk variants, which the fold could not
-                      -- reach at all until their write set became
-                      -- state-keyed.  A bulk step is where the ordered
-                      -- fold earns its keep: one opening per recipient,
-                      -- each against the root the previous write left.
-                      , .distributeOthers 1 7 30
-                      , .proportionalDilute 1 7 30 ] do
-          let post := productionApplyBudget base (sign action) 0
-          match stepPostRoot base (sign action) 0 with
-          | some root =>
-            assertEq (expected := (commitExtendedState post).toList)
-              (actual := root.toList)
-              s!"folded root ≠ published root for {repr action}"
-          | none =>
-            throw <| IO.userError s!"the fold rejected an honest bundle for {repr action}"
-    }
-  , { name := "a FORGED post-value does not fold to the published root"
-    , body := do
-        -- The direction that makes the fold an adjudicator rather than
-        -- a calculator: substituting a value the advance did not
-        -- produce changes the number the L1 computes, so the responder
-        -- cannot claim a root of their choosing.
-        let action : Authority.Action := .transfer 1 7 8 30
-        let post := productionApplyBudget base (sign action) 0
-        let honest := stepWriteBundle base (sign action) 0
-        let forged := honest.map (fun w =>
-          if w.1 == CellTag.balance 1 8 then (w.1, w.2.1, amountCellValue 9999, w.2.2.2)
-          else w)
-        assert (forged.map (fun w => w.2.2.1.toList) != honest.map (fun w => w.2.2.1.toList))
-          "the forgery really changed a written value"
-        match foldStateCellWrites (commitExtendedState base) forged with
-        | some root =>
-          assert (root.toList != (commitExtendedState post).toList)
-            "a forged value must not fold to the honest root"
-        | none => pure ()   -- rejected outright is also fail-closed
-    }
   , { name := "OBLIGATION: a bulk write set is not verifiable from the root"
     , body := do
         -- **The write set is complete; a VERIFIER cannot check that.**
         --
         -- `writeSetComplete_productionApplyBudget` says the advance
         -- moves no cell `writeCellsAt` omits.  That is a statement
-        -- about the honest bundle.  An L1 holding only the pre-root
-        -- and a submitted bundle checks each opening — and every
-        -- opening in a bundle that DROPS a recipient is perfectly
-        -- valid, because the dropped cell is simply not mentioned.
+        -- about the HONEST bundle.  An L1 holding only the pre-root
+        -- and a submitted bundle checks the openings it is given — and
+        -- a bundle that DROPS a recipient opens a perfectly valid set,
+        -- because the dropped cell is simply not mentioned and
+        -- `smtCellKey` hashes the cell identity, so no subtree
+        -- argument enumerates a resource's actors.
         --
-        -- So the fold of a short bundle succeeds and lands on a root
-        -- for a state where that recipient was never credited.  A
-        -- sequencer that PUBLISHES that root can then defend it: the
-        -- fold reproduces it exactly, and `terminateOnSingleStep`
-        -- settles in the sequencer's favour on a state the L2 never
-        -- reached.
+        -- Stated on the MERGED walk, which is the live machinery: the
+        -- obligation is about the SMT's inability to enumerate, not
+        -- about any particular fold.
         --
-        -- Non-bulk variants are immune: their write sets are
-        -- functions of `(action, signer)` plus cells the bundle
-        -- itself proves (`withdraw`'s key comes from the proven
-        -- `.bridgeNextWdId`), so a verifier re-derives the tag list
-        -- and rejects a bundle that does not match it.  A bulk write
-        -- set is the actor set at a resource, and `smtCellKey` is a
-        -- HASH of the cell's identity — balance cells at one resource
-        -- share no key prefix, so no subtree argument enumerates
-        -- them.
-        --
-        -- What closes it is a design decision, not a proof: commit to
-        -- the per-resource actor set in its own cell, put the
-        -- recipient list in the action's own fields, or exclude the
-        -- bulk laws from a deployment that leans on the fault proof.
+        -- Resolved by EXCLUSION rather than by proof:
+        -- `FaultProofAdjudicable` is false on exactly the two bulk
+        -- variants, so a deployment leaning on the fault proof must
+        -- not authorise them.  See
         -- `docs/planning/state_root_merkleisation_plan.md` §4 step 3.
         let bulk : Authority.Action := .distributeOthers 1 7 30
-        let honest := stepWriteBundle base (sign bulk) 0
-        -- Drop the LAST recipient's write.  Every remaining opening
-        -- is untouched, so the short bundle is chain-coherent.
-        let short := honest.take (honest.length - 1)
-        assert (short.length + 1 == honest.length) "the probe dropped exactly one write"
-        match foldStateCellWrites (commitExtendedState base) short,
-              stepPostRoot base (sign bulk) 0 with
-        | some shortRoot, some honestRoot =>
+        let post := productionApplyBudget base (sign bulk) 0
+        let ts := Authority.Action.writeCellsAt base bulk 7
+        -- Drop the LAST declared cell.  Every remaining opening is
+        -- untouched, so the short bundle's own wire is consistent.
+        let short := ts.take (ts.length - 1)
+        assert (short.length + 1 == ts.length) "the probe dropped exactly one cell"
+        let walkOf : List CellTag → Option (StateCommit × List ByteArray) := fun cells =>
+          multiWalk smtDepth (openedOf post cells)
+            (multiSiblings smtDepth (stateCellEntries base) (openedOf base cells))
+        match walkOf ts, walkOf short with
+        | some (honestRoot, _), some (shortRoot, _) =>
           assert (shortRoot.toList != honestRoot.toList)
             "an incomplete bulk bundle must reach a DIFFERENT root"
-          -- ...and that is the whole problem: the fold ACCEPTED it.
+          -- ...and that is the whole problem: the walk ACCEPTED it.
           -- A verifier with only the pre-root has seen nothing wrong.
-          assert true "the short bundle folded successfully"
-        | none, _ =>
+          assert true "the short bundle walked successfully"
+        | _, none =>
           throw <| IO.userError
-            "the fold rejected the short bundle — if this ever becomes \
+            "the walk rejected the short bundle — if this ever becomes \
              true the obligation is discharged and this test should be \
              rewritten as the positive property"
-        | _, none =>
-          throw <| IO.userError "the honest bundle failed to fold"
+        | none, _ =>
+          throw <| IO.userError "the honest bundle failed to walk"
     }
   , { name := "OBLIGATION: a no-op step must fold to the pre-root, not revert"
     , body := do
         -- `step_impl` is `if pre then apply_impl else id`, so an
         -- action whose precondition fails advances nothing and its
-        -- post-root IS the pre-root.  `stepPostRoot` gets this right:
+        -- post-root IS the pre-root.  The multiproof gets this right:
         -- every declared cell is written back with its own value.
         --
         -- Solidity's `_stepTransfer` REVERTS (`InsufficientBalance`)
@@ -381,7 +299,7 @@ def tests : List TestCase :=
           "a failing precondition must not move the sender's balance"
         -- ...but the nonce and budget still advance, so the post-root
         -- is NOT simply the pre-root, and the fold must produce it.
-        match stepPostRoot base (sign noop) 0 with
+        match stepMultiPostRoot base (sign noop) 0 with
         | some root =>
           assertEq (expected := (commitExtendedState post).toList)
             (actual := root.toList)
@@ -711,19 +629,10 @@ def tests : List TestCase :=
         let _policy : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
             (productionApplyBudget es st idx).budgetPolicy = es.budgetPolicy :=
           productionApplyBudget_budgetPolicy
-        let _root : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
-            CellWritesReady es
-              (stepCellWrites es (productionApplyBudget es st idx) st.action st.signer) →
-            (Authority.Action.writeCellsAt es st.action st.signer).Nodup →
-            ExtendedState.CanonicalBounds (productionApplyBudget es st idx) →
-            BitsDistinctBelow smtDepth
-              (stateCellEntries (productionApplyBudget es st idx)) →
-            (∀ t : CellTag, t.appendOnly = true →
-              getCellValue (productionApplyBudget es st idx) t = canonicalAbsentValue t →
-              getCellValue es t = canonicalAbsentValue t) →
-            stepPostRoot es st idx
-              = some (commitExtendedState (productionApplyBudget es st idx)) :=
-          stepPostRoot_eq_commit_productionApplyBudget
+        -- The fold-level statement now lives on the multiproof
+        -- (`stepMultiFold_eq_commit_post`, pinned in
+        -- `faultproof-terminate`); what belongs HERE is the per-variant
+        -- obligation it consumes, which is `_complete` above.
         pure ()
     }
   ]
