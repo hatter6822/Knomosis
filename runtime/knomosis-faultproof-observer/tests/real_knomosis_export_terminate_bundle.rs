@@ -179,20 +179,29 @@ fn real_knomosis_export_terminate_bundle_transfer_round_trip() {
         32,
         "expected_post_commit is 32 bytes"
     );
-    // Transfer's bundle has 4 openings: `balance × 2, nonce,
-    // epochBudget` — the cells `writeCellsAt` names.  It was 5 while
-    // the bundle carried `requiredCells`, which included the READ-ONLY
-    // registry cell; the fold opens what a step WRITES, and the one
-    // read it needs (the budget policy) rides its own field.
+    // Transfer's frontier is 5 cells: `balance × 2, nonce,
+    // epochBudget` — the cells `writeCellsAt` names — plus the
+    // read-only budget policy, which is IN the frontier rather than
+    // beside it now that a read is a write of the same value.
     assert_eq!(
-        bundle.cell_proofs.len(),
-        4,
-        "Transfer bundle has 4 write openings"
+        bundle.opened_cells.len(),
+        5,
+        "Transfer frontier is 4 written cells plus the policy"
     );
-    // ...and the read-only policy opening names the policy cell.
+    // ...and the policy cell is one of them.
+    assert!(
+        bundle.opened_cells.iter().any(|c| c.cell_kind == 14),
+        "the frontier must open the budget-policy cell"
+    );
+    // The wire is present and whole.
+    assert!(
+        !bundle.gap_mask.is_empty(),
+        "a real bundle carries a gap mask"
+    );
     assert_eq!(
-        bundle.policy_opening.cell_kind, 14,
-        "the policy opening must name the budget-policy cell"
+        bundle.siblings.len() % 32,
+        0,
+        "the sibling region must be whole 32-byte siblings"
     );
 }
 
@@ -263,11 +272,11 @@ fn real_knomosis_export_terminate_bundle_mint_variant() {
     // amount occupies [16..32] (uint128BE), so its LSB is byte 31.
     assert_eq!(bundle.action_fields[31], 42, "amount=42 in BE last byte");
     assert_eq!(bundle.signer, 11, "Mint signer is 11");
-    // Mint bundle: 3 write openings (balance, nonce, epochBudget).
+    // Mint's frontier: balance, nonce, epochBudget, plus the policy.
     assert_eq!(
-        bundle.cell_proofs.len(),
-        3,
-        "Mint bundle has 3 write openings"
+        bundle.opened_cells.len(),
+        4,
+        "Mint frontier is 3 written cells plus the policy"
     );
 }
 
@@ -324,12 +333,13 @@ fn real_knomosis_export_terminate_bundle_withdraw_variant() {
     assert_eq!(bundle.signer, 3, "Withdraw signer is 3");
     // Withdraw is the one variant whose write set is not a function of
     // `(action, signer)`: its pending-withdrawal cell is keyed by the
-    // PRE-state's counter, so the bundle carries five openings —
-    // balance, nonce, epochBudget, the counter, and the cell it names.
+    // PRE-state's counter, so it writes five cells — balance, nonce,
+    // epochBudget, the counter, and the cell it names — and the
+    // frontier adds the policy.
     assert_eq!(
-        bundle.cell_proofs.len(),
-        5,
-        "Withdraw bundle has 5 write openings"
+        bundle.opened_cells.len(),
+        6,
+        "Withdraw frontier is 5 written cells plus the policy"
     );
 }
 

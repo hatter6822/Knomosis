@@ -237,6 +237,42 @@ def pathSort (ts : List CellTag) : List CellTag := ts.foldr pathInsert []
 def frontierShapeOk (derived submitted : List CellTag) : Bool :=
   (pathSort submitted).map smtCellKey == (frontierOf derived).map smtCellKey
 
+/-- `frontierInsert` never empties a list: it either returns its
+    argument, prepends, or rebuilds with the head intact. -/
+theorem frontierInsert_ne_nil (t : CellTag) (l : List CellTag) :
+    frontierInsert t l ≠ [] := by
+  cases l with
+  | nil => simp [frontierInsert]
+  | cons u rest =>
+    unfold frontierInsert
+    split
+    · simp
+    · split <;> simp
+
+/-- A non-empty cell list has a non-empty frontier. -/
+theorem frontierOf_cons_ne_nil (t : CellTag) (ts : List CellTag) :
+    frontierOf (t :: ts) ≠ [] := by
+  show List.foldr frontierInsert [] (t :: ts) ≠ []
+  rw [List.foldr_cons]
+  exact frontierInsert_ne_nil _ _
+
+/-- **An empty submission fails the shape check** whenever the step
+    opens anything at all.
+
+    Load-bearing rather than incidental: the multiproof frontier always
+    leads with the read-only budget-policy cell, so this instantiates
+    unconditionally and an empty bundle is refused before a byte of the
+    wire is read.  The chained verifier needed the same fact per
+    variant, from `writeCells` naming the nonce and the epoch budget;
+    here it is one lemma about the list's shape. -/
+theorem frontierShapeOk_nil_of_cons (t : CellTag) (ts : List CellTag) :
+    frontierShapeOk (t :: ts) [] = false := by
+  unfold frontierShapeOk
+  have h := frontierOf_cons_ne_nil t ts
+  cases hc : frontierOf (t :: ts) with
+  | nil          => exact absurd hc h
+  | cons _ _     => simp [pathSort]
+
 /-! ## The wire's shape
 
 The gap count is a function of the KEY SET, so the verifier computes it

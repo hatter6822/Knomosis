@@ -467,8 +467,9 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         uint8 actionKind,
         bytes calldata actionFields,
         uint64 signer,
-        KnomosisStepVMRoot.CellOpening calldata policyOpening,
-        KnomosisStepVMRoot.CellOpening[] calldata writeOpenings
+        KnomosisStepVMRoot.OpenedCell[] calldata opened,
+        bytes calldata gapMask,
+        bytes calldata siblings
     ) external nonReentrant {
         Game storage g = games[gameId];
         if (g.status != GameStatus.InProgress) revert GameAlreadyEnded();
@@ -503,13 +504,28 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         // per-variant hash, so the comparison never succeeded and an
         // honest sequencer lost every game it correctly defended.
         //
+        // The bundle is a DEDUPLICATING PRE-ROOT MULTIPROOF: every cell
+        // opened once against `g.low.commit`, sharing one sibling list,
+        // rather than one opening per write against a running root.
+        // Four consequences the game relies on.  The pre-root is
+        // checked ONCE, against `g.low.commit`, so no intermediate root
+        // is materialised or trusted.  A cell written twice — a
+        // self-transfer, which anyone can submit — is opened once, so
+        // the responsible party is not charged for a second walk that
+        // lands the value the first already did.  Order carries no
+        // information, so a permuted bundle settles identically and the
+        // responsible party cannot lose on a formatting question.  And
+        // the wire's length is derived from the cell set, so a
+        // truncated proof reverts rather than being padded out and
+        // walked to some other root.
+        //
         // `g.high.idx` is the log index the disputed action produced,
         // and `withdraw`'s pending-withdrawal record carries it — so
         // the game supplies the index it is adjudicating rather than
         // the step VM guessing one.
-        bytes32 computedPostCommit = stepVM.executeStepToRoot(
+        bytes32 computedPostCommit = stepVM.executeStepToRootMulti(
             g.low.commit, actionKind, actionFields, signer,
-            g.high.idx, policyOpening, writeOpenings);
+            g.high.idx, opened, gapMask, siblings);
 
         // The disputed endpoint is the committed transcript high point.
         if (computedPostCommit == g.high.commit) {
@@ -743,5 +759,23 @@ contract KnomosisFaultProofGame is ReentrancyGuard {
         require(address(stepVM) != address(0), "ZeroStepVM");
         require(stateRootSubmission != address(0), "ZeroStateRootSubmission");
         require(MAX_BISECTION_DEPTH == 64, "DepthCapMustBe64");
+        // **The linked step VM is the MULTIPROOF build.**  Probed
+        // through the game's own reference rather than asserted about
+        // the address the deploy script happens to hold, so a game
+        // wired to a stale step VM fails at DEPLOY time.
+        //
+        // Without this the failure is invisible until the first
+        // terminate: `terminateOnSingleStep` would call a selector the
+        // linked contract does not implement, hit its fallback and
+        // revert — and a reverting terminal step costs the responsible
+        // party the game by timeout, on a step it correctly defended.
+        //
+        // `widestFrontier` is the probe because it exists only on the
+        // multiproof build and its answer is checkable: the widest
+        // adjudicable write set plus the read-only policy cell, which
+        // must fit the opening cap the same contract publishes.
+        uint256 widest = stepVM.widestFrontier(new bytes(128));
+        require(widest > 0, "StepVMNotMultiproof");
+        require(widest <= stepVM.MAX_CELL_OPENINGS(), "StepVMFrontierExceedsCap");
     }
 }

@@ -106,26 +106,21 @@ impl MethodSelector {
             // `solidity/src/contracts/KnomosisFaultProofGame.sol`):
             // `terminateOnSingleStep(uint256 gameId, uint8 actionKind,
             //                        bytes actionFields, uint64 signer,
-            //                        CellOpening policyOpening,
-            //                        CellOpening[] writeOpenings)`
-            // `KnomosisStepVMRoot::CellOpening`'s canonical ABI tuple is
-            // `(uint8, uint256, uint256, bytes, bytes)`: the cell's
-            // identity, its value in the state the opening is against,
-            // and the opening itself.
+            //                        OpenedCell[] opened,
+            //                        bytes gapMask, bytes siblings)`
+            // `KnomosisStepVMRoot::OpenedCell`'s canonical ABI tuple is
+            // `(uint8, uint256, uint256, bytes)`: the cell's identity
+            // and its proven PRE-state value.
             //
-            // **The `bytes32 witnessCommit` word is gone**, and its
-            // absence is the point.  It attested that a value came from
-            // a state whose root is the pre-state root — a claim only a
-            // party holding the whole `ExtendedState` could check.  The
-            // step VM now verifies the opening against the running root
-            // directly, so the word was a field the contract could not
-            // use and a responder could set freely.
-            //
-            // The SEPARATE `policyOpening` is the read-only
-            // budget-policy cell.  It is not a write, so it is not in
-            // the bundle, but `deriveEpochBudget` selects its branch on
-            // it and every one of the twenty-five variants writes an
-            // epoch-budget cell — the verifier cannot start without it.
+            // **The per-opening path is gone**, and its absence is the
+            // point.  The bundle is a DEDUPLICATING PRE-ROOT
+            // MULTIPROOF: every cell is opened against the same root,
+            // so they share one `gapMask` + `siblings` pair instead of
+            // carrying a 256-level path each, and a cell written twice
+            // appears once.  The separate `policyOpening` went the same
+            // way — under a multiproof a read is a write of the same
+            // value, so the budget-policy cell is one more entry in
+            // `opened`.
             //
             // There is NO trailing `bytes32 claimedPostCommit`.  An
             // earlier form spelled one, which changed the 4-byte
@@ -135,8 +130,12 @@ impl MethodSelector {
             // adjudicates against the on-chain `g.high.commit` rather
             // than against a claim the caller supplies, so the Rust
             // side moves, not the contract.
+            //
+            // This string is pinned against the COMPILED ABI by
+            // `runtime/tests/cross-stack/method_selectors.json`, so a
+            // signature drift breaks the build rather than the game.
             Self::TerminateOnSingleStepFull => {
-                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes,bytes),(uint8,uint256,uint256,bytes,bytes)[])"
+                "terminateOnSingleStep(uint256,uint8,bytes,uint64,(uint8,uint256,uint256,bytes)[],bytes,bytes)"
             }
             Self::ClaimTimeout => "claimTimeout(uint256)",
         }
@@ -296,8 +295,9 @@ pub fn encode_calldata_with_bundle(
                 b.action_kind,
                 &b.action_fields,
                 b.signer,
-                &b.policy_opening,
-                &b.cell_proofs,
+                &b.opened_cells,
+                &b.gap_mask,
+                &b.siblings,
             ))
         }
         (mv, _) => encode_calldata(game_id, mv),
@@ -416,6 +416,60 @@ pub struct CellProof {
         deserialize_with = "deserialize_proof_data_hex_or_array"
     )]
     pub proof_data: Vec<u8>,
+}
+
+/// One opened cell in a MULTIPROOF terminate bundle: its identity and
+/// its proven PRE-state value, with no opening of its own.
+///
+/// Mirrors the Solidity `KnomosisStepVMRoot::OpenedCell` struct and
+/// Lean's `MultiBundle.cells` entries.  The whole difference from
+/// [`CellProof`] is the missing path: under a multiproof every cell is
+/// opened against the SAME root, so the openings share one sibling
+/// list and a per-cell path would be redundant.  A cell also appears
+/// exactly once, so `pre_value` is unambiguously the pre-state's
+/// rather than "the running state's, which is the pre-state's only for
+/// the first write".
+///
+/// Built by Lean's `buildTerminateBundle` and supplied to the observer
+/// out of band (a `knomosis` subprocess).  The observer ABI-encodes
+/// it; it does not construct proofs.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct OpenedCell {
+    /// The cell kind (uint8 in Solidity; 0=Balance, 1=Nonce,
+    /// 2=Registry, …, 14=BudgetPolicy).
+    pub cell_kind: u8,
+    /// The first key (resource id / actor id / deposit id /
+    /// withdrawal id, depending on `cell_kind`).  Encoded as uint256.
+    ///
+    /// JSON wire format: Lean emits a 16-hex-char big-endian string;
+    /// the deserializer also accepts a native JSON number so a
+    /// `Serialize` round-trip parses.
+    #[serde(
+        serialize_with = "serialize_u128_hex_lowpadded",
+        deserialize_with = "deserialize_u128_hex_or_number"
+    )]
+    pub key_a: u128,
+    /// The second key (actor id for balance cells; 0 otherwise).
+    #[serde(
+        serialize_with = "serialize_u128_hex_lowpadded",
+        deserialize_with = "deserialize_u128_hex_or_number"
+    )]
+    pub key_b: u128,
+    /// The cell's CBE-encoded PRE-state value, as opaque bytes.
+    ///
+    /// Not trusted: it enters the verifier's PRE-side fold, which must
+    /// reproduce the submitted pre-root, so a lie moves the aggregate
+    /// off it.  There is no per-opening verdict to fail — that is what
+    /// the single aggregate root check buys.
+    ///
+    /// JSON wire format: a lowercase hex string (no `0x` prefix), as
+    /// emitted by `LegalKernel.FaultProof.TerminateBundle`.  The
+    /// deserializer accepts the native byte-array form too.
+    #[serde(
+        serialize_with = "serialize_bytes_hex",
+        deserialize_with = "deserialize_bytes_hex_or_array"
+    )]
+    pub pre_value: Vec<u8>,
 }
 
 /// Encode a `u128` as a 16-character lowercase big-endian hex
@@ -725,67 +779,110 @@ pub fn encode_terminate_full_calldata(
     action_kind: u8,
     action_fields: &[u8],
     signer: u64,
-    policy_opening: &CellProof,
-    cell_proofs: &[CellProof],
+    opened: &[OpenedCell],
+    gap_mask: &[u8],
+    siblings: &[u8],
 ) -> Vec<u8> {
-    // Header layout (6 head words, 32 bytes each = 192 bytes):
+    // Head layout (7 head words, 32 bytes each = 224 bytes):
     //   word 0: gameId              (uint256)
     //   word 1: actionKind          (uint8 in uint256 slot)
     //   word 2: actionFields offset (relative to start of args)
     //   word 3: signer              (uint64 in uint256 slot)
-    //   word 4: policyOpening offset
-    //   word 5: writeOpenings offset
+    //   word 4: opened offset       (OpenedCell[])
+    //   word 5: gapMask offset      (bytes)
+    //   word 6: siblings offset     (bytes)
     //
-    // `policyOpening` is a struct containing `bytes`, so it is a
-    // DYNAMIC tuple and rides an offset rather than sitting inline —
-    // the one place this layout differs from what a reading of the
-    // Solidity signature suggests.
+    // The chained form carried a `policyOpening` struct and a
+    // `writeOpenings` array of six-word tuples.  Under a multiproof
+    // the policy cell is one more entry in `opened` — a read is a
+    // write of the same value — and the per-opening sibling paths
+    // collapse into the single `gapMask` + `siblings` pair.
     //
-    // `expected_post_commit` is NOT a calldata word — the contract
+    // `expected_post_commit` is NOT a calldata word: the contract
     // recomputes the post-commit and compares it against the on-chain
-    // `g.high.commit`.  The parameter is retained here only to feed
-    // the caller's `BundleCommitMismatch` cross-oracle check.
-    const HEAD_WORDS: usize = 6;
+    // `g.high.commit`.  It rides the bundle only to feed the caller's
+    // `BundleCommitMismatch` cross-oracle check.
+    const HEAD_WORDS: usize = 7;
     const WORD: usize = 32;
     let head_bytes: usize = HEAD_WORDS * WORD;
 
-    // First, encode the dynamic tails so we know their offsets
-    // and lengths.
-    //
-    // Tail entry 1: actionFields as `bytes`.
     let action_fields_tail = encode_dynamic_bytes(action_fields);
-    // Tail entry 2: the read-only policy opening, as a dynamic tuple.
-    let policy_tail = encode_cell_proof_tuple(policy_opening);
-    // Tail entry 3: writeOpenings as `CellOpening[]`.
-    let cell_proofs_tail = encode_cell_proof_array(cell_proofs);
+    let opened_tail = encode_opened_cell_array(opened);
+    let gap_mask_tail = encode_dynamic_bytes(gap_mask);
+    let siblings_tail = encode_dynamic_bytes(siblings);
 
-    // Offsets are computed relative to the start of the args
-    // (right after the 4-byte selector).
     let action_fields_offset: u128 = head_bytes as u128;
-    let policy_offset: u128 = (head_bytes + action_fields_tail.len()) as u128;
-    let cell_proofs_offset: u128 =
-        (head_bytes + action_fields_tail.len() + policy_tail.len()) as u128;
+    let opened_offset: u128 = (head_bytes + action_fields_tail.len()) as u128;
+    let gap_mask_offset: u128 = (head_bytes + action_fields_tail.len() + opened_tail.len()) as u128;
+    let siblings_offset: u128 =
+        (head_bytes + action_fields_tail.len() + opened_tail.len() + gap_mask_tail.len()) as u128;
 
     let mut out = Vec::with_capacity(
-        4 + head_bytes + action_fields_tail.len() + policy_tail.len() + cell_proofs_tail.len(),
+        4 + head_bytes
+            + action_fields_tail.len()
+            + opened_tail.len()
+            + gap_mask_tail.len()
+            + siblings_tail.len(),
     );
     out.extend_from_slice(&MethodSelector::TerminateOnSingleStepFull.selector());
-    // word 0: gameId
     out.extend_from_slice(&u256_be(game_id));
-    // word 1: actionKind (uint8 → left-padded 32 bytes)
     out.extend_from_slice(&u256_be(u128::from(action_kind)));
-    // word 2: actionFields offset
     out.extend_from_slice(&u256_be(action_fields_offset));
-    // word 3: signer
     out.extend_from_slice(&u256_be(u128::from(signer)));
-    // word 4: policyOpening offset
-    out.extend_from_slice(&u256_be(policy_offset));
-    // word 5: writeOpenings offset
-    out.extend_from_slice(&u256_be(cell_proofs_offset));
-    // Tails, in head order.
+    out.extend_from_slice(&u256_be(opened_offset));
+    out.extend_from_slice(&u256_be(gap_mask_offset));
+    out.extend_from_slice(&u256_be(siblings_offset));
     out.extend_from_slice(&action_fields_tail);
-    out.extend_from_slice(&policy_tail);
-    out.extend_from_slice(&cell_proofs_tail);
+    out.extend_from_slice(&opened_tail);
+    out.extend_from_slice(&gap_mask_tail);
+    out.extend_from_slice(&siblings_tail);
+    out
+}
+
+/// Encode an `OpenedCell[]`: length, then one pointer per element,
+/// then the elements.
+///
+/// Each element is a dynamic tuple (it holds a `bytes`), so the
+/// pointers are required and are relative to the start of the
+/// pointer region — the same discipline the chained `CellOpening[]`
+/// used.
+fn encode_opened_cell_array(cells: &[OpenedCell]) -> Vec<u8> {
+    let n = cells.len();
+    let per_element: Vec<Vec<u8>> = cells.iter().map(encode_opened_cell_tuple).collect();
+    let mut pointers = Vec::with_capacity(n * 32);
+    let mut data_offset: u128 = (n as u128) * 32;
+    for elem in &per_element {
+        pointers.extend_from_slice(&u256_be(data_offset));
+        data_offset += elem.len() as u128;
+    }
+    let data: Vec<u8> = per_element.into_iter().flatten().collect();
+    let mut out = Vec::with_capacity(32 + pointers.len() + data.len());
+    out.extend_from_slice(&u256_be(n as u128));
+    out.extend_from_slice(&pointers);
+    out.extend_from_slice(&data);
+    out
+}
+
+/// Encode a single `OpenedCell` tuple
+/// `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes preValue)`.
+///
+/// One dynamic field, so one offset — the tuple is four head words
+/// and a `bytes` tail.  Its chained predecessor had two dynamic
+/// fields (`cellValue` and `proofData`) and six head words; the
+/// opening is gone because every cell is opened against the same
+/// root and they share one sibling list.
+fn encode_opened_cell_tuple(c: &OpenedCell) -> Vec<u8> {
+    const HEAD_WORDS: usize = 4;
+    const WORD: usize = 32;
+    let head_bytes: usize = HEAD_WORDS * WORD;
+
+    let pre_value_tail = encode_dynamic_bytes(&c.pre_value);
+    let mut out = Vec::with_capacity(head_bytes + pre_value_tail.len());
+    out.extend_from_slice(&u256_be(u128::from(c.cell_kind)));
+    out.extend_from_slice(&u256_be(c.key_a));
+    out.extend_from_slice(&u256_be(c.key_b));
+    out.extend_from_slice(&u256_be(head_bytes as u128));
+    out.extend_from_slice(&pre_value_tail);
     out
 }
 
@@ -799,93 +896,6 @@ fn encode_dynamic_bytes(payload: &[u8]) -> Vec<u8> {
     out.extend_from_slice(payload);
     // Zero padding.
     out.extend(std::iter::repeat_n(0u8, padded_len - len));
-    out
-}
-
-/// Encode a `CellProof[]` value: 32-byte length + each element
-/// encoded as a tuple `(uint8, uint256, uint256, bytes, bytes32)`.
-///
-/// Since the tuple contains a dynamic `bytes` field, each tuple
-/// is itself dynamic; the array encoding is:
-///   * length: uint256
-///   * for each element: offset:uint256 into the elements blob
-///   * elements blob: concatenation of per-element encodings.
-///
-/// Wait — that's the encoding for `T[]` where `T` is a dynamic
-/// type.  Each element of a dynamic-element array is encoded
-/// as a (offset, data) pair within the array's encoded region.
-///
-/// Let me follow the strict Solidity ABI:
-///   `T[]` where T is dynamic:
-///     - length (32 bytes)
-///     - N pointers (32 bytes each) into the per-element data
-///     - per-element data laid out in declaration order
-///
-/// The pointers are RELATIVE TO THE START OF THE ELEMENTS
-/// BLOB (i.e., after the length word).
-fn encode_cell_proof_array(proofs: &[CellProof]) -> Vec<u8> {
-    let n = proofs.len();
-    // Pre-encode each element so we know per-element lengths.
-    let per_element: Vec<Vec<u8>> = proofs.iter().map(encode_cell_proof_tuple).collect();
-    // Compute pointers: each element's offset within the
-    // pointers+data region.  Pointers come first (N×32 bytes),
-    // then the elements concatenated.
-    let mut pointers = Vec::with_capacity(n * 32);
-    let mut data_offset: u128 = (n as u128) * 32;
-    for elem in &per_element {
-        pointers.extend_from_slice(&u256_be(data_offset));
-        data_offset += elem.len() as u128;
-    }
-    let data: Vec<u8> = per_element.into_iter().flatten().collect();
-    // Top-level: length + pointers + data.
-    let mut out = Vec::with_capacity(32 + pointers.len() + data.len());
-    out.extend_from_slice(&u256_be(n as u128));
-    out.extend_from_slice(&pointers);
-    out.extend_from_slice(&data);
-    out
-}
-
-/// Encode a single `CellProof` tuple
-/// `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes cellValue,
-///   bytes32 witnessCommit, bytes proofData)`.
-///
-/// The tuple contains TWO dynamic fields (`bytes cellValue` and
-/// `bytes proofData`), so the encoding uses the head/tail discipline
-/// with two offsets:
-/// * Head (6 words = 192 bytes):
-///   word 0: cellKind          (uint8 left-padded)
-///   word 1: keyA              (uint256)
-///   word 2: keyB              (uint256)
-///   word 3: cellValue offset  (192 bytes, relative to tuple start)
-///   word 4: witnessCommit     (bytes32)
-///   word 5: proofData offset  (192 + len(cellValue tail))
-/// * Tail: cellValue dynamic-bytes encoding, then proofData's.
-///
-/// The second offset is computed from the first tail's ACTUAL encoded
-/// length, not from `cell_value.len()` — `encode_dynamic_bytes` pads to
-/// a word boundary, so the two differ for every value whose length is
-/// not a multiple of 32.
-fn encode_cell_proof_tuple(p: &CellProof) -> Vec<u8> {
-    const HEAD_WORDS: usize = 5;
-    const WORD: usize = 32;
-    let head_bytes: usize = HEAD_WORDS * WORD;
-
-    let cell_value_tail = encode_dynamic_bytes(&p.cell_value);
-    let proof_data_tail = encode_dynamic_bytes(&p.proof_data);
-    let mut out = Vec::with_capacity(head_bytes + cell_value_tail.len() + proof_data_tail.len());
-    // word 0: cellKind
-    out.extend_from_slice(&u256_be(u128::from(p.cell_kind)));
-    // word 1: keyA
-    out.extend_from_slice(&u256_be(p.key_a));
-    // word 2: keyB
-    out.extend_from_slice(&u256_be(p.key_b));
-    // word 3: cellValue offset (head_bytes = 160 bytes from tuple start)
-    out.extend_from_slice(&u256_be(head_bytes as u128));
-    // word 4: proofData offset (after the cellValue tail)
-    out.extend_from_slice(&u256_be((head_bytes + cell_value_tail.len()) as u128));
-    // Tails, in head order.
-    out.extend_from_slice(&cell_value_tail);
-    out.extend_from_slice(&proof_data_tail);
     out
 }
 
@@ -1375,65 +1385,82 @@ mod tests {
     }
 
     /// Full-form `terminateOnSingleStep` calldata layout
-    /// verification.  Encodes a tiny example with one
-    /// `CellProof` and verifies the head/tail boundaries and
-    /// pointer values.
+    /// verification.  Encodes a tiny example with one `OpenedCell` and
+    /// verifies the head size, the four dynamic offsets and their
+    /// targets — the numbers a hand-written ABI encoder gets wrong.
     #[test]
     fn encode_terminate_full_calldata_shape() {
-        use super::{encode_terminate_full_calldata, ActionKind, CellProof};
+        use super::{encode_terminate_full_calldata, ActionKind, OpenedCell};
 
-        let cell = CellProof {
+        let cell = OpenedCell {
             cell_kind: 0, // Balance
             key_a: 7,
             key_b: 11,
-            cell_value: vec![0xAA, 0xBB, 0xCC],
-            proof_data: vec![0u8; 32],
+            pre_value: vec![0xAA, 0xBB, 0xCC],
         };
-        let policy = CellProof {
-            cell_kind: 14, // BudgetPolicy
-            key_a: 0,
-            key_b: 0,
-            cell_value: vec![0u8; 36],
-            proof_data: vec![0u8; 32],
-        };
+        let gap_mask = vec![0u8; 33];
+        let siblings = vec![0xEEu8; 64];
         let bytes = encode_terminate_full_calldata(
             123_u128,
             ActionKind::Transfer as u8,
             &[1, 2, 3, 4],
             999_u64,
-            &policy,
             std::slice::from_ref(&cell),
+            &gap_mask,
+            &siblings,
         );
 
-        // Length sanity: 4-byte selector + 6×32-byte head + tails.
-        // actionFields tail: 32 (length) + 32 (4 bytes padded) = 64.
-        // policyOpening tail (a DYNAMIC tuple, so it rides an offset):
-        //   5×32 head + 32 (cellValue length) + 64 (36 bytes padded)
-        //   + 32 (proofData length) + 32 (one word) = 320.
-        // writeOpenings tail: 32 (length) + 32 (1 pointer) + per-cell.
-        //   per-cell: 5×32 head + 32 (cellValue length) + 32 (padded 3
-        //   bytes) + 32 (proofData length) + 32 (one word) = 288.
-        assert_eq!(bytes.len(), 4 + 192 + 64 + 320 + 32 + 32 + 288);
+        // 4-byte selector + 7×32-byte head (224) + tails:
+        //   actionFields:  32 (length) + 32 (4 bytes padded)      =  64
+        //   opened:        32 (length) + 32 (1 pointer) + 192     = 256
+        //     per cell:    4×32 head + 32 (length) + 32 (padded)  = 192
+        //   gapMask:       32 (length) + 64 (33 bytes padded)     =  96
+        //   siblings:      32 (length) + 64                       =  96
+        assert_eq!(bytes.len(), 4 + 224 + 64 + 256 + 96 + 96);
 
-        // Selector matches the full-form signature's hash.
         assert_eq!(
             &bytes[0..4],
             &MethodSelector::TerminateOnSingleStepFull.selector()
         );
 
-        // Word 0 (offset 4..36): gameId = 123.
+        // Word 0: gameId = 123.
         let mut expected_gid = [0u8; 32];
         expected_gid[31] = 123;
         assert_eq!(&bytes[4..36], &expected_gid);
 
-        // Word 2 (offset 4+2*32 = 68..100): the actionFields offset,
-        // which is the head size — 192, six words.  The sixth is the
-        // read-only policy opening's offset, and it is an OFFSET
-        // rather than an inline tuple because the struct carries
-        // `bytes`, which makes it dynamic.
-        let mut expected_off = [0u8; 32];
-        expected_off[31] = 192;
-        assert_eq!(&bytes[68..100], &expected_off);
+        // The four dynamic offsets, each relative to the start of the
+        // args.  Read them and follow each to its length word — an
+        // off-by-one here produces calldata the L1 decodes into
+        // something else entirely rather than rejecting.
+        let word = |i: usize| -> usize {
+            let mut v = 0usize;
+            for b in &bytes[4 + i * 32..4 + (i + 1) * 32] {
+                v = (v << 8) | *b as usize;
+            }
+            v
+        };
+        let args = &bytes[4..];
+        assert_eq!(word(2), 224, "actionFields offset is the head size");
+        assert_eq!(word(4), 224 + 64, "opened offset follows actionFields");
+        assert_eq!(word(5), 224 + 64 + 256, "gapMask offset follows opened");
+        assert_eq!(
+            word(6),
+            224 + 64 + 256 + 96,
+            "siblings offset follows gapMask"
+        );
+        let len_at = |off: usize| -> usize {
+            let mut v = 0usize;
+            for b in &args[off..off + 32] {
+                v = (v << 8) | *b as usize;
+            }
+            v
+        };
+        assert_eq!(len_at(word(2)), 4, "actionFields length");
+        assert_eq!(len_at(word(4)), 1, "opened length");
+        assert_eq!(len_at(word(5)), 33, "gapMask length");
+        assert_eq!(len_at(word(6)), 64, "siblings length");
+        // ...and the sibling payload survives the round trip.
+        assert_eq!(&args[word(6) + 32..word(6) + 96], &siblings[..]);
     }
 
     /// `MethodSelector::TerminateOnSingleStepFull` produces a
@@ -1446,81 +1473,95 @@ mod tests {
         assert_ne!(minimum, full);
     }
 
-    /// `CellProof`-tuple encoding: head/tail boundaries checked.
-    /// One cell with empty `cell_value` and a one-word `proof_data`
-    /// produces a tuple of exactly 5×32 head + 32 (cellValue length
-    /// only, no payload) + 32 (proofData length) + 32 (its one word)
-    /// = 256 bytes.
+    /// `OpenedCell`-tuple encoding: head/tail boundaries checked.
+    /// One cell with an empty `pre_value` produces a tuple of exactly
+    /// 4×32 head + 32 (length word only, no payload) = 160 bytes.
     #[test]
-    fn cell_proof_tuple_with_empty_cell_value() {
-        use super::{encode_cell_proof_tuple, CellProof};
-        let cell = CellProof {
+    fn opened_cell_tuple_with_empty_pre_value() {
+        use super::{encode_opened_cell_tuple, OpenedCell};
+        let cell = OpenedCell {
             cell_kind: 1,
             key_a: 0,
             key_b: 0,
-            cell_value: vec![],
-            proof_data: vec![0u8; 32],
+            pre_value: vec![],
         };
-        let bytes = encode_cell_proof_tuple(&cell);
-        assert_eq!(bytes.len(), 5 * 32 + 32 + 32 + 32);
-        // The cellValue offset (word 3) is `5 * 32 = 160`.
+        let bytes = encode_opened_cell_tuple(&cell);
+        assert_eq!(bytes.len(), 4 * 32 + 32);
+        // The preValue offset (word 3) is `4 * 32 = 128`.
         let mut expected_offset = [0u8; 32];
-        expected_offset[31] = 160;
+        expected_offset[31] = 128;
         assert_eq!(&bytes[3 * 32..4 * 32], &expected_offset);
-        // The proofData offset (word 4) is 160 + 32 (the empty
-        // cellValue tail is its length word alone) = 192.
-        let mut expected_pd_offset = [0u8; 32];
-        expected_pd_offset[31] = 192;
-        assert_eq!(&bytes[4 * 32..5 * 32], &expected_pd_offset);
-        // The cellValue length (at offset 5*32 = 160) is 0.
-        let expected_len = [0u8; 32];
-        assert_eq!(&bytes[160..192], expected_len.as_slice());
-        // The proofData length (at offset 192) is 32.
-        let mut expected_pd_len = [0u8; 32];
-        expected_pd_len[31] = 32;
-        assert_eq!(&bytes[192..224], &expected_pd_len);
+        // Following it lands on a zero length word.
+        assert_eq!(&bytes[128..160], [0u8; 32].as_slice());
     }
 
-    /// **The second offset is computed from the encoded tail, not the
-    /// raw length.**  `encode_dynamic_bytes` pads to a word boundary,
-    /// so a `cell_value` whose length is not a multiple of 32 makes the
-    /// two differ — and a decoder following a `proof_data` offset
-    /// derived from the raw length would land mid-padding.
+    /// A `pre_value` whose length is not a multiple of 32 is padded to
+    /// a word boundary, and the tuple's total length reflects the
+    /// PADDED tail — a decoder sizing the tuple from the raw length
+    /// would land mid-padding on the next element.
     #[test]
-    fn cell_proof_tuple_second_offset_accounts_for_padding() {
-        use super::{encode_cell_proof_tuple, CellProof};
-        // 3 bytes: one padded word, so raw length 3 vs tail 64.
-        let cell = CellProof {
+    fn opened_cell_tuple_pads_the_value_to_a_word() {
+        use super::{encode_opened_cell_tuple, OpenedCell};
+        let cell = OpenedCell {
             cell_kind: 0,
             key_a: 1,
             key_b: 2,
-            cell_value: vec![0xDE, 0xAD, 0xBE],
-            proof_data: vec![0xFFu8; 64],
+            pre_value: vec![0xDE, 0xAD, 0xBE],
         };
-        let bytes = encode_cell_proof_tuple(&cell);
-        // proofData offset = 160 (head) + 64 (length word + one padded
-        // data word) = 224.
-        let mut expected_pd_offset = [0u8; 32];
-        expected_pd_offset[31] = 224;
-        assert_eq!(&bytes[4 * 32..5 * 32], &expected_pd_offset);
-        // Following it lands on the proofData length word (= 64).
-        let mut expected_pd_len = [0u8; 32];
-        expected_pd_len[31] = 64;
-        assert_eq!(&bytes[224..256], &expected_pd_len);
-        // ...and the payload that follows is the opening itself.
-        assert_eq!(&bytes[256..320], &[0xFFu8; 64]);
-        assert_eq!(bytes.len(), 320);
+        let bytes = encode_opened_cell_tuple(&cell);
+        // 128 head + 32 length + 32 padded payload.
+        assert_eq!(bytes.len(), 192);
+        let mut expected_len = [0u8; 32];
+        expected_len[31] = 3;
+        assert_eq!(&bytes[128..160], &expected_len);
+        assert_eq!(&bytes[160..163], &[0xDE, 0xAD, 0xBE]);
+        assert_eq!(&bytes[163..192], [0u8; 29].as_slice());
     }
 
-    /// Empty `cell_proofs` array: encoded as length=0 + no
-    /// pointers + no data.  Total 32 bytes for the array.
+    /// Empty `opened` array: length=0, no pointers, no data.
     #[test]
-    fn encode_cell_proof_array_empty() {
-        use super::encode_cell_proof_array;
-        let bytes = encode_cell_proof_array(&[]);
+    fn encode_opened_cell_array_empty() {
+        use super::encode_opened_cell_array;
+        let bytes = encode_opened_cell_array(&[]);
         assert_eq!(bytes.len(), 32);
-        // Length word is all-zero.
         assert_eq!(bytes, vec![0u8; 32]);
+    }
+
+    /// **The array's element pointers are relative to the start of the
+    /// pointer region, and account for each element's PADDED size.**
+    /// Two cells whose values pad differently is the shape a
+    /// fixed-stride reader gets wrong.
+    #[test]
+    fn encode_opened_cell_array_pointers_follow_padded_elements() {
+        use super::{encode_opened_cell_array, OpenedCell};
+        let cells = [
+            OpenedCell {
+                cell_kind: 0,
+                key_a: 1,
+                key_b: 2,
+                pre_value: vec![0xAA; 3],
+            },
+            OpenedCell {
+                cell_kind: 1,
+                key_a: 3,
+                key_b: 0,
+                pre_value: vec![],
+            },
+        ];
+        let bytes = encode_opened_cell_array(&cells);
+        // length + 2 pointers + (192-byte element) + (160-byte element)
+        assert_eq!(bytes.len(), 32 + 64 + 192 + 160);
+        let mut want_len = [0u8; 32];
+        want_len[31] = 2;
+        assert_eq!(&bytes[0..32], &want_len);
+        // Pointer 0 = 64 (past both pointers).
+        let mut p0 = [0u8; 32];
+        p0[31] = 64;
+        assert_eq!(&bytes[32..64], &p0);
+        // Pointer 1 = 64 + 192 = 256.
+        let mut p1 = [0u8; 32];
+        p1[30] = 1;
+        assert_eq!(&bytes[64..96], &p1);
     }
 
     /// `ActionKind` byte values match the documented
@@ -1940,20 +1981,21 @@ mod tests {
     // -------------------------------------------------------------
 
     fn sample_bundle(commit_bytes: [u8; 32]) -> TerminateBundle {
+        use super::OpenedCell;
         TerminateBundle {
             fixture_id: "log[0]".to_string(),
             action_kind: 1,
             action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
             signer: 5,
             expected_post_commit: commit_bytes,
-            policy_opening: CellProof {
+            opened_cells: vec![OpenedCell {
                 cell_kind: 14,
                 key_a: 0,
                 key_b: 0,
-                cell_value: vec![0u8; 36],
-                proof_data: vec![0u8; 32],
-            },
-            cell_proofs: vec![],
+                pre_value: vec![0u8; 36],
+            }],
+            gap_mask: vec![0u8; 32],
+            siblings: vec![],
         }
     }
 

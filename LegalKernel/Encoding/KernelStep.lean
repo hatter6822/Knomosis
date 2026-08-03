@@ -266,18 +266,85 @@ instance : Encodable FaultProof.CellOpening where
   encode := CellOpening.encode
   decode := CellOpening.decode
 
+/-! ## `SmtMultiProof` + `MultiBundle` codecs
+
+The multiproof wire, in the same shape as `SmtCellProof`'s: the
+sibling list then the mask.  One structural difference is worth
+naming — an `SmtCellProof`'s mask is always 32 bytes, while a
+multiproof's is `ceil(G/8)` for a gap count the KEY SET determines, so
+the decoder cannot check the length and the verifier does
+(`SmtMultiProof.isWellFormedFor`, against levels it derives). -/
+
+/-- Encode an `SmtMultiProof`. -/
+def SmtMultiProof.encode (p : FaultProof.SmtMultiProof) : Stream :=
+  Encodable.encode (T := List ByteArray) p.siblings.toList ++
+  Encodable.encode (T := ByteArray) p.gapMask
+
+/-- Decode an `SmtMultiProof`. -/
+def SmtMultiProof.decode (s : Stream) :
+    Except DecodeError (FaultProof.SmtMultiProof × Stream) :=
+  match Encodable.decode (T := List ByteArray) s with
+  | .ok (sibs, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (gm, s₂) => .ok ({ siblings := sibs.toArray, gapMask := gm }, s₂)
+    | .error e     => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.SmtMultiProof where
+  encode := SmtMultiProof.encode
+  decode := SmtMultiProof.decode
+
+/-- Encode one opened cell: its tag and its proven PRE-value.  No
+    proof of its own — under a multiproof every cell is opened against
+    the same root and they share one sibling list. -/
+def OpenedCell.encode (c : FaultProof.CellTag × ByteArray) : Stream :=
+  Encodable.encode (T := FaultProof.CellTag) c.1 ++
+  Encodable.encode (T := ByteArray) c.2
+
+/-- Decode one opened cell. -/
+def OpenedCell.decode (s : Stream) :
+    Except DecodeError ((FaultProof.CellTag × ByteArray) × Stream) :=
+  match Encodable.decode (T := FaultProof.CellTag) s with
+  | .ok (tag, s₁) =>
+    match Encodable.decode (T := ByteArray) s₁ with
+    | .ok (val, s₂) => .ok ((tag, val), s₂)
+    | .error e      => .error e
+  | .error e => .error e
+
+instance : Encodable (FaultProof.CellTag × ByteArray) where
+  encode := OpenedCell.encode
+  decode := OpenedCell.decode
+
+/-- Encode a `MultiBundle`: the opened cells, then the shared wire. -/
+def MultiBundle.encode (b : FaultProof.MultiBundle) : Stream :=
+  Encodable.encode (T := List (FaultProof.CellTag × ByteArray)) b.cells ++
+  Encodable.encode (T := FaultProof.SmtMultiProof) b.proof
+
+/-- Decode a `MultiBundle`. -/
+def MultiBundle.decode (s : Stream) :
+    Except DecodeError (FaultProof.MultiBundle × Stream) :=
+  match Encodable.decode (T := List (FaultProof.CellTag × ByteArray)) s with
+  | .ok (cells, s₁) =>
+    match Encodable.decode (T := FaultProof.SmtMultiProof) s₁ with
+    | .ok (pf, s₂) => .ok ({ cells := cells, proof := pf }, s₂)
+    | .error e     => .error e
+  | .error e => .error e
+
+instance : Encodable FaultProof.MultiBundle where
+  encode := MultiBundle.encode
+  decode := MultiBundle.decode
+
 /-! ## `KernelStep` codec -/
 
 /-- Encode a `KernelStep` to its CBE byte sequence.  Layout:
     `preStateCommit ++ signedAction ++ postStateCommit ++
-     l2LogIndex ++ policyOpening ++ writeOpenings`. -/
+     l2LogIndex ++ bundle`. -/
 def KernelStep.encode (step : FaultProof.KernelStep) : Stream :=
   Encodable.encode (T := ByteArray) step.preStateCommit ++
   Encodable.encode (T := SignedAction) step.signedAction ++
   Encodable.encode (T := ByteArray) step.postStateCommit ++
   Encodable.encode (T := Nat) step.l2LogIndex ++
-  Encodable.encode (T := FaultProof.CellOpening) step.policyOpening ++
-  Encodable.encode (T := List FaultProof.CellOpening) step.writeOpenings
+  Encodable.encode (T := FaultProof.MultiBundle) step.bundle
 
 /-- Decode a `KernelStep` from a stream. -/
 def KernelStep.decode (s : Stream) :
@@ -290,17 +357,13 @@ def KernelStep.decode (s : Stream) :
       | .ok (post, s₃) =>
         match Encodable.decode (T := Nat) s₃ with
         | .ok (idx, s₄) =>
-          match Encodable.decode (T := FaultProof.CellOpening) s₄ with
-          | .ok (pol, s₅) =>
-            match Encodable.decode (T := List FaultProof.CellOpening) s₅ with
-            | .ok (ops, s₆) =>
-              .ok ({ preStateCommit := pre,
-                     signedAction := sa,
-                     postStateCommit := post,
-                     l2LogIndex := idx,
-                     policyOpening := pol,
-                     writeOpenings := ops }, s₆)
-            | .error e => .error e
+          match Encodable.decode (T := FaultProof.MultiBundle) s₄ with
+          | .ok (b, s₅) =>
+            .ok ({ preStateCommit := pre,
+                   signedAction := sa,
+                   postStateCommit := post,
+                   l2LogIndex := idx,
+                   bundle := b }, s₅)
           | .error e => .error e
         | .error e => .error e
       | .error e => .error e

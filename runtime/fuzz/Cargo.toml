@@ -87,4 +87,10 @@ name = "observer_cell_proof_json"
 path = "fuzz_targets/observer_cell_proof_json.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "observer_terminate_bundle_json"
+path = "fuzz_targets/observer_terminate_bundle_json.rs"
+test = false
+doc = false
 bench = false

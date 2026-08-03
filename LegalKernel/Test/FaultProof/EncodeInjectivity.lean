@@ -50,10 +50,8 @@ def tests : List TestCase :=
           signedAction := st,
           postStateCommit := ByteArray.empty,
           l2LogIndex := 0,
-          policyOpening := { cellTag := .budgetPolicy,
-                             preValue := ByteArray.empty,
-                             proof := { siblings := #[], bitmask := ByteArray.empty } },
-          writeOpenings := [] }
+          bundle := { cells := [(.budgetPolicy, ByteArray.empty)],
+                      proof := { gapMask := ByteArray.empty, siblings := #[] } } }
         let h_eq : s = s := rfl
         let h := kernelStep_encode_deterministic s s h_eq
         let _ := h

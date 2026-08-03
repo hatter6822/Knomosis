@@ -143,22 +143,28 @@ structure TerminateBundle where
       offer a responder a value to disagree with.  It is retained here
       because the builder needs it to compute `expectedPostCommit`. -/
   l2LogIndex        : Nat
-  /-- The READ-ONLY budget-policy opening, against the pre-state
-      root.
+  /-- The step's FRONTIER: every cell the step opens, with its proven
+      PRE-state value, in path order.
 
-      Not a write, so it is not in `cellProofs` — but
-      `deriveEpochBudget` selects its branch on it and every one of the
-      twenty-five variants writes an epoch-budget cell, so the L1
-      verifier cannot start without it. -/
-  policyProof       : CellProof
-  /-- The step's WRITTEN cells, in `writeCellsAt` order, with CHAINED
-      openings: proof `i` opens against the root write `i-1` produced.
+      Replaced a `policyProof` + `cellProofs` pair.  The read-only
+      budget-policy cell is IN here rather than beside it — under a
+      multiproof a read is a write of the same value, so it is one more
+      cell and costs no separate walk.  And a cell the step writes
+      twice (a self-transfer, which anyone can submit) appears ONCE:
+      every opening is against the same root, so the second one carried
+      no information the first did not.
 
-      Not against the pre-state root.  An opening goes stale the moment
-      a write lands, and two writes at the SAME cell (a self-transfer)
-      are reachable by anyone — a bundle whose openings were all
-      against the pre-root would fold to a root no state has. -/
-  cellProofs        : CellProofBundle
+      Order is free on the wire — the L1 sorts by path index — but the
+      builder emits path order anyway, which is what the walk consumes. -/
+  openedCells       : List (CellTag × ByteArray)
+  /-- The single shared wire: a gap mask, then the siblings the mask
+      marks as non-canonical-empty.
+
+      One list rather than one path per opening.  Sound because every
+      sibling is the root of a sub-tree holding no opened cell, so the
+      step's writes cannot move it and the pre- and post-folds share
+      it — `multiSiblings_congr` is the Lean statement of that. -/
+  wire              : SmtMultiProof
   deriving Repr
 
 /-! ## Bundle builder
@@ -192,11 +198,10 @@ def buildTerminateBundle
     signer            := signer,
     l2LogIndex        := l2LogIndex,
     expectedPostCommit :=
-      (stepPostRoot preState entry.signedAction l2LogIndex).getD ByteArray.empty,
-    policyProof       := openingCellProof preState (policyOpening preState),
-    cellProofs        :=
-      { proofs := (stepOpenings preState entry.signedAction l2LogIndex).map
-                    (openingCellProof preState) } }
+      (stepMultiPostRoot preState entry.signedAction l2LogIndex).getD
+        ByteArray.empty,
+    openedCells       := (stepMultiBundle preState entry.signedAction).cells,
+    wire              := (stepMultiBundle preState entry.signedAction).proof }
 
 /-! ## Well-formedness theorems -/
 
@@ -235,40 +240,39 @@ theorem buildTerminateBundle_signer
 theorem buildTerminateBundle_expectedPostCommit
     (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
     (buildTerminateBundle es entry idx).expectedPostCommit =
-    (stepPostRoot es entry.signedAction idx).getD ByteArray.empty := rfl
+    (stepMultiPostRoot es entry.signedAction idx).getD ByteArray.empty := rfl
 
-/-- The bundle's `cellProofs` are the step's CHAINED write openings. -/
-theorem buildTerminateBundle_cellProofs
+/-- The bundle's opened cells are the honest sequencer's frontier. -/
+theorem buildTerminateBundle_openedCells
     (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
-    (buildTerminateBundle es entry idx).cellProofs =
-    { proofs := (stepOpenings es entry.signedAction idx).map
-                  (openingCellProof es) } := rfl
+    (buildTerminateBundle es entry idx).openedCells =
+    (stepMultiBundle es entry.signedAction).cells := rfl
 
-/-- The bundle's cells are exactly the ones the action writes, in
-    declaration order — so a verifier can check the bundle's SHAPE
-    against `writeCellsAt` before doing any hashing, and an observer
-    that dropped or reordered one fails that check rather than folding
-    to a root no state has. -/
-theorem buildTerminateBundle_cellProofs_tags
+/-- The bundle's wire is the honest sequencer's. -/
+theorem buildTerminateBundle_wire
     (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
-    (buildTerminateBundle es entry idx).cellProofs.proofs.map CellProof.cellTag
-      = entry.signedAction.action.writeCellsAt es entry.signedAction.signer := by
-  show ((stepOpenings es entry.signedAction idx).map
-          (openingCellProof es)).map CellProof.cellTag = _
+    (buildTerminateBundle es entry idx).wire =
+    (stepMultiBundle es entry.signedAction).proof := rfl
+
+/-- **The bundle's cells are exactly the step's frontier** — the cells
+    the action writes plus the read-only budget policy, deduplicated
+    and in path order.
+
+    The L1 re-derives that list and compares, so an observer that
+    dropped a cell, added one, or named one twice fails the shape check
+    rather than folding to a root no state has.  Order is NOT part of
+    the comparison — the verifier sorts — but the builder emits the
+    sorted form, which is what this states. -/
+theorem buildTerminateBundle_openedCells_tags
+    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
+    (buildTerminateBundle es entry idx).openedCells.map Prod.fst
+      = multiFrontierOf entry.signedAction.action entry.signedAction.signer
+          es.bridge.nextWdId := by
+  show ((multiFrontierOf entry.signedAction.action entry.signedAction.signer
+          es.bridge.nextWdId).map (fun t => (t, getCellValue es t))).map Prod.fst = _
   rw [List.map_map]
-  show (stepOpenings es entry.signedAction idx).map CellOpening.cellTag = _
-  unfold stepOpenings
-  rw [List.map_map]
-  exact stepWriteBundle_tags es entry.signedAction idx
+  exact List.map_id _
 
-/-- The bundle's policy proof names the budget-policy cell.  Fixed by
-    the builder rather than chosen: the policy selects the branch every
-    epoch-budget write takes, so a substitutable one would let a
-    responder steer the budget leg of every action. -/
-theorem buildTerminateBundle_policyProof_tag
-    (es : ExtendedState) (entry : LogEntry) (idx : Nat) :
-    (buildTerminateBundle es entry idx).policyProof.cellTag
-      = CellTag.budgetPolicy := rfl
 
 /-! ## JSON formatter
 
@@ -286,11 +290,25 @@ def formatUInt8 (b : UInt8) : String :=
 def formatUInt64 (n : UInt64) : String :=
   toString n.toNat
 
-/-- Format the `cellProofs` list as a JSON array (one cell-proof
-    object per element).  Uses the existing `formatCellProofJson`
-    formatter. -/
-def formatCellProofsArray (bundle : CellProofBundle) : String :=
-  let entries := bundle.proofs.map formatCellProofJson
+/-- Format one opened cell as a JSON object.
+
+    The same `cell_kind` / `key_a` / `key_b` shape a cell proof used,
+    minus the opening: under a multiproof every cell is opened against
+    the same root and they share one sibling list, so a per-cell
+    `proof_data` would be a field with nothing to put in it. -/
+def formatOpenedCellJson (c : CellTag × ByteArray) : String :=
+  let (kind, keyA, keyB) := LegalKernel.Runtime.CellProofJson.formatCellTag c.1
+  let q := "\""
+  String.join
+    [ "{", q ++ "cell_kind" ++ q, ":", kind, ","
+    , q ++ "key_a" ++ q, ":", q ++ keyA ++ q, ","
+    , q ++ "key_b" ++ q, ":", q ++ keyB ++ q, ","
+    , q ++ "pre_value" ++ q, ":", q ++ bytesHex c.2 ++ q
+    , "}" ]
+
+/-- Format the frontier as a JSON array. -/
+def formatOpenedCellsArray (cells : List (CellTag × ByteArray)) : String :=
+  let entries := cells.map formatOpenedCellJson
   let joined := match entries with
     | [] => ""
     | x :: xs => xs.foldl (fun acc e => acc ++ "," ++ e) x
@@ -311,7 +329,7 @@ def formatTerminateBundleJson (fixtureId : String)
   let q := "\""
   let actionFieldsHex := bytesHex bundle.actionFields
   let expectedPostCommitHex := bytesHex bundle.expectedPostCommit
-  let cellProofsArr := formatCellProofsArray bundle.cellProofs
+  let openedCellsArr := formatOpenedCellsArray bundle.openedCells
   let parts : List String := [
     "{",
     q ++ "fixture_id" ++ q, ":", q ++ fixtureId ++ q, ",",
@@ -320,17 +338,19 @@ def formatTerminateBundleJson (fixtureId : String)
     q ++ "signer" ++ q, ":", formatUInt64 bundle.signer, ",",
     q ++ "expected_post_commit_hex" ++ q, ":",
       q ++ expectedPostCommitHex ++ q, ",",
-    q ++ "policy_opening" ++ q, ":",
-      formatCellProofJson bundle.policyProof, ",",
-    q ++ "cell_proofs" ++ q, ":", cellProofsArr,
+    q ++ "opened_cells" ++ q, ":", openedCellsArr, ",",
+    q ++ "gap_mask_hex" ++ q, ":", q ++ bytesHex bundle.wire.gapMask ++ q, ",",
+    q ++ "siblings_hex" ++ q, ":",
+      q ++ bytesHex (bundle.wire.siblings.foldl (fun acc s => acc ++ s)
+                       (ByteArray.mk #[])) ++ q,
     "}"
   ]
   String.join parts
 
 /-! ## Smoke checks -/
 
-/-- An empty bundle's cell-proofs array formats as `[]`. -/
-example : formatCellProofsArray { proofs := [] } = "[]" := rfl
+/-- An empty frontier formats as `[]`. -/
+example : formatOpenedCellsArray [] = "[]" := rfl
 
 /-- `formatUInt8 0 = "0"`. -/
 example : formatUInt8 0 = "0" := rfl

@@ -159,14 +159,18 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
     bytes private probeFields;
     uint64 private probeSigner;
     bytes32 private probePostRoot;
-    KnomosisStepVMRoot.CellOpening private probePolicy;
-    KnomosisStepVMRoot.CellOpening[] private probeOpenings;
+    KnomosisStepVMRoot.OpenedCell[] private probeCells;
+    bytes private probeGapMask;
+    bytes private probeSiblings;
 
-    /// @dev Load the probe.  A real pre-root with real openings is now
-    ///      the only way the honest terminal step can succeed.
+    /// @dev Load the probe from the MULTIPROOF column.  A real pre-root
+    ///      with a real wire is the only way the honest terminal step
+    ///      can succeed: the fold checks its aggregate against
+    ///      `g.low.commit`, so a fabricated low has no wire that
+    ///      reproduces it.
     function _loadProbe() private {
         string memory raw = readFixture("step_vm.json");
-        string memory base = ".writeBundleGoldens[0]";
+        string memory base = ".multiProofGoldens[0]";
         LOW_ROOT = vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex"));
         probePostRoot =
             vm.parseJsonBytes32(raw, string.concat(base, ".postStateRootHex"));
@@ -175,33 +179,28 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         probeFields = vm.parseJsonBytes(raw, string.concat(base, ".actionFieldsHex"));
         probeSigner =
             uint64(vm.parseJsonUint(raw, string.concat(base, ".signerNat")));
-        probePolicy = KnomosisStepVMRoot.CellOpening({
-            cellKind: 14, keyA: 0, keyB: 0,
-            preValue: vm.parseJsonBytes(raw, string.concat(base, ".policyValueHex")),
-            proofData:
-                vm.parseJsonBytes(raw, string.concat(base, ".policyProofDataHex"))
-        });
-        uint256 n = vm.parseJsonUint(raw, string.concat(base, ".writeCount"));
+        probeGapMask = vm.parseJsonBytes(raw, string.concat(base, ".gapMaskHex"));
+        probeSiblings = vm.parseJsonBytes(raw, string.concat(base, ".siblingsHex"));
+        uint256 n = vm.parseJsonUint(raw, string.concat(base, ".cellCount"));
         for (uint256 i = 0; i < n; i++) {
-            string memory w = string.concat(base, ".writes[", vm.toString(i), "]");
-            probeOpenings.push(KnomosisStepVMRoot.CellOpening({
-                cellKind: uint8(vm.parseJsonUint(raw, string.concat(w, ".cellKind"))),
-                keyA: vm.parseJsonUint(raw, string.concat(w, ".keyA")),
-                keyB: vm.parseJsonUint(raw, string.concat(w, ".keyB")),
-                preValue: vm.parseJsonBytes(raw, string.concat(w, ".oldValueHex")),
-                proofData: vm.parseJsonBytes(raw, string.concat(w, ".proofDataHex"))
+            string memory c = string.concat(base, ".cells[", vm.toString(i), "]");
+            probeCells.push(KnomosisStepVMRoot.OpenedCell({
+                cellKind: uint8(vm.parseJsonUint(raw, string.concat(c, ".cellKind"))),
+                keyA: vm.parseJsonUint(raw, string.concat(c, ".keyA")),
+                keyB: vm.parseJsonUint(raw, string.concat(c, ".keyB")),
+                preValue: vm.parseJsonBytes(raw, string.concat(c, ".preValueHex"))
             }));
         }
     }
 
-    /// @dev The probe's bundle, as a memory array for the call.
-    function _openings()
+    /// @dev The probe's frontier, as a memory array for the call.
+    function _cells()
         private
         view
-        returns (KnomosisStepVMRoot.CellOpening[] memory out)
+        returns (KnomosisStepVMRoot.OpenedCell[] memory out)
     {
-        out = new KnomosisStepVMRoot.CellOpening[](probeOpenings.length);
-        for (uint256 i = 0; i < out.length; i++) out[i] = probeOpenings[i];
+        out = new KnomosisStepVMRoot.OpenedCell[](probeCells.length);
+        for (uint256 i = 0; i < out.length; i++) out[i] = probeCells[i];
     }
 
     /// @dev All but the last byte of `b`.  Used to perturb one field of
@@ -554,9 +553,9 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         // anchored low.  Unlike the bespoke hash the old step VM
         // returned, this is a value in state-root space, so the
         // terminal comparison can succeed at all.
-        bytes32 honestPost = stepVM.executeStepToRoot(
+        bytes32 honestPost = stepVM.executeStepToRootMulti(
             LOW_ROOT, kind, actionFields, stepSigner, 1,
-            probePolicy, _openings());
+            _cells(), probeGapMask, probeSiblings);
         assertEq(honestPost, probePostRoot,
             "the step VM must reach the corpus's post-root");
 
@@ -575,7 +574,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         uint256 seqBalBefore = sequencer.balance;
         vm.prank(sequencer);
         game.terminateOnSingleStep(
-            gameId, kind, actionFields, stepSigner, probePolicy, _openings());
+            gameId, kind, actionFields, stepSigner, _cells(), probeGapMask, probeSiblings);
 
         // SequencerWon: the sequencer is CREDITED the winner's 95% share
         // of the challenger's forfeited bond (pull-payment, 1.3) and
@@ -634,13 +633,13 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
         game.terminateOnSingleStep(
             gameId, kind, substitutedFields, stepSigner,
-            probePolicy, _openings());
+            _cells(), probeGapMask, probeSiblings);
 
         // ...and the bound action still terminates, so the rejection is
         // the substitution and not the binding refusing everything.
         vm.prank(sequencer);
         game.terminateOnSingleStep(
-            gameId, kind, boundFields, stepSigner, probePolicy, _openings());
+            gameId, kind, boundFields, stepSigner, _cells(), probeGapMask, probeSiblings);
         (, , , , , , , , , , ,
          KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);
         assertEq(uint8(status), uint8(KnomosisFaultProofGame.GameStatus.SequencerWon),
@@ -662,7 +661,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
         game.terminateOnSingleStep(
             gameId, probeKind, actionFields, probeSigner + 1,
-            probePolicy, _openings());
+            _cells(), probeGapMask, probeSiblings);
     }
 
     /// @notice The action KIND is bound: naming a different variant
@@ -679,7 +678,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
         game.terminateOnSingleStep(
             gameId, 1 /* Mint */, actionFields, probeSigner,
-            probePolicy, _openings());
+            _cells(), probeGapMask, probeSiblings);
     }
 
     /// @notice A root published with NO action bound to it cannot be
@@ -700,7 +699,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.expectRevert(KnomosisFaultProofGame.ActionNotInLogChain.selector);
         game.terminateOnSingleStep(
             gameId, probeKind, actionFields, probeSigner,
-            probePolicy, _openings());
+            _cells(), probeGapMask, probeSiblings);
     }
 
     /// @notice Companion to the above: an honest CHALLENGER wins the
@@ -727,7 +726,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         vm.prank(sequencer);
         game.terminateOnSingleStep(
             gameId, probeKind, actionFields, probeSigner,
-            probePolicy, _openings());
+            _cells(), probeGapMask, probeSiblings);
 
         // Pull-payment (1.3): the challenger claims its credited share.
         vm.prank(challenger);
@@ -815,7 +814,7 @@ contract KnomosisFaultProofGameTest is CrossCheckFramework {
         // which is `high` ⇒ the responding sequencer wins.
         vm.prank(sequencer);
         game.terminateOnSingleStep(
-            gameId, kind, actionFields, stepSigner, probePolicy, _openings());
+            gameId, kind, actionFields, stepSigner, _cells(), probeGapMask, probeSiblings);
 
         (, , , , , , , , , , ,
          KnomosisFaultProofGame.GameStatus status, , ,) = game.games(gameId);

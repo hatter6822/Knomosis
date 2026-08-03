@@ -97,17 +97,23 @@ def signer_matches_entry : IO Unit := do
     against `g.high.commit` could never succeed. -/
 def expectedPostCommit_matches_stepPostRoot : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
-  let expected := stepPostRoot exampleState exampleEntry.signedAction 0
+  let expected := stepMultiPostRoot exampleState exampleEntry.signedAction 0
   unless some bundle.expectedPostCommit = expected do
-    throw (IO.userError "expectedPostCommit does not match stepPostRoot")
+    throw (IO.userError "expectedPostCommit does not match stepMultiPostRoot")
 
-/-- The bundle's cell-proof bundle verifies against the
-    pre-state's commit. -/
-def cellProofs_verify_against_preCommit : IO Unit := do
+/-- The bundle's own wire folds to the root it publishes.
+
+    The multiproof analogue of the chained `verifyCellProofs` check.
+    There is no per-opening verdict to collect: the fold's PRE side is
+    compared to the pre-state root once, in aggregate, which is what
+    `verifierPostRootMulti` returning `some` says happened. -/
+def wire_folds_to_the_published_root : IO Unit := do
   let bundle := buildTerminateBundle exampleState exampleEntry
-  let preCommit := commitExtendedState exampleState
-  unless verifyCellProofs preCommit bundle.cellProofs = true do
-    throw (IO.userError "cellProofs failed to verify against preCommit")
+  let got := verifierPostRootMulti (commitExtendedState exampleState)
+    exampleEntry.signedAction.action exampleEntry.signedAction.signer 0
+    { cells := bundle.openedCells, proof := bundle.wire }
+  unless got = some bundle.expectedPostCommit do
+    throw (IO.userError "the bundle's wire does not reach its published root")
 
 /-- The bundle is deterministic in its inputs.  Two calls with
     the same inputs produce JSON-equivalent outputs. -/
@@ -140,7 +146,9 @@ def json_has_snake_case_fields : IO Unit := do
     "\"action_fields_hex\"",
     "\"signer\"",
     "\"expected_post_commit_hex\"",
-    "\"cell_proofs\""
+    "\"opened_cells\"",
+    "\"gap_mask_hex\"",
+    "\"siblings_hex\""
   ]
   for field in requiredFields do
     let parts := json.splitOn field
@@ -154,6 +162,10 @@ def json_has_snake_case_fields : IO Unit := do
     "\"actionFieldsHex\"",
     "\"expectedPostCommit\"",
     "\"expectedPostCommitHex\"",
+    "\"openedCells\"",
+    "\"gapMask\"",
+    "\"gapMaskHex\"",
+    "\"siblingsHex\"",
     "\"cellProofs\""
   ]
   for field in forbiddenFields do
@@ -240,11 +252,10 @@ def json_byte_pinning_revoke_local_policy : IO Unit := do
     in the TOP-LEVEL object excluding nested cell-proof
     objects.  A maintainer adding a 7th field would silently
     slip into production wire traffic otherwise. -/
-def json_exactly_six_top_level_fields : IO Unit := do
-  -- Use an empty bundle (revokeLocalPolicy ⇒ no balance-cell
-  -- proofs ⇒ shorter cell_proofs array).  Even then the
-  -- registry+nonce cells are emitted; we count fields by
-  -- splitting at top-level separators.
+def json_exactly_eight_top_level_fields : IO Unit := do
+  -- `revokeLocalPolicy` gives the narrowest frontier this suite can
+  -- build; even then the policy, registry and nonce cells are opened,
+  -- so the count is of KEYS rather than of the object's size.
   let entry : LogEntry := { exampleEntry with
     signedAction := { exampleEntry.signedAction with
       action := .revokeLocalPolicy } }
@@ -261,7 +272,9 @@ def json_exactly_six_top_level_fields : IO Unit := do
     "\"action_fields_hex\":",
     "\"signer\":",
     "\"expected_post_commit_hex\":",
-    "\"cell_proofs\":"
+    "\"opened_cells\":",
+    "\"gap_mask_hex\":",
+    "\"siblings_hex\":"
   ]
   for key in topLevelKeys do
     let parts := json.splitOn key
@@ -292,7 +305,7 @@ def tests : List TestCase := [
   ⟨"export-terminate-bundle: expectedPostCommit is the fold's root",
     expectedPostCommit_matches_stepPostRoot⟩,
   ⟨"export-terminate-bundle: cellProofs verify against preCommit",
-    cellProofs_verify_against_preCommit⟩,
+    wire_folds_to_the_published_root⟩,
   ⟨"export-terminate-bundle: bundle is deterministic",
     bundle_is_deterministic⟩,
   ⟨"export-terminate-bundle: JSON envelope well-formed",
@@ -307,8 +320,8 @@ def tests : List TestCase := [
     json_byte_pinning_transfer_minimal⟩,
   ⟨"export-terminate-bundle: JSON byte-pinning (revokeLocalPolicy)",
     json_byte_pinning_revoke_local_policy⟩,
-  ⟨"export-terminate-bundle: JSON has exactly 6 top-level fields",
-    json_exactly_six_top_level_fields⟩,
+  ⟨"export-terminate-bundle: JSON has exactly 8 top-level fields",
+    json_exactly_eight_top_level_fields⟩,
   ⟨"export-terminate-bundle: buildTerminateBundle API stable",
     build_terminate_bundle_api_stable⟩,
   ⟨"export-terminate-bundle: formatTerminateBundleJson API stable",

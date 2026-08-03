@@ -26,6 +26,7 @@ deposit-decode path, potentially a mis-credit).
 | `l1_ingest_decode_event` | `knomosis-l1-ingest` L1-log ABI decoder — biases `topic0` to a real event-signature hash so the deep per-event decode arm (the deposit paths that credit L2 balances) is reached | `knomosis_l1_ingest::events::decode_event` |
 | `indexer_decode_event` | `knomosis-indexer` event decoder — the CBE-frame → typed `Event` reconstruction the read model runs on the subscription stream | `knomosis_indexer::decoder::decode_event` |
 | `observer_cell_proof_json` | `knomosis-faultproof-observer` cell-proof intake — the JSON a `knomosis export-cell-proofs` subprocess writes, whose `proof_data` SMT opening is the struct's only unbounded-length field | `<knomosis_faultproof_observer::submitter::CellProof as serde::Deserialize>` |
+| `observer_terminate_bundle_json` | `knomosis-faultproof-observer` terminate-bundle intake — the JSON a `knomosis export-terminate-bundle` subprocess writes, carrying a MULTIPROOF whose three unbounded fields (the frontier array, the gap mask, the packed siblings) vary independently and constrain each other | `knomosis_faultproof_observer::strategy::parse_terminate_bundle_json` |
 
 These are the **nightly-only** counterpart to the stable-toolchain
 proptest fuzz that already rides `ci-rust.yml`
@@ -62,6 +63,7 @@ cargo +nightly fuzz run host_read_request -- -dict=fuzz/dictionaries/host.dict
 cargo +nightly fuzz run l1_ingest_decode_event
 cargo +nightly fuzz run indexer_decode_event -- -dict=fuzz/dictionaries/indexer.dict
 cargo +nightly fuzz run observer_cell_proof_json
+cargo +nightly fuzz run observer_terminate_bundle_json
 
 # Just compile every target (the API-drift guard CI runs on every PR):
 cargo +nightly fuzz build

@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "d4144ce3eca57197e38071b61ab173fc253f7e4f3e7ee965900fe8e00f60f48b"
+    "source_digest": "715f7fea11aa9437c5f7f71862584351276a193b7f7dc561c30fc21a76735f5b"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5843
+    "declaration_count": 5853
   },
   "modules": [
     {
@@ -18109,7 +18109,7 @@
     {
       "module": "LegalKernel.Encoding.KernelStep",
       "path": "LegalKernel/Encoding/KernelStep.lean",
-      "declaration_count": 17,
+      "declaration_count": 23,
       "declarations": [
         {
           "kind": "namespace",
@@ -18237,8 +18237,72 @@
         },
         {
           "kind": "def",
+          "name": "SmtMultiProof.encode",
+          "line": 278,
+          "called": [
+            "Stream"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "SmtMultiProof.decode",
+          "line": 283,
+          "called": [
+            "DecodeError",
+            "Encodable",
+            "SmtMultiProof.encode",
+            "Stream",
+            "decode",
+            "encode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "OpenedCell.encode",
+          "line": 299,
+          "called": [
+            "Stream"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "OpenedCell.decode",
+          "line": 304,
+          "called": [
+            "DecodeError",
+            "Encodable",
+            "OpenedCell.encode",
+            "Stream",
+            "decode",
+            "encode"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "MultiBundle.encode",
+          "line": 318,
+          "called": [
+            "Stream"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "MultiBundle.decode",
+          "line": 323,
+          "called": [
+            "DecodeError",
+            "Encodable",
+            "MultiBundle.encode",
+            "Stream",
+            "cells",
+            "decode",
+            "encode"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "KernelStep.encode",
-          "line": 273,
+          "line": 341,
           "called": [
             "SignedAction",
             "Stream",
@@ -18248,7 +18312,7 @@
         {
           "kind": "def",
           "name": "KernelStep.decode",
-          "line": 282,
+          "line": 349,
           "called": [
             "DecodeError",
             "Encodable",
@@ -18256,15 +18320,13 @@
             "SignedAction",
             "Stream",
             "decode",
-            "encode",
-            "pol",
-            "policyOpening"
+            "encode"
           ]
         },
         {
           "kind": "theorem",
           "name": "kernelStep_encode_deterministic",
-          "line": 317,
+          "line": 380,
           "called": [
             "KernelStep.encode"
           ]
@@ -18272,7 +18334,7 @@
         {
           "kind": "theorem",
           "name": "cellProof_encode_deterministic",
-          "line": 322,
+          "line": 385,
           "called": [
             "CellProof.encode"
           ]
@@ -18280,7 +18342,7 @@
         {
           "kind": "theorem",
           "name": "cellTag_encode_deterministic",
-          "line": 327,
+          "line": 390,
           "called": [
             "CellTag.encode",
             "Encoding",
@@ -22893,7 +22955,7 @@
     {
       "module": "LegalKernel.FaultProof.Frontier",
       "path": "LegalKernel/FaultProof/Frontier.lean",
-      "declaration_count": 25,
+      "declaration_count": 28,
       "declarations": [
         {
           "kind": "namespace",
@@ -23038,9 +23100,41 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "frontierInsert_ne_nil",
+          "line": 241,
+          "called": [
+            "CellTag",
+            "frontierInsert"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "frontierOf_cons_ne_nil",
+          "line": 252,
+          "called": [
+            "CellTag",
+            "frontierInsert",
+            "frontierInsert_ne_nil",
+            "frontierOf"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "frontierShapeOk_nil_of_cons",
+          "line": 267,
+          "called": [
+            "CellTag",
+            "frontierOf",
+            "frontierOf_cons_ne_nil",
+            "frontierShapeOk",
+            "pathSort"
+          ]
+        },
+        {
           "kind": "def",
           "name": "adjacentDivs",
-          "line": 248,
+          "line": 284,
           "called": [
             "divLevel"
           ]
@@ -23048,7 +23142,7 @@
         {
           "kind": "def",
           "name": "activeAt",
-          "line": 255,
+          "line": 291,
           "called": [
             "adjacentDivs"
           ]
@@ -23056,7 +23150,7 @@
         {
           "kind": "def",
           "name": "mergesAt",
-          "line": 259,
+          "line": 295,
           "called": [
             "adjacentDivs"
           ]
@@ -23064,7 +23158,7 @@
         {
           "kind": "def",
           "name": "gapsAt",
-          "line": 265,
+          "line": 301,
           "called": [
             "activeAt",
             "mergesAt"
@@ -23073,7 +23167,7 @@
         {
           "kind": "def",
           "name": "gapCount",
-          "line": 269,
+          "line": 305,
           "called": [
             "gapsAt",
             "smtDepth"
@@ -23082,7 +23176,7 @@
         {
           "kind": "def",
           "name": "gapCountClosed",
-          "line": 276,
+          "line": 312,
           "called": [
             "adjacentDivs",
             "smtDepth"
@@ -23091,13 +23185,13 @@
         {
           "kind": "def",
           "name": "aliasConsistent",
-          "line": 295,
+          "line": 331,
           "called": []
         },
         {
           "kind": "def",
           "name": "plannedBalanceAt?",
-          "line": 300,
+          "line": 336,
           "called": [
             "ActorId",
             "ResourceId"
@@ -23106,7 +23200,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalanceAt?_of_aliasConsistent",
-          "line": 308,
+          "line": 344,
           "called": [
             "ActorId",
             "LegalKernel.FaultProof",
@@ -28587,56 +28681,52 @@
           "name": "KernelStep",
           "line": 52,
           "called": [
-            "CellOpening",
+            "MultiBundle",
             "SignedAction",
-            "StateCommit",
-            "policyOpening"
+            "StateCommit"
           ]
         },
         {
           "kind": "def",
           "name": "kernelStepApply",
-          "line": 113,
+          "line": 117,
           "called": [
             "KernelStep",
             "StateCommit",
             "step",
-            "verifierPostRoot"
+            "verifierPostRootMulti"
           ]
         },
         {
           "kind": "theorem",
           "name": "kernelStepApply_eq_claim_iff_correct",
-          "line": 123,
+          "line": 126,
           "called": [
             "KernelStep",
             "kernelStepApply",
             "step",
-            "verifierPostRoot"
+            "verifierPostRootMulti"
           ]
         },
         {
           "kind": "theorem",
           "name": "kernelStepApply_empty_bundle_refused",
-          "line": 141,
+          "line": 144,
           "called": [
-            "Action.writeCells",
-            "CellOpening",
             "FaultProofAdjudicable",
             "SignedAction",
+            "SmtMultiProof",
             "StateCommit",
+            "cells",
+            "frontierShapeOk_nil_of_cons",
             "kernelStepApply",
-            "policy",
-            "policyOpening",
-            "verifierPostRoot",
-            "verifierWriteCells",
-            "verifyStateCellProof"
+            "verifierPostRootMulti"
           ]
         },
         {
           "kind": "instance",
           "name": "instDecidableKernelStepApplySome",
-          "line": 161,
+          "line": 166,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28647,7 +28737,7 @@
         {
           "kind": "theorem",
           "name": "kernelStepApply_deterministic",
-          "line": 168,
+          "line": 173,
           "called": [
             "KernelStep",
             "kernelStepApply"
@@ -28656,7 +28746,7 @@
         {
           "kind": "def",
           "name": "chainKernelStepApply",
-          "line": 177,
+          "line": 182,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28666,7 +28756,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_empty",
-          "line": 189,
+          "line": 194,
           "called": [
             "StateCommit",
             "chainKernelStepApply"
@@ -28675,7 +28765,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_deterministic",
-          "line": 194,
+          "line": 199,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28685,7 +28775,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_singleton_match",
-          "line": 205,
+          "line": 210,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28696,7 +28786,7 @@
         {
           "kind": "theorem",
           "name": "chainKernelStepApply_split",
-          "line": 221,
+          "line": 226,
           "called": [
             "KernelStep",
             "StateCommit",
@@ -28708,22 +28798,21 @@
         {
           "kind": "def",
           "name": "buildKernelStep",
-          "line": 267,
+          "line": 272,
           "called": [
             "ExtendedState",
             "KernelStep",
             "SignedAction",
             "commitExtendedState",
             "es",
-            "policyOpening",
             "recomputeCommitment",
-            "stepOpenings"
+            "stepMultiBundle"
           ]
         },
         {
           "kind": "theorem",
           "name": "buildKernelStep_preStateCommit",
-          "line": 282,
+          "line": 286,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -28735,7 +28824,7 @@
         {
           "kind": "theorem",
           "name": "buildKernelStep_postStateCommit",
-          "line": 295,
+          "line": 299,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -28747,7 +28836,7 @@
         {
           "kind": "theorem",
           "name": "kernelStepApply_canonical",
-          "line": 321,
+          "line": 325,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -28759,9 +28848,8 @@
             "commitExtendedState",
             "es",
             "kernelStepApply",
-            "policyOpening",
-            "stepOpenings",
-            "verifierPostRoot"
+            "stepMultiBundle",
+            "verifierPostRootMulti"
           ]
         }
       ]
@@ -30619,7 +30707,7 @@
     {
       "module": "LegalKernel.FaultProof.TerminateBundle",
       "path": "LegalKernel/FaultProof/TerminateBundle.lean",
-      "declaration_count": 17,
+      "declaration_count": 18,
       "declarations": [
         {
           "kind": "namespace",
@@ -30648,30 +30736,29 @@
           "line": 118,
           "called": [
             "ActorId",
-            "CellProof",
-            "CellProofBundle"
+            "CellTag",
+            "SmtMultiProof"
           ]
         },
         {
           "kind": "def",
           "name": "buildTerminateBundle",
-          "line": 184,
+          "line": 190,
           "called": [
             "ExtendedState",
             "LogEntry",
             "TerminateBundle",
             "actionFieldsForL1",
             "actionKindByte",
-            "openingCellProof",
-            "policyOpening",
-            "stepOpenings",
-            "stepPostRoot"
+            "cells",
+            "stepMultiBundle",
+            "stepMultiPostRoot"
           ]
         },
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_deterministic",
-          "line": 203,
+          "line": 208,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30682,7 +30769,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionKind",
-          "line": 210,
+          "line": 215,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30694,7 +30781,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_actionFields",
-          "line": 216,
+          "line": 221,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30706,7 +30793,7 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_signer",
-          "line": 222,
+          "line": 227,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -30717,87 +30804,96 @@
         {
           "kind": "theorem",
           "name": "buildTerminateBundle_expectedPostCommit",
-          "line": 234,
+          "line": 239,
           "called": [
             "ExtendedState",
             "LogEntry",
             "buildTerminateBundle",
             "es",
-            "stepPostRoot"
+            "stepMultiPostRoot"
           ]
         },
         {
           "kind": "theorem",
-          "name": "buildTerminateBundle_cellProofs",
-          "line": 240,
+          "name": "buildTerminateBundle_openedCells",
+          "line": 245,
           "called": [
             "ExtendedState",
             "LogEntry",
             "buildTerminateBundle",
+            "cells",
             "es",
-            "openingCellProof",
-            "stepOpenings"
+            "stepMultiBundle"
           ]
         },
         {
           "kind": "theorem",
-          "name": "buildTerminateBundle_cellProofs_tags",
+          "name": "buildTerminateBundle_wire",
           "line": 251,
           "called": [
             "ExtendedState",
             "LogEntry",
             "buildTerminateBundle",
             "es",
-            "openingCellProof",
-            "stepOpenings",
-            "stepWriteBundle_tags"
+            "stepMultiBundle"
           ]
         },
         {
           "kind": "theorem",
-          "name": "buildTerminateBundle_policyProof_tag",
-          "line": 267,
+          "name": "buildTerminateBundle_openedCells_tags",
+          "line": 265,
           "called": [
             "ExtendedState",
             "LegalKernel.Runtime.CellProofJson",
             "LogEntry",
             "buildTerminateBundle",
-            "es"
+            "es",
+            "getCellValue",
+            "multiFrontierOf"
           ]
         },
         {
           "kind": "def",
           "name": "formatUInt8",
-          "line": 281,
-          "called": []
-        },
-        {
-          "kind": "def",
-          "name": "formatUInt64",
           "line": 285,
           "called": []
         },
         {
           "kind": "def",
-          "name": "formatCellProofsArray",
-          "line": 291,
+          "name": "formatUInt64",
+          "line": 289,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "formatOpenedCellJson",
+          "line": 298,
           "called": [
-            "CellProofBundle",
+            "CellTag",
+            "bytesHex"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "formatOpenedCellsArray",
+          "line": 309,
+          "called": [
+            "CellTag",
+            "cells",
             "entries",
-            "formatCellProofJson"
+            "formatOpenedCellJson"
           ]
         },
         {
           "kind": "def",
           "name": "formatTerminateBundleJson",
-          "line": 308,
+          "line": 326,
           "called": [
             "FaultProof",
             "LegalKernel",
             "TerminateBundle",
             "bytesHex",
-            "formatCellProofJson",
-            "formatCellProofsArray",
+            "formatOpenedCellsArray",
             "formatUInt64",
             "formatUInt8"
           ]
@@ -57427,13 +57523,13 @@
             "LegalKernel.Test.FaultProof.EncodeInjectivity",
             "TestCase",
             "assert",
+            "cells",
             "commitState_setBalance_bytes_inj_under_collision_free",
             "freezeResource",
             "gameState_encode_deterministic",
             "gameState_encode_distinguishes_inputs",
             "kernelStep_encode_deterministic",
-            "kernelStep_encode_distinguishes_inputs",
-            "policyOpening"
+            "kernelStep_encode_distinguishes_inputs"
           ]
         }
       ]
@@ -58434,6 +58530,7 @@
             "assertEq",
             "base",
             "buildKernelStep",
+            "cells",
             "chainKernelStepApply",
             "commitExtendedState",
             "empty",
@@ -58441,12 +58538,11 @@
             "firstStep",
             "kernelStepApply",
             "kernelStepApply_canonical",
-            "policyOpening",
             "productionApplyBudget",
             "secondStep",
             "someSignedAction",
-            "stepOpenings",
-            "verifierPostRoot"
+            "stepMultiBundle",
+            "verifierPostRootMulti"
           ]
         }
       ]
@@ -58950,9 +59046,10 @@
             "base",
             "buildTerminateBundle",
             "buildTerminateBundle_actionKind",
-            "buildTerminateBundle_cellProofs_tags",
             "buildTerminateBundle_deterministic",
-            "buildTerminateBundle_policyProof_tag",
+            "buildTerminateBundle_openedCells_tags",
+            "buildTerminateBundle_wire",
+            "cells",
             "challenger",
             "commitExtendedState",
             "depositWithFee",
@@ -58962,9 +59059,12 @@
             "formatTerminateBundleJson",
             "freezeResource",
             "mint",
+            "multiFrontierOf",
+            "stepMultiBundle",
+            "stepMultiPostRoot",
             "stepPostRoot",
             "topUpActionBudget",
-            "verifyCellProofs"
+            "verifierPostRootMulti"
           ]
         }
       ]
@@ -59820,25 +59920,26 @@
             "buildTerminateBundle",
             "exampleEntry",
             "exampleState",
-            "stepPostRoot"
+            "stepMultiPostRoot"
           ]
         },
         {
           "kind": "def",
-          "name": "cellProofs_verify_against_preCommit",
-          "line": 105,
+          "name": "wire_folds_to_the_published_root",
+          "line": 109,
           "called": [
             "buildTerminateBundle",
+            "cells",
             "commitExtendedState",
             "exampleEntry",
             "exampleState",
-            "verifyCellProofs"
+            "verifierPostRootMulti"
           ]
         },
         {
           "kind": "def",
           "name": "bundle_is_deterministic",
-          "line": 113,
+          "line": 119,
           "called": [
             "buildTerminateBundle",
             "exampleEntry",
@@ -59849,7 +59950,7 @@
         {
           "kind": "def",
           "name": "json_envelope_well_formed",
-          "line": 124,
+          "line": 130,
           "called": [
             "buildTerminateBundle",
             "exampleEntry",
@@ -59860,7 +59961,7 @@
         {
           "kind": "def",
           "name": "json_has_snake_case_fields",
-          "line": 133,
+          "line": 139,
           "called": [
             "buildTerminateBundle",
             "exampleEntry",
@@ -59871,7 +59972,7 @@
         {
           "kind": "def",
           "name": "json_fixture_id_round_trip",
-          "line": 165,
+          "line": 177,
           "called": [
             "buildTerminateBundle",
             "exampleEntry",
@@ -59882,7 +59983,7 @@
         {
           "kind": "def",
           "name": "actionKind_dispatch_for_all_variants",
-          "line": 175,
+          "line": 187,
           "called": [
             "Action",
             "LogEntry",
@@ -59902,7 +60003,7 @@
         {
           "kind": "def",
           "name": "json_byte_pinning_transfer_minimal",
-          "line": 202,
+          "line": 214,
           "called": [
             "buildTerminateBundle",
             "exampleEntry",
@@ -59913,7 +60014,7 @@
         {
           "kind": "def",
           "name": "json_byte_pinning_revoke_local_policy",
-          "line": 221,
+          "line": 233,
           "called": [
             "LogEntry",
             "buildTerminateBundle",
@@ -59924,8 +60025,8 @@
         },
         {
           "kind": "def",
-          "name": "json_exactly_six_top_level_fields",
-          "line": 242,
+          "name": "json_exactly_eight_top_level_fields",
+          "line": 254,
           "called": [
             "LogEntry",
             "buildTerminateBundle",
@@ -59937,7 +60038,7 @@
         {
           "kind": "def",
           "name": "build_terminate_bundle_api_stable",
-          "line": 272,
+          "line": 285,
           "called": [
             "ExtendedState",
             "LogEntry",
@@ -59948,7 +60049,7 @@
         {
           "kind": "def",
           "name": "format_terminate_bundle_json_api_stable",
-          "line": 278,
+          "line": 291,
           "called": [
             "TerminateBundle",
             "formatTerminateBundleJson"
@@ -59957,7 +60058,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 284,
+          "line": 297,
           "called": [
             "LegalKernel.Test.Integration.ExportTerminateBundleCli",
             "TestCase",
@@ -59966,16 +60067,16 @@
             "actionKind_matches_actionKindByte",
             "build_terminate_bundle_api_stable",
             "bundle_is_deterministic",
-            "cellProofs_verify_against_preCommit",
             "expectedPostCommit_matches_stepPostRoot",
             "format_terminate_bundle_json_api_stable",
             "json_byte_pinning_revoke_local_policy",
             "json_byte_pinning_transfer_minimal",
             "json_envelope_well_formed",
-            "json_exactly_six_top_level_fields",
+            "json_exactly_eight_top_level_fields",
             "json_fixture_id_round_trip",
             "json_has_snake_case_fields",
-            "signer_matches_entry"
+            "signer_matches_entry",
+            "wire_folds_to_the_published_root"
           ]
         }
       ]

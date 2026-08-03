@@ -62,12 +62,16 @@ structure KernelStep where
       told which index it is adjudicating.  On L1 the game supplies
       `g.high.idx` rather than reading it from the caller. -/
   l2LogIndex      : Nat
-  /-- The READ-ONLY budget-policy opening, against `preStateCommit`. -/
-  policyOpening   : CellOpening
-  /-- The step's WRITTEN cells, in `writeCellsAt` order, with CHAINED
-      openings: opening `i` is against the root write `i-1`
-      produced. -/
-  writeOpenings   : List CellOpening
+  /-- The step's DEDUPLICATING PRE-ROOT MULTIPROOF: the frontier's
+      cells with their proven pre-values, in any order, and the single
+      shared wire.
+
+      Replaced a `policyOpening` + `writeOpenings` pair.  The policy
+      cell is no longer beside the bundle — a read is a write of the
+      same value, so it is one more cell in the frontier — and the
+      openings are no longer chained, so there is no order to get
+      wrong and a cell written twice appears once. -/
+  bundle          : MultiBundle
   deriving Repr
 
 /-! ## `kernelStepApply` (§12.1.2)
@@ -112,9 +116,8 @@ A responder supplies openings, not values. -/
     the claim under dispute, and a function that returned it would
     make the single-step adjudication self-affirming. -/
 def kernelStepApply (step : KernelStep) : Option StateCommit :=
-  verifierPostRoot step.preStateCommit step.signedAction.action
-    step.signedAction.signer step.l2LogIndex
-    step.policyOpening step.writeOpenings
+  verifierPostRootMulti step.preStateCommit step.signedAction.action
+    step.signedAction.signer step.l2LogIndex step.bundle
 
 /-- `kernelStepApply` agrees with the claim exactly when the claim is
     the root the fold reaches.  The correctness of the claim is an
@@ -123,9 +126,9 @@ def kernelStepApply (step : KernelStep) : Option StateCommit :=
     vacuous. -/
 theorem kernelStepApply_eq_claim_iff_correct (step : KernelStep) :
     kernelStepApply step = some step.postStateCommit ↔
-      verifierPostRoot step.preStateCommit step.signedAction.action
+      verifierPostRootMulti step.preStateCommit step.signedAction.action
         step.signedAction.signer step.l2LogIndex
-        step.policyOpening step.writeOpenings = some step.postStateCommit :=
+        step.bundle = some step.postStateCommit :=
   Iff.rfl
 
 /-- An empty opening bundle no longer wins the game for free — and
@@ -141,20 +144,22 @@ theorem kernelStepApply_eq_claim_iff_correct (step : KernelStep) :
     nothing. -/
 theorem kernelStepApply_empty_bundle_refused
     (pre : StateCommit) (sa : SignedAction) (claim : StateCommit)
-    (idx : Nat) (policy : CellOpening)
-    (h_adj : FaultProofAdjudicable sa.action = true)
-    (h_tag : policy.cellTag = CellTag.budgetPolicy)
-    (h_pol : verifyStateCellProof pre CellTag.budgetPolicy
-               policy.preValue policy.proof = true) :
+    (idx : Nat) (wire : SmtMultiProof)
+    (h_adj : FaultProofAdjudicable sa.action = true) :
     kernelStepApply
         { preStateCommit := pre, signedAction := sa,
           postStateCommit := claim, l2LogIndex := idx,
-          policyOpening := policy, writeOpenings := [] } = none := by
-  unfold kernelStepApply verifierPostRoot
-  simp only [h_adj, h_tag, h_pol, not_true, if_false, ne_eq]
-  -- The re-derived list is non-empty (`writeCells` names the nonce and
-  -- the epoch budget on every variant), so the shape check refuses.
-  cases sa.action <;> simp [verifierWriteCells, Action.writeCells]
+          bundle := { cells := [], proof := wire } } = none := by
+  unfold kernelStepApply verifierPostRootMulti
+  -- The frontier leads with the read-only budget-policy cell on every
+  -- variant, so it is never empty and an empty submission fails the
+  -- shape check before the wire is read.  No per-variant case split:
+  -- the chained form needed one, because the fact came from
+  -- `writeCells` naming the nonce and the epoch budget; here it is a
+  -- property of the list's shape.
+  simp only [h_adj, not_true, if_false, ne_eq, frontierShapeOk_nil_of_cons,
+    List.map_nil]
+  rw [if_pos (show ¬(false = true) by simp)]
 
 /-! ## Decidability + determinism -/
 
@@ -271,8 +276,7 @@ def buildKernelStep
   signedAction    := st
   postStateCommit := recomputeCommitment es st l2LogIndex
   l2LogIndex      := l2LogIndex
-  policyOpening   := policyOpening es
-  writeOpenings   := stepOpenings es st l2LogIndex
+  bundle          := stepMultiBundle es st
 
 /-- The canonical step's pre-commit, as a projection lemma.
 
@@ -322,8 +326,8 @@ theorem buildKernelStep_postStateCommit
 theorem kernelStepApply_canonical
     (es : ExtendedState) (st : SignedAction) (l2LogIndex : Nat) :
     kernelStepApply (buildKernelStep es st l2LogIndex) =
-      verifierPostRoot (commitExtendedState es) st.action st.signer l2LogIndex
-        (policyOpening es) (stepOpenings es st l2LogIndex) := rfl
+      verifierPostRootMulti (commitExtendedState es) st.action st.signer
+        l2LogIndex (stepMultiBundle es st) := rfl
 
 /-! ## Smoke checks -/
 

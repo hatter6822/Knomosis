@@ -92,10 +92,12 @@ def tests : List TestCase :=
     }
   , { name := "an empty opening bundle is REFUSED"
     , body := do
-        -- It used to verify vacuously.  Every variant writes the
-        -- signer's nonce and epoch budget, so the re-derived cell list
-        -- is never empty and a bundle that is fails the shape check.
-        let empty : KernelStep := { firstStep with writeOpenings := [] }
+        -- It used to verify vacuously.  The multiproof frontier always
+        -- leads with the read-only budget-policy cell, so it is never
+        -- empty and an empty submission fails the shape check before a
+        -- byte of the wire is read.
+        let empty : KernelStep := { firstStep with
+          bundle := { firstStep.bundle with cells := [] } }
         assertEq (expected := true) (actual := (kernelStepApply empty).isNone)
           "an empty bundle must not apply"
     }
@@ -157,8 +159,8 @@ def tests : List TestCase :=
     , body := do
         let _proof : ∀ (es : ExtendedState) (st : SignedAction) (idx : Nat),
             kernelStepApply (buildKernelStep es st idx)
-              = verifierPostRoot (commitExtendedState es) st.action st.signer idx
-                  (policyOpening es) (stepOpenings es st idx) :=
+              = verifierPostRootMulti (commitExtendedState es) st.action
+                  st.signer idx (stepMultiBundle es st) :=
           fun es st idx => kernelStepApply_canonical es st idx
         pure ()
     }

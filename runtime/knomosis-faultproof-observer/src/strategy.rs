@@ -504,24 +504,51 @@ pub struct TerminateBundle {
         deserialize_with = "deserialize_bytes32_hex_or_array"
     )]
     pub expected_post_commit: [u8; 32],
-    /// The READ-ONLY budget-policy cell opening, against the
-    /// pre-state root.
+    /// The step's FRONTIER: every cell it opens, with its proven
+    /// PRE-state value, in path order.
     ///
-    /// Not a write, so it is not in `cell_proofs` — but
-    /// `deriveEpochBudget` selects its branch on it and every one of
-    /// the twenty-five action variants writes an epoch-budget cell, so
-    /// the L1 verifier cannot start without it.
-    pub policy_opening: crate::submitter::CellProof,
-    /// The step's written cells, in `writeCellsAt` order, with CHAINED
-    /// openings: proof `i` opens against the root write `i-1`
-    /// produced.
+    /// Replaced a `policy_opening` + `cell_proofs` pair.  The
+    /// read-only budget-policy cell is IN here rather than beside it —
+    /// under a multiproof a read is a write of the same value — and a
+    /// cell the step writes twice (a self-transfer, which anyone can
+    /// submit) appears ONCE, because every opening is against the same
+    /// root and the second carried no information the first did not.
     ///
-    /// Not against the pre-state root.  An opening goes stale the
-    /// moment a write lands, and two writes at the SAME cell (a
-    /// self-transfer) are reachable by anyone — a bundle whose
-    /// openings were all against the pre-root would fold to a root no
-    /// state has.
-    pub cell_proofs: Vec<crate::submitter::CellProof>,
+    /// Order is free on the wire: the L1 sorts by path index.  The
+    /// builder emits path order anyway, which is what the walk
+    /// consumes.
+    pub opened_cells: Vec<crate::submitter::OpenedCell>,
+    /// The shared wire's gap mask: one bit per gap, LSB-first within
+    /// each byte, set iff that gap's sibling is drawn from
+    /// [`Self::siblings`] rather than being the canonical empty
+    /// sub-tree at its level.
+    ///
+    /// Its length is `ceil(G/8)` for a gap count `G` the KEY SET
+    /// determines, so the L1 derives the expected length before
+    /// reading a byte and refuses a wire of any other size.
+    ///
+    /// JSON wire format: a lowercase hex string (no `0x` prefix).
+    #[serde(
+        rename = "gap_mask_hex",
+        serialize_with = "serialize_bytes_hex_lower",
+        deserialize_with = "deserialize_bytes_hex_or_array"
+    )]
+    pub gap_mask: Vec<u8>,
+    /// The shared wire's siblings: the packed non-canonical-empty
+    /// sub-tree roots, in gap order, 32 bytes each.
+    ///
+    /// One list for the whole bundle rather than one path per opening.
+    /// Sound because every sibling is the root of a sub-tree holding no
+    /// opened cell, so the step's writes cannot move it and the pre-
+    /// and post-folds share it.
+    ///
+    /// JSON wire format: a lowercase hex string (no `0x` prefix).
+    #[serde(
+        rename = "siblings_hex",
+        serialize_with = "serialize_bytes_hex_lower",
+        deserialize_with = "deserialize_bytes_hex_or_array"
+    )]
+    pub siblings: Vec<u8>,
 }
 
 /// Maximum total bytes the bundle parser will admit from a
@@ -542,9 +569,25 @@ pub const MAX_TERMINATE_BUNDLE_JSON_BYTES: usize = 8 * 1024 * 1024;
 /// We cap at 4 KiB as defense-in-depth.
 pub const MAX_TERMINATE_BUNDLE_ACTION_FIELDS_BYTES: usize = 4 * 1024;
 
-/// Maximum cell-proofs per terminate bundle.  Mirrors Solidity's
-/// `KnomosisStepVM.MAX_CELL_PROOFS_PER_STEP = 272`.
-pub const MAX_TERMINATE_BUNDLE_CELL_PROOFS: usize = 272;
+/// Maximum opened cells per terminate bundle.  Mirrors Solidity's
+/// `KnomosisStepVMRoot.MAX_CELL_OPENINGS = 32`, which the contract's
+/// `assertConsistent` in turn checks against the widest write set any
+/// adjudicable variant produces (seven, including the policy cell).
+///
+/// Far below the chained path's 272: that bound counted per-WRITE
+/// openings for the bulk variants, and a frontier counts distinct
+/// cells for the adjudicable ones only.
+pub const MAX_TERMINATE_BUNDLE_OPENED_CELLS: usize = 32;
+
+/// Maximum gap-mask bytes.  The gap count is at most
+/// `(256 + 1) - m + 255 * (m - 1)` — one full path per cell, less the
+/// merges — so `ceil(G/8)` tops out just under `32 * m`.  Capped
+/// generously against `MAX_TERMINATE_BUNDLE_OPENED_CELLS`.
+pub const MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES: usize = 32 * MAX_TERMINATE_BUNDLE_OPENED_CELLS;
+
+/// Maximum sibling bytes: 32 per set mask bit, and at most every gap
+/// is set.
+pub const MAX_TERMINATE_BUNDLE_SIBLINGS_BYTES: usize = 8 * 32 * MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES;
 
 /// Errors the [`TerminateBundleOracle`] surfaces.
 #[derive(Debug, thiserror::Error)]
@@ -673,14 +716,20 @@ fn deserialize_bytes32_hex_or_array<'de, D: serde::Deserializer<'de>>(
 }
 
 /// Parse a JSON document into a [`TerminateBundle`].  Caps the
-/// declared JSON size at [`MAX_TERMINATE_BUNDLE_JSON_BYTES`] and
-/// the declared cell-proof count at
-/// [`MAX_TERMINATE_BUNDLE_CELL_PROOFS`] as defense-in-depth.
+/// declared JSON size at [`MAX_TERMINATE_BUNDLE_JSON_BYTES`], the
+/// frontier at [`MAX_TERMINATE_BUNDLE_OPENED_CELLS`], and both wire
+/// regions at their own caps, as defense-in-depth.
+///
+/// The wire caps are not the L1's check and do not try to be: the
+/// contract derives the EXACT mask length and sibling count from the
+/// key set and refuses anything else.  These bound what a
+/// misconfigured or hostile `knomosis` subprocess can make the
+/// observer allocate before that check ever runs.
 ///
 /// # Errors
 ///
 /// Returns [`TerminateBundleError::Malformed`] on any parser
-/// failure or oversize cell-proof bundle; returns
+/// failure or oversize frontier / wire; returns
 /// [`TerminateBundleError::Oversize`] if the JSON document
 /// itself exceeds the size cap.
 pub fn parse_terminate_bundle_json(
@@ -699,13 +748,45 @@ pub fn parse_terminate_bundle_json(
             idx,
             detail: format!("serde_json: {e}"),
         })?;
-    if bundle.cell_proofs.len() > MAX_TERMINATE_BUNDLE_CELL_PROOFS {
+    if bundle.opened_cells.len() > MAX_TERMINATE_BUNDLE_OPENED_CELLS {
         return Err(TerminateBundleError::Malformed {
             idx,
             detail: format!(
-                "cell_proofs count {} exceeds cap {}",
-                bundle.cell_proofs.len(),
-                MAX_TERMINATE_BUNDLE_CELL_PROOFS
+                "opened_cells count {} exceeds cap {}",
+                bundle.opened_cells.len(),
+                MAX_TERMINATE_BUNDLE_OPENED_CELLS
+            ),
+        });
+    }
+    if bundle.gap_mask.len() > MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES {
+        return Err(TerminateBundleError::Malformed {
+            idx,
+            detail: format!(
+                "gap_mask {} bytes exceeds cap {}",
+                bundle.gap_mask.len(),
+                MAX_TERMINATE_BUNDLE_GAP_MASK_BYTES
+            ),
+        });
+    }
+    if bundle.siblings.len() > MAX_TERMINATE_BUNDLE_SIBLINGS_BYTES {
+        return Err(TerminateBundleError::Malformed {
+            idx,
+            detail: format!(
+                "siblings {} bytes exceeds cap {}",
+                bundle.siblings.len(),
+                MAX_TERMINATE_BUNDLE_SIBLINGS_BYTES
+            ),
+        });
+    }
+    // Whole 32-byte siblings.  The L1 checks the exact COUNT against
+    // the mask's popcount; this catches a truncated region before the
+    // observer broadcasts calldata that would lose the game.
+    if !bundle.siblings.len().is_multiple_of(32) {
+        return Err(TerminateBundleError::Malformed {
+            idx,
+            detail: format!(
+                "siblings region {} bytes is not whole 32-byte siblings",
+                bundle.siblings.len()
             ),
         });
     }
@@ -1733,7 +1814,7 @@ mod terminate_bundle_tests {
         parse_terminate_bundle_json, MemoryTerminateBundleOracle, TerminateBundle,
         TerminateBundleError, TerminateBundleOracle, MAX_TERMINATE_BUNDLE_JSON_BYTES,
     };
-    use crate::submitter::CellProof;
+    use crate::submitter::OpenedCell;
 
     fn sample_bundle(idx_str: &str) -> TerminateBundle {
         TerminateBundle {
@@ -1742,14 +1823,14 @@ mod terminate_bundle_tests {
             action_fields: vec![0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
             signer: 5,
             expected_post_commit: [0xCD; 32],
-            policy_opening: CellProof {
+            opened_cells: vec![OpenedCell {
                 cell_kind: 14,
                 key_a: 0,
                 key_b: 0,
-                cell_value: vec![0u8; 36],
-                proof_data: vec![0u8; 32],
-            },
-            cell_proofs: vec![],
+                pre_value: vec![0u8; 36],
+            }],
+            gap_mask: vec![0u8; 32],
+            siblings: vec![],
         }
     }
 
@@ -1846,34 +1927,37 @@ mod terminate_bundle_tests {
             "action_fields_hex": "deadbeef",
             "signer": 0,
             "expected_post_commit_hex": "0000000000000000000000000000000000000000000000000000000000000001",
-            "policy_opening": {
+            "opened_cells": [{
                 "cell_kind": 14,
                 "key_a": "0000000000000000",
                 "key_b": "0000000000000000",
-                "cell_value": "",
-                "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
-            },
-            "cell_proofs": []
+                "pre_value": ""
+            }],
+            "gap_mask_hex": "",
+            "siblings_hex": ""
         }"#;
         let parsed = parse_terminate_bundle_json(0, json).unwrap();
         assert_eq!(parsed.action_fields, vec![0xde, 0xad, 0xbe, 0xef]);
         assert_eq!(parsed.expected_post_commit[31], 0x01);
     }
 
-    /// Parser rejects an oversize cell-proof count.
+    /// Parser rejects an oversize frontier.
+    ///
+    /// The cap is the contract's `MAX_CELL_OPENINGS`, which
+    /// `assertConsistent` in turn checks against the widest write set
+    /// any adjudicable variant produces.  A `knomosis` subprocess
+    /// emitting more than that is misconfigured or hostile, and the
+    /// observer refuses before allocating for it.
     #[test]
-    fn parse_rejects_oversize_cell_proof_count() {
-        // Build a JSON with > MAX_TERMINATE_BUNDLE_CELL_PROOFS
-        // entries.  Use a minimal cell-proof per entry.
-        let proof = CellProof {
+    fn parse_rejects_oversize_opened_cell_count() {
+        let cell = OpenedCell {
             cell_kind: 0,
             key_a: 0,
             key_b: 0,
-            cell_value: vec![],
-            proof_data: vec![0u8; 32],
+            pre_value: vec![],
         };
-        let proofs: Vec<CellProof> = (0..=super::MAX_TERMINATE_BUNDLE_CELL_PROOFS)
-            .map(|_| proof.clone())
+        let cells: Vec<OpenedCell> = (0..=super::MAX_TERMINATE_BUNDLE_OPENED_CELLS)
+            .map(|_| cell.clone())
             .collect();
         let bundle = TerminateBundle {
             fixture_id: "log[0]".to_string(),
@@ -1881,20 +1965,43 @@ mod terminate_bundle_tests {
             action_fields: vec![],
             signer: 0,
             expected_post_commit: [0; 32],
-            policy_opening: CellProof {
-                cell_kind: 14,
-                key_a: 0,
-                key_b: 0,
-                cell_value: vec![0u8; 36],
-                proof_data: vec![0u8; 32],
-            },
-            cell_proofs: proofs,
+            opened_cells: cells,
+            gap_mask: vec![0u8; 32],
+            siblings: vec![],
         };
         let json = serde_json::to_string(&bundle).unwrap();
         let err = parse_terminate_bundle_json(0, &json).unwrap_err();
         assert!(
             matches!(err, TerminateBundleError::Malformed { .. }),
-            "expected Malformed for oversize cell-proof count, got {err:?}",
+            "expected Malformed for oversize frontier, got {err:?}",
+        );
+    }
+
+    /// Parser rejects a sibling region that is not whole 32-byte
+    /// siblings.
+    ///
+    /// Not the L1's check — the contract derives the EXACT count from
+    /// the key set — but a truncated region caught here is one the
+    /// observer never broadcasts calldata for, and broadcasting a
+    /// bundle the L1 reverts on costs the responsible party the game
+    /// by timeout.
+    #[test]
+    fn parse_rejects_ragged_sibling_region() {
+        let bundle = TerminateBundle {
+            fixture_id: "log[0]".to_string(),
+            action_kind: 0,
+            action_fields: vec![],
+            signer: 0,
+            expected_post_commit: [0; 32],
+            opened_cells: vec![],
+            gap_mask: vec![0u8; 32],
+            siblings: vec![0u8; 33],
+        };
+        let json = serde_json::to_string(&bundle).unwrap();
+        let err = parse_terminate_bundle_json(0, &json).unwrap_err();
+        assert!(
+            matches!(err, TerminateBundleError::Malformed { .. }),
+            "expected Malformed for a ragged sibling region, got {err:?}",
         );
     }
 
@@ -1920,14 +2027,22 @@ mod terminate_bundle_tests {
             "action_fields_hex": "0000000000000005",
             "signer": 42,
             "expected_post_commit_hex": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-            "policy_opening": {
-                "cell_kind": 14,
-                "key_a": "0000000000000000",
-                "key_b": "0000000000000000",
-                "cell_value": "",
-                "proof_data": "0000000000000000000000000000000000000000000000000000000000000000"
-            },
-            "cell_proofs": []
+            "opened_cells": [
+                {
+                    "cell_kind": 14,
+                    "key_a": "0000000000000000",
+                    "key_b": "0000000000000000",
+                    "pre_value": ""
+                },
+                {
+                    "cell_kind": 1,
+                    "key_a": "000000000000002a",
+                    "key_b": "0000000000000000",
+                    "pre_value": "1b00000000000000"
+                }
+            ],
+            "gap_mask_hex": "0102",
+            "siblings_hex": "00000000000000000000000000000000000000000000000000000000000000ff"
         }"#;
         let parsed = parse_terminate_bundle_json(7, lean_json).unwrap();
         assert_eq!(parsed.fixture_id, "log[7]");
@@ -1937,5 +2052,12 @@ mod terminate_bundle_tests {
         // The commit hex decodes to 0xde repeated.
         assert_eq!(parsed.expected_post_commit[0], 0xde);
         assert_eq!(parsed.expected_post_commit[31], 0xef);
+        // The frontier and the wire survive the hex decode.
+        assert_eq!(parsed.opened_cells.len(), 2);
+        assert_eq!(parsed.opened_cells[0].cell_kind, 14);
+        assert_eq!(parsed.opened_cells[1].key_a, 42);
+        assert_eq!(parsed.gap_mask, vec![0x01, 0x02]);
+        assert_eq!(parsed.siblings.len(), 32);
+        assert_eq!(parsed.siblings[31], 0xff);
     }
 }
