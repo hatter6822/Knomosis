@@ -118,6 +118,83 @@ theorem divBelow_lt :
     · rw [if_neg hne] at h
       exact Nat.lt_succ_of_lt (ih a b i h)
 
+/-- Where `divBelow` reports nothing the two keys agree, at every bit
+    below the bound.  The converse of `divBelow_bit_ne`, and the half
+    that turns "no divergence" into a statement about the keys
+    themselves rather than about the search. -/
+theorem divBelow_none_agree :
+    ∀ (d : Nat) (a b : ByteArray), divBelow d a b = none →
+      ∀ i, i < d → BitsKey.keyBit a i = BitsKey.keyBit b i := by
+  intro d
+  induction d with
+  | zero => intro a b _ i hi; exact absurd hi (Nat.not_lt_zero i)
+  | succ k ih =>
+    intro a b h i hi
+    unfold divBelow at h
+    by_cases hne : BitsKey.keyBit a k != BitsKey.keyBit b k
+    · rw [if_pos hne] at h; exact absurd h (by simp)
+    · rw [if_neg hne] at h
+      rcases Nat.lt_succ_iff_lt_or_eq.mp hi with hi' | hi'
+      · exact ih a b h i hi'
+      · subst hi'; simpa using hne
+
+/-- A byte is determined by its eight bits. -/
+theorem uint8_eq_of_bits (x y : UInt8)
+    (h : ∀ k, k < 8 → (x.toNat >>> k) % 2 = (y.toNat >>> k) % 2) : x = y := by
+  refine UInt8.toNat_inj.mp (Nat.eq_of_testBit_eq (fun k => ?_))
+  by_cases hk : k < 8
+  · have hb := h k hk
+    rw [Nat.shiftRight_eq_div_pow, Nat.shiftRight_eq_div_pow] at hb
+    rw [Nat.testBit_eq_decide_div_mod_eq, Nat.testBit_eq_decide_div_mod_eq, hb]
+  · -- Past the byte's width both sides read zero.
+    have hle : (256:Nat) ≤ 2 ^ k := by
+      calc (256:Nat) = 2 ^ 8 := rfl
+        _ ≤ 2 ^ k := Nat.pow_le_pow_right (by decide) (Nat.le_of_not_lt hk)
+    rw [Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le x.toNat_lt_size hle),
+        Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le y.toNat_lt_size hle)]
+
+/-- **The bits the tree reads determine the key.**  Two same-sized
+    byte arrays agreeing on every bit below `8 · size` are equal.
+
+    `keyBit` is a total function returning `false` past the array, so
+    the bound matters: agreement on the first `8 · n` bits says
+    everything only because both arrays stop there. -/
+theorem byteArray_eq_of_keyBits (a b : ByteArray) (n : Nat)
+    (ha : a.size = n) (hb : b.size = n)
+    (h : ∀ i, i < 8 * n → BitsKey.keyBit a i = BitsKey.keyBit b i) : a = b := by
+  refine ByteArray.ext (Array.ext (ha.trans hb.symm) (fun j hj _ => ?_))
+  show a[j] = b[j]
+  refine uint8_eq_of_bits _ _ (fun k hk => ?_)
+  have hj8 : j < n := by rw [← ha]; exact hj
+  -- Bit `k` of byte `j` is key bit `8·j + (7 − k)`, MSB-first.
+  have hbit := h (8 * j + (7 - k)) (by omega)
+  have hbit' : (if hh : (8 * j + (7 - k)) / 8 < a.size then
+        decide (((a[(8 * j + (7 - k)) / 8]'hh).toNat >>> (7 - (8 * j + (7 - k)) % 8)) % 2 = 1)
+      else false)
+      = (if hh : (8 * j + (7 - k)) / 8 < b.size then
+        decide (((b[(8 * j + (7 - k)) / 8]'hh).toNat >>> (7 - (8 * j + (7 - k)) % 8)) % 2 = 1)
+      else false) := hbit
+  have hdiv : (8 * j + (7 - k)) / 8 = j := by omega
+  have hmod : 7 - (8 * j + (7 - k)) % 8 = k := by omega
+  rw [hdiv, hmod, dif_pos (show j < a.size by omega),
+    dif_pos (show j < b.size by omega)] at hbit'
+  have := (decide_eq_decide).mp hbit'
+  omega
+
+/-- **Distinct keys of the tree's own width always diverge.**
+
+    A 32-byte key occupies exactly the 256 bits the walk reads, so two
+    distinct ones cannot agree on all of them.  This is what makes the
+    separation side condition below a theorem rather than a
+    hypothesis. -/
+theorem divBelow_ne_none_of_ne (a b : ByteArray)
+    (ha : a.size = 32) (hb : b.size = 32) (h : a ≠ b) :
+    divBelow smtDepth a b ≠ none := by
+  intro h_none
+  exact h (byteArray_eq_of_keyBits a b 32 ha hb
+    (fun i hi => divBelow_none_agree smtDepth a b h_none i
+      (by simpa [smtDepth] using hi)))
+
 /-- Divergence is symmetric — it is a property of the pair, not of an
     orientation, which is what lets the scan compare neighbours in
     either direction. -/
@@ -367,9 +444,25 @@ def pathSort (ts : List CellTag) : List CellTag := ts.foldr pathInsert []
 
     That is the whole of the same-cell defence: under a pre-root
     multiproof a duplicate has no wire representation, so there is no
-    occurrence rule left to get wrong. -/
+    occurrence rule left to get wrong.
+
+    Compared at the TAG level, not the key level.  The two differ only
+    under a hash collision, and exactly there the tag comparison is the
+    one that fails closed: two colliding tags are one cell to the tree,
+    so a key-level check would accept a submission naming the cell the
+    step does NOT write and then derive that cell's post-value.  It is
+    also what `KnomosisStepVMRoot._requireFrontier` does — it looks
+    each derived cell up by `(cellKind, keyA, keyB)` — so the model and
+    the contract now decide the same question the same way rather than
+    agreeing only where keys are injective.
+
+    Sorting is still by KEY, because path order is what the walk
+    consumes.  That is not a reintroduction of the slack: the sort
+    determines the ORDER, the comparison determines the CONTENT, and a
+    submission whose keys tie is rejected by the walk's strict-ascent
+    requirement before either matters. -/
 def frontierShapeOk (derived submitted : List CellTag) : Bool :=
-  (pathSort submitted).map smtCellKey == (frontierOf derived).map smtCellKey
+  pathSort submitted == frontierOf derived
 
 /-- `frontierInsert` never empties a list: it either returns its
     argument, prepends, or rebuilds with the head intact. -/
@@ -424,13 +517,37 @@ root already assumes is what supplies it for real cell keys. -/
 /-- Every pair of cells in `ts` that the frontier does NOT collapse
     differs at some bit the walk reads.
 
-    Phrased on `==` rather than `≠` deliberately: the collapse in
-    `frontierInsert` is a `==` test, so this is the same relation the
-    insertion decides on rather than a proposition that happens to
-    coincide with it. -/
+    Stated on `≠` and used against `frontierInsert`'s `==` test, which
+    is the same relation because `LawfulBEq ByteArray`
+    (`Encoding/CBOR.lean`) says so.  Before that instance existed the
+    two were formally unrelated and this had to be phrased on `==` to
+    be applicable at all — which made it inapplicable to
+    `BitsDistinctBelow`, whose conclusion is a `≠` on bits.  It is the
+    property both need.
+
+    Named rather than inlined because it is the *sentence* the
+    frontier's order rests on, and because `keysSeparated_cellTags`
+    then has something to conclude.  It is not a hypothesis: it holds
+    of every cell list. -/
 def KeysSeparated (ts : List CellTag) : Prop :=
-  ∀ t ∈ ts, ∀ u ∈ ts, (smtCellKey t == smtCellKey u) = false →
+  ∀ t ∈ ts, ∀ u ∈ ts, smtCellKey t ≠ smtCellKey u →
     divBelow smtDepth (smtCellKey t) (smtCellKey u) ≠ none
+
+/-- **Cell keys are always separated.**
+
+    Not a side condition — a theorem, and the reason is that
+    `smtCellKey` hashes to exactly the tree's width: a 32-byte key
+    fills all 256 bits the walk reads, so two distinct keys must
+    differ at one of them.
+
+    Worth stating as its own thing because the *other* separation
+    obligation — that distinct CELLS get distinct KEYS — is genuinely
+    conditional (`smtCellKey_injective_under_collision_free`).  The
+    two look alike and are not: one is arithmetic on a fixed width,
+    the other is collision-freeness of a hash. -/
+theorem keysSeparated_cellTags (ts : List CellTag) : KeysSeparated ts := by
+  intro t _ u _ hne
+  exact divBelow_ne_none_of_ne _ _ (smtCellKey_size t) (smtCellKey_size u) hne
 
 /-- Membership is preserved by insertion, up to the collapse: every
     cell of the result was already there or is the inserted one. -/
@@ -464,6 +581,95 @@ theorem mem_frontierOf (ts : List CellTag) :
     rcases mem_frontierInsert t u (frontierOf rest) this with h' | h'
     · exact h' ▸ List.mem_cons_self
     · exact List.mem_cons_of_mem _ (ih u h')
+
+/-- Insertion loses no KEY: the result carries the inserted cell's key
+    and every key the list already had.
+
+    At the key level rather than the tag level because that is exactly
+    what `frontierInsert` preserves — the collapse branch discards the
+    inserted TAG and keeps a key-equal one, so a tag-level statement
+    would be false without a hash hypothesis. -/
+theorem mem_keys_frontierInsert (t : CellTag) (l : List CellTag) (k : ByteArray)
+    (h : k = smtCellKey t ∨ k ∈ l.map smtCellKey) :
+    k ∈ (frontierInsert t l).map smtCellKey := by
+  induction l with
+  | nil =>
+    rcases h with h | h
+    · simp [frontierInsert, h]
+    · simp at h
+  | cons v rest ih =>
+    unfold frontierInsert
+    split
+    · rename_i h_eq
+      -- The collapse: `v`'s key IS `t`'s, so nothing is lost.
+      rcases h with h | h
+      · exact List.mem_map.mpr ⟨v, List.mem_cons_self, by
+          rw [h]; exact (by simpa using h_eq : smtCellKey t = smtCellKey v) ▸ rfl⟩
+      · exact h
+    · split
+      · rcases h with h | h
+        · simp [h]
+        · exact List.mem_cons_of_mem _ h
+      · rw [List.map_cons]
+        rcases h with h | h
+        · exact List.mem_cons_of_mem _ (ih (Or.inl h))
+        · rw [List.map_cons] at h
+          rcases List.mem_cons.mp h with h' | h'
+          · exact h' ▸ List.mem_cons_self
+          · exact List.mem_cons_of_mem _ (ih (Or.inr h'))
+
+/-- **The frontier keeps every key the write set names.**  The
+    converse of `mem_frontierOf`, and the half the correctness proofs
+    need: a cell a step writes is a cell the bundle opens. -/
+theorem mem_keys_frontierOf (ts : List CellTag) (t : CellTag) (h : t ∈ ts) :
+    smtCellKey t ∈ (frontierOf ts).map smtCellKey := by
+  induction ts with
+  | nil => simp at h
+  | cons u rest ih =>
+    show smtCellKey t ∈ (frontierInsert u (frontierOf rest)).map smtCellKey
+    rcases List.mem_cons.mp h with h' | h'
+    · exact mem_keys_frontierInsert u _ _ (Or.inl (by rw [h']))
+    · exact mem_keys_frontierInsert u _ _ (Or.inr (ih h'))
+
+/-- The tree tells this write set's cells apart: no two of them hash
+    to one key.
+
+    The *other* separation obligation, and the conditional one —
+    `keysSeparated_cellTags` is arithmetic on a fixed width, this is
+    collision-freeness of `hashBytes`.  Stated as a predicate on the
+    list so a caller discharges it once for a step's whole write set
+    rather than pair by pair. -/
+def KeyInjectiveOn (ts : List CellTag) : Prop :=
+  ∀ t ∈ ts, ∀ u ∈ ts, smtCellKey t = smtCellKey u → t = u
+
+/-- **A written cell is an opened cell**, given that the tree can tell
+    the write set's cells apart.
+
+    The hypothesis is doing real work rather than tidying: without it
+    the frontier could collapse two genuinely different cells into
+    one, and the step's write to the collapsed one would be invisible
+    to the bundle.  That is precisely the failure
+    `smtCellKey_injective_under_collision_free` rules out. -/
+theorem mem_frontierOf_of_mem (ts : List CellTag) (h_inj : KeyInjectiveOn ts)
+    (t : CellTag) (h : t ∈ ts) : t ∈ frontierOf ts := by
+  obtain ⟨u, hu, h_key⟩ := List.mem_map.mp (mem_keys_frontierOf ts t h)
+  exact (h_inj u (mem_frontierOf ts u hu) t h h_key) ▸ hu
+
+/-- `KeyInjectiveOn` from collision-freeness on the write set's own
+    pre-images, plus the layout bounds.
+
+    Both hypotheses are the ones already in play elsewhere:
+    `CollisionFreeOn` over a FINITE pre-image set is the project's
+    standing hash assumption (a global injectivity predicate is
+    refutable inside Lean), and `KeyBounded` is the `2^256` truncation
+    boundary of the packed key layout. -/
+theorem keyInjectiveOn_of_collisionFree (ts : List CellTag)
+    (h_cf : Bridge.CollisionFreeOn (ts.map cellKeyPreimage)
+      LegalKernel.Runtime.hashBytes)
+    (h_bound : ∀ t ∈ ts, t.KeyBounded) : KeyInjectiveOn ts := by
+  intro t ht u hu h_key
+  exact cellKeyPreimage_injective t u (h_bound t ht) (h_bound u hu)
+    (h_cf _ (List.mem_map_of_mem ht) _ (List.mem_map_of_mem hu) h_key)
 
 /-- A sorted list stays sorted when a key that precedes its head is
     prepended. -/
@@ -514,7 +720,7 @@ theorem pathSorted_head_lt :
     produces. -/
 theorem pathSorted_frontierInsert (t : CellTag) (l : List CellTag)
     (h_sorted : pathSorted l = true)
-    (h_sep : ∀ u ∈ l, (smtCellKey t == smtCellKey u) = false →
+    (h_sep : ∀ u ∈ l, smtCellKey t ≠ smtCellKey u →
       divBelow smtDepth (smtCellKey t) (smtCellKey u) ≠ none) :
     pathSorted (frontierInsert t l) = true := by
   induction l with
@@ -532,7 +738,7 @@ theorem pathSorted_frontierInsert (t : CellTag) (l : List CellTag)
         -- The head precedes the inserted key, by totality.
         have h_ul : pathLess (smtCellKey u) (smtCellKey t) = true :=
           pathLess_total (smtCellKey t) (smtCellKey u)
-            (h_sep u List.mem_cons_self (Bool.not_eq_true _ ▸ h_ne_key))
+            (h_sep u List.mem_cons_self (by simpa using h_ne_key))
             (by simpa using h_not_lt)
         have h_rest : pathSorted rest = true := pathSorted_tail u rest h_sorted
         have h_ih := ih h_rest
@@ -557,20 +763,20 @@ theorem pathSorted_frontierInsert (t : CellTag) (l : List CellTag)
                 pathSorted_head_lt w tl v (pathSorted_tail u (w :: tl) h_sorted) h''
               exact pathLess_trans _ _ _ h_uw h_wv
 
-/-- **The frontier of any key-separated write set is strictly
-    ascending** — and therefore key-distinct, which is the property
-    `frontierShapeOk` turns on. -/
-theorem pathSorted_frontierOf (ts : List CellTag) (h : KeysSeparated ts) :
+/-- **Every frontier is strictly ascending** — and therefore
+    key-distinct, which is the property `frontierShapeOk` turns on.
+
+    Unconditional, because `keysSeparated_cellTags` is.  The write set
+    it is built from needs no hypothesis at all: whatever cells a step
+    touches, the tree can order them. -/
+theorem pathSorted_frontierOf (ts : List CellTag) :
     pathSorted (frontierOf ts) = true := by
   induction ts with
   | nil => rfl
   | cons t rest ih =>
-    have h_rest : KeysSeparated rest := fun a ha b hb hne =>
-      h a (List.mem_cons_of_mem _ ha) b (List.mem_cons_of_mem _ hb) hne
     show pathSorted (frontierInsert t (frontierOf rest)) = true
-    refine pathSorted_frontierInsert t (frontierOf rest) (ih h_rest) (fun u hu hne => ?_)
-    exact h t List.mem_cons_self u
-      (List.mem_cons_of_mem _ (mem_frontierOf rest u hu)) hne
+    refine pathSorted_frontierInsert t (frontierOf rest) ih (fun u _ hne => ?_)
+    exact keysSeparated_cellTags [t, u] t (by simp) u (by simp) hne
 
 /-- **Strict ascent IS distinctness.**  The claim `frontierShapeOk`'s
     docstring makes — "one comparison rather than two" — as a theorem:
@@ -586,12 +792,12 @@ theorem pathSorted_keys_nodup (l : List CellTag) (h : pathSorted l = true) :
   exact Bool.noConfusion h_lt
 
 /-- The frontier's keys are pairwise distinct, all the way down. -/
-theorem frontierOf_keys_nodup (ts : List CellTag) (h : KeysSeparated ts) :
+theorem frontierOf_keys_nodup (ts : List CellTag) :
     (frontierOf ts).map smtCellKey |>.Nodup := by
   -- Induction on the SORTED list rather than on `ts`: distinctness is
   -- a property of the result's order, and the order is what
   -- `pathSorted_frontierOf` established.
-  have h_sorted := pathSorted_frontierOf ts h
+  have h_sorted := pathSorted_frontierOf ts
   generalize frontierOf ts = l at h_sorted
   induction l with
   | nil => simp

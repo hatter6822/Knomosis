@@ -177,6 +177,76 @@ def coreTests : List TestCase :=
           fun es st t h => bundleValueAt_stepMultiBundle es st t h
         pure ()
     }
+  , { name := "the honest bundle plans what the state plans"
+    , body := do
+        -- The reader congruence, value-level: the bundle's PARTIAL
+        -- balance reader and the state's TOTAL one produce the same
+        -- plan for every probe, because the cells a derivation reads
+        -- are cells the frontier opens.
+        for (name, a) in probes do
+          let st := sign a
+          let b := stepMultiBundle base st
+          assertEq (expected := plannedBalances (stateBalanceReader base) a 7)
+            (actual := plannedBalances (bundleBalanceReader b) a 7)
+            s!"{name}: the bundle's plan must be the state's"
+    }
+  , { name := "the bundle reader is PARTIAL away from the frontier"
+    , body := do
+        -- The other half, and the one that makes the congruence's
+        -- membership hypothesis load-bearing rather than decorative: a
+        -- cell the frontier does not open reads back nothing, so an
+        -- omitted opening cannot be passed off as a zero balance.
+        let st := sign (.transfer 1 7 8 30)
+        let b := stepMultiBundle base st
+        assertEq (expected := none) (actual := bundleBalanceReader b 2 99)
+          "an unopened balance cell must read as none, not as zero"
+        assertEq (expected := some 0) (actual := stateBalanceReader base 2 99)
+          "...while the state's reader defaults it, which is the difference"
+    }
+  , { name := "API stability: the honest bundle plans what the state plans"
+    , body := do
+        let _reader : ∀ (es : ExtendedState) (st : SignedAction),
+            ExtendedState.CanonicalBounds es → ∀ (r : ResourceId) (a : ActorId),
+            CellTag.balance r a ∈
+              multiFrontierOf st.action st.signer es.bridge.nextWdId →
+            bundleBalanceReader (stepMultiBundle es st) r a
+              = stateBalanceReader es r a :=
+          bundleBalanceReader_stepMultiBundle
+        let _plan : ∀ (es : ExtendedState) (st : SignedAction),
+            ExtendedState.CanonicalBounds es →
+            KeyInjectiveOn (.budgetPolicy ::
+              verifierWriteCells st.action st.signer es.bridge.nextWdId) →
+            plannedBalances (bundleBalanceReader (stepMultiBundle es st))
+                st.action st.signer
+              = plannedBalances (stateBalanceReader es) st.action st.signer :=
+          plannedBalances_stepMultiBundle
+        pure ()
+    }
+  , { name := "API stability: a written cell is an opened cell"
+    , body := do
+        -- The membership bridge the congruence runs on, and the place
+        -- the collision hypothesis actually does work: without
+        -- `KeyInjectiveOn` the frontier could collapse two different
+        -- cells and a write to the collapsed one would be invisible.
+        let _writes : ∀ (es : ExtendedState) (st : SignedAction),
+            KeyInjectiveOn (.budgetPolicy ::
+              verifierWriteCells st.action st.signer es.bridge.nextWdId) →
+            ∀ (t : CellTag), t ∈ st.action.writeCells st.signer →
+            t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId :=
+          mem_multiFrontierOf_of_writeCells
+        let _policy : ∀ (es : ExtendedState) (st : SignedAction),
+            KeyInjectiveOn (.budgetPolicy ::
+              verifierWriteCells st.action st.signer es.bridge.nextWdId) →
+            CellTag.budgetPolicy ∈
+              multiFrontierOf st.action st.signer es.bridge.nextWdId :=
+          budgetPolicy_mem_multiFrontierOf
+        let _cf : ∀ (ts : List CellTag),
+            LegalKernel.Bridge.CollisionFreeOn (ts.map cellKeyPreimage)
+              LegalKernel.Runtime.hashBytes →
+            (∀ t ∈ ts, t.KeyBounded) → KeyInjectiveOn ts :=
+          keyInjectiveOn_of_collisionFree
+        pure ()
+    }
   , { name := "API stability: the verifier's signature"
     , body := do
         let _proof : StateCommit → Authority.Action → ActorId → Nat →

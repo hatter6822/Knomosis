@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "defe2687b7271ac16b6b6960978e40f43b95d1b65281d2c85d5443922cdf9e2e"
+    "source_digest": "f13eac7f6e88f10c4af66d339f23076b8ed01de7a4fa3680b119fdad3a7846a8"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5857
+    "declaration_count": 5883
   },
   "modules": [
     {
@@ -16404,67 +16404,67 @@
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 61,
+          "line": 93,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Encoding",
-          "line": 62,
+          "line": 94,
           "called": []
         },
         {
           "kind": "inductive",
           "name": "DecodeError",
-          "line": 78,
+          "line": 110,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagUint",
-          "line": 107,
+          "line": 139,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagAmount",
-          "line": 128,
+          "line": 160,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagBytes",
-          "line": 131,
+          "line": 163,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagText",
-          "line": 134,
+          "line": 166,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagArray",
-          "line": 137,
+          "line": 169,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "cbeTagMap",
-          "line": 140,
+          "line": 172,
           "called": []
         },
         {
           "kind": "abbrev",
           "name": "Stream",
-          "line": 153,
+          "line": 185,
           "called": []
         },
         {
           "kind": "def",
           "name": "natToBytesLE",
-          "line": 164,
+          "line": 196,
           "called": [
             "Stream"
           ]
@@ -16472,7 +16472,7 @@
         {
           "kind": "theorem",
           "name": "natToBytesLE_length",
-          "line": 169,
+          "line": 201,
           "called": [
             "natToBytesLE"
           ]
@@ -16480,7 +16480,7 @@
         {
           "kind": "def",
           "name": "natFromBytesLE",
-          "line": 178,
+          "line": 210,
           "called": [
             "DecodeError",
             "Stream"
@@ -16489,13 +16489,13 @@
         {
           "kind": "theorem",
           "name": "nat_lt_256_toUInt8_toNat_eq",
-          "line": 205,
+          "line": 237,
           "called": []
         },
         {
           "kind": "theorem",
           "name": "natFromBytesLE_natToBytesLE",
-          "line": 213,
+          "line": 245,
           "called": [
             "natFromBytesLE",
             "natToBytesLE",
@@ -16505,7 +16505,7 @@
         {
           "kind": "def",
           "name": "cborHeadEncode",
-          "line": 265,
+          "line": 297,
           "called": [
             "Stream",
             "natToBytesLE"
@@ -16514,7 +16514,7 @@
         {
           "kind": "def",
           "name": "cborHeadDecode",
-          "line": 278,
+          "line": 310,
           "called": [
             "DecodeError",
             "Stream",
@@ -16524,7 +16524,7 @@
         {
           "kind": "theorem",
           "name": "natFromBytesLE_append_natToBytesLE",
-          "line": 291,
+          "line": 323,
           "called": [
             "Stream",
             "natFromBytesLE",
@@ -16535,7 +16535,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadRoundtrip",
-          "line": 319,
+          "line": 351,
           "called": [
             "cborHeadDecode",
             "cborHeadEncode",
@@ -16545,7 +16545,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadRoundtrip_append",
-          "line": 330,
+          "line": 362,
           "called": [
             "Stream",
             "cborHeadDecode",
@@ -16556,7 +16556,7 @@
         {
           "kind": "def",
           "name": "cborAmountHeadEncode",
-          "line": 352,
+          "line": 384,
           "called": [
             "Stream",
             "cbeTagAmount",
@@ -16566,7 +16566,7 @@
         {
           "kind": "def",
           "name": "cborAmountHeadDecode",
-          "line": 362,
+          "line": 394,
           "called": [
             "DecodeError",
             "Stream",
@@ -16577,7 +16577,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadEncode_length",
-          "line": 373,
+          "line": 405,
           "called": [
             "cborAmountHeadEncode",
             "natToBytesLE_length"
@@ -16586,7 +16586,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadRoundtrip_append",
-          "line": 380,
+          "line": 412,
           "called": [
             "Stream",
             "cborAmountHeadDecode",
@@ -16597,7 +16597,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadRoundtrip",
-          "line": 388,
+          "line": 420,
           "called": [
             "cborAmountHeadDecode",
             "cborAmountHeadEncode",
@@ -16607,7 +16607,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadEncode_injective",
-          "line": 396,
+          "line": 428,
           "called": [
             "DecodeError",
             "Stream",
@@ -16618,7 +16618,7 @@
         {
           "kind": "theorem",
           "name": "cborAmountHeadEncode_ne_cborHeadEncode",
-          "line": 410,
+          "line": 442,
           "called": [
             "cbeTagAmount",
             "cbeTagUint",
@@ -16629,7 +16629,7 @@
         {
           "kind": "theorem",
           "name": "cborHeadEncode_injective",
-          "line": 433,
+          "line": 465,
           "called": [
             "DecodeError",
             "Encoding",
@@ -22955,7 +22955,7 @@
     {
       "module": "LegalKernel.FaultProof.Frontier",
       "path": "LegalKernel/FaultProof/Frontier.lean",
-      "declaration_count": 42,
+      "declaration_count": 52,
       "declarations": [
         {
           "kind": "namespace",
@@ -23005,8 +23005,41 @@
         },
         {
           "kind": "theorem",
+          "name": "divBelow_none_agree",
+          "line": 124,
+          "called": [
+            "divBelow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "uint8_eq_of_bits",
+          "line": 141,
+          "called": []
+        },
+        {
+          "kind": "theorem",
+          "name": "byteArray_eq_of_keyBits",
+          "line": 161,
+          "called": [
+            "uint8_eq_of_bits"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "divBelow_ne_none_of_ne",
+          "line": 189,
+          "called": [
+            "byteArray_eq_of_keyBits",
+            "divBelow",
+            "divBelow_none_agree",
+            "smtDepth"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "divBelow_comm",
-          "line": 123,
+          "line": 200,
           "called": [
             "divBelow"
           ]
@@ -23014,7 +23047,7 @@
         {
           "kind": "theorem",
           "name": "divLevel_comm",
-          "line": 137,
+          "line": 214,
           "called": [
             "divBelow_comm",
             "divLevel"
@@ -23023,7 +23056,7 @@
         {
           "kind": "theorem",
           "name": "pathLess_irrefl",
-          "line": 141,
+          "line": 218,
           "called": [
             "divBelow",
             "pathLess"
@@ -23032,7 +23065,7 @@
         {
           "kind": "theorem",
           "name": "adjacent_div_ne",
-          "line": 158,
+          "line": 235,
           "called": [
             "divBelow",
             "divBelow_bit_ne",
@@ -23043,7 +23076,7 @@
         {
           "kind": "theorem",
           "name": "divBelow_agree_above",
-          "line": 179,
+          "line": 256,
           "called": [
             "divBelow"
           ]
@@ -23051,7 +23084,7 @@
         {
           "kind": "theorem",
           "name": "divBelow_eq_of",
-          "line": 201,
+          "line": 278,
           "called": [
             "divBelow"
           ]
@@ -23059,7 +23092,7 @@
         {
           "kind": "theorem",
           "name": "pathLess_total",
-          "line": 238,
+          "line": 315,
           "called": [
             "divBelow",
             "divBelow_bit_ne",
@@ -23071,7 +23104,7 @@
         {
           "kind": "theorem",
           "name": "pathLess_trans",
-          "line": 260,
+          "line": 337,
           "called": [
             "adjacent_div_ne",
             "divBelow",
@@ -23086,7 +23119,7 @@
         {
           "kind": "def",
           "name": "frontierInsert",
-          "line": 319,
+          "line": 396,
           "called": [
             "CellTag",
             "pathLess",
@@ -23096,7 +23129,7 @@
         {
           "kind": "def",
           "name": "frontierOf",
-          "line": 327,
+          "line": 404,
           "called": [
             "CellTag",
             "frontierInsert"
@@ -23105,7 +23138,7 @@
         {
           "kind": "def",
           "name": "pathSorted",
-          "line": 333,
+          "line": 410,
           "called": [
             "CellTag",
             "pathLess",
@@ -23115,7 +23148,7 @@
         {
           "kind": "def",
           "name": "pathInsert",
-          "line": 344,
+          "line": 421,
           "called": [
             "CellTag",
             "pathLess",
@@ -23125,7 +23158,7 @@
         {
           "kind": "def",
           "name": "pathSort",
-          "line": 351,
+          "line": 428,
           "called": [
             "CellTag",
             "pathInsert"
@@ -23134,18 +23167,17 @@
         {
           "kind": "def",
           "name": "frontierShapeOk",
-          "line": 370,
+          "line": 463,
           "called": [
             "CellTag",
             "frontierOf",
-            "pathSort",
-            "smtCellKey"
+            "pathSort"
           ]
         },
         {
           "kind": "theorem",
           "name": "frontierInsert_ne_nil",
-          "line": 375,
+          "line": 468,
           "called": [
             "CellTag",
             "frontierInsert"
@@ -23154,7 +23186,7 @@
         {
           "kind": "theorem",
           "name": "frontierOf_cons_ne_nil",
-          "line": 386,
+          "line": 479,
           "called": [
             "CellTag",
             "frontierInsert",
@@ -23165,7 +23197,7 @@
         {
           "kind": "theorem",
           "name": "frontierShapeOk_nil_of_cons",
-          "line": 401,
+          "line": 494,
           "called": [
             "CellTag",
             "frontierOf",
@@ -23177,7 +23209,7 @@
         {
           "kind": "def",
           "name": "KeysSeparated",
-          "line": 430,
+          "line": 531,
           "called": [
             "CellTag",
             "divBelow",
@@ -23187,8 +23219,19 @@
         },
         {
           "kind": "theorem",
+          "name": "keysSeparated_cellTags",
+          "line": 547,
+          "called": [
+            "CellTag",
+            "KeysSeparated",
+            "divBelow_ne_none_of_ne",
+            "smtCellKey_size"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "mem_frontierInsert",
-          "line": 436,
+          "line": 553,
           "called": [
             "CellTag",
             "frontierInsert"
@@ -23197,7 +23240,7 @@
         {
           "kind": "theorem",
           "name": "mem_frontierOf",
-          "line": 455,
+          "line": 572,
           "called": [
             "CellTag",
             "frontierInsert",
@@ -23207,8 +23250,62 @@
         },
         {
           "kind": "theorem",
+          "name": "mem_keys_frontierInsert",
+          "line": 591,
+          "called": [
+            "CellTag",
+            "frontierInsert",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_keys_frontierOf",
+          "line": 623,
+          "called": [
+            "CellTag",
+            "frontierInsert",
+            "frontierOf",
+            "mem_keys_frontierInsert",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "KeyInjectiveOn",
+          "line": 641,
+          "called": [
+            "CellTag",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_frontierOf_of_mem",
+          "line": 652,
+          "called": [
+            "CellTag",
+            "KeyInjectiveOn",
+            "frontierOf",
+            "mem_frontierOf",
+            "mem_keys_frontierOf"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "keyInjectiveOn_of_collisionFree",
+          "line": 665,
+          "called": [
+            "CellTag",
+            "KeyInjectiveOn",
+            "cellKeyPreimage",
+            "cellKeyPreimage_injective"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "pathSorted_cons",
-          "line": 469,
+          "line": 675,
           "called": [
             "CellTag",
             "pathLess",
@@ -23219,7 +23316,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_tail",
-          "line": 481,
+          "line": 687,
           "called": [
             "CellTag",
             "pathLess",
@@ -23230,7 +23327,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_head_lt",
-          "line": 491,
+          "line": 697,
           "called": [
             "CellTag",
             "pathLess",
@@ -23242,7 +23339,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_frontierInsert",
-          "line": 514,
+          "line": 720,
           "called": [
             "CellTag",
             "divBelow",
@@ -23262,13 +23359,12 @@
         {
           "kind": "theorem",
           "name": "pathSorted_frontierOf",
-          "line": 562,
+          "line": 771,
           "called": [
             "CellTag",
-            "KeysSeparated",
             "frontierInsert",
             "frontierOf",
-            "mem_frontierOf",
+            "keysSeparated_cellTags",
             "pathSorted",
             "pathSorted_frontierInsert"
           ]
@@ -23276,7 +23372,7 @@
         {
           "kind": "theorem",
           "name": "pathSorted_keys_nodup",
-          "line": 578,
+          "line": 784,
           "called": [
             "CellTag",
             "pathLess_irrefl",
@@ -23288,10 +23384,9 @@
         {
           "kind": "theorem",
           "name": "frontierOf_keys_nodup",
-          "line": 588,
+          "line": 794,
           "called": [
             "CellTag",
-            "KeysSeparated",
             "frontierOf",
             "pathSorted_frontierOf",
             "pathSorted_keys_nodup",
@@ -23302,7 +23397,7 @@
         {
           "kind": "def",
           "name": "adjacentDivs",
-          "line": 612,
+          "line": 818,
           "called": [
             "divLevel"
           ]
@@ -23310,7 +23405,7 @@
         {
           "kind": "def",
           "name": "activeAt",
-          "line": 619,
+          "line": 825,
           "called": [
             "adjacentDivs"
           ]
@@ -23318,7 +23413,7 @@
         {
           "kind": "def",
           "name": "mergesAt",
-          "line": 623,
+          "line": 829,
           "called": [
             "adjacentDivs"
           ]
@@ -23326,7 +23421,7 @@
         {
           "kind": "def",
           "name": "gapsAt",
-          "line": 629,
+          "line": 835,
           "called": [
             "activeAt",
             "mergesAt"
@@ -23335,7 +23430,7 @@
         {
           "kind": "def",
           "name": "gapCount",
-          "line": 633,
+          "line": 839,
           "called": [
             "gapsAt",
             "smtDepth"
@@ -23344,7 +23439,7 @@
         {
           "kind": "def",
           "name": "gapCountClosed",
-          "line": 640,
+          "line": 846,
           "called": [
             "adjacentDivs",
             "smtDepth"
@@ -23353,13 +23448,13 @@
         {
           "kind": "def",
           "name": "aliasConsistent",
-          "line": 659,
+          "line": 865,
           "called": []
         },
         {
           "kind": "def",
           "name": "plannedBalanceAt?",
-          "line": 664,
+          "line": 870,
           "called": [
             "ActorId",
             "ResourceId"
@@ -23368,7 +23463,7 @@
         {
           "kind": "theorem",
           "name": "plannedBalanceAt?_of_aliasConsistent",
-          "line": 672,
+          "line": 878,
           "called": [
             "ActorId",
             "LegalKernel.FaultProof",
@@ -30472,7 +30567,7 @@
     {
       "module": "LegalKernel.FaultProof.Terminate",
       "path": "LegalKernel/FaultProof/Terminate.lean",
-      "declaration_count": 19,
+      "declaration_count": 23,
       "declarations": [
         {
           "kind": "namespace",
@@ -30762,9 +30857,106 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "mem_multiFrontierOf_of_writeCells",
+          "line": 563,
+          "called": [
+            "CellTag",
+            "ExtendedState",
+            "KeyInjectiveOn",
+            "SignedAction",
+            "es",
+            "mem_frontierOf_of_mem",
+            "multiFrontierOf",
+            "verifierWriteCells"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "budgetPolicy_mem_multiFrontierOf",
+          "line": 574,
+          "called": [
+            "ExtendedState",
+            "KeyInjectiveOn",
+            "SignedAction",
+            "es",
+            "mem_frontierOf_of_mem",
+            "multiFrontierOf",
+            "verifierWriteCells"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bundleBalanceReader_stepMultiBundle",
+          "line": 589,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "ResourceId",
+            "SignedAction",
+            "bundleBalanceReader",
+            "bundleValueAt_stepMultiBundle",
+            "es",
+            "getBalance_lt_of_canonicalBounds",
+            "getCellValue",
+            "multiFrontierOf",
+            "stateBalanceReader",
+            "stepMultiBundle"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "plannedBalances_stepMultiBundle",
+          "line": 619,
+          "called": [
+            "Action.writeCells",
+            "ActorId",
+            "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "KeyInjectiveOn",
+            "ResourceId",
+            "SignedAction",
+            "ammSwap",
+            "bundleBalanceReader",
+            "bundleBalanceReader_stepMultiBundle",
+            "burn",
+            "claimBudgetRefund",
+            "deposit",
+            "depositWithFee",
+            "deriveAmmSwapBalances_congr",
+            "deriveBurnBalance_congr",
+            "deriveCreditBalance_congr",
+            "deriveDelegatedTopUpBalances_congr",
+            "deriveDepositBalance_congr",
+            "deriveDepositWithFeeBalances_congr",
+            "deriveReclaimBalances_congr",
+            "deriveRefundBalances_congr",
+            "deriveTopUpBalances_congr",
+            "deriveTransferBalances_congr",
+            "deriveWithdrawBalance_congr",
+            "es",
+            "mem_multiFrontierOf_of_writeCells",
+            "mint",
+            "plannedBalances",
+            "poolActor",
+            "receiver",
+            "reclaimAmmReserves",
+            "reward",
+            "sender",
+            "stateBalanceReader",
+            "stepMultiBundle",
+            "topUpActionBudget",
+            "topUpActionBudgetFor",
+            "transfer",
+            "verifierWriteCells",
+            "withdraw"
+          ]
+        },
+        {
           "kind": "def",
           "name": "stepMultiPostRoot",
-          "line": 546,
+          "line": 687,
           "called": [
             "ExtendedState",
             "FaultProof",
@@ -31406,7 +31598,7 @@
     {
       "module": "LegalKernel.FaultProof.VerifierWrites",
       "path": "LegalKernel/FaultProof/VerifierWrites.lean",
-      "declaration_count": 83,
+      "declaration_count": 95,
       "declarations": [
         {
           "kind": "namespace",
@@ -32569,13 +32761,172 @@
             "ActorId",
             "Amount",
             "BalanceReader",
-            "FaultProof",
-            "LegalKernel",
             "ResourceId",
             "aliasConsistent",
             "aliasConsistent_singleton",
             "deriveWithdrawBalance",
             "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveChainPair_congr",
+          "line": 2023,
+          "called": [
+            "ActorId",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveTransferBalances_congr",
+          "line": 2030,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveTransferBalances",
+            "receiver",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveCreditBalance_congr",
+          "line": 2039,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveCreditBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveBurnBalance_congr",
+          "line": 2046,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveBurnBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDepositBalance_congr",
+          "line": 2054,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveDepositBalance"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveWithdrawBalance_congr",
+          "line": 2062,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveWithdrawBalance",
+            "sender"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDepositWithFeeBalances_congr",
+          "line": 2070,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair_congr",
+            "deriveDepositWithFeeBalances",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveTopUpBalances_congr",
+          "line": 2082,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair_congr",
+            "deriveTopUpBalances",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveDelegatedTopUpBalances_congr",
+          "line": 2100,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "deriveChainPair_congr",
+            "deriveDelegatedTopUpBalances",
+            "poolActor"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveRefundBalances_congr",
+          "line": 2117,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "claimant",
+            "deriveChainPair_congr",
+            "deriveRefundBalances",
+            "poolActor",
+            "refundAmount"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveAmmSwapBalances_congr",
+          "line": 2134,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "ResourceId",
+            "ammReserveActor",
+            "deriveAmmSwapBalances"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "deriveReclaimBalances_congr",
+          "line": 2146,
+          "called": [
+            "ActorId",
+            "Amount",
+            "BalanceReader",
+            "FaultProof",
+            "LegalKernel",
+            "ResourceId",
+            "deriveChainPair_congr",
+            "deriveReclaimBalances",
+            "poolActor"
           ]
         }
       ]
@@ -57654,15 +58005,18 @@
             "claimBudgetRefund",
             "depositWithFee",
             "divBelow",
+            "divBelow_ne_none_of_ne",
             "divLevel",
             "frontierOf",
             "frontierOf_keys_nodup",
             "frontierShapeOk",
             "gapCount",
             "gapCountClosed",
+            "keysSeparated_cellTags",
             "pathLess",
             "pathLess_total",
             "pathLess_trans",
+            "pathSort",
             "pathSorted",
             "pathSorted_frontierOf",
             "plannedBalanceAt?",
@@ -58919,24 +59273,37 @@
             "ActorId",
             "CellTag",
             "ExtendedState",
+            "ExtendedState.CanonicalBounds",
+            "KeyInjectiveOn",
             "MultiBundle",
+            "ResourceId",
             "SignedAction",
             "StateCommit",
             "TestCase",
             "assertEq",
             "base",
+            "budgetPolicy_mem_multiFrontierOf",
+            "bundleBalanceReader",
+            "bundleBalanceReader_stepMultiBundle",
             "bundleValueAt",
             "bundleValueAt_stepMultiBundle",
+            "cellKeyPreimage",
             "commitExtendedState",
             "es",
             "getCellValue",
+            "keyInjectiveOn_of_collisionFree",
+            "mem_multiFrontierOf_of_writeCells",
             "multiFrontierOf",
+            "plannedBalances",
+            "plannedBalances_stepMultiBundle",
             "probes",
             "runProbe",
             "sign",
+            "stateBalanceReader",
             "stepMultiBundle",
             "stepMultiPostRoot",
             "stepPostRoot",
+            "transfer",
             "verifierPostRootMulti",
             "verifierWriteCells"
           ]
@@ -58944,7 +59311,7 @@
         {
           "kind": "def",
           "name": "zeroGapWire",
-          "line": 198,
+          "line": 268,
           "called": [
             "SmtMultiProof",
             "buildMultiProof"
@@ -58953,13 +59320,13 @@
         {
           "kind": "def",
           "name": "setMaskBit",
-          "line": 202,
+          "line": 272,
           "called": []
         },
         {
           "kind": "def",
           "name": "probeLevels",
-          "line": 208,
+          "line": 278,
           "called": [
             "base",
             "multiFrontierOf",
@@ -58971,7 +59338,7 @@
         {
           "kind": "def",
           "name": "multiTests",
-          "line": 213,
+          "line": 283,
           "called": [
             "MultiBundle",
             "TestCase",
@@ -59003,7 +59370,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 393,
+          "line": 463,
           "called": [
             "LegalKernel.Test.FaultProof.Terminate",
             "TestCase",

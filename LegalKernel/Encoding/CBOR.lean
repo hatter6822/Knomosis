@@ -59,6 +59,38 @@ or deserialises bytes, only the deployment-facing runtime adaptor
 (Phase 5) does.
 -/
 
+/-! ## `ByteArray` equality is lawful
+
+Lean core gives `ByteArray` a `BEq` instance but no `LawfulBEq`, so
+`a == b` and `a = b` are formally unrelated: neither
+`a = b → (a == b) = true` nor `(a == b) = true → a = b` is available.
+That gap is not harmless in a project whose every content-addressed
+identity — cell keys, commitments, encoded values — is a `ByteArray`
+compared with `==`, because a side condition phrased on `≠` is then
+*not* the condition the code decides, and a lemma proved about one
+does not apply to the other.
+
+The instance is true and its proof is three lines: `ByteArray` is a
+one-field structure over `Array UInt8`, its `BEq` is that field's, and
+`Array UInt8` is lawful.  Stated here rather than at the point of use
+because it is a fact about the byte-level foundation, and an instance
+in scope in some modules and not others is worse than none — `simp`
+would close a goal in one file and fail on it in the next. -/
+
+/-- `ByteArray`'s `==` decides its `=`.
+
+    Both directions, and both are used: `eq_of_beq` is what lets a
+    computed key comparison discharge a propositional side condition,
+    and `rfl` is what lets a propositional distinctness hypothesis
+    discharge a computed one. -/
+instance : LawfulBEq ByteArray where
+  eq_of_beq {a b} h := by
+    cases a; cases b
+    exact congrArg ByteArray.mk (eq_of_beq h)
+  rfl {a} := by
+    cases a
+    exact beq_self_eq_true (α := Array UInt8) _
+
 namespace LegalKernel
 namespace Encoding
 

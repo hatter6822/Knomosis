@@ -253,23 +253,49 @@ def tests : List TestCase :=
   , { name := "API stability: the frontier is sorted, hence key-distinct"
     , body := do
         -- The two theorems that replace the value-level checks above:
-        -- ANY key-separated write set sorts, and sortedness IS
-        -- distinctness.
-        let _sorted : ∀ (ts : List CellTag), KeysSeparated ts →
-            pathSorted (frontierOf ts) = true :=
+        -- EVERY write set sorts, and sortedness IS distinctness.  Both
+        -- are unconditional — the separation they used to take as a
+        -- hypothesis is `keysSeparated_cellTags`.
+        let _sorted : ∀ (ts : List CellTag), pathSorted (frontierOf ts) = true :=
           pathSorted_frontierOf
-        let _nodup : ∀ (ts : List CellTag), KeysSeparated ts →
+        let _nodup : ∀ (ts : List CellTag),
             ((frontierOf ts).map smtCellKey).Nodup :=
           frontierOf_keys_nodup
         pure ()
     }
-  , { name := "the separation side condition holds on real cell keys"
+  , { name := "API stability: separation is a theorem, not a hypothesis"
     , body := do
-        -- `KeysSeparated` is a hypothesis rather than a fact because
-        -- `pathLess` is defined on `ByteArray`.  On the keys a real
-        -- write set produces it is discharged by computation, and
-        -- checking that here is what keeps the hypothesis from being
-        -- one no instance satisfies.
+        -- A 32-byte key fills exactly the 256 bits the walk reads, so
+        -- two distinct ones cannot agree on all of them.  That is what
+        -- makes the sortedness theorems above unconditional, and it is
+        -- the half of "the tree can tell cells apart" that is NOT
+        -- collision-freeness.
+        let _sep : ∀ (ts : List CellTag), KeysSeparated ts :=
+          keysSeparated_cellTags
+        let _bits : ∀ (a b : ByteArray), a.size = 32 → b.size = 32 → a ≠ b →
+            divBelow smtDepth a b ≠ none :=
+          divBelow_ne_none_of_ne
+        pure ()
+    }
+  , { name := "API stability: the shape check decides TAGS"
+    , body := do
+        -- The model and `KnomosisStepVMRoot._requireFrontier` now
+        -- decide the same question the same way: the contract looks
+        -- each derived cell up by `(cellKind, keyA, keyB)`, and this
+        -- compares tag lists.  A key-level comparison agreed with it
+        -- only where `smtCellKey` is injective, and exactly where it
+        -- is not, the tag comparison is the one that fails closed.
+        let _faithful : ∀ (derived submitted : List CellTag),
+            frontierShapeOk derived submitted = true →
+            pathSort submitted = frontierOf derived :=
+          fun _ _ h => by simpa [frontierShapeOk] using h
+        pure ()
+    }
+  , { name := "the separation theorem agrees with computation on real keys"
+    , body := do
+        -- `keysSeparated_cellTags` says every distinct pair diverges.
+        -- Computing it on a real write set is the value-level check
+        -- that the theorem is about the function the code runs.
         let cells : List CellTag :=
           [.budgetPolicy, .balance 1 7, .balance 1 8, .nonce 7, .epochBudget 7]
         for t in cells do

@@ -2005,5 +2005,160 @@ theorem deriveWithdrawBalance_alias_consistent (read : BalanceReader)
     · rw [if_neg hpre] at h; simp only [Option.some.injEq] at h; subst h
       exact aliasConsistent_singleton _ _
 
+/-! ## Reader congruence
+
+A derivation reads a fixed, small set of cells and is otherwise blind
+to the reader.  So two readers agreeing at those cells produce the same
+plan — which is what lets the honest bundle's PARTIAL reader stand in
+for the state's TOTAL one without the derivations knowing the
+difference.
+
+Stated per derivation rather than as one lemma over `plannedBalances`
+because "the cells it reads" is a different set for each, and naming
+them in the signature is what makes the hypothesis checkable at the
+call site.  Each proof is the same two moves: rewrite the reads,
+recurse into the chained pair where there is one.
+-/
+
+/-- `deriveChainPair` reads its two cells and nothing else. -/
+theorem deriveChainPair_congr (read₁ read₂ : BalanceReader) (r : ResourceId)
+    (x y : ActorId) (fx fy : Nat → Nat)
+    (hx : read₁ r x = read₂ r x) (hy : read₁ r y = read₂ r y) :
+    deriveChainPair read₁ r x y fx fy = deriveChainPair read₂ r x y fx fy := by
+  unfold deriveChainPair; rw [hx, hy]
+
+/-- `transfer` reads the sender's and the receiver's cells. -/
+theorem deriveTransferBalances_congr (read₁ read₂ : BalanceReader)
+    (r : ResourceId) (sender receiver : ActorId) (amount : Amount)
+    (hs : read₁ r sender = read₂ r sender)
+    (hr : read₁ r receiver = read₂ r receiver) :
+    deriveTransferBalances read₁ r sender receiver amount
+      = deriveTransferBalances read₂ r sender receiver amount := by
+  unfold deriveTransferBalances; rw [hs, hr]
+
+/-- `mint` / `reward` read the credited cell. -/
+theorem deriveCreditBalance_congr (read₁ read₂ : BalanceReader)
+    (r : ResourceId) (to : ActorId) (amount : Amount)
+    (h : read₁ r to = read₂ r to) :
+    deriveCreditBalance read₁ r to amount = deriveCreditBalance read₂ r to amount := by
+  unfold deriveCreditBalance; rw [h]
+
+/-- `burn` reads the debited cell. -/
+theorem deriveBurnBalance_congr (read₁ read₂ : BalanceReader)
+    (r : ResourceId) (fromActor : ActorId) (amount : Amount)
+    (h : read₁ r fromActor = read₂ r fromActor) :
+    deriveBurnBalance read₁ r fromActor amount
+      = deriveBurnBalance read₂ r fromActor amount := by
+  unfold deriveBurnBalance; rw [h]
+
+/-- `deposit` reads the recipient's cell. -/
+theorem deriveDepositBalance_congr (read₁ read₂ : BalanceReader)
+    (r : ResourceId) (recipient : ActorId) (amount : Amount)
+    (h : read₁ r recipient = read₂ r recipient) :
+    deriveDepositBalance read₁ r recipient amount
+      = deriveDepositBalance read₂ r recipient amount := by
+  unfold deriveDepositBalance; rw [h]
+
+/-- `withdraw` reads the sender's cell. -/
+theorem deriveWithdrawBalance_congr (read₁ read₂ : BalanceReader)
+    (r : ResourceId) (sender : ActorId) (amount : Amount)
+    (h : read₁ r sender = read₂ r sender) :
+    deriveWithdrawBalance read₁ r sender amount
+      = deriveWithdrawBalance read₂ r sender amount := by
+  unfold deriveWithdrawBalance; rw [h]
+
+/-- `depositWithFee` reads the recipient's and the pool's cells. -/
+theorem deriveDepositWithFeeBalances_congr (read₁ read₂ : BalanceReader)
+    (r : ResourceId) (recipient poolActor : ActorId)
+    (userAmount poolAmount : Amount)
+    (hr : read₁ r recipient = read₂ r recipient)
+    (hp : read₁ r poolActor = read₂ r poolActor) :
+    deriveDepositWithFeeBalances read₁ r recipient poolActor userAmount poolAmount
+      = deriveDepositWithFeeBalances read₂ r recipient poolActor userAmount poolAmount := by
+  unfold deriveDepositWithFeeBalances
+  exact deriveChainPair_congr read₁ read₂ r recipient poolActor _ _ hr hp
+
+/-- `topUpActionBudget` reads the payer's and the pool's cells — both
+    branches, since the failing one still returns their pre-values. -/
+theorem deriveTopUpBalances_congr (read₁ read₂ : BalanceReader)
+    (gr : ResourceId) (payer poolActor : ActorId) (gasAmount : Amount)
+    (hp : read₁ gr payer = read₂ gr payer)
+    (hq : read₁ gr poolActor = read₂ gr poolActor) :
+    deriveTopUpBalances read₁ gr payer poolActor gasAmount
+      = deriveTopUpBalances read₂ gr payer poolActor gasAmount := by
+  unfold deriveTopUpBalances
+  rw [hp]
+  cases read₂ gr payer with
+  | none => rfl
+  | some payerBal =>
+    simp only []
+    split
+    · exact deriveChainPair_congr read₁ read₂ gr payer poolActor _ _ hp hq
+    · rw [hq]
+
+/-- `topUpActionBudgetFor` reads the payer's and the pool's cells; the
+    recipient enters only through the guard, not through a read. -/
+theorem deriveDelegatedTopUpBalances_congr (read₁ read₂ : BalanceReader)
+    (gr : ResourceId) (payer poolActor recipient : ActorId) (gasAmount : Amount)
+    (hp : read₁ gr payer = read₂ gr payer)
+    (hq : read₁ gr poolActor = read₂ gr poolActor) :
+    deriveDelegatedTopUpBalances read₁ gr payer poolActor recipient gasAmount
+      = deriveDelegatedTopUpBalances read₂ gr payer poolActor recipient gasAmount := by
+  unfold deriveDelegatedTopUpBalances
+  rw [hp]
+  cases read₂ gr payer with
+  | none => rfl
+  | some payerBal =>
+    simp only []
+    split
+    · exact deriveChainPair_congr read₁ read₂ gr payer poolActor _ _ hp hq
+    · rw [hq]
+
+/-- `claimBudgetRefund` reads the pool's and the claimant's cells. -/
+theorem deriveRefundBalances_congr (read₁ read₂ : BalanceReader)
+    (gr : ResourceId) (poolActor claimant : ActorId) (refundAmount : Amount)
+    (hp : read₁ gr poolActor = read₂ gr poolActor)
+    (hc : read₁ gr claimant = read₂ gr claimant) :
+    deriveRefundBalances read₁ gr poolActor claimant refundAmount
+      = deriveRefundBalances read₂ gr poolActor claimant refundAmount := by
+  unfold deriveRefundBalances
+  rw [hp]
+  cases read₂ gr poolActor with
+  | none => rfl
+  | some poolBal =>
+    simp only []
+    split
+    · exact deriveChainPair_congr read₁ read₂ gr poolActor claimant _ _ hp hc
+    · rw [hc]
+
+/-- `ammSwap` reads the reserve actor's cell at BOTH resources. -/
+theorem deriveAmmSwapBalances_congr (read₁ read₂ : BalanceReader)
+    (fromResource toResource : ResourceId) (amountIn amountOut : Amount)
+    (ammReserveActor : ActorId)
+    (hf : read₁ fromResource ammReserveActor = read₂ fromResource ammReserveActor)
+    (ht : read₁ toResource ammReserveActor = read₂ toResource ammReserveActor) :
+    deriveAmmSwapBalances read₁ fromResource toResource amountIn amountOut ammReserveActor
+      = deriveAmmSwapBalances read₂ fromResource toResource amountIn amountOut
+          ammReserveActor := by
+  unfold deriveAmmSwapBalances; rw [hf, ht]
+
+/-- `reclaimAmmReserves` reads the reserve actor's and the pool's
+    cells. -/
+theorem deriveReclaimBalances_congr (read₁ read₂ : BalanceReader)
+    (r : ResourceId) (reserveActor poolActor : ActorId) (amount : Amount)
+    (hres : read₁ r reserveActor = read₂ r reserveActor)
+    (hpool : read₁ r poolActor = read₂ r poolActor) :
+    deriveReclaimBalances read₁ r reserveActor poolActor amount
+      = deriveReclaimBalances read₂ r reserveActor poolActor amount := by
+  unfold deriveReclaimBalances
+  rw [hres]
+  cases read₂ r reserveActor with
+  | none => rfl
+  | some reserveBal =>
+    simp only []
+    split
+    · exact deriveChainPair_congr read₁ read₂ r reserveActor poolActor _ _ hres hpool
+    · rw [hpool]
+
 end FaultProof
 end LegalKernel

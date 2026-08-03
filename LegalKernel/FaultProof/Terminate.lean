@@ -538,6 +538,147 @@ theorem bundleValueAt_stepMultiBundle (es : ExtendedState) (st : SignedAction)
       · exact absurd h_eq (by simp [h'])
       · exact h'
 
+/-! ## The honest bundle's reader is the state's
+
+`bundleValueAt_stepMultiBundle` says the bundle reads back the state at
+every cell the frontier opens.  The derivations do not read cells; they
+read a `BalanceReader`, which is a decoded view.  These lemmas cross
+that gap, and then lift it from a single cell to a whole plan.
+
+Two hypotheses run through the section and neither is decoration:
+
+  * `KeyInjectiveOn` — the tree can tell the step's cells apart.
+    Without it the frontier may collapse two genuinely different cells,
+    and a write to the collapsed one becomes invisible to the bundle.
+  * `CanonicalBounds` — the state's balances fit the amount head.
+    Without it a balance past `2^128` encodes to bytes that decode to
+    something else, so the reader would disagree with the state at a
+    cell the bundle opened honestly.
+
+Both are the project's standing state-well-formedness obligations, not
+new ones.
+-/
+
+/-- Every cell the action declares it writes is a cell the frontier
+    opens. -/
+theorem mem_multiFrontierOf_of_writeCells (es : ExtendedState) (st : SignedAction)
+    (h_inj : KeyInjectiveOn (.budgetPolicy ::
+      verifierWriteCells st.action st.signer es.bridge.nextWdId))
+    (t : CellTag) (h : t ∈ st.action.writeCells st.signer) :
+    t ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId :=
+  mem_frontierOf_of_mem _ h_inj t
+    (List.mem_cons_of_mem _ (List.mem_append_left _ h))
+
+/-- The read-only budget-policy cell is always opened — it leads the
+    frontier's source list, which is what makes an empty bundle a
+    shape failure rather than a vacuous success. -/
+theorem budgetPolicy_mem_multiFrontierOf (es : ExtendedState) (st : SignedAction)
+    (h_inj : KeyInjectiveOn (.budgetPolicy ::
+      verifierWriteCells st.action st.signer es.bridge.nextWdId)) :
+    CellTag.budgetPolicy ∈ multiFrontierOf st.action st.signer es.bridge.nextWdId :=
+  mem_frontierOf_of_mem _ h_inj _ List.mem_cons_self
+
+/-- **The honest bundle's balance reader is the state's**, at every
+    balance cell the frontier opens.
+
+    The decode is where `CanonicalBounds` enters: `getCellValue` writes
+    the balance through the 17-byte amount head, and that round-trips
+    only inside `2^128`.  Off the frontier the two readers genuinely
+    differ — the bundle's is `none` — which is the partiality the
+    derivations rely on, so the membership hypothesis is not
+    removable. -/
+theorem bundleBalanceReader_stepMultiBundle (es : ExtendedState) (st : SignedAction)
+    (h_bounds : ExtendedState.CanonicalBounds es)
+    (r : ResourceId) (a : ActorId)
+    (h_mem : CellTag.balance r a ∈
+      multiFrontierOf st.action st.signer es.bridge.nextWdId) :
+    bundleBalanceReader (stepMultiBundle es st) r a = stateBalanceReader es r a := by
+  unfold bundleBalanceReader
+  rw [bundleValueAt_stepMultiBundle es st _ h_mem]
+  show (match Encoding.decodeAmount (getCellValue es (.balance r a)).data.toList with
+        | .ok (n, []) => some n
+        | _           => none) = stateBalanceReader es r a
+  have h_bytes : (getCellValue es (.balance r a)).data.toList
+      = Encoding.encodeAmount (LegalKernel.getBalance es.base r a) := by
+    show (Encoding.encodeAmount (LegalKernel.getBalance es.base r a)).toArray.toList = _
+    simp
+  rw [h_bytes,
+    Encoding.amount_roundtrip_empty _ (getBalance_lt_of_canonicalBounds es r a h_bounds)]
+  rfl
+
+/-- **The honest bundle plans what the state plans.**
+
+    The reader congruence lifted from one cell to a whole step: for
+    every action, the cells the derivation reads are cells the action
+    declares it writes, hence cells the frontier opens, hence cells
+    where the two readers agree.
+
+    Twenty-five branches because the read set is per-variant and naming
+    it is the point — a single lemma quantified over "the cells it
+    reads" would have to compute that set, and computing it is what
+    `Action.writeCells` already does. -/
+theorem plannedBalances_stepMultiBundle (es : ExtendedState) (st : SignedAction)
+    (h_bounds : ExtendedState.CanonicalBounds es)
+    (h_inj : KeyInjectiveOn (.budgetPolicy ::
+      verifierWriteCells st.action st.signer es.bridge.nextWdId)) :
+    plannedBalances (bundleBalanceReader (stepMultiBundle es st)) st.action st.signer
+      = plannedBalances (stateBalanceReader es) st.action st.signer := by
+  have key : ∀ (r : ResourceId) (x : ActorId),
+      CellTag.balance r x ∈ st.action.writeCells st.signer →
+      bundleBalanceReader (stepMultiBundle es st) r x = stateBalanceReader es r x :=
+    fun r x hx => bundleBalanceReader_stepMultiBundle es st h_bounds r x
+      (mem_multiFrontierOf_of_writeCells es st h_inj _ hx)
+  unfold plannedBalances
+  cases h_act : st.action with
+  | transfer r sender receiver amount =>
+      exact deriveTransferBalances_congr _ _ r sender receiver amount
+        (key r sender (by rw [h_act]; simp [Action.writeCells]))
+        (key r receiver (by rw [h_act]; simp [Action.writeCells]))
+  | mint r to amount =>
+      exact deriveCreditBalance_congr _ _ r to amount
+        (key r to (by rw [h_act]; simp [Action.writeCells]))
+  | reward r to amount =>
+      exact deriveCreditBalance_congr _ _ r to amount
+        (key r to (by rw [h_act]; simp [Action.writeCells]))
+  | burn r from_ amount =>
+      exact deriveBurnBalance_congr _ _ r from_ amount
+        (key r from_ (by rw [h_act]; simp [Action.writeCells]))
+  | deposit r recipient amount d =>
+      exact deriveDepositBalance_congr _ _ r recipient amount
+        (key r recipient (by rw [h_act]; simp [Action.writeCells]))
+  | withdraw r sender amount rcp =>
+      exact deriveWithdrawBalance_congr _ _ r sender amount
+        (key r sender (by rw [h_act]; simp [Action.writeCells]))
+  | depositWithFee r recipient poolActor userAmount poolAmount bg d =>
+      exact deriveDepositWithFeeBalances_congr _ _ r recipient poolActor
+        userAmount poolAmount
+        (key r recipient (by rw [h_act]; simp [Action.writeCells]))
+        (key r poolActor (by rw [h_act]; simp [Action.writeCells]))
+  | topUpActionBudget gr gasAmount bi pa =>
+      exact deriveTopUpBalances_congr _ _ gr st.signer pa gasAmount
+        (key gr st.signer (by rw [h_act]; simp [Action.writeCells]))
+        (key gr pa (by rw [h_act]; simp [Action.writeCells]))
+  | topUpActionBudgetFor recipient gr gasAmount bi pa =>
+      exact deriveDelegatedTopUpBalances_congr _ _ gr st.signer pa recipient gasAmount
+        (key gr st.signer (by rw [h_act]; simp [Action.writeCells]))
+        (key gr pa (by rw [h_act]; simp [Action.writeCells]))
+  | claimBudgetRefund gr budgetUnits weiPerBudgetUnit pa =>
+      exact deriveRefundBalances_congr _ _ gr pa st.signer
+        (budgetUnits * weiPerBudgetUnit)
+        (key gr pa (by rw [h_act]; simp [Action.writeCells]))
+        (key gr st.signer (by rw [h_act]; simp [Action.writeCells]))
+  | ammSwap fromResource toResource amountIn amountOut reserveActor =>
+      exact deriveAmmSwapBalances_congr _ _ fromResource toResource
+        amountIn amountOut reserveActor
+        (key fromResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
+        (key toResource reserveActor (by rw [h_act]; simp [Action.writeCells]))
+  | reclaimAmmReserves r amount reserveActor poolActor =>
+      exact deriveReclaimBalances_congr _ _ r reserveActor poolActor amount
+        (key r reserveActor (by rw [h_act]; simp [Action.writeCells]))
+        (key r poolActor (by rw [h_act]; simp [Action.writeCells]))
+  -- The thirteen variants that write no balance cell at all.
+  | _ => rfl
+
 /-- **The post-state root the multiproof verifier reaches** for an
     honest step: one merged walk, one root check, one answer.
 
