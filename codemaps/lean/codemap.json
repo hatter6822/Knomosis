@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "346278c5fea2f1b250f9d211a04c6316f47ba3f455b296a24d9d83e285b3a931"
+    "source_digest": "1f32068f0d8d5c185cb827d94743afe6c9c5f63eb1777dc742d12ccbca2f8540"
   },
   "summary": {
-    "module_count": 334,
-    "declaration_count": 5758
+    "module_count": 336,
+    "declaration_count": 5779
   },
   "modules": [
     {
@@ -24001,6 +24001,221 @@
       ]
     },
     {
+      "module": "LegalKernel.FaultProof.MultiProof",
+      "path": "LegalKernel/FaultProof/MultiProof.lean",
+      "declaration_count": 16,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.FaultProof",
+          "line": 50,
+          "called": []
+        },
+        {
+          "kind": "abbrev",
+          "name": "OpenedLeaf",
+          "line": 59,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "lowHalf",
+          "line": 65,
+          "called": [
+            "SmtEntries",
+            "entries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "highHalf",
+          "line": 69,
+          "called": [
+            "SmtEntries",
+            "entries"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "openedLow",
+          "line": 73,
+          "called": [
+            "OpenedLeaf",
+            "opened"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "openedHigh",
+          "line": 77,
+          "called": [
+            "OpenedLeaf",
+            "opened"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "smtRootListAux_succ_split",
+          "line": 89,
+          "called": [
+            "SmtEntries",
+            "entries",
+            "hashBytes",
+            "highHalf",
+            "lowHalf",
+            "smtRootListAux",
+            "smtRootListAux_nil"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "multiWalk",
+          "line": 120,
+          "called": [
+            "OpenedLeaf",
+            "hashBytes",
+            "opened",
+            "openedHigh",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "multiSiblings",
+          "line": 152,
+          "called": [
+            "OpenedLeaf",
+            "SmtEntries",
+            "entries",
+            "highHalf",
+            "lowHalf",
+            "opened",
+            "openedHigh",
+            "openedLow",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "LeavesCoherent",
+          "line": 173,
+          "called": [
+            "OpenedLeaf",
+            "SmtEntries",
+            "bucketAt",
+            "entries",
+            "opened",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "LeavesCoherent_low",
+          "line": 178,
+          "called": [
+            "LeavesCoherent",
+            "OpenedLeaf",
+            "SmtEntries",
+            "bucketAt",
+            "entries",
+            "lowHalf",
+            "opened",
+            "openedLow"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "LeavesCoherent_high",
+          "line": 192,
+          "called": [
+            "LeavesCoherent",
+            "OpenedLeaf",
+            "SmtEntries",
+            "bucketAt",
+            "entries",
+            "highHalf",
+            "opened",
+            "openedHigh"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiWalk_append",
+          "line": 223,
+          "called": [
+            "BitsDistinctBelow",
+            "BitsDistinctBelow.filter_high",
+            "BitsDistinctBelow.filter_low",
+            "LeavesCoherent",
+            "LeavesCoherent_high",
+            "LeavesCoherent_low",
+            "OpenedLeaf",
+            "SmtEntries",
+            "bucketAt",
+            "entries",
+            "highHalf",
+            "length_le_one_of_bitsDistinctBelow_zero",
+            "lowHalf",
+            "multiSiblings",
+            "multiWalk",
+            "opened",
+            "openedHigh",
+            "openedLow",
+            "smtRootListAux",
+            "smtRootListAux_succ_split"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiWalk_eq_smtRootListAux",
+          "line": 334,
+          "called": [
+            "BitsDistinctBelow",
+            "LeavesCoherent",
+            "OpenedLeaf",
+            "SmtEntries",
+            "entries",
+            "multiSiblings",
+            "multiWalk",
+            "multiWalk_append",
+            "opened",
+            "smtDepth",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiSiblings_single",
+          "line": 355,
+          "called": [
+            "SmtEntries",
+            "canonicalSiblings",
+            "entries",
+            "highHalf",
+            "lowHalf",
+            "multiSiblings",
+            "openedHigh",
+            "openedLow",
+            "smtRootListAux"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "multiSiblings_single_length",
+          "line": 401,
+          "called": [
+            "FaultProof",
+            "LegalKernel",
+            "SmtEntries",
+            "canonicalSiblings_length",
+            "entries",
+            "multiSiblings",
+            "multiSiblings_single"
+          ]
+        }
+      ]
+    },
+    {
       "module": "LegalKernel.FaultProof.Observer",
       "path": "LegalKernel/FaultProof/Observer.lean",
       "declaration_count": 7,
@@ -46847,6 +47062,7 @@
             "actionKindByte",
             "ammSwap",
             "burn",
+            "cells",
             "claimBudgetRefund",
             "deposit",
             "depositWithFee",
@@ -56135,6 +56351,7 @@
             "assertEq",
             "burn",
             "cellKeyPreimage",
+            "cells",
             "commitExtendedState",
             "deposit",
             "es",
@@ -56532,6 +56749,7 @@
             "TestCase",
             "aliasConsistent",
             "assertEq",
+            "cells",
             "claimBudgetRefund",
             "depositWithFee",
             "divLevel",
@@ -56721,6 +56939,83 @@
             "noMigrationActivationInLog",
             "reward",
             "trivialLogEntry"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "LegalKernel.Test.FaultProof.MultiProof",
+      "path": "LegalKernel/Test/FaultProof/MultiProof.lean",
+      "declaration_count": 5,
+      "declarations": [
+        {
+          "kind": "namespace",
+          "name": "LegalKernel.Test.FaultProof.MultiProof",
+          "line": 38,
+          "called": []
+        },
+        {
+          "kind": "def",
+          "name": "base",
+          "line": 41,
+          "called": [
+            "BalanceMap",
+            "ExtendedState",
+            "ExtendedState.empty",
+            "ResourceId"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "cells",
+          "line": 50,
+          "called": [
+            "CellTag",
+            "frontierOf"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "opened",
+          "line": 54,
+          "called": [
+            "OpenedLeaf",
+            "base",
+            "cellLeaf",
+            "getCellValue",
+            "smtCellKey"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "tests",
+          "line": 58,
+          "called": [
+            "BitsDistinctBelow",
+            "CellTag",
+            "LeavesCoherent",
+            "LegalKernel.Test.FaultProof.MultiProof",
+            "OpenedLeaf",
+            "SmtEntries",
+            "TestCase",
+            "assertEq",
+            "base",
+            "canonicalAbsentValue",
+            "canonicalSiblings",
+            "cellLeaf",
+            "commitExtendedState",
+            "emptyRootAt",
+            "entries",
+            "getCellValue",
+            "multiSiblings",
+            "multiSiblings_single",
+            "multiWalk",
+            "multiWalk_eq_smtRootListAux",
+            "opened",
+            "smtCellKey",
+            "smtDepth",
+            "smtRootListAux",
+            "stateCellEntries"
           ]
         }
       ]
@@ -57617,6 +57912,7 @@
             "assertEq",
             "bulkRecipients",
             "bulkRecipients_eq_law_list",
+            "cells",
             "distributeOthers",
             "distributeOthers_noop_above_cap",
             "es",
@@ -70107,7 +70403,7 @@
         {
           "kind": "def",
           "name": "main",
-          "line": 223,
+          "line": 224,
           "called": [
             "runAll"
           ]
