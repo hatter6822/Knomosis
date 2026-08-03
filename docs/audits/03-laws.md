@@ -691,7 +691,7 @@ and the post-state was already root-determined.  The sharing is what
 matters — a per-law filter would have left `distributeOthers` broken
 while looking correct from this side.  The dust bound
 (`proportionalDilute_distributed_le_totalReward`) is unchanged; it now
-goes through `Conservation.state_filter_nonzero_sum_eq_sumOthers`,
+goes through `Laws.bulkRecipients_values_sum_eq_sumOthers`,
 since zero entries contribute nothing to a sum and the divisor is
 still `sumOthers`.
 

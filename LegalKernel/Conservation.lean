@@ -500,8 +500,16 @@ theorem state_filter_sum_eq_sumOthers
     the sum of its values, whatever else the filter keeps.  Trivial
     arithmetically; stated because the bulk laws' recipient list
     (`Laws.bulkRecipients`) carries a `kv.2 != 0` conjunct that the
-    supply identity below must see through. -/
-private theorem balanceList_sum_filter_ne_zero
+    dust bound's divisor identity has to see through.
+
+    Deliberately general in `p` rather than specialised to
+    `fun kv => kv.1 != excluded`: this module sits below
+    `Laws/BulkBound.lean` and so cannot name `bulkRecipients`, and a
+    specialised statement here would be a second copy of that filter —
+    exactly the duplication the recipient list exists to remove.  The
+    bulk-specific corollary lives with the definition, as
+    `Laws.bulkRecipients_values_sum_eq_sumOthers`. -/
+theorem balanceList_sum_filter_ne_zero
     (xs : List (ActorId × Nat)) (p : ActorId × Nat → Bool) :
     ((xs.filter (fun kv => p kv && kv.2 != 0)).map (·.2)).sum =
     ((xs.filter p).map (·.2)).sum := by
@@ -514,23 +522,6 @@ private theorem balanceList_sum_filter_ne_zero
         · simp [hp, hz, ih]
         · simp [hp, hz, ih]
       · simp [hp, ih]
-
-/-- `state_filter_sum_eq_sumOthers` for the filter the bulk laws
-    actually use.
-
-    `Laws.bulkRecipients` excludes zero-balance entries as well as the
-    excluded actor (they have no leaf in the state-commitment tree, so
-    crediting them would make a bulk step's post-root depend on
-    something the pre-root does not observe).  Zero entries contribute
-    nothing to a sum, so the divisor identity the dust bound needs is
-    unaffected — which is the content of this corollary. -/
-theorem state_filter_nonzero_sum_eq_sumOthers
-    (s : State) (r : ResourceId) (excluded : ActorId) :
-    (((s.balances[r]?.getD ∅).toList.filter
-        (fun kv => kv.1 != excluded && kv.2 != 0)).map (·.2)).sum =
-    sumOthers s r excluded := by
-  rw [balanceList_sum_filter_ne_zero _ (fun kv => kv.1 != excluded)]
-  exact state_filter_sum_eq_sumOthers s r excluded
 
 /-! ## `IsMonotonic` typeclass (positive-incentive tier) -/
 

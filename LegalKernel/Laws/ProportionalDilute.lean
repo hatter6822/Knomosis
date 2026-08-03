@@ -350,8 +350,8 @@ private theorem list_div_sum_mul_le
        (totalReward * kv.2 / S)` and `S := sumOthers`.
     2. By `list_div_sum_mul_le`: `dist_sum * S ≤ totalReward *
        recipient_sum_balances`.
-    3. By `state_filter_nonzero_sum_eq_sumOthers` (in
-       `Conservation.lean`): `recipient_sum_balances = S`.  The
+    3. By `bulkRecipients_values_sum_eq_sumOthers` (in
+       `Laws/BulkBound.lean`): `recipient_sum_balances = S`.  The
        recipient list drops zero-balance entries, which contribute
        nothing to the sum, so the divisor is still `sumOthers`.
     4. Substitute: `dist_sum * S ≤ totalReward * S`.
@@ -367,7 +367,7 @@ theorem proportionalDilute_distributed_le_totalReward
   have hS : sumOthers s r excluded > 0 := hpre.2.1
   have h_filter_sum :
       (((bulkRecipients s r excluded).map (·.2)).sum) = sumOthers s r excluded :=
-    state_filter_nonzero_sum_eq_sumOthers s r excluded
+    bulkRecipients_values_sum_eq_sumOthers s r excluded
   have h_chain_bound :=
     list_div_sum_mul_le (bulkRecipients s r excluded)
       totalReward (sumOthers s r excluded)

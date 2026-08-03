@@ -147,6 +147,100 @@ def tests : List TestCase :=
         assertEq (expected := 17) (actual := LegalKernel.getBalance postFlat 1 1)
           "a live recipient is still credited"
     }
+  , { name := "the PRECONDITION is root-determined too"
+    , body := do
+        -- The second break the same filter closes, and the sharper one:
+        -- it is about `pre`, not about the credit.
+        --
+        -- `BulkBounded s r excluded` is `(bulkRecipients …).length ≤
+        -- maxRecipientsPerBulkAction`, and `step_impl` is `if pre then
+        -- apply_impl else id`.  Under the retired rule a live zero
+        -- entry counted toward that bound, so a state carrying 300
+        -- swept-to-zero actors sat OVER the cap while its
+        -- root-identical twin (the same entries never written) sat
+        -- under it.  Two root-identical states, one of which advances
+        -- and one of which does not — and no credit has to be wrong for
+        -- the game to become unwinnable, because the honest sequencer's
+        -- post-root is simply not reachable from the root the verifier
+        -- holds.
+        let base := stateOf 5
+        let sweptBase : LegalKernel.State :=
+          (List.range 300).foldl
+            (fun st i => LegalKernel.setBalance st 1 (UInt64.ofNat (i + 100)) 0)
+            base.base
+        let zeros : ExtendedState := { base with base := sweptBase }
+        assertEq (expected := 305)
+          (actual := (zeros.base.balances[(1 : ResourceId)]?.getD ∅).toList.length)
+          "the fixture really does carry 300 live zero entries"
+        assertEq (expected := (commitExtendedState base).toList)
+          (actual := (commitExtendedState zeros).toList)
+          "...and is root-identical to the state that never held them"
+        -- The negative control: under the retired rule this fixture was
+        -- over the cap, so `pre` differed across a root-identical pair.
+        let retiredCount :=
+          ((zeros.base.balances[(1 : ResourceId)]?.getD ∅).toList.filter
+            (fun kv => kv.1 != 3)).length
+        assert (maxRecipientsPerBulkAction < retiredCount)
+          "the retired rule really did put this fixture over the cap"
+        assert (!(maxRecipientsPerBulkAction <
+                  ((base.base.balances[(1 : ResourceId)]?.getD ∅).toList.filter
+                    (fun kv => kv.1 != 3)).length))
+          "...while leaving its twin under it — so `pre` really did differ"
+        -- And now it does not.
+        assertEq (expected := (bulkRecipients base 1 3).length)
+          (actual := (bulkRecipients zeros 1 3).length)
+          "the recipient counts agree across the pair"
+        assert (decide ((Laws.distributeOthers 1 3 7).pre zeros.base))
+          "`pre` holds on the zero-carrying state"
+        assert (decide ((Laws.distributeOthers 1 3 7).pre base.base))
+          "...and on its root-identical twin"
+    }
+  , { name := "OBLIGATION: the zero filter is exact only below 2^128"
+    , body := do
+        -- What the filter does NOT close, stated where someone will
+        -- trip over it.  `Encoding.encodeAmount` is a 16-byte
+        -- little-endian body, so it truncates modulo `2^128`: a balance
+        -- that is a nonzero multiple of `2^128` encodes exactly as
+        -- `encodeAmount 0`, its cell reads canonically ABSENT, and the
+        -- root cannot see it — while `kv.2 != 0` still says `true`, so
+        -- it is still a recipient.  The C-2 fixture pair reappears.
+        --
+        -- Deliberately NOT closed by bounding this law's precondition.
+        -- The blind spot belongs to the COMMITMENT, not to the
+        -- recipient list: the `transfer` control at the end forks on
+        -- the same pair through a law that has nothing to do with bulk,
+        -- so a per-law bound would treat one symptom of a global
+        -- property and read as if the rest were safe.  Recorded as
+        -- C-3 in `docs/audits/19-findings-and-followups.md`;
+        -- `balanceCell_absent_iff_balance_zero` carries the bound as an
+        -- explicit hypothesis rather than assuming it silently.
+        let big : Nat := 256 ^ 16
+        let base := LegalKernel.setBalance { balances := ∅ } 1 1 10
+        let withBig := LegalKernel.setBalance base 1 2 big
+        let e (x : LegalKernel.State) : ExtendedState :=
+          { ExtendedState.empty with base := x }
+        assertEq (expected := (LegalKernel.Encoding.encodeAmount 0))
+          (actual := (LegalKernel.Encoding.encodeAmount big))
+          "2^128 encodes as zero — the truncation, exhibited"
+        assertEq (expected := (commitExtendedState (e base)).toList)
+          (actual := (commitExtendedState (e withBig)).toList)
+          "so a 2^128 balance is invisible to the published root"
+        -- Hence the recipient sets diverge, and so do the post-roots.
+        assert ((Laws.bulkRecipients withBig 1 9).length
+                  != (Laws.bulkRecipients base 1 9).length)
+          "OBLIGATION: the recipient sets still diverge at 2^128"
+        let pB := step_impl withBig (Laws.distributeOthers 1 9 7)
+        let pA := step_impl base    (Laws.distributeOthers 1 9 7)
+        assert ((commitExtendedState (e pB)).toList
+                  != (commitExtendedState (e pA)).toList)
+          "OBLIGATION: bulk post-roots still fork at 2^128"
+        -- The control that scopes it.  `transfer` forks on the SAME
+        -- pair, through its precondition, with no bulk law in sight.
+        assert (decide ((Laws.transfer 1 2 3 5).pre withBig))
+          "transfer's precondition reads true on the invisible balance"
+        assert (!decide ((Laws.transfer 1 2 3 5).pre base))
+          "...and false on its root-identical twin: NOT bulk-specific"
+    }
   , { name := "each sub-step writes exactly one balance cell"
     , body := do
         let es := stateOf 4
@@ -278,6 +372,19 @@ def tests : List TestCase :=
               (getCellValue es (.balance r a) ≠ canonicalAbsentValue (.balance r a)
                 ∧ a ≠ excluded)) :=
           exists_mem_bulkRecipients_iff_cell_live
+        -- The completeness half, pinned SEPARATELY because it is
+        -- bound-free: a signature change that quietly added an amount
+        -- hypothesis here would weaken the bulk-adjudicability argument
+        -- without failing the `iff` pin above.
+        let _complete : ∀ (es : ExtendedState) (r : ResourceId) (excluded a : ActorId),
+            getCellValue es (.balance r a) ≠ canonicalAbsentValue (.balance r a) →
+            a ≠ excluded →
+            ∃ v, (a, v) ∈ bulkRecipients es r excluded :=
+          mem_bulkRecipients_of_cell_live
+        let _absentFree : ∀ (es : ExtendedState) (r : ResourceId) (a : ActorId),
+            LegalKernel.getBalance es.base r a = 0 →
+            getCellValue es (.balance r a) = canonicalAbsentValue (.balance r a) :=
+          balanceCell_absent_of_balance_zero
         let _bound : ∀ (es : ExtendedState) (action : Authority.Action),
             (LegalKernel.FaultProof.Action.subSteps es action).length ≤ maxRecipientsPerBulkAction :=
           subSteps_length_bound

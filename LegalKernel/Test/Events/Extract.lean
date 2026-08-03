@@ -487,6 +487,122 @@ def revokeEmitsAPI : TestCase := {
     pure ()
 }
 
+/-! ### The bulk-law event path
+
+This path had **no coverage at all** — every case above exercises a
+single-actor law.  That mattered more than a gap usually does, because
+`affectedActors` was a fourth independent spelling of the recipient
+rule, and the only thing keeping its events honest was
+`balanceChangeEvents` re-checking `oldV != newV` downstream.  A
+divergence between the helper and the laws would therefore have been
+invisible here and surfaced somewhere else entirely.
+
+Unlike the cases above, these build the post-state by **applying the
+kernel** rather than by hand: the property under test is agreement
+between the emitted events and what the law actually did, and a
+hand-built post-state would let the two agree by construction. -/
+
+/-- A pre-state at resource 1: actors 1, 2, 3 hold 10 each, actor 4
+    holds a LIVE ZERO (the shape a whole-balance transfer leaves
+    behind), and actor 5 is the excluded one holding 10. -/
+def preBulkWithLiveZero : ExtendedState :=
+  let s0 := setBalance ({ balances := ∅ }) 1 1 10
+  let s1 := setBalance s0 1 2 10
+  let s2 := setBalance s1 1 3 10
+  let s3 := setBalance s2 1 4 0
+  { base := setBalance s3 1 5 10
+  , nonces := { next := ∅ }
+  , registry := KeyRegistry.empty }
+
+/-- `distributeOthers` emits one `balanceChanged` per recipient, and
+    none for the excluded actor or for the live-zero actor.
+
+    The live-zero assertion is the C-2 property observed through the
+    event stream: that actor has no leaf in the state-commitment tree,
+    so it is not a recipient, so its balance does not move, so no event
+    describes it. -/
+def distributeOthersEmitsPerRecipient : TestCase := {
+  name := "distributeOthers emits one balanceChanged per recipient, none for the live zero"
+  body := do
+    let pre := preBulkWithLiveZero
+    let post : ExtendedState :=
+      { pre with
+        base := step_impl pre.base (Laws.distributeOthers 1 5 7)
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let st : SignedAction := ⟨.distributeOthers 1 5 7, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let balEvs := evs.filter (fun e => match e with | .balanceChanged .. => true | _ => false)
+    assertEq (expected := (3 : Nat)) (actual := balEvs.length)
+      "one balanceChanged per recipient (actors 1, 2, 3)"
+    -- Named explicitly, so a silent membership change fails here.
+    assert (balEvs.any (fun e => match e with
+              | .balanceChanged r a o n => r == 1 && a == 1 && o == 10 && n == 17
+              | _ => false))
+      "actor 1 is credited 10 -> 17"
+    assert (!balEvs.any (fun e => match e with
+              | .balanceChanged _ a _ _ => a == 4 | _ => false))
+      "the LIVE-ZERO actor gets no event — it is not a recipient"
+    assert (!balEvs.any (fun e => match e with
+              | .balanceChanged _ a _ _ => a == 5 | _ => false))
+      "the excluded actor gets no event"
+}
+
+/-- `affectedActors` IS the law's recipient list, key-for-key and in
+    order — not a superset that the downstream delta filter happens to
+    clean up.
+
+    Stated as a list equality rather than as a set claim because the
+    order is consensus (both laws fold it), and a reordering here would
+    reorder the event stream an indexer replays. -/
+def affectedActorsIsTheRecipientList : TestCase := {
+  name := "affectedActors is exactly the law's recipient list, in order"
+  body := do
+    let pre := preBulkWithLiveZero
+    assertEq
+      (expected := (Laws.bulkRecipients pre.base 1 5).map (·.1))
+      (actual   := affectedActors pre.base 1 5)
+      "same actors, same order"
+    -- ...and the retired spelling is a strict superset, so the
+    -- equality above is not vacuous on this fixture.
+    let retired :=
+      ((pre.base.balances[(1 : ResourceId)]?.getD ∅).toList.map (·.1)).filter (· ≠ 5)
+    assert (retired.length > (affectedActors pre.base 1 5).length)
+      "the retired spelling really did over-approximate here"
+}
+
+/-- `proportionalDilute` emits per-recipient events too, and its
+    zero-delta filter still fires: an actor whose floor-divided credit
+    rounds to zero gets no event even though it IS a recipient. -/
+def proportionalDiluteEmitsPerChangedRecipient : TestCase := {
+  name := "proportionalDilute emits per recipient whose balance actually moved"
+  body := do
+    -- Actor 3 holds 1 against a large sumOthers, so its credit floors
+    -- to 0 and it must NOT produce an event.
+    let s0 := setBalance ({ balances := ∅ }) 1 1 1000
+    let s1 := setBalance s0 1 3 1
+    let pre : ExtendedState :=
+      { base := setBalance s1 1 5 10, nonces := { next := ∅ }
+      , registry := KeyRegistry.empty }
+    let post : ExtendedState :=
+      { pre with
+        base := step_impl pre.base (Laws.proportionalDilute 1 5 10)
+      , nonces := { next := (∅ : Std.TreeMap _ _ _).insert 1 1 } }
+    let st : SignedAction := ⟨.proportionalDilute 1 5 10, 1, 0, dummySig⟩
+    let evs := extractEvents pre post st
+    let balEvs := evs.filter (fun e => match e with | .balanceChanged .. => true | _ => false)
+    -- Actor 3 IS a recipient (balance 1 > 0) but its credit floors to 0.
+    assert ((Laws.bulkRecipients pre.base 1 5).any (fun p => p.1 == 3))
+      "actor 3 really is a recipient"
+    assertEq (expected := (0 : Nat))
+      (actual := LegalKernel.getBalance post.base 1 3 - LegalKernel.getBalance pre.base 1 3)
+      "...whose floor-divided credit is zero"
+    assert (!balEvs.any (fun e => match e with
+              | .balanceChanged _ a _ _ => a == 3 | _ => false))
+      "so the delta filter suppresses its event"
+    assertEq (expected := (1 : Nat)) (actual := balEvs.length)
+      "only the recipient that actually moved emits"
+}
+
 /-- All tests. -/
 def tests : List TestCase :=
   [transferEmitsThreeEvents, freezeOneEvent, replaceKeyTwoEvents,
@@ -504,7 +620,10 @@ def tests : List TestCase :=
    declareEmitsAPI, revokeEmitsAPI,
    -- GP.6.4:
    bridgeActorEmitsNoBudgetConsumed, zeroActionCostEmitsNoBudgetConsumed,
-   emitsBudgetConsumedAPI]
+   emitsBudgetConsumedAPI,
+   -- The bulk-law event path (previously uncovered):
+   distributeOthersEmitsPerRecipient, affectedActorsIsTheRecipientList,
+   proportionalDiluteEmitsPerChangedRecipient]
 
 end ExtractTests
 end LegalKernel.Test.Events

@@ -110,18 +110,37 @@ All project-internal, reasonable.
 emitting `balanceChanged` only when pre / post differ.  Pure
 function; no side effects.
 
-`affectedActors` (line 100): returns the actors in `r`'s pre-state
-`BalanceMap`, minus an excluded actor.  Uses
-`bm.toList.map (·.1)` to project keys, then `filter (· ≠ excluded)`.
+`affectedActors`: returns the recipients both bulk laws fold —
+`(Laws.bulkRecipients preState r excluded).map (·.1)`.
 
-**Hazard observation:** `affectedActors` does not include actors
-who *gained* a balance through the action but had no pre-state
-entry.  For `distributeOthers` and `proportionalDilute` this is
-fine (those laws don't add new actors — they distribute among
-existing ones), but a future law that *introduces* new actors at a
-resource would not have its new-actor balanceChanged event emitted
-unless the helper is updated.  Currently sound; flagged for future
-extensibility.
+**Superseded description.**  This entry originally read "returns the
+actors in `r`'s pre-state `BalanceMap`, minus an excluded actor.  Uses
+`bm.toList.map (·.1)` to project keys, then `filter (· ≠ excluded)`."
+That was a *fourth* independent spelling of the recipient rule, and it
+was over-approximating: it included actors whose entry is present and
+zero, who are not recipients (they have no leaf in the
+state-commitment tree — see finding C-2).  The emitted events were
+nevertheless correct, because `balanceChangeEvents` re-checks
+`oldV != newV` downstream and silently dropped the surplus — which is
+exactly why the divergence was invisible from here.  The helper now
+reads the shared definition, so the delta filter is a second line
+rather than the only one.
+
+**Hazard observation (stands):** `affectedActors` does not include
+actors who *gained* a balance through the action but had no pre-state
+entry.  For `distributeOthers` and `proportionalDilute` this is fine —
+both fold `Laws.bulkRecipients`, a sub-list of the pre-state's entries,
+so neither can introduce an actor — but a future law that *introduces*
+new actors at a resource would not have its new-actor `balanceChanged`
+event emitted unless the helper is updated.  Currently sound; flagged
+for future extensibility.
+
+**Coverage note.**  Until the C-2 audit, this path had **no tests at
+all**: every `events-extract` case exercised a single-actor law.  Three
+cases now cover it, and they build the post-state by applying the
+kernel rather than by hand, so the events are checked against what the
+law actually did rather than against a fixture that agrees by
+construction.
 
 ### `actionEvents` (lines 109–240)
 

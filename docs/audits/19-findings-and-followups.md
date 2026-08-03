@@ -34,7 +34,8 @@ findings outside the TCB.  Their dispositions:
 | **B-2** — vacuous headline injectivity theorems | `Bridge/Eip712.lean` and every `CollisionFree` consumer | **Closed.**  `CollisionFreeOn S h` replaces the globally-injective (and hence *refutable*) predicate; satisfiability is exhibited, not assumed. |
 | **B-4a** — terminate ABI drift | `knomosis-faultproof-observer/src/submitter.rs` | **Closed.**  Rust moved to the contract's 5-argument form, and the selector table is now pinned against `method_selectors.json`, emitted from the COMPILED artifacts by `solidity/scripts/export_method_selectors.py` and gated in `ci-solidity.yml` — so the pin can no longer re-derive its expectation from the string it tests. |
 | **B-4b** — game-model fidelity (Lean/Rust) | `FaultProof/Game.lean`, `FaultProof/Step.lean`, observer `game.rs` | **Closed.**  `kernelStepApply` computes through `stepVMHash` instead of echoing the responder's `postStateCommit`; `terminateOnSingleStep` dropped `claimedPostCommit` and reads both sides from the game state; `submitMidpoint` carries only a commit and the index is derived, which made the convergence bound logarithmic (`bisection_converges_in_log_rounds`). |
-| **C-2** — a bulk step's post-state not determined by the pre-state root | `Laws/BulkBound.lean`'s `bulkRecipients` | **Closed.**  Zero-valued balance entries have no leaf in the commitment tree but were counted as recipients, so `distributeOthers` paid an actor the root cannot see — two root-identical pre-states reached different post-roots.  The recipient list now drops them, and both laws call the one definition instead of respelling it. |
+| **C-2** — a bulk step's post-state not determined by the pre-state root | `Laws/BulkBound.lean`'s `bulkRecipients` | **Closed.**  Zero-valued balance entries have no leaf in the commitment tree but were counted as recipients, so `distributeOthers` paid an actor the root cannot see — two root-identical pre-states reached different post-roots, and `BulkBounded` disagreed across the same pair so one advanced and one no-oped.  The recipient list now drops them, and all four spellings collapse to the one definition. |
+| **C-3** — the commitment is blind to balances at multiples of 2^128 | `Encoding.encodeAmount` (16-byte body) | **Open, scoped.**  Such a balance encodes as `encodeAmount 0`, so its cell reads canonically absent and the root does not carry it — breaking `transfer`'s precondition as readily as a bulk credit.  Covered by the standing `CanonicalBounds.base_amt` assumption, which is assumed rather than enforced; 2^41× beyond reachable supply.  Deliberately not patched in one law — see the section below. |
 | **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **CLOSED — the game calls `KnomosisStepVMRoot.executeStepToRoot`, which returns a post-state ROOT folded from derived cell writes, so both sides of the terminal comparison are the same construction.**  What survives is a cleanup (the old recipe is still compiled); see the section below. |
 
 ### Open critical: the fault-proof commit-recipe split
@@ -217,16 +218,49 @@ what the root observes.  `bulkRecipients_values_ne_zero` states the
 resulting invariant; `mem_bulkRecipients_iff` unpacks membership once
 for the sites that used to re-run `List.mem_filter` themselves.
 
+**The precondition was broken the same way, and more sharply.**
+`BulkBounded s r excluded` is `(bulkRecipients …).length ≤
+maxRecipientsPerBulkAction`, and `step_impl` is `if pre then apply_impl
+else id`.  Under the retired rule a live zero entry counted toward that
+bound, so a state carrying 300 swept-to-zero actors sat OVER the cap
+while its root-identical twin sat under it: **two root-identical states,
+one of which advances and one of which does not.**  No credit has to be
+wrong for that to be fatal — the honest sequencer's post-root is simply
+not reachable from the root the verifier holds.  The same filter closes
+it, and `faultproof-substep`'s "the PRECONDITION is root-determined too"
+pins both directions with the over-the-cap negative control.
+
 Both laws now **call** `bulkRecipients` instead of respelling the
 filter inline, which is the structural half of the fix.  The list had
-three independent spellings — `distributeOthers.apply_impl`, the
-`lexlaw` `lex_impl` mirror, and `Action.stateWriteCells` (which
-already called `bulkRecipients`, and was therefore *right* while the
-laws were wrong).  Changing one would have made the declared cell
-footprint and the executed fold disagree, which is a worse failure
-than the one being fixed.  `bulkRecipients_eq_law_list` pins the shared
-list to a concrete traversal so a future edit surfaces rather than
-silently moving consensus.
+**four** independent spellings: `distributeOthers.apply_impl`, the
+`lexlaw` `lex_impl` mirror, `Events.affectedActors`, and
+`Action.stateWriteCells` (which already called `bulkRecipients`, and
+was therefore *right* while the other three were wrong).  Changing one
+would have made the declared cell footprint and the executed fold
+disagree, which is a worse failure than the one being fixed.
+`bulkRecipients_eq_law_list` pins the shared list to a concrete
+traversal so a future edit surfaces rather than silently moving
+consensus.
+
+`Events.affectedActors` was the one that hid best, and it is worth
+recording why: its events stayed *correct* through the defect, because
+`balanceChangeEvents` re-checks `oldV != newV` downstream and silently
+dropped the surplus actors.  A divergence between the helper and the
+laws was therefore invisible at the event layer and would have surfaced
+somewhere else entirely.  It now reads `Laws.bulkRecipients`, so the
+delta filter is a second line rather than the only one, and the
+bulk-law event path — **previously uncovered by any test** — has three
+cases in `events-extract`, including one asserting `affectedActors` is
+the recipient list key-for-key and in order.
+
+A fifth near-spelling was removed on the way.  The dust bound's divisor
+identity was stated in `Conservation.lean` over a literal copy of the
+filter, because that module sits below `Laws/BulkBound.lean` and cannot
+name `bulkRecipients`.  What lives there now is the general
+`balanceList_sum_filter_ne_zero`, which knows nothing about which
+entries a bulk law keeps; the bulk-specific corollary
+`bulkRecipients_values_sum_eq_sumOthers` moved up to sit with the
+definition it is about.
 
 **This is a behaviour change.**  A holder whose balance of `r` is a
 live zero no longer receives a `distributeOthers` credit.  That is the
@@ -242,7 +276,7 @@ for it.  That asymmetry is the reason the shared list matters — a
 per-law filter would have left `distributeOthers` broken while looking
 correct from `proportionalDilute`'s side.  The dust bound survives
 unchanged, via the new
-`Conservation.state_filter_nonzero_sum_eq_sumOthers` (zero entries
+`Laws.bulkRecipients_values_sum_eq_sumOthers` (zero entries
 contribute nothing to a sum, so the divisor is still `sumOthers`).
 
 Pinned by three cases in `faultproof-substep`, the third of which is a
@@ -250,6 +284,73 @@ negative control: it rebuilds the retired recipient rule and asserts
 that on the SAME fixture pair it reaches **different** post-roots — so
 the first two cannot pass vacuously, and the defect is exhibited rather
 than described.
+
+### C-3 — Open: the commitment is blind to balances at multiples of 2^128
+
+**Severity: critical in kind, remote in reach.**  Surfaced while
+auditing C-2, and deliberately **not** fixed there, because fixing it
+where it was found would have been fixing the wrong thing.
+
+`Encoding.encodeAmount` is `cbeTagAmount :: natToBytesLE n 16` — a
+fixed 16-byte body, so it truncates modulo `2^128`.  A balance that is
+a *nonzero multiple of* `2^128` therefore encodes byte-for-byte as
+`encodeAmount 0`, which is exactly `canonicalAbsentValue (.balance _
+_)`.  `stateCellEntries` drops it, the cell has no leaf, and **the
+published root cannot see the balance at all.**
+
+Verified rather than argued (`faultproof-substep`, "OBLIGATION: the
+zero filter is exact only below 2^128"):
+
+| | pre-state at `r` | root | consequence |
+|---|---|---|---|
+| A | `{1↦10, 2↦2^128}` | `H` | `distributeOthers` credits actor 2; `transfer` from actor 2 has `pre = true` |
+| B | `{1↦10}` | `H` (same) | actor 2 is not a recipient; `transfer` from actor 2 has `pre = false` |
+
+**It is not bulk-specific, which is the whole point.**  The obvious
+patch — add `∀ kv ∈ bulkRecipients, kv.2 < 2^128` to the bulk
+preconditions — was considered and rejected.  The `transfer` row above
+is the reason: a law with no connection to the recipient list forks on
+the same pair, through its *precondition*, because `getBalance` reads a
+value the root does not carry.  The blind spot belongs to the
+**commitment**, not to `bulkRecipients`, and bounding one law would
+treat a symptom while reading as if the rest were safe.
+
+**Standing mitigation.**  This is the
+`ExtendedState.CanonicalBounds.base_amt` assumption (`∀ balance,
+< 256^16`), which every commitment-injectivity theorem already carries
+as an explicit hypothesis.  It is assumed at the runtime boundary, not
+enforced by the kernel: `Amount = Nat` is unbounded and `mint`'s
+precondition is `amount > 0`.  C-1 moved the head from `2^64` to
+`2^128` precisely to put the bound out of reachable range — the entire
+ETH supply is about `2^87` wei — so the residual is 2^41× beyond
+anything a real deployment reaches, but it is an assumption rather than
+a theorem and should be recorded as one.
+
+**What was done instead of patching it:**
+
+  * the "zero balance ⟺ absent cell" bridge is **split along the
+    bound**, so a consumer takes on only what it actually needs.
+    `balanceCell_absent_of_balance_zero` and
+    `mem_bulkRecipients_of_cell_live` are unconditional — they
+    evaluate the encoder at `0` and never invert it — and the latter is
+    the *completeness* half the bulk-adjudicability work (P1) will
+    consume: every live leaf at `r` other than `excluded` is a
+    recipient, so a verifier enumerating live leaves enumerates exactly
+    the credited actors.  Only the converse
+    (`balanceCell_absent_iff_balance_zero`'s forward direction, and
+    hence `exists_mem_bulkRecipients_iff_cell_live`) needs the bound,
+    and it carries it as an explicit `h_amt` rather than assuming it;
+  * `Laws.bulkRecipients`' docstring states the scope of its claim
+    instead of asserting root-determinism unconditionally;
+  * the `OBLIGATION:` case above exhibits the fork on both a bulk law
+    and `transfer`, so the gap cannot be quietly forgotten and its true
+    radius is on the record.
+
+**To close it** a deployment must either enforce the bound at
+admission (a supply cap, or a per-cell check in the admission gate) or
+widen the amount head and re-derive `CanonicalBounds`.  Enforcement
+belongs at the admission layer, where it can cover every value-carrying
+cell at once, not in individual laws.
 
 ### Closed: a bulk action could exceed what the game can decompose
 
@@ -919,6 +1020,20 @@ its new-actor `balanceChanged` event emitted.
 
 **Impact:** No current law introduces new actors, so this
 is theoretical.  Flagged for future extensibility.
+
+**Update (C-2).**  The hazard stands, but the helper no longer
+re-derives the actor set: it is now
+`(Laws.bulkRecipients preState r excluded).map (·.1)`, the same list
+both bulk laws fold.  It had been a *fourth* independent spelling of
+the recipient rule, and the audit that closed C-2 initially missed it
+because its output stayed correct — `balanceChangeEvents` re-checks
+`oldV != newV` downstream and silently dropped the surplus.  The
+original note's reasoning ("those laws operate over `bm.toList`, which
+is the pre-state actor set") is superseded: they operate over
+`bulkRecipients`, a strict sub-list of the pre-state's entries, which
+makes the no-new-actors conclusion hold more clearly than before.  The
+bulk-law event path now has test coverage (`events-extract`); it had
+none.
 
 ### m-7 — `Event` constructor-index drift relies on encoder, not inductive declaration
 

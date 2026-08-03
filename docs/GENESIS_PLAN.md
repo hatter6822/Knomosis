@@ -3473,13 +3473,31 @@ invariant; finding **C-2** in
 `docs/audits/19-findings-and-followups.md` records the analysis and
 the negative control that pins it.
 
+The same narrowing repairs the PRECONDITION, which was broken more
+sharply: `BulkBounded` counts the recipient list, so under the old
+rule a state carrying many swept-to-zero actors sat over the cap
+while its root-identical twin sat under it, and `step_impl`'s
+`if pre then apply_impl else id` advanced on one and not the other.
+
 `proportionalDilute` was unaffected in substance — its credit
 `totalReward * v_k / S` is already `0` at `v_k = 0` — and the dust
-bound survives via `state_filter_nonzero_sum_eq_sumOthers`, since
-zero entries contribute nothing to a sum.  The asymmetry is why the
-two laws share ONE list: a per-law filter would have left
+bound survives via `Laws.bulkRecipients_values_sum_eq_sumOthers`,
+since zero entries contribute nothing to a sum.  The asymmetry is why
+the two laws share ONE list: a per-law filter would have left
 `distributeOthers` unsound while looking correct from
 `proportionalDilute`'s side.
+
+**Scope.**  "Balance zero" and "cell canonically absent" coincide only
+below the CBE amount head's `2^128` range, because `encodeAmount`
+truncates modulo `2^128`.  That is the standing
+`ExtendedState.CanonicalBounds.base_amt` assumption, and it is
+deliberately not re-enforced in these two preconditions: a balance
+that large makes the root blind to a cell for *every* law — `transfer`'s
+precondition already reads `true` on one of two root-identical states —
+so it is a property of §8.9's commitment rather than of the recipient
+list.  Recorded as finding **C-3**;
+`FaultProof.balanceCell_absent_iff_balance_zero` carries the bound as
+an explicit hypothesis rather than assuming it silently.
 
 ### Phase 4: DSL and Serialization
 

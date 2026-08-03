@@ -130,35 +130,51 @@ def tests : List TestCase :=
     }
   , { name := "totalSupply_after_proportionalDilute API stability"
     , body := do
+        -- **Quantified on purpose** — see the matching note in
+        -- `Test/Laws/DistributeOthers.lean`.  Ascribed at the concrete
+        -- `fixtureF1` this pin was vacuous: the recipient list is a
+        -- closed term there, so the retired and current spellings
+        -- reduce alike and a statement change slips through.
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+            (s : State), (proportionalDilute r excluded totalReward).pre s →
+            TotalSupply (step_impl s (proportionalDilute r excluded totalReward)) r =
+              TotalSupply s r +
+                ((bulkRecipients s r excluded).map
+                  (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum :=
+          totalSupply_after_proportionalDilute
         let s := fixtureF1
         let t := proportionalDilute 1 2 10
-        have hpre : t.pre s := by decide
-        let _proof :
-            TotalSupply (step_impl s t) 1 = TotalSupply s 1 +
-              ((s.balances[(1 : ResourceId)]?.getD ∅).toList.filter
-                (fun kv => kv.1 != 2)
-                |>.map (fun kv => 10 * kv.2 / sumOthers s 1 2)).sum :=
-          totalSupply_after_proportionalDilute 1 2 10 s hpre
-        pure ()
+        assertEq
+          (expected := TotalSupply s 1 +
+            ((bulkRecipients s 1 2).map (fun kv => 10 * kv.2 / sumOthers s 1 2)).sum)
+          (actual   := TotalSupply (step_impl s t) 1)
+          "the supply equation holds numerically on F1"
     }
   , { name := "proportionalDilute_supply_nondecreasing API stability"
     , body := do
-        let s := fixtureF1
-        let t := proportionalDilute 1 2 10
-        have hpre : t.pre s := by decide
-        let _proof : TotalSupply s 1 ≤ TotalSupply (step_impl s t) 1 :=
-          proportionalDilute_supply_nondecreasing 1 2 10 s hpre
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+            (s : State), (proportionalDilute r excluded totalReward).pre s →
+            TotalSupply s r ≤
+              TotalSupply (step_impl s (proportionalDilute r excluded totalReward)) r :=
+          proportionalDilute_supply_nondecreasing
         pure ()
     }
   , { name := "proportionalDilute_distributed_le_totalReward API stability (dust bound)"
     , body := do
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+            (s : State), (proportionalDilute r excluded totalReward).pre s →
+            TotalSupply (step_impl s (proportionalDilute r excluded totalReward)) r ≤
+              TotalSupply s r + totalReward :=
+          proportionalDilute_distributed_le_totalReward
+        -- The bound is the point, so check it numerically too: the
+        -- floor-division dust makes this a STRICT inequality on F1,
+        -- which a `≤`-only pin would not distinguish from equality.
         let s := fixtureF1
         let t := proportionalDilute 1 2 10
-        have hpre : t.pre s := by decide
-        let _proof :
-            TotalSupply (step_impl s t) 1 ≤ TotalSupply s 1 + 10 :=
-          proportionalDilute_distributed_le_totalReward 1 2 10 s hpre
-        pure ()
+        assert (TotalSupply (step_impl s t) 1 ≤ TotalSupply s 1 + 10)
+          "the dust bound holds numerically on F1"
+        assert (TotalSupply (step_impl s t) 1 < TotalSupply s 1 + 10)
+          "and F1 really does discard dust, so the bound is not equality"
     }
   , { name := "proportionalDilute_isMonotonic instance resolves"
     , body := do
@@ -167,17 +183,20 @@ def tests : List TestCase :=
     }
   , { name := "proportionalDilute_not_conservative API stability"
     , body := do
-        let _proof : ¬ IsConservative (proportionalDilute 1 2 10) :=
-          proportionalDilute_not_conservative 1 2 10 (by decide)
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (totalReward : Amount),
+            totalReward > 0 → ¬ IsConservative (proportionalDilute r excluded totalReward) :=
+          proportionalDilute_not_conservative
         pure ()
     }
   , { name := "proportionalDilute_excluded_unchanged API check"
     , body := do
+        let _proof : ∀ (r : ResourceId) (excluded : ActorId) (totalReward : Amount)
+            (s : State), (proportionalDilute r excluded totalReward).pre s →
+            getBalance (step_impl s (proportionalDilute r excluded totalReward)) r excluded =
+              getBalance s r excluded :=
+          proportionalDilute_excluded_unchanged
         let s := fixtureF1
         let t := proportionalDilute 1 2 10
-        have hpre : t.pre s := by decide
-        let _proof : getBalance (step_impl s t) 1 2 = getBalance s 1 2 :=
-          proportionalDilute_excluded_unchanged 1 2 10 s hpre
         assertEq (expected := getBalance s 1 2)
                  (actual   := getBalance (step_impl s t) 1 2)
                  "value-level: excluded actor preserved"

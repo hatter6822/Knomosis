@@ -37,6 +37,7 @@ it from here too.
 -/
 
 import LegalKernel.Kernel
+import LegalKernel.Conservation
 import Lex.DSL.PreGrammar
 
 namespace LegalKernel
@@ -57,10 +58,18 @@ def maxRecipientsPerBulkAction : Nat := 256
     The ORDER is consensus, not incidental.  Both bulk laws fold over
     this list, the fault-proof decomposition walks it, and an SMT fold
     is order-sensitive — so the order has to be a function of
-    `(state, action)` rather than of anything a caller supplies.  Both
-    laws *call* this definition rather than re-deriving it, so the
-    footprint `Action.stateWriteCells` declares and the set the laws
-    credit cannot drift apart.
+    `(state, action)` rather than of anything a caller supplies.
+
+    **Four consumers, one definition.**  Both bulk laws' `apply_impl`
+    (and their `lexlaw` mirrors), the fault proof's
+    `FaultProof.Action.stateWriteCells`, and `Events.affectedActors`
+    all *call* this rather than re-deriving it.  Each of the other
+    three used to spell its own filter, so the cells a bulk step
+    declared, the balances it credited, and the events it emitted were
+    three independent answers to one question.
+    `FaultProof.bulkRecipients_eq_law_list` pins the shared list to a
+    concrete traversal, so a change to which entries are kept surfaces
+    there rather than silently moving consensus.
 
     **The zero filter is load-bearing** (see
     `bulkRecipients_values_ne_zero`).  A `Std.TreeMap` entry mapping an
@@ -80,7 +89,23 @@ def maxRecipientsPerBulkAction : Nat := 256
     `proportionalDilute` was already safe on its own — its credit is
     `totalReward * kv.2 / S`, which is `0` at `kv.2 = 0` — so the
     filter is a no-op there.  That asymmetry is exactly why the two
-    laws must share one list rather than each spell their own. -/
+    laws must share one list rather than each spell their own.
+
+    **Scope of the claim.**  `kv.2 ≠ 0` coincides with "the cell is
+    live" only while balances stay under the CBE amount head's `2^128`
+    range, because `encodeAmount` truncates modulo `2^128`: a balance
+    of a nonzero multiple of `2^128` encodes as `encodeAmount 0` and so
+    reads canonically absent while `kv.2 != 0` still says `true`.  That
+    is the standing `ExtendedState.CanonicalBounds.base_amt`
+    assumption, and it is deliberately NOT re-enforced here.  It is a
+    property of the commitment rather than of this list — a balance
+    that large makes the root blind to a cell for EVERY law, not just
+    these two (`transfer`'s precondition already reads `true` on one of
+    two root-identical states), so bounding it in one law's
+    precondition would treat a symptom.  Recorded as finding **C-3** in
+    `docs/audits/19-findings-and-followups.md`;
+    `FaultProof.balanceCell_absent_iff_balance_zero` carries the bound
+    as an explicit hypothesis rather than assuming it silently. -/
 def bulkRecipients (s : State) (r : ResourceId) (excluded : ActorId) :
     List (ActorId × Amount) :=
   (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded && kv.2 != 0)
@@ -181,6 +206,29 @@ theorem bulkRecipients_values_ne_zero (s : State) (r : ResourceId)
     (excluded : ActorId) {kv : ActorId × Amount}
     (h : kv ∈ bulkRecipients s r excluded) : kv.2 ≠ 0 :=
   ((mem_bulkRecipients_iff s r excluded kv).mp h).2.2
+
+/-- **The recipients' balances sum to `sumOthers`** — the divisor
+    `proportionalDilute`'s dust bound divides by.
+
+    Dropping the excluded actor is what `sumOthers` already subtracts;
+    dropping zero-valued entries subtracts nothing, since they
+    contribute nothing to a sum.  So narrowing the recipient list did
+    not move the divisor, which is why
+    `proportionalDilute_distributed_le_totalReward` survived the
+    narrowing unchanged.
+
+    Stated HERE, over `bulkRecipients`, rather than in
+    `Conservation.lean` over a literal filter: a specialised statement
+    down there would be a second copy of the recipient rule, and the
+    whole point of this definition is that there is one.  What
+    `Conservation` supplies is the general `balanceList_sum_filter_ne_zero`,
+    which knows nothing about which entries a bulk law keeps. -/
+theorem bulkRecipients_values_sum_eq_sumOthers
+    (s : State) (r : ResourceId) (excluded : ActorId) :
+    ((bulkRecipients s r excluded).map (·.2)).sum = sumOthers s r excluded := by
+  unfold bulkRecipients
+  rw [balanceList_sum_filter_ne_zero _ (fun kv => kv.1 != excluded)]
+  exact state_filter_sum_eq_sumOthers s r excluded
 
 /-- **The recipients are pairwise distinct.**
 

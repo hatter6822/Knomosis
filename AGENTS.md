@@ -901,10 +901,24 @@ full catalogue):
   bulk step's post-state is a function of the pre-state ROOT: a live
   zero-balance entry is not a recipient (it has no leaf, so crediting
   it would let two root-identical pre-states reach different
-  post-roots), both bulk laws agree on a state holding one, and — the
-  negative control — the retired recipient rule is rebuilt in the test
-  and shown to fork the post-root on the same fixture pair, so the
-  first two cases cannot pass vacuously.
+  post-roots), the PRECONDITION is root-determined for the same reason
+  (`BulkBounded` counts the recipient list, so under the retired rule a
+  state carrying 300 swept-to-zero actors sat over the cap while its
+  twin sat under it — one advances, one no-ops), both bulk laws agree
+  on a state holding one, and — the negative control — the retired rule
+  is rebuilt in the test and shown to fork the post-root on the same
+  fixture pair, so nothing above passes vacuously.  Carries the one
+  `OBLIGATION:` case the filter does NOT close: `encodeAmount`
+  truncates at `2^128`, so a balance at a multiple of it reads
+  canonically absent, and the case exhibits `transfer` forking on the
+  same pair to show the gap belongs to the commitment rather than to
+  the bulk pair (finding C-3).
+- `events-extract` — per-action event emission, including the bulk-law
+  path, which had no coverage at all until `Events.affectedActors` was
+  found to be a fourth spelling of the recipient rule.  Its three cases
+  build the post-state by APPLYING the kernel rather than by hand, so
+  the events are checked against what the law did rather than against a
+  fixture that agrees by construction.
 - `faultproof-state-cells-injective` — cell determination, the
   well-formedness side conditions checked on a real state, and the
   write algebra: a single write lands on the post-state's published

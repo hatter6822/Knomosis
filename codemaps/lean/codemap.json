@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "9e4412b5f4fb4cb2109d7b6fe6aa2c16b1928f217ebe7165d7393aaca96dff0a"
+    "source_digest": "d27daa8ff6da9e8bd4ab4ca1b4baa06786fb6f85f1c477ae45af53e30f1d4ea6"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5902
+    "declaration_count": 5909
   },
   "modules": [
     {
@@ -12975,7 +12975,7 @@
     {
       "module": "LegalKernel.Conservation",
       "path": "LegalKernel/Conservation.lean",
-      "declaration_count": 37,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "namespace",
@@ -13149,28 +13149,15 @@
         {
           "kind": "theorem",
           "name": "balanceList_sum_filter_ne_zero",
-          "line": 503,
+          "line": 511,
           "called": [
             "ActorId"
           ]
         },
         {
-          "kind": "theorem",
-          "name": "state_filter_nonzero_sum_eq_sumOthers",
-          "line": 526,
-          "called": [
-            "ActorId",
-            "ResourceId",
-            "State",
-            "balanceList_sum_filter_ne_zero",
-            "state_filter_sum_eq_sumOthers",
-            "sumOthers"
-          ]
-        },
-        {
           "kind": "class",
           "name": "IsMonotonic",
-          "line": 549,
+          "line": 540,
           "called": [
             "IsConservative",
             "ResourceId",
@@ -13183,7 +13170,7 @@
         {
           "kind": "def",
           "name": "TotalSupplyEquals",
-          "line": 575,
+          "line": 566,
           "called": [
             "ResourceId",
             "State",
@@ -13193,7 +13180,7 @@
         {
           "kind": "structure",
           "name": "ConservativeLawSet",
-          "line": 587,
+          "line": 578,
           "called": [
             "IsConservative",
             "Transition"
@@ -13202,7 +13189,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_global",
-          "line": 607,
+          "line": 598,
           "called": [
             "ReachableViaLaws",
             "ResourceId",
@@ -13217,7 +13204,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_global_via_law_set",
-          "line": 629,
+          "line": 620,
           "called": [
             "ConservativeLawSet",
             "ReachableViaLaws",
@@ -13230,7 +13217,7 @@
         {
           "kind": "structure",
           "name": "MonotonicLawSet",
-          "line": 651,
+          "line": 642,
           "called": [
             "IsMonotonic",
             "Transition"
@@ -13239,7 +13226,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_globally_nondecreasing",
-          "line": 669,
+          "line": 660,
           "called": [
             "ReachableViaLaws",
             "ResourceId",
@@ -13253,7 +13240,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_globally_nondecreasing_via_law_set",
-          "line": 687,
+          "line": 678,
           "called": [
             "MonotonicLawSet",
             "ReachableViaLaws",
@@ -13266,7 +13253,7 @@
         {
           "kind": "class",
           "name": "LocalTo",
-          "line": 741,
+          "line": 732,
           "called": [
             "ActorId",
             "ResourceId",
@@ -13279,7 +13266,7 @@
         {
           "kind": "class",
           "name": "FreezePreserving",
-          "line": 768,
+          "line": 759,
           "called": [
             "BalanceMap",
             "ResourceId",
@@ -13291,7 +13278,7 @@
         {
           "kind": "structure",
           "name": "FreezePreservingLawSet",
-          "line": 791,
+          "line": 782,
           "called": [
             "FreezePreserving",
             "ResourceId",
@@ -13301,7 +13288,7 @@
         {
           "kind": "theorem",
           "name": "freeze_preservation_via_law_set",
-          "line": 803,
+          "line": 794,
           "called": [
             "BalanceMap",
             "FreezePreservingLawSet",
@@ -13314,7 +13301,7 @@
         {
           "kind": "def",
           "name": "ConservativeLawSet.empty",
-          "line": 834,
+          "line": 825,
           "called": [
             "ConservativeLawSet"
           ]
@@ -13322,7 +13309,7 @@
         {
           "kind": "def",
           "name": "ConservativeLawSet.cons",
-          "line": 842,
+          "line": 833,
           "called": [
             "ConservativeLawSet",
             "IsConservative",
@@ -13332,7 +13319,7 @@
         {
           "kind": "def",
           "name": "MonotonicLawSet.empty",
-          "line": 851,
+          "line": 842,
           "called": [
             "MonotonicLawSet"
           ]
@@ -13340,7 +13327,7 @@
         {
           "kind": "def",
           "name": "MonotonicLawSet.cons",
-          "line": 857,
+          "line": 848,
           "called": [
             "IsMonotonic",
             "MonotonicLawSet",
@@ -13350,7 +13337,7 @@
         {
           "kind": "def",
           "name": "FreezePreservingLawSet.empty",
-          "line": 866,
+          "line": 857,
           "called": [
             "FreezePreservingLawSet",
             "ResourceId"
@@ -13359,7 +13346,7 @@
         {
           "kind": "def",
           "name": "FreezePreservingLawSet.cons",
-          "line": 873,
+          "line": 864,
           "called": [
             "FreezePreserving",
             "FreezePreservingLawSet",
@@ -20074,7 +20061,7 @@
         {
           "kind": "def",
           "name": "affectedActors",
-          "line": 114,
+          "line": 124,
           "called": [
             "ActorId",
             "ResourceId"
@@ -20083,7 +20070,7 @@
         {
           "kind": "def",
           "name": "actionEvents",
-          "line": 123,
+          "line": 131,
           "called": [
             "Action",
             "Event",
@@ -20113,7 +20100,7 @@
         {
           "kind": "def",
           "name": "extractEvents",
-          "line": 362,
+          "line": 370,
           "called": [
             "Event",
             "ExtendedState",
@@ -20139,7 +20126,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_deterministic",
-          "line": 543,
+          "line": 551,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20149,7 +20136,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_nonempty",
-          "line": 562,
+          "line": 570,
           "called": [
             "ExtendedState",
             "SignedAction",
@@ -20159,7 +20146,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_freeze_only_nonce",
-          "line": 582,
+          "line": 590,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20175,7 +20162,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_replaceKey_emits_registration",
-          "line": 596,
+          "line": 604,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20190,7 +20177,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_deposit_emits_credited",
-          "line": 623,
+          "line": 631,
           "called": [
             "ActorId",
             "Amount",
@@ -20205,7 +20192,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_withdraw_emits_requested",
-          "line": 646,
+          "line": 654,
           "called": [
             "ActorId",
             "Amount",
@@ -20221,7 +20208,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_declareLocalPolicy_emits_localPolicyDeclared",
-          "line": 676,
+          "line": 684,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20233,7 +20220,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_revokeLocalPolicy_emits_localPolicyRevoked",
-          "line": 696,
+          "line": 704,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20245,7 +20232,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_faultProofChallenge_emits_gameOpened",
-          "line": 723,
+          "line": 731,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20257,7 +20244,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_faultProofResolution_emits_gameSettled",
-          "line": 746,
+          "line": 754,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -20269,7 +20256,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_depositWithFee_emits_credited",
-          "line": 777,
+          "line": 785,
           "called": [
             "ActorId",
             "Amount",
@@ -20286,7 +20273,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_topUpActionBudget_emits_topUp",
-          "line": 803,
+          "line": 811,
           "called": [
             "ActorId",
             "Amount",
@@ -20303,7 +20290,7 @@
         {
           "kind": "theorem",
           "name": "extractEvents_emits_budgetConsumed_for_non_bridge_signer",
-          "line": 840,
+          "line": 848,
           "called": [
             "Events",
             "ExtendedState",
@@ -30318,7 +30305,7 @@
     {
       "module": "LegalKernel.FaultProof.SubStep",
       "path": "LegalKernel/FaultProof/SubStep.lean",
-      "declaration_count": 19,
+      "declaration_count": 22,
       "declarations": [
         {
           "kind": "namespace",
@@ -30375,8 +30362,8 @@
         },
         {
           "kind": "theorem",
-          "name": "balanceCell_absent_iff_balance_zero",
-          "line": 136,
+          "name": "balanceCell_absent_of_balance_zero",
+          "line": 134,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30388,8 +30375,49 @@
         },
         {
           "kind": "theorem",
+          "name": "balanceCell_absent_iff_balance_zero",
+          "line": 156,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "balanceCell_absent_of_balance_zero",
+            "canonicalAbsentValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "getBalance_eq_lookup",
+          "line": 173,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "es"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "mem_bulkRecipients_of_cell_live",
+          "line": 196,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "balanceCell_absent_of_balance_zero",
+            "bulkRecipients",
+            "canonicalAbsentValue",
+            "es",
+            "getBalance_eq_lookup",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "exists_mem_bulkRecipients_iff_cell_live",
-          "line": 164,
+          "line": 223,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30398,13 +30426,15 @@
             "bulkRecipients",
             "canonicalAbsentValue",
             "es",
-            "getCellValue"
+            "getBalance_eq_lookup",
+            "getCellValue",
+            "mem_bulkRecipients_of_cell_live"
           ]
         },
         {
           "kind": "def",
           "name": "Action.distributeOthers_subSteps",
-          "line": 218,
+          "line": 261,
           "called": [
             "ActorId",
             "Amount",
@@ -30421,7 +30451,7 @@
         {
           "kind": "def",
           "name": "Action.proportionalDilute_subSteps",
-          "line": 249,
+          "line": 292,
           "called": [
             "ActorId",
             "Amount",
@@ -30439,7 +30469,7 @@
         {
           "kind": "def",
           "name": "Action.subSteps",
-          "line": 273,
+          "line": 316,
           "called": [
             "Action",
             "ExtendedState",
@@ -30452,7 +30482,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_bound",
-          "line": 285,
+          "line": 328,
           "called": [
             "Action",
             "Action.distributeOthers_subSteps",
@@ -30468,7 +30498,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_eq_of_within_cap",
-          "line": 321,
+          "line": 364,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30483,7 +30513,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_complete_of_pre",
-          "line": 335,
+          "line": 378,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30498,7 +30528,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_noop_above_cap",
-          "line": 350,
+          "line": 393,
           "called": [
             "ActorId",
             "Amount",
@@ -30511,7 +30541,7 @@
         {
           "kind": "def",
           "name": "SubStep.writeCells",
-          "line": 366,
+          "line": 409,
           "called": [
             "CellTag",
             "ResourceId",
@@ -30521,7 +30551,7 @@
         {
           "kind": "theorem",
           "name": "SubStep.writeCells_length",
-          "line": 371,
+          "line": 414,
           "called": [
             "ResourceId",
             "SubStep"
@@ -30530,7 +30560,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_affectedActors_nodup",
-          "line": 381,
+          "line": 424,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30543,7 +30573,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_deterministic",
-          "line": 408,
+          "line": 451,
           "called": [
             "Action",
             "Action.subSteps",
@@ -34096,30 +34126,30 @@
     {
       "module": "LegalKernel.Laws.BulkBound",
       "path": "LegalKernel/Laws/BulkBound.lean",
-      "declaration_count": 13,
+      "declaration_count": 14,
       "declarations": [
         {
           "kind": "namespace",
           "name": "LegalKernel",
-          "line": 41,
+          "line": 42,
           "called": []
         },
         {
           "kind": "namespace",
           "name": "Laws",
-          "line": 42,
+          "line": 43,
           "called": []
         },
         {
           "kind": "def",
           "name": "maxRecipientsPerBulkAction",
-          "line": 50,
+          "line": 51,
           "called": []
         },
         {
           "kind": "def",
           "name": "bulkRecipients",
-          "line": 83,
+          "line": 108,
           "called": [
             "ActorId",
             "Amount",
@@ -34130,7 +34160,7 @@
         {
           "kind": "def",
           "name": "BulkBounded",
-          "line": 95,
+          "line": 120,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34142,7 +34172,7 @@
         {
           "kind": "instance",
           "name": "BulkBounded.decidable",
-          "line": 120,
+          "line": 145,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34153,7 +34183,7 @@
         {
           "kind": "theorem",
           "name": "bulkBounded_of_absent",
-          "line": 127,
+          "line": 152,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34165,7 +34195,7 @@
         {
           "kind": "theorem",
           "name": "bulkBounded_of_map_length_le",
-          "line": 135,
+          "line": 160,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34177,7 +34207,7 @@
         {
           "kind": "theorem",
           "name": "mem_bulkRecipients_iff",
-          "line": 144,
+          "line": 169,
           "called": [
             "ActorId",
             "Amount",
@@ -34189,7 +34219,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_key_ne_excluded",
-          "line": 159,
+          "line": 184,
           "called": [
             "ActorId",
             "Amount",
@@ -34202,7 +34232,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_values_ne_zero",
-          "line": 179,
+          "line": 204,
           "called": [
             "ActorId",
             "Amount",
@@ -34214,8 +34244,22 @@
         },
         {
           "kind": "theorem",
+          "name": "bulkRecipients_values_sum_eq_sumOthers",
+          "line": 225,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "balanceList_sum_filter_ne_zero",
+            "bulkRecipients",
+            "state_filter_sum_eq_sumOthers",
+            "sumOthers"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "bulkRecipients_keys_pairwise_ne",
-          "line": 195,
+          "line": 243,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34226,7 +34270,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_nodup_keys",
-          "line": 205,
+          "line": 253,
           "called": [
             "ActorId",
             "Laws",
@@ -35715,9 +35759,9 @@
             "State",
             "TotalSupply",
             "bulkRecipients",
+            "bulkRecipients_values_sum_eq_sumOthers",
             "list_div_sum_mul_le",
             "proportionalDilute",
-            "state_filter_nonzero_sum_eq_sumOthers",
             "step_impl",
             "sumOthers",
             "totalSupply_after_proportionalDilute"
@@ -56932,7 +56976,7 @@
     {
       "module": "LegalKernel.Test.Events.Extract",
       "path": "LegalKernel/Test/Events/Extract.lean",
-      "declaration_count": 34,
+      "declaration_count": 38,
       "declarations": [
         {
           "kind": "namespace",
@@ -57414,12 +57458,74 @@
         },
         {
           "kind": "def",
+          "name": "preBulkWithLiveZero",
+          "line": 507,
+          "called": [
+            "ExtendedState",
+            "KeyRegistry.empty",
+            "base",
+            "setBalance"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "distributeOthersEmitsPerRecipient",
+          "line": 523,
+          "called": [
+            "ExtendedState",
+            "SignedAction",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "base",
+            "distributeOthers",
+            "dummySig",
+            "extractEvents",
+            "preBulkWithLiveZero",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "affectedActorsIsTheRecipientList",
+          "line": 556,
+          "called": [
+            "ResourceId",
+            "TestCase",
+            "affectedActors",
+            "assert",
+            "assertEq",
+            "preBulkWithLiveZero"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "proportionalDiluteEmitsPerChangedRecipient",
+          "line": 575,
+          "called": [
+            "ExtendedState",
+            "KeyRegistry.empty",
+            "SignedAction",
+            "TestCase",
+            "assert",
+            "assertEq",
+            "base",
+            "dummySig",
+            "extractEvents",
+            "proportionalDilute",
+            "setBalance",
+            "step_impl"
+          ]
+        },
+        {
+          "kind": "def",
           "name": "tests",
-          "line": 490,
+          "line": 606,
           "called": [
             "ExtractTests",
             "LegalKernel.Test.Events",
             "TestCase",
+            "affectedActorsIsTheRecipientList",
             "bridgeActorEmitsNoBudgetConsumed",
             "burnTwoEvents",
             "declareEmitsAPI",
@@ -57430,12 +57536,14 @@
             "depositZeroAmountEmitsCredited",
             "determinism",
             "determinismAPI",
+            "distributeOthersEmitsPerRecipient",
             "emitsBudgetConsumedAPI",
             "freezeOneEvent",
             "lpEventCarriesSigner",
             "lpEventDeterministic",
             "mintTwoEvents",
             "nonemptyAPI",
+            "proportionalDiluteEmitsPerChangedRecipient",
             "replaceKeyTwoEvents",
             "revokeEmitsAPI",
             "revokeEmitsLocalPolicyRevoked",
@@ -59416,12 +59524,14 @@
             "Amount",
             "BalanceMap",
             "ExtendedState",
+            "ExtendedState.empty",
             "LegalKernel.Test.FaultProof.SubStep",
             "ResourceId",
             "TestCase",
             "assert",
             "assertEq",
             "balanceCell_absent_iff_balance_zero",
+            "balanceCell_absent_of_balance_zero",
             "base",
             "bulkRecipients",
             "bulkRecipients_eq_law_list",
@@ -59434,6 +59544,7 @@
             "exists_mem_bulkRecipients_iff_cell_live",
             "getCellValue",
             "maxRecipientsPerBulkAction",
+            "mem_bulkRecipients_of_cell_live",
             "other",
             "stateOf",
             "step_impl",
@@ -61215,14 +61326,18 @@
           "name": "tests",
           "line": 36,
           "called": [
+            "ActorId",
+            "Amount",
             "IsConservative",
             "IsMonotonic",
             "LegalKernel.Test.Laws.DistributeOthersTests",
             "ResourceId",
+            "State",
             "TestCase",
             "TotalSupply",
             "assert",
             "assertEq",
+            "bulkRecipients",
             "distributeOthers",
             "distributeOthers_excluded_unchanged",
             "distributeOthers_not_conservative",
@@ -61368,14 +61483,18 @@
           "name": "tests",
           "line": 46,
           "called": [
+            "ActorId",
+            "Amount",
             "IsConservative",
             "IsMonotonic",
             "LegalKernel.Test.Laws.ProportionalDiluteTests",
             "ResourceId",
+            "State",
             "TestCase",
             "TotalSupply",
             "assert",
             "assertEq",
+            "bulkRecipients",
             "emptyState",
             "fixtureF1",
             "fixtureF2",

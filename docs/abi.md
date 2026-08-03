@@ -2003,11 +2003,24 @@ global flags before `extract-events` (so the spawned argv is
 deployment forwards nothing (the invocation is unchanged).
 
 **Response size.**  A single log frame's event list is bounded by
-`HARD_MAX_EVENT_COUNT` (2^20); the multi-actor laws
-(`distributeOthers` / `proportionalDilute`) emit one `balanceChanged`
-per affected actor, so the cap is a generous DoS ceiling, not a
-per-action bound.  A count above it is a subprocess protocol
+`HARD_MAX_EVENT_COUNT` (2^20).  The multi-actor laws
+(`distributeOthers` / `proportionalDilute`) emit at most one
+`balanceChanged` per recipient, and `Laws.BulkBounded` — a conjunct of
+both preconditions — caps the recipients at
+`maxRecipientsPerBulkAction` (256), so a single bulk action contributes
+at most 256 balance events plus the uniform nonce / budget pair.
+`HARD_MAX_EVENT_COUNT` is therefore a DoS ceiling several orders above
+the real per-action bound; a count above it is a subprocess protocol
 violation.
+
+A **recipient** is an actor holding a *positive* balance of the
+resource other than the excluded one (`Laws.bulkRecipients`).  Actors
+with no entry, and actors whose entry is present but zero, are not
+credited and so produce no event — the latter because a zero-valued
+balance cell is canonically absent from the state commitment, so
+crediting it would make a bulk step's post-root depend on something the
+pre-root does not observe (finding C-2 in
+`docs/audits/19-findings-and-followups.md`).
 
 **`Event` payload field layout.**  Each emitted event is
 `Event.encode` (`LegalKernel/Encoding/Event.lean`): the constructor

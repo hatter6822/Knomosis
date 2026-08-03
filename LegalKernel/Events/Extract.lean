@@ -95,29 +95,37 @@ def balanceChangeEvents
     let newV := LegalKernel.getBalance postState r a
     if oldV != newV then some (.balanceChanged r a oldV newV) else none)
 
-/-- The list of actors a Phase-5 multi-actor law (distributeOthers /
-    proportionalDilute) potentially affects: every actor present in
-    `r`'s pre-state `BalanceMap`, minus the excluded actor.
+/-- The actors a Phase-5 multi-actor law (`distributeOthers` /
+    `proportionalDilute`) affects: exactly the recipients the two laws
+    fold over.
 
-    **AR.13.5 / m-6 note.**  Returns *pre-state* actors only.  If a
+    **This reads `Laws.bulkRecipients` rather than re-deriving the
+    set.**  It used to spell its own filter —
+    `(bm.toList.map (·.1)).filter (· ≠ excluded)` — which was a fourth
+    independent copy of the recipient rule alongside both laws'
+    `apply_impl`s and the fault proof's `Action.stateWriteCells`.  The
+    events it produced stayed correct only because
+    `balanceChangeEvents` re-checks `oldV != newV` downstream and
+    silently dropped the surplus; a divergence would therefore have
+    been invisible here and shown up somewhere else.  Now the two
+    cannot diverge, and the downstream delta filter is a second line
+    rather than the only one.
+
+    **AR.13.5 / m-6 note.**  Returns *pre-state* recipients only.  If a
     future law introduces new actors at a resource via
-    `distributeOthers` / `proportionalDilute` (i.e. credits a
-    previously-unmapped actor), those gained-only actors would NOT
-    surface here, and the corresponding `balanceChanged` events
-    would not be emitted by this helper.  No current law triggers
-    this — `distributeOthers` and `proportionalDilute` operate
-    over `bm.toList`, which is the pre-state actor set — but the
-    helper is flagged as a future-extensibility hazard: any
-    new-actor-introducing law would need a separate pass over
-    the post-state actor set, or this helper would need to
-    consume both `preState` and `postState` and union the actor
+    `distributeOthers` / `proportionalDilute` (i.e. credits an actor
+    with no live balance cell), those gained-only actors would NOT
+    surface here, and the corresponding `balanceChanged` events would
+    not be emitted.  No current law triggers this: both bulk laws fold
+    `Laws.bulkRecipients`, which is a sub-list of the pre-state's
+    entries.  The hazard stands for any new-actor-introducing law,
+    which would need a separate pass over the post-state actor set or
+    would have to make this helper consume both states and union the
     sets. -/
 def affectedActors
     (preState : LegalKernel.State) (r : ResourceId) (excluded : ActorId) :
     List ActorId :=
-  match preState.balances[r]? with
-  | none    => []
-  | some bm => (bm.toList.map (·.1)).filter (· ≠ excluded)
+  (Laws.bulkRecipients preState r excluded).map (·.1)
 
 /-- The per-action event list, ignoring the nonce-advance event
     (which is uniformly emitted by `extractEvents`). -/

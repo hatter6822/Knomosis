@@ -362,7 +362,7 @@ The proof goes through the filter-sum infrastructure in
 `state_filter_sum_eq_sumOthers`), which uses
 `Std.TreeMap.distinct_keys_toList` to bridge per-bm filter sums to
 `sumOthers`, and its zero-dropping corollary
-`state_filter_nonzero_sum_eq_sumOthers` — zero entries contribute
+`Laws.bulkRecipients_values_sum_eq_sumOthers` — zero entries contribute
 nothing to a sum, so narrowing the recipient list leaves the divisor
 untouched.
 
