@@ -676,6 +676,8 @@ The Genesis Plan promises a small set of type-level guarantees
 | M | Every frontier is strictly ascending | `pathSorted_frontierOf` | `FaultProof/Frontier.lean` |
 | M | Cell keys always diverge | `keysSeparated_cellTags` | `FaultProof/Frontier.lean` |
 | M | `ByteArray` `==` decides `=` | `instLawfulBEqByteArray` | `Encoding/CBOR.lean` |
+| M | The wire round-trips | `expandMultiProof_buildMultiProof` | `FaultProof/MultiProof.lean` |
+| M | An honest wire passes the shape check | `isWellFormedFor_buildMultiProof` | `FaultProof/MultiProof.lean` |
 | M | An empty bundle is refused | `frontierShapeOk_nil_of_cons` | `FaultProof/Frontier.lean` |
 | M | Path order is a strict total order | `pathLess_trans` / `pathLess_total` | `FaultProof/Frontier.lean` |
 | M | The frontier is strictly ascending | `pathSorted_frontierOf` | `FaultProof/Frontier.lean` |

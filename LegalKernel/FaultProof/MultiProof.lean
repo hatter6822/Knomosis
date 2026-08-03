@@ -1121,5 +1121,360 @@ theorem SmtMultiProof.toWireBytes_size (p : SmtMultiProof)
   rw [h p.siblings.toList p.gapMask (fun s hs => h_sibs s (by simpa using hs))]
   simp
 
+/-! ## The wire round-trips
+
+The compression codec, proved rather than fixture-checked.
+`SmtInjective`'s single-cell counterpart is still described as
+"bookkeeping over `setBitmaskBit` rather than content, validated by
+per-fixture tests"; this is that bookkeeping, done — for the multiproof
+wire, whose shape is derivable and therefore checkable.
+
+It is deliberately NOT what the fold's soundness rests on.
+`multiFold_eq_commit_post` is stated on the EXPANDED sibling list, so a
+codec bug could only ever make an honest wire fail to expand — never
+make a dishonest one verify.  What this buys is the other direction: an
+honest sequencer's wire expands back to exactly the siblings it was
+built from, so a correct defender cannot lose to a formatting accident.
+
+The three `ByteArray.set` lemmas at the head are core's `Array` ones,
+which do not ride along through the one-field wrapper.
+-/
+
+/-- `ByteArray.set` preserves the size.  Core states this for
+    `Array`; `ByteArray` is a one-field wrapper and the lemma does not
+    ride along. -/
+theorem byteArray_size_set (a : ByteArray) (i : Nat) (h : i < a.size) (v : UInt8) :
+    (a.set i v h).size = a.size := by
+  cases a
+  show (Array.set _ i v h).size = _
+  rw [Array.size_set]
+  rfl
+
+/-- Writing one byte leaves the others. -/
+theorem byteArray_getElem_set_ne (a : ByteArray) (i j : Nat) (h : i < a.size) (v : UInt8)
+    (hj : j < (a.set i v h).size) (hne : j ≠ i) :
+    (a.set i v h)[j] = a[j]'(by rwa [byteArray_size_set] at hj) := by
+  cases a
+  show (Array.set _ i v h)[j] = _
+  exact Array.getElem_set_ne (v := v) h (by rwa [byteArray_size_set] at hj) (fun he => hne he.symm)
+
+/-- Writing a byte reads it back. -/
+theorem byteArray_getElem_set_self (a : ByteArray) (i : Nat) (h : i < a.size) (v : UInt8)
+    (hi : i < (a.set i v h).size) :
+    (a.set i v h)[i] = v := by
+  cases a
+  show (Array.set _ i v h)[i] = _
+  exact Array.getElem_set_self (v := v) h
+
+/-- Read bit `g` of a bitmask, LSB-first within each byte. -/
+def maskBit (m : ByteArray) (g : Nat) : Bool :=
+  if h : g / 8 < m.size then
+    decide (((m[g / 8]'h).toNat >>> (g % 8)) % 2 = 1)
+  else
+    false
+
+theorem gapBit_eq_maskBit (p : SmtMultiProof) (g : Nat) :
+    p.gapBit g = maskBit p.gapMask g := rfl
+
+theorem maskBit_eq_testBit (m : ByteArray) (g : Nat) (h : g / 8 < m.size) :
+    maskBit m g = (m[g / 8]'h).toNat.testBit (g % 8) := by
+  unfold maskBit
+  rw [dif_pos h, Nat.testBit_eq_decide_div_mod_eq, Nat.shiftRight_eq_div_pow]
+
+theorem setBitmaskBit_size (m : ByteArray) (d : Nat) :
+    (setBitmaskBit m d).size = m.size := by
+  show (if h : d / 8 < m.size then
+          m.set (d / 8) (UInt8.ofNat ((m[d / 8]'h).toNat ||| 1 <<< (d % 8))) h
+        else m).size = m.size
+  by_cases h : d / 8 < m.size
+  · rw [dif_pos h, byteArray_size_set]
+  · rw [dif_neg h]
+
+/-- The OR's bit is set exactly at the position it names. -/
+theorem testBit_or_shift (x : Nat) (j k : Nat) (hj : j < 8) :
+    (x ||| 1 <<< j).testBit k = ((k == j) || x.testBit k) := by
+  rw [show (1 <<< j) = 2 ^ j from by rw [Nat.shiftLeft_eq]; omega,
+      Nat.testBit_or, Nat.testBit_two_pow]
+  by_cases h : k = j
+  · subst h; simp
+  · have h' : ¬ (j = k) := fun he => h he.symm
+    simp [h, h']
+
+/-- Setting bit `d` sets exactly bit `d`. -/
+theorem maskBit_setBitmaskBit (m : ByteArray) (d g : Nat) (hd : d / 8 < m.size) :
+    maskBit (setBitmaskBit m d) g = ((g == d) || maskBit m g) := by
+  have hset : setBitmaskBit m d
+      = m.set (d / 8) (UInt8.ofNat ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8))) hd := by
+    show (if h : d / 8 < m.size then
+            m.set (d / 8) (UInt8.ofNat ((m[d / 8]'h).toNat ||| 1 <<< (d % 8))) h
+          else m) = _
+    rw [dif_pos hd]
+  rw [hset]
+  have hsize : (m.set (d / 8)
+      (UInt8.ofNat ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8))) hd).size = m.size :=
+    byteArray_size_set _ _ _ _
+  by_cases hg : g / 8 < m.size
+  · rw [maskBit_eq_testBit _ _ (by rw [hsize]; exact hg), maskBit_eq_testBit _ _ hg]
+    by_cases hqe : g / 8 = d / 8
+    · -- Same byte: the OR sets bit `d % 8` and leaves the others.
+      have hbyte : (m.set (d / 8)
+            (UInt8.ofNat ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8))) hd)[g / 8]'
+              (by rw [hsize]; exact hg)
+            = UInt8.ofNat ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8)) := by
+        simp only [hqe]
+        exact byteArray_getElem_set_self m (d / 8) hd _ (by rw [hsize]; exact hd)
+      rw [hbyte]
+      -- The OR stays inside a byte, so `UInt8.ofNat` is exact.
+      have hlt : ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8)) < 256 := by
+        have h1 : (m[d / 8]'hd).toNat < 2 ^ 8 := (m[d / 8]'hd).toNat_lt_size
+        have h2 : (1 <<< (d % 8)) < 2 ^ 8 := by
+          rw [Nat.shiftLeft_eq, Nat.one_mul]
+          exact Nat.pow_lt_pow_right (by decide) (Nat.mod_lt _ (by decide))
+        exact Nat.or_lt_two_pow h1 h2
+      rw [show (UInt8.ofNat ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8))).toNat
+            = ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8)) from by
+          exact UInt8.toNat_ofNat_of_lt' hlt,
+        testBit_or_shift _ _ _ (Nat.mod_lt _ (by decide))]
+      simp only [hqe]
+      by_cases hmod : g % 8 = d % 8
+      · have hgd : g = d := by omega
+        subst hgd
+        simp only [beq_self_eq_true, Bool.true_or]
+      · have hgd : ¬ (g = d) := fun he => hmod (by rw [he])
+        rw [show (g % 8 == d % 8) = false from by simp [hmod],
+          show (g == d) = false from by simp [hgd]]
+    · -- A different byte is untouched, so no new bit appears.
+      have hne : g ≠ d := fun he => hqe (by rw [he])
+      rw [byteArray_getElem_set_ne m (d / 8) (g / 8) hd _ (by rw [hsize]; exact hg) hqe,
+        show (g == d) = false from by simp [hne], Bool.false_or]
+  · -- Past the mask both readers are `false`.
+    have h1 : maskBit (m.set (d / 8)
+        (UInt8.ofNat ((m[d / 8]'hd).toNat ||| 1 <<< (d % 8))) hd) g = false := by
+      unfold maskBit; rw [dif_neg (by rw [hsize]; exact hg)]
+    have h2 : maskBit m g = false := by unfold maskBit; rw [dif_neg hg]
+    have hne : g ≠ d := fun he => hg (he ▸ hd)
+    rw [h1, h2, Bool.or_false, show (g == d) = false from by simp [hne]]
+
+/-- Folding a list of bit indices sets exactly those bits. -/
+theorem maskBit_foldl (l : List Nat) (m : ByteArray) (g : Nat)
+    (hd : ∀ d ∈ l, d / 8 < m.size) :
+    maskBit (l.foldl setBitmaskBit m) g = ((l.contains g) || maskBit m g) := by
+  induction l generalizing m with
+  | nil => simp
+  | cons d rest ih =>
+    have hsize := setBitmaskBit_size m d
+    rw [List.foldl_cons,
+      ih (setBitmaskBit m d) (fun e he => by rw [hsize]; exact hd e (List.mem_cons_of_mem _ he)),
+      maskBit_setBitmaskBit m d g (hd d List.mem_cons_self)]
+    simp only [List.contains_cons]
+    cases h1 : rest.contains g <;> cases h2 : (g == d) <;>
+      simp_all [Bool.or_comm]
+
+/-- The empty mask reads `false` everywhere. -/
+theorem maskBit_replicate (n g : Nat) :
+    maskBit (ByteArray.mk (Array.replicate n (0 : UInt8))) g = false := by
+  unfold maskBit
+  by_cases h : g / 8 < (ByteArray.mk (Array.replicate n (0 : UInt8))).size
+  · rw [dif_pos h]
+    have : (ByteArray.mk (Array.replicate n (0 : UInt8)))[g / 8]'h = 0 := by
+      show (Array.replicate n (0 : UInt8))[g / 8]'h = 0
+      simp
+    rw [this]
+    simp
+  · rw [dif_neg h]
+
+/-- How many gaps below `g` carry a sibling — the wire cursor's value
+    when the walk reaches gap `g`. -/
+def cursorAt (p : SmtMultiProof) (g : Nat) : Nat :=
+  ((List.range g).filter (fun i => p.gapBit i)).length
+
+/-- `expandMultiProof`'s fold, as a `map`. -/
+theorem expandMultiProof_eq_map (levels : List Nat) (p : SmtMultiProof) :
+    expandMultiProof levels p
+      = (List.range levels.length).map (fun g =>
+          if p.gapBit g then p.siblings[cursorAt p g]?.getD paddingHash
+          else emptySubtreeHash (levels[g]!)) := by
+  unfold expandMultiProof
+  suffices h : ∀ n : Nat,
+      ((List.range n).foldl
+        (fun (acc : List ByteArray × Nat) g =>
+          if p.gapBit g then (acc.1 ++ [p.siblings[acc.2]?.getD paddingHash], acc.2 + 1)
+          else (acc.1 ++ [emptySubtreeHash (levels[g]!)], acc.2))
+        ([], 0))
+      = ((List.range n).map (fun g =>
+          if p.gapBit g then p.siblings[cursorAt p g]?.getD paddingHash
+          else emptySubtreeHash (levels[g]!)), cursorAt p n) from by
+    rw [h levels.length]
+  intro n
+  induction n with
+  | zero => rfl
+  | succ k ih =>
+    rw [List.range_succ, List.foldl_append, ih, List.map_append]
+    simp only [List.foldl_cons, List.foldl_nil, List.map_cons, List.map_nil]
+    by_cases hb : p.gapBit k
+    · rw [if_pos hb, if_pos hb]
+      refine Prod.ext rfl ?_
+      show cursorAt p k + 1 = cursorAt p (k + 1)
+      unfold cursorAt
+      rw [List.range_succ, List.filter_append]
+      simp [hb]
+    · rw [if_neg hb, if_neg hb]
+      refine Prod.ext rfl ?_
+      show cursorAt p k = cursorAt p (k + 1)
+      unfold cursorAt
+      rw [List.range_succ, List.filter_append]
+      simp [hb]
+
+/-- A filtered `range`'s entry at the count of earlier survivors is
+    the element itself. -/
+theorem filter_range_getElem? (q : Nat → Bool) (n g : Nat) (hg : g < n) (hq : q g = true) :
+    ((List.range n).filter q)[((List.range g).filter q).length]? = some g := by
+  induction n with
+  | zero => omega
+  | succ k ih =>
+    rw [List.range_succ, List.filter_append]
+    by_cases h : g = k
+    · subst h
+      rw [List.getElem?_append_right (by simp)]
+      simp [hq]
+    · have hgk : g < k := by omega
+      have hsome := ih hgk
+      obtain ⟨hlt, _⟩ := List.getElem?_eq_some_iff.mp hsome
+      rw [List.getElem?_append_left hlt]
+      exact hsome
+
+/-- The kept-gap predicate `buildMultiProof` filters on. -/
+def keptOf (levels : List Nat) (gaps : List ByteArray) (g : Nat) : Bool :=
+  gaps[g]! != emptySubtreeHash (levels[g]!)
+
+/-- **The mask marks exactly the gaps worth sending.** -/
+theorem gapBit_buildMultiProof (levels : List Nat) (gaps : List ByteArray) (g : Nat)
+    (hg : g < levels.length) :
+    (buildMultiProof levels gaps).gapBit g = keptOf levels gaps g := by
+  rw [gapBit_eq_maskBit]
+  show maskBit (((List.range levels.length).filter (keptOf levels gaps)).foldl
+    setBitmaskBit (ByteArray.mk (Array.replicate ((levels.length + 7) / 8) (0 : UInt8)))) g = _
+  rw [maskBit_foldl _ _ _ (fun d hd => by
+        have : d < levels.length := List.mem_range.mp (List.mem_filter.mp hd).1
+        show d / 8 < (ByteArray.mk (Array.replicate ((levels.length + 7) / 8) (0:UInt8))).size
+        show d / 8 < (Array.replicate ((levels.length + 7) / 8) (0:UInt8)).size
+        rw [Array.size_replicate]
+        omega),
+      maskBit_replicate, Bool.or_false]
+  by_cases hk : keptOf levels gaps g
+  · simp [List.mem_filter, List.mem_range, hg, hk]
+  · simp [List.mem_filter, hk]
+
+set_option maxRecDepth 8000 in
+/-- **The wire round-trips.**  Expanding a built wire recovers the
+    gap list it was built from. -/
+theorem expandMultiProof_buildMultiProof (levels : List Nat) (gaps : List ByteArray)
+    (h_len : gaps.length = levels.length) :
+    expandMultiProof levels (buildMultiProof levels gaps) = gaps := by
+  rw [expandMultiProof_eq_map]
+  have h_each : ∀ g ∈ List.range levels.length,
+      (if (buildMultiProof levels gaps).gapBit g then
+          (buildMultiProof levels gaps).siblings[cursorAt (buildMultiProof levels gaps) g]?.getD
+            paddingHash
+        else emptySubtreeHash (levels[g]!)) = gaps[g]! := by
+    intro g hg_mem
+    have hg : g < levels.length := List.mem_range.mp hg_mem
+    -- The bit is set iff the gap is worth sending.
+    have hbit : ∀ i, i < levels.length →
+        (buildMultiProof levels gaps).gapBit i = keptOf levels gaps i :=
+      fun i hi => gapBit_buildMultiProof levels gaps i hi
+    by_cases hk : keptOf levels gaps g
+    · rw [if_pos (by rw [hbit g hg]; exact hk)]
+      -- The cursor counts kept gaps below `g`, and the sibling list is
+      -- the kept gaps' values in order.
+      have hcur : cursorAt (buildMultiProof levels gaps) g
+          = ((List.range g).filter (keptOf levels gaps)).length := by
+        unfold cursorAt
+        congr 1
+        refine List.filter_congr (fun i hi => ?_)
+        exact hbit i (Nat.lt_trans (List.mem_range.mp hi) hg)
+      rw [hcur]
+      show ((((List.range levels.length).filter (keptOf levels gaps)).map
+        (fun i => gaps[i]!)).toArray)[_]?.getD paddingHash = _
+      rw [List.getElem?_toArray, List.getElem?_map,
+        filter_range_getElem? (keptOf levels gaps) levels.length g hg hk]
+      rfl
+    · rw [if_neg (by rw [hbit g hg]; simpa using hk)]
+      exact (by simpa [keptOf] using hk : gaps[g]! = emptySubtreeHash (levels[g]!)).symm
+  -- Pointwise agreement plus equal length is list equality.
+  have hmap : (List.range levels.length).map (fun g => gaps[g]!) = gaps := by
+    rw [← h_len]
+    refine List.ext_getElem (by simp) (fun i _ h2 => ?_)
+    simp [List.getElem_map, List.getElem_range, List.getElem!_eq_getElem?_getD,
+      List.getElem?_eq_getElem h2]
+  exact (List.map_congr_left h_each).trans hmap
+
+/-- Folding `setBitmaskBit` preserves the mask's size. -/
+theorem foldl_setBitmaskBit_size (l : List Nat) (m : ByteArray) :
+    (l.foldl setBitmaskBit m).size = m.size := by
+  induction l generalizing m with
+  | nil => rfl
+  | cons d rest ih => rw [List.foldl_cons, ih, setBitmaskBit_size]
+
+/-- The built mask is exactly `ceil(G/8)` bytes. -/
+theorem gapMask_size_buildMultiProof (levels : List Nat) (gaps : List ByteArray) :
+    (buildMultiProof levels gaps).gapMask.size = (levels.length + 7) / 8 := by
+  show (((List.range levels.length).filter (keptOf levels gaps)).foldl setBitmaskBit
+    (ByteArray.mk (Array.replicate ((levels.length + 7) / 8) (0 : UInt8)))).size = _
+  rw [foldl_setBitmaskBit_size]
+  show (Array.replicate ((levels.length + 7) / 8) (0 : UInt8)).size = _
+  rw [Array.size_replicate]
+
+set_option maxRecDepth 8000 in
+/-- The sibling count is exactly the mask's popcount. -/
+theorem siblings_size_buildMultiProof (levels : List Nat) (gaps : List ByteArray) :
+    (buildMultiProof levels gaps).siblings.size
+      = (buildMultiProof levels gaps).gapPopcount levels.length := by
+  show (((List.range levels.length).filter (keptOf levels gaps)).map
+    (fun g => gaps[g]!)).toArray.size = _
+  rw [List.size_toArray, List.length_map]
+  unfold SmtMultiProof.gapPopcount
+  congr 1
+  refine List.filter_congr (fun i hi => ?_)
+  exact (gapBit_buildMultiProof levels gaps i (List.mem_range.mp hi)).symm
+
+set_option maxRecDepth 8000 in
+/-- **The built wire passes the shape check.**  All four conditions. -/
+theorem isWellFormedFor_buildMultiProof (levels : List Nat) (gaps : List ByteArray)
+    (h_size : ∀ g < levels.length, (gaps[g]!).size = 32) :
+    (buildMultiProof levels gaps).isWellFormedFor levels = true := by
+  unfold SmtMultiProof.isWellFormedFor
+  simp only [Bool.and_eq_true, beq_iff_eq]
+  refine ⟨⟨⟨gapMask_size_buildMultiProof levels gaps, ?_⟩,
+    siblings_size_buildMultiProof levels gaps⟩, ?_⟩
+  · -- No padding bit past `G`: `buildMultiProof` only ever sets bits
+    -- drawn from `range n`.
+    refine List.all_eq_true.mpr (fun g _ => ?_)
+    by_cases hg : g < levels.length
+    · simp [hg]
+    · have : (buildMultiProof levels gaps).gapBit g = false := by
+        rw [gapBit_eq_maskBit]
+        show maskBit (((List.range levels.length).filter (keptOf levels gaps)).foldl
+          setBitmaskBit (ByteArray.mk (Array.replicate ((levels.length + 7) / 8) (0:UInt8)))) g
+          = false
+        rw [maskBit_foldl _ _ _ (fun d hd => by
+              have hd' : d < levels.length := List.mem_range.mp (List.mem_filter.mp hd).1
+              show d / 8 < (Array.replicate ((levels.length + 7) / 8) (0:UInt8)).size
+              rw [Array.size_replicate]
+              omega),
+            maskBit_replicate, Bool.or_false]
+        simp [List.mem_filter, List.mem_range, hg]
+      simp [this]
+  · -- Every sibling is 32 bytes: they are drawn from `gaps`.
+    show (((List.range levels.length).filter (keptOf levels gaps)).map
+      (fun g => gaps[g]!)).toArray.all (fun s => s.size == 32) = true
+    rw [List.all_toArray]
+    refine List.all_eq_true.mpr (fun s hs => ?_)
+    obtain ⟨g, hg, rfl⟩ := List.mem_map.mp hs
+    have hsz := h_size g (List.mem_range.mp (List.mem_filter.mp hg).1)
+    show ((gaps[g]!).size == 32) = true
+    rw [hsz]
+    rfl
+
 end FaultProof
 end LegalKernel

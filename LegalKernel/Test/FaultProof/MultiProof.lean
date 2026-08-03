@@ -276,6 +276,47 @@ def tests : List TestCase :=
           multiFold_eq_commit_post
         assertEq (expected := true) (actual := true) "signatures elaborate"
     }
+  , { name := "the codec's round-trip is pinned at the term level"
+    , body := do
+        -- The value-level round-trip above, as a theorem.  It is NOT
+        -- what the fold's soundness rests on — `multiFold_eq_commit_post`
+        -- is stated on the EXPANDED sibling list, so a codec bug could
+        -- only make an honest wire fail to expand, never make a
+        -- dishonest one verify.  What it buys is the other direction: a
+        -- correct defender cannot lose to a formatting accident.
+        let _roundTrip : ∀ (levels : List Nat) (gaps : List ByteArray),
+            gaps.length = levels.length →
+            expandMultiProof levels (buildMultiProof levels gaps) = gaps :=
+          expandMultiProof_buildMultiProof
+        let _shape : ∀ (levels : List Nat) (gaps : List ByteArray),
+            (∀ g < levels.length, (gaps[g]!).size = 32) →
+            (buildMultiProof levels gaps).isWellFormedFor levels = true :=
+          isWellFormedFor_buildMultiProof
+        let _mask : ∀ (levels : List Nat) (gaps : List ByteArray) (g : Nat),
+            g < levels.length →
+            (buildMultiProof levels gaps).gapBit g = keptOf levels gaps g :=
+          gapBit_buildMultiProof
+        assertEq (expected := true) (actual := true) "signatures elaborate"
+    }
+  , { name := "the built wire passes the shape check it will be judged by"
+    , body := do
+        -- The value-level companion: an honest sequencer's wire is
+        -- accepted by the very predicate `verifierPostRootMulti` uses to
+        -- refuse a malformed one.  Without this the refusal could be
+        -- refusing everything.
+        let entries := stateCellEntries base
+        let gaps := multiSiblings smtDepth entries opened
+        let levels := multiGapLevels smtDepth opened
+        let wire := buildMultiProof levels gaps
+        assertEq (expected := true) (actual := wire.isWellFormedFor levels)
+          "the honest wire is well-formed for its own gap levels"
+        -- The negative control: one sibling short and the same
+        -- predicate refuses.
+        let short : SmtMultiProof :=
+          { wire with siblings := wire.siblings.pop }
+        assertEq (expected := false) (actual := short.isWellFormedFor levels)
+          "...and a wire one sibling short is not"
+    }
   ]
 
 end LegalKernel.Test.FaultProof.MultiProof
