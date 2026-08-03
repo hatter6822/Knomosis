@@ -35,7 +35,9 @@ inductive theorems rather than by trust in operators.
 **Current status.** Phases 0 – 6 complete; Ethereum integration
 Workstreams A – G complete (Lean side); Workstream LP (actor-scoped
 policies) complete; Workstream LX milestones M1 / M2 / M3 complete;
-Workstream H (fault-proof migration) complete (Lean + Rust RH-G).
+Workstream H (fault-proof migration) complete (Lean + Rust RH-G),
+including the terminal step's adjudication and the deduplicating
+pre-root multiproof it folds.
 Phase 7 (Advanced Capabilities) is the next scoped work.  See
 `docs/GENESIS_PLAN.md` §12 / §15B / §15D and the relevant plan
 documents under `docs/planning/` for per-phase deliverables.
@@ -659,6 +661,14 @@ The Genesis Plan promises a small set of type-level guarantees
 | B-3 | Off-cell agreement discharges the fold | `dropKey_stateCellEntries_perm_of_agree_off` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | The root is order-independent | `smtRootListAux_perm` | `FaultProof/SmtInjective.lean` |
 | B-3 | Production-faithful semantic core | `apply_bridge_admissible_with_budget_eq` | `FaultProof/ProductionApply.lean` |
+| M | Merged walk = the reference root | `multiWalk_eq_smtRootListAux` | `FaultProof/MultiProof.lean` |
+| M | One wire, two roots | `multiFold_eq_commit_post` / `..._pre` | `FaultProof/MultiProof.lean` |
+| M | The wire is blind to the leaves | `multiSiblings_key_congr` | `FaultProof/MultiProof.lean` |
+| M | ...and to entries off the frontier | `multiSiblings_congr` | `FaultProof/MultiProof.lean` |
+| M | Adjacent divergences are distinct | `adjacent_div_ne` | `FaultProof/Frontier.lean` |
+| M | The gap count is a closed form | `gapCountClosed` | `FaultProof/Frontier.lean` |
+| M | An alias cannot fork the plan | `plannedBalances_alias_consistent` | `FaultProof/Terminate.lean` |
+| M | An empty bundle is refused | `frontierShapeOk_nil_of_cons` | `FaultProof/Frontier.lean` |
 | B-3 | Root observes exactly the cells | `commitExtendedState_eq_of_cells_agree` | `FaultProof/StateCellsInjective.lean` |
 | B-3 | A step's write chain is coherent | `chainCoherent_canonicalCellChain` | `FaultProof/CellWrites.lean` |
 | B-3 | `setCell` round-trips the reader | `getCellValue_setCell_getCellValue` | `FaultProof/CellWrites.lean` |
@@ -731,7 +741,7 @@ work units.  Status:
 | E-A–G | Ethereum integration (7 workstreams) | Complete |
 | LP | Actor-scoped policies | Complete (Lean side) |
 | LX-M1–M3 | Lex language (3 milestones) | Complete |
-| H | Fault-proof migration | Built (Lean + Rust RH-G); the terminal step now authenticates its action against the log-entry chain, but **still does not adjudicate the state transition** — `executeStep` returns a bespoke hash, not a state root.  See the Workstream H section below |
+| H | Fault-proof migration | **Complete.**  The terminal step authenticates its action against the log-entry chain AND adjudicates the state transition: `terminateOnSingleStep` calls `executeStepToRootMulti`, which returns a state ROOT computed by folding the step's derived cell writes into the pre-root from a deduplicating pre-root multiproof.  Both the bespoke `stepVMHash` recipe and the chained fold that replaced it are retired.  See the Workstream H section below |
 | RH-H–G | Rust host runtime (11 workstreams) | Complete |
 | SC.1–3 | SMT cell proofs (3 workstreams) | Complete |
 | SVC | L1 step-VM coherence | Complete |
@@ -805,11 +815,11 @@ at the current version:
 
 | Surface | Tests | Suites | Canonical query |
 |---------|-------|--------|-----------------|
-| Lean | ~3 124 | ~159 | `lake test` |
-| Rust | ~2 375 | across 12 crates | `cargo test --workspace` |
-| Solidity | ~891 passed | 62 forge suites | `cd solidity && forge test` |
+| Lean | ~3 200 | ~164 | `lake test` |
+| Rust | ~2 378 | across 12 crates | `cargo test --workspace` |
+| Solidity | ~923 passed | 65 forge suites | `cd solidity && forge test` |
 
-`forge test` runs **891 passed / 0 failed / 0 skipped** — the
+`forge test` runs **923 passed / 0 failed / 0 skipped** — the
 Lean<->EVM byte-equivalence corpus included.  It did not always: the
 `solidity/test/CrossCheck/` suites gated themselves on the fixture
 header's `isKeccak256Linked` flag and the committed fixtures carried
@@ -830,7 +840,7 @@ rather than conventional:
 
 `./scripts/verify_keccak_crossstack.sh` (the
 `ci-keccak-crossstack.yml` lane) remains the belt-and-braces lane and
-reports the same 891 / 0 / 0.
+reports the same 923 / 0 / 0.
 
 Only monotonic growth is enforced — no global gate pins the count.
 
@@ -840,10 +850,24 @@ full catalogue):
 - `authority-signed-budget` — GP.3.2 admission-gate theorems +
   five-round security hardening regression tests.
 - `faultproof-terminate` — the openings-only verifier
-  (`verifierPostRoot`) against the sequencer's fold on twenty probes,
-  plus the forgeries it must refuse: a forged pre-value, a short
-  bundle, a reordered bundle, a substituted policy cell, the two bulk
-  variants.
+  (`verifierPostRootMulti`) against the sequencer's fold on nineteen
+  probes, plus the forgeries it must refuse: a forged pre-value, a wire
+  short by one sibling, a mask bit set past the last gap, a bundle
+  whose cells are not the step's, the two bulk variants.  And the one
+  case the multiproof ACCEPTS that its chained predecessor refused: a
+  permuted bundle reaches the identical root.  The calldata claim is
+  measured here rather than asserted — 13 312 → 3 596 bytes over the
+  probe set.
+- `faultproof-frontier` / `faultproof-multiproof` — the merged walk's
+  own suites: the same-cell case first (a duplicate is not
+  representable), the gap-count closed form, `multiWalk` against the
+  reference root, and the wire's exact shape.
+- `crosscheck-smt-multi-proof` — the non-degenerate cross-stack pin for
+  the MERGED walk (`smt_multi_proof.json`): six probes covering merges
+  at two depths, an absent cell written, a present cell swept to
+  absent, and one opening every live cell so the gap mask is all
+  zeros.  The `m = 1` transitive pin exercises no merge, which is what
+  this corpus exists for.
 - `faultproof-smt-injective` — B-3 SMT root injectivity, cell
   updates, canonical-path coherence; includes the negative control
   showing a duplicate-keyed bucket hashes as if it were empty.
@@ -1120,37 +1144,33 @@ Built (Lean + Rust).  State-commitment scheme, bisection game,
 convergence / honesty / settlement theorem chain, SMT cell proofs
 (SC.1–SC.3), step-VM coherence (SVC), observer daemon (RH-G).
 
-**Open critical — the terminal step does not adjudicate.**
-`KnomosisFaultProofGame.initiateChallenge` anchors both game
-endpoints to submitted state roots, so `g.low.commit` and
-`g.high.commit` are `commitExtendedState`-shaped.
-`terminateOnSingleStep` then calls
-`stepVM.executeStep(g.low.commit, …)` and tests the result
-against `g.high.commit` — but `KnomosisStepVM`'s own header states
-that `executeStep` returns "a step-VM-specific 32-byte hash" that
-"is NOT byte-identical to" a `commitExtendedState` value.  The two
-sides of the comparison are different constructions, so it never
-succeeds and an honest sequencer loses every game it correctly
-defends.  The per-entry byte-equivalence assertion in
-`solidity/test/CrossCheck/StepVM.t.sol` is skipped for exactly
-this reason, which is why no suite reports it.
+**Closed — the terminal step adjudicates.**  It did not, and the
+failure was structural rather than a bug: `initiateChallenge` anchors
+both game endpoints to submitted state roots, so `g.low.commit` and
+`g.high.commit` are `commitExtendedState`-shaped, while
+`KnomosisStepVM.executeStep` returned — by its own header — "a step-VM-
+specific 32-byte hash" that "is NOT byte-identical to" one.  The two
+sides of the terminal comparison were different constructions, so it
+never succeeded and an honest sequencer lost every game it correctly
+defended.  The per-entry byte-equivalence assertion in
+`solidity/test/CrossCheck/StepVM.t.sol` was skipped for exactly that
+reason, which is why no suite reported it.
 
-The Lean side used to compound this with a vacuity —
-`kernelStepApply` returned the responder's own
-`step.postStateCommit` whenever `verifyCellProofs` passed, and that
-is `List.all` over the bundle, so an **empty** bundle passed — after
-which the transition compared the value against the responder's own
-`claimedPostCommit`.  That half is closed: `kernelStepApply`
-computes through `StepVMCoherence.stepVMHash`, and
-`terminateOnSingleStep` reads both the pre-state and the target from
-the game state.  The midpoint is derived rather than caller-chosen
-on all three stacks, so convergence is now proved *logarithmically*
+The Lean side compounded it with a vacuity — `kernelStepApply` returned
+the responder's own `step.postStateCommit` whenever `verifyCellProofs`
+passed, and that is `List.all` over the bundle, so an **empty** bundle
+passed — after which the transition compared the value against the
+responder's own claim.  Both halves are closed.  `kernelStepApply`
+computes through `verifierPostRootMulti`, and `terminateOnSingleStep`
+reads both the pre-state and the target from the game state.  The
+midpoint is derived rather than caller-chosen on all three stacks, so
+convergence is proved *logarithmically*
 (`bisection_converges_in_log_rounds`).
 
-What remains is the recipe mismatch alone.  Closing it means
-Merkleising the state root so a post-root is recomputable from the
-pre-root plus the proven cell writes.  The Lean side of that is now
-complete.  `commitExtendedState` **is** the SMT cell root (the
+Closing the recipe mismatch meant Merkleising the state root so a
+post-root is recomputable from the pre-root plus the proven cell
+writes.  The Lean side of that is complete.  `commitExtendedState`
+**is** the SMT cell root (the
 seven-component concatenation survives as
 `commitExtendedStateConcat`, published by nothing); the cell space
 covers all seven `ExtendedState` fields (tags 7–16); `smtCellKey` /
@@ -1313,31 +1333,57 @@ deduplicating pre-root multiproof is materially smaller on calldata, at
 the cost of having to sequence same-cell writes itself.  Chaining
 first, measure, then decide.
 
-**The wiring has landed.**  `terminateOnSingleStep` calls
-`executeStepToRoot`, so both sides of its terminal comparison are state
-roots and `KnomosisFaultProofGame.t.sol`'s honest-sequencer-wins test
-passes for the right reason — driven by a REAL corpus probe (pre-root,
-action, chained openings, post-root), because a fabricated `low` now
-has no openings that verify against it.  `FaultProof/Terminate.lean` is
-the Lean mirror (`verifierPostRoot`), pinned against `stepPostRoot` on
-twenty probes and refusing a forged pre-value, a short bundle, a
-reordered bundle, a substituted policy cell and the two bulk variants.
-`buildTerminateBundle` emits the CHAINED bundle plus the read-only
-policy opening; the `witnessCommit` word is gone from the wire on all
-three stacks — it was a claim only a holder of the whole
-`ExtendedState` could check and a responder could set freely — and the
-Rust conduit follows the new terminate signature
-(`method_selectors.json` regenerated from the compiled ABI).
+**The wiring has landed, and the bundle is a DEDUPLICATING PRE-ROOT
+MULTIPROOF.**  `terminateOnSingleStep` calls `executeStepToRootMulti`,
+so both sides of its terminal comparison are state roots and
+`KnomosisFaultProofGame.t.sol`'s honest-sequencer-wins test passes for
+the right reason — driven by a REAL corpus probe (pre-root, action,
+frontier, wire, post-root), because a fabricated `low` has no wire that
+reproduces it.  `FaultProof/Terminate.lean` is the Lean mirror
+(`verifierPostRootMulti` / `stepMultiPostRoot`), pinned against
+`stepPostRoot` on nineteen probes and refusing a forged pre-value, a
+short wire, a set padding bit, a duplicate cell and the two bulk
+variants.
+
+Every cell is opened ONCE against the pre-root and they share one
+sibling list, which buys four properties the game relies on.  The
+pre-root is checked once, in aggregate, so no intermediate root is
+materialised or trusted.  A cell written twice — a self-transfer,
+which anyone can submit — is opened once, so the responsible party is
+not charged for a second walk that lands the value the first already
+did.  Order carries no information (the verifier sorts by path index),
+so a permuted bundle settles identically and nobody loses on a
+formatting question — the chained arrangement's
+`test_reordered_bundle_reverts` is now
+`test_a_permuted_frontier_reaches_the_same_root`, inverted on purpose.
+And the wire's length is DERIVED from the cell set (`G = (256+1) − m +
+Σ divs`), so a truncated proof reverts rather than being padded out
+with a placeholder hash and walked to some other root — the one thing
+the single-cell verifier cannot do.
+
+Measured over the twenty corpus probes: **−48% calldata**, and gas
++5.6% on a distinct-cell step against **−11.7%** on the duplicate-cell
+shape the dedup exists for.  Getting there took three profiler-found
+fixes rather than one design decision, and one of them —
+`precomputeEmptySubtreeHashes` carrying its running hash on the stack
+instead of paying two bounds-checked fixed-array accesses per level —
+made the terminal step 15% cheaper on its own, before any multiproof.
+
+`buildTerminateBundle` emits the frontier plus the wire
+(`opened_cells` / `gap_mask_hex` / `siblings_hex`); the `witnessCommit`
+word is gone from the wire on all three stacks — it was a claim only a
+holder of the whole `ExtendedState` could check and a responder could
+set freely — and the Rust conduit follows the terminate signature
+(`method_selectors.json` regenerated from the compiled ABI, so a drift
+breaks the build rather than the game).
 
 `Step.kernelStepApply` — the Lean MODEL of the terminal step — routes
-through `verifierPostRoot` too, so the model computes what the contract
-computes.  That change reached further than a repoint:
-`KernelStep` now carries the log index, the read-only policy opening
-and the chained write openings instead of a witness-state-bearing
-bundle, and the settlement and chain tests had to be rebased on a REAL
-step over a REAL state, because an empty bundle no longer verifies
-vacuously — it fails the re-derived shape check, since every one of
-the twenty-five variants writes the signer's nonce and epoch budget.
+through `verifierPostRootMulti` too, so the model computes what the
+contract computes.  `KernelStep` carries the log index and a
+`MultiBundle` instead of a witness-state-bearing bundle, and an empty
+one no longer verifies vacuously: the frontier always leads with the
+read-only budget-policy cell, so `frontierShapeOk_nil_of_cons` refuses
+it as a property of the list's shape.
 
 **The old recipe is gone.**  `KnomosisStepVM.sol` and its test,
 `SolidityStepVMCommit.lean`, `stepVMHash` / `stepVMHashFromAction` and
@@ -1351,9 +1397,38 @@ from that surface is the L1 FIELD LAYOUT: `actionKindByte`,
 root-computing step VM reads them unchanged.
 `docs/audits/19-findings-and-followups.md` records the blast radius
 and `docs/planning/state_root_merkleisation_plan.md` §4 step 3 is the
-specification.  Until the retirement lands the fault-proof game's
-terminal step adjudicates, but the old recipe is still compiled
-alongside it.
+specification.
+
+**And so is the chained fold that replaced it.**
+`KnomosisStepVMRoot.executeStepToRoot`, its `CellOpening` struct and
+per-write derivation helpers, `StepVMMerkle.applyCellWrite`, the
+`writeBundleGoldens` / `stepPostRootGoldens` corpus columns and the
+Lean chained verifier (`verifierPostRoot`, `stepOpenings`,
+`policyOpening`, `preStateValueAt` and their readers) are gone —
+retired once the multiproof was pinned against Lean on the same twenty
+probes AND against the chained entry point itself, which passed on all
+twenty before its second operand was deleted.  What the corpus asserts
+now is stronger than that agreement: `multiProofGoldens` publishes the
+fold's root and `commitExtendedState (productionApplyBudget …)`
+independently, so a verifier is right only if two separately-computed
+numbers coincide.
+
+What SURVIVES from the chained era is the honest sequencer's write
+algebra — `stepWriteBundle` / `stepPostRoot`, `chainWrites`,
+`canonicalCellChain`, `foldStateCellWrites` and their theorems.  It is
+no longer a consensus surface: nothing on L1, in the Rust conduit or in
+the corpus consumes it.  It is kept because
+`stepPostRoot_eq_commit_productionApplyBudget` is the proved statement
+that an honest fold lands on the published root, the multiproof's own
+version of that statement is only VALUE-level so far (twenty corpus
+probes plus nineteen `faultproof-terminate` probes, on both stacks),
+and composing `multiFold_eq_commit_post` into a
+`stepMultiPostRoot` counterpart is a development in its own right —
+it needs the frontier's sortedness, `plannedBalances`' totality and a
+twenty-five-way dispatch through `VerifierWrites`' `*_correct` family.
+Retiring a headline guarantee before its replacement is proved would be
+the wrong order.  Recorded in
+`state_root_merkleisation_plan.md` §6.5 M8.
 
 ### Fair queuing (Workstream FQ / GP.8)
 

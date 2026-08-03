@@ -1236,7 +1236,7 @@ contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
 
 /// @title BenchmarkGasV1_3StepVMRootTest
 /// @notice The fault proof's TERMINAL STEP —
-///         `KnomosisStepVMRoot.executeStepToRoot`, the call
+///         `KnomosisStepVMRoot.executeStepToRootMulti`, the call
 ///         `KnomosisFaultProofGame.terminateOnSingleStep` makes to
 ///         adjudicate a converged bisection.
 ///
@@ -1253,12 +1253,13 @@ contract BenchmarkGasV1_3DisasterRecoveryTest is BenchmarkGasV1_3Base {
 ///
 ///         Two probes rather than one, because the cost is not a single
 ///         number: `transfer` opens five DISTINCT cells, while
-///         `selfTransfer` names the same balance cell twice — the shape
-///         a deduplicating multiproof helps most and a chained fold
-///         helps not at all.  Measuring only the first would report an
-///         average that neither case has.
+///         `selfTransfer` names the same balance cell twice and the
+///         frontier dedups it to four — the shape the multiproof helps
+///         most and the retired chained fold helped not at all.
+///         Measuring only the first would report an average that
+///         neither case has.
 ///
-///         The inputs are the committed `writeBundleGoldens` corpus,
+///         The inputs are the committed `multiProofGoldens` corpus,
 ///         loaded through the SAME harness the cross-check suite uses
 ///         (`StepVMRootProbeHarness`), so the measured call and the
 ///         verified call cannot drift apart.  The corpus is a keccak
@@ -1271,56 +1272,18 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
 
     /// @dev The corpus, read once.
     string internal raw;
-    /// @dev The five-distinct-cell probe.
-    string internal distinctBase;
-    /// @dev The duplicate-cell probe (`transfer` with sender == receiver).
-    string internal duplicateBase;
-    /// @dev The same two probes in the multiproof column.
+    /// @dev The five-distinct-cell probe (`transfer`).
     string internal multiDistinctBase;
-    /// @dev The duplicate-cell probe's multiproof column entry.
+    /// @dev The duplicate-cell probe (`transfer` with sender ==
+    ///      receiver), whose frontier dedups to four cells.
     string internal multiDuplicateBase;
 
     function setUp() public {
         vmRoot = new KnomosisStepVMRoot();
         raw = readFixture(STEP_VM_FIXTURE);
         _requireKeccakLinked(raw, ".isKeccak256Linked");
-        distinctBase = findProbeBase(raw, "transfer");
-        duplicateBase = findProbeBase(raw, "selfTransfer");
         multiDistinctBase = findMultiProbeBase(raw, "transfer");
         multiDuplicateBase = findMultiProbeBase(raw, "selfTransfer");
-    }
-
-    /// @notice `executeStepToRoot` over a bundle of five DISTINCT cells
-    ///         (`transfer`: two balances, the signer's nonce, the
-    ///         signer's epoch budget, plus the read-only policy cell).
-    function test_gas_executeStepToRoot_distinctCells() public {
-        _bench(
-            "executeStepToRoot_distinctCells",
-            address(this),
-            address(vmRoot),
-            0,
-            encodeProbeCall(raw, distinctBase, loadOpenings(raw, distinctBase)),
-            true
-        );
-    }
-
-    /// @notice `executeStepToRoot` over a bundle naming the same balance
-    ///         cell TWICE (`transfer` with sender == receiver).
-    ///
-    /// @dev    Under the chained fold the second write costs a full
-    ///         second opening — 256 levels verified and 256 re-walked —
-    ///         to land the value the first one already did.  That is the
-    ///         cost §6's dedup removes, and this entry is where the
-    ///         removal will show.
-    function test_gas_executeStepToRoot_duplicateCell() public {
-        _bench(
-            "executeStepToRoot_duplicateCell",
-            address(this),
-            address(vmRoot),
-            0,
-            encodeProbeCall(raw, duplicateBase, loadOpenings(raw, duplicateBase)),
-            true
-        );
     }
 
     /// @notice `executeStepToRootMulti` over the SAME distinct-cell
@@ -1373,11 +1336,13 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
         );
     }
 
-    /// @notice Pins the multiproof scenarios the same way: each reaches
-    ///         Lean's published post-root, agrees with the chained entry
-    ///         point, and has the shape its name claims — the duplicate
-    ///         probe's frontier is strictly smaller than its write set,
-    ///         which is the dedup being exercised rather than assumed.
+    /// @notice Pins both benchmarked scenarios: each reaches Lean's
+    ///         published post-root, that root is not the pre-root, and
+    ///         the two probes have the shapes their names claim.
+    ///
+    /// @dev    Discipline point (4) of this file's header: a benchmark
+    ///         whose effects are unpinned measures whatever `setUp`
+    ///         happens to stage.
     function test_sanity_stepVMRootMultiScenarioAssumptions() public view {
         KnomosisStepVMRoot.OpenedCell[] memory distinct =
             loadOpenedCells(raw, multiDistinctBase);
@@ -1399,17 +1364,23 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
             probePostRoot(raw, multiDuplicateBase),
             "the duplicate-cell multiproof reaches Lean's post-root"
         );
-        // And the two disciplines adjudicate the same transition, so
-        // the benchmark is comparing costs of one thing.
-        assertEq(
-            _runMulti(multiDistinctBase, distinct),
-            _run(distinctBase, loadOpenings(raw, distinctBase)),
-            "the two entry points disagree on the distinct-cell step"
+        // The duplicate probe's frontier is strictly smaller than its
+        // write set, which is the dedup being exercised rather than
+        // assumed: a corpus regeneration that changed `selfTransfer`'s
+        // aliasing would silently turn the duplicate benchmark into a
+        // second distinct-cell one.
+        assertLt(
+            duplicate.length,
+            distinct.length,
+            "the duplicate probe must dedup to a smaller frontier"
         );
-        assertEq(
-            _runMulti(multiDuplicateBase, duplicate),
-            _run(duplicateBase, loadOpenings(raw, duplicateBase)),
-            "the two entry points disagree on the duplicate-cell step"
+        assertTrue(
+            probePostRoot(raw, multiDistinctBase) != probePreRoot(raw, multiDistinctBase),
+            "the distinct-cell fold moves the root"
+        );
+        assertTrue(
+            probePostRoot(raw, multiDuplicateBase) != probePreRoot(raw, multiDuplicateBase),
+            "the duplicate-cell fold moves the root"
         );
     }
 
@@ -1426,83 +1397,4 @@ contract BenchmarkGasV1_3StepVMRootTest is BenchmarkGasV1_3Base, StepVMRootProbe
         root = abi.decode(out, (bytes32));
     }
 
-    /// @notice Pins both benchmarked scenarios: each probe folds to
-    ///         Lean's published post-root, that root is not the
-    ///         pre-root, and the two probes have the shapes their names
-    ///         claim — five distinct cells against a bundle carrying one
-    ///         cell twice.
-    ///
-    /// @dev    Discipline point (4) of this file's header: a benchmark
-    ///         whose effects are unpinned measures whatever `setUp`
-    ///         happens to stage.  Here that risk is concrete — a corpus
-    ///         regeneration that changed `selfTransfer`'s aliasing would
-    ///         silently turn the duplicate benchmark into a second
-    ///         distinct-cell one.
-    function test_sanity_stepVMRootScenarioAssumptions() public view {
-        KnomosisStepVMRoot.CellOpening[] memory distinct =
-            loadOpenings(raw, distinctBase);
-        KnomosisStepVMRoot.CellOpening[] memory duplicate =
-            loadOpenings(raw, duplicateBase);
-
-        assertEq(distinct.length, 4, "transfer writes four cells");
-        assertEq(duplicate.length, 4, "selfTransfer writes four cells");
-        assertEq(
-            _distinctCellCount(distinct), 4, "transfer's cells are all distinct"
-        );
-        assertEq(
-            _distinctCellCount(duplicate), 3, "selfTransfer names one cell twice"
-        );
-
-        assertEq(
-            _run(distinctBase, distinct),
-            probePostRoot(raw, distinctBase),
-            "the distinct-cell probe reaches Lean's post-root"
-        );
-        assertEq(
-            _run(duplicateBase, duplicate),
-            probePostRoot(raw, duplicateBase),
-            "the duplicate-cell probe reaches Lean's post-root"
-        );
-        assertTrue(
-            probePostRoot(raw, distinctBase) != probePreRoot(raw, distinctBase),
-            "the distinct-cell fold moves the root"
-        );
-        assertTrue(
-            probePostRoot(raw, duplicateBase) != probePreRoot(raw, duplicateBase),
-            "the duplicate-cell fold moves the root"
-        );
-    }
-
-    /// @dev Run a probe and return the root the verifier reaches.
-    function _run(
-        string memory base,
-        KnomosisStepVMRoot.CellOpening[] memory ops
-    ) private view returns (bytes32 root) {
-        (bool ok, bytes memory out) =
-            address(vmRoot).staticcall(encodeProbeCall(raw, base, ops));
-        assertTrue(ok, "probe reverted");
-        root = abi.decode(out, (bytes32));
-    }
-
-    /// @dev How many distinct `(cellKind, keyA, keyB)` triples a bundle
-    ///      names.  Quadratic, over at most `MAX_CELL_OPENINGS` entries.
-    function _distinctCellCount(KnomosisStepVMRoot.CellOpening[] memory ops)
-        private
-        pure
-        returns (uint256 n)
-    {
-        for (uint256 i = 0; i < ops.length; i++) {
-            bool seen = false;
-            for (uint256 j = 0; j < i; j++) {
-                if (
-                    ops[i].cellKind == ops[j].cellKind && ops[i].keyA == ops[j].keyA
-                        && ops[i].keyB == ops[j].keyB
-                ) {
-                    seen = true;
-                    break;
-                }
-            }
-            if (!seen) n++;
-        }
-    }
 }

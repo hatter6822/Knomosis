@@ -2,12 +2,10 @@
 pragma solidity 0.8.20;
 
 import {CrossCheckFramework} from "./Framework.t.sol";
-import {KnomosisStepVMRoot} from "src/contracts/KnomosisStepVMRoot.sol";
 import {LogChain} from "src/lib/LogChain.sol";
 import {CBEEncode} from "src/lib/CBEEncode.sol";
 import {SmtCellVerifier} from "src/lib/SmtCellVerifier.sol";
 import {StepWrites} from "src/lib/StepWrites.sol";
-import {StepVMMerkle} from "src/lib/StepVMMerkle.sol";
 
 /// @title StepVMCrossCheck
 /// @notice Workstream-H F.1.8 — Solidity-side consumer of the
@@ -199,10 +197,10 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         only property the fault-proof game needs.  Two
     ///         implementations of the same wrong thing concurring.
     ///
-    ///         `CrossCheck/StepVMRoot.t.sol` is what replaced it: it
-    ///         drives `KnomosisStepVMRoot.executeStepToRoot` against
-    ///         the root Lean's `stepPostRoot` reaches, so both sides
-    ///         are state roots.  The corpus's per-entry columns that
+    ///         `CrossCheck/StepVMRootMulti.t.sol` is what replaced it:
+    ///         it drives `KnomosisStepVMRoot.executeStepToRootMulti`
+    ///         against the root Lean's `stepMultiPostRoot` reaches, so
+    ///         both sides are state roots.  The corpus's per-entry columns that
     ///         survive here — the action-kind dispatch, the field
     ///         layouts, the cell-proof shapes — are the L1 CALLDATA
     ///         contract, which the new verifier reads unchanged.
@@ -242,7 +240,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///      have witnessCommitHex matching the fixture's
     ///      preStateCommitHex.  Extracted to keep the outer
     ///      driver's stack shallow.
-    function _assertWitnessBinding(string memory raw, string memory base) internal view {
+    function _assertWitnessBinding(string memory raw, string memory base) internal pure {
         string memory preStateHex =
             vm.parseJsonString(raw, string.concat(base, ".preStateCommitHex"));
         uint256 nProofs = vm.parseJsonUint(raw, string.concat(base, ".cellProofsCount"));
@@ -260,9 +258,14 @@ contract StepVMCrossCheck is CrossCheckFramework {
             bytes memory pd = vm.parseJsonBytes(raw, string.concat(cpBase, ".proofDataHex"));
             assertTrue(pd.length > 0, string.concat("empty proofData for ", cpBase));
             assertEq(pd.length % 32, 0, string.concat("misaligned proofData for ", cpBase));
+            // The tree's geometry: a 32-byte bitmask plus at most one
+            // sibling per level.  Spelled here rather than read off the
+            // step VM — the multiproof entry point derives its wire's
+            // EXACT length from the key set and has no opinion about a
+            // single-cell opening's cap.
             assertLe(
                 pd.length,
-                vmRoot.MAX_PROOF_DATA_BYTES(),
+                32 * (1 + 256),
                 string.concat("oversize proofData for ", cpBase)
             );
         }
@@ -745,42 +748,38 @@ contract StepVMCrossCheck is CrossCheckFramework {
         );
     }
 
-    /// @notice **The step VM does not yet return a state root, and the
-    ///         corpus now says so in numbers.**
+    /// @notice **The fold's answer is the production advance's
+    ///         published root.**
     ///
-    ///         `stepPostRootGoldens` carries, per probe, the root Lean
-    ///         reaches by FOLDING a step's proven writes into the
-    ///         pre-root — the value `executeStep` must return after the
-    ///         flip — alongside the bespoke hash it returns today.
+    ///         `multiProofGoldens` carries two independently-computed
+    ///         numbers per probe: `postStateRootHex`, the root the
+    ///         merged walk reaches by folding a step's derived writes
+    ///         into the pre-root, and `publishedPostRootHex`, the root
+    ///         `commitExtendedState (productionApplyBudget …)` gives
+    ///         from the post-STATE.  A verifier is only right if they
+    ///         coincide.
     ///
-    ///         This is the one fact the 278-entry byte-equivalence
-    ///         corpus cannot establish.  That corpus pins Lean's
+    ///         This is the fact the 278-entry byte-equivalence corpus
+    ///         could not establish.  That corpus pinned Lean's
     ///         `stepVMHash` against Solidity's `executeStep`: two
-    ///         implementations of the SAME recipe, agreeing on every
-    ///         entry, and their agreement says nothing about whether
-    ///         either equals a published state root.  Here the two
-    ///         numbers are compared directly, and they differ on every
-    ///         probe.
-    ///
-    ///         When the flip lands this test inverts: the assertion
-    ///         becomes `executeStep(...) == expectedPostStateRootHex`
-    ///         and the bespoke column retires.  Written as a
-    ///         measurement rather than a comment so the day it stops
-    ///         being true is a test failure.
-    function test_stepVM_does_not_yet_return_the_state_root() public {
+    ///         implementations of the SAME recipe, whose agreement said
+    ///         nothing about whether either equalled a published state
+    ///         root.  Both are retired; this compares the fold against
+    ///         the state.
+    function test_the_fold_reaches_the_published_root() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
         _requireKeccakLinked(raw, ".isKeccak256Linked");
-        uint256 n = vm.parseJsonUint(raw, ".stepPostRootGoldensCount");
-        assertGt(n, 0, "the corpus must carry state-root goldens");
+        uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
+        assertGt(n, 0, "the corpus must carry multiproof goldens");
         for (uint256 i = 0; i < n; i++) {
             string memory base =
-                string.concat(".stepPostRootGoldens[", vm.toString(i), "]");
+                string.concat(".multiProofGoldens[", vm.toString(i), "]");
             bytes32 foldRoot =
-                vm.parseJsonBytes32(raw, string.concat(base, ".expectedPostStateRootHex"));
+                vm.parseJsonBytes32(raw, string.concat(base, ".postStateRootHex"));
             bytes32 published =
                 vm.parseJsonBytes32(raw, string.concat(base, ".publishedPostRootHex"));
             bytes32 preRoot =
@@ -812,96 +811,26 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         that got this wrong: two writes at the SAME cell, so a
     ///         fold verifying both against the pre-root would accept
     ///         the bundle and reach a root no state has.
-    function test_writeFold_reaches_lean_root() public {
-        if (!fixtureExists(FIXTURE_NAME)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(FIXTURE_NAME);
-        _requireKeccakLinked(raw, ".isKeccak256Linked");
-        uint256 n = vm.parseJsonUint(raw, ".writeBundleGoldensCount");
-        assertGt(n, 0, "the corpus must carry write-bundle goldens");
-        for (uint256 i = 0; i < n; i++) {
-            string memory base =
-                string.concat(".writeBundleGoldens[", vm.toString(i), "]");
-            assertEq(
-                this.foldBundleExternal(raw, base),
-                vm.parseJsonBytes32(raw, string.concat(base, ".postStateRootHex")),
-                string.concat("fold did not reach Lean's root at ", base)
-            );
-        }
-    }
-
-    /// @dev External so the per-write `bytes` slices arrive in
-    ///      calldata, which `StepVMMerkle.applyCellWrite` requires.
-    function foldBundleExternal(string calldata raw, string calldata base)
-        external
-        view
-        returns (bytes32 root)
-    {
-        root = vm.parseJsonBytes32(raw, string.concat(base, ".preStateRootHex"));
-        uint256 m = vm.parseJsonUint(raw, string.concat(base, ".writeCount"));
-        for (uint256 j = 0; j < m; j++) {
-            string memory w =
-                string.concat(base, ".writes[", vm.toString(j), "]");
-            bool ok;
-            (ok, root) = this.applyOneWrite(
-                root,
-                vm.parseJsonBytes32(raw, string.concat(w, ".smtKeyHex")),
-                vm.parseJsonBool(raw, string.concat(w, ".oldIsAbsent")),
-                vm.parseJsonBytes(raw, string.concat(w, ".oldLeafPreimageHex")),
-                vm.parseJsonBool(raw, string.concat(w, ".newIsAbsent")),
-                vm.parseJsonBytes(raw, string.concat(w, ".newLeafPreimageHex")),
-                vm.parseJsonBytes(raw, string.concat(w, ".proofDataHex"))
-            );
-            // Fatal, not skippable: a fold that dropped an unverified
-            // write would reach a root for a state where that cell
-            // never moved.
-            require(ok, "opening did not verify against the running root");
-        }
-    }
-
-    /// @dev Calldata boundary for one write.
-    function applyOneWrite(
-        bytes32 root,
-        bytes32 smtKey,
-        bool oldIsAbsent,
-        bytes calldata oldPreimage,
-        bool newIsAbsent,
-        bytes calldata newPreimage,
-        bytes calldata proofData
-    ) external pure returns (bool ok, bytes32 newRoot) {
-        return StepVMMerkle.applyCellWrite(
-            root,
-            smtKey,
-            oldIsAbsent,
-            oldPreimage,
-            newIsAbsent,
-            newPreimage,
-            proofData,
-            SmtCellVerifier.precomputeEmptySubtreeHashes()
-        );
-    }
-
     /// @notice The leaf PREIMAGE Lean hashes is one Solidity can build.
     ///
     /// @dev    `encodeAsBytes key ++ encodeAsBytes value` — two CBE
     ///         byte-strings.  Checking the fold with Lean's preimage
     ///         proves the WALK agrees; rebuilding it here from
     ///         `CBEEncode.bytesValue` proves the CONSTRUCTION does too,
-    ///         which is what `executeStep` will have to do for itself.
+    ///         which is what the step VM does for itself on every cell it
+///         folds.
     function test_leafPreimage_is_reconstructible() public {
         if (!fixtureExists(FIXTURE_NAME)) {
             _skipWithReason("fixture missing");
             return;
         }
         string memory raw = readFixture(FIXTURE_NAME);
-        string memory w = ".writeBundleGoldens[0].writes[0]";
-        bytes memory smtKey = vm.parseJsonBytes(raw, string.concat(w, ".smtKeyHex"));
-        bytes memory oldValue = vm.parseJsonBytes(raw, string.concat(w, ".oldValueHex"));
+        string memory c = ".multiProofGoldens[0].cells[0]";
+        bytes memory smtKey = vm.parseJsonBytes(raw, string.concat(c, ".smtKeyHex"));
+        bytes memory preValue = vm.parseJsonBytes(raw, string.concat(c, ".preValueHex"));
         assertEq(
-            bytes.concat(CBEEncode.bytesValue(smtKey), CBEEncode.bytesValue(oldValue)),
-            vm.parseJsonBytes(raw, string.concat(w, ".oldLeafPreimageHex")),
+            bytes.concat(CBEEncode.bytesValue(smtKey), CBEEncode.bytesValue(preValue)),
+            vm.parseJsonBytes(raw, string.concat(c, ".preLeafPreimageHex")),
             "the leaf preimage must be two CBE byte-strings"
         );
     }
@@ -1186,16 +1115,4 @@ contract StepVMCrossCheck is CrossCheckFramework {
         );
     }
 
-    /// @dev The step VM this corpus's shape checks read constants
-    ///      from.  It used to be `KnomosisStepVM`, deployed so the
-    ///      per-entry byte-equivalence driver could call
-    ///      `executeStep`; that driver and that contract are gone, and
-    ///      what remains here is the L1 CALLDATA contract — field
-    ///      layouts, cell-proof shapes, the opening's depth bound —
-    ///      which the root-computing step VM reads unchanged.
-    KnomosisStepVMRoot internal vmRoot;
-
-    function setUp() public {
-        vmRoot = new KnomosisStepVMRoot();
-    }
 }

@@ -7,24 +7,27 @@ import {StepWrites} from "src/lib/StepWrites.sol";
 import {StepVMRootProbeHarness} from "test/utils/StepVMRootProbeHarness.sol";
 
 /// @title StepVMRootMultiCrossCheck
-/// @notice **The multiproof entry point, checked against Lean and
-///         against its own chained twin.**
+/// @notice **The multiproof entry point, checked against Lean.**
 ///
-/// @dev    `executeStepToRootMulti` adjudicates the same step as
-///         `executeStepToRoot` from a deduplicating pre-root
-///         multiproof: one opening per CELL against the pre-root with
-///         a shared sibling list, instead of one per WRITE against the
-///         running root.
+/// @dev    `executeStepToRootMulti` adjudicates a step from a
+///         deduplicating pre-root multiproof: one opening per CELL
+///         against the pre-root with a shared sibling list, rather
+///         than the retired `executeStepToRoot`'s one per WRITE
+///         against a running root.
 ///
-///         Two agreements are asserted, and both are needed.  Against
-///         LEAN, because the corpus's `multiProofGoldens` column is
-///         what says this stack's merged walk and Lean's
-///         `verifierPostRootMulti` compute the same root.  Against the
-///         CHAINED entry point, because that is what distinguishes
+///         The agreement is against LEAN: the corpus's
+///         `multiProofGoldens` column is what says this stack's merged
+///         walk and Lean's `verifierPostRootMulti` compute the same
+///         root, over the same twenty probes the retired chained entry
+///         point was checked on.
+///
+///         While both entry points existed this suite also asserted
+///         they agreed WITH EACH OTHER — the check that distinguished
 ///         "the multiproof works" from "the multiproof and the chained
-///         fold both work, differently" — two consensus surfaces that
-///         disagree on one step would each be defensible and the game
-///         could not say which was right.
+///         fold both work, differently".  It passed on all twenty
+///         probes, and it retired with its second operand; the corpus
+///         keeps the same evidence one layer up, since Lean asserts
+///         the two columns agree before it publishes either.
 ///
 ///         The negative controls are where the design actually differs.
 ///         A duplicate cell is not representable (strict ascent after
@@ -65,50 +68,6 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
                 _runProbe(raw, base),
                 probePostRoot(raw, base),
                 string.concat("post-root mismatch at ", base)
-            );
-        }
-    }
-
-    /// @notice **The two entry points agree on every probe.**
-    ///
-    /// @dev    Same pre-state, same action, opened two different ways.
-    ///         Asserted on THIS stack rather than only in the corpus,
-    ///         because the corpus's own check compares two Lean
-    ///         computations and this compares two Solidity ones — a
-    ///         derivation that drifted between the chained and the
-    ///         merged path would satisfy the corpus and fail here.
-    function test_the_two_entry_points_agree() public {
-        if (!fixtureExists(STEP_VM_FIXTURE)) {
-            _skipWithReason("fixture missing");
-            return;
-        }
-        string memory raw = readFixture(STEP_VM_FIXTURE);
-        _requireKeccakLinked(raw, ".isKeccak256Linked");
-        uint256 n = vm.parseJsonUint(raw, ".multiProofGoldensCount");
-        assertEq(
-            n, vm.parseJsonUint(raw, ".writeBundleGoldensCount"),
-            "the two columns must cover the same probes"
-        );
-        for (uint256 i = 0; i < n; i++) {
-            string memory multi = multiProbeBase(i);
-            string memory chained = findProbeBase(
-                raw, vm.parseJsonString(raw, string.concat(multi, ".variant")));
-            assertEq(
-                probePreRoot(raw, multi), probePreRoot(raw, chained),
-                "the two columns must share a pre-state"
-            );
-            assertEq(
-                _runProbe(raw, multi),
-                vmRoot.executeStepToRoot(
-                    probePreRoot(raw, chained),
-                    uint8(vm.parseJsonUint(raw, string.concat(chained, ".actionKindByte"))),
-                    vm.parseJsonBytes(raw, string.concat(chained, ".actionFieldsHex")),
-                    uint64(vm.parseJsonUint(raw, string.concat(chained, ".signerNat"))),
-                    vm.parseJsonUint(raw, string.concat(chained, ".l2LogIndex")),
-                    loadPolicyOpening(raw, chained),
-                    loadOpenings(raw, chained)
-                ),
-                string.concat("the entry points disagree at ", multi)
             );
         }
     }
@@ -322,6 +281,27 @@ contract StepVMRootMultiCrossCheck is StepVMRootProbeHarness {
             );
             vmRoot.executeStepToRootMulti(
                 bytes32(0), kinds[i], hex"", 7, 0, none_, hex"", hex"");
+        }
+    }
+
+    /// @notice The adjudicability predicate is false on exactly the
+    ///         bulk pair and unknown kinds.
+    ///
+    /// @dev    Mirrors `FaultProof.faultProofAdjudicable_eq_false_iff`.
+    ///         Stated over the whole frozen range so ADDING a variant
+    ///         without deciding its adjudicability fails here.
+    ///
+    ///         Inherited from the retired chained suite: the exclusion
+    ///         is a property of the write set, not of the opening
+    ///         scheme, so it outlives the entry point that first
+    ///         asserted it.
+    function test_isAdjudicable_excludes_exactly_the_bulk_pair() public pure {
+        for (uint256 k = 0; k <= 30; k++) {
+            bool expected = k <= 24 && k != 6 && k != 7;
+            assertEq(
+                StepWrites.isAdjudicable(uint8(k)), expected,
+                string.concat("adjudicability at kind ", vm.toString(k))
+            );
         }
     }
 

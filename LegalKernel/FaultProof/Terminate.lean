@@ -9,20 +9,19 @@
 
 /-
 LegalKernel.FaultProof.Terminate — the OPENINGS-ONLY verifier: the
-Lean mirror of `KnomosisStepVMRoot.executeStepToRoot`.
+Lean mirror of `KnomosisStepVMRoot.executeStepToRootMulti`.
 
 `stepPostRoot` (`StepWriteSets.lean`) is the SEQUENCER's computation.
 It takes the pre-state and reads its `newValue` column off
 `productionApplyBudget`, so its guarantee — the fold lands on the root
 the sequencer published — says nothing about a bundle an arbitrary
-party supplies.  A verifier holds a pre-root and a bundle of openings
-and nothing else, so it has to derive both halves itself:
+party supplies.  A verifier holds a pre-root and a bundle and nothing
+else, so it has to derive both halves itself:
 
   * the cell LIST, from `(action, signer)` plus the proven
-    `.bridgeNextWdId` — `verifierWriteCells`, checked against the
-    submitted bundle position by position, which is what stops a
-    responder omitting a write and folding to a root where that cell
-    never moved;
+    `.bridgeNextWdId` — `verifierWriteCells`, whose FRONTIER is checked
+    against the submitted one as a set, which is what stops a responder
+    omitting a write and folding to a root where that cell never moved;
   * each cell's VALUE, from the proven pre-values —
     `VerifierWrites`, which is `productionApplyBudget` re-expressed
     cell-locally with a `*_correct` theorem per cell kind.
@@ -30,6 +29,14 @@ and nothing else, so it has to derive both halves itself:
 This module assembles those into one function, so the Lean model of
 `terminateOnSingleStep` computes what the contract computes rather
 than what the sequencer does.
+
+The bundle is a DEDUPLICATING PRE-ROOT MULTIPROOF: every cell opened
+once against the pre-root, sharing one sibling list, with the aggregate
+compared to the pre-root once.  A CHAINED arrangement shipped first —
+one opening per WRITE, each against the running root — and lived here
+until the multiproof replaced it on all three stacks; `CellOpening` is
+what survives of it, because the SMT opening it carries is still the
+shape `buildStateCellProof` produces and the observer publishes.
 
 Two properties run through it, both inherited from `VerifierWrites`:
 
@@ -81,42 +88,6 @@ structure CellOpening where
   proof    : SmtCellProof
   deriving Repr
 
-/-- The opening a `StateCellWrite` carries: its tag, its pre-value and
-    its path.  The new value is dropped on purpose — that column is
-    the sequencer's, and a verifier that consumed it would fold to a
-    root of the responder's choosing. -/
-def CellOpening.ofStateCellWrite (w : StateCellWrite) : CellOpening :=
-  { cellTag := w.1, preValue := w.2.1, proof := w.2.2.2 }
-
-/-- The honest bundle for a step: `stepWriteBundle` with the new
-    values stripped. -/
-def stepOpenings (es : ExtendedState) (st : SignedAction) (idx : Nat) :
-    List CellOpening :=
-  (stepWriteBundle es st idx).map CellOpening.ofStateCellWrite
-
-/-- The read-only budget-policy opening, against the pre-root.  Not a
-    write, so it is not in the bundle — but `deriveEpochBudget`
-    selects its branch on it and every one of the twenty-five variants
-    writes an epoch-budget cell, so the verifier cannot start without
-    it. -/
-def policyOpening (es : ExtendedState) : CellOpening :=
-  { cellTag  := .budgetPolicy
-  , preValue := getCellValue es .budgetPolicy
-  , proof    := buildStateCellProof es .budgetPolicy }
-
-/-- The wire form of an opening: the `CellProof` the JSON emitter and
-    the Rust conduit carry.
-
-    `witnessState` is the pre-state on every entry, and nothing reads
-    it — the L1 verifies `proofData` against the running root.  It is
-    the field the wire dropped; it survives in the Lean structure only
-    until `CellProof` itself retires. -/
-def openingCellProof (es : ExtendedState) (o : CellOpening) : CellProof :=
-  { cellTag      := o.cellTag
-  , cellValue    := o.preValue
-  , witnessState := es
-  , proofData    := SmtCellProof.toWireBytes o.proof }
-
 /-! ## The cell list
 
 The verifier's counterpart to `Action.writeCellsAt`, which it cannot
@@ -151,52 +122,6 @@ theorem verifierWriteCells_eq_writeCellsAt
   | distributeOthers r e amt => exact absurd h (by simp [FaultProofAdjudicable])
   | proportionalDilute r e amt => exact absurd h (by simp [FaultProofAdjudicable])
   | _ => rfl
-
-/-! ## Reading the bundle -/
-
-/-- The PRE-STATE value of the opening at index `i`: the `preValue` of
-    the FIRST opening naming that cell.
-
-    A later write to the same cell opens against the running state, so
-    its `preValue` is the earlier write's result, while every
-    derivation is a function of the pre-state.  Duplicates are
-    reachable — a self-transfer, a `depositWithFee` whose recipient is
-    the signer, a self-delegated top-up — and every derivation is
-    idempotent on them, so the second write lands the same value and
-    leaves the root alone. -/
-def preStateValueAt (ops : List CellOpening) (t : CellTag) : Option ByteArray :=
-  (ops.find? (fun o => o.cellTag == t)).map CellOpening.preValue
-
-/-- The balance reader the bundle induces: `some` exactly where the
-    bundle opens that balance cell, and `none` elsewhere.
-
-    PARTIAL by design.  A derivation reading a cell the bundle does
-    not open produces nothing rather than a default, so an omitted
-    opening cannot be passed off as a zero balance. -/
-def openingBalanceReader (ops : List CellOpening) : BalanceReader :=
-  fun r a =>
-    match preStateValueAt ops (.balance r a) with
-    | none   => none
-    | some v =>
-      match Encoding.decodeAmount v.data.toList with
-      | .ok (n, []) => some n
-      | _           => none
-
-/-- The proven `.bridgeNextWdId` pre-value, or `0` when the bundle
-    does not open that cell.
-
-    The default is safe rather than convenient: only `withdraw` writes
-    that cell, and for `withdraw` a wrong value names a pending cell
-    whose opening then has to verify against the running root — which
-    it cannot, since the bundle's shape is checked against the list
-    this number determines. -/
-def provenNextWdId (ops : List CellOpening) : Nat :=
-  match preStateValueAt ops .bridgeNextWdId with
-  | none   => 0
-  | some v =>
-    match Encodable.decode (T := Nat) v.data.toList with
-    | .ok (n, []) => n
-    | _           => 0
 
 /-! ## The per-variant balance plan
 
@@ -331,67 +256,13 @@ def derivedCellValue (read : CellValueReader) (policyValue : ByteArray)
   -- naming one fails the shape check before reaching here.
   | _ => none
 
-/-! ## The verifier -/
+/-! ## Alias consistency
 
-/-- Assemble one write for the fold: the opening's own pre-value (the
-    RUNNING one, which is what the opening is against) and the derived
-    post-value. -/
-def foldEntry (ops : List CellOpening) (policyValue : ByteArray)
-    (a : Action) (signer : ActorId) (l2LogIndex : Nat)
-    (plan : List ((ResourceId × ActorId) × Nat)) (o : CellOpening) :
-    Option StateCellWrite :=
-  (derivedCellValue (preStateValueAt ops) policyValue a signer l2LogIndex plan
-      o.cellTag).map
-    (fun newV => (o.cellTag, o.preValue, newV, o.proof))
+The multiproof reads a balance BY CELL, so a plan naming one cell twice
+with different values would be a fork in the derivation.  `plannedBalanceAt?`
+refuses that rather than resolving it, and this theorem says the refusal
+is unreachable from any action. -/
 
-/-- **The openings-only post-state root** — what an L1 holding a
-    pre-root and a bundle computes.  The Lean mirror of
-    `KnomosisStepVMRoot.executeStepToRoot`.
-
-    `none` on any refusal: a non-adjudicable action, a policy opening
-    that does not verify or does not name the policy cell, a bundle
-    whose cells are not the ones the action writes, a missing or
-    malformed pre-value, or an opening that does not verify against
-    the running root.  Every one of those is a SUBMISSION failure
-    rather than a state-transition outcome — a failing law precondition
-    is a no-op here, not a refusal. -/
-def verifierPostRoot (preRoot : StateCommit) (a : Action) (signer : ActorId)
-    (l2LogIndex : Nat) (policy : CellOpening) (ops : List CellOpening) :
-    Option StateCommit :=
-  if ¬ FaultProofAdjudicable a then none
-  else if policy.cellTag ≠ .budgetPolicy then none
-  else if ¬ verifyStateCellProof preRoot .budgetPolicy policy.preValue policy.proof
-    then none
-  else if ops.map CellOpening.cellTag
-            ≠ verifierWriteCells a signer (provenNextWdId ops) then none
-  else
-    match plannedBalances (openingBalanceReader ops) a signer with
-    | none      => none
-    | some plan =>
-      match ops.mapM (foldEntry ops policy.preValue a signer l2LogIndex plan) with
-      | none       => none
-      | some writes => foldStateCellWrites preRoot writes
-
-/-- **Every variant's plan agrees at an alias.**
-
-    The statement that makes `plannedBalanceAt?`'s refusal free.  A
-    pre-root multiproof opens each cell ONCE, so the plan is consulted
-    per CELL rather than per occurrence, and "which entry wins" becomes
-    a real question wherever a variant can name one cell twice — which
-    every aliasable variant can, cheaply and permissionlessly.
-
-    It cannot matter: at an alias the two entries carry the same value.
-    Either the admitted branch is guarded against the alias outright
-    (`transfer`'s explicit `sender = receiver` arm, `ammSwap`'s
-    `fromResource ≠ toResource` conjunct, `reclaimAmmReserves`'
-    `reserveActor ≠ poolActor`), or both entries are pre-values from
-    the SAME reader call at the SAME key, and a reader is a function.
-
-    This is also why the corpus cannot see a dedup bug: the three
-    duplicate probes pass under a first-occurrence rule and a
-    last-occurrence one alike, because there is nothing to choose
-    between.  The guard exists for the derivation bug that has not been
-    written yet. -/
 theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
     (signer : ActorId) (plan : List ((ResourceId × ActorId) × Nat))
     (h : plannedBalances read a signer = some plan) :

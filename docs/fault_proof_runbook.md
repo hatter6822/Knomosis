@@ -36,26 +36,43 @@ equalled a published state root, which is the only property the game
 needs.  That column and its driver are gone, along with the recipe.
 
 **It is closed.**  `terminateOnSingleStep` calls
-`KnomosisStepVMRoot.executeStepToRoot`, which returns a post-state ROOT
-computed by folding the step's DERIVED cell writes into `g.low.commit`.
-It derives both halves rather than accepting them — the cell list from
-`StepWrites.deriveWriteSet`, checked against the submitted bundle
-position by position so a responder cannot omit a write, and each
-cell's value from `StepWrites` / `StepPlan`, which are
-`productionApplyBudget` re-expressed cell-locally.  Every derivation
-EVALUATES its law's precondition and returns the pre-values when it
-fails, so a failing precondition is a no-op rather than a revert — a
-revert would not be a verdict, since the terminal step is callable only
-by whoever's turn it is.
+`KnomosisStepVMRoot.executeStepToRootMulti`, which returns a post-state
+ROOT computed by folding the step's DERIVED cell writes into
+`g.low.commit`.  It derives both halves rather than accepting them —
+the cell list from `StepWrites.deriveWriteSet`, whose frontier is
+checked against the submitted one as a SET so a responder cannot omit
+a write, and each cell's value from `StepWrites` / `StepPlan`, which
+are `productionApplyBudget` re-expressed cell-locally.  Every
+derivation EVALUATES its law's precondition and returns the pre-values
+when it fails, so a failing precondition is a no-op rather than a
+revert — a revert would not be a verdict, since the terminal step is
+callable only by whoever's turn it is.
 
-The evidence is a corpus column on both stacks: `writeBundleGoldens`
-carries, per probe, the pre-root, the action, the chained openings and
-the root Lean's `stepPostRoot` reaches, and both the L1 verifier
-(`CrossCheck/StepVMRoot.t.sol`) and the Lean one
-(`FaultProof/Terminate.lean`) reach it.  The game's own
-honest-sequencer-wins test is driven by that probe rather than by
-hand-built values — with a real fold, a fabricated `low` has no
-openings that verify against it, so the honest path is only reachable
+**What a responding party submits** is a deduplicating pre-root
+multiproof: the step's frontier (every cell it touches, with that
+cell's proven pre-value) plus ONE shared sibling list.  Four operator-
+visible consequences.  The bundle's ORDER does not matter — the
+verifier sorts, so a terminate cannot fail on a formatting question.
+A cell the step writes twice (a self-transfer) is opened once, so the
+responsible party is not charged for a redundant walk.  The wire's
+length is fixed by the cell set, so a truncated proof reverts with a
+named error rather than being padded out and walked to a wrong root.
+And the read-only budget-policy cell rides IN the frontier — there is
+no separate policy opening to forget.  `knomosis
+export-terminate-bundle` emits exactly this shape (`opened_cells`,
+`gap_mask_hex`, `siblings_hex`) and the observer forwards it.
+
+The evidence is a corpus column on both stacks: `multiProofGoldens`
+carries, per probe, the pre-root, the action, the frontier, the wire,
+and TWO independently-computed post-roots — the one the fold reaches
+and the one `commitExtendedState (productionApplyBudget …)` gives from
+the post-STATE.  Both the L1 verifier
+(`CrossCheck/StepVMRootMulti.t.sol`) and the Lean one
+(`FaultProof/Terminate.lean`) reach it, and the corpus asserts the two
+numbers coincide — which is more than agreeing with another verifier.
+The game's own honest-sequencer-wins test is driven by that probe
+rather than by hand-built values: with a real fold, a fabricated `low`
+has no wire that reproduces it, so the honest path is only reachable
 from a real one.
 
 **Operator obligation, in force: do not authorise the bulk laws.**  A

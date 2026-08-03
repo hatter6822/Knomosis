@@ -1704,206 +1704,18 @@ def recordWriteGoldens : List Test.Bridge.CrossCheck.Json :=
              { resource := 1, recipient := rcp
              , amount := 5, l2LogIndex := 7 }))) ] ]
 
-/-! ### The state-root target the flip must hit
-
-`expectedStepVMCommitHex` is the BESPOKE recipe — a value living
-outside state-root space, which both stacks compute identically and
-neither can compare against a published root.  These goldens carry the
-other number: `stepPostRoot`, the root an L1 reaches by folding a
-step's proven writes into the pre-root.
-
-Emitting both makes the gap a corpus column rather than a claim.  The
-tests assert three things about it: the fold LANDS on
-`commitExtendedState` of the production advance (so the target is the
-right one), it DIFFERS from the bespoke hash (so the flip is a real
-change and not a relabelling), and the pre-root is not accidentally
-the post-root (so a fold that did nothing would fail).
-
-When `executeStep` flips, `expectedStepVMCommitHex` retires and this
-column becomes the per-entry expectation.
--/
-
-/-- Probes for the post-state root, over a populated two-resource
-    state — the same base the balance goldens use, for the same reason:
-    over an empty one the interesting variants no-op. -/
-def stepPostRootGoldens : List Test.Bridge.CrossCheck.Json :=
-  let es : ExtendedState :=
-    let base : LegalKernel.State :=
-      { balances :=
-          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
-             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
-             ((∅ : BalanceMap).insert 9 60) }
-    { fixtureBase with base := base }
-  let signer : ActorId := 7
-  let hx := Test.Bridge.CrossCheck.hexFromBytes
-  let probes : List (String × Action) :=
-    [ ("transfer",   .transfer 1 signer 8 30)
-    , ("mint",       .mint 1 8 5)
-    , ("burn",       .burn 1 8 5)
-    , ("freezeResource", .freezeResource 1)
-    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
-    , ("deposit",    .deposit 1 8 5 3)
-    , ("registerIdentity", .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
-    , ("revokeLocalPolicy", .revokeLocalPolicy) ]
-  probes.filterMap (fun (name, action) =>
-    let st : SignedAction :=
-      { action, signer, nonce := 0, sig := ByteArray.empty }
-    match stepPostRoot es st 0 with
-    | none => none
-    | some root =>
-      some (.obj
-        [ ("variant", .str name)
-        , ("preStateRootHex", .str (hx (commitExtendedState es)))
-        , ("actionKindByte", .num (actionKindByte action).toNat)
-        , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
-        , ("signerNat", .num signer.toNat)
-          -- What the fold produces, and what `executeStep` must return.
-        , ("expectedPostStateRootHex", .str (hx root))
-          -- The published root of the production advance: the fold's
-          -- target, emitted separately so the two are compared rather
-          -- than assumed equal.
-        , ("publishedPostRootHex",
-           .str (hx (commitExtendedState (productionApplyBudget es st 0))))
-        ]))
-
-/-! ### The ordered write bundle, for the fold
-
-The riskiest single piece of the flip: given a pre-root and an ORDERED
-list of `(cell, proven pre-value, new value, opening)`, verify each
-opening against the RUNNING root and re-walk it from the new leaf.
-
-The order is load-bearing.  Openings go stale as soon as a write lands,
-so proof `i` opens against the root write `i-1` produced — not against
-the pre-root.  A fold that verified every opening against the pre-root
-would accept a bundle the honest sequencer could not have produced, and
-one that re-walked from the wrong root would reach a root no state has.
-
-`chainWrites` is what threads that, and this column publishes its
-output so the L1's fold is checked against it rather than against a
-re-derivation.
--/
-
-/-- The write bundle for one probe, as JSON: the ordered
-    `(cell, pre-value, new value, opening)` list plus the pre-root and
-    the root the fold reaches. -/
-def writeBundleGoldens : List Test.Bridge.CrossCheck.Json :=
-  let es : ExtendedState :=
-    let base : LegalKernel.State :=
-      { balances :=
-          ((∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1
-             ((((∅ : BalanceMap).insert 7 100).insert 8 40).insert 9 25)).insert 2
-             ((∅ : BalanceMap).insert 9 60) }
-    { fixtureBase with base := base }
-  let signer : ActorId := 7
-  let hx := Test.Bridge.CrossCheck.hexFromBytes
-  let probes : List (String × Action) :=
-    [ ("transfer",   .transfer 1 signer 8 30)
-      -- The self-transfer: two writes at the SAME cell, so the second
-      -- opening must be against the root the first produced.  A fold
-      -- verifying both against the pre-root would accept it and reach
-      -- the wrong root.
-    , ("selfTransfer", .transfer 1 signer signer 30)
-    , ("mint",       .mint 1 8 5)
-    , ("burn",       .burn 1 8 5)
-      -- The precondition FAILS: `step_impl` is a no-op, so every
-      -- balance keeps its pre-value and the fold still has to reach the
-      -- published root.  A verifier that reverted here would cost the
-      -- responsible party the game by timeout.
-    , ("burnNoop",   .burn 1 8 999999)
-    , ("reward",     .reward 1 8 5)
-    , ("freezeResource", .freezeResource 1)
-    , ("withdraw",   .withdraw 1 signer 5 LegalKernel.Bridge.EthAddress.zero)
-    , ("deposit",    .deposit 1 8 5 3)
-      -- Both chained-pair shapes with a fee split, and the one where
-      -- the recipient IS the signer — so the epoch-budget cell appears
-      -- TWICE in the write set and the second write must land the same
-      -- value the first did.
-    , ("depositWithFee", .depositWithFee 1 8 9 5 2 3 4)
-    , ("depositWithFeeSelf", .depositWithFee 1 signer 9 5 2 3 5)
-    , ("topUpActionBudget", .topUpActionBudget 1 10 4 9)
-      -- ...and its self-delegated form, whose precondition
-      -- (`recipient ≠ payer`) FAILS, so the balances stay put.
-    , ("topUpActionBudgetForSelf", .topUpActionBudgetFor signer 1 10 4 9)
-    , ("topUpActionBudgetFor", .topUpActionBudgetFor 8 1 10 4 9)
-    , ("claimBudgetRefund", .claimBudgetRefund 1 2 3 9)
-    , ("ammSwap",    .ammSwap 1 2 5 10 9)
-    , ("registerIdentity", .registerIdentity 8 (ByteArray.mk #[1, 2, 3]))
-    , ("replaceKey", .replaceKey 8 (ByteArray.mk #[0xAA, 0xBB]))
-    , ("declareLocalPolicy", .declareLocalPolicy Authority.LocalPolicy.empty)
-    , ("revokeLocalPolicy", .revokeLocalPolicy) ]
-  probes.filterMap (fun (name, action) =>
-    let st : SignedAction :=
-      { action, signer, nonce := 0, sig := ByteArray.empty }
-    match stepPostRoot es st 0 with
-    | none => none
-    | some root =>
-      let bundle := stepWriteBundle es st 0
-      some (.obj
-        [ ("variant", .str name)
-        , ("preStateRootHex", .str (hx (commitExtendedState es)))
-        , ("postStateRootHex", .str (hx root))
-          -- The action, in the form the L1 holds it.  Emitted here as
-          -- well as in `writeSetGoldens` so this column drives the
-          -- WHOLE verifier — cells derived, values derived, fold — from
-          -- inputs an L1 actually has, rather than only its fold.
-        , ("actionKindByte", .num (actionKindByte action).toNat)
-        , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
-        , ("signerNat", .num signer.toNat)
-        , ("l2LogIndex", .num 0)
-          -- The read-only budget-policy cell.  Not a write, so it is
-          -- not in the bundle — but `deriveEpochBudget` selects its
-          -- branch on it and every one of the twenty-five variants
-          -- writes an epoch-budget cell, so the verifier cannot start
-          -- without it.
-        , ("policyValueHex", .str (hx (getCellValue es .budgetPolicy)))
-        , ("policySmtKeyHex", .str (hx (smtCellKey .budgetPolicy)))
-        , ("policyProofDataHex",
-           .str (hx (buildStateCellProof es .budgetPolicy).toWireBytes))
-        , ("writeCount", .num bundle.length)
-        , ("writes", .arr (bundle.map (fun w =>
-            let (t, oldV, newV, proof) := w
-            let (kindNat, keyA, keyB) : Nat × Nat × Nat := t.flatKey
-            .obj [ ("cellKind", .num kindNat)
-                 , ("keyA", .num keyA), ("keyB", .num keyB)
-                 , ("oldValueHex", .str (hx oldV))
-                 , ("newValueHex", .str (hx newV))
-                 , ("smtKeyHex", .str (hx (smtCellKey t)))
-                 , ("proofDataHex", .str (hx proof.toWireBytes))
-                   -- The leaf PREIMAGE for each side of the write:
-                   -- `encodeAsBytes key ++ encodeAsBytes value`, which
-                   -- is two CBE byte-strings.  Emitted so the L1's
-                   -- fold is checked against Lean's leaf construction
-                   -- rather than against a re-derivation of it — and
-                   -- so the Solidity side can rebuild it from
-                   -- `CBEEncode.bytesValue` and prove the two agree.
-                 , ("oldLeafPreimageHex",
-                    .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes oldV)))
-                 , ("newLeafPreimageHex",
-                    .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes newV)))
-                   -- Absence is a BRANCH, not an optimisation: a cell
-                   -- whose value is canonically absent has an empty
-                   -- sub-tree beneath its key, so its leaf is the
-                   -- canonical empty one rather than a hash of the
-                   -- preimage.  A verifier that always hashed could
-                   -- not read an absent cell at all, and a step
-                   -- crediting a fresh actor reads one on its first
-                   -- line.
-                 , ("oldIsAbsent",
-                    .bool (decide (oldV = canonicalAbsentValue t)))
-                 , ("newIsAbsent",
-                    .bool (decide (newV = canonicalAbsentValue t))) ])) ) ]))
-
 /-! ### The multiproof wire, per probe
 
-The same twenty probes as `writeBundleGoldens`, opened the OTHER way:
-one opening per CELL against the pre-root, all sharing a single
-sibling list, instead of one opening per WRITE against the running
-root.
+Twenty probes covering the shapes a verifier has to handle: the
+two-cell chain, its aliased case, the failing precondition, the
+state-keyed write, and each action-field-derived cell.
 
-Emitted alongside the chained column rather than instead of it, so the
-two entry points can be asserted to agree before either retires.  That
-is the only check that distinguishes "the multiproof works" from "the
-multiproof and the chained fold both work, differently".
+Each carries TWO independently-computed roots — the one the merged
+walk reaches by folding derived writes into the pre-root, and the one
+`commitExtendedState (productionApplyBudget …)` gives from the
+post-STATE.  A verifier is right only if they coincide, which is
+strictly more than agreeing with some other verifier: the retired
+chained column asserted the latter, and this asserts the former.
 
 The wire here is the COMPRESSED one — mask plus the siblings the mask
 marks — because that is what an L1 receives.  Its length is not a free
@@ -1965,6 +1777,13 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
           -- What the merged walk produces, and what
           -- `executeStepToRootMulti` must return.
         , ("postStateRootHex", .str (hx root))
+          -- The published root of the production advance, computed
+          -- WITHOUT the fold.  Emitted separately so the consumer
+          -- compares two independent numbers rather than one number
+          -- with itself: the fold is only right if it lands on the
+          -- root an honest sequencer publishes.
+        , ("publishedPostRootHex",
+           .str (hx (commitExtendedState (productionApplyBudget es st 0))))
         , ("actionKindByte", .num (actionKindByte action).toNat)
         , ("actionFieldsHex", .str (hx (actionFieldsForL1 action)))
         , ("signerNat", .num signer.toNat)
@@ -1991,6 +1810,14 @@ def multiProofGoldens : List Test.Bridge.CrossCheck.Json :=
                  , ("smtKeyHex", .str (hx (smtCellKey t)))
                  , ("preValueHex", .str (hx v))
                  , ("preLeafHex", .str (hx (cellLeaf t v)))
+                   -- The leaf PREIMAGE, `encodeAsBytes key ++
+                   -- encodeAsBytes value` — two CBE byte-strings.
+                   -- Emitted alongside the leaf HASH so the consumer
+                   -- can check Lean's leaf CONSTRUCTION against
+                   -- `CBEEncode.bytesValue`, not only that the walk
+                   -- agrees on the result.
+                 , ("preLeafPreimageHex",
+                    .str (hx (encodeAsBytes (smtCellKey t) ++ encodeAsBytes v)))
                  , ("isAbsent", .bool (decide (v = canonicalAbsentValue t))) ])))
         ]))
 
@@ -2403,63 +2230,32 @@ def tests : List Test.TestCase :=
     }
   , { name := "the fold lands on the published root"
     , body := do
-        -- The corpus's state-root column, checked in both directions.
-        -- Landing on the published root says the target is right; not
-        -- landing on the PRE-root says the fold is doing something —
-        -- otherwise a fold that returned its input would pass the
-        -- first check on any action whose advance happens to be inert.
+        -- The corpus's own version of the property the L1 must have:
+        -- what the merged walk computes from a pre-root and a wire is
+        -- the root `commitExtendedState (productionApplyBudget …)`
+        -- gives from the post-STATE.  Two independent computations, so
+        -- a verifier that agreed with itself would still fail here.
         --
-        -- A third check used to sit here: that the fold DIFFERS from
-        -- the bespoke `stepVMHash`.  It went with the recipe, which no
-        -- longer exists to differ from.
-        let goldens := stepPostRootGoldens
-        Test.assert (goldens.length > 0) "the root goldens must be non-empty"
-        for g in goldens do
-          match g with
-          | .obj fields =>
-            let get := fun (k : String) =>
-              (fields.find? (fun p => p.1 = k)).map Prod.snd
-            match get "expectedPostStateRootHex", get "publishedPostRootHex",
-                  get "preStateRootHex" with
-            | some (.str fold), some (.str published), some (.str pre) =>
-              Test.assertEq (expected := published) (actual := fold)
-                "the fold must land on the production advance's published root"
-              Test.assert (fold != pre)
-                "the fold must move the root"
-            | _, _, _ => throw <| IO.userError "malformed root golden"
-          | _ => throw <| IO.userError "malformed root golden"
-    }
-  , { name := "the multiproof column agrees with the chained one"
-    , body := do
-        -- The check that distinguishes "the multiproof works" from
-        -- "the multiproof and the chained fold both work, differently".
-        -- Same probes, same pre-state, opened two different ways; if
-        -- the post-roots ever diverge, exactly one of the two entry
-        -- points is adjudicating the wrong transition and the corpus
-        -- cannot say which.
+        -- ...and the fold is not the identity, which is what makes the
+        -- first assertion say something: every one of the twenty-five
+        -- variants advances the signer's nonce, so no probe's post-root
+        -- is its pre-root, including the two whose LAW no-ops.
         let get : Test.Bridge.CrossCheck.Json → String →
             Option Test.Bridge.CrossCheck.Json := fun j k =>
           match j with
           | .obj fields => (fields.find? (fun p => p.1 = k)).map Prod.snd
           | _           => none
-        Test.assertEq (expected := writeBundleGoldens.length)
-          (actual := multiProofGoldens.length)
-          "the two columns must cover the same probes"
-        for (chained, multi) in writeBundleGoldens.zip multiProofGoldens do
-          match get chained "variant", get multi "variant",
-                get chained "postStateRootHex", get multi "postStateRootHex",
-                get chained "preStateRootHex", get multi "preStateRootHex" with
-          | some (.str v₁), some (.str v₂),
-            some (.str r₁), some (.str r₂),
-            some (.str p₁), some (.str p₂) =>
-            Test.assertEq (expected := v₁) (actual := v₂)
-              "the two columns must be in the same probe order"
-            Test.assertEq (expected := p₁) (actual := p₂)
-              s!"{v₁}: the two columns must share a pre-state"
-            Test.assertEq (expected := r₁) (actual := r₂)
-              s!"{v₁}: the multiproof and the chained fold disagree"
-            Test.assert (r₁ != p₁) s!"{v₁}: neither fold moved the root"
-          | _, _, _, _, _, _ => throw <| IO.userError "malformed goldens"
+        Test.assert (multiProofGoldens.length > 0)
+          "the multiproof goldens must be non-empty"
+        for g in multiProofGoldens do
+          match get g "variant", get g "postStateRootHex",
+                get g "publishedPostRootHex", get g "preStateRootHex" with
+          | some (.str v), some (.str fold), some (.str published),
+            some (.str pre) =>
+            Test.assertEq (expected := published) (actual := fold)
+              s!"{v}: the fold must land on the production advance's root"
+            Test.assert (fold != pre) s!"{v}: the fold must move the root"
+          | _, _, _, _ => throw <| IO.userError "malformed multiproof golden"
     }
   , { name := "every multiproof wire is exactly its key set's shape"
     , body := do
@@ -2666,10 +2462,6 @@ def tests : List Test.TestCase :=
           , ("balanceWriteGoldensCount", .num balanceWriteGoldens.length)
           , ("recordWriteGoldens", .arr recordWriteGoldens)
           , ("recordWriteGoldensCount", .num recordWriteGoldens.length)
-          , ("stepPostRootGoldens", .arr stepPostRootGoldens)
-          , ("stepPostRootGoldensCount", .num stepPostRootGoldens.length)
-          , ("writeBundleGoldens", .arr writeBundleGoldens)
-          , ("writeBundleGoldensCount", .num writeBundleGoldens.length)
           , ("multiProofGoldens", .arr multiProofGoldens)
           , ("multiProofGoldensCount", .num multiProofGoldens.length)
           , ("writeSetGoldens", .arr writeSetGoldens)

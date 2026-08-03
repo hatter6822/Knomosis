@@ -122,23 +122,12 @@ ROWS: list[tuple[str, str]] = [
     # L1 call a challenger and a defender each pay to settle a game, and
     # the one whose cost is dominated by SMT walks rather than storage.
     (
-        "executeStepToRoot_distinctCells",
-        "`executeStepToRoot` (terminal step, 4 distinct cells + policy)",
-    ),
-    (
-        "executeStepToRoot_duplicateCell",
-        "`executeStepToRoot` (terminal step, one cell written twice)",
-    ),
-    # The same two steps under the deduplicating pre-root multiproof.
-    # Paired with the rows above so an operator reads the two opening
-    # disciplines on one scenario rather than comparing across two.
-    (
         "executeStepToRootMulti_distinctCells",
-        "`executeStepToRootMulti` (terminal step, multiproof, 4 distinct cells + policy)",
+        "`executeStepToRootMulti` (terminal step, 4 distinct cells + policy)",
     ),
     (
         "executeStepToRootMulti_duplicateCell",
-        "`executeStepToRootMulti` (terminal step, multiproof, one cell deduped)",
+        "`executeStepToRootMulti` (terminal step, one cell deduped to four)",
     ),
 ]
 

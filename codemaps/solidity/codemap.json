@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "fa95ec943fc320a33f165626d2ca1739178491966d7f69b0ad87646870f653ea"
+    "source_digest": "c38de0888b79a2fe835e3cb86945512a1784abe8ddc19c84c6f06ddc49fbecfd"
   },
   "summary": {
-    "module_count": 100,
-    "declaration_count": 2145
+    "module_count": 99,
+    "declaration_count": 2103
   },
   "modules": [
     {
@@ -3348,112 +3348,66 @@
     {
       "module": "KnomosisStepVMRoot",
       "path": "solidity/src/contracts/KnomosisStepVMRoot.sol",
-      "declaration_count": 34,
+      "declaration_count": 20,
       "declarations": [
         {
           "kind": "contract",
           "name": "KnomosisStepVMRoot",
-          "line": 64,
+          "line": 67,
           "called": []
         },
         {
           "kind": "struct",
           "name": "OpenedCell",
-          "line": 79,
-          "called": []
-        },
-        {
-          "kind": "struct",
-          "name": "CellOpening",
-          "line": 98,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "PolicyCellMismatch",
-          "line": 152,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "BadCellOpening",
-          "line": 157,
+          "line": 82,
           "called": []
         },
         {
           "kind": "error",
           "name": "WriteSetMismatch",
-          "line": 161,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "WriteSetLengthMismatch",
-          "line": 164,
-          "called": []
-        },
-        {
-          "kind": "error",
-          "name": "MalformedProofData",
-          "line": 168,
+          "line": 130,
           "called": []
         },
         {
           "kind": "error",
           "name": "TooManyCellOpenings",
-          "line": 171,
+          "line": 133,
           "called": []
         },
         {
           "kind": "error",
           "name": "FrontierMissingCell",
-          "line": 176,
+          "line": 138,
           "called": []
         },
         {
           "kind": "error",
           "name": "FrontierLengthMismatch",
-          "line": 179,
+          "line": 141,
           "called": []
         },
         {
           "kind": "error",
           "name": "PreRootMismatch",
-          "line": 183,
+          "line": 145,
           "called": []
         },
         {
           "kind": "function",
           "name": "assertConsistent",
-          "line": 199,
+          "line": 161,
           "called": []
         },
         {
           "kind": "function",
           "name": "widestFrontier",
-          "line": 234,
+          "line": 193,
           "called": []
         },
         {
           "kind": "function",
-          "name": "executeStepToRoot",
-          "line": 268,
-          "called": [
-            "CellOpening",
-            "TooManyCellOpenings",
-            "WriteSetLengthMismatch",
-            "WriteSetMismatch",
-            "_applyWrite",
-            "_nextWdIdPre",
-            "_plan",
-            "_requirePolicyOpening",
-            "_requireProofDataShape"
-          ]
-        },
-        {
-          "kind": "function",
           "name": "executeStepToRootMulti",
-          "line": 379,
+          "line": 255,
           "called": [
             "OpenedCell",
             "PreRootMismatch",
@@ -3466,7 +3420,7 @@
         {
           "kind": "function",
           "name": "_nextWdIdPreMulti",
-          "line": 433,
+          "line": 309,
           "called": [
             "OpenedCell"
           ]
@@ -3474,7 +3428,7 @@
         {
           "kind": "function",
           "name": "_findOpened",
-          "line": 448,
+          "line": 324,
           "called": [
             "OpenedCell"
           ]
@@ -3482,7 +3436,7 @@
         {
           "kind": "function",
           "name": "_openedValue",
-          "line": 467,
+          "line": 343,
           "called": [
             "FrontierMissingCell",
             "OpenedCell",
@@ -3492,13 +3446,13 @@
         {
           "kind": "function",
           "name": "_frontierSize",
-          "line": 483,
+          "line": 359,
           "called": []
         },
         {
           "kind": "function",
           "name": "_requireFrontier",
-          "line": 509,
+          "line": 385,
           "called": [
             "FrontierLengthMismatch",
             "FrontierMissingCell",
@@ -3510,7 +3464,7 @@
         {
           "kind": "function",
           "name": "_multiLeaves",
-          "line": 537,
+          "line": 413,
           "called": [
             "OpenedCell",
             "_deriveValueMulti",
@@ -3522,7 +3476,7 @@
         {
           "kind": "function",
           "name": "_planMulti",
-          "line": 609,
+          "line": 485,
           "called": [
             "OpenedCell",
             "_openedValue"
@@ -3531,7 +3485,7 @@
         {
           "kind": "function",
           "name": "_deriveValueMulti",
-          "line": 640,
+          "line": 516,
           "called": [
             "OpenedCell",
             "WriteSetMismatch",
@@ -3541,92 +3495,14 @@
         },
         {
           "kind": "function",
-          "name": "_requirePolicyOpening",
-          "line": 712,
-          "called": [
-            "BadCellOpening",
-            "CellOpening",
-            "PolicyCellMismatch",
-            "_leafPreimage",
-            "_requireProofDataShape"
-          ]
-        },
-        {
-          "kind": "function",
           "name": "_leafPreimage",
-          "line": 750,
+          "line": 585,
           "called": []
         },
         {
           "kind": "function",
-          "name": "_requireProofDataShape",
-          "line": 763,
-          "called": [
-            "MalformedProofData"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_nextWdIdPre",
-          "line": 772,
-          "called": [
-            "CellOpening"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_preStateValue",
-          "line": 796,
-          "called": [
-            "CellOpening"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_signerBudgetPre",
-          "line": 815,
-          "called": [
-            "CellOpening",
-            "WriteSetMismatch",
-            "_preStateValue"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_plan",
-          "line": 831,
-          "called": [
-            "CellOpening",
-            "_preStateValue"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_applyWrite",
-          "line": 854,
-          "called": [
-            "BadCellOpening",
-            "CellOpening",
-            "_deriveValue",
-            "_leafPreimage"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_deriveValue",
-          "line": 892,
-          "called": [
-            "CellOpening",
-            "WriteSetMismatch",
-            "_deriveConsumed",
-            "_preStateValue",
-            "_signerBudgetPre"
-          ]
-        },
-        {
-          "kind": "function",
           "name": "_deriveConsumed",
-          "line": 965,
+          "line": 600,
           "called": []
         }
       ]
@@ -4873,7 +4749,7 @@
     {
       "module": "StepVMMerkle",
       "path": "solidity/src/lib/StepVMMerkle.sol",
-      "declaration_count": 6,
+      "declaration_count": 5,
       "declarations": [
         {
           "kind": "library",
@@ -4890,28 +4766,20 @@
         {
           "kind": "function",
           "name": "verifyCellSmtProof",
-          "line": 115,
+          "line": 116,
           "called": []
         },
         {
           "kind": "function",
           "name": "updateCellRoot",
-          "line": 154,
+          "line": 159,
           "called": []
         },
         {
           "kind": "function",
           "name": "cellLeafHash",
-          "line": 193,
+          "line": 198,
           "called": []
-        },
-        {
-          "kind": "function",
-          "name": "applyCellWrite",
-          "line": 247,
-          "called": [
-            "cellLeafHash"
-          ]
         }
       ]
     },
@@ -7139,7 +7007,7 @@
     {
       "module": "BenchmarkGasV1_3.t",
       "path": "solidity/test/BenchmarkGasV1_3.t.sol",
-      "declaration_count": 81,
+      "declaration_count": 76,
       "declarations": [
         {
           "kind": "contract",
@@ -7800,7 +7668,7 @@
         {
           "kind": "contract",
           "name": "BenchmarkGasV1_3StepVMRootTest",
-          "line": 1266,
+          "line": 1267,
           "called": [
             "BenchmarkGasV1_3Base",
             "KnomosisStepVMRoot",
@@ -7810,39 +7678,18 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 1282,
+          "line": 1280,
           "called": [
             "KnomosisStepVMRoot",
             "_requireKeccakLinked",
             "findMultiProbeBase",
-            "findProbeBase",
             "readFixture"
           ]
         },
         {
           "kind": "function",
-          "name": "test_gas_executeStepToRoot_distinctCells",
-          "line": 1295,
-          "called": [
-            "_bench",
-            "encodeProbeCall",
-            "loadOpenings"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_gas_executeStepToRoot_duplicateCell",
-          "line": 1314,
-          "called": [
-            "_bench",
-            "encodeProbeCall",
-            "loadOpenings"
-          ]
-        },
-        {
-          "kind": "function",
           "name": "test_gas_executeStepToRootMulti_distinctCells",
-          "line": 1336,
+          "line": 1299,
           "called": [
             "_bench",
             "encodeMultiProbeCall",
@@ -7854,7 +7701,7 @@
         {
           "kind": "function",
           "name": "test_gas_executeStepToRootMulti_duplicateCell",
-          "line": 1360,
+          "line": 1323,
           "called": [
             "_bench",
             "encodeMultiProbeCall",
@@ -7866,50 +7713,23 @@
         {
           "kind": "function",
           "name": "test_sanity_stepVMRootMultiScenarioAssumptions",
-          "line": 1380,
+          "line": 1345,
           "called": [
-            "_run",
             "_runMulti",
             "loadOpenedCells",
-            "loadOpenings",
-            "probePostRoot"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_runMulti",
-          "line": 1416,
-          "called": [
-            "encodeMultiProbeCall",
-            "probeGapMask",
-            "probeSiblings"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_sanity_stepVMRootScenarioAssumptions",
-          "line": 1440,
-          "called": [
-            "_distinctCellCount",
-            "_run",
-            "loadOpenings",
             "probePostRoot",
             "probePreRoot"
           ]
         },
         {
           "kind": "function",
-          "name": "_run",
-          "line": 1476,
+          "name": "_runMulti",
+          "line": 1387,
           "called": [
-            "encodeProbeCall"
+            "encodeMultiProbeCall",
+            "probeGapMask",
+            "probeSiblings"
           ]
-        },
-        {
-          "kind": "function",
-          "name": "_distinctCellCount",
-          "line": 1488,
-          "called": []
         }
       ]
     },
@@ -12728,12 +12548,12 @@
     {
       "module": "StepVM.t",
       "path": "solidity/test/CrossCheck/StepVM.t.sol",
-      "declaration_count": 40,
+      "declaration_count": 36,
       "declarations": [
         {
           "kind": "contract",
           "name": "StepVMCrossCheck",
-          "line": 45,
+          "line": 43,
           "called": [
             "CrossCheckFramework"
           ]
@@ -12741,7 +12561,7 @@
         {
           "kind": "function",
           "name": "test_fixture_header_shape",
-          "line": 51,
+          "line": 49,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -12750,7 +12570,7 @@
         {
           "kind": "function",
           "name": "test_perVariant_counts",
-          "line": 72,
+          "line": 70,
           "called": [
             "fixtureExists",
             "readFixture"
@@ -12759,7 +12579,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_schema_is_well_formed",
-          "line": 115,
+          "line": 113,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12769,7 +12589,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_adversarial_flag_consistency",
-          "line": 137,
+          "line": 135,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12779,7 +12599,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_happy_postCommit_is_32_bytes",
-          "line": 167,
+          "line": 165,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12789,13 +12609,13 @@
         {
           "kind": "function",
           "name": "_assertWitnessBinding",
-          "line": 244,
+          "line": 242,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_actionCommit_matches_lean",
-          "line": 282,
+          "line": 285,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
@@ -12806,7 +12626,7 @@
         {
           "kind": "function",
           "name": "test_cbeEncoders_match_lean",
-          "line": 327,
+          "line": 330,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12816,25 +12636,25 @@
         {
           "kind": "function",
           "name": "test_cbeEncoders_reject_overwide_and_roundtrip",
-          "line": 371,
+          "line": 374,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeUintExternal",
-          "line": 400,
+          "line": 403,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeAmountExternal",
-          "line": 405,
+          "line": 408,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_uniformWrites_match_lean",
-          "line": 429,
+          "line": 432,
           "called": [
             "_assertUniformWrite",
             "_skipWithReason",
@@ -12845,25 +12665,25 @@
         {
           "kind": "function",
           "name": "_assertUniformWrite",
-          "line": 445,
+          "line": 448,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_uniformWrites_are_fail_closed",
-          "line": 481,
+          "line": 484,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveNonceExternal",
-          "line": 498,
+          "line": 501,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_balanceWrites_match_lean",
-          "line": 522,
+          "line": 525,
           "called": [
             "_assertBalanceWrite",
             "_skipWithReason",
@@ -12874,13 +12694,13 @@
         {
           "kind": "function",
           "name": "_assertBalanceWrite",
-          "line": 538,
+          "line": 541,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_recordWrites_match_lean",
-          "line": 593,
+          "line": 596,
           "called": [
             "_assertRecordWrite",
             "_skipWithReason",
@@ -12891,31 +12711,31 @@
         {
           "kind": "function",
           "name": "_assertRecordWrite",
-          "line": 609,
+          "line": 612,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveRegistryFromFieldsExternal",
-          "line": 648,
+          "line": 651,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveDeclaredPolicyExternal",
-          "line": 657,
+          "line": 660,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_nextWdIdWrite_advances_by_one",
-          "line": 669,
+          "line": 672,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_canonicalAbsentValues_match_lean",
-          "line": 696,
+          "line": 699,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12925,47 +12745,24 @@
         {
           "kind": "function",
           "name": "test_canonicalAbsence_rejects_present_values",
-          "line": 729,
+          "line": 732,
           "called": []
         },
         {
           "kind": "function",
-          "name": "test_stepVM_does_not_yet_return_the_state_root",
-          "line": 769,
+          "name": "test_the_fold_reaches_the_published_root",
+          "line": 768,
           "called": [
             "_requireKeccakLinked",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
           ]
-        },
-        {
-          "kind": "function",
-          "name": "test_writeFold_reaches_lean_root",
-          "line": 814,
-          "called": [
-            "_requireKeccakLinked",
-            "_skipWithReason",
-            "fixtureExists",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "foldBundleExternal",
-          "line": 836,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "applyOneWrite",
-          "line": 864,
-          "called": []
         },
         {
           "kind": "function",
           "name": "test_leafPreimage_is_reconstructible",
-          "line": 892,
+          "line": 821,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12975,7 +12772,7 @@
         {
           "kind": "function",
           "name": "test_writeSet_matches_lean",
-          "line": 920,
+          "line": 849,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -12985,25 +12782,25 @@
         {
           "kind": "function",
           "name": "assertWriteSetExternal",
-          "line": 935,
+          "line": 864,
           "called": []
         },
         {
           "kind": "function",
           "name": "deriveWriteSetExternal",
-          "line": 982,
+          "line": 911,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_writeSet_refuses_only_the_bulk_pair",
-          "line": 995,
+          "line": 924,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_perEntry_cellProofs_witness_binding",
-          "line": 1017,
+          "line": 946,
           "called": [
             "_assertWitnessBinding",
             "_skipWithReason",
@@ -13014,7 +12811,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionKindByte_in_range",
-          "line": 1045,
+          "line": 974,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -13024,7 +12821,7 @@
         {
           "kind": "function",
           "name": "test_perEntry_actionFieldsHex_well_formed",
-          "line": 1070,
+          "line": 999,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -13034,7 +12831,7 @@
         {
           "kind": "function",
           "name": "test_packedLayoutGoldens_match_abiEncodePacked",
-          "line": 1119,
+          "line": 1048,
           "called": [
             "_skipWithReason",
             "fixtureExists",
@@ -13044,156 +12841,12 @@
         {
           "kind": "function",
           "name": "test_variant21_tailGolden_matches_abiEncodePacked",
-          "line": 1166,
+          "line": 1095,
           "called": [
-            "KnomosisStepVMRoot",
             "_skipWithReason",
             "fixtureExists",
             "readFixture"
           ]
-        },
-        {
-          "kind": "function",
-          "name": "setUp",
-          "line": 1197,
-          "called": [
-            "KnomosisStepVMRoot"
-          ]
-        }
-      ]
-    },
-    {
-      "module": "StepVMRoot.t",
-      "path": "solidity/test/CrossCheck/StepVMRoot.t.sol",
-      "declaration_count": 13,
-      "declarations": [
-        {
-          "kind": "contract",
-          "name": "StepVMRootCrossCheck",
-          "line": 32,
-          "called": [
-            "KnomosisStepVMRoot",
-            "StepVMRootProbeHarness"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "setUp",
-          "line": 39,
-          "called": [
-            "KnomosisStepVMRoot"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_executeStepToRoot_matches_lean",
-          "line": 48,
-          "called": [
-            "_requireKeccakLinked",
-            "_runProbe",
-            "_skipWithReason",
-            "fixtureExists",
-            "probePostRoot",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_executeStepToRoot_moves_the_root",
-          "line": 78,
-          "called": [
-            "_runProbe",
-            "_skipWithReason",
-            "fixtureExists",
-            "probePreRoot",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_omitting_a_write_reverts",
-          "line": 107,
-          "called": [
-            "_call",
-            "_skipWithReason",
-            "fixtureExists",
-            "loadOpenings",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_forged_pre_value_reverts",
-          "line": 133,
-          "called": [
-            "_amountValue",
-            "_call",
-            "_skipWithReason",
-            "fixtureExists",
-            "loadOpenings",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_reordered_bundle_reverts",
-          "line": 158,
-          "called": [
-            "_call",
-            "_skipWithReason",
-            "fixtureExists",
-            "loadOpenings",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_policy_opening_must_name_the_policy_cell",
-          "line": 180,
-          "called": [
-            "_skipWithReason",
-            "fixtureExists",
-            "loadOpenings",
-            "loadPolicyOpening",
-            "probePreRoot",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "test_bulk_variants_are_refused",
-          "line": 211,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "test_isAdjudicable_excludes_exactly_the_bulk_pair",
-          "line": 238,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "_runProbe",
-          "line": 253,
-          "called": [
-            "_call",
-            "loadOpenings"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_call",
-          "line": 263,
-          "called": [
-            "loadPolicyOpening",
-            "probePreRoot"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "_amountValue",
-          "line": 280,
-          "called": []
         }
       ]
     },
@@ -13205,7 +12858,7 @@
         {
           "kind": "contract",
           "name": "StepVMRootMultiCrossCheck",
-          "line": 36,
+          "line": 39,
           "called": [
             "KnomosisStepVMRoot",
             "StepVMRootProbeHarness"
@@ -13214,7 +12867,7 @@
         {
           "kind": "function",
           "name": "setUp",
-          "line": 42,
+          "line": 45,
           "called": [
             "KnomosisStepVMRoot"
           ]
@@ -13222,7 +12875,7 @@
         {
           "kind": "function",
           "name": "test_executeStepToRootMulti_matches_lean",
-          "line": 52,
+          "line": 55,
           "called": [
             "_requireKeccakLinked",
             "_runProbe",
@@ -13235,25 +12888,8 @@
         },
         {
           "kind": "function",
-          "name": "test_the_two_entry_points_agree",
-          "line": 79,
-          "called": [
-            "_requireKeccakLinked",
-            "_runProbe",
-            "_skipWithReason",
-            "findProbeBase",
-            "fixtureExists",
-            "loadOpenings",
-            "loadPolicyOpening",
-            "multiProbeBase",
-            "probePreRoot",
-            "readFixture"
-          ]
-        },
-        {
-          "kind": "function",
           "name": "test_executeStepToRootMulti_moves_the_root",
-          "line": 123,
+          "line": 82,
           "called": [
             "_requireKeccakLinked",
             "_runProbe",
@@ -13267,7 +12903,7 @@
         {
           "kind": "function",
           "name": "test_a_permuted_frontier_reaches_the_same_root",
-          "line": 157,
+          "line": 116,
           "called": [
             "_call",
             "_requireKeccakLinked",
@@ -13284,7 +12920,7 @@
         {
           "kind": "function",
           "name": "test_the_same_cell_twice_reverts",
-          "line": 199,
+          "line": 158,
           "called": [
             "_call",
             "_probeWithAtLeast",
@@ -13299,7 +12935,7 @@
         {
           "kind": "function",
           "name": "test_omitting_a_cell_reverts",
-          "line": 225,
+          "line": 184,
           "called": [
             "_call",
             "_probeWithAtLeast",
@@ -13314,7 +12950,7 @@
         {
           "kind": "function",
           "name": "test_a_forged_pre_value_reverts",
-          "line": 252,
+          "line": 211,
           "called": [
             "_amountValue",
             "_call",
@@ -13331,7 +12967,7 @@
         {
           "kind": "function",
           "name": "test_a_truncated_wire_reverts",
-          "line": 285,
+          "line": 244,
           "called": [
             "_call",
             "_probeWithSiblings",
@@ -13346,13 +12982,19 @@
         {
           "kind": "function",
           "name": "test_bulk_variants_are_refused",
-          "line": 313,
+          "line": 272,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_isAdjudicable_excludes_exactly_the_bulk_pair",
+          "line": 297,
           "called": []
         },
         {
           "kind": "function",
           "name": "test_the_opening_cap_is_derived_from_the_write_set",
-          "line": 342,
+          "line": 322,
           "called": [
             "fixtureExists",
             "multiProbeBase",
@@ -13362,7 +13004,7 @@
         {
           "kind": "function",
           "name": "_probeWithAtLeast",
-          "line": 369,
+          "line": 349,
           "called": [
             "multiProbeBase"
           ]
@@ -13370,7 +13012,7 @@
         {
           "kind": "function",
           "name": "_probeWithSiblings",
-          "line": 385,
+          "line": 365,
           "called": [
             "multiProbeBase",
             "probeSiblings"
@@ -13379,7 +13021,7 @@
         {
           "kind": "function",
           "name": "_runProbe",
-          "line": 399,
+          "line": 379,
           "called": [
             "_call",
             "loadOpenedCells",
@@ -13390,7 +13032,7 @@
         {
           "kind": "function",
           "name": "_call",
-          "line": 412,
+          "line": 392,
           "called": [
             "probePreRoot"
           ]
@@ -13398,7 +13040,7 @@
         {
           "kind": "function",
           "name": "_amountValue",
-          "line": 432,
+          "line": 412,
           "called": []
         }
       ]
@@ -18648,7 +18290,7 @@
     {
       "module": "StepVMRootProbeHarness",
       "path": "solidity/test/utils/StepVMRootProbeHarness.sol",
-      "declaration_count": 14,
+      "declaration_count": 9,
       "declarations": [
         {
           "kind": "abstract_contract",
@@ -18660,52 +18302,14 @@
         },
         {
           "kind": "function",
-          "name": "probeBase",
-          "line": 26,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "findProbeBase",
-          "line": 37,
-          "called": [
-            "probeBase"
-          ]
-        },
-        {
-          "kind": "function",
-          "name": "loadPolicyOpening",
-          "line": 59,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "loadOpenings",
-          "line": 72,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "probePreRoot",
-          "line": 92,
-          "called": []
-        },
-        {
-          "kind": "function",
-          "name": "probePostRoot",
-          "line": 102,
-          "called": []
-        },
-        {
-          "kind": "function",
           "name": "multiProbeBase",
-          "line": 122,
+          "line": 34,
           "called": []
         },
         {
           "kind": "function",
           "name": "findMultiProbeBase",
-          "line": 128,
+          "line": 40,
           "called": [
             "multiProbeBase"
           ]
@@ -18713,13 +18317,13 @@
         {
           "kind": "function",
           "name": "loadOpenedCells",
-          "line": 148,
+          "line": 60,
           "called": []
         },
         {
           "kind": "function",
           "name": "encodeMultiProbeCall",
-          "line": 169,
+          "line": 81,
           "called": [
             "probePreRoot"
           ]
@@ -18727,23 +18331,26 @@
         {
           "kind": "function",
           "name": "probeGapMask",
-          "line": 192,
+          "line": 104,
           "called": []
         },
         {
           "kind": "function",
           "name": "probeSiblings",
-          "line": 201,
+          "line": 113,
           "called": []
         },
         {
           "kind": "function",
-          "name": "encodeProbeCall",
-          "line": 217,
-          "called": [
-            "loadPolicyOpening",
-            "probePreRoot"
-          ]
+          "name": "probePreRoot",
+          "line": 122,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "probePostRoot",
+          "line": 132,
+          "called": []
         }
       ]
     },

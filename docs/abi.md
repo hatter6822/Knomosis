@@ -2834,7 +2834,7 @@ All contracts immutable per Workstream-E §20 discipline.
   * `initiateChallenge(...) payable returns (uint256 gameId)`
   * `submitMidpoint(uint256 gameId, bytes32 midpointCommit)`
   * `respondToMidpoint(uint256 gameId, bool agree)`
-  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, CellOpening policyOpening, CellOpening[] writeOpenings)`
+  * `terminateOnSingleStep(uint256 gameId, uint8 actionKind, bytes actionFields, uint64 signer, OpenedCell[] opened, bytes gapMask, bytes siblings)`
     — no `claimedPostCommit` argument: the contract computes the
     post-state ROOT from the step and compares it against the on-chain
     `g.high.commit`, so the claim is not the caller's to make.  It
@@ -2850,42 +2850,78 @@ All contracts immutable per Workstream-E §20 discipline.
 
 `KnomosisStepVMRoot`:
 
-  * `executeStepToRoot(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, CellOpening policyOpening, CellOpening[] writeOpenings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
+  * `executeStepToRootMulti(bytes32 preStateRoot, uint8 actionKind, bytes actionFields, uint64 signer, uint256 l2LogIndex, OpenedCell[] opened, bytes gapMask, bytes siblings) pure returns (bytes32 postStateRoot)` — `actionKind` is the frozen `Action` dispatcher index (`0..24`; mirrors `actionKindByte` / the `ActionKind` enum); `actionFields` is the per-variant `actionFieldsForL1` byte layout; `signer` is the action signer's `ActorId`; `l2LogIndex` is the index the step produces, which `withdraw`'s pending-withdrawal record carries.
+  * `widestFrontier(bytes probeFields) pure returns (uint256)` — the
+    largest frontier any adjudicable action produces, derived from
+    `StepWrites.deriveWriteSet` rather than restated.  `assertConsistent`
+    requires the opening cap to exceed it, and
+    `KnomosisFaultProofGame.assertConsistent` calls it through the
+    game's own `stepVM` reference so a game wired to a stale step VM
+    fails at deploy rather than at the first terminate.
 
-  `CellOpening` is the ABI tuple
-  `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes preValue, bytes proofData)`.
+  **The bundle is a DEDUPLICATING PRE-ROOT MULTIPROOF.**  `opened` is
+  the step's FRONTIER — every cell it touches, opened ONCE against
+  `preStateRoot` — and `gapMask` + `siblings` are the single sibling
+  list all of them share.
 
-  * `preValue` — the cell's CBE-encoded value in the state this
-    opening is against: the PRE-state for the first write to a cell,
-    and the RUNNING state for a later one.  Not trusted — the opening
-    must verify against the running root with a leaf built from
-    exactly these bytes.
-  * `proofData` — the cell's SMT opening against that root: a 32-byte
-    bitmask followed by one 32-byte sibling per set bit, in depth
-    order (Lean `SmtCellProof.toWireBytes`).  Shape-validated at
-    intake — a nonzero multiple of 32, at most
-    `MAX_PROOF_DATA_BYTES = 32 * (1 + 256)` — and rejected with
-    `MalformedProofData(length)` otherwise.  The JSON wire form
-    (`knomosis export-cell-proofs`, the Rust observer's `CellProof`)
-    spells it `proof_data`, lowercase hex without the `0x` prefix; the
-    cross-stack corpus spells it `proofDataHex`, `0x`-prefixed.
+  `OpenedCell` is the ABI tuple
+  `(uint8 cellKind, uint256 keyA, uint256 keyB, bytes preValue)`.
 
-  **Openings are CHAINED.**  Opening `i` opens against the root write
-  `i-1` produced, not against `preStateRoot`: an opening goes stale
-  the moment a write lands, and two writes at the SAME cell (a
-  self-transfer) are reachable by anyone.
+  * `preValue` — the cell's CBE-encoded PRE-state value.  Not trusted:
+    it enters the verifier's PRE-side fold, whose aggregate must
+    reproduce `preStateRoot`, so a lie moves the aggregate off it.
+    There is no per-opening verdict to fail; that single aggregate
+    check is the point.
+
+  The frontier includes the READ-ONLY budget-policy cell `(14, 0, 0)`
+  — under a multiproof a read is a write of the same value, so it
+  needs no separate opening and no separate walk.  It is not optional:
+  the policy selects the branch every epoch-budget write takes, and a
+  frontier without it fails the shape check.
+
+  **Order carries no information.**  Every cell is opened against the
+  same root, so the verifier SORTS the frontier by path index
+  (`pathIndex(key) = bitreverse(key)`, which makes the tree's
+  root-first reading order a plain unsigned compare).  Any permutation
+  of a valid bundle yields the identical post-root.  Two consequences,
+  both accepted deliberately: a bundle cannot lose on a formatting
+  question, and two calldata encodings are valid for one step —
+  harmless, since nothing signs the bundle and the game stores only
+  the resulting root.
+
+  **A duplicate is not representable.**  Strict ascent after the sort
+  is the distinctness check, so a bundle naming one cell twice fails
+  before any hashing.
+
+  `gapMask` — one bit per gap, LSB-first within each byte, set iff
+  that gap's sibling is drawn from `siblings` rather than being the
+  canonical empty sub-tree at its level.  Its length is EXACTLY
+  `ceil(G/8)` for the gap count `G = (256 + 1) − m + Σ divs` the KEY
+  SET implies, and `siblings` is exactly `32 * popcount(gapMask)`
+  bytes.  Both are derived before a byte of the wire is read, so a
+  truncated proof reverts (`MultiProofMaskLength`,
+  `MultiProofSiblingCount`) rather than being padded out with a
+  placeholder hash and walked to some other root.  A set bit past the
+  last gap reverts too (`MultiProofPadding`), closing a malleability
+  slot.
+
+  The JSON wire form (`knomosis export-terminate-bundle`, the Rust
+  observer's `TerminateBundle`) spells these `opened_cells` /
+  `gap_mask_hex` / `siblings_hex`, lowercase hex without the `0x`
+  prefix; the cross-stack corpus spells them `cells` / `gapMaskHex` /
+  `siblingsHex`, `0x`-prefixed.
 
   **There is no `witnessCommit` word.**  It carried
   `commitExtendedState` of the state the value was read from — a claim
   only a party holding the whole `ExtendedState` could check, and one
-  a responder could set freely.  The opening is the binding now, and
-  it is one an L1 holding nothing but a 32-byte root can verify.
+  a responder could set freely.  The fold is the binding now, and it
+  is one an L1 holding nothing but a 32-byte root can verify.
 
-  `policyOpening` is the READ-ONLY budget-policy cell, opened against
-  `preStateRoot`.  Its cell identity is fixed by the contract
-  (`(14, 0, 0)`) rather than read from the struct, so a responder
-  cannot pass some other cell's bytes off as the deployment's policy —
-  which selects the branch every epoch-budget write takes.
+  **A CHAINED arrangement shipped first** — one opening per WRITE,
+  each against the running root, with a separate `policyOpening` — and
+  is retired.  It cost a full second walk for a cell written twice (a
+  self-transfer, which anyone can submit), made bundle order part of
+  consensus, and padded a short proof rather than refusing it.
 
 `KnomosisDisputeVerifierV2`:
 

@@ -11,11 +11,11 @@
 LegalKernel.Test.FaultProof.Terminate — the openings-only verifier
 against the sequencer's fold.
 
-`verifierPostRoot` holds a pre-root and a bundle; `stepPostRoot` holds
-the state.  The property that matters is that they AGREE on the honest
-bundle — otherwise an honest sequencer's bundle would not verify, which
-is the failure the whole workstream exists to remove — and that the
-verifier refuses every dishonest one.
+`verifierPostRootMulti` holds a pre-root and a bundle; `stepPostRoot`
+holds the state.  The property that matters is that they AGREE on the
+honest bundle — otherwise an honest sequencer's bundle would not
+verify, which is the failure the whole workstream exists to remove —
+and that the verifier refuses every dishonest one.
 
 The negative cases are the point.  A verifier that agreed on the honest
 bundle and accepted everything else would pass the first test and be
@@ -94,11 +94,16 @@ def probes : List (String × Authority.Action) :=
 
 /-- Run the verifier on the honest bundle for one probe. -/
 def runProbe (a : Authority.Action) : Option StateCommit :=
-  let st := sign a
-  verifierPostRoot (commitExtendedState base) a st.signer 0
-    (policyOpening base) (stepOpenings base st 0)
+  stepMultiPostRoot base (sign a) 0
 
-/-- Tests. -/
+/-- Tests over the honest bundle.
+
+    The chained verifier these once drove — one opening per WRITE
+    against a RUNNING root — is retired on all three stacks; the cases
+    that were about the CHAIN (order is consensus, an opening goes
+    stale) went with it, and the cases that are about ADJUDICATION are
+    here, restated against the multiproof.  The multiproof's own
+    refusals live in `multiTests` below. -/
 def coreTests : List TestCase :=
   [ { name := "the verifier reaches the sequencer's post-root on every probe"
     , body := do
@@ -124,114 +129,44 @@ def coreTests : List TestCase :=
           if got = some (commitExtendedState base) then
             throw <| IO.userError s!"{name}: the fold left the root alone"
     }
-  , { name := "a forged pre-value is refused"
-    , body := do
-        -- The opening is verified against the RUNNING root with a leaf
-        -- built from exactly the submitted bytes, so claiming a
-        -- balance the state does not hold fails the walk rather than
-        -- deriving a post-value of the responder's choosing.
-        let a := Authority.Action.transfer 1 7 8 30
-        let st := sign a
-        let ops := stepOpenings base st 0
-        let forged := ops.map (fun o =>
-          match o.cellTag with
-          | .balance 1 7 =>
-            { o with preValue :=
-                ByteArray.mk (Encoding.encodeAmount 1000000).toArray }
-          | _ => o)
-        let got := verifierPostRoot (commitExtendedState base) a st.signer 0
-          (policyOpening base) forged
-        assertEq (expected := true) (actual := got.isNone)
-          "a forged balance pre-value was accepted"
-    }
-  , { name := "omitting a write is refused"
-    , body := do
-        -- The forgery the re-derived cell list exists to stop: a
-        -- shorter bundle folds to a root where the dropped cell never
-        -- moved, which the publishing sequencer could then defend.
-        let a := Authority.Action.transfer 1 7 8 30
-        let st := sign a
-        let ops := stepOpenings base st 0
-        let got := verifierPostRoot (commitExtendedState base) a st.signer 0
-          (policyOpening base) ops.dropLast
-        assertEq (expected := true) (actual := got.isNone)
-          "a short bundle was accepted"
-    }
-  , { name := "reordering the bundle is refused"
-    , body := do
-        -- Order is consensus, not convention: the openings are
-        -- CHAINED, so opening `i` is only valid against the root write
-        -- `i-1` produced.
-        let a := Authority.Action.transfer 1 7 8 30
-        let st := sign a
-        let ops := stepOpenings base st 0
-        let got := verifierPostRoot (commitExtendedState base) a st.signer 0
-          (policyOpening base) ops.reverse
-        assertEq (expected := true) (actual := got.isNone)
-          "a reordered bundle was accepted"
-    }
-  , { name := "a policy opening naming another cell is refused"
-    , body := do
-        -- The policy selects the branch every epoch-budget write
-        -- takes, so a responder able to substitute another cell's
-        -- bytes for it could steer the budget leg of every action.
-        let a := Authority.Action.transfer 1 7 8 30
-        let st := sign a
-        let bogus : CellOpening :=
-          { cellTag := .nonce 7
-          , preValue := getCellValue base (.nonce 7)
-          , proof := buildStateCellProof base (.nonce 7) }
-        let got := verifierPostRoot (commitExtendedState base) a st.signer 0
-          bogus (stepOpenings base st 0)
-        assertEq (expected := true) (actual := got.isNone)
-          "a policy opening for the wrong cell was accepted"
-    }
   , { name := "the two bulk variants are refused"
     , body := do
-        -- Their write set is the actor set at a resource, which an L1
-        -- holding only the pre-root cannot enumerate: a complete
-        -- bundle and one missing a recipient are indistinguishable to
-        -- it.  Refused rather than adjudicated on a coin flip.
-        for a in [Authority.Action.distributeOthers 1 7 5,
-                  Authority.Action.proportionalDilute 1 7 5] do
-          let st := sign a
-          let got := verifierPostRoot (commitExtendedState base) a st.signer 0
-            (policyOpening base) (stepOpenings base st 0)
-          assertEq (expected := true) (actual := got.isNone)
-            s!"{repr a} was adjudicated"
+        -- Not an adjudication outcome: their write set is the actor set
+        -- at a resource, which an L1 holding only the pre-root cannot
+        -- enumerate.  A multiproof does not make it enumerable, so the
+        -- exclusion is unchanged.
+        for a in [Authority.Action.distributeOthers 1 7 30,
+                  Authority.Action.proportionalDilute 1 7 30] do
+          assertEq (expected := true)
+            (actual := (stepMultiPostRoot base (sign a) 0).isNone)
+            "a bulk variant must be refused"
     }
   , { name := "the verifier's cell list is the complete one"
     , body := do
-        -- The theorem `verifierWriteCells_eq_writeCellsAt` in value
-        -- form: deriving from the proven counter reaches exactly
-        -- `writeCellsAt`, so the shape check is a check against
+        -- Deriving from the proven counter reaches exactly
+        -- `writeCellsAt`, so the frontier check is a check against
         -- COMPLETENESS rather than against a weaker static
         -- declaration.
         for (name, a) in probes do
           assertEq
-            (expected := (Authority.Action.writeCellsAt base a 7).map
-              (fun t => toString (repr t)))
+            (expected := (a.writeCellsAt base 7).map (fun t => t.kindIndex))
             (actual := (verifierWriteCells a 7 base.bridge.nextWdId).map
-              (fun t => toString (repr t)))
-            s!"{name}: the derived cell list is not the complete one"
+                         (fun t => t.kindIndex))
+            s!"{name}: the derived cell list must be the complete one"
     }
   , { name := "API stability: the verifier's signature"
     , body := do
-        let _agree : ∀ (es : ExtendedState) (a : Authority.Action)
-            (signer : ActorId), FaultProofAdjudicable a = true →
-            verifierWriteCells a signer es.bridge.nextWdId
-              = Authority.Action.writeCellsAt es a signer :=
-          fun es a signer h => verifierWriteCells_eq_writeCellsAt es a signer h
+        let _proof : StateCommit → Authority.Action → ActorId → Nat →
+            MultiBundle → Option StateCommit := verifierPostRootMulti
         pure ()
     }
   ]
 
 /-! ## The multiproof verifier
 
-`verifierPostRootMulti` is the same verifier over a pre-root
-multiproof.  These cases exercise what the change makes newly
-possible and newly refusable, rather than re-checking what the chained
-suite above already pins. -/
+These cases exercise what the multiproof makes newly possible and newly
+refusable: an accepted permutation, a refused duplicate, a refused
+short wire, a refused padding bit. -/
 
 /-- The zero-gap wire — what `buildMultiProof` produces from no gaps
     at all.  Used by the cases the verifier refuses on the CELL SET,
@@ -366,10 +301,15 @@ def multiTests : List TestCase :=
         -- it stays true either way.
         for (name, a) in probes do
           let st := sign a
+          -- The retired shape, reconstructed from the surviving
+          -- honest-sequencer bundle: one 32-byte bitmask plus siblings
+          -- per WRITE, and a separate opening for the read-only policy
+          -- cell.  Rebuilt rather than measured through the old
+          -- helpers, which went with the verifier that consumed them.
           let chained :=
-            (stepOpenings base st 0).foldl
-              (fun acc o => acc + o.proof.toWireBytes.size)
-              (policyOpening base).proof.toWireBytes.size
+            (stepWriteBundle base st 0).foldl
+              (fun acc w => acc + w.2.2.2.toWireBytes.size)
+              (buildStateCellProof base .budgetPolicy).toWireBytes.size
           let multi := (stepMultiBundle base st).proof.toWireBytes.size
           assertEq (expected := true) (actual := multi < chained)
             s!"{name}: multiproof {multi} bytes vs chained {chained}"
