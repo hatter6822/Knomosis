@@ -49,6 +49,7 @@ This module is **not** part of the trusted computing base.
 -/
 
 import LegalKernel.FaultProof.Frontier
+import LegalKernel.FaultProof.MultiProof
 import LegalKernel.FaultProof.StepWriteSets
 import LegalKernel.FaultProof.VerifierWrites
 
@@ -240,10 +241,21 @@ def plannedBalances (read : BalanceReader)
   -- The thirteen variants that write no balance cell at all.
   | _ => some []
 
-/-- Look one balance cell up in the plan. -/
+/-- Look one balance cell up in the plan, refusing a disagreeing
+    duplicate rather than resolving one.
+
+    Routes through `plannedBalanceAt?` rather than taking the first
+    match.  `plannedBalances_alias_consistent` proves the refusal
+    unreachable from any action, so this changes no behaviour any step
+    can reach; what it buys is that a derivation bug not yet written
+    fails closed instead of silently picking whichever entry the search
+    finds first.  Under the chained fold that could not matter — a cell
+    was read per OCCURRENCE, against the running state — and under a
+    multiproof it is read per CELL, which is what makes the question
+    real. -/
 def plannedBalanceAt (plan : List ((ResourceId × ActorId) × Nat))
     (r : ResourceId) (a : ActorId) : Option Nat :=
-  (plan.find? (fun p => p.1 == (r, a))).map Prod.snd
+  plannedBalanceAt? plan r a
 
 /-! ## The per-cell value -/
 
@@ -397,6 +409,145 @@ theorem plannedBalances_alias_consistent (read : BalanceReader) (a : Action)
         amount plan h
   -- The thirteen variants that write no balance cell at all.
   | _ => simp only [Option.some.injEq] at h; subst h; exact aliasConsistent_nil
+
+/-! ## The multiproof verifier
+
+`verifierPostRoot` above is the CHAINED verifier: one opening per
+write, each against the root the previous write produced, and a
+first-occurrence rule for reading a cell's pre-value because a later
+write's opening is against the running state rather than the
+pre-state.
+
+This is the same verifier over a pre-root multiproof, and the
+differences are all consequences of that one change:
+
+  * the bundle is a SET of cells, so the shape check normalises its
+    order and refuses a duplicate;
+  * a cell's pre-value is read BY CELL rather than by first
+    occurrence, because there is exactly one opening per cell —
+    `preStateValueAt`'s rule has nothing left to disambiguate;
+  * the read-only budget-policy cell stops being special.  It joins
+    the frontier as a cell written to its own value, so it needs no
+    separate walk and no separate verification path.  A read is a
+    write of the same value.
+-/
+
+/-- A multiproof bundle: the cells it opens with their PRE-state
+    values, in any order, and the single sibling list serving both
+    roots.
+
+    One sibling list rather than one per opening is the whole
+    difference on the wire, and `multiSiblings_congr` is why it is
+    sound: every sibling is the root of a sub-tree holding no opened
+    cell, so the writes cannot move it. -/
+structure MultiBundle where
+  /-- The opened cells with their pre-state values, in any order. -/
+  cells : List (CellTag × ByteArray)
+  /-- The shared sibling list, in the walk's post-order. -/
+  siblings : List ByteArray
+  deriving Repr
+
+/-- A cell's proven pre-value, looked up BY CELL.
+
+    The replacement for `preStateValueAt`'s first-occurrence rule.
+    Under a multiproof a cell is opened exactly once — the shape check
+    refuses a duplicate — so "the first opening naming this cell" and
+    "the opening naming this cell" are the same thing, and the rule
+    that had to distinguish them is gone. -/
+def bundleValueAt (b : MultiBundle) (t : CellTag) : Option ByteArray :=
+  (b.cells.find? (fun c => smtCellKey c.1 == smtCellKey t)).map Prod.snd
+
+/-- The balance reader a multiproof bundle induces.  PARTIAL, exactly
+    as the chained one is: a derivation reading a cell the bundle does
+    not open produces nothing rather than a default, so an omitted
+    opening cannot be passed off as a zero balance. -/
+def bundleBalanceReader (b : MultiBundle) : BalanceReader :=
+  fun r a =>
+    match bundleValueAt b (.balance r a) with
+    | none   => none
+    | some v =>
+      match Encoding.decodeAmount v.data.toList with
+      | .ok (n, []) => some n
+      | _           => none
+
+/-- The proven `.bridgeNextWdId` pre-value, or `0` when unopened. -/
+def bundleNextWdId (b : MultiBundle) : Nat :=
+  match bundleValueAt b .bridgeNextWdId with
+  | none   => 0
+  | some v =>
+    match Encodable.decode (T := Nat) v.data.toList with
+    | .ok (n, []) => n
+    | _           => 0
+
+/-- The cells a step's bundle must open: the written ones plus the
+    read-only budget policy, deduplicated and in path order.
+
+    The policy cell is IN the frontier rather than beside it.  Under
+    the chained fold it needed its own opening and its own walk
+    because it is a read among writes; here a read is a write of the
+    same value, so it is one more cell. -/
+def multiFrontierOf (a : Action) (signer : ActorId) (nextWdIdPre : Nat) :
+    List CellTag :=
+  frontierOf (.budgetPolicy :: verifierWriteCells a signer nextWdIdPre)
+
+/-- **The multiproof post-state root** — what an L1 holding a pre-root
+    and ONE bundle computes.
+
+    `none` on any refusal, and each refusal is a submission failure
+    rather than a state-transition outcome: a non-adjudicable action, a
+    bundle whose cells are not the ones the step opens (a duplicate, a
+    missing cell, an extra cell — order is free), a missing or
+    malformed pre-value, a wire that does not reproduce the submitted
+    pre-root, or a wire the walk cannot consume exactly.
+
+    A failing law precondition is a NO-OP here, not a refusal: the
+    derivations evaluate the precondition and return the pre-values
+    when it fails, because `step_impl` is
+    `if pre then apply_impl else id`. -/
+def verifierPostRootMulti (preRoot : StateCommit) (a : Action) (signer : ActorId)
+    (l2LogIndex : Nat) (b : MultiBundle) : Option StateCommit :=
+  if ¬ FaultProofAdjudicable a then none
+  else
+    let expected := multiFrontierOf a signer (bundleNextWdId b)
+    if ¬ frontierShapeOk (.budgetPolicy :: verifierWriteCells a signer (bundleNextWdId b))
+           (b.cells.map Prod.fst) then none
+    else
+      match bundleValueAt b .budgetPolicy with
+      | none => none
+      | some policyValue =>
+        match plannedBalances (bundleBalanceReader b) a signer with
+        | none      => none
+        | some plan =>
+          -- The PRE side: the leaves the bundle claims, which must
+          -- reproduce the submitted pre-root.
+          let preOpened : List OpenedLeaf :=
+            expected.filterMap (fun t =>
+              (bundleValueAt b t).map (fun v => (smtCellKey t, cellLeaf t v)))
+          -- The POST side: the same cells, with values DERIVED rather
+          -- than submitted.  The policy cell is a read, so it keeps
+          -- its value; every other cell takes the step's result.
+          let postOpened : List OpenedLeaf :=
+            expected.filterMap (fun t =>
+              if t = .budgetPolicy then
+                (bundleValueAt b t).map (fun v => (smtCellKey t, cellLeaf t v))
+              else
+                (derivedCellValue (b.cells.map (fun c =>
+                    ({ cellTag := c.1, preValue := c.2
+                     , proof := { siblings := #[], bitmask := ByteArray.empty } }
+                       : CellOpening)))
+                  policyValue a signer l2LogIndex plan t).map
+                  (fun v => (smtCellKey t, cellLeaf t v)))
+          if preOpened.length ≠ expected.length then none
+          else if postOpened.length ≠ expected.length then none
+          else
+            match multiWalk smtDepth preOpened b.siblings with
+            | some (r, []) =>
+              if r ≠ preRoot then none
+              else
+                match multiWalk smtDepth postOpened b.siblings with
+                | some (r', []) => some r'
+                | _             => none
+            | _ => none
 
 end FaultProof
 end LegalKernel

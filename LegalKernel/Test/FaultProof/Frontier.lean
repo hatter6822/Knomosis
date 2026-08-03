@@ -95,20 +95,30 @@ def tests : List TestCase :=
           (actual := frontierShapeOk transferCells (frontierOf transferCells))
           "the distinct-cell list is accepted"
     }
-  , { name := "a bundle in the wrong order fails the shape check"
+  , { name := "a bundle in any order is accepted"
     , body := do
-        -- Order is not information — every opening is against the same
-        -- root — but the CANONICAL order is required so a step has one
-        -- encoding rather than m!.  The verifier sorts what it is
-        -- handed, so this is a check on the submission, not on the
-        -- mathematics; `multiWalk_perm` is the statement that nothing
-        -- is lost by requiring it.
+        -- Order carries no information: every opening is against the
+        -- same root.  So the verifier NORMALISES the submission rather
+        -- than dictating its order, and a permutation is accepted.
+        --
+        -- The duplicate is still refused, and by the SAME comparison —
+        -- `pathSort` keeps duplicates while `frontierOf` drops them, so
+        -- a duplicate-carrying bundle sorts to a longer list and fails
+        -- on length.  Order free, duplicates not.
         let sorted := frontierOf transferCells
         assertEq (expected := true)
           (actual := frontierShapeOk transferCells sorted) "sorted is accepted"
-        assertEq (expected := false)
+        assertEq (expected := true)
           (actual := frontierShapeOk transferCells sorted.reverse)
-          "the reverse is refused (unless it is already sorted)"
+          "and so is the reverse"
+        assertEq (expected := true)
+          (actual := frontierShapeOk transferCells (sorted.rotateLeft 2))
+          "and any other permutation"
+        -- The negative control for THIS test: order being free must not
+        -- have made the check vacuous.
+        assertEq (expected := false)
+          (actual := frontierShapeOk transferCells (sorted.drop 1))
+          "a missing cell is still refused"
     }
   , -- 2. Sortedness IS distinctness.
     { name := "the frontier is strictly ascending in path order"

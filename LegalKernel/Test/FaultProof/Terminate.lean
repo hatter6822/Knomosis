@@ -22,6 +22,7 @@ bundle and accepted everything else would pass the first test and be
 worthless: it would let a responder fold to a root of their choosing.
 -/
 
+import LegalKernel.FaultProof.CellStore
 import LegalKernel.FaultProof.Terminate
 import LegalKernel.Test.Framework
 
@@ -98,7 +99,7 @@ def runProbe (a : Authority.Action) : Option StateCommit :=
     (policyOpening base) (stepOpenings base st 0)
 
 /-- Tests. -/
-def tests : List TestCase :=
+def coreTests : List TestCase :=
   [ { name := "the verifier reaches the sequencer's post-root on every probe"
     , body := do
         for (name, a) in probes do
@@ -224,5 +225,73 @@ def tests : List TestCase :=
         pure ()
     }
   ]
+
+/-! ## The multiproof verifier
+
+`verifierPostRootMulti` is the same verifier over a pre-root
+multiproof.  These cases exercise what the change makes newly
+possible and newly refusable, rather than re-checking what the chained
+suite above already pins. -/
+
+/-- A step over the probe state: bump the signer's nonce. -/
+def multiCells : List CellTag := [CellTag.nonce 7]
+
+/-- Tests for the multiproof path. -/
+def multiTests : List TestCase :=
+  [ { name := "the frontier includes the policy cell"
+    , body := do
+        -- Under the chained fold the read-only budget policy needed its
+        -- own opening and its own 256-level walk, because it is a read
+        -- among writes.  Here a read is a write of the same value, so
+        -- it is one more cell in the frontier and one fewer walk.
+        let f := multiFrontierOf (.transfer 1 7 8 30) 7 0
+        assertEq (expected := true)
+          (actual := f.any (fun t => smtCellKey t == smtCellKey .budgetPolicy))
+          "the policy cell is in the frontier"
+        assertEq (expected := true) (actual := pathSorted f)
+          "and the frontier is still strictly sorted"
+    }
+  , { name := "a cell's pre-value is read by cell, not by occurrence"
+    , body := do
+        -- `preStateValueAt`'s first-occurrence rule existed because a
+        -- later write's opening was against the RUNNING state.  With
+        -- one opening per cell there is nothing to disambiguate, and
+        -- the lookup says so directly.
+        let b : MultiBundle :=
+          { cells := [(.nonce 7, natCellValue 3), (.budgetPolicy, ByteArray.empty)]
+          , siblings := [] }
+        assertEq (expected := some (natCellValue 3).toList)
+          (actual := (bundleValueAt b (.nonce 7)).map ByteArray.toList)
+          "the opened cell reads back"
+        assertEq (expected := (none : Option (List UInt8)))
+          (actual := (bundleValueAt b (.nonce 8)).map ByteArray.toList)
+          "an unopened cell reads nothing, rather than a default"
+    }
+  , { name := "a non-adjudicable action is refused before any work"
+    , body := do
+        let b : MultiBundle := { cells := [], siblings := [] }
+        assertEq (expected := true)
+          (actual := (verifierPostRootMulti (ByteArray.mk #[]) 
+                        (.distributeOthers 1 7 30) 7 0 b).isNone)
+          "distributeOthers is refused"
+        assertEq (expected := true)
+          (actual := (verifierPostRootMulti (ByteArray.mk #[])
+                        (.proportionalDilute 1 7 30) 7 0 b).isNone)
+          "proportionalDilute is refused"
+    }
+  , { name := "a bundle whose cells are not the step's is refused"
+    , body := do
+        -- The shape check, at the verifier rather than in isolation.
+        -- Order is free; content is not.
+        let b : MultiBundle := { cells := [(.nonce 7, natCellValue 3)], siblings := [] }
+        assertEq (expected := true)
+          (actual := (verifierPostRootMulti (ByteArray.mk #[])
+                        (.transfer 1 7 8 30) 7 0 b).isNone)
+          "a bundle missing the balance and policy cells is refused"
+    }
+  ]
+
+/-- Tests. -/
+def tests : List TestCase := coreTests ++ multiTests
 
 end LegalKernel.Test.FaultProof.Terminate

@@ -202,18 +202,40 @@ def pathSorted : List CellTag → Bool
   | [_]           => true
   | t :: u :: rest => pathLess (smtCellKey t) (smtCellKey u) && pathSorted (u :: rest)
 
-/-- **The bundle's shape check.**  The submitted cell list must BE the
-    derived write set's frontier.
+/-- Insert into a path-sorted list WITHOUT collapsing an equal key.
 
-    One comparison catches everything the wire could get wrong: a
-    duplicate (the frontier has none), a missing cell, an extra cell,
-    and a non-canonical order.  A bundle carrying a cell twice — the
-    shape an honest CHAINED fold sends — is refused, which is the whole
-    of the same-cell defence: under a pre-root multiproof a duplicate
-    has no representation, so there is no occurrence rule to get
-    wrong. -/
+    The difference from `frontierInsert` is the whole of the shape
+    check's power: sorting the submission normalises its ORDER while
+    preserving its LENGTH, so a duplicate survives the sort and is then
+    caught by the comparison. -/
+def pathInsert (t : CellTag) : List CellTag → List CellTag
+  | []        => [t]
+  | u :: rest =>
+    if pathLess (smtCellKey t) (smtCellKey u) then t :: u :: rest
+    else u :: pathInsert t rest
+
+/-- Sort a submitted cell list into path order, keeping duplicates. -/
+def pathSort (ts : List CellTag) : List CellTag := ts.foldr pathInsert []
+
+/-- **The bundle's shape check.**  Sort what was submitted, and require
+    it to BE the derived write set's frontier.
+
+    Order carries no information here — every opening is against the
+    same root — so the verifier NORMALISES the submission rather than
+    dictating its order.  Any permutation is accepted.
+
+    What is not accepted is a duplicate, and the reason the same
+    comparison catches it is that `pathSort` keeps duplicates while
+    `frontierOf` drops them: a bundle naming a cell twice sorts to a
+    LONGER list than the frontier and fails on length.  So one
+    comparison still catches everything — a duplicate, a missing cell,
+    an extra cell — while leaving order free.
+
+    That is the whole of the same-cell defence: under a pre-root
+    multiproof a duplicate has no wire representation, so there is no
+    occurrence rule left to get wrong. -/
 def frontierShapeOk (derived submitted : List CellTag) : Bool :=
-  submitted.map smtCellKey == (frontierOf derived).map smtCellKey
+  (pathSort submitted).map smtCellKey == (frontierOf derived).map smtCellKey
 
 /-! ## The wire's shape
 
