@@ -105,18 +105,21 @@ def runProbe (a : Authority.Action) : Option StateCommit :=
     here, restated against the multiproof.  The multiproof's own
     refusals live in `multiTests` below. -/
 def coreTests : List TestCase :=
-  [ { name := "the verifier reaches the sequencer's post-root on every probe"
+  [ { name := "the verifier reaches the published post-root on every probe"
     , body := do
+        -- Against the STATE, not against another verifier.  This used
+        -- to compare `stepMultiPostRoot` with `stepPostRoot` — the
+        -- chained fold — which made the assertion "two verifiers
+        -- agree" rather than "the verifier is right".  The target is
+        -- now `commitExtendedState` of the state the step produces,
+        -- computed independently of anything the fold does, which is
+        -- also the statement `stepMultiFold_eq_commit_post` proves.
         for (name, a) in probes do
           let st := sign a
-          let expected := stepPostRoot base st 0
-          -- `stepPostRoot` itself must succeed, or the comparison
-          -- below would be `none = none` and say nothing.
-          if expected.isNone then
-            throw <| IO.userError s!"{name}: the sequencer's fold aborted"
-          assertEq (expected := expected.map ByteArray.toList)
+          let expected := commitExtendedState (productionApplyBudget base st 0)
+          assertEq (expected := some expected.toList)
             (actual := (runProbe a).map ByteArray.toList)
-            s!"{name}: the verifier and the sequencer disagree"
+            s!"{name}: the verifier must reach the published post-root"
     }
   , { name := "every probe MOVES the root"
     , body := do

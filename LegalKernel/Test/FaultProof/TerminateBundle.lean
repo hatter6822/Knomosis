@@ -76,12 +76,14 @@ def tests : List TestCase :=
         -- living outside state-root space, so the contract's terminal
         -- comparison against `g.high.commit` could never succeed.
         let bundle := buildTerminateBundle exampleState exampleEntry
-        let expected := stepPostRoot exampleState exampleEntry.signedAction 0
-        if expected.isNone then
-          throw <| IO.userError "the sequencer's fold aborted on the example"
-        assertEq (expected := expected.map ByteArray.toList)
+        -- Against the STATE rather than against another verifier: the
+        -- published root of the state the step produces, computed with
+        -- no reference to the fold.
+        let expected := commitExtendedState
+          (productionApplyBudget exampleState exampleEntry.signedAction 0)
+        assertEq (expected := some expected.toList)
           (actual := some bundle.expectedPostCommit.toList)
-          "expectedPostCommit = stepPostRoot"
+          "expectedPostCommit = the published post-root"
     }
   , { name := "buildTerminateBundle: the frontier is the step's"
     , body := do
@@ -188,15 +190,14 @@ def tests : List TestCase :=
         -- (userAmount and poolAmount are wei-denominated).
         assertEq (expected := 72) (actual := bundle.actionFields.size)
           "depositWithFee actionFields = 72 bytes"
-        -- expectedPostCommit is the fold's root.
-        let expected := stepMultiPostRoot es entry.signedAction 0
-        assertEq (expected := expected.map ByteArray.toList)
+        let expected := commitExtendedState
+          (productionApplyBudget es entry.signedAction 0)
+        assertEq (expected := some expected.toList)
           (actual := some bundle.expectedPostCommit.toList)
-          "expectedPostCommit = stepPostRoot for depositWithFee"
-        -- The bundle names exactly the cells the action writes.  It
-        -- is no longer checkable with `verifyCellProofs` against the
-        -- pre-root: the openings are CHAINED, so only the first is
-        -- against the pre-state.
+          "expectedPostCommit = the published post-root for depositWithFee"
+        -- The bundle names exactly the cells the action writes --
+        -- deduplicated, since a pre-root multiproof opens each cell
+        -- once however many times the step writes it.
         assertEq
           (expected := (multiFrontierOf entry.signedAction.action
              entry.signedAction.signer es.bridge.nextWdId).length)
@@ -223,10 +224,11 @@ def tests : List TestCase :=
         -- count and stays 8 bytes).
         assertEq (expected := 40) (actual := bundle.actionFields.size)
           "topUpActionBudget actionFields = 40 bytes"
-        let expected := stepMultiPostRoot es entry.signedAction 0
-        assertEq (expected := expected.map ByteArray.toList)
+        let expected := commitExtendedState
+          (productionApplyBudget es entry.signedAction 0)
+        assertEq (expected := some expected.toList)
           (actual := some bundle.expectedPostCommit.toList)
-          "expectedPostCommit = stepPostRoot for topUpActionBudget"
+          "expectedPostCommit = the published post-root for topUpActionBudget"
         assertEq
           (expected := (multiFrontierOf entry.signedAction.action
              entry.signedAction.signer es.bridge.nextWdId).length)

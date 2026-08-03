@@ -802,7 +802,7 @@ contract StepVMCrossCheck is CrossCheckFramework {
     ///         `(cell, pre-value, new value, opening)` bundle Lean
     ///         publishes, Solidity verifies each opening against the
     ///         RUNNING root and re-walks it from the new leaf,
-    ///         arriving at exactly `stepPostRoot`.
+    ///         arriving at exactly the published post-state root.
     ///
     ///         The order is load-bearing.  Openings go stale as soon as
     ///         a write lands, so proof `i` opens against the root write

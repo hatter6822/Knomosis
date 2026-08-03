@@ -15,7 +15,7 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "9c77963b9551b70eaa9aecbf6e1714669133f149b0050bf286d02b6303bf2ae4"
+    "source_digest": "3ded74b47adabcd03c5bcc6d62167e38ee82bb593802f5a1964c4174ff3ce27f"
   },
   "summary": {
     "module_count": 337,
@@ -59694,7 +59694,6 @@
             "stepMultiBundle",
             "stepMultiFold_eq_commit_post",
             "stepMultiPostRoot",
-            "stepPostRoot",
             "transfer",
             "verifierPostRootMulti",
             "verifierWriteCells"
@@ -59703,7 +59702,7 @@
         {
           "kind": "def",
           "name": "zeroGapWire",
-          "line": 390,
+          "line": 393,
           "called": [
             "SmtMultiProof",
             "buildMultiProof"
@@ -59712,13 +59711,13 @@
         {
           "kind": "def",
           "name": "setMaskBit",
-          "line": 394,
+          "line": 397,
           "called": []
         },
         {
           "kind": "def",
           "name": "probeLevels",
-          "line": 400,
+          "line": 403,
           "called": [
             "base",
             "multiFrontierOf",
@@ -59730,7 +59729,7 @@
         {
           "kind": "def",
           "name": "multiTests",
-          "line": 405,
+          "line": 408,
           "called": [
             "MultiBundle",
             "TestCase",
@@ -59762,7 +59761,7 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 585,
+          "line": 588,
           "called": [
             "LegalKernel.Test.FaultProof.Terminate",
             "TestCase",
@@ -59833,9 +59832,8 @@
             "freezeResource",
             "mint",
             "multiFrontierOf",
+            "productionApplyBudget",
             "stepMultiBundle",
-            "stepMultiPostRoot",
-            "stepPostRoot",
             "topUpActionBudget",
             "verifierPostRootMulti"
           ]
