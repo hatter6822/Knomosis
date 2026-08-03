@@ -226,6 +226,35 @@ def tests : List TestCase :=
         assertEq (expected := 32) (actual := wire.gapMask.size)
           "so the mask is 32 bytes, exactly as a single-cell proof's is"
     }
+  , { name := "the wire's shape is derived, so truncation is refused"
+    , body := do
+        let entries := stateCellEntries base
+        let gaps := multiSiblings smtDepth entries opened
+        let levels := multiGapLevels smtDepth opened
+        let wire := buildMultiProof levels gaps
+        -- The honest wire fits the shape the KEY SET implies.  Nothing
+        -- about the wire was consulted to compute that shape.
+        assertEq (expected := true) (actual := wire.isWellFormedFor levels)
+          "the honest wire is well-formed for its derived levels"
+        -- Drop a sibling: the count no longer matches the mask's
+        -- popcount.  A single-cell verifier pads here and keeps
+        -- walking; this one has a count to check against.
+        let shortWire : SmtMultiProof :=
+          { gapMask := wire.gapMask, siblings := wire.siblings.pop }
+        assertEq (expected := false) (actual := shortWire.isWellFormedFor levels)
+          "a wire one sibling short is refused"
+        -- Set a padding bit past the last gap: the mask's tail cannot
+        -- smuggle a sibling in.
+        let padded : SmtMultiProof :=
+          { gapMask := setBitmaskBit wire.gapMask (levels.length + 1)
+          , siblings := wire.siblings }
+        assertEq (expected := false) (actual := padded.isWellFormedFor levels)
+          "a bit past the last gap is refused"
+        -- The encoding's length is the mask plus 32 per sibling, which
+        -- is the shape an L1 validates before walking.
+        assertEq (expected := wire.gapMask.size + 32 * wire.siblings.size)
+          (actual := wire.toWireBytes.size) "the wire encodes to its declared length"
+    }
   , { name := "completeness is pinned at the term level"
     , body := do
         let _pin : ∀ (entries : SmtEntries) (opened : List OpenedLeaf),

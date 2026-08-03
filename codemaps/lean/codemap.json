@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "57f44fa02663a4ead89d048ab53d5fe08ebfca49c81aee523228d41ee0c23a61"
+    "source_digest": "193335f1694b04ac2bd43c167bdf4687312b0fcc48127a33f2088c6c5ffe4b5d"
   },
   "summary": {
     "module_count": 336,
-    "declaration_count": 5823
+    "declaration_count": 5826
   },
   "modules": [
     {
@@ -24023,7 +24023,7 @@
     {
       "module": "LegalKernel.FaultProof.MultiProof",
       "path": "LegalKernel/FaultProof/MultiProof.lean",
-      "declaration_count": 49,
+      "declaration_count": 52,
       "declarations": [
         {
           "kind": "namespace",
@@ -24666,11 +24666,36 @@
           "name": "expandMultiProof",
           "line": 950,
           "called": [
-            "FaultProof",
-            "LegalKernel",
             "SmtMultiProof",
             "emptySubtreeHash",
             "paddingHash"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "SmtMultiProof.gapPopcount",
+          "line": 972,
+          "called": [
+            "SmtMultiProof"
+          ]
+        },
+        {
+          "kind": "def",
+          "name": "SmtMultiProof.isWellFormedFor",
+          "line": 986,
+          "called": [
+            "SmtMultiProof"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "SmtMultiProof.toWireBytes_size",
+          "line": 995,
+          "called": [
+            "FaultProof",
+            "LegalKernel",
+            "SmtMultiProof",
+            "toWireBytes"
           ]
         }
       ]
@@ -57536,6 +57561,7 @@
             "LegalKernel.Test.FaultProof.MultiProof",
             "OpenedLeaf",
             "SmtEntries",
+            "SmtMultiProof",
             "TestCase",
             "assertEq",
             "base",
@@ -57560,6 +57586,7 @@
             "natCellValue",
             "opened",
             "openedOf",
+            "setBitmaskBit",
             "setCell",
             "smtCellKey",
             "smtDepth",

@@ -957,5 +957,62 @@ def expandMultiProof (levels : List Nat) (p : SmtMultiProof) : List ByteArray :=
         (acc.1 ++ [emptySubtreeHash (levels[g]!)], acc.2))
     ([], 0)).1
 
+/-! ## The wire's exact shape
+
+The property the whole design turns on.  A single-cell verifier that
+runs out of siblings substitutes `PADDING_HASH` and keeps walking, so
+a truncated proof is a silent reinterpretation rather than a refusal —
+it reaches SOME root, just not the one the tree has.
+
+A multiproof cannot be truncated silently, because its length is a
+function of the KEY SET: derive the gap levels, and the mask's size,
+the sibling count and every padding bit are all determined before a
+single byte of the wire is read. -/
+
+/-- How many gaps the mask marks as carrying a sibling. -/
+def SmtMultiProof.gapPopcount (p : SmtMultiProof) (n : Nat) : Nat :=
+  ((List.range n).filter (fun g => p.gapBit g)).length
+
+/-- **The wire is exactly the shape the key set implies.**
+
+    Four conditions, each derived rather than trusted:
+      * the mask is exactly `ceil(G/8)` bytes;
+      * every bit at or past `G` is clear, so the final byte's padding
+        cannot smuggle a sibling;
+      * the sibling count is exactly the mask's popcount — not "at
+        least", which is what lets a short proof be padded;
+      * every sibling is 32 bytes.
+
+    `G` comes from `multiGapLevels`, which never looks at an entry. -/
+def SmtMultiProof.isWellFormedFor (p : SmtMultiProof) (levels : List Nat) : Bool :=
+  let n := levels.length
+  p.gapMask.size == (n + 7) / 8
+    && (List.range (p.gapMask.size * 8)).all (fun g => g < n || ! p.gapBit g)
+    && p.siblings.size == p.gapPopcount n
+    && p.siblings.all (fun s => s.size == 32)
+
+/-- The wire encoding's length is the mask plus 32 bytes per sibling —
+    the shape an L1 validates before walking. -/
+theorem SmtMultiProof.toWireBytes_size (p : SmtMultiProof)
+    (h_sibs : ∀ s ∈ p.siblings, s.size = 32) :
+    p.toWireBytes.size = p.gapMask.size + 32 * p.siblings.size := by
+  unfold toWireBytes
+  have h : ∀ (l : List ByteArray) (acc : ByteArray),
+      (∀ s ∈ l, s.size = 32) →
+      (l.foldl (fun a s => a ++ s) acc).size = acc.size + 32 * l.length := by
+    intro l
+    induction l with
+    | nil => intro acc _; simp
+    | cons a t ih =>
+      intro acc hl
+      rw [List.foldl_cons, ih (acc ++ a) (fun s hs => hl s (List.mem_cons_of_mem _ hs))]
+      rw [ByteArray.size_append, hl a List.mem_cons_self, List.length_cons]
+      omega
+  rw [show p.siblings.foldl (fun acc s => acc ++ s) p.gapMask
+        = p.siblings.toList.foldl (fun acc s => acc ++ s) p.gapMask from
+      (Array.foldl_toList ..).symm]
+  rw [h p.siblings.toList p.gapMask (fun s hs => h_sibs s (by simpa using hs))]
+  simp
+
 end FaultProof
 end LegalKernel
