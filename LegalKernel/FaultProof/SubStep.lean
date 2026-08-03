@@ -99,15 +99,102 @@ def bulkRecipients (es : ExtendedState) (r : ResourceId) (excluded : ActorId) :
   Laws.bulkRecipients es.base r excluded
 
 /-- **The decomposition traverses exactly the law's list, in the law's
-    order.**  `Laws.distributeOthers` folds over
-    `bm.toList.filter (·.1 != excluded)`; this says `bulkRecipients` is
-    that list.  Stated because the two spell their filter differently
-    (`!=` against `≠`) and a `decide`-level difference here would be an
-    order divergence nothing else would catch. -/
+    order** — spelled out as the concrete filter both laws now fold.
+
+    Both bulk laws *call* `Laws.bulkRecipients`, so an order or
+    membership divergence between the law and the decomposition is no
+    longer expressible; this theorem is what pins the shared list to a
+    concrete traversal, so a future edit to `Laws.bulkRecipients` that
+    changed which entries it keeps would surface here rather than
+    silently move consensus.  Note both conjuncts: the excluded actor
+    is dropped, and so is any entry whose balance is zero (which has no
+    leaf in the state-commitment tree — see `Laws.bulkRecipients`). -/
 theorem bulkRecipients_eq_law_list
     (es : ExtendedState) (r : ResourceId) (excluded : ActorId) :
     bulkRecipients es r excluded
-      = (es.base.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) := rfl
+      = (es.base.balances[r]?.getD ∅).toList.filter
+          (fun kv => kv.1 != excluded && kv.2 != 0) := rfl
+
+/-! ### A recipient is exactly a live balance LEAF
+
+`Laws.bulkRecipients` drops zero-valued entries, and the reason is not
+a policy preference: the state-commitment root cannot see them.
+`stateCellEntries` filters out cells whose value is the canonical
+absent one, and `canonicalAbsentValue (.balance _ _)` IS
+`encodeAmount 0` — so an actor whose `Std.TreeMap` entry reads zero
+has no leaf, and a state holding that entry is root-identical to one
+holding nothing for that actor.
+
+The two theorems below say the filter lands exactly on that boundary,
+so the rationale is a theorem rather than a comment.  Without them the
+claim "the recipients are the live balance cells" would be prose the
+code merely happens to satisfy. -/
+
+/-- A balance cell is canonically ABSENT exactly when the balance is
+    zero.  The amount bound is the same one `ExtendedState.CanonicalBounds`
+    carries as `base_amt` (a 17-byte amount head reaches `2^128`), taken
+    here as a narrow hypothesis rather than the whole bundle. -/
+theorem balanceCell_absent_iff_balance_zero (es : ExtendedState)
+    (r : ResourceId) (a : ActorId)
+    (h_amt : LegalKernel.getBalance es.base r a < 256 ^ 16) :
+    getCellValue es (.balance r a) = canonicalAbsentValue (.balance r a) ↔
+      LegalKernel.getBalance es.base r a = 0 := by
+  constructor
+  · intro h
+    have h' : Encoding.encodeAmount (LegalKernel.getBalance es.base r a)
+        = Encoding.encodeAmount 0 := by
+      have hd := congrArg (fun b => b.data.toList) h
+      simp only [getCellValue, canonicalAbsentValue] at hd
+      simpa using hd
+    exact Encoding.encodeAmount_injective _ _ h_amt (by decide) h'
+  · intro h
+    show ByteArray.mk
+      (Encoding.encodeAmount (LegalKernel.getBalance es.base r a)).toArray = _
+    rw [h]
+    rfl
+
+/-- **The recipients are exactly the live balance leaves at `r`, minus
+    `excluded`.**
+
+    This is the property that makes a bulk step's post-state a function
+    of the pre-state ROOT: everything the fold credits is something the
+    root observes, and everything the root observes at `r` (other than
+    `excluded`) is credited.  Before the zero filter the left-to-right
+    direction failed — `distributeOthers` paid an actor with no leaf —
+    and two root-identical pre-states reached different post-roots. -/
+theorem exists_mem_bulkRecipients_iff_cell_live (es : ExtendedState)
+    (r : ResourceId) (excluded : ActorId) (a : ActorId)
+    (h_amt : LegalKernel.getBalance es.base r a < 256 ^ 16) :
+    (∃ v, (a, v) ∈ bulkRecipients es r excluded) ↔
+      (getCellValue es (.balance r a) ≠ canonicalAbsentValue (.balance r a)
+        ∧ a ≠ excluded) := by
+  -- The lookup form of `getBalance`, so both directions can reason
+  -- about `bm[a]?` rather than about the outer-map match.
+  have h_gb : LegalKernel.getBalance es.base r a
+      = (es.base.balances[r]?.getD ∅)[a]?.getD 0 := by
+    unfold LegalKernel.getBalance
+    cases es.base.balances[r]? with
+    | none => rfl
+    | some bm => rfl
+  rw [ne_eq, balanceCell_absent_iff_balance_zero es r a h_amt]
+  constructor
+  · rintro ⟨v, hv⟩
+    obtain ⟨hmem, hne, hnz⟩ := (Laws.mem_bulkRecipients_iff _ r excluded (a, v)).mp hv
+    have hlook : (es.base.balances[r]?.getD ∅)[a]? = some v :=
+      Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp hmem
+    refine ⟨?_, hne⟩
+    rw [h_gb, hlook]
+    exact hnz
+  · rintro ⟨hnz, hne⟩
+    -- A non-zero balance is a `some` lookup, hence a `toList` entry
+    -- that survives both conjuncts of the filter.
+    refine ⟨LegalKernel.getBalance es.base r a, ?_⟩
+    refine (Laws.mem_bulkRecipients_iff _ r excluded _).mpr ⟨?_, hne, hnz⟩
+    refine Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr ?_
+    rw [h_gb] at hnz ⊢
+    cases hv : (es.base.balances[r]?.getD ∅)[a]? with
+    | none => simp [hv] at hnz
+    | some w => simp
 
 /-! ## Per-bulk-action sub-step decomposition
 

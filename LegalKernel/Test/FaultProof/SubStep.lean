@@ -23,6 +23,7 @@ become vacuous in either direction without one of them failing.
 
 import LegalKernel.FaultProof.SubStep
 import LegalKernel.Laws.DistributeOthers
+import LegalKernel.Laws.ProportionalDilute
 import LegalKernel.Test.Framework
 
 open LegalKernel
@@ -54,10 +55,97 @@ def tests : List TestCase :=
         let es := stateOf 5
         let mine := (bulkRecipients es 1 3).map (fun p => (p.1, p.2))
         let law := ((es.base.balances[(1 : ResourceId)]?.getD ∅).toList.filter
-          (fun kv => kv.1 != 3)).map (fun p => (p.1, p.2))
+          (fun kv => kv.1 != 3 && kv.2 != 0)).map (fun p => (p.1, p.2))
         assertEq (expected := law) (actual := mine) "same list, same order"
         assert (!mine.any (fun p => p.1 == 3)) "the excluded actor is dropped"
         assertEq (expected := 4) (actual := mine.length) "5 actors minus 1 excluded"
+    }
+  , { name := "a LIVE zero-balance entry is not a recipient"
+    , body := do
+        -- The soundness case.  A `Std.TreeMap` entry mapping an actor to
+        -- `0` is invisible to `commitExtendedState` — `stateCellEntries`
+        -- drops canonically-absent cells, and `encodeAmount 0` IS the
+        -- canonical absent value for a balance — so the actor has no
+        -- leaf.  If such an actor were a recipient, `distributeOthers`'
+        -- flat credit would pay it `amount`, and two ROOT-IDENTICAL
+        -- pre-states (one holding the zero entry, one holding nothing)
+        -- would produce post-states with DIFFERENT roots.  The root
+        -- would then not determine the transition, which is the premise
+        -- the whole fault proof rests on.
+        --
+        -- Reachable, not theoretical: `setBalance s r a 0` is what any
+        -- whole-balance transfer leaves behind.
+        let live := stateOf 5
+        -- Sweep actor 2 to zero — the entry stays in the map.
+        let swept : ExtendedState :=
+          { live with base := LegalKernel.setBalance live.base 1 2 0 }
+        assert ((swept.base.balances[(1 : ResourceId)]?.getD ∅).contains 2)
+          "the fixture really does keep a live zero entry"
+        let recips := (bulkRecipients swept 1 3).map (fun p => p.1)
+        assert (!recips.contains 2) "the zero-balance actor is NOT credited"
+        assertEq (expected := 3) (actual := recips.length)
+          "5 actors minus the excluded one minus the swept one"
+        -- ...and the recipient set now matches the one derived from the
+        -- state that never held the entry at all, which is what makes
+        -- the post-root a function of the pre-root.
+        let erased : BalanceMap := (live.base.balances[(1 : ResourceId)]?.getD ∅).erase 2
+        let absentMap := (∅ : Std.TreeMap ResourceId BalanceMap compare).insert 1 erased
+        let absent : ExtendedState := { live with base := { balances := absentMap } }
+        assertEq (expected := (bulkRecipients absent 1 3).map (fun p => (p.1, p.2)))
+          (actual := (bulkRecipients swept 1 3).map (fun p => (p.1, p.2)))
+          "root-identical states credit identical sets"
+        -- The claim stated where it bites: at the published root.  Both
+        -- the pre-states and the post-states must commit identically —
+        -- the first half establishes that the fixture pair really is
+        -- root-identical (so the second half is not vacuous), the second
+        -- is the property the terminal step needs.
+        assertEq (expected := (commitExtendedState absent).toList)
+          (actual := (commitExtendedState swept).toList)
+          "the two pre-states publish the same root"
+        let postSwept : ExtendedState :=
+          { swept with base := step_impl swept.base (Laws.distributeOthers 1 3 7) }
+        let postAbsent : ExtendedState :=
+          { absent with base := step_impl absent.base (Laws.distributeOthers 1 3 7) }
+        assertEq (expected := (commitExtendedState postAbsent).toList)
+          (actual := (commitExtendedState postSwept).toList)
+          "...and so do the two post-states"
+        -- The negative control, so the two assertions above cannot pass
+        -- vacuously: under the RETIRED recipient rule (excluded-only, no
+        -- zero filter) the SAME fixture pair lands on DIFFERENT
+        -- post-roots.  This is the defect, exhibited rather than
+        -- asserted — it is what made the pre-state root an insufficient
+        -- statistic for a `distributeOthers` step.
+        let retired (s : LegalKernel.State) : LegalKernel.State :=
+          ((s.balances[(1 : ResourceId)]?.getD ∅).toList.filter
+              (fun kv => kv.1 != 3)).foldl
+            (fun s' kv => LegalKernel.setBalance s' 1 kv.1
+              (LegalKernel.getBalance s' 1 kv.1 + 7)) s
+        let retiredSwept : ExtendedState := { swept with base := retired swept.base }
+        let retiredAbsent : ExtendedState := { absent with base := retired absent.base }
+        assert ((commitExtendedState retiredAbsent).toList
+                  != (commitExtendedState retiredSwept).toList)
+          "the retired rule really did fork the post-root on this pair"
+    }
+  , { name := "both bulk laws agree on a state holding a zero entry"
+    , body := do
+        -- `proportionalDilute` was already safe on its own — its credit
+        -- is `totalReward * kv.2 / S`, which is 0 at `kv.2 = 0` — so the
+        -- zero filter changes nothing for it.  That asymmetry is the
+        -- reason the two laws must share ONE list: a per-law filter
+        -- would have left `distributeOthers` wrong and looked correct
+        -- from `proportionalDilute`'s side.
+        let live := stateOf 5
+        let swept := LegalKernel.setBalance live.base 1 2 0
+        let postFlat := step_impl swept (Laws.distributeOthers 1 3 7)
+        let postProp := step_impl swept (Laws.proportionalDilute 1 3 7)
+        assertEq (expected := 0) (actual := LegalKernel.getBalance postFlat 1 2)
+          "distributeOthers leaves the zero-balance actor at zero"
+        assertEq (expected := 0) (actual := LegalKernel.getBalance postProp 1 2)
+          "and so does proportionalDilute"
+        -- The other actors still receive their credit, so the filter is
+        -- not vacuously passing by disabling the law.
+        assertEq (expected := 17) (actual := LegalKernel.getBalance postFlat 1 1)
+          "a live recipient is still credited"
     }
   , { name := "each sub-step writes exactly one balance cell"
     , body := do
@@ -176,8 +264,20 @@ def tests : List TestCase :=
     , body := do
         let _order : ∀ (es : ExtendedState) (r : ResourceId) (excluded : ActorId),
             bulkRecipients es r excluded
-              = (es.base.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) :=
+              = (es.base.balances[r]?.getD ∅).toList.filter
+                  (fun kv => kv.1 != excluded && kv.2 != 0) :=
           bulkRecipients_eq_law_list
+        let _absent : ∀ (es : ExtendedState) (r : ResourceId) (a : ActorId),
+            LegalKernel.getBalance es.base r a < 256 ^ 16 →
+            (getCellValue es (.balance r a) = canonicalAbsentValue (.balance r a) ↔
+              LegalKernel.getBalance es.base r a = 0) :=
+          balanceCell_absent_iff_balance_zero
+        let _live : ∀ (es : ExtendedState) (r : ResourceId) (excluded a : ActorId),
+            LegalKernel.getBalance es.base r a < 256 ^ 16 →
+            ((∃ v, (a, v) ∈ bulkRecipients es r excluded) ↔
+              (getCellValue es (.balance r a) ≠ canonicalAbsentValue (.balance r a)
+                ∧ a ≠ excluded)) :=
+          exists_mem_bulkRecipients_iff_cell_live
         let _bound : ∀ (es : ExtendedState) (action : Authority.Action),
             (LegalKernel.FaultProof.Action.subSteps es action).length ≤ maxRecipientsPerBulkAction :=
           subSteps_length_bound

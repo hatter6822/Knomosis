@@ -3450,6 +3450,37 @@ together cover what the rebuild-from-empty fold would have provided,
 and avoided the harder distinct-keys induction that the
 rebuild-from-empty would have required at the `bm.foldl` level.
 
+**Amendment — who is a recipient.**  Both bulk laws draw their
+recipients from one definition, `Laws.bulkRecipients s r excluded`
+(`Laws/BulkBound.lean`), which `FaultProof.Action.stateWriteCells`
+also calls, so a bulk step's declared cell footprint and its executed
+fold cannot drift apart.  A recipient is an actor holding a
+**positive** balance of `r` other than `excluded`; the effect
+descriptions above should be read with that meaning.
+
+Two actors are excluded for different reasons.  One with no entry in
+`r`'s `BalanceMap` receives nothing — the original rule, unchanged.
+One whose entry is present and reads `0` also receives nothing, and
+that narrowing is a §8.9-level requirement rather than a policy
+choice: `stateCellEntries` drops canonically-absent cells and
+`encodeAmount 0` is a balance cell's canonical absent value, so such
+an actor has **no leaf** in the state-commitment tree.  Crediting it
+made two states with the SAME published root produce post-states with
+DIFFERENT published roots — so the pre-state root was not a
+sufficient statistic for the transition, which is the premise §8.10's
+fault proof rests on.  `bulkRecipients_values_ne_zero` states the
+invariant; finding **C-2** in
+`docs/audits/19-findings-and-followups.md` records the analysis and
+the negative control that pins it.
+
+`proportionalDilute` was unaffected in substance — its credit
+`totalReward * v_k / S` is already `0` at `v_k = 0` — and the dust
+bound survives via `state_filter_nonzero_sum_eq_sumOthers`, since
+zero entries contribute nothing to a sum.  The asymmetry is why the
+two laws share ONE list: a per-law filter would have left
+`distributeOthers` unsound while looking correct from
+`proportionalDilute`'s side.
+
 ### Phase 4: DSL and Serialization
 
 Goal: a canonical CBOR encoding for every kernel-level type with

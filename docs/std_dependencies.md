@@ -211,10 +211,10 @@ extensions to `LegalKernel/Conservation.lean` are **non-TCB**.  Their
 
 | Std symbol                       | Module                         | Used in                                                |
 |----------------------------------|--------------------------------|--------------------------------------------------------|
-| `Std.TreeMap.foldl`              | `Std.Data.TreeMap`             | `distributeOthers.apply_impl`, `proportionalDilute.apply_impl`, `sumOthers` |
-| `Std.TreeMap.toList`             | `Std.Data.TreeMap`             | `proportionalDilute` filter-sum infrastructure         |
-| `Std.TreeMap.distinct_keys_toList` | `Std.Data.TreeMap.Lemmas`    | `state_filter_sum_eq_sumOthers` (R.14 dust-bound)      |
-| `List.filter`                    | `Init.Data.List.Basic`         | `proportionalDilute` per-actor exclusion logic         |
+| `Std.TreeMap.foldl`              | `Std.Data.TreeMap`             | `sumOthers`                                            |
+| `Std.TreeMap.toList`             | `Std.Data.TreeMap`             | `Laws.bulkRecipients` (which both bulk `apply_impl`s fold), filter-sum infrastructure |
+| `Std.TreeMap.distinct_keys_toList` | `Std.Data.TreeMap.Lemmas`    | `state_filter_sum_eq_sumOthers` (R.14 dust-bound), `bulkRecipients_keys_pairwise_ne` |
+| `List.filter`                    | `Init.Data.List.Basic`         | `Laws.bulkRecipients` — excluded-actor and zero-balance exclusion |
 | `Nat.div`                        | `Init.Data.Nat.Basic`          | `proportionalDilute` (floor division)                  |
 | `Nat.mul_div_le`                 | `Init.Data.Nat.Basic`          | `proportionalDilute_distributed_le_totalReward`        |
 | `Nat.add_le_add`                 | `Init.Data.Nat.Basic`          | monotonicity-instance proofs                           |

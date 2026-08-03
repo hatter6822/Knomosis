@@ -51,15 +51,39 @@ namespace Laws
 def maxRecipientsPerBulkAction : Nat := 256
 
 /-- The recipients a bulk action at `r` credits: the resource's
-    balance-map entries minus the excluded actor, in map order.
+    balance-map entries minus the excluded actor and minus any entry
+    whose balance is zero, in map order.
 
     The ORDER is consensus, not incidental.  Both bulk laws fold over
     this list, the fault-proof decomposition walks it, and an SMT fold
     is order-sensitive — so the order has to be a function of
-    `(state, action)` rather than of anything a caller supplies. -/
+    `(state, action)` rather than of anything a caller supplies.  Both
+    laws *call* this definition rather than re-deriving it, so the
+    footprint `Action.stateWriteCells` declares and the set the laws
+    credit cannot drift apart.
+
+    **The zero filter is load-bearing** (see
+    `bulkRecipients_values_ne_zero`).  A `Std.TreeMap` entry mapping an
+    actor to `0` is indistinguishable, at the state-commitment root,
+    from no entry at all: `stateCellEntries` drops canonically-absent
+    cells and `canonicalAbsentValue (.balance _ _) = encodeAmount 0`,
+    so a zero-balance actor has no leaf.  Without the filter,
+    `distributeOthers`' flat credit would pay such an actor `amount`,
+    and two ROOT-IDENTICAL pre-states — one holding a live zero entry,
+    one holding none — would produce post-states with DIFFERENT roots.
+    The root would then not be a sufficient statistic for the
+    transition, which is the premise the whole fault proof rests on.
+    Reachable rather than theoretical: `setBalance s r a 0` is what any
+    whole-balance transfer leaves behind, and `reclaimAmmReserves`
+    sweeps to zero by design.
+
+    `proportionalDilute` was already safe on its own — its credit is
+    `totalReward * kv.2 / S`, which is `0` at `kv.2 = 0` — so the
+    filter is a no-op there.  That asymmetry is exactly why the two
+    laws must share one list rather than each spell their own. -/
 def bulkRecipients (s : State) (r : ResourceId) (excluded : ActorId) :
     List (ActorId × Amount) :=
-  (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)
+  (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded && kv.2 != 0)
 
 /-- The bulk-action recipient bound, as a state predicate.
 
@@ -113,6 +137,50 @@ theorem bulkBounded_of_map_length_le (s : State) (r : ResourceId) (excluded : Ac
     (h : (s.balances[r]?.getD ∅).toList.length ≤ maxRecipientsPerBulkAction) :
     BulkBounded s r excluded :=
   Nat.le_trans (List.length_filter_le _ _) h
+
+/-- Membership in the recipient list, unpacked.  Both bulk laws and
+    the fault proof reason from one of the three components, so state
+    the decomposition once rather than re-running `List.mem_filter`
+    and `Bool.and_eq_true` at every site. -/
+theorem mem_bulkRecipients_iff (s : State) (r : ResourceId) (excluded : ActorId)
+    (kv : ActorId × Amount) :
+    kv ∈ bulkRecipients s r excluded ↔
+      kv ∈ (s.balances[r]?.getD ∅).toList ∧ kv.1 ≠ excluded ∧ kv.2 ≠ 0 := by
+  unfold bulkRecipients
+  rw [List.mem_filter]
+  constructor
+  · rintro ⟨hmem, hp⟩
+    obtain ⟨h₁, h₂⟩ := Bool.and_eq_true _ _ |>.mp hp
+    exact ⟨hmem, by simpa using h₁, by simpa using h₂⟩
+  · rintro ⟨hmem, h₁, h₂⟩
+    exact ⟨hmem, by simp [h₁, h₂]⟩
+
+/-- No recipient is the excluded actor — the property both laws'
+    `_excluded_unchanged` theorems consume. -/
+theorem bulkRecipients_key_ne_excluded (s : State) (r : ResourceId)
+    (excluded : ActorId) {kv : ActorId × Amount}
+    (h : kv ∈ bulkRecipients s r excluded) : kv.1 ≠ excluded :=
+  ((mem_bulkRecipients_iff s r excluded kv).mp h).2.1
+
+/-- **Every recipient holds a positive balance**, hence has a leaf in
+    the state-commitment tree.
+
+    This is the property that makes a bulk step's post-state a
+    function of the pre-state ROOT rather than of the pre-state map:
+    the recipients are exactly the live balance cells at `r` other
+    than `excluded`, and "live" is what the root observes.  A state
+    holding an actor at zero and a state holding no entry for that
+    actor commit to the same root AND now credit the same set.
+
+    "Exactly" is a theorem, not a reading of this one:
+    `FaultProof.exists_mem_bulkRecipients_iff_cell_live` states the
+    both-ways form against `getCellValue` / `canonicalAbsentValue` —
+    the very predicate `stateCellEntries` filters on.  It cannot live
+    here, since this module sits below the cell space. -/
+theorem bulkRecipients_values_ne_zero (s : State) (r : ResourceId)
+    (excluded : ActorId) {kv : ActorId × Amount}
+    (h : kv ∈ bulkRecipients s r excluded) : kv.2 ≠ 0 :=
+  ((mem_bulkRecipients_iff s r excluded kv).mp h).2.2
 
 /-- **The recipients are pairwise distinct.**
 

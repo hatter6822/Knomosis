@@ -523,6 +523,25 @@ resource, conservation + `omega`.
 
 **Documentation drift:** None.
 
+**Update — the recipient list has moved and narrowed.**  Both the
+`pre` and the `apply_impl` quoted above are superseded.  `pre` gained
+the `BulkBounded` conjunct (see finding "a bulk action could exceed
+what the game can decompose"), and the recipient list is now
+`Laws.bulkRecipients s r excluded` — a single definition in
+`Laws/BulkBound.lean` that both bulk laws and the fault proof's
+`Action.stateWriteCells` call, rather than three inline respellings of
+the same filter.
+
+Its filter is `kv.1 != excluded && kv.2 != 0`.  The added conjunct
+closes finding **C-2**: an entry present in the `TreeMap` with value
+`0` has **no leaf** in the state-commitment tree (`stateCellEntries`
+drops canonically-absent cells, and `encodeAmount 0` is a balance
+cell's canonical absent value), so paying it made two root-identical
+pre-states reach different post-roots.  Note this is a *different*
+observation from bullet 2 above — that one is about an actor with no
+entry, which was always correct; this one is about an actor whose
+entry exists and reads zero, which was not.
+
 ---
 
 ## 7. `LegalKernel/Laws/ProportionalDilute.lean` (518 lines)
@@ -661,6 +680,20 @@ This is the §4-prelude WU R.14 theorem cited in CLAUDE.md.
    noting for runtime-monitoring purposes.
 
 **Documentation drift:** None.
+
+**Update — the shared recipient list.**  As with `distributeOthers`,
+the `pre` gained the `BulkBounded` conjunct and the `apply_impl` now
+folds `Laws.bulkRecipients s r excluded` rather than respelling the
+filter.  The narrowing that closes finding **C-2** is a **no-op here**:
+this law's credit is `totalReward * kv.2 / S`, which is `0` at
+`kv.2 = 0`, so a live zero-balance entry was already receiving nothing
+and the post-state was already root-determined.  The sharing is what
+matters — a per-law filter would have left `distributeOthers` broken
+while looking correct from this side.  The dust bound
+(`proportionalDilute_distributed_le_totalReward`) is unchanged; it now
+goes through `Conservation.state_filter_nonzero_sum_eq_sumOthers`,
+since zero entries contribute nothing to a sum and the divisor is
+still `sumOthers`.
 
 ---
 

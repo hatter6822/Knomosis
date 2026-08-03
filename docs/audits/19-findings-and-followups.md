@@ -34,6 +34,7 @@ findings outside the TCB.  Their dispositions:
 | **B-2** — vacuous headline injectivity theorems | `Bridge/Eip712.lean` and every `CollisionFree` consumer | **Closed.**  `CollisionFreeOn S h` replaces the globally-injective (and hence *refutable*) predicate; satisfiability is exhibited, not assumed. |
 | **B-4a** — terminate ABI drift | `knomosis-faultproof-observer/src/submitter.rs` | **Closed.**  Rust moved to the contract's 5-argument form, and the selector table is now pinned against `method_selectors.json`, emitted from the COMPILED artifacts by `solidity/scripts/export_method_selectors.py` and gated in `ci-solidity.yml` — so the pin can no longer re-derive its expectation from the string it tests. |
 | **B-4b** — game-model fidelity (Lean/Rust) | `FaultProof/Game.lean`, `FaultProof/Step.lean`, observer `game.rs` | **Closed.**  `kernelStepApply` computes through `stepVMHash` instead of echoing the responder's `postStateCommit`; `terminateOnSingleStep` dropped `claimedPostCommit` and reads both sides from the game state; `submitMidpoint` carries only a commit and the index is derived, which made the convergence bound logarithmic (`bisection_converges_in_log_rounds`). |
+| **C-2** — a bulk step's post-state not determined by the pre-state root | `Laws/BulkBound.lean`'s `bulkRecipients` | **Closed.**  Zero-valued balance entries have no leaf in the commitment tree but were counted as recipients, so `distributeOthers` paid an actor the root cannot see — two root-identical pre-states reached different post-roots.  The recipient list now drops them, and both laws call the one definition instead of respelling it. |
 | **B-3** — fault-proof cell values bound to nothing | `KnomosisStepVM.executeStep` | **CLOSED — the game calls `KnomosisStepVMRoot.executeStepToRoot`, which returns a post-state ROOT folded from derived cell writes, so both sides of the terminal comparison are the same construction.**  What survives is a cleanup (the old recipe is still compiled); see the section below. |
 
 ### Open critical: the fault-proof commit-recipe split
@@ -164,6 +165,91 @@ was incomplete for `withdraw`: `appendWithdrawal` inserts at
 pre-state and a function of `(action, signer)` cannot name it — a
 bundle carrying the declared cells could not reproduce a withdrawal's
 post-root.  `Action.writeCellsAt` is the complete set.
+
+### C-2 — Closed: a bulk step's post-state was not determined by the pre-state root
+
+**Severity: critical.**  Not an L1 or a wire defect — a defect in the
+LAW, which broke the premise the whole fault proof is built on.
+
+`Laws.bulkRecipients` read the resource's `Std.TreeMap` directly:
+
+```lean
+(s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)
+```
+
+so an actor whose entry is **present and zero** counted as a recipient.
+But `stateCellEntries` drops canonically-absent cells and
+`canonicalAbsentValue (.balance _ _) = encodeAmount 0`, so that actor
+has **no leaf in the state-commitment tree**.  `distributeOthers`'
+credit is flat — `getBalance s' r kv.1 + amount` — so the actor did
+receive `amount`.
+
+The consequence, stated at the root:
+
+| | pre-state at `r` | published pre-root | post-state after `distributeOthers r e 7` | published post-root |
+|---|---|---|---|---|
+| A | `{1↦10, 2↦0, 4↦10, 5↦10}` | `H` | `{1↦17, 2↦7, 4↦17, 5↦17}` | `H₁` |
+| B | `{1↦10, 4↦10, 5↦10}` | `H` (same) | `{1↦17, 4↦17, 5↦17}` | `H₂ ≠ H₁` |
+
+Two states with the **same** published root, the **same** action, and
+**different** published post-roots.  The pre-state root is therefore
+not a sufficient statistic for the transition, and a verifier holding
+only that root cannot decide which post-root is honest — there are two,
+both correct, and the sequencer picks by holding a map the root does
+not distinguish.
+
+`setBalance s r a 0` does not erase the entry (`Kernel.lean`), so the
+reachable states are ordinary ones: any whole-balance `transfer` leaves
+its sender at a live zero, and `reclaimAmmReserves` sweeps to zero by
+design.
+
+**Not caught earlier** because the bulk pair is excluded from
+adjudication (`FaultProofAdjudicable` is `false` on kinds 6/7,
+`isAdjudicable` likewise on the L1), so no fault-proof test drove a
+bulk step through a root comparison — and no LAW test needed to, since
+at the law layer paying a zero-balance actor is merely a policy choice.
+The defect lives exactly in the seam between the two.
+
+**Closed** by filtering zero-valued entries out of `bulkRecipients`
+(`LegalKernel/Laws/BulkBound.lean`), so the recipients are precisely
+the live balance cells at `r` other than `excluded` — and "live" is
+what the root observes.  `bulkRecipients_values_ne_zero` states the
+resulting invariant; `mem_bulkRecipients_iff` unpacks membership once
+for the sites that used to re-run `List.mem_filter` themselves.
+
+Both laws now **call** `bulkRecipients` instead of respelling the
+filter inline, which is the structural half of the fix.  The list had
+three independent spellings — `distributeOthers.apply_impl`, the
+`lexlaw` `lex_impl` mirror, and `Action.stateWriteCells` (which
+already called `bulkRecipients`, and was therefore *right* while the
+laws were wrong).  Changing one would have made the declared cell
+footprint and the executed fold disagree, which is a worse failure
+than the one being fixed.  `bulkRecipients_eq_law_list` pins the shared
+list to a concrete traversal so a future edit surfaces rather than
+silently moving consensus.
+
+**This is a behaviour change.**  A holder whose balance of `r` is a
+live zero no longer receives a `distributeOthers` credit.  That is the
+point — the previous behaviour was not root-determined — but a
+deployment relying on "an entry exists, therefore it is paid" must
+mint to such actors first, exactly as the law's docstring has always
+said about actors with no entry at all.
+
+`proportionalDilute` was **already safe**: its credit is
+`totalReward * kv.2 / S`, which is `0` at `kv.2 = 0`, so its
+post-state was root-determined either way and the filter is a no-op
+for it.  That asymmetry is the reason the shared list matters — a
+per-law filter would have left `distributeOthers` broken while looking
+correct from `proportionalDilute`'s side.  The dust bound survives
+unchanged, via the new
+`Conservation.state_filter_nonzero_sum_eq_sumOthers` (zero entries
+contribute nothing to a sum, so the divisor is still `sumOthers`).
+
+Pinned by three cases in `faultproof-substep`, the third of which is a
+negative control: it rebuilds the retired recipient rule and asserts
+that on the SAME fixture pair it reaches **different** post-roots — so
+the first two cannot pass vacuously, and the defect is exhibited rather
+than described.
 
 ### Closed: a bulk action could exceed what the game can decompose
 

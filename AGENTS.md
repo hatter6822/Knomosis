@@ -814,7 +814,7 @@ every match.
 ## Current development status
 
 **Runtime version** (`kernelVersion` in `LegalKernel.lean`): mirrors
-the `lakefile.lean` `version` field (currently `0.11.0`) — the single
+the `lakefile.lean` `version` field (currently `0.12.1`) — the single
 project-wide build identifier, surfaced by `knomosis info` and the
 test driver.  It is bumped in lockstep with `lakefile.lean`,
 `runtime/Cargo.toml`, and the `README.md` banner per the
@@ -897,6 +897,14 @@ full catalogue):
   and both bulk variants; a bulk write set covers every cell the
   advance moves and over-declares none; and a FORGED post-value does
   not reach the honest root.
+- `faultproof-substep` — the bulk decomposition, and the pin that a
+  bulk step's post-state is a function of the pre-state ROOT: a live
+  zero-balance entry is not a recipient (it has no leaf, so crediting
+  it would let two root-identical pre-states reach different
+  post-roots), both bulk laws agree on a state holding one, and — the
+  negative control — the retired recipient rule is rebuilt in the test
+  and shown to fork the post-root on the same fixture pair, so the
+  first two cases cannot pass vacuously.
 - `faultproof-state-cells-injective` — cell determination, the
   well-formedness side conditions checked on a real state, and the
   write algebra: a single write lands on the post-state's published

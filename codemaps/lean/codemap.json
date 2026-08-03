@@ -15,11 +15,11 @@
       "**/*.lean"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "dcac7e6f84dc8a2bec3db8215ac9e4aee5b0e349ff102cf7878a49a1eabba2ee"
+    "source_digest": "9e4412b5f4fb4cb2109d7b6fe6aa2c16b1928f217ebe7165d7393aaca96dff0a"
   },
   "summary": {
     "module_count": 337,
-    "declaration_count": 5895
+    "declaration_count": 5902
   },
   "modules": [
     {
@@ -12975,7 +12975,7 @@
     {
       "module": "LegalKernel.Conservation",
       "path": "LegalKernel/Conservation.lean",
-      "declaration_count": 35,
+      "declaration_count": 37,
       "declarations": [
         {
           "kind": "namespace",
@@ -13147,9 +13147,30 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "balanceList_sum_filter_ne_zero",
+          "line": 503,
+          "called": [
+            "ActorId"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "state_filter_nonzero_sum_eq_sumOthers",
+          "line": 526,
+          "called": [
+            "ActorId",
+            "ResourceId",
+            "State",
+            "balanceList_sum_filter_ne_zero",
+            "state_filter_sum_eq_sumOthers",
+            "sumOthers"
+          ]
+        },
+        {
           "kind": "class",
           "name": "IsMonotonic",
-          "line": 513,
+          "line": 549,
           "called": [
             "IsConservative",
             "ResourceId",
@@ -13162,7 +13183,7 @@
         {
           "kind": "def",
           "name": "TotalSupplyEquals",
-          "line": 539,
+          "line": 575,
           "called": [
             "ResourceId",
             "State",
@@ -13172,7 +13193,7 @@
         {
           "kind": "structure",
           "name": "ConservativeLawSet",
-          "line": 551,
+          "line": 587,
           "called": [
             "IsConservative",
             "Transition"
@@ -13181,7 +13202,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_global",
-          "line": 571,
+          "line": 607,
           "called": [
             "ReachableViaLaws",
             "ResourceId",
@@ -13196,7 +13217,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_global_via_law_set",
-          "line": 593,
+          "line": 629,
           "called": [
             "ConservativeLawSet",
             "ReachableViaLaws",
@@ -13209,7 +13230,7 @@
         {
           "kind": "structure",
           "name": "MonotonicLawSet",
-          "line": 615,
+          "line": 651,
           "called": [
             "IsMonotonic",
             "Transition"
@@ -13218,7 +13239,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_globally_nondecreasing",
-          "line": 633,
+          "line": 669,
           "called": [
             "ReachableViaLaws",
             "ResourceId",
@@ -13232,7 +13253,7 @@
         {
           "kind": "theorem",
           "name": "total_supply_globally_nondecreasing_via_law_set",
-          "line": 651,
+          "line": 687,
           "called": [
             "MonotonicLawSet",
             "ReachableViaLaws",
@@ -13245,7 +13266,7 @@
         {
           "kind": "class",
           "name": "LocalTo",
-          "line": 705,
+          "line": 741,
           "called": [
             "ActorId",
             "ResourceId",
@@ -13258,7 +13279,7 @@
         {
           "kind": "class",
           "name": "FreezePreserving",
-          "line": 732,
+          "line": 768,
           "called": [
             "BalanceMap",
             "ResourceId",
@@ -13270,7 +13291,7 @@
         {
           "kind": "structure",
           "name": "FreezePreservingLawSet",
-          "line": 755,
+          "line": 791,
           "called": [
             "FreezePreserving",
             "ResourceId",
@@ -13280,7 +13301,7 @@
         {
           "kind": "theorem",
           "name": "freeze_preservation_via_law_set",
-          "line": 767,
+          "line": 803,
           "called": [
             "BalanceMap",
             "FreezePreservingLawSet",
@@ -13293,7 +13314,7 @@
         {
           "kind": "def",
           "name": "ConservativeLawSet.empty",
-          "line": 798,
+          "line": 834,
           "called": [
             "ConservativeLawSet"
           ]
@@ -13301,7 +13322,7 @@
         {
           "kind": "def",
           "name": "ConservativeLawSet.cons",
-          "line": 806,
+          "line": 842,
           "called": [
             "ConservativeLawSet",
             "IsConservative",
@@ -13311,7 +13332,7 @@
         {
           "kind": "def",
           "name": "MonotonicLawSet.empty",
-          "line": 815,
+          "line": 851,
           "called": [
             "MonotonicLawSet"
           ]
@@ -13319,7 +13340,7 @@
         {
           "kind": "def",
           "name": "MonotonicLawSet.cons",
-          "line": 821,
+          "line": 857,
           "called": [
             "IsMonotonic",
             "MonotonicLawSet",
@@ -13329,7 +13350,7 @@
         {
           "kind": "def",
           "name": "FreezePreservingLawSet.empty",
-          "line": 830,
+          "line": 866,
           "called": [
             "FreezePreservingLawSet",
             "ResourceId"
@@ -13338,7 +13359,7 @@
         {
           "kind": "def",
           "name": "FreezePreservingLawSet.cons",
-          "line": 837,
+          "line": 873,
           "called": [
             "FreezePreserving",
             "FreezePreservingLawSet",
@@ -30297,7 +30318,7 @@
     {
       "module": "LegalKernel.FaultProof.SubStep",
       "path": "LegalKernel/FaultProof/SubStep.lean",
-      "declaration_count": 17,
+      "declaration_count": 19,
       "declarations": [
         {
           "kind": "namespace",
@@ -30343,7 +30364,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_eq_law_list",
-          "line": 106,
+          "line": 111,
           "called": [
             "ActorId",
             "ExtendedState",
@@ -30353,9 +30374,37 @@
           ]
         },
         {
+          "kind": "theorem",
+          "name": "balanceCell_absent_iff_balance_zero",
+          "line": 136,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "canonicalAbsentValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "exists_mem_bulkRecipients_iff_cell_live",
+          "line": 164,
+          "called": [
+            "ActorId",
+            "ExtendedState",
+            "ResourceId",
+            "balanceCell_absent_iff_balance_zero",
+            "bulkRecipients",
+            "canonicalAbsentValue",
+            "es",
+            "getCellValue"
+          ]
+        },
+        {
           "kind": "def",
           "name": "Action.distributeOthers_subSteps",
-          "line": 131,
+          "line": 218,
           "called": [
             "ActorId",
             "Amount",
@@ -30372,7 +30421,7 @@
         {
           "kind": "def",
           "name": "Action.proportionalDilute_subSteps",
-          "line": 162,
+          "line": 249,
           "called": [
             "ActorId",
             "Amount",
@@ -30390,7 +30439,7 @@
         {
           "kind": "def",
           "name": "Action.subSteps",
-          "line": 186,
+          "line": 273,
           "called": [
             "Action",
             "ExtendedState",
@@ -30403,7 +30452,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_bound",
-          "line": 198,
+          "line": 285,
           "called": [
             "Action",
             "Action.distributeOthers_subSteps",
@@ -30419,7 +30468,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_length_eq_of_within_cap",
-          "line": 234,
+          "line": 321,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30434,7 +30483,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_complete_of_pre",
-          "line": 248,
+          "line": 335,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30449,7 +30498,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_noop_above_cap",
-          "line": 263,
+          "line": 350,
           "called": [
             "ActorId",
             "Amount",
@@ -30462,7 +30511,7 @@
         {
           "kind": "def",
           "name": "SubStep.writeCells",
-          "line": 279,
+          "line": 366,
           "called": [
             "CellTag",
             "ResourceId",
@@ -30472,7 +30521,7 @@
         {
           "kind": "theorem",
           "name": "SubStep.writeCells_length",
-          "line": 284,
+          "line": 371,
           "called": [
             "ResourceId",
             "SubStep"
@@ -30481,7 +30530,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_affectedActors_nodup",
-          "line": 294,
+          "line": 381,
           "called": [
             "Action.distributeOthers_subSteps",
             "ActorId",
@@ -30494,7 +30543,7 @@
         {
           "kind": "theorem",
           "name": "subSteps_deterministic",
-          "line": 321,
+          "line": 408,
           "called": [
             "Action",
             "Action.subSteps",
@@ -34047,7 +34096,7 @@
     {
       "module": "LegalKernel.Laws.BulkBound",
       "path": "LegalKernel/Laws/BulkBound.lean",
-      "declaration_count": 10,
+      "declaration_count": 13,
       "declarations": [
         {
           "kind": "namespace",
@@ -34070,7 +34119,7 @@
         {
           "kind": "def",
           "name": "bulkRecipients",
-          "line": 59,
+          "line": 83,
           "called": [
             "ActorId",
             "Amount",
@@ -34081,7 +34130,7 @@
         {
           "kind": "def",
           "name": "BulkBounded",
-          "line": 71,
+          "line": 95,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34093,7 +34142,7 @@
         {
           "kind": "instance",
           "name": "BulkBounded.decidable",
-          "line": 96,
+          "line": 120,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34104,7 +34153,7 @@
         {
           "kind": "theorem",
           "name": "bulkBounded_of_absent",
-          "line": 103,
+          "line": 127,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34116,7 +34165,7 @@
         {
           "kind": "theorem",
           "name": "bulkBounded_of_map_length_le",
-          "line": 111,
+          "line": 135,
           "called": [
             "ActorId",
             "BulkBounded",
@@ -34127,8 +34176,46 @@
         },
         {
           "kind": "theorem",
+          "name": "mem_bulkRecipients_iff",
+          "line": 144,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "bulkRecipients"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bulkRecipients_key_ne_excluded",
+          "line": 159,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "bulkRecipients",
+            "mem_bulkRecipients_iff"
+          ]
+        },
+        {
+          "kind": "theorem",
+          "name": "bulkRecipients_values_ne_zero",
+          "line": 179,
+          "called": [
+            "ActorId",
+            "Amount",
+            "ResourceId",
+            "State",
+            "bulkRecipients",
+            "mem_bulkRecipients_iff"
+          ]
+        },
+        {
+          "kind": "theorem",
           "name": "bulkRecipients_keys_pairwise_ne",
-          "line": 127,
+          "line": 195,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34139,7 +34226,7 @@
         {
           "kind": "theorem",
           "name": "bulkRecipients_nodup_keys",
-          "line": 137,
+          "line": 205,
           "called": [
             "ActorId",
             "Laws",
@@ -34894,7 +34981,7 @@
         {
           "kind": "def",
           "name": "distributeOthers",
-          "line": 63,
+          "line": 70,
           "called": [
             "ActorId",
             "Amount",
@@ -34902,6 +34989,7 @@
             "ResourceId",
             "State",
             "Transition",
+            "bulkRecipients",
             "getBalance",
             "setBalance"
           ]
@@ -34909,7 +34997,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_other_resource_untouched",
-          "line": 129,
+          "line": 132,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34921,7 +35009,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_excluded_untouched",
-          "line": 151,
+          "line": 154,
           "called": [
             "ActorId",
             "ResourceId",
@@ -34933,7 +35021,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_other_resource_untouched",
-          "line": 184,
+          "line": 187,
           "called": [
             "ActorId",
             "Amount",
@@ -34947,7 +35035,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_does_not_touch_other_resources",
-          "line": 199,
+          "line": 202,
           "called": [
             "ActorId",
             "Amount",
@@ -34962,7 +35050,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_conserves_other_resource",
-          "line": 209,
+          "line": 212,
           "called": [
             "ActorId",
             "Amount",
@@ -34977,12 +35065,13 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_excluded_unchanged",
-          "line": 222,
+          "line": 225,
           "called": [
             "ActorId",
             "Amount",
             "ResourceId",
             "State",
+            "bulkRecipients_key_ne_excluded",
             "distributeOthers",
             "foldl_setBalance_excluded_untouched",
             "getBalance",
@@ -34992,7 +35081,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_totalSupply",
-          "line": 248,
+          "line": 245,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35006,13 +35095,14 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_distributeOthers",
-          "line": 277,
+          "line": 273,
           "called": [
             "ActorId",
             "Amount",
             "ResourceId",
             "State",
             "TotalSupply",
+            "bulkRecipients",
             "distributeOthers",
             "foldl_setBalance_totalSupply",
             "step_impl"
@@ -35021,7 +35111,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_isMonotonic",
-          "line": 295,
+          "line": 289,
           "called": [
             "ActorId",
             "Amount",
@@ -35035,7 +35125,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_not_conservative",
-          "line": 317,
+          "line": 311,
           "called": [
             "ActorId",
             "Amount",
@@ -35046,9 +35136,11 @@
             "State",
             "TotalSupply",
             "bulkBounded_of_map_length_le",
+            "bulkRecipients",
             "distributeOthers",
             "genesisState",
             "maxRecipientsPerBulkAction",
+            "mem_bulkRecipients_iff",
             "setBalance",
             "totalSupply_after_distributeOthers"
           ]
@@ -35056,7 +35148,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_localTo",
-          "line": 403,
+          "line": 391,
           "called": [
             "ActorId",
             "Amount",
@@ -35069,7 +35161,7 @@
         {
           "kind": "theorem",
           "name": "distributeOthers_freezePreserving",
-          "line": 417,
+          "line": 405,
           "called": [
             "ActorId",
             "Amount",
@@ -35082,7 +35174,7 @@
         {
           "kind": "instance",
           "name": "distributeOthers_freezePreserving_empty",
-          "line": 433,
+          "line": 421,
           "called": [
             "ActorId",
             "Amount",
@@ -35461,7 +35553,7 @@
         {
           "kind": "def",
           "name": "proportionalDilute",
-          "line": 64,
+          "line": 72,
           "called": [
             "ActorId",
             "Amount",
@@ -35469,6 +35561,7 @@
             "ResourceId",
             "State",
             "Transition",
+            "bulkRecipients",
             "getBalance",
             "setBalance",
             "sumOthers"
@@ -35477,7 +35570,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_other_resource_untouched",
-          "line": 153,
+          "line": 157,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35488,7 +35581,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_at_r_excluded_untouched",
-          "line": 170,
+          "line": 174,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35500,7 +35593,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_other_resource_untouched",
-          "line": 195,
+          "line": 199,
           "called": [
             "ActorId",
             "Amount",
@@ -35514,7 +35607,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_does_not_touch_other_resources",
-          "line": 210,
+          "line": 214,
           "called": [
             "ActorId",
             "Amount",
@@ -35529,7 +35622,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_conserves_other_resource",
-          "line": 219,
+          "line": 223,
           "called": [
             "ActorId",
             "Amount",
@@ -35544,12 +35637,13 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_excluded_unchanged",
-          "line": 230,
+          "line": 234,
           "called": [
             "ActorId",
             "Amount",
             "ResourceId",
             "State",
+            "bulkRecipients_key_ne_excluded",
             "foldl_setBalance_at_r_excluded_untouched",
             "getBalance",
             "proportionalDilute",
@@ -35559,7 +35653,7 @@
         {
           "kind": "theorem",
           "name": "foldl_setBalance_proportional_totalSupply",
-          "line": 254,
+          "line": 253,
           "called": [
             "ActorId",
             "ResourceId",
@@ -35573,13 +35667,14 @@
         {
           "kind": "theorem",
           "name": "totalSupply_after_proportionalDilute",
-          "line": 280,
+          "line": 279,
           "called": [
             "ActorId",
             "Amount",
             "ResourceId",
             "State",
             "TotalSupply",
+            "bulkRecipients",
             "foldl_setBalance_proportional_totalSupply",
             "proportionalDilute",
             "step_impl",
@@ -35589,7 +35684,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_supply_nondecreasing",
-          "line": 303,
+          "line": 302,
           "called": [
             "ActorId",
             "Amount",
@@ -35604,7 +35699,7 @@
         {
           "kind": "theorem",
           "name": "list_div_sum_mul_le",
-          "line": 321,
+          "line": 320,
           "called": [
             "ActorId"
           ]
@@ -35612,16 +35707,17 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_distributed_le_totalReward",
-          "line": 357,
+          "line": 358,
           "called": [
             "ActorId",
             "Amount",
             "ResourceId",
             "State",
             "TotalSupply",
+            "bulkRecipients",
             "list_div_sum_mul_le",
             "proportionalDilute",
-            "state_filter_sum_eq_sumOthers",
+            "state_filter_nonzero_sum_eq_sumOthers",
             "step_impl",
             "sumOthers",
             "totalSupply_after_proportionalDilute"
@@ -35630,7 +35726,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_isMonotonic",
-          "line": 382,
+          "line": 384,
           "called": [
             "ActorId",
             "Amount",
@@ -35644,7 +35740,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_not_conservative",
-          "line": 406,
+          "line": 408,
           "called": [
             "ActorId",
             "Amount",
@@ -35654,10 +35750,12 @@
             "State",
             "TotalSupply",
             "bulkBounded_of_map_length_le",
+            "bulkRecipients",
             "genesisState",
             "getBalance",
             "getBalance_setBalance_other",
             "maxRecipientsPerBulkAction",
+            "mem_bulkRecipients_iff",
             "proportionalDilute",
             "setBalance",
             "sumOthers",
@@ -35669,7 +35767,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_localTo",
-          "line": 516,
+          "line": 517,
           "called": [
             "ActorId",
             "Amount",
@@ -35682,7 +35780,7 @@
         {
           "kind": "theorem",
           "name": "proportionalDilute_freezePreserving",
-          "line": 531,
+          "line": 532,
           "called": [
             "ActorId",
             "Amount",
@@ -35695,7 +35793,7 @@
         {
           "kind": "instance",
           "name": "proportionalDilute_freezePreserving_empty",
-          "line": 548,
+          "line": 549,
           "called": [
             "ActorId",
             "Amount",
@@ -59285,13 +59383,13 @@
         {
           "kind": "namespace",
           "name": "LegalKernel.Test.FaultProof.SubStep",
-          "line": 32,
+          "line": 33,
           "called": []
         },
         {
           "kind": "def",
           "name": "mapOf",
-          "line": 36,
+          "line": 37,
           "called": [
             "BalanceMap"
           ]
@@ -59299,7 +59397,7 @@
         {
           "kind": "def",
           "name": "stateOf",
-          "line": 40,
+          "line": 41,
           "called": [
             "BalanceMap",
             "ExtendedState",
@@ -59312,22 +59410,29 @@
         {
           "kind": "def",
           "name": "tests",
-          "line": 46,
+          "line": 47,
           "called": [
             "ActorId",
             "Amount",
+            "BalanceMap",
             "ExtendedState",
             "LegalKernel.Test.FaultProof.SubStep",
             "ResourceId",
             "TestCase",
             "assert",
             "assertEq",
+            "balanceCell_absent_iff_balance_zero",
+            "base",
             "bulkRecipients",
             "bulkRecipients_eq_law_list",
+            "canonicalAbsentValue",
             "cells",
+            "commitExtendedState",
             "distributeOthers",
             "distributeOthers_noop_above_cap",
             "es",
+            "exists_mem_bulkRecipients_iff_cell_live",
+            "getCellValue",
             "maxRecipientsPerBulkAction",
             "other",
             "stateOf",

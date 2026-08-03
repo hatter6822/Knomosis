@@ -496,6 +496,42 @@ theorem state_filter_sum_eq_sumOthers
   unfold sumOthers
   exact Nat.eq_sub_of_add_eq h_id
 
+/-- Dropping zero-valued entries from a balance list does not change
+    the sum of its values, whatever else the filter keeps.  Trivial
+    arithmetically; stated because the bulk laws' recipient list
+    (`Laws.bulkRecipients`) carries a `kv.2 != 0` conjunct that the
+    supply identity below must see through. -/
+private theorem balanceList_sum_filter_ne_zero
+    (xs : List (ActorId × Nat)) (p : ActorId × Nat → Bool) :
+    ((xs.filter (fun kv => p kv && kv.2 != 0)).map (·.2)).sum =
+    ((xs.filter p).map (·.2)).sum := by
+  induction xs with
+  | nil => rfl
+  | cons hd tl ih =>
+      simp only [List.filter_cons]
+      by_cases hp : p hd = true
+      · by_cases hz : hd.2 = 0
+        · simp [hp, hz, ih]
+        · simp [hp, hz, ih]
+      · simp [hp, ih]
+
+/-- `state_filter_sum_eq_sumOthers` for the filter the bulk laws
+    actually use.
+
+    `Laws.bulkRecipients` excludes zero-balance entries as well as the
+    excluded actor (they have no leaf in the state-commitment tree, so
+    crediting them would make a bulk step's post-root depend on
+    something the pre-root does not observe).  Zero entries contribute
+    nothing to a sum, so the divisor identity the dust bound needs is
+    unaffected — which is the content of this corollary. -/
+theorem state_filter_nonzero_sum_eq_sumOthers
+    (s : State) (r : ResourceId) (excluded : ActorId) :
+    (((s.balances[r]?.getD ∅).toList.filter
+        (fun kv => kv.1 != excluded && kv.2 != 0)).map (·.2)).sum =
+    sumOthers s r excluded := by
+  rw [balanceList_sum_filter_ne_zero _ (fun kv => kv.1 != excluded)]
+  exact state_filter_sum_eq_sumOthers s r excluded
+
 /-! ## `IsMonotonic` typeclass (positive-incentive tier) -/
 
 /-- A transition that *never decreases* the total supply at any

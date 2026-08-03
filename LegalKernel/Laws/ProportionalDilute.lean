@@ -54,10 +54,18 @@ namespace Laws
     * Precondition: `totalReward > 0 ∧ sumOthers s r excluded > 0`.
       The second conjunct rules out divide-by-zero in the proportional
       computation.
-    * Effect: for each `(actor, balance)` in `bm := s.balances[r]?.getD
-      ∅` with `actor ≠ excluded`, replace the balance with `balance +
-      totalReward * balance / sumOthers s r excluded` (Nat floor).
-      The excluded actor and absent actors are unchanged.
+    * Effect: for each `(actor, balance)` in
+      `bulkRecipients s r excluded`, replace the balance with
+      `balance + totalReward * balance / sumOthers s r excluded` (Nat
+      floor).  The excluded actor and actors with no live balance are
+      unchanged.
+
+    The recipient list is `Laws.bulkRecipients`, shared with
+    `distributeOthers` and with the fault proof's
+    `Action.stateWriteCells` footprint, so the three cannot drift.
+    Its zero filter is a no-op *here* — a zero-balance actor's credit
+    `totalReward * 0 / S` is already `0` — but it is load-bearing for
+    `distributeOthers`, whose credit is flat; see `bulkRecipients`.
 
     Note: `S := sumOthers s r excluded` is captured *before* the foldl
     starts, so it remains constant across the iteration even though
@@ -68,10 +76,8 @@ def proportionalDilute
                         BulkBounded s r excluded
   decPre     := fun _ => inferInstance
   apply_impl := fun s =>
-    let bm := s.balances[r]?.getD ∅
     let S  := sumOthers s r excluded
-    let toReward := bm.toList.filter (fun kv => kv.1 != excluded)
-    toReward.foldl
+    (bulkRecipients s r excluded).foldl
       (fun s' kv =>
         -- INVARIANT (AR.15 / i-9): `kv.2` reads the **pre-foldl**
         -- snapshot balance, captured at the moment `bm.toList` was
@@ -111,10 +117,8 @@ lexlaw legalkernel_proportionalDilute where
                                   LegalKernel.Laws.BulkBounded s r excluded
   lex_impl            :=
     fun s =>
-      let bm := s.balances[r]?.getD ∅
       let S  := sumOthers s r excluded
-      let toReward := bm.toList.filter (fun kv => kv.1 != excluded)
-      toReward.foldl
+      (LegalKernel.Laws.bulkRecipients s r excluded).foldl
         (fun s' kv =>
           setBalance s' r kv.1 (getBalance s' r kv.1 + totalReward * kv.2 / S))
         s
@@ -238,13 +242,8 @@ theorem proportionalDilute_excluded_unchanged
   show getBalance ((proportionalDilute r excluded totalReward).apply_impl s) r excluded
      = getBalance s r excluded
   simp only [proportionalDilute]
-  apply foldl_setBalance_at_r_excluded_untouched
-  intro kv hkv
-  have := List.mem_filter.mp hkv
-  intro heq
-  have h_neq : (kv.1 != excluded) = true := this.2
-  rw [heq] at h_neq
-  simp at h_neq
+  exact foldl_setBalance_at_r_excluded_untouched _ s r excluded _
+    (fun _ hkv => bulkRecipients_key_ne_excluded s r excluded hkv)
 
 /-! ## Supply equation (WU R.13) -/
 
@@ -277,14 +276,14 @@ private theorem foldl_setBalance_proportional_totalSupply
 
 /-- The supply equation for `proportionalDilute`: post-dilution supply
     at `r` equals pre-dilution supply plus the sum of floor-distributed
-    amounts over non-excluded actors. -/
+    amounts over the recipients. -/
 theorem totalSupply_after_proportionalDilute
     (r : ResourceId) (excluded : ActorId) (totalReward : Amount) (s : State)
     (hpre : (proportionalDilute r excluded totalReward).pre s) :
     TotalSupply (step_impl s (proportionalDilute r excluded totalReward)) r =
     TotalSupply s r +
-    ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)
-      |>.map (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum := by
+    ((bulkRecipients s r excluded).map
+      (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum := by
   rw [step_impl]
   simp only [if_pos hpre]
   show TotalSupply ((proportionalDilute r excluded totalReward).apply_impl s) r = _
@@ -350,9 +349,11 @@ private theorem list_div_sum_mul_le
        `dist_sum ≤ totalReward`, where `dist_sum := sum_{kv ∈ filter}
        (totalReward * kv.2 / S)` and `S := sumOthers`.
     2. By `list_div_sum_mul_le`: `dist_sum * S ≤ totalReward *
-       filter_sum_balances`.
-    3. By `state_filter_sum_eq_sumOthers` (in `Conservation.lean`):
-       `filter_sum_balances = S`.
+       recipient_sum_balances`.
+    3. By `state_filter_nonzero_sum_eq_sumOthers` (in
+       `Conservation.lean`): `recipient_sum_balances = S`.  The
+       recipient list drops zero-balance entries, which contribute
+       nothing to the sum, so the divisor is still `sumOthers`.
     4. Substitute: `dist_sum * S ≤ totalReward * S`.
     5. Divide by `S > 0` (precondition): `dist_sum ≤ totalReward`. -/
 theorem proportionalDilute_distributed_le_totalReward
@@ -362,12 +363,13 @@ theorem proportionalDilute_distributed_le_totalReward
     TotalSupply s r + totalReward := by
   rw [totalSupply_after_proportionalDilute r excluded totalReward s hpre]
   apply Nat.add_le_add_left
-  -- Goal: sum_{kv ∈ filter} (totalReward * kv.2 / sumOthers) ≤ totalReward
+  -- Goal: sum_{kv ∈ recipients} (totalReward * kv.2 / sumOthers) ≤ totalReward
   have hS : sumOthers s r excluded > 0 := hpre.2.1
-  have h_filter_sum := state_filter_sum_eq_sumOthers s r excluded
+  have h_filter_sum :
+      (((bulkRecipients s r excluded).map (·.2)).sum) = sumOthers s r excluded :=
+    state_filter_nonzero_sum_eq_sumOthers s r excluded
   have h_chain_bound :=
-    list_div_sum_mul_le
-      ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded))
+    list_div_sum_mul_le (bulkRecipients s r excluded)
       totalReward (sumOthers s r excluded)
   -- h_chain_bound : dist_sum * S ≤ totalReward * filter_sum_balances
   rw [h_filter_sum] at h_chain_bound
@@ -469,12 +471,11 @@ theorem proportionalDilute_not_conservative
     exact RBMap.find?_insert_self _ _ _
   have h_mem : (non_excluded, totalReward) ∈ (s.balances[r]?.getD ∅).toList :=
     Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h_lookup
+  -- The witness holds `totalReward > 0`, so it survives the zero filter too.
   have h_in_filter :
-      (non_excluded, totalReward) ∈
-        (s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded) := by
-    apply List.mem_filter.mpr
-    refine ⟨h_mem, ?_⟩
-    simp [h_neq]
+      (non_excluded, totalReward) ∈ bulkRecipients s r excluded :=
+    (mem_bulkRecipients_iff s r excluded _).mpr
+      ⟨h_mem, h_neq, Nat.pos_iff_ne_zero.mp hpos⟩
   -- (non_excluded, totalReward) contributes totalReward * totalReward / sumOthers = totalReward * totalReward / totalReward = totalReward to the sum.
   have h_increment_value :
       totalReward * totalReward / sumOthers s r excluded = totalReward := by
@@ -484,7 +485,7 @@ theorem proportionalDilute_not_conservative
   -- The mapped list contains "totalReward" as one of its elements, so its sum ≥ totalReward.
   have h_mem_mapped :
       totalReward ∈
-        ((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+        (bulkRecipients s r excluded).map
           (fun kv => totalReward * kv.2 / sumOthers s r excluded) := by
     apply List.mem_map.mpr
     refine ⟨(non_excluded, totalReward), h_in_filter, ?_⟩
@@ -492,7 +493,7 @@ theorem proportionalDilute_not_conservative
   -- Length-positive ⟹ sum ≥ element ≥ totalReward.
   have h_sum_ge :
       totalReward ≤
-        (((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+        ((bulkRecipients s r excluded).map
           (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum :=
     LegalKernel.nat_le_sum_of_mem _ totalReward h_mem_mapped
   -- Now combine: hpost gives post = pre + sum; hcons_r gives post = pre.
@@ -500,10 +501,10 @@ theorem proportionalDilute_not_conservative
   rw [hcons_r] at hpost
   -- hpost : pre = pre + sum, so sum = 0.
   have h_sum_zero :
-      (((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+      ((bulkRecipients s r excluded).map
           (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum = 0 := by
     have h : TotalSupply s r + 0 = TotalSupply s r +
-        (((s.balances[r]?.getD ∅).toList.filter (fun kv => kv.1 != excluded)).map
+        ((bulkRecipients s r excluded).map
           (fun kv => totalReward * kv.2 / sumOthers s r excluded)).sum := by
       rw [Nat.add_zero]; exact hpost
     exact (Nat.add_left_cancel h).symm
