@@ -15,11 +15,11 @@
       "**/*.sol"
     ],
     "digest_algorithm": "sha256",
-    "source_digest": "2586616d35aee1b263d247ba08a6f9774998d07619b7baf39754d6f985199bf6"
+    "source_digest": "26d038ccf31b05f12fe54efe724be955af4f417fad7efe36e740756a27c701f3"
   },
   "summary": {
-    "module_count": 96,
-    "declaration_count": 2041
+    "module_count": 98,
+    "declaration_count": 2078
   },
   "modules": [
     {
@@ -4483,6 +4483,128 @@
           "name": "_readSiblingAt",
           "line": 588,
           "called": []
+        }
+      ]
+    },
+    {
+      "module": "SmtMultiVerifier",
+      "path": "solidity/src/lib/SmtMultiVerifier.sol",
+      "declaration_count": 16,
+      "declarations": [
+        {
+          "kind": "library",
+          "name": "SmtMultiVerifier",
+          "line": 46,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MultiProofTooManyCells",
+          "line": 75,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MultiProofEmpty",
+          "line": 78,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MultiProofNotStrictlySorted",
+          "line": 83,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MultiProofMaskLength",
+          "line": 87,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MultiProofPadding",
+          "line": 91,
+          "called": []
+        },
+        {
+          "kind": "error",
+          "name": "MultiProofSiblingCount",
+          "line": 94,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "pathIndex",
+          "line": 107,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "msb",
+          "line": 124,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "divLevel",
+          "line": 139,
+          "called": [
+            "msb"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "gapCount",
+          "line": 157,
+          "called": [
+            "divLevel"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "gapBit",
+          "line": 170,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "requireShape",
+          "line": 189,
+          "called": [
+            "MultiProofMaskLength",
+            "MultiProofPadding",
+            "MultiProofSiblingCount",
+            "gapBit",
+            "gapCount"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "siblingAt",
+          "line": 220,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "hashPair",
+          "line": 235,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "multiWalk",
+          "line": 266,
+          "called": [
+            "MultiProofEmpty",
+            "MultiProofNotStrictlySorted",
+            "MultiProofTooManyCells",
+            "divLevel",
+            "gapBit",
+            "hashPair",
+            "requireShape",
+            "siblingAt"
+          ]
         }
       ]
     },
@@ -16646,6 +16768,147 @@
           "kind": "function",
           "name": "test_gas_fullPopcount_walk",
           "line": 1392,
+          "called": []
+        }
+      ]
+    },
+    {
+      "module": "SmtMultiVerifier.t",
+      "path": "solidity/test/SmtMultiVerifier.t.sol",
+      "declaration_count": 21,
+      "declarations": [
+        {
+          "kind": "contract",
+          "name": "SmtMultiVerifierProxy",
+          "line": 14,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "multiWalk",
+          "line": 15,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "recomputeRootFromLeaf",
+          "line": 27,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "pathIndex",
+          "line": 35,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "gapCount",
+          "line": 39,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "divLevel",
+          "line": 44,
+          "called": []
+        },
+        {
+          "kind": "contract",
+          "name": "SmtMultiVerifierTest",
+          "line": 66,
+          "called": [
+            "SmtMultiVerifierProxy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "setUp",
+          "line": 75,
+          "called": [
+            "SmtMultiVerifierProxy"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_pathIndex_bit_is_the_key_bit",
+          "line": 90,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_divLevel_is_the_msb_of_the_difference",
+          "line": 103,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_gapCount_single_is_the_depth",
+          "line": 114,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_gapCount_pair_matches_the_closed_form",
+          "line": 127,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "_exactProof",
+          "line": 144,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_single_cell_matches_the_pinned_verifier",
+          "line": 163,
+          "called": [
+            "_exactProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_short_wire_is_refused",
+          "line": 190,
+          "called": [
+            "_exactProof"
+          ]
+        },
+        {
+          "kind": "function",
+          "name": "test_padding_bit_is_refused",
+          "line": 214,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_duplicate_cell_is_refused",
+          "line": 241,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_unsorted_bundle_is_refused",
+          "line": 256,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_wrong_mask_length_is_refused",
+          "line": 271,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_merging_saves_gaps",
+          "line": 289,
+          "called": []
+        },
+        {
+          "kind": "function",
+          "name": "test_two_cells_reach_the_hand_built_root",
+          "line": 305,
           "called": []
         }
       ]
